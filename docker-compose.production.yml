@@ -1,0 +1,102 @@
+name: replyconnect-production
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: replyconnect:production
+    command: ["pnpm", "start"]
+    restart: unless-stopped
+    environment: &application-environment
+      NODE_ENV: production
+      APP_NAME: ${APP_NAME:-ReplyConnect}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://replyconnect.example.com}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-owner-provided@example.com}
+      SOURCE_COMMIT: ${SOURCE_COMMIT:-local-compose}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://replyconnect:replace-with-a-unique-postgres-password@postgres:5432/replyconnect?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://:replace-with-a-unique-valkey-password@valkey:6379/0}
+      META_APP_ID: ${META_APP_ID:-replace-with-meta-app-id}
+      META_APP_SECRET: ${META_APP_SECRET:-replace-with-meta-app-secret}
+      META_TOKEN_ENCRYPTION_KEY: ${META_TOKEN_ENCRYPTION_KEY:-replace-with-64-hex-character-token-encryption-key}
+      META_REDIRECT_URI: ${META_REDIRECT_URI:-https://replyconnect.example.com/api/meta/oauth/callback}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-replace-with-a-long-random-webhook-verify-token}
+      META_API_VERSION: ${META_API_VERSION:-v25.0}
+      META_SCOPES: ${META_SCOPES:-instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  worker:
+    image: replyconnect:production
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["pnpm", "worker"]
+    restart: unless-stopped
+    environment: *application-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-replyconnect}
+      POSTGRES_USER: ${POSTGRES_USER:-replyconnect}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-replace-with-a-unique-postgres-password}
+    volumes:
+      - replyconnect-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  valkey:
+    image: valkey/valkey:9.1.1-alpine3.24
+    restart: unless-stopped
+    command:
+      [
+        "valkey-server",
+        "--appendonly",
+        "yes",
+        "--appendfsync",
+        "everysec",
+        "--protected-mode",
+        "yes",
+        "--requirepass",
+        "${VALKEY_PASSWORD:-replace-with-a-unique-valkey-password}",
+      ]
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:-replace-with-a-unique-valkey-password}
+    volumes:
+      - replyconnect-valkey:/data
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli --no-auth-warning -a \"$$VALKEY_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  replyconnect-postgres:
+  replyconnect-valkey:

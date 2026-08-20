@@ -61,6 +61,26 @@ pnpm test:e2e
 
 Production needs a public HTTPS deployment, PostgreSQL, Redis, a stable `NEXT_PUBLIC_APP_URL`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` only when a configured dependency is unavailable. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. This repository intentionally keeps workspace identity simple for the MVP; add real authentication and workspace membership before opening it to multiple customers.
 
+Use the production image for both long-running processes:
+
+```bash
+pnpm build
+pnpm start
+pnpm worker
+```
+
+The complete operator runbook, including the values the owner must supply in
+Coolify and Meta, is at [`ops/COOLIFY_DEPLOYMENT.md`](ops/COOLIFY_DEPLOYMENT.md).
+The local production topology can be checked with:
+
+```bash
+cp .env.production.example .env.production
+pnpm check:compose
+```
+
+`.env.production` contains secrets and is intentionally ignored; replace every
+placeholder before any deployment. Do not publish PostgreSQL or Valkey ports.
+
 ## Meta App Review
 
 Follow [`docs/meta-app-review.md`](docs/meta-app-review.md) for the Meta dashboard configuration, environment values, reviewer test script, and submission checklist. The public review surfaces are:
