@@ -31,3 +31,15 @@ The guard now scans tracked files, ignores generated/dependency/planning directo
 
 - No secret values were added. The default support address remains a placeholder mailbox until the owner supplies the real mailbox.
 - The planning document retains the legacy token but is excluded as a planning artifact by the branding guard.
+
+## Review follow-up
+
+- Replaced the automation-builder preview's hard-coded `D` with `PRODUCT_MARK`.
+- Added a focused component assertion that renders `AutomationBuilder` and verifies the `.preview-avatar-brand` contains `PRODUCT_MARK`.
+
+Follow-up verification:
+
+- `pnpm test src/components/automation-builder.test.tsx`: passed; 1 file and 2 tests.
+- `pnpm check:branding`: passed.
+- `pnpm lint`: passed.
+- `pnpm build`: passed; TypeScript compilation and Next production build completed.

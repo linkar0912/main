@@ -3,6 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { ArrowRight, Check, ChevronDown, CircleHelp, Link2, MessageCircle, Send } from "lucide-react";
 import type { FlowAction, FlowCondition, FlowDefinition } from "@/src/lib/automation/types";
+import { PRODUCT_MARK } from "@/src/lib/branding";
 
 type AutomationBuilderProps = {
   automationId?: string;
@@ -361,7 +362,7 @@ export function AutomationBuilder({
         <div className="preview-arrow"><ArrowRight size={18} /></div>
         <p className="preview-kicker">ReplyConnect sends</p>
         <div className="preview-message preview-response">
-          <span className="preview-avatar preview-avatar-brand">D</span>
+          <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
           <div>
             <strong>{messageText || "Your exact reply appears here"}</strong>
             {linkUrl && <small>{linkUrl}</small>}
