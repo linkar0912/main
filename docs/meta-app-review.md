@@ -84,7 +84,7 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
 
 ## 4. Verify the deployed app yourself
 
-1. Call `GET https://app.example.com/api/health`; confirm the response reports `configured`.
+1. Call `GET https://<replyconnect-domain>/api/health`; confirm the response reports `configured`.
 2. Open `/privacy`, `/terms`, `/data-deletion`, and `/support` in a private browser window. Confirm they load without login and use the final business contact details.
 3. Open Settings and choose **Connect Instagram**.
 4. Complete the official Meta login with the test Instagram Professional account.
