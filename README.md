@@ -34,6 +34,12 @@ pnpm dev
 pnpm worker
 ```
 
+For a production deployment, apply committed migrations explicitly before starting the web and worker services:
+
+```bash
+pnpm db:migrate:deploy
+```
+
 Generate a token encryption key with:
 
 ```bash
@@ -53,7 +59,7 @@ pnpm test:e2e
 
 ## Production requirements
 
-Production needs a public HTTPS deployment, PostgreSQL, Redis, a stable `NEXT_PUBLIC_APP_URL`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. This repository intentionally keeps workspace identity simple for the MVP; add real authentication and workspace membership before opening it to multiple customers.
+Production needs a public HTTPS deployment, PostgreSQL, Redis, a stable `NEXT_PUBLIC_APP_URL`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` only when a configured dependency is unavailable. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. This repository intentionally keeps workspace identity simple for the MVP; add real authentication and workspace membership before opening it to multiple customers.
 
 ## Meta App Review
 

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { isDemoMode } from "@/src/lib/repository-provider";
+import { getHealth } from "@/src/lib/health";
 
 export const runtime = "nodejs";
 
-export function GET() {
-  return NextResponse.json({ status: "ok", mode: isDemoMode() ? "demo" : "configured" });
+export async function GET() {
+  const health = await getHealth();
+  return NextResponse.json(health, { status: health.status === "ok" ? 200 : 503 });
 }
