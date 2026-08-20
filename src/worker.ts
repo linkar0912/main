@@ -10,7 +10,7 @@ import type { NormalizedEvent } from "./lib/automation/types";
 const env = getServerEnv();
 
 if (!env.redisUrl) {
-  console.error("DMSetu worker requires REDIS_URL");
+  console.error("ReplyConnect worker requires REDIS_URL");
   process.exitCode = 1;
 } else {
   const redis = new Redis(env.redisUrl, { maxRetriesPerRequest: null });

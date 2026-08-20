@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
 import { StatusBadge } from "./status-badge";
 import type { ConnectionStatus } from "@/src/lib/repository";
+import { PRODUCT_NAME } from "@/src/lib/branding";
 
 type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string };
 
@@ -34,7 +35,7 @@ export function SettingsScreen() {
   return (
     <AppShell>
       <div className="page-wrap narrow-wrap">
-        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Connect your Instagram.</h1><p className="muted page-lede">DMSetu uses Meta’s official Instagram APIs. You stay in control of the account and the rules.</p></div></header>
+        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Connect your Instagram.</h1><p className="muted page-lede">{PRODUCT_NAME} uses Meta’s official Instagram APIs. You stay in control of the account and the rules.</p></div></header>
 
         {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status"><span>{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}</span><p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
 

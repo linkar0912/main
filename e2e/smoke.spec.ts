@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("dashboard and automation list are reachable", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByText("ReplyConnect", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Make every signal useful." })).toBeVisible();
   await page.getByRole("link", { name: "Automations" }).first().click();
   await expect(page.getByRole("heading", { name: "Automations" })).toBeVisible();

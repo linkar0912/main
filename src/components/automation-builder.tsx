@@ -177,7 +177,7 @@ export function AutomationBuilder({
             <div className="step-heading">
               <div>
                 <p className="eyebrow">Trigger</p>
-                <h2>When should DMSetu listen?</h2>
+                <h2>When should ReplyConnect listen?</h2>
               </div>
               <MessageCircle size={21} strokeWidth={1.7} />
             </div>
@@ -359,7 +359,7 @@ export function AutomationBuilder({
           </div>
         </div>
         <div className="preview-arrow"><ArrowRight size={18} /></div>
-        <p className="preview-kicker">DMSetu sends</p>
+        <p className="preview-kicker">ReplyConnect sends</p>
         <div className="preview-message preview-response">
           <span className="preview-avatar preview-avatar-brand">D</span>
           <div>

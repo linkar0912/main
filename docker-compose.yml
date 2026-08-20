@@ -2,20 +2,20 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: dmsetu
-      POSTGRES_PASSWORD: dmsetu
-      POSTGRES_DB: dmsetu
+      POSTGRES_USER: replyconnect
+      POSTGRES_PASSWORD: replyconnect
+      POSTGRES_DB: replyconnect
     ports:
       - "5432:5432"
     volumes:
-      - dmsetu-postgres:/var/lib/postgresql/data
+      - replyconnect-postgres:/var/lib/postgresql/data
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     volumes:
-      - dmsetu-redis:/data
+      - replyconnect-redis:/data
 
 volumes:
-  dmsetu-postgres:
-  dmsetu-redis:
+  replyconnect-postgres:
+  replyconnect-redis:

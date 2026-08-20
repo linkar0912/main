@@ -5,8 +5,8 @@ const prisma = new PrismaClient();
 async function main() {
   await prisma.workspace.upsert({
     where: { id: "demo_workspace" },
-    create: { id: "demo_workspace", name: "DMSetu workspace", slug: "dmsetu" },
-    update: { name: "DMSetu workspace", slug: "dmsetu" },
+    create: { id: "demo_workspace", name: "ReplyConnect workspace", slug: "replyconnect" },
+    update: { name: "ReplyConnect workspace", slug: "replyconnect" },
   });
 }
 

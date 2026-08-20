@@ -16,8 +16,8 @@ describe("Meta data deletion", () => {
   });
 
   it("builds the callback response Meta expects", () => {
-    expect(createDeletionResponse("ig_123", "https://dmsetu.example/data-deletion")).toMatchObject({
-      url: "https://dmsetu.example/data-deletion",
+    expect(createDeletionResponse("ig_123", "https://replyconnect.example/data-deletion")).toMatchObject({
+      url: "https://replyconnect.example/data-deletion",
       confirmation_code: expect.stringContaining("ig_123"),
     });
   });

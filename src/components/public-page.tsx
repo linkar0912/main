@@ -1,25 +1,28 @@
 import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
+import { getServerEnv } from "@/src/lib/env";
+import { PRODUCT_MARK, PRODUCT_NAME } from "@/src/lib/branding";
 
 export function PublicPage({
   title,
   intro,
   children,
 }: Readonly<{ title: string; intro: string; children: React.ReactNode }>) {
+  const supportEmail = getServerEnv().supportEmail;
   return (
     <main className="legal-page">
       <div className="legal-top">
-        <Link className="brand" href="/"><span className="brand-mark">D</span><span>DMSetu</span></Link>
+        <Link className="brand" href="/"><span className="brand-mark">{PRODUCT_MARK}</span><span>{PRODUCT_NAME}</span></Link>
         <Link className="back-link" href="/"><ArrowLeft size={15} /> Back to app</Link>
       </div>
       <article className="legal-content">
-        <p className="eyebrow">DMSetu / public policy</p>
+        <p className="eyebrow">{PRODUCT_NAME} / public policy</p>
         <h1>{title}</h1>
         <p className="legal-meta">Last updated: 20 August 2026</p>
         <p className="legal-intro">{intro}</p>
         {children}
       </article>
-      <p className="legal-footer">Questions? <a href="mailto:support@dmsetu.app">support@dmsetu.app</a> <ExternalLink size={12} /></p>
+      <p className="legal-footer">Questions? <a href={`mailto:${supportEmail}`}>{supportEmail}</a> <ExternalLink size={12} /></p>
     </main>
   );
 }

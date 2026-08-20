@@ -25,6 +25,6 @@ export function parseSignedRequest(signedRequest: string, appSecret: string): De
 export function createDeletionResponse(userId: string, statusUrl: string) {
   return {
     url: statusUrl,
-    confirmation_code: `dmsetu_${userId}_${randomBytes(4).toString("hex")}`,
+    confirmation_code: `replyconnect_${userId}_${randomBytes(4).toString("hex")}`,
   };
 }

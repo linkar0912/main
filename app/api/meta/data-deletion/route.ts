@@ -5,7 +5,7 @@ import { getRepository } from "@/src/lib/repository-provider";
 export const runtime = "nodejs";
 
 export async function GET() {
-  return Response.json({ status: "ok", message: "DMSetu data deletion callback is available" });
+  return Response.json({ status: "ok", message: "ReplyConnect data deletion callback is available" });
 }
 
 export async function POST(request: Request) {

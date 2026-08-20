@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CircleHelp, LayoutDashboard, Settings, Sparkles, Workflow } from "lucide-react";
+import { getServerEnv } from "@/src/lib/env";
+import { PRODUCT_MARK, PRODUCT_NAME } from "@/src/lib/branding";
 
 const navigation = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -12,17 +14,18 @@ const navigation = [
 
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
+  const supportEmail = getServerEnv().supportEmail;
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <Link className="brand" href="/" aria-label="DMSetu overview">
-          <span className="brand-mark">D</span>
-          <span>DMSetu</span>
+        <Link className="brand" href="/" aria-label={`${PRODUCT_NAME} overview`}>
+          <span className="brand-mark">{PRODUCT_MARK}</span>
+          <span>{PRODUCT_NAME}</span>
         </Link>
 
         <div className="workspace-switcher">
-          <span className="workspace-avatar">D</span>
-          <span className="workspace-copy"><strong>DMSetu workspace</strong><small>Demo mode</small></span>
+          <span className="workspace-avatar">{PRODUCT_MARK}</span>
+          <span className="workspace-copy"><strong>{PRODUCT_NAME} workspace</strong><small>Demo mode</small></span>
           <span className="workspace-caret">⌄</span>
         </div>
 
@@ -44,7 +47,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             <Sparkles size={17} />
             <div><strong>No AI, by design</strong><span>Rules stay predictable.</span></div>
           </div>
-          <a className="sidebar-link" href="mailto:support@dmsetu.app"><CircleHelp size={18} strokeWidth={1.8} /><span>Get support</span></a>
+          <a className="sidebar-link" href={`mailto:${supportEmail}`}><CircleHelp size={18} strokeWidth={1.8} /><span>Get support</span></a>
           <div className="sidebar-footnote">Instagram-first automation<br />Built for Indian teams.</div>
         </div>
       </aside>

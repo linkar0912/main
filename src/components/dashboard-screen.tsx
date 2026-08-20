@@ -5,6 +5,7 @@ import { Activity, ArrowUpRight, CheckCircle2, Plus, ShieldCheck, Sparkles, Work
 import { AppShell } from "./app-shell";
 import { AutomationList, useAutomations } from "./automation-list";
 import { MetricCard } from "./metric-card";
+import { PRODUCT_NAME } from "@/src/lib/branding";
 
 export function DashboardScreen() {
   const { automations, loading, error, setStatus } = useAutomations();
@@ -42,7 +43,7 @@ export function DashboardScreen() {
 
           <aside className="panel way-panel">
             <div className="way-icon"><Sparkles size={20} /></div>
-            <p className="eyebrow">The DMSetu way</p>
+            <p className="eyebrow">The {PRODUCT_NAME} way</p>
             <h2>Simple rules. Clear outcomes.</h2>
             <div className="way-steps">
               <div><span>01</span><p><strong>Listen</strong><small>Comment or DM arrives.</small></p></div>

@@ -1,6 +1,6 @@
-# DMSetu Meta App Review runbook
+# ReplyConnect Meta App Review runbook
 
-This runbook is for the first production deployment of DMSetu. Meta’s dashboard labels and permission requirements can change, so confirm the current product documentation and the scopes shown in your app before submitting.
+This runbook is for the first production deployment of ReplyConnect. Meta’s dashboard labels and permission requirements can change, so confirm the current product documentation and the scopes shown in your app before submitting.
 
 Reference the current [Meta Instagram Private Replies collection](https://www.postman.com/meta/instagram/request/23987686-189d7215-22b3-403f-b2f5-a46c7e66a514) and [Meta comment webhook example](https://www.postman.com/meta/instagram/request/23987686-db99ce99-bf76-475c-8b76-718576c11cae) while validating the live payloads.
 
@@ -21,7 +21,7 @@ Before requesting advanced access, make sure:
 Set these production values on the web app and worker:
 
 ```dotenv
-APP_NAME=DMSetu
+APP_NAME=ReplyConnect
 NEXT_PUBLIC_APP_URL=https://app.example.com
 SUPPORT_EMAIL=support@example.com
 DATABASE_URL=postgresql://...
@@ -54,7 +54,7 @@ In the Meta developer dashboard, configure the Instagram Login/Business Login fo
 
 Use these deployed URLs:
 
-| Meta field | DMSetu URL |
+| Meta field | ReplyConnect URL |
 | --- | --- |
 | OAuth redirect URI | `https://app.example.com/api/meta/oauth/callback` |
 | Webhooks callback URL | `https://app.example.com/api/meta/webhook` |
@@ -93,7 +93,7 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
 
 Use plain, testable language in each permission explanation:
 
-> DMSetu lets a connected Instagram Professional account owner create explicit keyword or any-message rules. When Meta sends a comment or inbound-message webhook, DMSetu evaluates the saved rule and sends the exact reply configured by the account owner. We do not generate copy with AI, scrape Instagram, or send follower blasts.
+> ReplyConnect lets a connected Instagram Professional account owner create explicit keyword or any-message rules. When Meta sends a comment or inbound-message webhook, ReplyConnect evaluates the saved rule and sends the exact reply configured by the account owner. We do not generate copy with AI, scrape Instagram, or send follower blasts.
 
 For the reviewer instructions, provide:
 

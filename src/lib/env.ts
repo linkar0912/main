@@ -15,9 +15,9 @@ export type ServerEnv = {
 
 export function getServerEnv(): ServerEnv {
   return {
-    appName: process.env.APP_NAME ?? "DMSetu",
+    appName: process.env.APP_NAME ?? "ReplyConnect",
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-    supportEmail: process.env.SUPPORT_EMAIL ?? "hello@example.com",
+    supportEmail: process.env.SUPPORT_EMAIL ?? "support@replyconnect.in",
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
     metaAppId: process.env.META_APP_ID || undefined,

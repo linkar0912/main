@@ -1,9 +1,10 @@
 {
-  "name": "dmsetu",
+  "name": "replyconnect",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "check:branding": "node scripts/check-branding.mjs",
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",

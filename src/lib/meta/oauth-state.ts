@@ -1,1 +1,1 @@
-export const META_OAUTH_STATE_COOKIE = "dmsetu_meta_oauth_state";
+export const META_OAUTH_STATE_COOKIE = "replyconnect_meta_oauth_state";

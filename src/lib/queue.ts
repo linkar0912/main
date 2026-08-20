@@ -3,22 +3,22 @@ import Redis from "ioredis";
 import { getServerEnv } from "./env";
 import type { NormalizedEvent } from "./automation/types";
 
-export const WEBHOOK_QUEUE_NAME = "dmsetu-webhooks";
+export const WEBHOOK_QUEUE_NAME = "replyconnect-webhooks";
 
 const globalForQueue = globalThis as unknown as {
-  dmsetuWebhookQueue?: Queue;
-  dmsetuWebhookRedis?: Redis;
+  replyconnectWebhookQueue?: Queue;
+  replyconnectWebhookRedis?: Redis;
 };
 
 function getWebhookQueue(): Queue | null {
   const redisUrl = getServerEnv().redisUrl;
   if (!redisUrl) return null;
-  if (globalForQueue.dmsetuWebhookQueue) return globalForQueue.dmsetuWebhookQueue;
+  if (globalForQueue.replyconnectWebhookQueue) return globalForQueue.replyconnectWebhookQueue;
 
   const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
   const queue = new Queue(WEBHOOK_QUEUE_NAME, { connection: redis });
-  globalForQueue.dmsetuWebhookRedis = redis;
-  globalForQueue.dmsetuWebhookQueue = queue;
+  globalForQueue.replyconnectWebhookRedis = redis;
+  globalForQueue.replyconnectWebhookQueue = queue;
   return queue;
 }
 
