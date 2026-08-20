@@ -19,17 +19,25 @@ contain any of those values.
 
 Create a dedicated ReplyConnect PostgreSQL 17 service and a dedicated Valkey
 service in the ReplyConnect Coolify project. Do not reuse TrackParcel's data,
-services, networks, volumes, or credentials.
+services, networks, volumes, aliases, or credentials.
+
+Create one ReplyConnect-only private Coolify network, for example
+`replyconnect-private`, and attach exactly these production services to it:
+`replyconnect-web`, `replyconnect-worker`, `replyconnect-postgres`, and
+`replyconnect-valkey`. Configure the stable ReplyConnect-only private aliases
+`replyconnect-postgres` and `replyconnect-valkey` for the data services. Never
+use a TrackParcel alias or attach a ReplyConnect service to a TrackParcel
+network. PostgreSQL and Valkey must have neither public ports nor FQDNs.
 
 - Create the PostgreSQL database, user, and password from owner-provided
   values. Do not expose port 5432 or assign an FQDN.
 - Create Valkey from the contract in [`valkey/README.md`](valkey/README.md).
   Use a distinct `VALKEY_PASSWORD`; do not expose port 6379 or assign an FQDN.
-- Record each service's private hostname. The compose fixture uses `postgres`
-  and `valkey`; Coolify may issue different private hostnames.
-- Put the URLs in the application secrets using the Coolify hostnames:
-  `DATABASE_URL=postgresql://<user>:<password>@<postgres-host>:5432/<database>?schema=public`
-  and `REDIS_URL=redis://:<valkey-password>@<valkey-host>:6379/0`.
+- The local compose fixture uses `postgres` and `valkey`. In Coolify, use only
+  the stable private aliases `replyconnect-postgres` and `replyconnect-valkey`.
+- Put the URLs in both application secret sets using those aliases:
+  `DATABASE_URL=postgresql://<user>:<password>@replyconnect-postgres:5432/<database>?schema=public`
+  and `REDIS_URL=redis://:<valkey-password>@replyconnect-valkey:6379/0`.
 
 Wait for both data-service health checks before applying migrations or starting
 the application processes.
@@ -58,7 +66,8 @@ hex value and must remain stable after Instagram tokens have been stored.
 
 The image defaults to `pnpm start`; the worker application's command override
 is `pnpm worker`. The runtime image also contains `pnpm db:migrate:deploy` for
-the explicit migration step below.
+the explicit migration step below. Both applications must also attach to
+`replyconnect-private`; only `replyconnect-web` receives the public domain.
 
 ## 3. Route the web app through Cloudflare
 
@@ -81,9 +90,15 @@ For every release, use this order:
 
 1. Confirm both private data services are healthy and back up PostgreSQL before
    any migration.
-2. Build the selected commit once for the web/worker image. If the existing
-   single-vCPU host becomes constrained, move image builds to CI or a dedicated
-   build server and deploy the resulting image through Coolify.
+2. Choose the image delivery path before deploying:
+   - **Normal Dockerfile path:** Coolify builds `replyconnect-worker` and
+     `replyconnect-web` independently from the same immutable commit SHA. Deploy
+     them sequentially and budget for two builds on the host; on a single-vCPU
+     server, wait for the first build to finish before starting the second.
+   - **Recommended one-build path:** CI or a dedicated build server builds the
+     Dockerfile once, pushes a private-registry image, and records its immutable
+     digest. Configure both Coolify applications to deploy that exact digest;
+     their commands remain `pnpm worker` and `pnpm start` respectively.
 3. Run this one-off command from the release image in Coolify before promoting
    either application: `pnpm db:migrate:deploy`.
 4. Start or redeploy `replyconnect-worker` with `pnpm worker`.

@@ -1,11 +1,13 @@
 FROM node:24-bookworm-slim AS base
 
+ARG PNPM_VERSION=11.19.0
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV NEXT_TELEMETRY_DISABLED=1
 
 WORKDIR /app
-RUN corepack enable
+RUN npm install --global "pnpm@${PNPM_VERSION}" \
+  && test "$(pnpm --version)" = "${PNPM_VERSION}"
 
 FROM base AS dependencies
 

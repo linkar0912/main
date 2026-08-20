@@ -3,27 +3,32 @@
 ReplyConnect uses a dedicated, password-protected Valkey instance for BullMQ.
 It is private to ReplyConnect: do not share it with TrackParcel or any other
 application, do not assign it a public domain, and do not publish port 6379.
+It must share the ReplyConnect-only `replyconnect-private` Coolify network with
+`replyconnect-web`, `replyconnect-worker`, and `replyconnect-postgres`.
 
 ## Runtime contract
 
 - Image: `valkey/valkey:9.1.1-alpine3.24`
 - Internal compose hostname: `valkey`
-- Application URL: `redis://:<VALKEY_PASSWORD>@valkey:6379/0`
+- Stable Coolify private alias: `replyconnect-valkey`
+- Coolify application URL: `redis://:<VALKEY_PASSWORD>@replyconnect-valkey:6379/0`
 - Application variable: `REDIS_URL`
 - Service secret: `VALKEY_PASSWORD`, a unique high-entropy value
 - Data volume: `replyconnect-valkey:/data`
 - Persistence: append-only file (AOF) with `everysec` fsync
 - Network exposure: private only; no `ports:` mapping and no FQDN
 
-In Coolify, use the service's private hostname in `REDIS_URL` instead of the
-compose hostname if Coolify gives it a different one. The owner must provide
-the final hostname and secret through Coolify; neither belongs in this
-repository.
+In Coolify, use the stable `replyconnect-valkey` alias in `REDIS_URL`, never a
+TrackParcel alias or hostname. The owner must provide the final password through
+Coolify; it does not belong in this repository. Keep Valkey on
+`replyconnect-private` only, with no published port or FQDN.
 
 ## Routine checks
 
 1. Confirm Valkey is `running` and its health check is healthy in Coolify.
-2. Confirm the service has no public port, FQDN, or cross-project attachment.
+2. Confirm the service has no public port, FQDN, cross-project attachment, or
+   TrackParcel alias, and shares only `replyconnect-private` with the three
+   other ReplyConnect production services.
 3. Check `https://<replyconnect-domain>/api/health`; require
    `status: "ok"`, `dependencies.database: "ok"`, and
    `dependencies.redis: "ok"`.
