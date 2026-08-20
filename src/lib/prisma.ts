@@ -2,14 +2,18 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { createId } from "./id";
 import type {
   AutomationRecord,
+  AutomationParticipantRecord,
   AutomationRepository,
   CreateAutomationInput,
+  CreateParticipantInput,
   ExecutionRecord,
   InstagramConnectionRecord,
   RecordExecutionInput,
   RecordExecutionResult,
   UpdateAutomationInput,
   DataDeletionRequestRecord,
+  ParticipantPatch,
+  ParticipantState,
 } from "./repository";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
@@ -23,14 +27,83 @@ function mapAutomation(record: {
   status: "DRAFT" | "ACTIVE" | "PAUSED";
   version: number;
   definition: unknown;
+  activatedAt: Date | null;
+  boundMediaId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): AutomationRecord {
   return {
     ...record,
     definition: record.definition as AutomationRecord["definition"],
+    activatedAt: record.activatedAt?.toISOString(),
+    boundMediaId: record.boundMediaId ?? undefined,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapParticipant(record: {
+  id: string;
+  workspaceId: string;
+  automationId: string;
+  instagramAccountId: string;
+  igScopedUserId: string | null;
+  sourceCommentId: string;
+  sourceMediaId: string;
+  sourceMediaSnapshot: unknown;
+  matchedKeyword: string | null;
+  state: ParticipantState;
+  publicReplyStatus: string;
+  publicReplyProviderId: string | null;
+  publicReplySentAt: Date | null;
+  publicReplyError: string | null;
+  openingStatus: string;
+  openingProviderId: string | null;
+  openingSentAt: Date | null;
+  openingError: string | null;
+  followStatus: boolean | null;
+  followCheckedAt: Date | null;
+  followCheckError: string | null;
+  finalDeliveryStatus: string;
+  finalProviderId: string | null;
+  finalDeliveredAt: Date | null;
+  finalDeliveryError: string | null;
+  messagingWindowExpiresAt: Date | null;
+  recheckCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): AutomationParticipantRecord {
+  return {
+    ...record,
+    igScopedUserId: record.igScopedUserId ?? undefined,
+    sourceMediaSnapshot: record.sourceMediaSnapshot as AutomationParticipantRecord["sourceMediaSnapshot"],
+    matchedKeyword: record.matchedKeyword ?? undefined,
+    publicReplyProviderId: record.publicReplyProviderId ?? undefined,
+    publicReplySentAt: record.publicReplySentAt?.toISOString(),
+    publicReplyError: record.publicReplyError ?? undefined,
+    openingProviderId: record.openingProviderId ?? undefined,
+    openingSentAt: record.openingSentAt?.toISOString(),
+    openingError: record.openingError ?? undefined,
+    followStatus: record.followStatus ?? undefined,
+    followCheckedAt: record.followCheckedAt?.toISOString(),
+    followCheckError: record.followCheckError ?? undefined,
+    finalProviderId: record.finalProviderId ?? undefined,
+    finalDeliveredAt: record.finalDeliveredAt?.toISOString(),
+    finalDeliveryError: record.finalDeliveryError ?? undefined,
+    messagingWindowExpiresAt: record.messagingWindowExpiresAt?.toISOString(),
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapParticipantPatch(patch: ParticipantPatch) {
+  return {
+    ...patch,
+    publicReplySentAt: patch.publicReplySentAt ? new Date(patch.publicReplySentAt) : undefined,
+    openingSentAt: patch.openingSentAt ? new Date(patch.openingSentAt) : undefined,
+    followCheckedAt: patch.followCheckedAt ? new Date(patch.followCheckedAt) : undefined,
+    finalDeliveredAt: patch.finalDeliveredAt ? new Date(patch.finalDeliveredAt) : undefined,
+    messagingWindowExpiresAt: patch.messagingWindowExpiresAt ? new Date(patch.messagingWindowExpiresAt) : undefined,
   };
 }
 
@@ -102,6 +175,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           workspaceId,
           name: input.name.trim(),
           definition: input.definition,
+          version: input.definition.version,
         },
       });
       return mapAutomation(record);
@@ -110,7 +184,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async updateAutomation(workspaceId, id, patch: UpdateAutomationInput) {
       const existing = await client.automation.findFirst({ where: { workspaceId, id } });
       if (!existing) return null;
-      const record = await client.automation.update({ where: { id }, data: patch });
+      const record = await client.automation.update({
+        where: { id },
+        data: { ...patch, ...(patch.definition ? { version: patch.definition.version } : {}) },
+      });
       return mapAutomation(record);
     },
 
@@ -256,6 +333,92 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async hasExecution(workspaceId, dedupeKey) {
       return Boolean(await client.automationExecution.findFirst({ where: { workspaceId, dedupeKey }, select: { id: true } }));
+    },
+
+    async createParticipant(input: CreateParticipantInput) {
+      try {
+        const record = await client.automationParticipant.create({
+          data: {
+            id: createId("participant"),
+            ...input,
+            sourceMediaSnapshot: input.sourceMediaSnapshot as Prisma.InputJsonValue,
+            ...mapParticipantPatch(input),
+          },
+        });
+        return { created: true, record: mapParticipant(record) };
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        const record = await client.automationParticipant.findFirstOrThrow({
+          where: {
+            workspaceId: input.workspaceId,
+            instagramAccountId: input.instagramAccountId,
+            sourceCommentId: input.sourceCommentId,
+          },
+        });
+        return { created: false, record: mapParticipant(record) };
+      }
+    },
+
+    async findPendingParticipant(instagramAccountId, igScopedUserId) {
+      const record = await client.automationParticipant.findFirst({
+        where: {
+          instagramAccountId,
+          igScopedUserId,
+          state: { notIn: ["LINK_SENT", "EXPIRED", "FAILED"] },
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+      return record ? mapParticipant(record) : null;
+    },
+
+    async transitionParticipant(id, expectedStates, patch) {
+      const result = await client.automationParticipant.updateMany({
+        where: { id, state: { in: expectedStates } },
+        data: mapParticipantPatch(patch),
+      });
+      if (result.count === 0) return null;
+      const record = await client.automationParticipant.findUnique({ where: { id } });
+      return record ? mapParticipant(record) : null;
+    },
+
+    async bindNextMedia(workspaceId, automationId, mediaId, publishedAt) {
+      const result = await client.automation.updateMany({
+        where: {
+          id: automationId,
+          workspaceId,
+          status: "ACTIVE",
+          boundMediaId: null,
+          activatedAt: { lt: new Date(publishedAt) },
+        },
+        data: { boundMediaId: mediaId },
+      });
+      return result.count === 1;
+    },
+
+    async listParticipants(workspaceId, automationId, limit) {
+      const records = await client.automationParticipant.findMany({
+        where: { workspaceId, automationId },
+        orderBy: { updatedAt: "desc" },
+        take: limit,
+      });
+      return records.map(mapParticipant);
+    },
+
+    async expireParticipantsByInstagramAccount(instagramAccountId, reason) {
+      const result = await client.automationParticipant.updateMany({
+        where: {
+          instagramAccountId,
+          state: { notIn: ["LINK_SENT", "EXPIRED", "FAILED"] },
+        },
+        data: { state: "EXPIRED", finalDeliveryError: reason },
+      });
+      return result.count;
+    },
+
+    async deleteParticipantsByWorkspaceIds(workspaceIds) {
+      if (workspaceIds.length === 0) return 0;
+      const result = await client.automationParticipant.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+      return result.count;
     },
   };
 }

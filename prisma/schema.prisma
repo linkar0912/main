@@ -26,15 +26,27 @@ enum ExecutionStatus {
   FAILED
 }
 
+enum ParticipantState {
+  COMMENT_MATCHED
+  OPENING_SENT
+  OPTED_IN
+  FOLLOW_REQUIRED
+  FOLLOW_VERIFIED
+  LINK_SENT
+  EXPIRED
+  FAILED
+}
+
 model Workspace {
-  id           String                 @id
-  name         String
-  slug         String                 @unique
-  createdAt    DateTime               @default(now())
-  members      WorkspaceMember[]
-  connections  InstagramConnection[]
-  automations  Automation[]
-  executions   AutomationExecution[]
+  id            String                  @id
+  name          String
+  slug          String                  @unique
+  createdAt     DateTime                @default(now())
+  members       WorkspaceMember[]
+  connections   InstagramConnection[]
+  automations   Automation[]
+  participants  AutomationParticipant[]
+  executions    AutomationExecution[]
   webhookEvents WebhookEvent[]
 }
 
@@ -66,32 +78,73 @@ model InstagramConnection {
 }
 
 model Automation {
-  id          String           @id
-  workspaceId String
-  name        String
-  status      AutomationStatus @default(DRAFT)
-  version     Int              @default(1)
-  definition  Json
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  executions  AutomationExecution[]
+  id           String                  @id
+  workspaceId  String
+  name         String
+  status       AutomationStatus        @default(DRAFT)
+  version      Int                     @default(1)
+  definition   Json
+  activatedAt  DateTime?
+  boundMediaId String?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  workspace    Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executions   AutomationExecution[]
+  participants AutomationParticipant[]
 
   @@index([workspaceId, status])
 }
 
+model AutomationParticipant {
+  id                       String           @id
+  workspaceId              String
+  automationId             String
+  instagramAccountId       String
+  igScopedUserId           String?
+  sourceCommentId          String
+  sourceMediaId            String
+  sourceMediaSnapshot      Json
+  matchedKeyword           String?
+  state                    ParticipantState @default(COMMENT_MATCHED)
+  publicReplyStatus        String           @default("PENDING")
+  publicReplyProviderId    String?
+  publicReplySentAt        DateTime?
+  publicReplyError         String?
+  openingStatus            String           @default("PENDING")
+  openingProviderId        String?
+  openingSentAt            DateTime?
+  openingError             String?
+  followStatus             Boolean?
+  followCheckedAt          DateTime?
+  followCheckError         String?
+  finalDeliveryStatus      String           @default("PENDING")
+  finalProviderId          String?
+  finalDeliveredAt         DateTime?
+  finalDeliveryError       String?
+  messagingWindowExpiresAt DateTime?
+  recheckCount             Int              @default(0)
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+  workspace                Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation               Automation       @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, instagramAccountId, sourceCommentId])
+  @@index([instagramAccountId, igScopedUserId, state])
+  @@index([workspaceId, automationId, updatedAt])
+}
+
 model AutomationExecution {
-  id              String            @id
-  workspaceId     String
-  automationId    String
-  externalEventId String
-  dedupeKey       String
-  status          ExecutionStatus
-  reason          String?
+  id                String          @id
+  workspaceId       String
+  automationId      String
+  externalEventId   String
+  dedupeKey         String
+  status            ExecutionStatus
+  reason            String?
   providerMessageId String?
-  createdAt       DateTime          @default(now())
-  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  automation      Automation        @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation        Automation      @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, dedupeKey])
   @@index([workspaceId, createdAt])
@@ -112,12 +165,12 @@ model WebhookEvent {
 }
 
 model DataDeletionRequest {
-  id                    String   @id
-  confirmationCode      String   @unique
-  signedRequestHash     String   @unique
-  status                String
-  requestedAt           DateTime @default(now())
-  completedAt           DateTime?
+  id                String    @id
+  confirmationCode  String    @unique
+  signedRequestHash String    @unique
+  status            String
+  requestedAt       DateTime  @default(now())
+  completedAt       DateTime?
 
   @@index([requestedAt])
 }

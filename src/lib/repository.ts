@@ -1,8 +1,11 @@
-import type { FlowDefinition } from "./automation/types";
+import type { FlowDefinition, MediaSnapshot } from "./automation/types";
 
 export type AutomationStatus = "DRAFT" | "ACTIVE" | "PAUSED";
 export type ConnectionStatus = "CONNECTED" | "DISCONNECTED" | "EXPIRED";
 export type ExecutionStatus = "PROCESSING" | "SENT" | "SKIPPED" | "FAILED";
+export type ParticipantState =
+  | "COMMENT_MATCHED" | "OPENING_SENT" | "OPTED_IN" | "FOLLOW_REQUIRED"
+  | "FOLLOW_VERIFIED" | "LINK_SENT" | "EXPIRED" | "FAILED";
 
 export type AutomationRecord = {
   id: string;
@@ -11,6 +14,40 @@ export type AutomationRecord = {
   status: AutomationStatus;
   version: number;
   definition: FlowDefinition;
+  activatedAt?: string;
+  boundMediaId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AutomationParticipantRecord = {
+  id: string;
+  workspaceId: string;
+  automationId: string;
+  instagramAccountId: string;
+  igScopedUserId?: string;
+  sourceCommentId: string;
+  sourceMediaId: string;
+  sourceMediaSnapshot: MediaSnapshot;
+  matchedKeyword?: string;
+  state: ParticipantState;
+  publicReplyStatus: string;
+  publicReplyProviderId?: string;
+  publicReplySentAt?: string;
+  publicReplyError?: string;
+  openingStatus: string;
+  openingProviderId?: string;
+  openingSentAt?: string;
+  openingError?: string;
+  followStatus?: boolean;
+  followCheckedAt?: string;
+  followCheckError?: string;
+  finalDeliveryStatus: string;
+  finalProviderId?: string;
+  finalDeliveredAt?: string;
+  finalDeliveryError?: string;
+  messagingWindowExpiresAt?: string;
+  recheckCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -43,7 +80,19 @@ export type CreateAutomationInput = {
   definition: FlowDefinition;
 };
 
-export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "status" | "definition">>;
+export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "status" | "definition" | "activatedAt">> & {
+  boundMediaId?: string | null;
+};
+
+export type CreateParticipantInput = Pick<
+  AutomationParticipantRecord,
+  "workspaceId" | "automationId" | "instagramAccountId" | "sourceCommentId" | "sourceMediaId" | "sourceMediaSnapshot"
+> & Partial<Omit<AutomationParticipantRecord, "id" | "workspaceId" | "automationId" | "instagramAccountId" | "sourceCommentId" | "sourceMediaId" | "sourceMediaSnapshot" | "createdAt" | "updatedAt">>;
+
+export type ParticipantPatch = Partial<Pick<
+  AutomationParticipantRecord,
+  "igScopedUserId" | "matchedKeyword" | "state" | "publicReplyStatus" | "publicReplyProviderId" | "publicReplySentAt" | "publicReplyError" | "openingStatus" | "openingProviderId" | "openingSentAt" | "openingError" | "followStatus" | "followCheckedAt" | "followCheckError" | "finalDeliveryStatus" | "finalProviderId" | "finalDeliveredAt" | "finalDeliveryError" | "messagingWindowExpiresAt" | "recheckCount"
+>>;
 
 export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt">;
 export type ClaimExecutionInput = Pick<ExecutionRecord, "workspaceId" | "automationId" | "externalEventId" | "dedupeKey">;
@@ -90,4 +139,11 @@ export interface AutomationRepository {
   completeExecution(workspaceId: string, dedupeKey: string, result: Pick<RecordExecutionInput, "status" | "reason" | "providerMessageId">): Promise<void>;
   releaseExecutionClaim(workspaceId: string, dedupeKey: string): Promise<void>;
   hasExecution(workspaceId: string, dedupeKey: string): Promise<boolean>;
+  createParticipant(input: CreateParticipantInput): Promise<{ created: boolean; record: AutomationParticipantRecord }>;
+  findPendingParticipant(igAccountId: string, igScopedUserId: string): Promise<AutomationParticipantRecord | null>;
+  transitionParticipant(id: string, expectedStates: ParticipantState[], patch: ParticipantPatch): Promise<AutomationParticipantRecord | null>;
+  bindNextMedia(workspaceId: string, automationId: string, mediaId: string, publishedAt: string): Promise<boolean>;
+  listParticipants(workspaceId: string, automationId: string, limit: number): Promise<AutomationParticipantRecord[]>;
+  expireParticipantsByInstagramAccount(igAccountId: string, reason: string): Promise<number>;
+  deleteParticipantsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
 }

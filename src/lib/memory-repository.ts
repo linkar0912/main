@@ -1,14 +1,18 @@
 import { createId } from "./id";
 import type {
   AutomationRecord,
+  AutomationParticipantRecord,
   AutomationRepository,
   CreateAutomationInput,
+  CreateParticipantInput,
   ExecutionRecord,
   InstagramConnectionRecord,
   RecordExecutionInput,
   RecordExecutionResult,
   UpdateAutomationInput,
   DataDeletionRequestRecord,
+  ParticipantPatch,
+  ParticipantState,
 } from "./repository";
 
 function now(): string {
@@ -24,6 +28,8 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const connections = new Map<string, InstagramConnectionRecord>();
   const executions = new Map<string, ExecutionRecord>();
   const deletionRequests = new Map<string, DataDeletionRequestRecord>();
+  const participants = new Map<string, AutomationParticipantRecord>();
+  const participantIdsBySource = new Map<string, string>();
 
   return {
     async ensureWorkspace() {},
@@ -48,7 +54,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         workspaceId,
         name: input.name.trim(),
         status: "DRAFT",
-        version: 1,
+        version: input.definition.version,
         definition: copy(input.definition),
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -60,11 +66,14 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     async updateAutomation(workspaceId, id, patch: UpdateAutomationInput) {
       const current = automations.get(id);
       if (!current || current.workspaceId !== workspaceId) return null;
+      const { boundMediaId, ...rest } = patch;
       const updated: AutomationRecord = {
         ...current,
-        ...patch,
+        ...rest,
+        ...(boundMediaId === undefined ? {} : { boundMediaId: boundMediaId ?? undefined }),
         name: patch.name?.trim() || current.name,
         definition: patch.definition ? copy(patch.definition) : current.definition,
+        version: patch.definition?.version ?? current.version,
         updatedAt: now(),
       };
       automations.set(id, updated);
@@ -214,6 +223,95 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return [...executions.values()].some(
         (record) => record.workspaceId === workspaceId && record.dedupeKey === dedupeKey,
       );
+    },
+
+    async createParticipant(input: CreateParticipantInput) {
+      const sourceKey = `${input.workspaceId}:${input.instagramAccountId}:${input.sourceCommentId}`;
+      const existingId = participantIdsBySource.get(sourceKey);
+      if (existingId) {
+        const existing = participants.get(existingId);
+        if (existing) return { created: false, record: copy(existing) };
+      }
+      const timestamp = now();
+      const record: AutomationParticipantRecord = {
+        ...input,
+        id: createId("participant"),
+        sourceMediaSnapshot: copy(input.sourceMediaSnapshot),
+        state: input.state ?? "COMMENT_MATCHED",
+        publicReplyStatus: input.publicReplyStatus ?? "PENDING",
+        openingStatus: input.openingStatus ?? "PENDING",
+        finalDeliveryStatus: input.finalDeliveryStatus ?? "PENDING",
+        recheckCount: input.recheckCount ?? 0,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      participants.set(record.id, record);
+      participantIdsBySource.set(sourceKey, record.id);
+      return { created: true, record: copy(record) };
+    },
+
+    async findPendingParticipant(instagramAccountId, igScopedUserId) {
+      const record = [...participants.values()]
+        .filter((participant) =>
+          participant.instagramAccountId === instagramAccountId
+          && participant.igScopedUserId === igScopedUserId
+          && !["LINK_SENT", "EXPIRED", "FAILED"].includes(participant.state),
+        )
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+      return record ? copy(record) : null;
+    },
+
+    async transitionParticipant(id, expectedStates: ParticipantState[], patch: ParticipantPatch) {
+      const current = participants.get(id);
+      if (!current || !expectedStates.includes(current.state)) return null;
+      const updated: AutomationParticipantRecord = { ...current, ...patch, updatedAt: now() };
+      participants.set(id, updated);
+      return copy(updated);
+    },
+
+    async bindNextMedia(workspaceId, automationId, mediaId, publishedAt) {
+      const current = automations.get(automationId);
+      if (
+        !current
+        || current.workspaceId !== workspaceId
+        || current.status !== "ACTIVE"
+        || current.boundMediaId
+        || !current.activatedAt
+        || publishedAt <= current.activatedAt
+      ) return false;
+      automations.set(automationId, { ...current, boundMediaId: mediaId, updatedAt: now() });
+      return true;
+    },
+
+    async listParticipants(workspaceId, automationId, limit) {
+      return copy(
+        [...participants.values()]
+          .filter((participant) => participant.workspaceId === workspaceId && participant.automationId === automationId)
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .slice(0, limit),
+      );
+    },
+
+    async expireParticipantsByInstagramAccount(instagramAccountId, reason) {
+      let count = 0;
+      for (const [id, participant] of participants.entries()) {
+        if (participant.instagramAccountId !== instagramAccountId || ["LINK_SENT", "EXPIRED", "FAILED"].includes(participant.state)) continue;
+        participants.set(id, { ...participant, state: "EXPIRED", finalDeliveryError: reason, updatedAt: now() });
+        count += 1;
+      }
+      return count;
+    },
+
+    async deleteParticipantsByWorkspaceIds(workspaceIds) {
+      const workspaceIdSet = new Set(workspaceIds);
+      let count = 0;
+      for (const [id, participant] of participants.entries()) {
+        if (!workspaceIdSet.has(participant.workspaceId)) continue;
+        participants.delete(id);
+        participantIdsBySource.delete(`${participant.workspaceId}:${participant.instagramAccountId}:${participant.sourceCommentId}`);
+        count += 1;
+      }
+      return count;
     },
   };
 }

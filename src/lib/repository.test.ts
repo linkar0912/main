@@ -8,6 +8,38 @@ const definition = {
   actions: [{ type: "private_reply" as const, text: "Here you go" }],
 };
 
+const campaignDefinition = {
+  version: 2 as const,
+  trigger: {
+    type: "comment" as const,
+    source: "next_media" as const,
+    mediaIds: [],
+    mediaSnapshots: [],
+    match: "keyword" as const,
+    keywords: ["guide"],
+  },
+  publicReplies: [],
+  openingMessage: { text: "Thanks for your comment", optInButtonLabel: "Get the guide" },
+  followGate: { required: true as const, notFollowingMessage: "Follow us first", recheckButtonLabel: "I've followed" },
+  delivery: { text: "Here is your guide", url: "https://example.com/guide" },
+};
+
+const participantInput = {
+  workspaceId: "workspace_a",
+  automationId: "automation_1",
+  instagramAccountId: "ig_123",
+  sourceCommentId: "comment_1",
+  sourceMediaId: "media_1",
+  sourceMediaSnapshot: {
+    id: "media_1",
+    mediaType: "VIDEO" as const,
+    mediaProductType: "REELS" as const,
+    permalink: "https://instagram.com/reel/media_1",
+    timestamp: "2026-08-21T09:00:00.000Z",
+  },
+  matchedKeyword: "guide",
+};
+
 describe("memory repository", () => {
   it("creates, lists, and updates automations within a workspace", async () => {
     const repository = createMemoryRepository();
@@ -53,6 +85,103 @@ describe("memory repository", () => {
     const claim = { workspaceId: "workspace_a", automationId: "automation_1", externalEventId: "comment_1", dedupeKey: "automation_1:comment_1" };
     expect(await repository.claimExecution(claim)).toBe(true);
     expect(await repository.claimExecution(claim)).toBe(false);
+  });
+
+  it("deduplicates a source comment across matching automations", async () => {
+    const repository = createMemoryRepository();
+    const first = await repository.createParticipant(participantInput);
+    const duplicate = await repository.createParticipant(participantInput);
+    const otherAutomation = await repository.createParticipant({ ...participantInput, automationId: "automation_2" });
+
+    expect(first.created).toBe(true);
+    expect(duplicate.created).toBe(false);
+    expect(otherAutomation.created).toBe(false);
+    expect(duplicate.record.id).toBe(first.record.id);
+    expect(otherAutomation.record.id).toBe(first.record.id);
+  });
+
+  it("claims participant state transitions once and prevents duplicate final delivery", async () => {
+    const repository = createMemoryRepository();
+    const { record } = await repository.createParticipant(participantInput);
+    const checkedAt = "2026-08-21T10:00:00.000Z";
+
+    expect(await repository.transitionParticipant(record.id, ["OPTED_IN"], {
+      state: "FOLLOW_VERIFIED",
+      followStatus: true,
+      followCheckedAt: checkedAt,
+    })).toBeNull();
+    expect(await repository.transitionParticipant(record.id, ["COMMENT_MATCHED"], {
+      state: "OPTED_IN",
+      igScopedUserId: "scoped_user_1",
+    })).toMatchObject({ state: "OPTED_IN", igScopedUserId: "scoped_user_1" });
+    expect(await repository.transitionParticipant(record.id, ["OPTED_IN"], {
+      state: "FOLLOW_VERIFIED",
+      followStatus: true,
+      followCheckedAt: checkedAt,
+    })).toMatchObject({ state: "FOLLOW_VERIFIED", followStatus: true, followCheckedAt: checkedAt });
+
+    const [firstDelivery, duplicateDelivery] = await Promise.all([
+      repository.transitionParticipant(record.id, ["FOLLOW_VERIFIED"], {
+        state: "LINK_SENT",
+        finalDeliveryStatus: "SENT",
+        finalProviderId: "final_1",
+        finalDeliveredAt: checkedAt,
+      }),
+      repository.transitionParticipant(record.id, ["FOLLOW_VERIFIED"], {
+        state: "LINK_SENT",
+        finalDeliveryStatus: "SENT",
+        finalProviderId: "final_2",
+        finalDeliveredAt: checkedAt,
+      }),
+    ]);
+
+    expect([firstDelivery, duplicateDelivery].filter(Boolean)).toHaveLength(1);
+    expect((firstDelivery ?? duplicateDelivery)?.finalDeliveryStatus).toBe("SENT");
+  });
+
+  it("finds pending participants by Instagram-scoped user id", async () => {
+    const repository = createMemoryRepository();
+    const { record } = await repository.createParticipant(participantInput);
+    await repository.transitionParticipant(record.id, ["COMMENT_MATCHED"], {
+      state: "OPTED_IN",
+      igScopedUserId: "scoped_user_1",
+    });
+
+    expect(await repository.findPendingParticipant("ig_123", "scoped_user_1")).toMatchObject({ id: record.id, state: "OPTED_IN" });
+    expect(await repository.findPendingParticipant("ig_123", "scoped_user_missing")).toBeNull();
+
+    await repository.transitionParticipant(record.id, ["OPTED_IN"], { state: "EXPIRED" });
+    expect(await repository.findPendingParticipant("ig_123", "scoped_user_1")).toBeNull();
+  });
+
+  it("lists only the requested workspace automation participants", async () => {
+    const repository = createMemoryRepository();
+    const first = await repository.createParticipant(participantInput);
+    await repository.createParticipant({ ...participantInput, sourceCommentId: "comment_2" });
+    await repository.createParticipant({ ...participantInput, workspaceId: "workspace_b", sourceCommentId: "comment_3" });
+    await repository.createParticipant({ ...participantInput, automationId: "automation_2", sourceCommentId: "comment_4" });
+
+    const participants = await repository.listParticipants("workspace_a", "automation_1", 10);
+    expect(participants).toHaveLength(2);
+    expect(participants.map((participant) => participant.id)).toContain(first.record.id);
+    expect(participants.every((participant) => participant.workspaceId === "workspace_a" && participant.automationId === "automation_1")).toBe(true);
+  });
+
+  it("binds exactly one post published after next-media activation", async () => {
+    const repository = createMemoryRepository();
+    const automation = await repository.createAutomation("workspace_a", { name: "Next Reel", definition: campaignDefinition });
+    const activatedAt = "2026-08-21T10:00:00.000Z";
+    const activated = await repository.updateAutomation("workspace_a", automation.id, { status: "ACTIVE", activatedAt });
+
+    expect(activated).toMatchObject({ version: 2, activatedAt });
+    expect(await repository.bindNextMedia("workspace_a", automation.id, "media_old", activatedAt)).toBe(false);
+    const winners = await Promise.all([
+      repository.bindNextMedia("workspace_a", automation.id, "media_2", "2026-08-21T10:00:00.001Z"),
+      repository.bindNextMedia("workspace_a", automation.id, "media_3", "2026-08-21T10:00:00.001Z"),
+    ]);
+
+    expect(winners.filter(Boolean)).toHaveLength(1);
+    expect((await repository.getAutomation("workspace_a", automation.id))?.boundMediaId).toMatch(/^media_[23]$/);
   });
 
   it("finds a workspace connection by Instagram account id", async () => {
