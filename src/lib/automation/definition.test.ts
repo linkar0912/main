@@ -1,6 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { validateFlowDefinition } from "./definition";
 
+const campaign = {
+  version: 2,
+  trigger: {
+    type: "comment",
+    source: "specific_media",
+    mediaIds: ["media_1"],
+    mediaSnapshots: [
+      {
+        id: "media_1",
+        mediaType: "VIDEO",
+        mediaProductType: "REELS",
+        permalink: "https://www.instagram.com/reel/demo/",
+        timestamp: "2026-08-21T00:00:00.000Z",
+      },
+    ],
+    match: "keyword",
+    keywords: [" Guide ", "guide", "PDF"],
+  },
+  publicReplies: ["Check your DMs"],
+  openingMessage: { text: "Reply below so I can check your follow status.", optInButtonLabel: "Check follow" },
+  followGate: {
+    required: true,
+    notFollowingMessage: "Follow this account, then tap below.",
+    recheckButtonLabel: "I've followed",
+  },
+  delivery: {
+    text: "You're verified — here is your guide.",
+    url: "https://example.com/guide",
+    buttonLabel: "Open guide",
+  },
+};
+
 describe("validateFlowDefinition", () => {
   it("accepts a comment keyword flow with a private reply", () => {
     const flow = validateFlowDefinition({
@@ -42,5 +74,64 @@ describe("validateFlowDefinition", () => {
       version: 1, trigger: { type: "comment", match: "any", keywords: [], mediaIds: [] }, conditions: [],
       actions: [{ type: "private_reply", text: "One" }, { type: "private_reply", text: "Two" }],
     })).toThrow();
+  });
+
+  it("accepts and normalizes a version 2 campaign", () => {
+    expect(validateFlowDefinition(campaign)).toMatchObject({
+      version: 2,
+      trigger: { keywords: ["guide", "pdf"] },
+    });
+  });
+
+  it("rejects invalid version 2 media targeting and keyword configurations", () => {
+    expect(() =>
+      validateFlowDefinition({
+        ...campaign,
+        trigger: { ...campaign.trigger, mediaIds: [] },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      validateFlowDefinition({
+        ...campaign,
+        trigger: { ...campaign.trigger, keywords: ["Guide", "  "] },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      validateFlowDefinition({
+        ...campaign,
+        trigger: {
+          ...campaign.trigger,
+          mediaSnapshots: [{ ...campaign.trigger.mediaSnapshots[0], id: "media_2" }],
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("limits version 2 public replies and quick-reply labels", () => {
+    expect(() =>
+      validateFlowDefinition({ ...campaign, publicReplies: Array.from({ length: 6 }, (_, index) => `Reply ${index}`) }),
+    ).toThrow();
+
+    expect(() =>
+      validateFlowDefinition({
+        ...campaign,
+        openingMessage: { ...campaign.openingMessage, optInButtonLabel: "a".repeat(21) },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      validateFlowDefinition({
+        ...campaign,
+        followGate: { ...campaign.followGate, recheckButtonLabel: "a".repeat(21) },
+      }),
+    ).toThrow();
+  });
+
+  it("requires an HTTPS version 2 delivery URL outside development", () => {
+    expect(() =>
+      validateFlowDefinition({ ...campaign, delivery: { ...campaign.delivery, url: "http://example.com/guide" } }),
+    ).toThrow();
   });
 });

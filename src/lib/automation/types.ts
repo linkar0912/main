@@ -21,12 +21,39 @@ export type FlowAction =
   | { type: "send_link"; text: string; url: string }
   | { type: "send_button"; text: string; buttonLabel: string; url: string };
 
-export type FlowDefinition = {
+export type FlowDefinitionV1 = {
   version: 1;
   trigger: CommentTrigger | MessageTrigger;
   conditions: FlowCondition[];
   actions: FlowAction[];
 };
+
+export type MediaSnapshot = {
+  id: string;
+  caption?: string;
+  mediaType: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM";
+  mediaProductType?: "AD" | "FEED" | "REELS" | "STORY";
+  permalink: string;
+  timestamp: string;
+};
+
+export type FlowDefinitionV2 = {
+  version: 2;
+  trigger: {
+    type: "comment";
+    source: "specific_media" | "all_media" | "next_media";
+    mediaIds: string[];
+    mediaSnapshots: MediaSnapshot[];
+    match: "keyword" | "any";
+    keywords: string[];
+  };
+  publicReplies: string[];
+  openingMessage: { text: string; optInButtonLabel: string };
+  followGate: { required: true; notFollowingMessage: string; recheckButtonLabel: string };
+  delivery: { text: string; url: string; buttonLabel?: string };
+};
+
+export type FlowDefinition = FlowDefinitionV1 | FlowDefinitionV2;
 
 export type NormalizedEvent = {
   id: string;
