@@ -11,16 +11,16 @@ services:
     environment: &application-environment
       NODE_ENV: production
       APP_NAME: ${APP_NAME:-ReplyConnect}
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://replyconnect.example.com}
-      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-owner-provided@example.com}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:?SUPPORT_EMAIL is required}
       SOURCE_COMMIT: ${SOURCE_COMMIT:-local-compose}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://replyconnect:replace-with-a-unique-postgres-password@postgres:5432/replyconnect?schema=public}
-      REDIS_URL: ${REDIS_URL:-redis://:replace-with-a-unique-valkey-password@valkey:6379/0}
-      META_APP_ID: ${META_APP_ID:-replace-with-meta-app-id}
-      META_APP_SECRET: ${META_APP_SECRET:-replace-with-meta-app-secret}
-      META_TOKEN_ENCRYPTION_KEY: ${META_TOKEN_ENCRYPTION_KEY:-replace-with-64-hex-character-token-encryption-key}
-      META_REDIRECT_URI: ${META_REDIRECT_URI:-https://replyconnect.example.com/api/meta/oauth/callback}
-      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-replace-with-a-long-random-webhook-verify-token}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      META_APP_ID: ${META_APP_ID:?META_APP_ID is required}
+      META_APP_SECRET: ${META_APP_SECRET:?META_APP_SECRET is required}
+      META_TOKEN_ENCRYPTION_KEY: ${META_TOKEN_ENCRYPTION_KEY:?META_TOKEN_ENCRYPTION_KEY is required}
+      META_REDIRECT_URI: ${META_REDIRECT_URI:?META_REDIRECT_URI is required}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:?META_VERIFY_TOKEN is required}
       META_API_VERSION: ${META_API_VERSION:-v25.0}
       META_SCOPES: ${META_SCOPES:-instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages}
     depends_on:
@@ -63,7 +63,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-replyconnect}
       POSTGRES_USER: ${POSTGRES_USER:-replyconnect}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-replace-with-a-unique-postgres-password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - replyconnect-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -85,10 +85,10 @@ services:
         "--protected-mode",
         "yes",
         "--requirepass",
-        "${VALKEY_PASSWORD:-replace-with-a-unique-valkey-password}",
+        "${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}",
       ]
     environment:
-      VALKEY_PASSWORD: ${VALKEY_PASSWORD:-replace-with-a-unique-valkey-password}
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}
     volumes:
       - replyconnect-valkey:/data
     healthcheck:

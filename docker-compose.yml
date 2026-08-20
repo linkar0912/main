@@ -9,13 +9,13 @@ services:
       - "5432:5432"
     volumes:
       - replyconnect-postgres:/var/lib/postgresql/data
-  redis:
-    image: redis:7-alpine
+  valkey:
+    image: valkey/valkey:9.1.1-alpine3.24
     ports:
       - "6379:6379"
     volumes:
-      - replyconnect-redis:/data
+      - replyconnect-valkey:/data
 
 volumes:
   replyconnect-postgres:
-  replyconnect-redis:
+  replyconnect-valkey:

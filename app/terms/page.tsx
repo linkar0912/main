@@ -2,6 +2,8 @@ import { PublicPage } from "@/src/components/public-page";
 import { getServerEnv } from "@/src/lib/env";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 
+export const dynamic = "force-dynamic";
+
 export default function TermsPage() {
   const { supportEmail } = getServerEnv();
   return (

@@ -68,6 +68,9 @@ The image defaults to `pnpm start`; the worker application's command override
 is `pnpm worker`. The runtime image also contains `pnpm db:migrate:deploy` for
 the explicit migration step below. Both applications must also attach to
 `replyconnect-private`; only `replyconnect-web` receives the public domain.
+The shared image intentionally has no Dockerfile `HEALTHCHECK`: configure the
+HTTP `/api/health` check only for `replyconnect-web`, because the worker shares
+the image but does not listen on port 3000.
 
 ## 3. Route the web app through Cloudflare
 

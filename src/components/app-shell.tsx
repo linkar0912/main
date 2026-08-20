@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CircleHelp, LayoutDashboard, Settings, Sparkles, Workflow } from "lucide-react";
-import { getServerEnv } from "@/src/lib/env";
 import { PRODUCT_MARK, PRODUCT_NAME } from "@/src/lib/branding";
 
 const navigation = [
@@ -14,7 +13,6 @@ const navigation = [
 
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
-  const supportEmail = getServerEnv().supportEmail;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -47,7 +45,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             <Sparkles size={17} />
             <div><strong>No AI, by design</strong><span>Rules stay predictable.</span></div>
           </div>
-          <a className="sidebar-link" href={`mailto:${supportEmail}`}><CircleHelp size={18} strokeWidth={1.8} /><span>Get support</span></a>
+          <Link className="sidebar-link" href="/support"><CircleHelp size={18} strokeWidth={1.8} /><span>Get support</span></Link>
           <div className="sidebar-footnote">Instagram-first automation<br />Built for Indian teams.</div>
         </div>
       </aside>

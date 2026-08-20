@@ -53,7 +53,11 @@ export async function getHealth(checkers: HealthCheckers = {}): Promise<Health> 
   ]);
 
   return {
-    status: database === "error" || redis === "error" ? "degraded" : "ok",
+    status: database === "not_configured" && redis === "not_configured"
+      ? "ok"
+      : database === "ok" && redis === "ok"
+        ? "ok"
+        : "degraded",
     mode: databaseUrl || redisUrl ? "configured" : "demo",
     release: process.env.SOURCE_COMMIT || null,
     dependencies: { database, redis },

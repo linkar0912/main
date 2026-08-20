@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const forbidden = new RegExp(`${["DM", "Setu"].join("")}|${["dm", "setu"].join("")}`, "g");
+const forbidden = new RegExp(["DM", "Setu"].join(""), "gi");
 const ignored = /^(?:node_modules\/|\.next\/|coverage\/|dist\/|build\/|\.superpowers\/)/;
 const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
   .split("\0")

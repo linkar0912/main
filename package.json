@@ -6,7 +6,7 @@
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "check:branding": "node scripts/check-branding.mjs",
-    "check:compose": "docker compose -f docker-compose.production.yml config --quiet",
+    "check:compose": "docker compose --env-file .env.production.example -f docker-compose.production.yml config --quiet",
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",

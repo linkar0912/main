@@ -79,7 +79,7 @@ pnpm test:e2e
 
 ## Production requirements
 
-Production needs a public HTTPS deployment, PostgreSQL, Redis, a stable `NEXT_PUBLIC_APP_URL`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` only when a configured dependency is unavailable. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. This repository intentionally keeps workspace identity simple for the MVP; add real authentication and workspace membership before opening it to multiple customers.
+Production needs a public HTTPS deployment, PostgreSQL, Valkey, a stable `NEXT_PUBLIC_APP_URL`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of PostgreSQL and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. This repository intentionally keeps workspace identity simple for the MVP; add real authentication and workspace membership before opening it to multiple customers.
 
 The local production topology can be checked with:
 
@@ -89,7 +89,9 @@ pnpm check:compose
 ```
 
 `.env.production` contains secrets and is intentionally ignored; replace every
-placeholder before any deployment. Do not publish PostgreSQL or Valkey ports.
+placeholder before any deployment. `check:compose` reads the checked-in example
+template so it can validate strict required-variable interpolation without a
+local secret file. Do not publish PostgreSQL or Valkey ports.
 
 After the web service is public, verify its configured dependencies without
 printing connection details:
