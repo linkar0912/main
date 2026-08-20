@@ -15,6 +15,14 @@ Coolify project/server access, Meta credentials, and high-entropy database,
 Valkey, webhook, and encryption secrets. This repository does not deploy or
 contain any of those values.
 
+For the current shared single-vCPU server, use the checked-in
+`docker-compose.coolify.yml`. GitHub Actions builds and publishes
+`ghcr.io/tejastelkar/replyconnect:main`; Coolify only pulls that image and does
+not run a Next.js build on the production host. Create ReplyConnect as a new
+Coolify project/resource and do not enable **Connect to Predefined Network**.
+The resource-specific network and `replyconnect-*` volumes keep this stack
+separate from TrackParcel.
+
 ## 1. Provision private data services
 
 Create a dedicated ReplyConnect PostgreSQL 17 service and a dedicated Valkey
