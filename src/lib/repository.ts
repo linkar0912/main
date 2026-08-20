@@ -51,7 +51,16 @@ export type RecordExecutionResult =
   | { created: true; record: ExecutionRecord }
   | { created: false; record: ExecutionRecord };
 
+export type DataDeletionRequestRecord = {
+  confirmationCode: string;
+  instagramUserIdHash: string;
+  status: "COMPLETED";
+  requestedAt: string;
+  completedAt: string;
+};
+
 export interface AutomationRepository {
+  ensureWorkspace(workspaceId: string, ownerEmail: string): Promise<void>;
   listAutomations(workspaceId: string): Promise<AutomationRecord[]>;
   getAutomation(workspaceId: string, id: string): Promise<AutomationRecord | null>;
   createAutomation(workspaceId: string, input: CreateAutomationInput): Promise<AutomationRecord>;
@@ -61,11 +70,16 @@ export interface AutomationRepository {
     patch: UpdateAutomationInput,
   ): Promise<AutomationRecord | null>;
   listConnections(workspaceId: string): Promise<InstagramConnectionRecord[]>;
+  listConnectionsExpiringBefore(before: string): Promise<InstagramConnectionRecord[]>;
+  updateConnectionToken(id: string, accessTokenEncrypted: string, tokenExpiresAt?: string): Promise<void>;
   findWorkspaceByInstagramAccount(igUserId: string): Promise<{
     workspaceId: string;
     connection: InstagramConnectionRecord;
   } | null>;
   deleteConnectionByInstagramAccount(igUserId: string): Promise<void>;
+  deleteConnection(workspaceId: string, id: string): Promise<boolean>;
+  deleteInstagramData(igUserId: string, confirmationCode: string, instagramUserIdHash: string): Promise<DataDeletionRequestRecord>;
+  getDataDeletionRequest(confirmationCode: string): Promise<DataDeletionRequestRecord | null>;
   upsertConnection(input: Omit<InstagramConnectionRecord, "id" | "connectedAt">): Promise<InstagramConnectionRecord>;
   recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult>;
   hasExecution(workspaceId: string, dedupeKey: string): Promise<boolean>;

@@ -2,7 +2,7 @@ import { evaluateFlow } from "./engine";
 import type { ExecutionAction, NormalizedEvent } from "./types";
 import { unsealSecret } from "../security/secrets";
 import type { AutomationRepository, InstagramConnectionRecord } from "../repository";
-import type { MetaClient } from "../meta/client";
+import { MetaApiError, type MetaClient } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
 
 export type AutomationRunnerClient = Pick<MetaClient, "sendPrivateReply" | "sendDirectMessage">;
@@ -119,6 +119,7 @@ export async function processNormalizedEvent(
       });
       result.sent += 1;
     } catch (error) {
+      if (error instanceof MetaApiError && error.retryable) throw error;
       await repository.recordExecution({
         workspaceId: mapping.workspaceId,
         automationId: automation.id,

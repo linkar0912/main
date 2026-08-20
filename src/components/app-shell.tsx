@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleHelp, LayoutDashboard, Settings, Sparkles, Workflow } from "lucide-react";
+import { CircleHelp, LayoutDashboard, LogOut, Settings, Sparkles, Workflow } from "lucide-react";
 import { PRODUCT_MARK, PRODUCT_NAME } from "@/src/lib/branding";
 
 const navigation = [
@@ -46,6 +46,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             <div><strong>No AI, by design</strong><span>Rules stay predictable.</span></div>
           </div>
           <Link className="sidebar-link" href="/support"><CircleHelp size={18} strokeWidth={1.8} /><span>Get support</span></Link>
+          <form action="/api/auth/logout" method="post"><button className="sidebar-link sidebar-button" type="submit"><LogOut size={18} strokeWidth={1.8} /><span>Sign out</span></button></form>
           <div className="sidebar-footnote">Instagram-first automation<br />Built for Indian teams.</div>
         </div>
       </aside>

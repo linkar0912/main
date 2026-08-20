@@ -8,6 +8,7 @@ import type {
   RecordExecutionInput,
   RecordExecutionResult,
   UpdateAutomationInput,
+  DataDeletionRequestRecord,
 } from "./repository";
 
 function now(): string {
@@ -22,8 +23,11 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const automations = new Map(seed.map((automation) => [automation.id, copy(automation)]));
   const connections = new Map<string, InstagramConnectionRecord>();
   const executions = new Map<string, ExecutionRecord>();
+  const deletionRequests = new Map<string, DataDeletionRequestRecord>();
 
   return {
+    async ensureWorkspace() {},
+
     async listAutomations(workspaceId) {
       return copy(
         [...automations.values()]
@@ -71,6 +75,18 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return copy([...connections.values()].filter((connection) => connection.workspaceId === workspaceId));
     },
 
+    async listConnectionsExpiringBefore(before) {
+      return copy([...connections.values()].filter((connection) =>
+        connection.status === "CONNECTED" && connection.tokenExpiresAt && connection.tokenExpiresAt <= before,
+      ));
+    },
+
+    async updateConnectionToken(id, accessTokenEncrypted, tokenExpiresAt) {
+      const connection = connections.get(id);
+      if (!connection) return;
+      connections.set(id, { ...connection, accessTokenEncrypted, tokenExpiresAt });
+    },
+
     async findWorkspaceByInstagramAccount(igUserId) {
       const connection = [...connections.values()].find(
         (candidate) => candidate.igUserId === igUserId && candidate.status === "CONNECTED",
@@ -82,6 +98,43 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       for (const [id, connection] of connections.entries()) {
         if (connection.igUserId === igUserId) connections.delete(id);
       }
+    },
+
+    async deleteConnection(workspaceId, id) {
+      const connection = connections.get(id);
+      if (!connection || connection.workspaceId !== workspaceId) return false;
+      connections.delete(id);
+      return true;
+    },
+
+    async deleteInstagramData(igUserId, confirmationCode, instagramUserIdHash) {
+      const workspaceIds = new Set(
+        [...connections.values()].filter((connection) => connection.igUserId === igUserId).map((connection) => connection.workspaceId),
+      );
+      for (const [id, connection] of connections.entries()) {
+        if (connection.igUserId === igUserId) connections.delete(id);
+      }
+      for (const [id, automation] of automations.entries()) {
+        if (workspaceIds.has(automation.workspaceId)) automations.delete(id);
+      }
+      for (const [id, execution] of executions.entries()) {
+        if (workspaceIds.has(execution.workspaceId)) executions.delete(id);
+      }
+      const timestamp = now();
+      const record: DataDeletionRequestRecord = {
+        confirmationCode,
+        instagramUserIdHash,
+        status: "COMPLETED",
+        requestedAt: timestamp,
+        completedAt: timestamp,
+      };
+      deletionRequests.set(confirmationCode, record);
+      return copy(record);
+    },
+
+    async getDataDeletionRequest(confirmationCode) {
+      const record = deletionRequests.get(confirmationCode);
+      return record ? copy(record) : null;
     },
 
     async upsertConnection(input) {

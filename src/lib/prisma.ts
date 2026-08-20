@@ -9,6 +9,7 @@ import type {
   RecordExecutionInput,
   RecordExecutionResult,
   UpdateAutomationInput,
+  DataDeletionRequestRecord,
 } from "./repository";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
@@ -50,8 +51,37 @@ function mapConnection(record: {
   };
 }
 
+function mapDeletionRequest(record: {
+  confirmationCode: string;
+  instagramUserIdHash: string;
+  status: string;
+  requestedAt: Date;
+  completedAt: Date;
+}): DataDeletionRequestRecord {
+  return {
+    confirmationCode: record.confirmationCode,
+    instagramUserIdHash: record.instagramUserIdHash,
+    status: "COMPLETED",
+    requestedAt: record.requestedAt.toISOString(),
+    completedAt: record.completedAt.toISOString(),
+  };
+}
+
 export function createPrismaRepository(client = prisma): AutomationRepository {
   return {
+    async ensureWorkspace(workspaceId, ownerEmail) {
+      await client.workspace.upsert({
+        where: { id: workspaceId },
+        create: {
+          id: workspaceId,
+          name: "ReplyConnect workspace",
+          slug: `replyconnect-${workspaceId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40)}`,
+          members: { create: { id: createId("member"), email: ownerEmail, role: "OWNER" } },
+        },
+        update: {},
+      });
+    },
+
     async listAutomations(workspaceId) {
       const records = await client.automation.findMany({
         where: { workspaceId },
@@ -89,6 +119,20 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapConnection);
     },
 
+    async listConnectionsExpiringBefore(before) {
+      const records = await client.instagramConnection.findMany({
+        where: { status: "CONNECTED", tokenExpiresAt: { lte: new Date(before) } },
+      });
+      return records.map(mapConnection);
+    },
+
+    async updateConnectionToken(id, accessTokenEncrypted, tokenExpiresAt) {
+      await client.instagramConnection.update({
+        where: { id },
+        data: { accessTokenEncrypted, tokenExpiresAt: tokenExpiresAt ? new Date(tokenExpiresAt) : null },
+      });
+    },
+
     async findWorkspaceByInstagramAccount(igUserId) {
       const record = await client.instagramConnection.findFirst({
         where: { igUserId, status: "CONNECTED" },
@@ -98,6 +142,43 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async deleteConnectionByInstagramAccount(igUserId) {
       await client.instagramConnection.deleteMany({ where: { igUserId } });
+    },
+
+    async deleteConnection(workspaceId, id) {
+      const result = await client.instagramConnection.deleteMany({ where: { workspaceId, id } });
+      return result.count > 0;
+    },
+
+    async deleteInstagramData(igUserId, confirmationCode, instagramUserIdHash) {
+      const record = await client.$transaction(async (transaction) => {
+        const connections = await transaction.instagramConnection.findMany({
+          where: { igUserId },
+          select: { workspaceId: true },
+        });
+        const workspaceIds = [...new Set(connections.map((connection) => connection.workspaceId))];
+        if (workspaceIds.length > 0) {
+          await transaction.automationExecution.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+          await transaction.webhookEvent.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+          await transaction.automation.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+          await transaction.instagramConnection.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+        }
+        const completedAt = new Date();
+        return transaction.dataDeletionRequest.create({
+          data: {
+            id: createId("deletion"),
+            confirmationCode,
+            instagramUserIdHash,
+            status: "COMPLETED",
+            completedAt,
+          },
+        });
+      });
+      return mapDeletionRequest(record);
+    },
+
+    async getDataDeletionRequest(confirmationCode) {
+      const record = await client.dataDeletionRequest.findUnique({ where: { confirmationCode } });
+      return record ? mapDeletionRequest(record) : null;
     },
 
     async upsertConnection(input) {

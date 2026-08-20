@@ -68,6 +68,19 @@ openssl rand -hex 32
 
 Put the result in `META_TOKEN_ENCRYPTION_KEY`. Never commit `.env` or any Meta secret.
 
+Generate the single-owner password hash without storing the plain password in
+the repository:
+
+```bash
+read -s REPLYCONNECT_OWNER_PASSWORD
+OWNER_PASSWORD="$REPLYCONNECT_OWNER_PASSWORD" pnpm auth:hash-password
+unset REPLYCONNECT_OWNER_PASSWORD
+```
+
+Put the printed `scrypt$...` value in `OWNER_PASSWORD_HASH`, then configure
+`OWNER_EMAIL`, a random `OWNER_SESSION_SECRET` of at least 32 characters, and
+`OWNER_WORKSPACE_ID`. The first successful owner login creates that workspace.
+
 ## Verification
 
 ```bash
@@ -79,7 +92,7 @@ pnpm test:e2e
 
 ## Production requirements
 
-Production needs a public HTTPS deployment, PostgreSQL, Valkey, a stable `NEXT_PUBLIC_APP_URL`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of PostgreSQL and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. This repository intentionally keeps workspace identity simple for the MVP; add real authentication and workspace membership before opening it to multiple customers.
+Production needs a public HTTPS deployment, PostgreSQL, Valkey, a stable `NEXT_PUBLIC_APP_URL`, the single-owner authentication secrets, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of PostgreSQL and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. This MVP is deliberately single-owner; multi-customer signup and tenant administration remain a later phase.
 
 The local production topology can be checked with:
 

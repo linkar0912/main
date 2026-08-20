@@ -200,3 +200,89 @@
   git add README.md docs/meta-app-review.md
   git commit -m "docs: finish ReplyConnect deployment handoff"
   ```
+
+### Task 5: Protect the owner workspace before public deployment
+
+**Files:**
+- Create: `src/lib/auth/session.ts`
+- Create: `src/lib/auth/session.test.ts`
+- Create: `app/login/page.tsx`
+- Create: `app/api/auth/login/route.ts`
+- Create: `app/api/auth/logout/route.ts`
+- Create: `proxy.ts`
+- Modify: `src/lib/env.ts`
+- Modify: `app/api/automations/route.ts`
+- Modify: `app/api/automations/[id]/route.ts`
+- Modify: `app/api/meta/connection/route.ts`
+- Modify: `app/api/meta/oauth/start/route.ts`
+- Modify: `app/api/meta/oauth/callback/route.ts`
+- Modify: `.env.example`
+- Modify: `.env.production.example`
+
+**Interfaces:**
+- A signed, HTTP-only owner session carries the authorized ReplyConnect workspace ID.
+- Dashboard pages redirect unauthenticated users to `/login`; protected JSON APIs return `401`.
+- OAuth state is bound to the session workspace and cannot connect an Instagram account to another workspace.
+
+- [ ] **Step 1:** Write failing session, authorization, and OAuth-state tests.
+- [ ] **Step 2:** Implement the single-owner login/session boundary and workspace-bound OAuth state.
+- [ ] **Step 3:** Run focused auth and route tests, then commit.
+
+### Task 6: Correct production runtime and deployment behavior
+
+**Files:**
+- Modify: `src/lib/health.ts`
+- Modify: `src/lib/health.test.ts`
+- Modify: `src/components/app-shell.tsx`
+- Modify: `app/privacy/page.tsx`
+- Modify: `app/terms/page.tsx`
+- Modify: `app/data-deletion/page.tsx`
+- Modify: `app/support/page.tsx`
+- Modify: `Dockerfile`
+- Modify: `docker-compose.production.yml`
+- Modify: `docker-compose.yml`
+- Modify: `scripts/check-branding.mjs`
+- Modify: `package.json`
+
+- [ ] **Step 1:** Add failing tests for partial dependency configuration and runtime support values.
+- [ ] **Step 2:** Make configured health fail closed, keep server environment reads out of client bundles, and force public policy pages to render from runtime configuration.
+- [ ] **Step 3:** Remove the image-wide web health check, require production secrets explicitly, validate Compose with the example environment, and use Valkey consistently.
+
+### Task 7: Harden Meta delivery and lifecycle behavior
+
+**Files:**
+- Modify: `src/lib/meta/oauth.ts`
+- Modify: `src/lib/meta/oauth.test.ts`
+- Modify: `src/lib/automation/runner.ts`
+- Modify: `src/lib/automation/runner.test.ts`
+- Modify: `src/lib/repository.ts`
+- Modify: `src/lib/memory-repository.ts`
+- Modify: `src/lib/prisma.ts`
+- Modify: `src/worker.ts`
+
+- [ ] **Step 1:** Add failing tests proving short-lived token fallback and retryable delivery deduplication are rejected.
+- [ ] **Step 2:** Require long-lived tokens, allow BullMQ to retry transient Meta failures, and refresh expiring Instagram tokens from the worker.
+- [ ] **Step 3:** Run focused OAuth, runner, repository, and worker-adjacent tests.
+
+### Task 8: Make Meta data deletion truthful and trackable
+
+**Files:**
+- Modify: `prisma/schema.prisma`
+- Create: `prisma/migrations/20260820200000_data_deletion_requests/migration.sql`
+- Modify: `src/lib/repository.ts`
+- Modify: `src/lib/memory-repository.ts`
+- Modify: `src/lib/prisma.ts`
+- Modify: `src/lib/meta/data-deletion.ts`
+- Modify: `app/api/meta/data-deletion/route.ts`
+- Create: `app/data-deletion/status/[code]/page.tsx`
+- Modify: `app/data-deletion/page.tsx`
+
+- [ ] **Step 1:** Add failing repository and callback tests for immediate deletion plus persisted status.
+- [ ] **Step 2:** Delete the connected workspace's Instagram-derived data in one transaction and persist a non-sensitive confirmation record.
+- [ ] **Step 3:** Add the public status page and align the policy text with implemented behavior.
+
+### Task 9: Final launch-readiness verification
+
+- [ ] Run install, unit tests, lint, production build, browser tests, branding guard, and Compose validation where Docker is available.
+- [ ] Run an independent whole-branch code review and fix all critical findings.
+- [ ] Update the Coolify/Meta handoff with exact owner-supplied secrets and explicitly preserve TrackParcel isolation.

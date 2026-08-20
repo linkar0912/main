@@ -14,6 +14,27 @@ export function SettingsScreen() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [mode, setMode] = useState<"demo" | "configured">("demo");
   const [metaState] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("meta") ?? "");
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState("");
+
+  async function disconnect() {
+    if (!connection || disconnecting) return;
+    setDisconnecting(true);
+    setDisconnectError("");
+    try {
+      const response = await fetch("/api/meta/connection", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: connection.id }),
+      });
+      if (!response.ok) throw new Error("Could not disconnect Instagram");
+      setConnection(null);
+    } catch (error) {
+      setDisconnectError(error instanceof Error ? error.message : "Could not disconnect Instagram");
+    } finally {
+      setDisconnecting(false);
+    }
+  }
 
   useEffect(() => {
     void Promise.all([fetch("/api/meta/connection"), fetch("/api/health")]).then(async ([connectionResponse, healthResponse]) => {
@@ -42,8 +63,9 @@ export function SettingsScreen() {
         <section className="settings-hero panel">
           <div className="settings-icon"><Camera size={25} /></div>
           <div className="settings-copy"><p className="eyebrow">Instagram connection</p><h2>{connection ? `@${connection.username}` : "No account connected"}</h2><p>{connection ? "This account can receive comment and DM webhooks." : "Connect a professional Instagram account to enable delivery."}</p></div>
-          <div className="settings-action">{connection ? <StatusBadge status={connection.status} /> : <a className="button button-primary" href="/api/meta/oauth/start">Connect Instagram <ExternalLink size={15} /></a>}</div>
+          <div className="settings-action">{connection ? <><StatusBadge status={connection.status} /> <button className="button button-secondary" type="button" disabled={disconnecting} onClick={() => void disconnect()}>{disconnecting ? "Disconnecting…" : "Disconnect"}</button></> : <a className="button button-primary" href="/api/meta/oauth/start">Connect Instagram <ExternalLink size={15} /></a>}</div>
         </section>
+        {disconnectError && <p className="form-error" role="alert">{disconnectError}</p>}
 
         <div className="settings-grid">
           <section className="panel settings-panel"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Built for review</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> No AI or scraping is used in this MVP.</li></ul></section>

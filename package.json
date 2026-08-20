@@ -7,6 +7,7 @@
   "scripts": {
     "check:branding": "node scripts/check-branding.mjs",
     "check:compose": "docker compose --env-file .env.production.example -f docker-compose.production.yml config --quiet",
+    "auth:hash-password": "tsx scripts/hash-owner-password.ts",
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",

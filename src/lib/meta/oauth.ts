@@ -52,10 +52,12 @@ export async function exchangeInstagramCode(
   const longLivedResponse = await fetcher(
     `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(config.metaAppSecret)}&access_token=${encodeURIComponent(shortToken)}`,
   );
-  if (!longLivedResponse.ok) return { accessToken: shortToken, userId };
-  const longLived = await longLivedResponse.json().catch(() => ({})) as Record<string, unknown>;
+  const longLived = await jsonOrThrow(longLivedResponse);
+  if (typeof longLived.access_token !== "string" || !longLived.access_token) {
+    throw new Error("Meta did not return a long-lived Instagram access token");
+  }
   return {
-    accessToken: typeof longLived.access_token === "string" ? longLived.access_token : shortToken,
+    accessToken: longLived.access_token,
     userId,
     expiresIn: typeof longLived.expires_in === "number" ? longLived.expires_in : undefined,
   };

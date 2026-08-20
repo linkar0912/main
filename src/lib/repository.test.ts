@@ -64,4 +64,33 @@ describe("memory repository", () => {
     await repository.deleteConnectionByInstagramAccount("ig_123");
     expect(await repository.findWorkspaceByInstagramAccount("ig_123")).toBeNull();
   });
+
+  it("disconnects only the selected connection in the authorized workspace", async () => {
+    const repository = createMemoryRepository();
+    const first = await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_1", username: "one", accessTokenEncrypted: "token-one", status: "CONNECTED" });
+    await repository.upsertConnection({ workspaceId: "workspace_b", igUserId: "ig_2", username: "two", accessTokenEncrypted: "token-two", status: "CONNECTED" });
+
+    expect(await repository.deleteConnection("workspace_b", first.id)).toBe(false);
+    expect(await repository.deleteConnection("workspace_a", first.id)).toBe(true);
+    expect(await repository.listConnections("workspace_a")).toEqual([]);
+    expect(await repository.listConnections("workspace_b")).toHaveLength(1);
+  });
+
+  it("deletes Instagram-derived workspace data and persists a confirmation status", async () => {
+    const repository = createMemoryRepository();
+    const automation = await repository.createAutomation("workspace_a", { name: "Guide delivery", definition });
+    await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_123", username: "creator", accessTokenEncrypted: "sealed-token", status: "CONNECTED" });
+    await repository.recordExecution({ workspaceId: "workspace_a", automationId: automation.id, externalEventId: "comment_1", dedupeKey: "dedupe_1", status: "SENT" });
+
+    await repository.deleteInstagramData("ig_123", "replyconnect_delete_123", "hashed-instagram-user-id");
+
+    expect(await repository.listAutomations("workspace_a")).toEqual([]);
+    expect(await repository.listConnections("workspace_a")).toEqual([]);
+    expect(await repository.hasExecution("workspace_a", "dedupe_1")).toBe(false);
+    expect(await repository.getDataDeletionRequest("replyconnect_delete_123")).toMatchObject({
+      confirmationCode: "replyconnect_delete_123",
+      instagramUserIdHash: "hashed-instagram-user-id",
+      status: "COMPLETED",
+    });
+  });
 });

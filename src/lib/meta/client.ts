@@ -60,6 +60,42 @@ export class MetaClient {
     return this.post(connection, buildDirectMessagePayload(recipientId, message));
   }
 
+  async subscribeToWebhooks(connection: MetaConnection): Promise<void> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/subscribed_apps`);
+    url.searchParams.set("subscribed_fields", "comments,messages");
+    const data = await this.request(url, connection.accessToken, { method: "POST" });
+    if (data.success !== true) throw new MetaApiError("Meta did not confirm the webhook subscription", 502);
+  }
+
+  async unsubscribeFromWebhooks(connection: MetaConnection): Promise<void> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/subscribed_apps`);
+    const data = await this.request(url, connection.accessToken, { method: "DELETE" });
+    if (data.success !== true) throw new MetaApiError("Meta did not confirm the webhook removal", 502);
+  }
+
+  async getOwnProfile(connection: MetaConnection): Promise<{ id: string; username: string }> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}`);
+    url.searchParams.set("fields", "id,username");
+    const data = await this.request(url, connection.accessToken);
+    if (typeof data.id !== "string" || typeof data.username !== "string") {
+      throw new MetaApiError("Meta did not return the connected Instagram profile", 502);
+    }
+    return { id: data.id, username: data.username };
+  }
+
+  private async request(url: URL, accessToken: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+    const response = await this.fetcher(url, {
+      ...init,
+      headers: { authorization: `Bearer ${accessToken}`, ...init.headers },
+    });
+    const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok) {
+      const error = typeof data.error === "object" && data.error !== null ? data.error as Record<string, unknown> : {};
+      throw new MetaApiError(typeof error.message === "string" ? error.message : `Meta request failed (${response.status})`, response.status);
+    }
+    return data;
+  }
+
   private async post(connection: MetaConnection, payload: unknown): Promise<MetaSendResult> {
     const response = await this.fetcher(
       `${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/messages`,

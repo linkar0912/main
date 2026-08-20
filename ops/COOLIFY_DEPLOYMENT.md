@@ -54,6 +54,8 @@ commit, and select the repository `Dockerfile` as the build method.
 
 Give both applications the same server-side variables: `APP_NAME`,
 `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL`, `DATABASE_URL`, `REDIS_URL`,
+`OWNER_EMAIL`, `OWNER_PASSWORD_HASH`, `OWNER_SESSION_SECRET`,
+`OWNER_WORKSPACE_ID`,
 `META_APP_ID`, `META_APP_SECRET`, `META_TOKEN_ENCRYPTION_KEY`,
 `META_REDIRECT_URI`, `META_VERIFY_TOKEN`, `META_API_VERSION`,
 `META_SCOPES`, and `SOURCE_COMMIT`. Keep secrets in Coolify, never in a Git
@@ -63,6 +65,11 @@ Use [`.env.production.example`](../.env.production.example) as a names-only
 template. Replace its placeholders with owner-provided values. Generate
 `META_TOKEN_ENCRYPTION_KEY` with `openssl rand -hex 32`; it is a 64-character
 hex value and must remain stable after Instagram tokens have been stored.
+
+Generate `OWNER_PASSWORD_HASH` with `pnpm auth:hash-password` as shown in the
+README and generate `OWNER_SESSION_SECRET` with a password manager or
+`openssl rand -hex 32`. The first successful owner login creates the configured
+`OWNER_WORKSPACE_ID`; use the same value in web and worker environments.
 
 The image defaults to `pnpm start`; the worker application's command override
 is `pnpm worker`. The runtime image also contains `pnpm db:migrate:deploy` for

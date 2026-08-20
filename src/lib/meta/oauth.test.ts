@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { buildInstagramAuthorizeUrl } from "./oauth";
+import { describe, expect, it, vi } from "vitest";
+import { buildInstagramAuthorizeUrl, exchangeInstagramCode } from "./oauth";
 
 describe("buildInstagramAuthorizeUrl", () => {
   it("builds a Business Login for Instagram URL with requested scopes", () => {
@@ -26,5 +26,19 @@ describe("buildInstagramAuthorizeUrl", () => {
         metaScopes: [],
       }),
     ).toThrow("Meta app is not configured");
+  });
+
+  it("rejects the connection when long-lived token exchange fails", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "short-token", user_id: "ig_123" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error_message: "exchange failed" }), { status: 500 }));
+
+    await expect(exchangeInstagramCode("oauth-code", {
+      metaAppId: "app_123",
+      metaAppSecret: "app-secret",
+      metaRedirectUri: "https://reply.example.com/api/meta/oauth/callback",
+      metaApiVersion: "v25.0",
+      metaScopes: [],
+    }, fetcher)).rejects.toThrow("exchange failed");
   });
 });

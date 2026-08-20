@@ -11,6 +11,10 @@ export type ServerEnv = {
   metaVerifyToken: string;
   metaApiVersion: string;
   metaScopes: string[];
+  ownerEmail?: string;
+  ownerPasswordHash?: string;
+  ownerSessionSecret?: string;
+  ownerWorkspaceId: string;
 };
 
 export function getServerEnv(): ServerEnv {
@@ -32,5 +36,9 @@ export function getServerEnv(): ServerEnv {
       .split(",")
       .map((scope) => scope.trim())
       .filter(Boolean),
+    ownerEmail: process.env.OWNER_EMAIL?.trim() || undefined,
+    ownerPasswordHash: process.env.OWNER_PASSWORD_HASH?.trim() || undefined,
+    ownerSessionSecret: process.env.OWNER_SESSION_SECRET?.trim() || undefined,
+    ownerWorkspaceId: process.env.OWNER_WORKSPACE_ID?.trim() || "demo_workspace",
   };
 }

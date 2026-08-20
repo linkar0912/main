@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateFlowDefinition } from "@/src/lib/automation/definition";
-import { getRepository, getWorkspaceId } from "@/src/lib/repository-provider";
+import { getRepository } from "@/src/lib/repository-provider";
+import { getOwnerSessionFromRequest } from "@/src/lib/auth/session";
 import type { AutomationStatus } from "@/src/lib/repository";
 
 export const runtime = "nodejs";
@@ -8,6 +9,8 @@ export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: RouteContext) {
+  const session = getOwnerSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
   const body = (await request.json()) as { name?: unknown; status?: unknown; definition?: unknown };
   const patch: { name?: string; status?: AutomationStatus; definition?: ReturnType<typeof validateFlowDefinition> } = {};
@@ -22,7 +25,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
   }
 
-  const automation = await getRepository().updateAutomation(getWorkspaceId(), id, patch);
+  const automation = await getRepository().updateAutomation(session.workspaceId, id, patch);
   if (!automation) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
   return NextResponse.json({ data: automation });
 }

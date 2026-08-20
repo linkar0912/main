@@ -2,9 +2,11 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getServerEnv } from "@/src/lib/env";
 import { exchangeInstagramCode } from "@/src/lib/meta/oauth";
-import { META_OAUTH_STATE_COOKIE } from "@/src/lib/meta/oauth-state";
+import { MetaClient } from "@/src/lib/meta/client";
+import { META_OAUTH_STATE_COOKIE, readOAuthState } from "@/src/lib/meta/oauth-state";
+import { getOwnerAuthConfig } from "@/src/lib/auth/session";
 import { sealSecret } from "@/src/lib/security/secrets";
-import { getRepository, getWorkspaceId } from "@/src/lib/repository-provider";
+import { getRepository } from "@/src/lib/repository-provider";
 
 export const runtime = "nodejs";
 
@@ -18,7 +20,10 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const storedState = (await cookies()).get(META_OAUTH_STATE_COOKIE)?.value;
-  const responseState = state && storedState && state === storedState;
+  const auth = getOwnerAuthConfig();
+  const responseState = state && storedState && state === storedState && auth
+    ? readOAuthState(state, auth.sessionSecret)
+    : null;
 
   if (!code || !responseState) return settingsRedirect(env, "invalid-state");
   if (!env.metaTokenEncryptionKey) return settingsRedirect(env, "missing-encryption-key");
@@ -28,10 +33,14 @@ export async function GET(request: Request) {
     const tokenExpiresAt = token.expiresIn
       ? new Date(Date.now() + token.expiresIn * 1_000).toISOString()
       : undefined;
+    const connection = { igUserId: token.userId, accessToken: token.accessToken };
+    const client = new MetaClient({ apiVersion: env.metaApiVersion });
+    const profile = await client.getOwnProfile(connection);
+    await client.subscribeToWebhooks(connection);
     await getRepository().upsertConnection({
-      workspaceId: getWorkspaceId(),
+      workspaceId: responseState.workspaceId,
       igUserId: token.userId,
-      username: `instagram_${token.userId}`,
+      username: profile.username,
       accessTokenEncrypted: sealSecret(token.accessToken, env.metaTokenEncryptionKey),
       tokenExpiresAt,
       status: "CONNECTED",

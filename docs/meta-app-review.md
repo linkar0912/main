@@ -24,7 +24,8 @@ be completed:
 - the final public ReplyConnect domain and a monitored support mailbox;
 - Coolify/server access and private PostgreSQL and Valkey connection values;
 - the Meta developer app ID, app secret, and the business account that owns it;
-- a stable token-encryption key and a high-entropy webhook verify token; and
+- a stable token-encryption key and a high-entropy webhook verify token;
+- an owner email, scrypt password hash, session secret, and stable owner workspace ID; and
 - two eligible Instagram test accounts: one connected Professional account and
   one account that can send test comments and direct messages.
 
@@ -34,6 +35,10 @@ Set these production values on the web app and worker:
 APP_NAME=ReplyConnect
 NEXT_PUBLIC_APP_URL=https://<replyconnect-domain>
 SUPPORT_EMAIL=<owner-monitored-support-email>
+OWNER_EMAIL=<owner-login-email>
+OWNER_PASSWORD_HASH=<output from pnpm auth:hash-password>
+OWNER_SESSION_SECRET=<at least 32 random characters>
+OWNER_WORKSPACE_ID=replyconnect_owner_workspace
 DATABASE_URL=postgresql://...
 REDIS_URL=redis://...
 META_APP_ID=your_meta_app_id
@@ -74,7 +79,7 @@ Use these deployed URLs:
 | Data deletion instructions URL | `https://<replyconnect-domain>/data-deletion` |
 | Support URL | `https://<replyconnect-domain>/support` |
 
-Set the webhook verify token in the dashboard to the same value as `META_VERIFY_TOKEN`. Subscribe only to the comment and messaging fields needed by the current product flow. Request only the permissions required by the MVP:
+Set the webhook verify token in the dashboard to the same value as `META_VERIFY_TOKEN`. Configure the app-level `comments` and `messages` webhook fields in Meta; after OAuth, ReplyConnect automatically subscribes the connected Professional account to those two fields through `/{ig-user-id}/subscribed_apps`. Request only the permissions required by the MVP:
 
 - `instagram_business_basic`
 - `instagram_business_manage_comments`
@@ -86,7 +91,7 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
 
 1. Call `GET https://<replyconnect-domain>/api/health`; confirm the response reports `configured`.
 2. Open `/privacy`, `/terms`, `/data-deletion`, and `/support` in a private browser window. Confirm they load without login and use the final business contact details.
-3. Open Settings and choose **Connect Instagram**.
+3. Sign in at `/login` with the configured owner account, open Settings, and choose **Connect Instagram**.
 4. Complete the official Meta login with the test Instagram Professional account.
 5. Confirm the callback returns to Settings and shows the account as connected.
 6. Create this automation:
@@ -119,6 +124,8 @@ For the reviewer instructions, provide:
 - Replace every placeholder domain, email address, secret, and Meta credential.
 - Confirm the OAuth redirect URI matches character-for-character, including HTTPS and path.
 - Confirm the webhook endpoint is publicly reachable and returns the challenge on GET.
+- Confirm the owner login redirects unauthenticated dashboard/API requests and the reviewer credentials work.
+- Confirm the connected account shows its real Instagram username, proving profile lookup and webhook subscription completed.
 - Confirm `X-Hub-Signature-256` requests are accepted only with the correct App Secret.
 - Confirm the worker is running and can reach Redis and PostgreSQL.
 - Confirm the app is not in demo mode.

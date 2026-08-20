@@ -108,3 +108,14 @@ model WebhookEvent {
   @@unique([workspaceId, providerEventId])
   @@index([workspaceId, receivedAt])
 }
+
+model DataDeletionRequest {
+  id                    String   @id
+  confirmationCode      String   @unique
+  instagramUserIdHash   String
+  status                String
+  requestedAt           DateTime @default(now())
+  completedAt           DateTime
+
+  @@index([requestedAt])
+}

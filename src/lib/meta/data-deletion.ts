@@ -7,8 +7,10 @@ function decodeBase64Url(value: string): Buffer {
 }
 
 export function parseSignedRequest(signedRequest: string, appSecret: string): DeletionPayload | null {
-  const [encodedHeader, encodedPayload, encodedSignature] = signedRequest.split(".");
-  if (!encodedHeader || !encodedPayload || !encodedSignature) return null;
+  const parts = signedRequest.split(".");
+  if (parts.length !== 2) return null;
+  const [encodedSignature, encodedPayload] = parts;
+  if (!encodedPayload || !encodedSignature) return null;
 
   const expected = createHmac("sha256", appSecret).update(encodedPayload).digest();
   const actual = decodeBase64Url(encodedSignature);
@@ -16,15 +18,20 @@ export function parseSignedRequest(signedRequest: string, appSecret: string): De
 
   try {
     const payload = JSON.parse(decodeBase64Url(encodedPayload).toString("utf8")) as Record<string, unknown>;
+    if (payload.algorithm !== "HMAC-SHA256") return null;
     return typeof payload.user_id === "string" && payload.user_id ? { user_id: payload.user_id } : null;
   } catch {
     return null;
   }
 }
 
-export function createDeletionResponse(userId: string, statusUrl: string) {
+export function createDeletionConfirmationCode(): string {
+  return `replyconnect_delete_${randomBytes(12).toString("hex")}`;
+}
+
+export function createDeletionResponse(confirmationCode: string, statusUrl: string) {
   return {
     url: statusUrl,
-    confirmation_code: `replyconnect_${userId}_${randomBytes(4).toString("hex")}`,
+    confirmation_code: confirmationCode,
   };
 }

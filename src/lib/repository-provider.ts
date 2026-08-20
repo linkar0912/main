@@ -1,5 +1,5 @@
 import { getServerEnv } from "./env";
-import { createDemoRepository, DEMO_WORKSPACE_ID } from "./demo-data";
+import { createDemoRepository } from "./demo-data";
 import { createMemoryRepository } from "./memory-repository";
 import { createPrismaRepository } from "./prisma";
 import type { AutomationRepository } from "./repository";
@@ -13,10 +13,6 @@ export function getRepository(): AutomationRepository {
     ? createPrismaRepository()
     : createDemoRepository() ?? createMemoryRepository();
   return globalForRepository.replyconnectRepository;
-}
-
-export function getWorkspaceId(): string {
-  return DEMO_WORKSPACE_ID;
 }
 
 export function isDemoMode(): boolean {

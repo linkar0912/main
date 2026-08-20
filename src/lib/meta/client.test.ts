@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MetaClient, buildDirectMessagePayload, buildPrivateReplyPayload } from "./client";
 
 describe("Meta message payloads", () => {
@@ -49,5 +49,33 @@ describe("Meta message payloads", () => {
         "Hello",
       ),
     ).rejects.toMatchObject({ retryable: true, status: 429 });
+  });
+
+  it("subscribes the professional account to comment and message webhooks", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+
+    await expect(client.subscribeToWebhooks({ igUserId: "ig_1", accessToken: "secret" })).resolves.toBeUndefined();
+    const [url, init] = fetcher.mock.calls[0];
+    expect(String(url)).toContain("/v25.0/ig_1/subscribed_apps");
+    expect(String(url)).toContain("subscribed_fields=comments%2Cmessages");
+    expect(init).toMatchObject({ method: "POST", headers: { authorization: "Bearer secret" } });
+  });
+
+  it("loads the connected professional account username", async () => {
+    const client = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({ id: "ig_1", username: "creator" }), { status: 200 }),
+    });
+
+    await expect(client.getOwnProfile({ igUserId: "ig_1", accessToken: "secret" })).resolves.toEqual({ id: "ig_1", username: "creator" });
+  });
+
+  it("unsubscribes the professional account from webhooks", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+
+    await expect(client.unsubscribeFromWebhooks({ igUserId: "ig_1", accessToken: "secret" })).resolves.toBeUndefined();
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ method: "DELETE" });
   });
 });

@@ -1,5 +1,6 @@
 import { getServerEnv } from "@/src/lib/env";
-import { createDeletionResponse, parseSignedRequest } from "@/src/lib/meta/data-deletion";
+import { createHash } from "node:crypto";
+import { createDeletionConfirmationCode, createDeletionResponse, parseSignedRequest } from "@/src/lib/meta/data-deletion";
 import { getRepository } from "@/src/lib/repository-provider";
 
 export const runtime = "nodejs";
@@ -19,6 +20,9 @@ export async function POST(request: Request) {
   const payload = parseSignedRequest(signedRequest, env.metaAppSecret);
   if (!payload) return new Response("Invalid signed request", { status: 403 });
 
-  await getRepository().deleteConnectionByInstagramAccount(payload.user_id);
-  return Response.json(createDeletionResponse(payload.user_id, new URL("/data-deletion", env.appUrl).toString()));
+  const confirmationCode = createDeletionConfirmationCode();
+  const userIdHash = createHash("sha256").update(payload.user_id).digest("hex");
+  await getRepository().deleteInstagramData(payload.user_id, confirmationCode, userIdHash);
+  const statusUrl = new URL(`/data-deletion/status/${encodeURIComponent(confirmationCode)}`, env.appUrl).toString();
+  return Response.json(createDeletionResponse(confirmationCode, statusUrl));
 }

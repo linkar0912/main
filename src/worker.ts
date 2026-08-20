@@ -6,6 +6,8 @@ import { getRepository } from "./lib/repository-provider";
 import { WEBHOOK_QUEUE_NAME } from "./lib/queue";
 import { processNormalizedEvent } from "./lib/automation/runner";
 import type { NormalizedEvent } from "./lib/automation/types";
+import { refreshInstagramToken } from "./lib/meta/oauth";
+import { refreshExpiringInstagramTokens } from "./lib/meta/token-refresh";
 
 const env = getServerEnv();
 
@@ -33,4 +35,19 @@ if (!env.redisUrl) {
   worker.on("failed", (job, error) => {
     console.error(`Instagram event ${job?.id ?? "unknown"} failed: ${error.message}`);
   });
+
+  if (env.metaTokenEncryptionKey) {
+    const refreshTokens = async () => {
+      const result = await refreshExpiringInstagramTokens(
+        getRepository(),
+        env.metaTokenEncryptionKey!,
+        refreshInstagramToken,
+      );
+      if (result.refreshed || result.failed) {
+        console.log(`Instagram token refresh: ${result.refreshed} refreshed, ${result.failed} failed`);
+      }
+    };
+    void refreshTokens().catch((error) => console.error(`Instagram token refresh failed: ${error.message}`));
+    setInterval(() => void refreshTokens().catch((error) => console.error(`Instagram token refresh failed: ${error.message}`)), 24 * 60 * 60 * 1_000).unref();
+  }
 }
