@@ -4,9 +4,9 @@ import {
   hashOwnerPassword,
   readOwnerSession,
   verifyOwnerPassword,
-  getRequestOrigin,
   safeNextPath,
   createLoginAttemptLimiter,
+  ownerSessionCookieName,
 } from "./session";
 
 describe("owner authentication", () => {
@@ -33,6 +33,26 @@ describe("owner authentication", () => {
     ).toEqual({ email: "owner@example.com", workspaceId: "workspace_owner" });
   });
 
+  it("serializes only public owner claims into the signed session payload", () => {
+    const token = createOwnerSessionToken(
+      {
+        email: "owner@example.com",
+        workspaceId: "workspace_owner",
+        passwordHash: "must-not-leak",
+        sessionSecret: "must-not-leak",
+      } as never,
+      "session-secret-with-at-least-32-characters",
+      new Date("2026-08-20T10:00:00.000Z"),
+    );
+
+    const payload = JSON.parse(Buffer.from(token.split(".")[0], "base64url").toString("utf8"));
+    expect(payload).toEqual({
+      email: "owner@example.com",
+      workspaceId: "workspace_owner",
+      expiresAt: new Date("2026-08-21T10:00:00.000Z").getTime(),
+    });
+  });
+
   it("rejects expired and forged sessions", () => {
     const secret = "session-secret-with-at-least-32-characters";
     const token = createOwnerSessionToken(
@@ -45,12 +65,9 @@ describe("owner authentication", () => {
     expect(readOwnerSession(`${token.slice(0, -1)}x`, secret, new Date("2026-08-20T11:00:00.000Z"))).toBeNull();
   });
 
-  it("preserves the browser-facing origin behind a proxy", () => {
-    const request = new Request("http://internal-web:3000/api/auth/login", {
-      headers: { host: "reply.example.com", "x-forwarded-proto": "https" },
-    });
-
-    expect(getRequestOrigin(request)).toBe("https://reply.example.com");
+  it("uses a host-only secure cookie name in production", () => {
+    expect(ownerSessionCookieName("https://reply.example.com")).toBe("__Host-replyconnect_owner_session");
+    expect(ownerSessionCookieName("http://localhost:3000")).toBe("replyconnect_owner_session");
   });
 
   it("rejects external and backslash-based post-login redirects", () => {

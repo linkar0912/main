@@ -2,7 +2,7 @@ import type { FlowDefinition } from "./automation/types";
 
 export type AutomationStatus = "DRAFT" | "ACTIVE" | "PAUSED";
 export type ConnectionStatus = "CONNECTED" | "DISCONNECTED" | "EXPIRED";
-export type ExecutionStatus = "SENT" | "SKIPPED" | "FAILED";
+export type ExecutionStatus = "PROCESSING" | "SENT" | "SKIPPED" | "FAILED";
 
 export type AutomationRecord = {
   id: string;
@@ -46,6 +46,7 @@ export type CreateAutomationInput = {
 export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "status" | "definition">>;
 
 export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt">;
+export type ClaimExecutionInput = Pick<ExecutionRecord, "workspaceId" | "automationId" | "externalEventId" | "dedupeKey">;
 
 export type RecordExecutionResult =
   | { created: true; record: ExecutionRecord }
@@ -53,10 +54,10 @@ export type RecordExecutionResult =
 
 export type DataDeletionRequestRecord = {
   confirmationCode: string;
-  instagramUserIdHash: string;
-  status: "COMPLETED";
+  signedRequestHash: string;
+  status: "PENDING" | "COMPLETED";
   requestedAt: string;
-  completedAt: string;
+  completedAt?: string;
 };
 
 export interface AutomationRepository {
@@ -72,15 +73,21 @@ export interface AutomationRepository {
   listConnections(workspaceId: string): Promise<InstagramConnectionRecord[]>;
   listConnectionsExpiringBefore(before: string): Promise<InstagramConnectionRecord[]>;
   updateConnectionToken(id: string, accessTokenEncrypted: string, tokenExpiresAt?: string): Promise<void>;
+  updateConnectionStatus(id: string, status: ConnectionStatus): Promise<void>;
   findWorkspaceByInstagramAccount(igUserId: string): Promise<{
     workspaceId: string;
     connection: InstagramConnectionRecord;
   } | null>;
   deleteConnectionByInstagramAccount(igUserId: string): Promise<void>;
   deleteConnection(workspaceId: string, id: string): Promise<boolean>;
-  deleteInstagramData(igUserId: string, confirmationCode: string, instagramUserIdHash: string): Promise<DataDeletionRequestRecord>;
+  beginInstagramDataDeletion(igUserId: string, confirmationCode: string, signedRequestHash: string): Promise<DataDeletionRequestRecord>;
+  completeDataDeletion(confirmationCode: string): Promise<DataDeletionRequestRecord>;
+  findDataDeletionByRequestHash(signedRequestHash: string): Promise<DataDeletionRequestRecord | null>;
   getDataDeletionRequest(confirmationCode: string): Promise<DataDeletionRequestRecord | null>;
   upsertConnection(input: Omit<InstagramConnectionRecord, "id" | "connectedAt">): Promise<InstagramConnectionRecord>;
   recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult>;
+  claimExecution(input: ClaimExecutionInput): Promise<boolean>;
+  completeExecution(workspaceId: string, dedupeKey: string, result: Pick<RecordExecutionInput, "status" | "reason" | "providerMessageId">): Promise<void>;
+  releaseExecutionClaim(workspaceId: string, dedupeKey: string): Promise<void>;
   hasExecution(workspaceId: string, dedupeKey: string): Promise<boolean>;
 }

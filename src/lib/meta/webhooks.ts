@@ -26,7 +26,12 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
     if (!accountId) continue;
     const entryTime = numberValue(entry.time, Date.now());
 
-    const changes = Array.isArray(entry.changes) ? entry.changes : [];
+    const changes = [
+      ...(Array.isArray(entry.changes) ? entry.changes : []),
+      ...(entry.field === "comments" || entry.field === "live_comments"
+        ? [{ field: entry.field, value: entry.value }]
+        : []),
+    ];
     for (const changeValue of changes) {
       const change = record(changeValue);
       if (!change || (change.field !== "comments" && change.field !== "live_comments")) continue;
@@ -53,12 +58,23 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
       const item = record(messagingValue);
       if (!item) continue;
       const sender = record(item.sender);
+      const recipient = record(item.recipient);
       const message = record(item.message);
       const postback = record(item.postback);
       const timestamp = numberValue(item.timestamp, entryTime);
       const recipientId = stringValue(sender?.id);
+      const professionalAccountIsRecipient = stringValue(recipient?.id) === accountId;
+      const senderIsExternal = recipientId !== accountId;
 
-      if (message && recipientId) {
+      if (
+        message &&
+        recipientId &&
+        professionalAccountIsRecipient &&
+        senderIsExternal &&
+        message.is_echo !== true &&
+        message.is_self !== true &&
+        message.is_deleted !== true
+      ) {
         const messageId = stringValue(message.mid) ?? `${accountId}:${timestamp}`;
         events.push({
           id: messageId,
@@ -68,7 +84,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
           recipientId,
           timestamp,
         });
-      } else if (postback && recipientId) {
+      } else if (postback && recipientId && professionalAccountIsRecipient && senderIsExternal) {
         events.push({
           id: stringValue(postback.mid) ?? `${accountId}:postback:${timestamp}`,
           accountId,

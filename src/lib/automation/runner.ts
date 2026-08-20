@@ -10,6 +10,7 @@ export type AutomationRunnerClient = Pick<MetaClient, "sendPrivateReply" | "send
 export type RunnerOptions = {
   client?: AutomationRunnerClient;
   tokenEncryptionKey?: string;
+  finalAttempt?: boolean;
 };
 
 export type RunnerResult = {
@@ -103,28 +104,31 @@ export async function processNormalizedEvent(
       continue;
     }
 
+    const claimed = await repository.claimExecution({
+      workspaceId: mapping.workspaceId,
+      automationId: automation.id,
+      externalEventId: event.id,
+      dedupeKey,
+    });
+    if (!claimed) continue;
+
     try {
       const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
       let providerMessageId: string | undefined;
       for (const action of evaluation.actions) {
         providerMessageId = (await sendAction(options.client, connection, action)) ?? providerMessageId;
       }
-      await repository.recordExecution({
-        workspaceId: mapping.workspaceId,
-        automationId: automation.id,
-        externalEventId: event.id,
-        dedupeKey,
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SENT",
         providerMessageId,
       });
       result.sent += 1;
     } catch (error) {
-      if (error instanceof MetaApiError && error.retryable) throw error;
-      await repository.recordExecution({
-        workspaceId: mapping.workspaceId,
-        automationId: automation.id,
-        externalEventId: event.id,
-        dedupeKey,
+      if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
+        await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
+        throw error;
+      }
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "FAILED",
         reason: error instanceof Error ? error.message : "Meta delivery failed",
       });

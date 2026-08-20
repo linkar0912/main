@@ -11,7 +11,7 @@ export default function DataDeletionPage() {
       <h2>Request deletion</h2>
       <p>Send an email to <a href={`mailto:${supportEmail}?subject=${PRODUCT_NAME}%20data%20deletion`}>{supportEmail}</a> from the workspace owner. Include the Instagram username, workspace name, and the email address associated with the account. Do not send an Instagram password or access token.</p>
       <h2>What we remove</h2>
-      <p>For a verified Meta callback, we immediately delete the stored Instagram access token and connection, workspace automations, delivery records, and webhook events associated with the connected workspace. We retain only a random confirmation code, request timestamps, completion status, and a one-way hash used to prevent the status record from exposing the Instagram account identifier.</p>
+      <p>Each workspace supports one connected Instagram account. For a verified Meta callback, we delete its stored access token and connection, workspace automations, delivery records, webhook events, and queued delivery payloads. We retain the owner login email until the owner account is separately closed, plus a random confirmation code, request timestamps, completion status, and a one-way hash of the signed deletion request used only to make callback retries idempotent.</p>
       <h2>Meta callback</h2>
       <p>For Meta-initiated requests, {PRODUCT_NAME} accepts signed deletion requests at <code>/api/meta/data-deletion</code> and returns a confirmation code with a dedicated status URL. Requests are verified with the Meta App Secret before they are processed.</p>
       <h2>Timing</h2>

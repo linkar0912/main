@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { NormalizedEvent } from "./automation/types";
-import { enqueueWebhookEvents } from "./queue";
+import { createWebhookJobId, enqueueWebhookEvents } from "./queue";
 
 const event: NormalizedEvent = {
   id: "comment_1",
@@ -22,5 +22,10 @@ describe("webhook queue", () => {
   it("stays in demo mode when Redis is not configured", async () => {
     delete process.env.REDIS_URL;
     expect(await enqueueWebhookEvents([event])).toBe(0);
+  });
+
+  it("uses a deterministic BullMQ-safe job id", () => {
+    expect(createWebhookJobId(event)).toBe(createWebhookJobId(event));
+    expect(createWebhookJobId(event)).not.toContain(":");
   });
 });

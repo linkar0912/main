@@ -16,7 +16,7 @@ describe("AutomationBuilder", () => {
     expect(screen.getByText(PRODUCT_MARK, { selector: ".preview-avatar-brand" })).toBeTruthy();
   });
 
-  it("creates a guided comment-to-link automation", async () => {
+  it("creates a guided comment private reply containing a link", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: { id: "automation_1" } }),
@@ -26,9 +26,7 @@ describe("AutomationBuilder", () => {
     render(<AutomationBuilder />);
     fireEvent.change(screen.getByLabelText(/automation name/i), { target: { value: "Guide delivery" } });
     fireEvent.change(screen.getByLabelText(/keywords/i), { target: { value: "guide, pdf" } });
-    fireEvent.change(screen.getByLabelText(/action type/i), { target: { value: "send_link" } });
-    fireEvent.change(screen.getByLabelText(/message text/i), { target: { value: "Here is the guide" } });
-    fireEvent.change(screen.getByLabelText(/link url/i), { target: { value: "https://example.com/guide" } });
+    fireEvent.change(screen.getByLabelText(/message text/i), { target: { value: "Here is the guide: https://example.com/guide" } });
     fireEvent.click(screen.getByRole("button", { name: /save automation/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -38,7 +36,7 @@ describe("AutomationBuilder", () => {
       name: "Guide delivery",
       definition: {
         trigger: { type: "comment", match: "keyword", keywords: ["guide", "pdf"] },
-        actions: [{ type: "send_link", text: "Here is the guide", url: "https://example.com/guide" }],
+        actions: [{ type: "private_reply", text: "Here is the guide: https://example.com/guide" }],
       },
     });
   });

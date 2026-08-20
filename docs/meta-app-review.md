@@ -97,7 +97,7 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
 6. Create this automation:
    - Trigger: Instagram comment
    - Match: keyword `guide`
-   - Action: private reply or link DM, using a real test URL
+   - Action: private reply containing a real test URL in the reply text
 7. Activate the automation.
 8. From the second Instagram test account, comment `guide` on the selected test post.
 9. Confirm the configured reply arrives once. Send a second identical event only to confirm deduplication; it must not produce a second reply for the same provider event ID.

@@ -27,7 +27,7 @@ describe("evaluateFlow", () => {
     });
   });
 
-  it("skips a direct-message action when a comment has no recipient ID", () => {
+  it("rejects a persisted direct-message action on a comment trigger", () => {
     const flow: FlowDefinition = {
       version: 1,
       trigger: { type: "comment", match: "any", keywords: [], mediaIds: [] },
@@ -37,7 +37,7 @@ describe("evaluateFlow", () => {
 
     expect(evaluateFlow(flow, commentEvent)).toEqual({
       status: "skipped",
-      reason: "message action requires a recipient ID",
+      reason: "comment triggers support only a private reply",
       actions: [],
     });
   });

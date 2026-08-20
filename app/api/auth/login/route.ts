@@ -1,28 +1,27 @@
 import { NextResponse } from "next/server";
 import {
   createOwnerSessionToken,
-  createLoginAttemptLimiter,
-  getRequestOrigin,
   getOwnerAuthConfig,
-  OWNER_SESSION_COOKIE,
+  ownerSessionCookieName,
   safeNextPath,
   verifyOwnerPassword,
 } from "@/src/lib/auth/session";
+import { LoginRateLimitStore, loginRateLimitKey } from "@/src/lib/auth/rate-limit";
+import { getServerEnv } from "@/src/lib/env";
 import { getRepository } from "@/src/lib/repository-provider";
 
 export const runtime = "nodejs";
 
-const loginLimiter = createLoginAttemptLimiter(5, 15 * 60 * 1_000);
+let loginLimiter: LoginRateLimitStore | undefined;
 
 function clientAddress(request: Request): string {
-  return request.headers.get("cf-connecting-ip")
-    ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    ?? "unknown";
+  return request.headers.get("cf-connecting-ip") ?? "unknown";
 }
 
 export async function POST(request: Request) {
   const config = getOwnerAuthConfig();
-  const requestOrigin = getRequestOrigin(request);
+  const env = getServerEnv();
+  loginLimiter ??= new LoginRateLimitStore(env.redisUrl);
   const address = clientAddress(request);
   const form = await request.formData();
   const email = String(form.get("email") ?? "").trim().toLowerCase();
@@ -30,28 +29,30 @@ export async function POST(request: Request) {
   const nextPath = safeNextPath(String(form.get("next") ?? "/"));
 
   if (!config) {
-    return NextResponse.redirect(new URL("/login?error=not-configured", requestOrigin), 303);
+    return NextResponse.redirect(new URL("/login?error=not-configured", env.appUrl), 303);
   }
-  if (!loginLimiter.isAllowed(address)) {
-    return NextResponse.redirect(new URL("/login?error=locked", requestOrigin), 303);
+  const limitKey = loginRateLimitKey(config.sessionSecret, config.email, address);
+  if (!(await loginLimiter.isAllowed(limitKey))) {
+    return NextResponse.redirect(new URL("/login?error=locked", env.appUrl), 303);
   }
-  if (email !== config.email || !verifyOwnerPassword(password, config.passwordHash)) {
-    loginLimiter.recordFailure(address);
-    const url = new URL("/login", requestOrigin);
+  const passwordValid = verifyOwnerPassword(password, config.passwordHash);
+  if (email !== config.email || !passwordValid) {
+    await loginLimiter.recordFailure(limitKey);
+    const url = new URL("/login", env.appUrl);
     url.searchParams.set("error", "invalid");
     url.searchParams.set("next", nextPath);
     return NextResponse.redirect(url, 303);
   }
 
-  loginLimiter.reset(address);
+  await loginLimiter.reset(limitKey);
   await getRepository().ensureWorkspace(config.workspaceId, config.email);
-  const response = NextResponse.redirect(new URL(nextPath, requestOrigin), 303);
+  const response = NextResponse.redirect(new URL(nextPath, env.appUrl), 303);
   response.cookies.set({
-    name: OWNER_SESSION_COOKIE,
-    value: createOwnerSessionToken(config, config.sessionSecret),
+    name: ownerSessionCookieName(env.appUrl),
+    value: createOwnerSessionToken({ email: config.email, workspaceId: config.workspaceId }, config.sessionSecret),
     httpOnly: true,
     sameSite: "lax",
-    secure: requestOrigin.startsWith("https://"),
+    secure: env.appUrl.startsWith("https://"),
     maxAge: 24 * 60 * 60,
     path: "/",
   });

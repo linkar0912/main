@@ -23,7 +23,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
         <div className="workspace-switcher">
           <span className="workspace-avatar">{PRODUCT_MARK}</span>
-          <span className="workspace-copy"><strong>{PRODUCT_NAME} workspace</strong><small>Demo mode</small></span>
+          <span className="workspace-copy"><strong>{PRODUCT_NAME} workspace</strong><small>Owner workspace</small></span>
           <span className="workspace-caret">⌄</span>
         </div>
 

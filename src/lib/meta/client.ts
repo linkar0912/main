@@ -10,11 +10,11 @@ export class MetaApiError extends Error {
   readonly status: number;
   readonly retryable: boolean;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, retryable?: boolean) {
     super(message);
     this.name = "MetaApiError";
     this.status = status;
-    this.retryable = status === 429 || status >= 500;
+    this.retryable = retryable ?? (status === 429 || status >= 500);
   }
 }
 
@@ -74,48 +74,56 @@ export class MetaClient {
   }
 
   async getOwnProfile(connection: MetaConnection): Promise<{ id: string; username: string }> {
-    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}`);
-    url.searchParams.set("fields", "id,username");
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/me`);
+    url.searchParams.set("fields", "user_id,username");
     const data = await this.request(url, connection.accessToken);
-    if (typeof data.id !== "string" || typeof data.username !== "string") {
+    const id = typeof data.user_id === "string" ? data.user_id :
+      typeof data.user_id === "number" ? String(data.user_id) : "";
+    if (!id || typeof data.username !== "string") {
       throw new MetaApiError("Meta did not return the connected Instagram profile", 502);
     }
-    return { id: data.id, username: data.username };
+    return { id, username: data.username };
   }
 
   private async request(url: URL, accessToken: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
-    const response = await this.fetcher(url, {
-      ...init,
-      headers: { authorization: `Bearer ${accessToken}`, ...init.headers },
-    });
+    let response: Response;
+    try {
+      response = await this.fetcher(url, {
+        ...init,
+        headers: { authorization: `Bearer ${accessToken}`, ...init.headers },
+      });
+    } catch {
+      throw new MetaApiError("Meta network request failed", 0, true);
+    }
     const data = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok) {
       const error = typeof data.error === "object" && data.error !== null ? data.error as Record<string, unknown> : {};
-      throw new MetaApiError(typeof error.message === "string" ? error.message : `Meta request failed (${response.status})`, response.status);
+      throw new MetaApiError(
+        typeof error.message === "string" ? error.message : `Meta request failed (${response.status})`,
+        response.status,
+        isTransientMetaError(error, response.status),
+      );
     }
     return data;
   }
 
   private async post(connection: MetaConnection, payload: unknown): Promise<MetaSendResult> {
-    const response = await this.fetcher(
-      `${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/messages`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${connection.accessToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      },
-    );
-    const data = await response.json().catch(() => ({})) as Record<string, unknown>;
-    if (!response.ok) {
-      const error = typeof data.error === "object" && data.error !== null ? data.error as Record<string, unknown> : {};
-      throw new MetaApiError(typeof error.message === "string" ? error.message : `Meta request failed (${response.status})`, response.status);
-    }
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/messages`);
+    const data = await this.request(url, connection.accessToken, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
     return {
       recipient_id: typeof data.recipient_id === "string" ? data.recipient_id : undefined,
       message_id: typeof data.message_id === "string" ? data.message_id : undefined,
     };
   }
+}
+
+const TRANSIENT_META_CODES = new Set([1, 2, 4, 17, 32, 341, 613]);
+
+function isTransientMetaError(error: Record<string, unknown>, status: number): boolean {
+  return status === 429 || status >= 500 || error.is_transient === true ||
+    (typeof error.code === "number" && TRANSIENT_META_CODES.has(error.code));
 }

@@ -51,6 +51,17 @@ describe("Meta message payloads", () => {
     ).rejects.toMatchObject({ retryable: true, status: 429 });
   });
 
+  it("maps network and provider transient failures to retryable errors", async () => {
+    const networkClient = new MetaClient({ apiVersion: "v25.0", fetcher: async () => { throw new TypeError("fetch failed"); } });
+    await expect(networkClient.sendPrivateReply({ igUserId: "ig_1", accessToken: "secret" }, "comment_1", "Hello")).rejects.toMatchObject({ retryable: true });
+
+    const graphClient = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({ error: { message: "Try again", code: 2, is_transient: true } }), { status: 400 }),
+    });
+    await expect(graphClient.sendPrivateReply({ igUserId: "ig_1", accessToken: "secret" }, "comment_1", "Hello")).rejects.toMatchObject({ retryable: true, status: 400 });
+  });
+
   it("subscribes the professional account to comment and message webhooks", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     const client = new MetaClient({ apiVersion: "v25.0", fetcher });
@@ -62,10 +73,10 @@ describe("Meta message payloads", () => {
     expect(init).toMatchObject({ method: "POST", headers: { authorization: "Bearer secret" } });
   });
 
-  it("loads the connected professional account username", async () => {
+  it("bootstraps the canonical professional account through /me", async () => {
     const client = new MetaClient({
       apiVersion: "v25.0",
-      fetcher: async () => new Response(JSON.stringify({ id: "ig_1", username: "creator" }), { status: 200 }),
+      fetcher: async () => new Response(JSON.stringify({ user_id: "ig_1", username: "creator" }), { status: 200 }),
     });
 
     await expect(client.getOwnProfile({ igUserId: "ig_1", accessToken: "secret" })).resolves.toEqual({ id: "ig_1", username: "creator" });

@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-type DeletionPayload = { user_id: string };
+export type DeletionPayload = { user_id: string; issued_at: number };
 
 function decodeBase64Url(value: string): Buffer {
   return Buffer.from(value.replace(/-/g, "+").replace(/_/g, "/"), "base64");
@@ -19,10 +19,17 @@ export function parseSignedRequest(signedRequest: string, appSecret: string): De
   try {
     const payload = JSON.parse(decodeBase64Url(encodedPayload).toString("utf8")) as Record<string, unknown>;
     if (payload.algorithm !== "HMAC-SHA256") return null;
-    return typeof payload.user_id === "string" && payload.user_id ? { user_id: payload.user_id } : null;
+    return typeof payload.user_id === "string" && payload.user_id && typeof payload.issued_at === "number"
+      ? { user_id: payload.user_id, issued_at: payload.issued_at }
+      : null;
   } catch {
     return null;
   }
+}
+
+export function isFreshDeletionRequest(payload: DeletionPayload, now = Date.now()): boolean {
+  const ageSeconds = now / 1_000 - payload.issued_at;
+  return ageSeconds >= -300 && ageSeconds <= 24 * 60 * 60;
 }
 
 export function createDeletionConfirmationCode(): string {

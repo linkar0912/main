@@ -31,11 +31,16 @@ export async function DELETE(request: Request) {
   const connection = (await getRepository().listConnections(session.workspaceId)).find((item) => item.id === body.id);
   if (!connection) return Response.json({ error: "Connection not found" }, { status: 404 });
 
-  const client = new MetaClient({ apiVersion: env.metaApiVersion });
-  await client.unsubscribeFromWebhooks({
-    igUserId: connection.igUserId,
-    accessToken: unsealSecret(connection.accessTokenEncrypted, env.metaTokenEncryptionKey),
-  });
+  let remoteUnsubscribed = true;
+  try {
+    const client = new MetaClient({ apiVersion: env.metaApiVersion });
+    await client.unsubscribeFromWebhooks({
+      igUserId: connection.igUserId,
+      accessToken: unsealSecret(connection.accessTokenEncrypted, env.metaTokenEncryptionKey),
+    });
+  } catch {
+    remoteUnsubscribed = false;
+  }
   await getRepository().deleteConnection(session.workspaceId, connection.id);
-  return Response.json({ disconnected: true });
+  return Response.json({ disconnected: true, remoteUnsubscribed });
 }

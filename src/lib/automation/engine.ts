@@ -6,6 +6,10 @@ export function evaluateFlow(flow: FlowDefinition, event: NormalizedEvent): Eval
     return { status: "skipped", reason: "trigger did not match", actions: [] };
   }
 
+  if (flow.trigger.type === "comment" && flow.actions.some((action) => action.type !== "private_reply")) {
+    return { status: "skipped", reason: "comment triggers support only a private reply", actions: [] };
+  }
+
   const actions: ExecutionAction[] = [];
   let privateReplyAdded = false;
 

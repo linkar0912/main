@@ -20,6 +20,7 @@ enum ConnectionStatus {
 }
 
 enum ExecutionStatus {
+  PROCESSING
   SENT
   SKIPPED
   FAILED
@@ -59,6 +60,7 @@ model InstagramConnection {
   connectedAt          DateTime         @default(now())
   workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@unique([workspaceId])
   @@unique([workspaceId, igUserId])
   @@index([workspaceId, status])
 }
@@ -112,10 +114,10 @@ model WebhookEvent {
 model DataDeletionRequest {
   id                    String   @id
   confirmationCode      String   @unique
-  instagramUserIdHash   String
+  signedRequestHash     String   @unique
   status                String
   requestedAt           DateTime @default(now())
-  completedAt           DateTime
+  completedAt           DateTime?
 
   @@index([requestedAt])
 }

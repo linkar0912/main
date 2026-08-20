@@ -7,8 +7,8 @@ ReplyConnect is an India-first Instagram automation MVP for deterministic commen
 - Dashboard with demo mode and automation status controls.
 - Guided builder for comment/DM keyword or any-message triggers.
 - Optional keyword/media conditions.
-- Private comment replies, text DMs, link messages, and button messages.
-- Meta OAuth callback, webhook verification, event normalization, BullMQ worker, retries, and execution deduplication.
+- One private text reply (including optional URLs) for comment triggers; text, link, and button replies for genuine inbound DMs.
+- Current Instagram Business Login callback handling, webhook verification, inbound-only event normalization, BullMQ worker retries, and atomic execution claims.
 - AES-256-GCM encryption for stored Instagram access tokens.
 - Public privacy, terms, data deletion, and support pages for Meta App Review.
 - Local demo mode when `DATABASE_URL` and `REDIS_URL` are omitted.
@@ -80,6 +80,8 @@ unset REPLYCONNECT_OWNER_PASSWORD
 Put the printed `scrypt$...` value in `OWNER_PASSWORD_HASH`, then configure
 `OWNER_EMAIL`, a random `OWNER_SESSION_SECRET` of at least 32 characters, and
 `OWNER_WORKSPACE_ID`. The first successful owner login creates that workspace.
+
+ReplyConnect claims each automation event before calling Meta. A successful or terminally failed delivery is persisted; a retryable failure releases the claim for BullMQ retry. If a worker loses power after Meta accepts a message but before the result is persisted, the claim remains `PROCESSING` so the system favors preventing a duplicate reply over blindly resending an ambiguous delivery.
 
 ## Verification
 

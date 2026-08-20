@@ -72,9 +72,6 @@ export function AutomationBuilder({
       triggerType === "comment"
         ? [
             { value: "private_reply", label: "Private reply", description: "Reply to the comment privately" },
-            { value: "send_text", label: "Send a DM", description: "Start a direct message" },
-            { value: "send_link", label: "Send a link", description: "Deliver a link in a DM" },
-            { value: "send_button", label: "Send a button", description: "Deliver a tappable link" },
           ]
         : [
             { value: "send_text", label: "Send a DM", description: "Reply to the incoming message" },
@@ -87,6 +84,7 @@ export function AutomationBuilder({
   function changeTriggerType(value: "comment" | "message") {
     setTriggerType(value);
     if (value === "message" && actionType === "private_reply") setActionType("send_text");
+    if (value === "comment") setActionType("private_reply");
   }
 
   function buildDefinition(): FlowDefinition {

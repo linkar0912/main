@@ -35,9 +35,7 @@ test("guided builder saves an automation", async ({ page }) => {
   await page.goto("/automations/new");
   await expect(page.getByRole("heading", { name: "Build a reply flow" })).toBeVisible();
   await page.getByLabel("Automation name").fill("E2E guide delivery");
-  await page.getByLabel("Action type").selectOption("send_link");
-  await page.getByLabel("Message text").fill("Here is the guide");
-  await page.getByLabel("Link URL").fill("https://example.com/guide");
+  await page.getByLabel("Message text").fill("Here is the guide: https://example.com/guide");
   await page.getByRole("button", { name: "Save automation" }).click();
   await expect(page.getByRole("status")).toContainText("Saved to your workspace.");
 });

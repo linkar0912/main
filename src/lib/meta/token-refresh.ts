@@ -1,5 +1,6 @@
 import type { AutomationRepository } from "../repository";
 import { sealSecret, unsealSecret } from "../security/secrets";
+import { MetaOAuthError } from "./oauth";
 
 type RefreshResult = { accessToken: string; expiresIn?: number };
 type RefreshToken = (token: string) => Promise<RefreshResult>;
@@ -30,7 +31,13 @@ export async function refreshExpiringInstagramTokens(
         tokenExpiresAt,
       );
       refreshed += 1;
-    } catch {
+    } catch (error) {
+      if (
+        (connection.tokenExpiresAt && connection.tokenExpiresAt <= now.toISOString()) ||
+        (error instanceof MetaOAuthError && !error.retryable)
+      ) {
+        await repository.updateConnectionStatus(connection.id, "EXPIRED");
+      }
       failed += 1;
     }
   }

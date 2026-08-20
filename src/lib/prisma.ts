@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { createId } from "./id";
 import type {
   AutomationRecord,
@@ -53,17 +53,17 @@ function mapConnection(record: {
 
 function mapDeletionRequest(record: {
   confirmationCode: string;
-  instagramUserIdHash: string;
+  signedRequestHash: string;
   status: string;
   requestedAt: Date;
-  completedAt: Date;
+  completedAt: Date | null;
 }): DataDeletionRequestRecord {
   return {
     confirmationCode: record.confirmationCode,
-    instagramUserIdHash: record.instagramUserIdHash,
-    status: "COMPLETED",
+    signedRequestHash: record.signedRequestHash,
+    status: record.status === "COMPLETED" ? "COMPLETED" : "PENDING",
     requestedAt: record.requestedAt.toISOString(),
-    completedAt: record.completedAt.toISOString(),
+    completedAt: record.completedAt?.toISOString(),
   };
 }
 
@@ -133,6 +133,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       });
     },
 
+    async updateConnectionStatus(id, status) {
+      await client.instagramConnection.update({ where: { id }, data: { status } });
+    },
+
     async findWorkspaceByInstagramAccount(igUserId) {
       const record = await client.instagramConnection.findFirst({
         where: { igUserId, status: "CONNECTED" },
@@ -149,7 +153,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return result.count > 0;
     },
 
-    async deleteInstagramData(igUserId, confirmationCode, instagramUserIdHash) {
+    async beginInstagramDataDeletion(igUserId, confirmationCode, signedRequestHash) {
       const record = await client.$transaction(async (transaction) => {
         const connections = await transaction.instagramConnection.findMany({
           where: { igUserId },
@@ -162,18 +166,29 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           await transaction.automation.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
           await transaction.instagramConnection.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
         }
-        const completedAt = new Date();
         return transaction.dataDeletionRequest.create({
           data: {
             id: createId("deletion"),
             confirmationCode,
-            instagramUserIdHash,
-            status: "COMPLETED",
-            completedAt,
+            signedRequestHash,
+            status: "PENDING",
           },
         });
       });
       return mapDeletionRequest(record);
+    },
+
+    async completeDataDeletion(confirmationCode) {
+      const record = await client.dataDeletionRequest.update({
+        where: { confirmationCode },
+        data: { status: "COMPLETED", completedAt: new Date() },
+      });
+      return mapDeletionRequest(record);
+    },
+
+    async findDataDeletionByRequestHash(signedRequestHash) {
+      const record = await client.dataDeletionRequest.findUnique({ where: { signedRequestHash } });
+      return record ? mapDeletionRequest(record) : null;
     },
 
     async getDataDeletionRequest(confirmationCode) {
@@ -182,6 +197,9 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async upsertConnection(input) {
+      await client.instagramConnection.deleteMany({
+        where: { workspaceId: input.workspaceId, NOT: { igUserId: input.igUserId } },
+      });
       const record = await client.instagramConnection.upsert({
         where: { workspaceId_igUserId: { workspaceId: input.workspaceId, igUserId: input.igUserId } },
         create: { id: createId("connection"), ...input },
@@ -197,10 +215,43 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       if (existing) {
         return { created: false, record: { ...existing, createdAt: existing.createdAt.toISOString() } as ExecutionRecord };
       }
-      const record = await client.automationExecution.create({
-        data: { id: createId("execution"), ...input },
+      try {
+        const record = await client.automationExecution.create({
+          data: { id: createId("execution"), ...input },
+        });
+        return { created: true, record: { ...record, createdAt: record.createdAt.toISOString() } as ExecutionRecord };
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        const record = await client.automationExecution.findFirstOrThrow({
+          where: { workspaceId: input.workspaceId, dedupeKey: input.dedupeKey },
+        });
+        return { created: false, record: { ...record, createdAt: record.createdAt.toISOString() } as ExecutionRecord };
+      }
+    },
+
+    async claimExecution(input) {
+      try {
+        await client.automationExecution.create({
+          data: { id: createId("execution"), status: "PROCESSING", ...input },
+        });
+        return true;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
+        throw error;
+      }
+    },
+
+    async completeExecution(workspaceId, dedupeKey, result) {
+      await client.automationExecution.updateMany({
+        where: { workspaceId, dedupeKey, status: "PROCESSING" },
+        data: result,
       });
-      return { created: true, record: { ...record, createdAt: record.createdAt.toISOString() } as ExecutionRecord };
+    },
+
+    async releaseExecutionClaim(workspaceId, dedupeKey) {
+      await client.automationExecution.deleteMany({
+        where: { workspaceId, dedupeKey, status: "PROCESSING" },
+      });
     },
 
     async hasExecution(workspaceId, dedupeKey) {

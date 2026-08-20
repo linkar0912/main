@@ -7,6 +7,7 @@ import {
 import { getServerEnv } from "../env";
 
 export const OWNER_SESSION_COOKIE = "replyconnect_owner_session";
+const OWNER_PRODUCTION_SESSION_COOKIE = "__Host-replyconnect_owner_session";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
 
 export type OwnerSession = {
@@ -29,7 +30,7 @@ export type LoginAttemptLimiter = {
   reset(key: string): void;
 };
 
-export function createLoginAttemptLimiter(maxAttempts: number, windowMs: number): LoginAttemptLimiter {
+export function createLoginAttemptLimiter(maxAttempts: number, windowMs: number, maxKeys = 1_000): LoginAttemptLimiter {
   const failures = new Map<string, number[]>();
   const active = (key: string, now: Date) => {
     const cutoff = now.getTime() - windowMs;
@@ -43,6 +44,12 @@ export function createLoginAttemptLimiter(maxAttempts: number, windowMs: number)
       return active(key, now).length < maxAttempts;
     },
     recordFailure(key, now = new Date()) {
+      if (!failures.has(key) && failures.size >= maxKeys) {
+        for (const [candidate, timestamps] of failures) {
+          if (timestamps.every((timestamp) => timestamp <= now.getTime() - windowMs)) failures.delete(candidate);
+        }
+        if (failures.size >= maxKeys) failures.delete(failures.keys().next().value as string);
+      }
       failures.set(key, [...active(key, now), now.getTime()]);
     },
     reset(key) {
@@ -79,7 +86,11 @@ export function createOwnerSessionToken(
   now = new Date(),
 ): string {
   const payload = Buffer.from(
-    JSON.stringify({ ...session, expiresAt: now.getTime() + SESSION_TTL_MS } satisfies StoredSession),
+    JSON.stringify({
+      email: session.email,
+      workspaceId: session.workspaceId,
+      expiresAt: now.getTime() + SESSION_TTL_MS,
+    } satisfies StoredSession),
   ).toString("base64url");
   return `${payload}.${signature(payload, secret).toString("base64url")}`;
 }
@@ -139,9 +150,14 @@ function readCookie(cookieHeader: string | null, name: string): string | undefin
 }
 
 export function getOwnerSessionFromRequest(request: Request): OwnerSession | null {
+  const env = getServerEnv();
   const config = getOwnerAuthConfig();
   if (!config) return null;
-  return readOwnerSession(readCookie(request.headers.get("cookie"), OWNER_SESSION_COOKIE), config.sessionSecret);
+  const session = readOwnerSession(
+    readCookie(request.headers.get("cookie"), ownerSessionCookieName(env.appUrl)),
+    config.sessionSecret,
+  );
+  return session?.email === config.email && session.workspaceId === config.workspaceId ? session : null;
 }
 
 export function safeNextPath(value: string | null | undefined): string {
@@ -150,17 +166,6 @@ export function safeNextPath(value: string | null | undefined): string {
     : "/";
 }
 
-export function getRequestOrigin(request: Request): string {
-  const requestUrl = new URL(request.url);
-  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-  const host = forwardedHost || request.headers.get("host")?.trim() || requestUrl.host;
-  const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const protocol = forwardedProtocol === "https" || forwardedProtocol === "http"
-    ? forwardedProtocol
-    : requestUrl.protocol.slice(0, -1);
-  try {
-    return new URL(`${protocol}://${host}`).origin;
-  } catch {
-    return requestUrl.origin;
-  }
+export function ownerSessionCookieName(appUrl: string): string {
+  return appUrl.startsWith("https://") ? OWNER_PRODUCTION_SESSION_COOKIE : OWNER_SESSION_COOKIE;
 }

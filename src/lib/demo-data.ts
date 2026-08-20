@@ -9,7 +9,7 @@ const guideDefinition: FlowDefinition = {
   version: 1,
   trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
   conditions: [],
-  actions: [{ type: "send_link", text: "Here is your guide", url: "https://example.com/guide" }],
+  actions: [{ type: "private_reply", text: "Here is your guide: https://example.com/guide" }],
 };
 
 const demoAutomations: AutomationRecord[] = [

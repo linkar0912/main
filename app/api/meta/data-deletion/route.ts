@@ -1,7 +1,8 @@
 import { getServerEnv } from "@/src/lib/env";
 import { createHash } from "node:crypto";
-import { createDeletionConfirmationCode, createDeletionResponse, parseSignedRequest } from "@/src/lib/meta/data-deletion";
+import { createDeletionConfirmationCode, createDeletionResponse, isFreshDeletionRequest, parseSignedRequest } from "@/src/lib/meta/data-deletion";
 import { getRepository } from "@/src/lib/repository-provider";
+import { deleteQueuedInstagramEvents } from "@/src/lib/queue";
 
 export const runtime = "nodejs";
 
@@ -20,9 +21,19 @@ export async function POST(request: Request) {
   const payload = parseSignedRequest(signedRequest, env.metaAppSecret);
   if (!payload) return new Response("Invalid signed request", { status: 403 });
 
-  const confirmationCode = createDeletionConfirmationCode();
-  const userIdHash = createHash("sha256").update(payload.user_id).digest("hex");
-  await getRepository().deleteInstagramData(payload.user_id, confirmationCode, userIdHash);
+  const repository = getRepository();
+  const signedRequestHash = createHash("sha256").update(signedRequest).digest("hex");
+  const existing = await repository.findDataDeletionByRequestHash(signedRequestHash);
+  if (existing?.status === "COMPLETED") {
+    const statusUrl = new URL(`/data-deletion/status/${encodeURIComponent(existing.confirmationCode)}`, env.appUrl).toString();
+    return Response.json(createDeletionResponse(existing.confirmationCode, statusUrl));
+  }
+  if (!existing && !isFreshDeletionRequest(payload)) return new Response("Expired signed request", { status: 403 });
+
+  const confirmationCode = existing?.confirmationCode ?? createDeletionConfirmationCode();
+  if (!existing) await repository.beginInstagramDataDeletion(payload.user_id, confirmationCode, signedRequestHash);
+  await deleteQueuedInstagramEvents(payload.user_id);
+  await repository.completeDataDeletion(confirmationCode);
   const statusUrl = new URL(`/data-deletion/status/${encodeURIComponent(confirmationCode)}`, env.appUrl).toString();
   return Response.json(createDeletionResponse(confirmationCode, statusUrl));
 }

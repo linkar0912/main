@@ -41,4 +41,22 @@ describe("buildInstagramAuthorizeUrl", () => {
       metaScopes: [],
     }, fetcher)).rejects.toThrow("exchange failed");
   });
+
+  it("accepts the current Business Login data-array response and verifies granted scopes", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ access_token: "short-token", user_id: "oauth-user", permissions: ["instagram_business_basic", "instagram_business_manage_comments"] }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "long-token", expires_in: 5_184_000 }), { status: 200 }));
+    await expect(exchangeInstagramCode("oauth-code", {
+      metaAppId: "app_123", metaAppSecret: "app-secret", metaRedirectUri: "https://reply.example.com/api/meta/oauth/callback",
+      metaApiVersion: "v25.0", metaScopes: ["instagram_business_basic", "instagram_business_manage_comments"],
+    }, fetcher)).resolves.toEqual({ accessToken: "long-token", userId: "oauth-user", expiresIn: 5_184_000 });
+  });
+
+  it("rejects Business Login when a required permission was not granted", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ access_token: "short-token", user_id: "oauth-user", permissions: ["instagram_business_basic"] }] }), { status: 200 }));
+    await expect(exchangeInstagramCode("oauth-code", {
+      metaAppId: "app_123", metaAppSecret: "app-secret", metaRedirectUri: "https://reply.example.com/api/meta/oauth/callback",
+      metaApiVersion: "v25.0", metaScopes: ["instagram_business_basic", "instagram_business_manage_comments"],
+    }, fetcher)).rejects.toThrow("required Instagram permissions");
+  });
 });

@@ -3,6 +3,16 @@ import type { MetaTokenResult } from "./types";
 
 type OAuthConfig = Pick<ServerEnv, "metaAppId" | "metaAppSecret" | "metaRedirectUri" | "metaApiVersion" | "metaScopes">;
 
+export class MetaOAuthError extends Error {
+  readonly retryable: boolean;
+
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "MetaOAuthError";
+    this.retryable = status === 429 || status >= 500;
+  }
+}
+
 export function buildInstagramAuthorizeUrl(
   state: string,
   config: Pick<OAuthConfig, "metaAppId" | "metaRedirectUri" | "metaScopes">,
@@ -20,7 +30,10 @@ export function buildInstagramAuthorizeUrl(
 async function jsonOrThrow(response: Response): Promise<Record<string, unknown>> {
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
-    throw new Error(typeof payload.error_message === "string" ? payload.error_message : `Meta OAuth failed (${response.status})`);
+    const graphError = typeof payload.error === "object" && payload.error !== null ? payload.error as Record<string, unknown> : {};
+    const message = typeof payload.error_message === "string" ? payload.error_message :
+      typeof graphError.message === "string" ? graphError.message : `Meta OAuth failed (${response.status})`;
+    throw new MetaOAuthError(message, response.status);
   }
   return payload;
 }
@@ -45,9 +58,22 @@ export async function exchangeInstagramCode(
       body,
     }),
   );
-  const shortToken = typeof shortLived.access_token === "string" ? shortLived.access_token : "";
-  const userId = typeof shortLived.user_id === "string" ? shortLived.user_id : "";
+  const dataEntry = Array.isArray(shortLived.data) && typeof shortLived.data[0] === "object" && shortLived.data[0] !== null
+    ? shortLived.data[0] as Record<string, unknown>
+    : shortLived;
+  const shortToken = typeof dataEntry.access_token === "string" ? dataEntry.access_token : "";
+  const userId = typeof dataEntry.user_id === "string" ? dataEntry.user_id :
+    typeof dataEntry.user_id === "number" ? String(dataEntry.user_id) : "";
   if (!shortToken || !userId) throw new Error("Meta did not return an Instagram access token");
+  if (config.metaScopes.length > 0) {
+    const permissions = new Set(
+      Array.isArray(dataEntry.permissions)
+        ? dataEntry.permissions.filter((permission): permission is string => typeof permission === "string")
+        : typeof dataEntry.permissions === "string" ? dataEntry.permissions.split(",").map((permission) => permission.trim()) : [],
+    );
+    const missing = config.metaScopes.filter((scope) => !permissions.has(scope));
+    if (missing.length > 0) throw new Error("Meta did not grant the required Instagram permissions");
+  }
 
   const longLivedResponse = await fetcher(
     `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(config.metaAppSecret)}&access_token=${encodeURIComponent(shortToken)}`,

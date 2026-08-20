@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Activity, ArrowUpRight, CheckCircle2, Plus, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { AutomationList, useAutomations } from "./automation-list";
@@ -9,7 +10,15 @@ import { PRODUCT_NAME } from "@/src/lib/branding";
 
 export function DashboardScreen() {
   const { automations, loading, error, setStatus } = useAutomations();
+  const [demoMode, setDemoMode] = useState(false);
   const activeCount = automations.filter((automation) => automation.status === "ACTIVE").length;
+
+  useEffect(() => {
+    void fetch("/api/health")
+      .then((response) => response.json())
+      .then((health: { mode?: string }) => setDemoMode(health.mode === "demo"))
+      .catch(() => setDemoMode(false));
+  }, []);
 
   return (
     <AppShell>
@@ -23,11 +32,11 @@ export function DashboardScreen() {
           <Link className="button button-primary" href="/automations/new"><Plus size={17} /> New automation</Link>
         </header>
 
-        <div className="demo-banner">
+        {demoMode ? <div className="demo-banner">
           <span className="signal-dot" />
           <div><strong>You’re in demo mode.</strong><span>Explore the builder with sample data. Connect Instagram in Settings when you’re ready to test delivery.</span></div>
           <Link href="/settings">Connect account <ArrowUpRight size={15} /></Link>
-        </div>
+        </div> : null}
 
         <section className="metrics-grid" aria-label="Workspace summary">
           <MetricCard label="Active flows" value={loading ? "—" : String(activeCount)} note="Ready to listen" icon={Activity} tone="saffron" />

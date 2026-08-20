@@ -24,6 +24,7 @@ if (!env.redisUrl) {
       return processNormalizedEvent(event, getRepository(), {
         client,
         tokenEncryptionKey: env.metaTokenEncryptionKey,
+        finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
       });
     },
     { connection: redis, concurrency: 5 },

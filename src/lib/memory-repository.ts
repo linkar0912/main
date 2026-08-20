@@ -87,6 +87,11 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       connections.set(id, { ...connection, accessTokenEncrypted, tokenExpiresAt });
     },
 
+    async updateConnectionStatus(id, status) {
+      const connection = connections.get(id);
+      if (connection) connections.set(id, { ...connection, status });
+    },
+
     async findWorkspaceByInstagramAccount(igUserId) {
       const connection = [...connections.values()].find(
         (candidate) => candidate.igUserId === igUserId && candidate.status === "CONNECTED",
@@ -107,7 +112,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return true;
     },
 
-    async deleteInstagramData(igUserId, confirmationCode, instagramUserIdHash) {
+    async beginInstagramDataDeletion(igUserId, confirmationCode, signedRequestHash) {
       const workspaceIds = new Set(
         [...connections.values()].filter((connection) => connection.igUserId === igUserId).map((connection) => connection.workspaceId),
       );
@@ -123,13 +128,25 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       const timestamp = now();
       const record: DataDeletionRequestRecord = {
         confirmationCode,
-        instagramUserIdHash,
-        status: "COMPLETED",
+        signedRequestHash,
+        status: "PENDING",
         requestedAt: timestamp,
-        completedAt: timestamp,
       };
       deletionRequests.set(confirmationCode, record);
       return copy(record);
+    },
+
+    async completeDataDeletion(confirmationCode) {
+      const current = deletionRequests.get(confirmationCode);
+      if (!current) throw new Error("Deletion request not found");
+      const record: DataDeletionRequestRecord = { ...current, status: "COMPLETED", completedAt: now() };
+      deletionRequests.set(confirmationCode, record);
+      return copy(record);
+    },
+
+    async findDataDeletionByRequestHash(signedRequestHash) {
+      const record = [...deletionRequests.values()].find((candidate) => candidate.signedRequestHash === signedRequestHash);
+      return record ? copy(record) : null;
     },
 
     async getDataDeletionRequest(confirmationCode) {
@@ -138,6 +155,9 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     },
 
     async upsertConnection(input) {
+      for (const [id, connection] of connections.entries()) {
+        if (connection.workspaceId === input.workspaceId && connection.igUserId !== input.igUserId) connections.delete(id);
+      }
       const existing = [...connections.values()].find(
         (connection) => connection.workspaceId === input.workspaceId && connection.igUserId === input.igUserId,
       );
@@ -158,6 +178,36 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       const record: ExecutionRecord = { id: createId("execution"), createdAt: now(), ...input };
       executions.set(record.id, record);
       return { created: true, record: copy(record) };
+    },
+
+    async claimExecution(input) {
+      const existing = [...executions.values()].some(
+        (record) => record.workspaceId === input.workspaceId && record.dedupeKey === input.dedupeKey,
+      );
+      if (existing) return false;
+      const record: ExecutionRecord = {
+        id: createId("execution"),
+        createdAt: now(),
+        status: "PROCESSING",
+        ...input,
+      };
+      executions.set(record.id, record);
+      return true;
+    },
+
+    async completeExecution(workspaceId, dedupeKey, result) {
+      const entry = [...executions.entries()].find(([, record]) =>
+        record.workspaceId === workspaceId && record.dedupeKey === dedupeKey && record.status === "PROCESSING",
+      );
+      if (!entry) return;
+      executions.set(entry[0], { ...entry[1], ...result });
+    },
+
+    async releaseExecutionClaim(workspaceId, dedupeKey) {
+      const entry = [...executions.entries()].find(([, record]) =>
+        record.workspaceId === workspaceId && record.dedupeKey === dedupeKey && record.status === "PROCESSING",
+      );
+      if (entry) executions.delete(entry[0]);
     },
 
     async hasExecution(workspaceId, dedupeKey) {

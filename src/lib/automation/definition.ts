@@ -45,7 +45,7 @@ const flowSchema = z
     version: z.literal(1),
     trigger: z.discriminatedUnion("type", [commentTrigger, messageTrigger]),
     conditions: z.array(condition),
-    actions: z.array(action).min(1),
+    actions: z.array(action).min(1).max(1),
   })
   .superRefine((flow, context) => {
     if (flow.trigger.match === "keyword" && flow.trigger.keywords.length === 0) {
@@ -61,6 +61,14 @@ const flowSchema = z
         code: "custom",
         path: ["trigger", "keywords"],
         message: "Any-comment triggers cannot include keywords",
+      });
+    }
+
+    if (flow.trigger.type === "comment" && flow.actions.some((item) => item.type !== "private_reply")) {
+      context.addIssue({
+        code: "custom",
+        path: ["actions"],
+        message: "Comment triggers support only a private reply",
       });
     }
 

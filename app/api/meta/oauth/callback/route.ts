@@ -33,13 +33,14 @@ export async function GET(request: Request) {
     const tokenExpiresAt = token.expiresIn
       ? new Date(Date.now() + token.expiresIn * 1_000).toISOString()
       : undefined;
-    const connection = { igUserId: token.userId, accessToken: token.accessToken };
+    const bootstrapConnection = { igUserId: token.userId, accessToken: token.accessToken };
     const client = new MetaClient({ apiVersion: env.metaApiVersion });
-    const profile = await client.getOwnProfile(connection);
+    const profile = await client.getOwnProfile(bootstrapConnection);
+    const connection = { igUserId: profile.id, accessToken: token.accessToken };
     await client.subscribeToWebhooks(connection);
     await getRepository().upsertConnection({
       workspaceId: responseState.workspaceId,
-      igUserId: token.userId,
+      igUserId: profile.id,
       username: profile.username,
       accessTokenEncrypted: sealSecret(token.accessToken, env.metaTokenEncryptionKey),
       tokenExpiresAt,

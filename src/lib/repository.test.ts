@@ -48,6 +48,13 @@ describe("memory repository", () => {
     expect(second.created).toBe(false);
   });
 
+  it("atomically claims a delivery once", async () => {
+    const repository = createMemoryRepository();
+    const claim = { workspaceId: "workspace_a", automationId: "automation_1", externalEventId: "comment_1", dedupeKey: "automation_1:comment_1" };
+    expect(await repository.claimExecution(claim)).toBe(true);
+    expect(await repository.claimExecution(claim)).toBe(false);
+  });
+
   it("finds a workspace connection by Instagram account id", async () => {
     const repository = createMemoryRepository();
     await repository.upsertConnection({
@@ -82,14 +89,19 @@ describe("memory repository", () => {
     await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_123", username: "creator", accessTokenEncrypted: "sealed-token", status: "CONNECTED" });
     await repository.recordExecution({ workspaceId: "workspace_a", automationId: automation.id, externalEventId: "comment_1", dedupeKey: "dedupe_1", status: "SENT" });
 
-    await repository.deleteInstagramData("ig_123", "replyconnect_delete_123", "hashed-instagram-user-id");
+    await repository.beginInstagramDataDeletion("ig_123", "replyconnect_delete_123", "signed-request-hash");
 
     expect(await repository.listAutomations("workspace_a")).toEqual([]);
     expect(await repository.listConnections("workspace_a")).toEqual([]);
     expect(await repository.hasExecution("workspace_a", "dedupe_1")).toBe(false);
     expect(await repository.getDataDeletionRequest("replyconnect_delete_123")).toMatchObject({
       confirmationCode: "replyconnect_delete_123",
-      instagramUserIdHash: "hashed-instagram-user-id",
+      signedRequestHash: "signed-request-hash",
+      status: "PENDING",
+    });
+    await repository.completeDataDeletion("replyconnect_delete_123");
+    expect(await repository.findDataDeletionByRequestHash("signed-request-hash")).toMatchObject({
+      confirmationCode: "replyconnect_delete_123",
       status: "COMPLETED",
     });
   });
