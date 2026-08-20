@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: replyconnect:production
-    command: ["pnpm", "start"]
+    command: ["./node_modules/.bin/next", "start"]
     restart: unless-stopped
     environment: &application-environment
       NODE_ENV: production
@@ -52,7 +52,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["pnpm", "worker"]
+    command: ["./node_modules/.bin/tsx", "src/worker.ts"]
     restart: unless-stopped
     environment: *application-environment
     depends_on:

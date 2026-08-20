@@ -24,7 +24,7 @@ services:
   migrate:
     image: ghcr.io/tejastelkar/replyconnect:${REPLYCONNECT_IMAGE_TAG:-main}
     pull_policy: always
-    command: ["pnpm", "db:migrate:deploy"]
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
     restart: "no"
     exclude_from_hc: true
     environment: *application-environment
@@ -40,7 +40,7 @@ services:
   web:
     image: ghcr.io/tejastelkar/replyconnect:${REPLYCONNECT_IMAGE_TAG:-main}
     pull_policy: always
-    command: ["pnpm", "start"]
+    command: ["./node_modules/.bin/next", "start"]
     restart: unless-stopped
     environment: *application-environment
     expose:
@@ -65,7 +65,7 @@ services:
   worker:
     image: ghcr.io/tejastelkar/replyconnect:${REPLYCONNECT_IMAGE_TAG:-main}
     pull_policy: always
-    command: ["pnpm", "worker"]
+    command: ["./node_modules/.bin/tsx", "src/worker.ts"]
     restart: unless-stopped
     environment: *application-environment
     depends_on:

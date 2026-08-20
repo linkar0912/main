@@ -61,8 +61,8 @@ commit, and select the repository `Dockerfile` as the build method.
 
 | Application | Start command | Public routing |
 | --- | --- | --- |
-| `replyconnect-web` | `pnpm start` | Assign the ReplyConnect domain and container port `3000`. |
-| `replyconnect-worker` | `pnpm worker` | No domain and no published port. |
+| `replyconnect-web` | `./node_modules/.bin/next start` | Assign the ReplyConnect domain and container port `3000`. |
+| `replyconnect-worker` | `./node_modules/.bin/tsx src/worker.ts` | No domain and no published port. |
 
 Give both applications the same server-side variables: `APP_NAME`,
 `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL`, `DATABASE_URL`, `REDIS_URL`,
@@ -83,8 +83,8 @@ README and generate `OWNER_SESSION_SECRET` with a password manager or
 `openssl rand -hex 32`. The first successful owner login creates the configured
 `OWNER_WORKSPACE_ID`; use the same value in web and worker environments.
 
-The image defaults to `pnpm start`; the worker application's command override
-is `pnpm worker`. The runtime image also contains `pnpm db:migrate:deploy` for
+The image defaults to `./node_modules/.bin/next start`; the worker application's command override
+is `./node_modules/.bin/tsx src/worker.ts`. The runtime image also contains `./node_modules/.bin/prisma migrate deploy` for
 the explicit migration step below. Both applications must also attach to
 `replyconnect-private`; only `replyconnect-web` receives the public domain.
 The shared image intentionally has no Dockerfile `HEALTHCHECK`: configure the
@@ -120,11 +120,11 @@ For every release, use this order:
    - **Recommended one-build path:** CI or a dedicated build server builds the
      Dockerfile once, pushes a private-registry image, and records its immutable
      digest. Configure both Coolify applications to deploy that exact digest;
-     their commands remain `pnpm worker` and `pnpm start` respectively.
+     their commands remain `./node_modules/.bin/tsx src/worker.ts` and `./node_modules/.bin/next start` respectively.
 3. Run this one-off command from the release image in Coolify before promoting
-   either application: `pnpm db:migrate:deploy`.
-4. Start or redeploy `replyconnect-worker` with `pnpm worker`.
-5. Start or redeploy `replyconnect-web` with `pnpm start`; only this service
+   either application: `./node_modules/.bin/prisma migrate deploy`.
+4. Start or redeploy `replyconnect-worker` with `./node_modules/.bin/tsx src/worker.ts`.
+5. Start or redeploy `replyconnect-web` with `./node_modules/.bin/next start`; only this service
    listens on container port 3000 and receives a public domain.
 
 Application startup never runs migrations automatically. Do not use
