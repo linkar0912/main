@@ -17,7 +17,7 @@ const campaign = {
       },
     ],
     match: "keyword",
-    keywords: [" Guide ", "guide", "PDF"],
+    keywords: [" Guide ", "PDF"],
   },
   publicReplies: ["Check your DMs"],
   openingMessage: { text: "Reply below so I can check your follow status.", optInButtonLabel: "Check follow" },
@@ -109,6 +109,27 @@ describe("validateFlowDefinition", () => {
     ).toThrow();
   });
 
+  it("rejects version 2 keywords duplicated after trim and lowercase normalization", () => {
+    expect(() =>
+      validateFlowDefinition({
+        ...campaign,
+        trigger: { ...campaign.trigger, keywords: ["Guide", " guide "] },
+      }),
+    ).toThrow("Keywords must be unique after normalization");
+  });
+
+  it("rejects duplicate version 2 media snapshot IDs", () => {
+    expect(() =>
+      validateFlowDefinition({
+        ...campaign,
+        trigger: {
+          ...campaign.trigger,
+          mediaSnapshots: [campaign.trigger.mediaSnapshots[0], campaign.trigger.mediaSnapshots[0]],
+        },
+      }),
+    ).toThrow("Media snapshot IDs must be unique");
+  });
+
   it("limits version 2 public replies and quick-reply labels", () => {
     expect(() =>
       validateFlowDefinition({ ...campaign, publicReplies: Array.from({ length: 6 }, (_, index) => `Reply ${index}`) }),
@@ -127,6 +148,10 @@ describe("validateFlowDefinition", () => {
         followGate: { ...campaign.followGate, recheckButtonLabel: "a".repeat(21) },
       }),
     ).toThrow();
+  });
+
+  it("accepts a version 2 campaign with zero public replies", () => {
+    expect(validateFlowDefinition({ ...campaign, publicReplies: [] })).toMatchObject({ publicReplies: [] });
   });
 
   it("requires an HTTPS version 2 delivery URL outside development", () => {

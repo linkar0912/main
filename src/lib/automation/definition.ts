@@ -119,6 +119,14 @@ const flowV2Schema = z
     const hasEqualMediaIds =
       mediaIds.size === snapshotIds.size && [...mediaIds].every((mediaId) => snapshotIds.has(mediaId));
 
+    if (snapshotIds.size !== flow.trigger.mediaSnapshots.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["trigger", "mediaSnapshots"],
+        message: "Media snapshot IDs must be unique",
+      });
+    }
+
     if (flow.trigger.source === "specific_media" && mediaIds.size === 0) {
       context.addIssue({
         code: "custom",
@@ -149,6 +157,14 @@ const flowV2Schema = z
         code: "custom",
         path: ["trigger", "keywords"],
         message: "Keyword triggers need at least one keyword",
+      });
+    }
+
+    if (normalizedKeywords.length !== flow.trigger.keywords.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["trigger", "keywords"],
+        message: "Keywords must be unique after normalization",
       });
     }
 

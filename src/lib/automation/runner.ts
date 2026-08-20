@@ -60,6 +60,8 @@ export async function processNormalizedEvent(
   const result: RunnerResult = { matched: 0, sent: 0, skipped: 0, failed: 0 };
 
   for (const automation of automations) {
+    if (automation.definition.version !== 1) continue;
+
     const dedupeKey = `${automation.id}:${event.id}`;
     if (await repository.hasExecution(mapping.workspaceId, dedupeKey)) continue;
 

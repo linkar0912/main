@@ -2,17 +2,17 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { ArrowRight, Check, ChevronDown, CircleHelp, Link2, MessageCircle, Send } from "lucide-react";
-import type { FlowAction, FlowCondition, FlowDefinition } from "@/src/lib/automation/types";
+import type { FlowAction, FlowCondition, FlowDefinitionV1 } from "@/src/lib/automation/types";
 import { PRODUCT_MARK } from "@/src/lib/branding";
 
 type AutomationBuilderProps = {
   automationId?: string;
   initialName?: string;
-  initialDefinition?: FlowDefinition;
+  initialDefinition?: FlowDefinitionV1;
   onSaved?: (automation: unknown) => void;
 };
 
-const defaultDefinition: FlowDefinition = {
+const defaultDefinition: FlowDefinitionV1 = {
   version: 1,
   trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
   conditions: [],
@@ -87,7 +87,7 @@ export function AutomationBuilder({
     if (value === "comment") setActionType("private_reply");
   }
 
-  function buildDefinition(): FlowDefinition {
+  function buildDefinition(): FlowDefinitionV1 {
     const trigger =
       triggerType === "comment"
         ? {

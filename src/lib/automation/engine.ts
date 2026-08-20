@@ -1,7 +1,7 @@
 import { matchesTrigger } from "./match";
-import type { EvaluationResult, ExecutionAction, FlowDefinition, NormalizedEvent } from "./types";
+import type { EvaluationResult, ExecutionAction, FlowDefinitionV1, NormalizedEvent } from "./types";
 
-export function evaluateFlow(flow: FlowDefinition, event: NormalizedEvent): EvaluationResult {
+export function evaluateFlow(flow: FlowDefinitionV1, event: NormalizedEvent): EvaluationResult {
   if (!matchesTrigger(flow, event)) {
     return { status: "skipped", reason: "trigger did not match", actions: [] };
   }

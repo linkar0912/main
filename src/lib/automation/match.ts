@@ -1,4 +1,4 @@
-import type { FlowCondition, FlowDefinition, NormalizedEvent } from "./types";
+import type { FlowCondition, FlowDefinitionV1, NormalizedEvent } from "./types";
 
 function normalizedText(value: string): string {
   return value.trim().toLowerCase();
@@ -18,7 +18,7 @@ function matchesConditions(conditions: FlowCondition[], event: NormalizedEvent):
   });
 }
 
-export function matchesTrigger(flow: FlowDefinition, event: NormalizedEvent): boolean {
+export function matchesTrigger(flow: FlowDefinitionV1, event: NormalizedEvent): boolean {
   const trigger = flow.trigger;
 
   if (trigger.type === "comment") {

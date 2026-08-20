@@ -69,6 +69,8 @@ function triggerSummary(automation: AutomationRecord): string {
 }
 
 function actionSummary(automation: AutomationRecord): string {
+  if (automation.definition.version !== 1) return "";
+
   const action = automation.definition.actions[0];
   if (!action) return "No action configured";
   if (action.type === "private_reply") return "Private reply";
