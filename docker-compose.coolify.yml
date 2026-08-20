@@ -31,6 +31,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
 
   web:
     image: ghcr.io/tejastelkar/replyconnect:${REPLYCONNECT_IMAGE_TAG:-main}
@@ -51,6 +56,11 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.35"
+          memory: 384M
 
   worker:
     image: ghcr.io/tejastelkar/replyconnect:${REPLYCONNECT_IMAGE_TAG:-main}
@@ -63,6 +73,11 @@ services:
         condition: service_completed_successfully
       valkey:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.20"
+          memory: 256M
 
   postgres:
     image: postgres:17-alpine
@@ -78,6 +93,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 384M
 
   valkey:
     image: valkey/valkey:9.1.1-alpine3.24
@@ -92,6 +112,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 128M
 
 volumes:
   replyconnect-postgres:

@@ -23,6 +23,10 @@ Coolify project/resource and do not enable **Connect to Predefined Network**.
 The resource-specific network and `replyconnect-*` volumes keep this stack
 separate from TrackParcel.
 
+The checked-in Compose file also caps each container's CPU and memory. These
+ceilings are intentional for the shared single-vCPU host: do not remove them
+without first moving ReplyConnect to a larger or dedicated server.
+
 ## 1. Provision private data services
 
 Create a dedicated ReplyConnect PostgreSQL 17 service and a dedicated Valkey
