@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AutomationStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  EXPIRED
+}
+
+enum ExecutionStatus {
+  SENT
+  SKIPPED
+  FAILED
+}
+
+model Workspace {
+  id           String                 @id
+  name         String
+  slug         String                 @unique
+  createdAt    DateTime               @default(now())
+  members      WorkspaceMember[]
+  connections  InstagramConnection[]
+  automations  Automation[]
+  executions   AutomationExecution[]
+  webhookEvents WebhookEvent[]
+}
+
+model WorkspaceMember {
+  id          String    @id
+  workspaceId String
+  email       String
+  role        String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId])
+}
+
+model InstagramConnection {
+  id                   String           @id
+  workspaceId          String
+  igUserId             String
+  username             String
+  accessTokenEncrypted String
+  tokenExpiresAt       DateTime?
+  status               ConnectionStatus @default(CONNECTED)
+  connectedAt          DateTime         @default(now())
+  workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, igUserId])
+  @@index([workspaceId, status])
+}
+
+model Automation {
+  id          String           @id
+  workspaceId String
+  name        String
+  status      AutomationStatus @default(DRAFT)
+  version     Int              @default(1)
+  definition  Json
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executions  AutomationExecution[]
+
+  @@index([workspaceId, status])
+}
+
+model AutomationExecution {
+  id              String            @id
+  workspaceId     String
+  automationId    String
+  externalEventId String
+  dedupeKey       String
+  status          ExecutionStatus
+  reason          String?
+  providerMessageId String?
+  createdAt       DateTime          @default(now())
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation      Automation        @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, dedupeKey])
+  @@index([workspaceId, createdAt])
+}
+
+model WebhookEvent {
+  id              String    @id
+  workspaceId     String
+  providerEventId String
+  eventType       String
+  payload         Json
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, providerEventId])
+  @@index([workspaceId, receivedAt])
+}

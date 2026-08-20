@@ -1,0 +1,135 @@
+import { evaluateFlow } from "./engine";
+import type { ExecutionAction, NormalizedEvent } from "./types";
+import { unsealSecret } from "../security/secrets";
+import type { AutomationRepository, InstagramConnectionRecord } from "../repository";
+import type { MetaClient } from "../meta/client";
+import type { MetaConnection, MetaMessage } from "../meta/types";
+
+export type AutomationRunnerClient = Pick<MetaClient, "sendPrivateReply" | "sendDirectMessage">;
+
+export type RunnerOptions = {
+  client?: AutomationRunnerClient;
+  tokenEncryptionKey?: string;
+};
+
+export type RunnerResult = {
+  matched: number;
+  sent: number;
+  skipped: number;
+  failed: number;
+};
+
+function metaConnection(connection: InstagramConnectionRecord, tokenEncryptionKey: string): MetaConnection {
+  return {
+    igUserId: connection.igUserId,
+    accessToken: unsealSecret(connection.accessTokenEncrypted, tokenEncryptionKey),
+  };
+}
+
+async function sendAction(
+  client: AutomationRunnerClient,
+  connection: MetaConnection,
+  action: ExecutionAction,
+): Promise<string | undefined> {
+  if (action.type === "private_reply") {
+    return (await client.sendPrivateReply(connection, action.commentId, action.text)).message_id;
+  }
+
+  const message: MetaMessage =
+    action.type === "send_text"
+      ? { type: "text", text: action.text }
+      : action.type === "send_link"
+        ? { type: "link", text: action.text, url: action.url }
+        : { type: "button", text: action.text, buttonLabel: action.buttonLabel, url: action.url };
+
+  return (await client.sendDirectMessage(connection, action.recipientId, message)).message_id;
+}
+
+export async function processNormalizedEvent(
+  event: NormalizedEvent,
+  repository: AutomationRepository,
+  options: RunnerOptions = {},
+): Promise<RunnerResult> {
+  const mapping = await repository.findWorkspaceByInstagramAccount(event.accountId);
+  if (!mapping) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+
+  const automations = (await repository.listAutomations(mapping.workspaceId)).filter(
+    (automation) => automation.status === "ACTIVE",
+  );
+  const result: RunnerResult = { matched: 0, sent: 0, skipped: 0, failed: 0 };
+
+  for (const automation of automations) {
+    const dedupeKey = `${automation.id}:${event.id}`;
+    if (await repository.hasExecution(mapping.workspaceId, dedupeKey)) continue;
+
+    const evaluation = evaluateFlow(automation.definition, event);
+    if (evaluation.status === "skipped") {
+      await repository.recordExecution({
+        workspaceId: mapping.workspaceId,
+        automationId: automation.id,
+        externalEventId: event.id,
+        dedupeKey,
+        status: "SKIPPED",
+        reason: evaluation.reason,
+      });
+      result.skipped += 1;
+      continue;
+    }
+
+    result.matched += 1;
+    if (!options.client) {
+      await repository.recordExecution({
+        workspaceId: mapping.workspaceId,
+        automationId: automation.id,
+        externalEventId: event.id,
+        dedupeKey,
+        status: "SKIPPED",
+        reason: "Meta delivery is disabled in demo mode",
+      });
+      result.skipped += 1;
+      continue;
+    }
+
+    if (!options.tokenEncryptionKey) {
+      await repository.recordExecution({
+        workspaceId: mapping.workspaceId,
+        automationId: automation.id,
+        externalEventId: event.id,
+        dedupeKey,
+        status: "FAILED",
+        reason: "Token encryption key is not configured",
+      });
+      result.failed += 1;
+      continue;
+    }
+
+    try {
+      const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+      let providerMessageId: string | undefined;
+      for (const action of evaluation.actions) {
+        providerMessageId = (await sendAction(options.client, connection, action)) ?? providerMessageId;
+      }
+      await repository.recordExecution({
+        workspaceId: mapping.workspaceId,
+        automationId: automation.id,
+        externalEventId: event.id,
+        dedupeKey,
+        status: "SENT",
+        providerMessageId,
+      });
+      result.sent += 1;
+    } catch (error) {
+      await repository.recordExecution({
+        workspaceId: mapping.workspaceId,
+        automationId: automation.id,
+        externalEventId: event.id,
+        dedupeKey,
+        status: "FAILED",
+        reason: error instanceof Error ? error.message : "Meta delivery failed",
+      });
+      result.failed += 1;
+    }
+  }
+
+  return result;
+}
