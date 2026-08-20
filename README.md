@@ -15,18 +15,24 @@ ReplyConnect is an India-first Instagram automation MVP for deterministic commen
 
 Out of scope: AI, follower-triggered DMs, scraping, bulk cold messaging, WhatsApp, publishing, insights, billing, and team invitations.
 
-## Local setup
+## Local demo (no database or worker)
 
 ```bash
 pnpm install
-cp .env.example .env
 pnpm db:generate
 pnpm dev
 ```
 
-Without `DATABASE_URL`, the dashboard uses sample data. To run the persistent stack locally:
+Run this without `DATABASE_URL` or `REDIS_URL`; the dashboard uses sample data
+and no worker is required. This is a local demonstration mode only and must
+never be used for a public deployment.
+
+## Persistent local stack
+
+To exercise PostgreSQL, Valkey, migrations, and the worker on your machine:
 
 ```bash
+cp .env.example .env
 docker compose up -d
 pnpm db:migrate
 pnpm db:seed
@@ -34,11 +40,25 @@ pnpm dev
 pnpm worker
 ```
 
-For a production deployment, apply committed migrations explicitly before starting the web and worker services:
+`pnpm db:migrate` is Prisma's development migration command and is only for
+this local workflow.
+
+## Production deployment
+
+Production requires configured PostgreSQL, Valkey, Meta credentials, and a
+public HTTPS URL. Build the release, apply only committed migrations, then run
+the web and worker as separate long-lived processes:
 
 ```bash
+pnpm build
 pnpm db:migrate:deploy
+pnpm start
+pnpm worker
 ```
+
+Do not use `pnpm db:migrate` or `pnpm db:seed` in production. The complete
+Coolify/Cloudflare release order, rollback procedure, and owner-supplied values
+are in [`ops/COOLIFY_DEPLOYMENT.md`](ops/COOLIFY_DEPLOYMENT.md).
 
 Generate a token encryption key with:
 
@@ -61,16 +81,6 @@ pnpm test:e2e
 
 Production needs a public HTTPS deployment, PostgreSQL, Redis, a stable `NEXT_PUBLIC_APP_URL`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` only when a configured dependency is unavailable. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. This repository intentionally keeps workspace identity simple for the MVP; add real authentication and workspace membership before opening it to multiple customers.
 
-Use the production image for both long-running processes:
-
-```bash
-pnpm build
-pnpm start
-pnpm worker
-```
-
-The complete operator runbook, including the values the owner must supply in
-Coolify and Meta, is at [`ops/COOLIFY_DEPLOYMENT.md`](ops/COOLIFY_DEPLOYMENT.md).
 The local production topology can be checked with:
 
 ```bash
@@ -80,6 +90,13 @@ pnpm check:compose
 
 `.env.production` contains secrets and is intentionally ignored; replace every
 placeholder before any deployment. Do not publish PostgreSQL or Valkey ports.
+
+After the web service is public, verify its configured dependencies without
+printing connection details:
+
+```bash
+curl --fail --show-error https://<replyconnect-domain>/api/health
+```
 
 ## Meta App Review
 

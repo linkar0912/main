@@ -18,35 +18,45 @@ Before requesting advanced access, make sure:
 
 ## 2. Deploy the app before submission
 
+The owner must supply all of the following before this production procedure can
+be completed:
+
+- the final public ReplyConnect domain and a monitored support mailbox;
+- Coolify/server access and private PostgreSQL and Valkey connection values;
+- the Meta developer app ID, app secret, and the business account that owns it;
+- a stable token-encryption key and a high-entropy webhook verify token; and
+- two eligible Instagram test accounts: one connected Professional account and
+  one account that can send test comments and direct messages.
+
 Set these production values on the web app and worker:
 
 ```dotenv
 APP_NAME=ReplyConnect
-NEXT_PUBLIC_APP_URL=https://app.example.com
-SUPPORT_EMAIL=support@example.com
+NEXT_PUBLIC_APP_URL=https://<replyconnect-domain>
+SUPPORT_EMAIL=<owner-monitored-support-email>
 DATABASE_URL=postgresql://...
 REDIS_URL=redis://...
 META_APP_ID=your_meta_app_id
 META_APP_SECRET=your_meta_app_secret
 META_TOKEN_ENCRYPTION_KEY=<64 hex characters from openssl rand -hex 32>
-META_REDIRECT_URI=https://app.example.com/api/meta/oauth/callback
+META_REDIRECT_URI=https://<replyconnect-domain>/api/meta/oauth/callback
 META_VERIFY_TOKEN=<long random verify token>
 META_API_VERSION=v25.0
 META_SCOPES=instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages
 ```
 
-Run the migration and start both processes:
+Apply committed migrations and start both production processes:
 
 ```bash
-pnpm db:generate
-pnpm db:migrate
-pnpm db:seed
 pnpm build
+pnpm db:migrate:deploy
 pnpm start
 pnpm worker
 ```
 
-Use a process manager to keep the web app and worker alive. Do not run production with demo mode, an ephemeral filesystem, or a development URL.
+Use a process manager to keep the web app and worker alive. Do not run
+production with demo mode, an ephemeral filesystem, a development URL,
+`pnpm db:migrate`, or `pnpm db:seed`.
 
 ## 3. Configure the Meta app
 
@@ -56,13 +66,13 @@ Use these deployed URLs:
 
 | Meta field | ReplyConnect URL |
 | --- | --- |
-| OAuth redirect URI | `https://app.example.com/api/meta/oauth/callback` |
-| Webhooks callback URL | `https://app.example.com/api/meta/webhook` |
-| Data deletion callback URL | `https://app.example.com/api/meta/data-deletion` |
-| Privacy policy URL | `https://app.example.com/privacy` |
-| Terms URL | `https://app.example.com/terms` |
-| Data deletion instructions URL | `https://app.example.com/data-deletion` |
-| Support URL | `https://app.example.com/support` |
+| OAuth redirect URI | `https://<replyconnect-domain>/api/meta/oauth/callback` |
+| Webhooks callback URL | `https://<replyconnect-domain>/api/meta/webhook` |
+| Data deletion callback URL | `https://<replyconnect-domain>/api/meta/data-deletion` |
+| Privacy policy URL | `https://<replyconnect-domain>/privacy` |
+| Terms URL | `https://<replyconnect-domain>/terms` |
+| Data deletion instructions URL | `https://<replyconnect-domain>/data-deletion` |
+| Support URL | `https://<replyconnect-domain>/support` |
 
 Set the webhook verify token in the dashboard to the same value as `META_VERIFY_TOKEN`. Subscribe only to the comment and messaging fields needed by the current product flow. Request only the permissions required by the MVP:
 
@@ -106,7 +116,7 @@ For the reviewer instructions, provide:
 
 ## 6. Submission blockers to resolve before clicking Submit
 
-- Replace every `example.com` and placeholder email/domain.
+- Replace every placeholder domain, email address, secret, and Meta credential.
 - Confirm the OAuth redirect URI matches character-for-character, including HTTPS and path.
 - Confirm the webhook endpoint is publicly reachable and returns the challenge on GET.
 - Confirm `X-Hub-Signature-256` requests are accepted only with the correct App Secret.

@@ -56,7 +56,7 @@
 
 - [ ] **Step 1: Add the failing branding guard and update the browser assertion.**
 
-  Create `scripts/check-branding.mjs` so it scans tracked project files for `DMSetu` or `dmsetu`, and change the first smoke test to require visible `ReplyConnect` branding. Run `pnpm check:branding` before the rename; it must fail because the copied source still contains legacy references.
+  Create `scripts/check-branding.mjs` so it scans tracked project files for legacy product branding, and change the first smoke test to require visible `ReplyConnect` branding. Run `pnpm check:branding` before the rename; it must fail because the copied source still contains legacy references.
 
 - [ ] **Step 2: Run the failing checks and record the expected failure.**
 
@@ -200,4 +200,3 @@
   git add README.md docs/meta-app-review.md
   git commit -m "docs: finish ReplyConnect deployment handoff"
   ```
-
