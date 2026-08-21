@@ -96,8 +96,8 @@ describe("GET /api/meta/media", () => {
     expect(mocks.listMedia).not.toHaveBeenCalled();
   });
 
-  it("rejects empty and overlong cursors", async () => {
-    for (const after of ["", "x".repeat(501)]) {
+  it("rejects empty, whitespace-only, and overlong cursors", async () => {
+    for (const after of ["", "   ", "x".repeat(501)]) {
       const response = await GET(new Request(`http://localhost/api/meta/media?after=${after}`));
 
       expect(response.status).toBe(400);
@@ -131,5 +131,17 @@ describe("GET /api/meta/media", () => {
 
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toEqual({ error: "Unable to load media" });
+  });
+
+  it("preserves a valid MetaApiError HTTP status", async () => {
+    const error = new Error("Meta rate limit");
+    error.name = "MetaApiError";
+    Object.assign(error, { status: 429 });
+    mocks.listMedia.mockRejectedValue(error);
+
+    const response = await GET(new Request("http://localhost/api/meta/media"));
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual({ error: "Meta rate limit" });
   });
 });
