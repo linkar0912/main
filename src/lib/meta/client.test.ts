@@ -90,6 +90,19 @@ describe("Meta message payloads", () => {
     expect(init).toMatchObject({ method: "POST", headers: { authorization: "Bearer secret" } });
   });
 
+  it("fails closed for null and primitive webhook subscription confirmations", async () => {
+    for (const body of ["null", "false"]) {
+      const client = new MetaClient({
+        apiVersion: "v25.0",
+        fetcher: async () => new Response(body, { status: 200 }),
+      });
+
+      await expect(client.subscribeToWebhooks({ igUserId: "ig_1", accessToken: "access-token" })).rejects.toEqual(
+        new MetaApiError("Meta did not confirm the webhook subscription", 502),
+      );
+    }
+  });
+
   it("bootstraps the canonical professional account through /me", async () => {
     const client = new MetaClient({
       apiVersion: "v25.0",

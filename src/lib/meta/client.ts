@@ -148,8 +148,8 @@ export class MetaClient {
   async subscribeToWebhooks(connection: MetaConnection): Promise<void> {
     const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/subscribed_apps`);
     url.searchParams.set("subscribed_fields", "comments,messages,messaging_postbacks,messaging_optins,messaging_referral");
-    const data = await this.request(url, connection.accessToken, { method: "POST" });
-    if (data.success !== true) throw new MetaApiError("Meta did not confirm the webhook subscription", 502);
+    const data = asRecord(await this.request(url, connection.accessToken, { method: "POST" }));
+    if (!data || data.success !== true) throw new MetaApiError("Meta did not confirm the webhook subscription", 502);
   }
 
   async unsubscribeFromWebhooks(connection: MetaConnection): Promise<void> {
