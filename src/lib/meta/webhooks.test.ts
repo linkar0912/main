@@ -149,7 +149,7 @@ describe("normalizeWebhook", () => {
         timestamp: 1710000002,
       },
       {
-        id: "ig_business_1:optin:1710000003",
+        id: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
         accountId: "ig_business_1",
         type: "optin.received",
         text: "optin-value",
@@ -158,7 +158,7 @@ describe("normalizeWebhook", () => {
         timestamp: 1710000003,
       },
       {
-        id: "ig_business_1:referral:1710000004",
+        id: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
         accountId: "ig_business_1",
         type: "referral.received",
         text: "referral-value",
@@ -167,6 +167,62 @@ describe("normalizeWebhook", () => {
         timestamp: 1710000004,
       },
     ]);
+  });
+
+  it("creates unique but retry-stable IDs for same-timestamp opt-in and referral interactions", () => {
+    const payload = {
+      object: "instagram",
+      entry: [{
+        id: "ig_business_1",
+        time: 1710000000,
+        messaging: [
+          { sender: { id: "igsid_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, optin: { ref: "signed-a" } },
+          { sender: { id: "igsid_2" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, optin: { ref: "signed-b" } },
+          { sender: { id: "igsid_3" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, referral: { ref: "signed-c" } },
+        ],
+      }],
+    };
+
+    const firstDelivery = normalizeWebhook(payload);
+    const retry = normalizeWebhook(payload);
+
+    expect(firstDelivery.map((event) => event.id)).toEqual([
+      expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+    ]);
+    expect(new Set(firstDelivery.map((event) => event.id)).size).toBe(3);
+    expect(retry.map((event) => event.id)).toEqual(firstDelivery.map((event) => event.id));
+  });
+
+  it("classifies quick replies only when their payload is a string and preserves empty payloads", () => {
+    const events = normalizeWebhook({
+      object: "instagram",
+      entry: [{
+        id: "ig_business_1",
+        time: 1710000000,
+        messaging: [
+          { sender: { id: "igsid_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, message: { mid: "empty", text: "empty", quick_reply: { payload: "" } } },
+          { sender: { id: "igsid_2" }, recipient: { id: "ig_business_1" }, timestamp: 1710000002, message: { mid: "missing", text: "missing", quick_reply: {} } },
+          { sender: { id: "igsid_3" }, recipient: { id: "ig_business_1" }, timestamp: 1710000003, message: { mid: "malformed", text: "malformed", quick_reply: { payload: 42 } } },
+        ],
+      }],
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      "quick_reply.received",
+      "message.received",
+      "message.received",
+    ]);
+    expect(events[0]).toMatchObject({
+      id: "empty",
+      text: "empty",
+      interactionPayload: "",
+      recipientId: "igsid_1",
+    });
+    expect(events[0]).toHaveProperty("interactionPayload", "");
+    expect(events[1]).not.toHaveProperty("interactionPayload");
+    expect(events[2]).not.toHaveProperty("interactionPayload");
   });
 
   it("ignores outbound echoes and self messages", () => {

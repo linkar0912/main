@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { NormalizedEvent } from "../automation/types";
 
 type JsonRecord = Record<string, unknown>;
@@ -10,8 +11,24 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function payloadValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 function numberValue(value: unknown, fallback: number): number {
   return typeof value === "number" ? value : fallback;
+}
+
+function interactionEventId(
+  accountId: string,
+  kind: "optin" | "referral",
+  recipientId: string,
+  timestamp: number,
+  interactionPayload: string | undefined,
+): string {
+  return createHash("sha256")
+    .update(`${accountId}\0${kind}\0${recipientId}\0${timestamp}\0${interactionPayload ?? ""}`)
+    .digest("base64url");
 }
 
 export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
@@ -78,46 +95,46 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
       ) {
         const messageId = stringValue(message.mid) ?? `${accountId}:${timestamp}`;
         const quickReply = record(message.quick_reply);
-        const interactionPayload = stringValue(quickReply?.payload);
+        const interactionPayload = payloadValue(quickReply?.payload);
         events.push({
           id: messageId,
           accountId,
-          type: quickReply ? "quick_reply.received" : "message.received",
+          type: interactionPayload !== undefined ? "quick_reply.received" : "message.received",
           text: stringValue(message.text) ?? "",
-          ...(interactionPayload ? { interactionPayload } : {}),
+          ...(interactionPayload !== undefined ? { interactionPayload } : {}),
           recipientId,
           timestamp,
         });
       } else if (postback && inbound) {
-        const interactionPayload = stringValue(postback.payload);
+        const interactionPayload = payloadValue(postback.payload);
         events.push({
           id: stringValue(postback.mid) ?? `${accountId}:postback:${timestamp}`,
           accountId,
           type: "postback.received",
           text: stringValue(postback.payload) ?? stringValue(postback.title) ?? "",
-          ...(interactionPayload ? { interactionPayload } : {}),
+          ...(interactionPayload !== undefined ? { interactionPayload } : {}),
           recipientId,
           timestamp,
         });
       } else if (optin && inbound) {
-        const interactionPayload = stringValue(optin.ref);
+        const interactionPayload = payloadValue(optin.ref);
         events.push({
-          id: `${accountId}:optin:${timestamp}`,
+          id: interactionEventId(accountId, "optin", recipientId, timestamp, interactionPayload),
           accountId,
           type: "optin.received",
           text: interactionPayload ?? "",
-          ...(interactionPayload ? { interactionPayload } : {}),
+          ...(interactionPayload !== undefined ? { interactionPayload } : {}),
           recipientId,
           timestamp,
         });
       } else if (referral && inbound) {
-        const interactionPayload = stringValue(referral.ref);
+        const interactionPayload = payloadValue(referral.ref);
         events.push({
-          id: `${accountId}:referral:${timestamp}`,
+          id: interactionEventId(accountId, "referral", recipientId, timestamp, interactionPayload),
           accountId,
           type: "referral.received",
           text: interactionPayload ?? "",
-          ...(interactionPayload ? { interactionPayload } : {}),
+          ...(interactionPayload !== undefined ? { interactionPayload } : {}),
           recipientId,
           timestamp,
         });
