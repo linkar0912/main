@@ -11,6 +11,10 @@ type InteractionPayloadBody = {
   exp: number;
 };
 
+function isCanonicalBase64Url(value: string): boolean {
+  return /^[A-Za-z0-9_-]+$/.test(value) && Buffer.from(value, "base64url").toString("base64url") === value;
+}
+
 function sign(value: string, secret: string): Buffer {
   return createHmac("sha256", secret).update(value).digest();
 }
@@ -43,6 +47,8 @@ export function readInteractionPayload(
   const [encoded, encodedSignature] = parts;
 
   try {
+    if (!isCanonicalBase64Url(encoded) || !isCanonicalBase64Url(encodedSignature)) return null;
+
     const expected = sign(encoded, secret);
     const actual = Buffer.from(encodedSignature, "base64url");
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;

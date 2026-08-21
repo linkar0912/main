@@ -5,6 +5,7 @@ import { createInteractionPayload, readInteractionPayload } from "./postback";
 const SECRET = "interaction-payload-secret";
 const NOW = 1_755_750_000_000;
 const TTL_MS = 24 * 60 * 60 * 1_000;
+const BASE64URL_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 function decodeBody(value: string): Record<string, unknown> {
   const [encodedBody] = value.split(".");
@@ -19,6 +20,18 @@ function signBody(body: Record<string, unknown>, secret = SECRET): string {
   const encodedBody = encodeBody(body);
   const signature = createHmac("sha256", secret).update(encodedBody).digest("base64url");
   return `${encodedBody}.${signature}`;
+}
+
+function equivalentNonCanonicalBase64Url(value: string): string {
+  const remainder = value.length % 4;
+  if (remainder === 0) throw new Error("expected unused base64url bits");
+
+  const unusedBits = remainder === 2 ? 4 : 2;
+  const lastValue = BASE64URL_ALPHABET.indexOf(value.at(-1)!);
+  const nonCanonicalLastValue = lastValue | 1;
+  if ((nonCanonicalLastValue & ((1 << unusedBits) - 1)) === 0) throw new Error("failed to alter unused bits");
+
+  return `${value.slice(0, -1)}${BASE64URL_ALPHABET[nonCanonicalLastValue]}`;
 }
 
 describe("signed interaction payloads", () => {
@@ -48,9 +61,10 @@ describe("signed interaction payloads", () => {
 
   it("rejects an altered signature", () => {
     const value = createInteractionPayload({ participantId: "participant_123", action: "opt_in" }, SECRET, NOW);
-    const altered = `${value.slice(0, -1)}${value.endsWith("A") ? "B" : "A"}`;
+    const [body, signature] = value.split(".");
+    const alteredSignature = `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
 
-    expect(readInteractionPayload(altered, SECRET, NOW)).toBeNull();
+    expect(readInteractionPayload(`${body}.${alteredSignature}`, SECRET, NOW)).toBeNull();
   });
 
   it("rejects altered participant or action references", () => {
@@ -67,6 +81,38 @@ describe("signed interaction payloads", () => {
     const body = decodeBody(value);
 
     expect(readInteractionPayload(signBody({ ...body, a: "download_url" }), SECRET, NOW)).toBeNull();
+  });
+
+  it("rejects a padded body segment", () => {
+    const value = createInteractionPayload({ participantId: "participant_123", action: "opt_in" }, SECRET, NOW);
+    const [body] = value.split(".");
+    const paddedBody = `${body}=`;
+    const signature = createHmac("sha256", SECRET).update(paddedBody).digest("base64url");
+
+    expect(readInteractionPayload(`${paddedBody}.${signature}`, SECRET, NOW)).toBeNull();
+  });
+
+  it("rejects a padded signature segment", () => {
+    const value = createInteractionPayload({ participantId: "participant_123", action: "opt_in" }, SECRET, NOW);
+    const [body, signature] = value.split(".");
+
+    expect(readInteractionPayload(`${body}.${signature}=`, SECRET, NOW)).toBeNull();
+  });
+
+  it("rejects an equivalent non-canonical body segment", () => {
+    const value = createInteractionPayload({ participantId: "participant_123", action: "opt_in" }, SECRET, NOW);
+    const [body] = value.split(".");
+    const nonCanonicalBody = equivalentNonCanonicalBase64Url(body);
+    const signature = createHmac("sha256", SECRET).update(nonCanonicalBody).digest("base64url");
+
+    expect(readInteractionPayload(`${nonCanonicalBody}.${signature}`, SECRET, NOW)).toBeNull();
+  });
+
+  it("rejects an equivalent non-canonical signature segment", () => {
+    const value = createInteractionPayload({ participantId: "participant_123", action: "opt_in" }, SECRET, NOW);
+    const [body, signature] = value.split(".");
+
+    expect(readInteractionPayload(`${body}.${equivalentNonCanonicalBase64Url(signature)}`, SECRET, NOW)).toBeNull();
   });
 
   it("rejects malformed input", () => {
