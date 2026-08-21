@@ -27,6 +27,7 @@ services:
       META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:?META_VERIFY_TOKEN is required}
       META_API_VERSION: ${META_API_VERSION:-v25.0}
       META_SCOPES: ${META_SCOPES:-instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages}
+      FOLLOW_GATED_CAMPAIGNS_ENABLED: ${FOLLOW_GATED_CAMPAIGNS_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
