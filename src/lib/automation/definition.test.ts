@@ -83,6 +83,30 @@ describe("validateFlowDefinition", () => {
     });
   });
 
+  it("accepts a media snapshot timestamp in Meta's actual offset format", () => {
+    expect(() =>
+      validateFlowDefinition({
+        ...campaign,
+        trigger: {
+          ...campaign.trigger,
+          mediaSnapshots: [{ ...campaign.trigger.mediaSnapshots[0], timestamp: "2026-08-21T00:00:00+0000" }],
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects a media snapshot with an unparseable timestamp", () => {
+    expect(() =>
+      validateFlowDefinition({
+        ...campaign,
+        trigger: {
+          ...campaign.trigger,
+          mediaSnapshots: [{ ...campaign.trigger.mediaSnapshots[0], timestamp: "not-a-date" }],
+        },
+      }),
+    ).toThrow();
+  });
+
   it("rejects invalid version 2 media targeting and keyword configurations", () => {
     expect(() =>
       validateFlowDefinition({

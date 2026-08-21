@@ -80,7 +80,7 @@ const mediaSnapshot = z.object({
   mediaType: z.enum(["IMAGE", "VIDEO", "CAROUSEL_ALBUM"]),
   mediaProductType: z.enum(["AD", "FEED", "REELS", "STORY"]).optional(),
   permalink: link,
-  timestamp: z.string().datetime(),
+  timestamp: z.string().refine((value) => !Number.isNaN(Date.parse(value)), "Invalid ISO datetime"),
 });
 
 const campaignText = z.string().trim().min(1).max(1_000);
