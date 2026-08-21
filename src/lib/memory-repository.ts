@@ -125,11 +125,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       const workspaceIds = new Set(
         [...connections.values()].filter((connection) => connection.igUserId === igUserId).map((connection) => connection.workspaceId),
       );
-      for (const [id, participant] of participants.entries()) {
-        if (!workspaceIds.has(participant.workspaceId)) continue;
-        participants.delete(id);
-        participantIdsBySource.delete(`${participant.workspaceId}:${participant.instagramAccountId}:${participant.sourceCommentId}`);
-      }
+      await this.deleteParticipantsByWorkspaceIds([...workspaceIds]);
       for (const [id, connection] of connections.entries()) {
         if (connection.igUserId === igUserId) connections.delete(id);
       }
