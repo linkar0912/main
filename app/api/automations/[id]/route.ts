@@ -28,7 +28,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const repository = getRepository();
   const current = await repository.getAutomation(session.workspaceId, id);
   if (!current) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
-  if (body.status === "ACTIVE") {
+  if (body.status === "ACTIVE" && current.status !== "ACTIVE") {
     patch.status = "ACTIVE";
     patch.activatedAt = new Date().toISOString();
     const definition = patch.definition ?? current.definition;
