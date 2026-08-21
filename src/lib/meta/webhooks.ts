@@ -61,35 +61,63 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
       const recipient = record(item.recipient);
       const message = record(item.message);
       const postback = record(item.postback);
+      const optin = record(item.optin);
+      const referral = record(item.referral);
       const timestamp = numberValue(item.timestamp, entryTime);
       const recipientId = stringValue(sender?.id);
       const professionalAccountIsRecipient = stringValue(recipient?.id) === accountId;
       const senderIsExternal = recipientId !== accountId;
+      const inbound = recipientId && professionalAccountIsRecipient && senderIsExternal;
 
       if (
         message &&
-        recipientId &&
-        professionalAccountIsRecipient &&
-        senderIsExternal &&
+        inbound &&
         message.is_echo !== true &&
         message.is_self !== true &&
         message.is_deleted !== true
       ) {
         const messageId = stringValue(message.mid) ?? `${accountId}:${timestamp}`;
+        const quickReply = record(message.quick_reply);
+        const interactionPayload = stringValue(quickReply?.payload);
         events.push({
           id: messageId,
           accountId,
-          type: "message.received",
+          type: quickReply ? "quick_reply.received" : "message.received",
           text: stringValue(message.text) ?? "",
+          ...(interactionPayload ? { interactionPayload } : {}),
           recipientId,
           timestamp,
         });
-      } else if (postback && recipientId && professionalAccountIsRecipient && senderIsExternal) {
+      } else if (postback && inbound) {
+        const interactionPayload = stringValue(postback.payload);
         events.push({
           id: stringValue(postback.mid) ?? `${accountId}:postback:${timestamp}`,
           accountId,
           type: "postback.received",
           text: stringValue(postback.payload) ?? stringValue(postback.title) ?? "",
+          ...(interactionPayload ? { interactionPayload } : {}),
+          recipientId,
+          timestamp,
+        });
+      } else if (optin && inbound) {
+        const interactionPayload = stringValue(optin.ref);
+        events.push({
+          id: `${accountId}:optin:${timestamp}`,
+          accountId,
+          type: "optin.received",
+          text: interactionPayload ?? "",
+          ...(interactionPayload ? { interactionPayload } : {}),
+          recipientId,
+          timestamp,
+        });
+      } else if (referral && inbound) {
+        const interactionPayload = stringValue(referral.ref);
+        events.push({
+          id: `${accountId}:referral:${timestamp}`,
+          accountId,
+          type: "referral.received",
+          text: interactionPayload ?? "",
+          ...(interactionPayload ? { interactionPayload } : {}),
           recipientId,
           timestamp,
         });

@@ -3,11 +3,12 @@ import type { NormalizedEvent } from "./automation/types";
 import { createWebhookJobId, enqueueWebhookEvents } from "./queue";
 
 const event: NormalizedEvent = {
-  id: "comment_1",
+  id: "quick_reply_1",
   accountId: "ig_1",
-  type: "comment.created",
-  text: "guide",
-  commentId: "comment_1",
+  type: "quick_reply.received",
+  text: "Send it",
+  recipientId: "igsid_1",
+  interactionPayload: "signed-value",
   timestamp: 1,
 };
 

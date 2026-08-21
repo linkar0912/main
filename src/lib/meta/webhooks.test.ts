@@ -89,6 +89,84 @@ describe("normalizeWebhook", () => {
         timestamp: 1710000002,
       },
     ]);
+    expect(events[0]).not.toHaveProperty("interactionPayload");
+  });
+
+  it("normalizes inbound interaction records while preserving opaque payloads", () => {
+    expect(normalizeWebhook({
+      object: "instagram",
+      entry: [{
+        id: "ig_business_1",
+        time: 1710000000,
+        messaging: [
+          {
+            sender: { id: "igsid_1" },
+            recipient: { id: "ig_business_1" },
+            timestamp: 1710000001,
+            message: {
+              mid: "quick_reply_1",
+              text: "Yes, send it",
+              quick_reply: { payload: "signed-value" },
+            },
+          },
+          {
+            sender: { id: "igsid_2" },
+            recipient: { id: "ig_business_1" },
+            timestamp: 1710000002,
+            postback: { mid: "postback_1", title: "Check again", payload: "recheck-value" },
+          },
+          {
+            sender: { id: "igsid_3" },
+            recipient: { id: "ig_business_1" },
+            timestamp: 1710000003,
+            optin: { ref: "optin-value" },
+          },
+          {
+            sender: { id: "igsid_4" },
+            recipient: { id: "ig_business_1" },
+            timestamp: 1710000004,
+            referral: { ref: "referral-value" },
+          },
+        ],
+      }],
+    })).toEqual([
+      {
+        id: "quick_reply_1",
+        accountId: "ig_business_1",
+        type: "quick_reply.received",
+        text: "Yes, send it",
+        interactionPayload: "signed-value",
+        recipientId: "igsid_1",
+        timestamp: 1710000001,
+      },
+      {
+        id: "postback_1",
+        accountId: "ig_business_1",
+        type: "postback.received",
+        text: "recheck-value",
+        interactionPayload: "recheck-value",
+        recipientId: "igsid_2",
+        timestamp: 1710000002,
+      },
+      {
+        id: "ig_business_1:optin:1710000003",
+        accountId: "ig_business_1",
+        type: "optin.received",
+        text: "optin-value",
+        interactionPayload: "optin-value",
+        recipientId: "igsid_3",
+        timestamp: 1710000003,
+      },
+      {
+        id: "ig_business_1:referral:1710000004",
+        accountId: "ig_business_1",
+        type: "referral.received",
+        text: "referral-value",
+        interactionPayload: "referral-value",
+        recipientId: "igsid_4",
+        timestamp: 1710000004,
+      },
+    ]);
   });
 
   it("ignores outbound echoes and self messages", () => {
@@ -98,7 +176,7 @@ describe("normalizeWebhook", () => {
         id: "ig_business_1",
         time: 1710000000,
         messaging: [
-          { sender: { id: "ig_business_1" }, recipient: { id: "person_1" }, message: { mid: "outbound", text: "sent by business", is_echo: true } },
+          { sender: { id: "ig_business_1" }, recipient: { id: "person_1" }, message: { mid: "outbound", text: "sent by business", quick_reply: { payload: "signed-value" }, is_echo: true } },
           { sender: { id: "ig_business_1" }, recipient: { id: "ig_business_1" }, message: { mid: "self", text: "self", is_self: true } },
           { sender: { id: "person_1" }, recipient: { id: "ig_business_1" }, message: { mid: "inbound", text: "price" } },
         ],

@@ -58,11 +58,18 @@ export type FlowDefinition = FlowDefinitionV1 | FlowDefinitionV2;
 export type NormalizedEvent = {
   id: string;
   accountId: string;
-  type: "comment.created" | "message.received" | "postback.received";
+  type:
+    | "comment.created"
+    | "message.received"
+    | "quick_reply.received"
+    | "postback.received"
+    | "optin.received"
+    | "referral.received";
   text: string;
   commentId?: string;
   mediaId?: string;
   recipientId?: string;
+  interactionPayload?: string;
   timestamp: number;
 };
 
