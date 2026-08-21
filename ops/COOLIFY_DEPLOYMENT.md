@@ -70,8 +70,21 @@ Give both applications the same server-side variables: `APP_NAME`,
 `OWNER_WORKSPACE_ID`,
 `META_APP_ID`, `META_APP_SECRET`, `META_TOKEN_ENCRYPTION_KEY`,
 `META_REDIRECT_URI`, `META_VERIFY_TOKEN`, `META_API_VERSION`,
-`META_SCOPES`, and `SOURCE_COMMIT`. Keep secrets in Coolify, never in a Git
-variable or `NEXT_PUBLIC_*` variable.
+`META_SCOPES`, `FOLLOW_GATED_CAMPAIGNS_ENABLED`, and `SOURCE_COMMIT`. Keep
+secrets in Coolify, never in a Git variable or `NEXT_PUBLIC_*` variable.
+
+`FOLLOW_GATED_CAMPAIGNS_ENABLED` gates version 2 (follow-gated Reel campaign)
+execution only; automation creation, preview, and version 1 execution work
+regardless of its value. Deploy with `FOLLOW_GATED_CAMPAIGNS_ENABLED=false` on
+both `replyconnect-web` and `replyconnect-worker`. If the tester Instagram
+connection is new or stale, reconnect it through ReplyConnect's OAuth flow so
+`subscribeToWebhooks` re-applies all five webhook fields, then confirm in
+Meta's dashboard that the app-level webhook fields match the same five
+(`comments`, `messages`, `messaging_postbacks`, `messaging_optins`,
+`messaging_referral`) — see the webhook subscription checklist in
+[`docs/meta-app-review.md`](../docs/meta-app-review.md). Only after that
+connection and subscription check passes, set
+`FOLLOW_GATED_CAMPAIGNS_ENABLED=true` on both services and redeploy.
 
 Use [`.env.production.example`](../.env.production.example) as a names-only
 template. Replace its placeholders with owner-provided values. Generate
