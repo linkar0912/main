@@ -1,8 +1,18 @@
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { getServerEnv } from "./env";
 
 const readProjectFile = (path: string) => readFileSync(path, "utf8");
+const originalCampaignFlag = process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED;
+
+afterEach(() => {
+  if (originalCampaignFlag === undefined) {
+    delete process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED;
+  } else {
+    process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED = originalCampaignFlag;
+  }
+});
 
 describe("production runtime commands", () => {
   it("runs bundled binaries without invoking pnpm's runtime install checks", () => {
@@ -24,5 +34,40 @@ describe("production runtime commands", () => {
     for (const contents of [dockerfile, coolifyCompose, productionCompose]) {
       expect(contents).not.toMatch(/(?:CMD|command:) \["pnpm"/);
     }
+  });
+
+  it("passes the campaign rollout flag and signing secret through worker and webhook execution", () => {
+    const worker = readProjectFile("src/worker.ts");
+    const webhook = readProjectFile("app/api/meta/webhook/route.ts");
+
+    for (const entrypoint of [worker, webhook]) {
+      expect(entrypoint).toContain("interactionSecret: env.metaAppSecret");
+      expect(entrypoint).toContain("campaignsEnabled: env.followGatedCampaignsEnabled");
+    }
+  });
+});
+
+describe("follow-gated campaign environment flag", () => {
+  it("defaults to false when missing", () => {
+    delete process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED;
+
+    expect(getServerEnv().followGatedCampaignsEnabled).toBe(false);
+  });
+
+  it.each([
+    ["true", true],
+    ["false", false],
+  ])("parses the exact %s value", (value, expected) => {
+    process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED = value;
+
+    expect(getServerEnv().followGatedCampaignsEnabled).toBe(expected);
+  });
+
+  it("rejects non-boolean values", () => {
+    process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED = "TRUE";
+
+    expect(() => getServerEnv()).toThrow(
+      "FOLLOW_GATED_CAMPAIGNS_ENABLED must be true or false",
+    );
   });
 });

@@ -24,6 +24,8 @@ if (!env.redisUrl) {
       return processNormalizedEvent(event, getRepository(), {
         client,
         tokenEncryptionKey: env.metaTokenEncryptionKey,
+        interactionSecret: env.metaAppSecret,
+        campaignsEnabled: env.followGatedCampaignsEnabled,
         finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
       });
     },

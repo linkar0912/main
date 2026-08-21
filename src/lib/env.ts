@@ -11,11 +11,18 @@ export type ServerEnv = {
   metaVerifyToken: string;
   metaApiVersion: string;
   metaScopes: string[];
+  followGatedCampaignsEnabled: boolean;
   ownerEmail?: string;
   ownerPasswordHash?: string;
   ownerSessionSecret?: string;
   ownerWorkspaceId: string;
 };
+
+function booleanEnv(value: string | undefined): boolean {
+  if (value === undefined || value === "false") return false;
+  if (value === "true") return true;
+  throw new Error("FOLLOW_GATED_CAMPAIGNS_ENABLED must be true or false");
+}
 
 export function getServerEnv(): ServerEnv {
   return {
@@ -36,6 +43,7 @@ export function getServerEnv(): ServerEnv {
       .split(",")
       .map((scope) => scope.trim())
       .filter(Boolean),
+    followGatedCampaignsEnabled: booleanEnv(process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED),
     ownerEmail: process.env.OWNER_EMAIL?.trim() || undefined,
     ownerPasswordHash: process.env.OWNER_PASSWORD_HASH?.trim() || undefined,
     ownerSessionSecret: process.env.OWNER_SESSION_SECRET?.trim() || undefined,

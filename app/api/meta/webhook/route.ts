@@ -45,6 +45,8 @@ export async function POST(request: Request) {
       events.map((event) => processNormalizedEvent(event, getRepository(), {
         client,
         tokenEncryptionKey: env.metaTokenEncryptionKey,
+        interactionSecret: env.metaAppSecret,
+        campaignsEnabled: env.followGatedCampaignsEnabled,
       })),
     );
     return Response.json({ received: true, events: events.length, enqueued, processed: results });

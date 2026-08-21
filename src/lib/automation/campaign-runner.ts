@@ -1,0 +1,963 @@
+import { matchCampaign, selectPublicReply } from "./campaign-match";
+import { createInteractionPayload, readInteractionPayload } from "./postback";
+import type { FlowDefinitionV2, MediaSnapshot, NormalizedEvent } from "./types";
+import { MetaApiError, type MetaClient } from "../meta/client";
+import type { MetaConnection, MetaMedia, MetaMessage } from "../meta/types";
+import type {
+  AutomationParticipantRecord,
+  AutomationRecord,
+  AutomationRepository,
+  InstagramConnectionRecord,
+  ParticipantState,
+} from "../repository";
+import { unsealSecret } from "../security/secrets";
+
+const RECHECK_COOLDOWN_MS = 10_000;
+const MAX_RECHECKS = 10;
+const MESSAGE_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
+const INTERACTION_EVENT_TYPES = new Set<NormalizedEvent["type"]>([
+  "quick_reply.received",
+  "postback.received",
+  "optin.received",
+  "referral.received",
+]);
+
+const PARTICIPANT_ACTION_STATES: ParticipantState[] = [
+  "COMMENT_MATCHED",
+  "OPENING_SENT",
+  "OPTED_IN",
+  "FOLLOW_REQUIRED",
+  "FOLLOW_VERIFIED",
+];
+
+export type CampaignRunnerClient = Pick<
+  MetaClient,
+  | "replyToComment"
+  | "sendPrivateReply"
+  | "sendQuickReply"
+  | "sendDirectMessage"
+  | "getUserFollowStatus"
+  | "getMedia"
+>;
+
+export type CampaignRunnerOptions = {
+  client?: CampaignRunnerClient;
+  tokenEncryptionKey?: string;
+  interactionSecret?: string;
+  finalAttempt?: boolean;
+};
+
+export type CampaignMapping = {
+  workspaceId: string;
+  connection: InstagramConnectionRecord;
+};
+
+export type CampaignRunnerResult = {
+  handled: boolean;
+  participantId?: string;
+  matched: number;
+  sent: number;
+  skipped: number;
+  failed: number;
+};
+
+export type PendingCampaignInteractionResult =
+  | { handled: false }
+  | { handled: true; result: CampaignRunnerResult };
+
+function emptyResult(): CampaignRunnerResult {
+  return { handled: false, matched: 0, sent: 0, skipped: 0, failed: 0 };
+}
+
+function handledResult(
+  participantId: string | undefined,
+  counts: Partial<Pick<CampaignRunnerResult, "sent" | "skipped" | "failed">> = {},
+): CampaignRunnerResult {
+  return {
+    handled: true,
+    ...(participantId ? { participantId } : {}),
+    matched: 1,
+    sent: counts.sent ?? 0,
+    skipped: counts.skipped ?? 0,
+    failed: counts.failed ?? 0,
+  };
+}
+
+function metaConnection(
+  connection: InstagramConnectionRecord,
+  tokenEncryptionKey: string,
+): MetaConnection {
+  return {
+    igUserId: connection.igUserId,
+    accessToken: unsealSecret(connection.accessTokenEncrypted, tokenEncryptionKey),
+  };
+}
+
+function actionDedupeKey(participantId: string, action: string): string {
+  return `campaign:${participantId}:${action}`;
+}
+
+function actionClaim(
+  participant: AutomationParticipantRecord,
+  repository: AutomationRepository,
+  action: string,
+  externalEventId: string,
+): Promise<boolean> {
+  return repository.claimExecution({
+    workspaceId: participant.workspaceId,
+    automationId: participant.automationId,
+    externalEventId,
+    dedupeKey: actionDedupeKey(participant.id, action),
+  });
+}
+
+function completeAction(
+  participant: AutomationParticipantRecord,
+  repository: AutomationRepository,
+  action: string,
+  status: "SENT" | "FAILED",
+  providerMessageId?: string,
+  reason?: string,
+): Promise<void> {
+  return repository.completeExecution(
+    participant.workspaceId,
+    actionDedupeKey(participant.id, action),
+    { status, providerMessageId, reason },
+  );
+}
+
+function releaseAction(
+  participant: AutomationParticipantRecord,
+  repository: AutomationRepository,
+  action: string,
+): Promise<void> {
+  return repository.releaseExecutionClaim(
+    participant.workspaceId,
+    actionDedupeKey(participant.id, action),
+  );
+}
+
+function mediaSnapshot(media: MetaMedia): MediaSnapshot {
+  return {
+    id: media.id,
+    ...(media.caption !== undefined ? { caption: media.caption } : {}),
+    mediaType: media.mediaType,
+    ...(media.mediaProductType !== undefined ? { mediaProductType: media.mediaProductType } : {}),
+    permalink: media.permalink,
+    timestamp: media.timestamp,
+  };
+}
+
+function boundDefinition(
+  definition: FlowDefinitionV2,
+  mediaId: string,
+  snapshot?: MediaSnapshot,
+): FlowDefinitionV2 {
+  return {
+    ...definition,
+    trigger: {
+      ...definition.trigger,
+      source: "specific_media",
+      mediaIds: [mediaId],
+      mediaSnapshots: snapshot ? [snapshot] : [],
+    },
+  };
+}
+
+async function recordCampaignConfigurationResult(
+  event: NormalizedEvent,
+  automation: AutomationRecord,
+  repository: AutomationRepository,
+  status: "SKIPPED" | "FAILED",
+  reason: string,
+): Promise<CampaignRunnerResult> {
+  await repository.recordExecution({
+    workspaceId: automation.workspaceId,
+    automationId: automation.id,
+    externalEventId: event.id,
+    dedupeKey: `${automation.id}:${event.id}:campaign:configuration`,
+    status,
+    reason,
+  });
+  return handledResult(undefined, status === "SKIPPED" ? { skipped: 1 } : { failed: 1 });
+}
+
+async function resolveNextMedia(
+  event: NormalizedEvent,
+  automation: AutomationRecord & { definition: FlowDefinitionV2 },
+  mapping: CampaignMapping,
+  repository: AutomationRepository,
+  options: CampaignRunnerOptions,
+): Promise<
+  | { automation: AutomationRecord & { definition: FlowDefinitionV2 }; snapshot?: MediaSnapshot }
+  | CampaignRunnerResult
+  | null
+> {
+  const mediaId = event.mediaId;
+  if (event.type !== "comment.created" || !mediaId) return null;
+
+  if (automation.boundMediaId) {
+    if (automation.boundMediaId !== mediaId) return null;
+    return {
+      automation: {
+        ...automation,
+        definition: boundDefinition(automation.definition, automation.boundMediaId),
+      },
+    };
+  }
+
+  if (!options.client) {
+    return recordCampaignConfigurationResult(
+      event,
+      automation,
+      repository,
+      "SKIPPED",
+      "Meta delivery is disabled in demo mode",
+    );
+  }
+  if (!options.tokenEncryptionKey) {
+    return recordCampaignConfigurationResult(
+      event,
+      automation,
+      repository,
+      "FAILED",
+      "Token encryption key is not configured",
+    );
+  }
+
+  const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+  let media: MetaMedia;
+  try {
+    media = await options.client.getMedia(connection, mediaId);
+  } catch (error) {
+    if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) throw error;
+    return recordCampaignConfigurationResult(
+      event,
+      automation,
+      repository,
+      "FAILED",
+      "Meta media lookup failed",
+    );
+  }
+
+  const publishedAt = Date.parse(media.timestamp);
+  const activatedAt = automation.activatedAt ? Date.parse(automation.activatedAt) : Number.NaN;
+  if (
+    media.id !== mediaId
+    || !Number.isFinite(publishedAt)
+    || !Number.isFinite(activatedAt)
+    || publishedAt <= activatedAt
+  ) {
+    return null;
+  }
+
+  const won = await repository.bindNextMedia(
+    mapping.workspaceId,
+    automation.id,
+    mediaId,
+    new Date(publishedAt).toISOString(),
+  );
+  if (!won) {
+    const current = await repository.getAutomation(mapping.workspaceId, automation.id);
+    if (!current || current.definition.version !== 2 || current.boundMediaId !== mediaId) return null;
+    return {
+      automation: {
+        ...current,
+        definition: boundDefinition(current.definition, mediaId, mediaSnapshot(media)),
+      },
+      snapshot: mediaSnapshot(media),
+    };
+  }
+
+  const snapshot = mediaSnapshot(media);
+  return {
+    automation: {
+      ...automation,
+      boundMediaId: mediaId,
+      definition: boundDefinition(automation.definition, mediaId, snapshot),
+    },
+    snapshot,
+  };
+}
+
+async function deliverPublicReply(
+  participant: AutomationParticipantRecord,
+  definition: FlowDefinitionV2,
+  client: CampaignRunnerClient,
+  connection: MetaConnection,
+  repository: AutomationRepository,
+  finalAttempt: boolean,
+): Promise<AutomationParticipantRecord> {
+  const text = selectPublicReply(
+    definition.publicReplies,
+    participant.automationId,
+    participant.sourceCommentId,
+  );
+  if (!text) {
+    const skipped = await repository.transitionParticipant(
+      participant.id,
+      PARTICIPANT_ACTION_STATES,
+      { publicReplyStatus: "SKIPPED" },
+    );
+    return skipped ?? participant;
+  }
+
+  const action = "public_reply";
+  if (!await actionClaim(participant, repository, action, participant.sourceCommentId)) {
+    return participant;
+  }
+
+  try {
+    const response = await client.replyToComment(
+      connection,
+      participant.sourceCommentId,
+      text,
+    );
+    await completeAction(participant, repository, action, "SENT", response.id);
+    const sent = await repository.transitionParticipant(
+      participant.id,
+      PARTICIPANT_ACTION_STATES,
+      {
+        publicReplyStatus: "SENT",
+        publicReplyProviderId: response.id,
+        publicReplySentAt: new Date().toISOString(),
+        publicReplyError: undefined,
+      },
+    );
+    return sent ?? participant;
+  } catch (error) {
+    if (error instanceof MetaApiError && error.retryable && !finalAttempt) {
+      await releaseAction(participant, repository, action);
+      await repository.transitionParticipant(participant.id, PARTICIPANT_ACTION_STATES, {
+        publicReplyStatus: "PENDING",
+        publicReplyError: "Meta public reply temporarily failed",
+      });
+      throw error;
+    }
+
+    await completeAction(
+      participant,
+      repository,
+      action,
+      "FAILED",
+      undefined,
+      "Meta public reply failed",
+    );
+    const failed = await repository.transitionParticipant(
+      participant.id,
+      PARTICIPANT_ACTION_STATES,
+      { publicReplyStatus: "FAILED", publicReplyError: "Meta public reply failed" },
+    );
+    return failed ?? participant;
+  }
+}
+
+async function deliverOpeningReply(
+  participant: AutomationParticipantRecord,
+  definition: FlowDefinitionV2,
+  client: CampaignRunnerClient,
+  connection: MetaConnection,
+  repository: AutomationRepository,
+  interactionSecret: string,
+  finalAttempt: boolean,
+): Promise<AutomationParticipantRecord> {
+  const action = "opening_reply";
+  if (!await actionClaim(participant, repository, action, participant.sourceCommentId)) {
+    return participant;
+  }
+
+  try {
+    const response = await client.sendPrivateReply(
+      connection,
+      participant.sourceCommentId,
+      {
+        text: definition.openingMessage.text,
+        quickReply: {
+          title: definition.openingMessage.optInButtonLabel,
+          payload: createInteractionPayload(
+            { participantId: participant.id, action: "opt_in" },
+            interactionSecret,
+          ),
+        },
+      },
+    );
+    if (!response.message_id || !response.recipient_id) {
+      throw new MetaApiError("Meta did not return opening reply identifiers", 502);
+    }
+
+    await completeAction(participant, repository, action, "SENT", response.message_id);
+    const sent = await repository.transitionParticipant(
+      participant.id,
+      ["COMMENT_MATCHED"],
+      {
+        state: "OPENING_SENT",
+        openingStatus: "SENT",
+        openingProviderId: response.message_id,
+        openingSentAt: new Date().toISOString(),
+        openingError: undefined,
+        igScopedUserId: response.recipient_id,
+      },
+    );
+    return sent ?? participant;
+  } catch (error) {
+    if (error instanceof MetaApiError && error.retryable && !finalAttempt) {
+      await releaseAction(participant, repository, action);
+      await repository.transitionParticipant(participant.id, ["COMMENT_MATCHED"], {
+        openingStatus: "PENDING",
+        openingError: "Meta opening reply temporarily failed",
+      });
+      throw error;
+    }
+
+    await completeAction(
+      participant,
+      repository,
+      action,
+      "FAILED",
+      undefined,
+      "Meta opening reply failed",
+    );
+    const failed = await repository.transitionParticipant(
+      participant.id,
+      ["COMMENT_MATCHED"],
+      {
+        state: "FAILED",
+        openingStatus: "FAILED",
+        openingError: "Meta opening reply failed",
+      },
+    );
+    return failed ?? participant;
+  }
+}
+
+async function promptForFollow(
+  participant: AutomationParticipantRecord,
+  definition: FlowDefinitionV2,
+  event: NormalizedEvent,
+  client: CampaignRunnerClient,
+  connection: MetaConnection,
+  repository: AutomationRepository,
+  interactionSecret: string,
+  actionPurpose: "opt_in" | "recheck",
+  finalAttempt: boolean,
+): Promise<AutomationParticipantRecord> {
+  const action = `follow_prompt:${event.id}`;
+  if (!await actionClaim(participant, repository, action, event.id)) return participant;
+
+  try {
+    const response = await client.sendQuickReply(
+      connection,
+      event.recipientId!,
+      definition.followGate.notFollowingMessage,
+      {
+        title: definition.followGate.recheckButtonLabel,
+        payload: createInteractionPayload(
+          { participantId: participant.id, action: "recheck" },
+          interactionSecret,
+          event.timestamp,
+        ),
+      },
+    );
+    if (!response.message_id) {
+      throw new MetaApiError("Meta did not return follow prompt ID", 502);
+    }
+
+    await completeAction(participant, repository, action, "SENT", response.message_id);
+    const prompted = await repository.transitionParticipant(
+      participant.id,
+      [participant.state],
+      {
+        state: "FOLLOW_REQUIRED",
+        followStatus: false,
+        followCheckedAt: new Date(event.timestamp).toISOString(),
+        followCheckError: undefined,
+        messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+        recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
+      },
+    );
+    return prompted ?? participant;
+  } catch (error) {
+    if (error instanceof MetaApiError && error.retryable && !finalAttempt) {
+      await releaseAction(participant, repository, action);
+      throw error;
+    }
+
+    await completeAction(
+      participant,
+      repository,
+      action,
+      "FAILED",
+      undefined,
+      "Meta follow prompt failed",
+    );
+    const failed = await repository.transitionParticipant(participant.id, [participant.state], {
+      state: "FAILED",
+      finalDeliveryError: "Meta follow prompt failed",
+    });
+    return failed ?? participant;
+  }
+}
+
+async function verifyAndDeliver(
+  participant: AutomationParticipantRecord,
+  definition: FlowDefinitionV2,
+  event: NormalizedEvent,
+  client: CampaignRunnerClient,
+  connection: MetaConnection,
+  repository: AutomationRepository,
+  finalAttempt: boolean,
+): Promise<AutomationParticipantRecord> {
+  const verified = await repository.transitionParticipant(
+    participant.id,
+    [participant.state],
+    {
+      state: "FOLLOW_VERIFIED",
+      followStatus: true,
+      followCheckedAt: new Date(event.timestamp).toISOString(),
+      followCheckError: undefined,
+      messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+      finalDeliveryStatus: "PENDING",
+    },
+  );
+  if (!verified) return participant;
+
+  const action = "final_delivery";
+  if (!await actionClaim(verified, repository, action, event.id)) return verified;
+
+  const message: MetaMessage = definition.delivery.buttonLabel
+    ? {
+        type: "button",
+        text: definition.delivery.text,
+        buttonLabel: definition.delivery.buttonLabel,
+        url: definition.delivery.url,
+      }
+    : { type: "link", text: definition.delivery.text, url: definition.delivery.url };
+
+  try {
+    const response = await client.sendDirectMessage(
+      connection,
+      event.recipientId!,
+      message,
+    );
+    if (!response.message_id) {
+      throw new MetaApiError("Meta did not return final delivery ID", 502);
+    }
+
+    await completeAction(verified, repository, action, "SENT", response.message_id);
+    const delivered = await repository.transitionParticipant(
+      verified.id,
+      ["FOLLOW_VERIFIED"],
+      {
+        state: "LINK_SENT",
+        finalDeliveryStatus: "SENT",
+        finalProviderId: response.message_id,
+        finalDeliveredAt: new Date().toISOString(),
+        finalDeliveryError: undefined,
+      },
+    );
+    return delivered ?? verified;
+  } catch (error) {
+    if (error instanceof MetaApiError && error.retryable && !finalAttempt) {
+      await releaseAction(verified, repository, action);
+      await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
+        finalDeliveryStatus: "PENDING",
+        finalDeliveryError: "Meta final delivery temporarily failed",
+      });
+      throw error;
+    }
+
+    await completeAction(
+      verified,
+      repository,
+      action,
+      "FAILED",
+      undefined,
+      "Meta final delivery failed",
+    );
+    const failed = await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
+      state: "FAILED",
+      finalDeliveryStatus: "FAILED",
+      finalDeliveryError: "Meta final delivery failed",
+    });
+    return failed ?? verified;
+  }
+}
+
+async function reloadParticipant(
+  participant: AutomationParticipantRecord,
+  repository: AutomationRepository,
+): Promise<AutomationParticipantRecord> {
+  const participants = await repository.listParticipants(
+    participant.workspaceId,
+    participant.automationId,
+    100,
+  );
+  return participants.find((candidate) => candidate.id === participant.id) ?? participant;
+}
+
+export async function processCampaignEvent(
+  event: NormalizedEvent,
+  automation: AutomationRecord,
+  mapping: CampaignMapping,
+  repository: AutomationRepository,
+  options: CampaignRunnerOptions,
+): Promise<CampaignRunnerResult> {
+  if (automation.definition.version !== 2) return emptyResult();
+  let campaign = automation as AutomationRecord & { definition: FlowDefinitionV2 };
+  let resolvedSnapshot: MediaSnapshot | undefined;
+
+  if (campaign.definition.trigger.source === "next_media") {
+    const resolved = await resolveNextMedia(event, campaign, mapping, repository, options);
+    if (!resolved) return emptyResult();
+    if ("handled" in resolved) return resolved;
+    campaign = resolved.automation;
+    resolvedSnapshot = resolved.snapshot;
+  }
+
+  const match = matchCampaign(campaign.definition, event);
+  if (!match.matched) return emptyResult();
+
+  if (!event.commentId || !event.mediaId) {
+    return recordCampaignConfigurationResult(
+      event,
+      campaign,
+      repository,
+      "FAILED",
+      "Campaign comments require comment and media IDs",
+    );
+  }
+  if (!options.client) {
+    return recordCampaignConfigurationResult(
+      event,
+      campaign,
+      repository,
+      "SKIPPED",
+      "Meta delivery is disabled in demo mode",
+    );
+  }
+  if (!options.tokenEncryptionKey) {
+    return recordCampaignConfigurationResult(
+      event,
+      campaign,
+      repository,
+      "FAILED",
+      "Token encryption key is not configured",
+    );
+  }
+  if (!options.interactionSecret) {
+    return recordCampaignConfigurationResult(
+      event,
+      campaign,
+      repository,
+      "FAILED",
+      "Interaction signing secret is not configured",
+    );
+  }
+
+  const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+  let snapshot = resolvedSnapshot
+    ?? campaign.definition.trigger.mediaSnapshots.find((candidate) => candidate.id === event.mediaId);
+  if (!snapshot) {
+    try {
+      const media = await options.client.getMedia(connection, event.mediaId);
+      if (media.id !== event.mediaId) {
+        return recordCampaignConfigurationResult(
+          event,
+          campaign,
+          repository,
+          "FAILED",
+          "Meta media lookup did not match the comment media",
+        );
+      }
+      snapshot = mediaSnapshot(media);
+    } catch (error) {
+      if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) throw error;
+      return recordCampaignConfigurationResult(
+        event,
+        campaign,
+        repository,
+        "FAILED",
+        "Meta media lookup failed",
+      );
+    }
+  }
+
+  const created = await repository.createParticipant({
+    workspaceId: mapping.workspaceId,
+    automationId: campaign.id,
+    instagramAccountId: event.accountId,
+    sourceCommentId: event.commentId,
+    sourceMediaId: event.mediaId,
+    sourceMediaSnapshot: snapshot,
+    ...(match.keyword ? { matchedKeyword: match.keyword } : {}),
+  });
+  let participant = created.record;
+  let deliveryDefinition = campaign.definition;
+
+  if (!created.created && participant.automationId !== campaign.id) {
+    const winningAutomation = await repository.getAutomation(
+      participant.workspaceId,
+      participant.automationId,
+    );
+    if (!winningAutomation || winningAutomation.definition.version !== 2) {
+      await repository.transitionParticipant(participant.id, [participant.state], {
+        state: "FAILED",
+        openingError: "Original campaign definition is unavailable",
+      });
+      return handledResult(participant.id, { failed: 1 });
+    }
+    deliveryDefinition = winningAutomation.definition;
+  }
+
+  if (["LINK_SENT", "EXPIRED", "FAILED"].includes(participant.state)) {
+    return handledResult(participant.id);
+  }
+  if (participant.publicReplyStatus !== "SENT" && participant.publicReplyStatus !== "SKIPPED") {
+    participant = await deliverPublicReply(
+      participant,
+      deliveryDefinition,
+      options.client,
+      connection,
+      repository,
+      options.finalAttempt === true,
+    );
+  }
+  if (participant.openingStatus !== "SENT" && participant.state !== "FAILED") {
+    participant = await deliverOpeningReply(
+      participant,
+      deliveryDefinition,
+      options.client,
+      connection,
+      repository,
+      options.interactionSecret,
+      options.finalAttempt === true,
+    );
+  }
+
+  participant = await reloadParticipant(participant, repository);
+  if (participant.openingStatus === "SENT") {
+    return handledResult(participant.id, { sent: 1 });
+  }
+  if (participant.state === "FAILED" || participant.openingStatus === "FAILED") {
+    return handledResult(participant.id, { failed: 1 });
+  }
+  return handledResult(participant.id);
+}
+
+async function failInteractionParticipant(
+  participant: AutomationParticipantRecord,
+  repository: AutomationRepository,
+  reason: string,
+): Promise<CampaignRunnerResult> {
+  await repository.transitionParticipant(participant.id, [participant.state], {
+    state: "FAILED",
+    followCheckError: reason,
+  });
+  return handledResult(participant.id, { failed: 1 });
+}
+
+export async function processPendingCampaignInteraction(
+  event: NormalizedEvent,
+  mapping: CampaignMapping,
+  repository: AutomationRepository,
+  options: CampaignRunnerOptions,
+): Promise<PendingCampaignInteractionResult> {
+  if (!INTERACTION_EVENT_TYPES.has(event.type) || event.interactionPayload === undefined || !event.recipientId) {
+    return { handled: false };
+  }
+
+  let participant = await repository.findPendingParticipant(event.accountId, event.recipientId);
+  const existingWindowExpiresAt = participant?.messagingWindowExpiresAt
+    ? Date.parse(participant.messagingWindowExpiresAt)
+    : Number.NaN;
+  if (participant && Number.isFinite(existingWindowExpiresAt) && event.timestamp >= existingWindowExpiresAt) {
+    await repository.transitionParticipant(participant.id, [participant.state], {
+      state: "EXPIRED",
+      finalDeliveryError: "Messaging window expired",
+    });
+    return {
+      handled: true,
+      result: handledResult(participant.id, { failed: 1 }),
+    };
+  }
+
+  if (!options.interactionSecret) {
+    if (!participant) return { handled: false };
+    return {
+      handled: true,
+      result: await failInteractionParticipant(
+        participant,
+        repository,
+        "Interaction signing secret is not configured",
+      ),
+    };
+  }
+
+  const payload = readInteractionPayload(
+    event.interactionPayload,
+    options.interactionSecret,
+    event.timestamp,
+  );
+  if (!payload) return { handled: false };
+
+  if (
+    !participant
+    || participant.id !== payload.participantId
+    || participant.workspaceId !== mapping.workspaceId
+    || participant.instagramAccountId !== event.accountId
+    || participant.igScopedUserId !== event.recipientId
+  ) {
+    return { handled: false };
+  }
+
+  const automation = await repository.getAutomation(mapping.workspaceId, participant.automationId);
+  if (!automation || automation.definition.version !== 2) return { handled: false };
+  const definition = automation.definition;
+
+  if (payload.action === "opt_in") {
+    if (participant.state === "OPENING_SENT") {
+      const optedIn = await repository.transitionParticipant(participant.id, ["OPENING_SENT"], {
+        state: "OPTED_IN",
+        igScopedUserId: event.recipientId,
+        messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+      });
+      if (!optedIn) return { handled: true, result: handledResult(participant.id) };
+      participant = optedIn;
+    } else if (participant.state !== "OPTED_IN" && participant.state !== "FOLLOW_VERIFIED") {
+      return { handled: true, result: handledResult(participant.id) };
+    }
+  } else {
+    if (participant.state !== "FOLLOW_REQUIRED" && participant.state !== "FOLLOW_VERIFIED") {
+      return { handled: true, result: handledResult(participant.id) };
+    }
+    const expiresAt = participant.messagingWindowExpiresAt
+      ? Date.parse(participant.messagingWindowExpiresAt)
+      : Number.NaN;
+    if (!Number.isFinite(expiresAt) || event.timestamp >= expiresAt) {
+      await repository.transitionParticipant(participant.id, [participant.state], {
+        state: "EXPIRED",
+        finalDeliveryError: "Messaging window expired",
+      });
+      return { handled: true, result: handledResult(participant.id, { failed: 1 }) };
+    }
+    if (participant.recheckCount >= MAX_RECHECKS) {
+      return { handled: true, result: handledResult(participant.id) };
+    }
+    const checkedAt = participant.followCheckedAt ? Date.parse(participant.followCheckedAt) : Number.NaN;
+    if (Number.isFinite(checkedAt) && event.timestamp - checkedAt < RECHECK_COOLDOWN_MS) {
+      return { handled: true, result: handledResult(participant.id) };
+    }
+  }
+
+  if (!options.client) {
+    return {
+      handled: true,
+      result: await failInteractionParticipant(
+        participant,
+        repository,
+        "Meta delivery is disabled in demo mode",
+      ),
+    };
+  }
+  if (!options.tokenEncryptionKey) {
+    return {
+      handled: true,
+      result: await failInteractionParticipant(
+        participant,
+        repository,
+        "Token encryption key is not configured",
+      ),
+    };
+  }
+
+  const followCheckAction = payload.action === "recheck"
+    ? `follow_check:recheck:${participant.recheckCount + 1}`
+    : "follow_check:opt_in";
+  if (!await actionClaim(participant, repository, followCheckAction, event.id)) {
+    return { handled: true, result: handledResult(participant.id) };
+  }
+
+  const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+  let follows: boolean;
+  try {
+    const response = await options.client.getUserFollowStatus(connection, event.recipientId);
+    if (response.isUserFollowingBusiness !== true && response.isUserFollowingBusiness !== false) {
+      throw new Error("Meta did not return follower status");
+    }
+    follows = response.isUserFollowingBusiness;
+  } catch {
+    await completeAction(
+      participant,
+      repository,
+      followCheckAction,
+      "FAILED",
+      undefined,
+      "Follower verification failed",
+    );
+    return {
+      handled: true,
+      result: await failInteractionParticipant(
+        participant,
+        repository,
+        "Follower verification failed",
+      ),
+    };
+  }
+
+  let updated: AutomationParticipantRecord;
+  try {
+    if (follows) {
+      updated = await verifyAndDeliver(
+        participant,
+        definition,
+        event,
+        options.client,
+        connection,
+        repository,
+        options.finalAttempt === true,
+      );
+    } else if (participant.state === "FOLLOW_VERIFIED") {
+      await completeAction(
+        participant,
+        repository,
+        followCheckAction,
+        "FAILED",
+        undefined,
+        "Follower status changed before delivery",
+      );
+      return {
+        handled: true,
+        result: await failInteractionParticipant(
+          participant,
+          repository,
+          "Follower status changed before delivery",
+        ),
+      };
+    } else {
+      updated = await promptForFollow(
+        participant,
+        definition,
+        event,
+        options.client,
+        connection,
+        repository,
+        options.interactionSecret,
+        payload.action,
+        options.finalAttempt === true,
+      );
+    }
+  } catch (error) {
+    await releaseAction(participant, repository, followCheckAction);
+    throw error;
+  }
+
+  await completeAction(participant, repository, followCheckAction, "SENT");
+  if (updated.state === "LINK_SENT" || updated.state === "FOLLOW_REQUIRED") {
+    return { handled: true, result: handledResult(updated.id, { sent: 1 }) };
+  }
+  if (updated.state === "FAILED") {
+    return { handled: true, result: handledResult(updated.id, { failed: 1 }) };
+  }
+  return { handled: true, result: handledResult(updated.id) };
+}

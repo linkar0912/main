@@ -2,15 +2,20 @@ import { evaluateFlow } from "./engine";
 import type { ExecutionAction, NormalizedEvent } from "./types";
 import { unsealSecret } from "../security/secrets";
 import type { AutomationRepository, InstagramConnectionRecord } from "../repository";
-import { MetaApiError, type MetaClient } from "../meta/client";
+import { MetaApiError } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
+import {
+  processCampaignEvent,
+  processPendingCampaignInteraction,
+  type CampaignRunnerClient,
+  type CampaignRunnerOptions,
+  type CampaignRunnerResult,
+} from "./campaign-runner";
 
-export type AutomationRunnerClient = Pick<MetaClient, "sendPrivateReply" | "sendDirectMessage">;
+export type AutomationRunnerClient = CampaignRunnerClient;
 
-export type RunnerOptions = {
-  client?: AutomationRunnerClient;
-  tokenEncryptionKey?: string;
-  finalAttempt?: boolean;
+export type RunnerOptions = CampaignRunnerOptions & {
+  campaignsEnabled?: boolean;
 };
 
 export type RunnerResult = {
@@ -50,13 +55,36 @@ export async function processNormalizedEvent(
   event: NormalizedEvent,
   repository: AutomationRepository,
   options: RunnerOptions = {},
-): Promise<RunnerResult> {
+): Promise<RunnerResult | CampaignRunnerResult> {
   const mapping = await repository.findWorkspaceByInstagramAccount(event.accountId);
   if (!mapping) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
 
   const automations = (await repository.listAutomations(mapping.workspaceId)).filter(
     (automation) => automation.status === "ACTIVE",
   );
+
+  if (options.campaignsEnabled === true) {
+    const interaction = await processPendingCampaignInteraction(
+      event,
+      mapping,
+      repository,
+      options,
+    );
+    if (interaction.handled) return interaction.result;
+
+    for (const campaign of automations) {
+      if (campaign.definition.version !== 2) continue;
+      const campaignResult = await processCampaignEvent(
+        event,
+        campaign,
+        mapping,
+        repository,
+        options,
+      );
+      if (campaignResult.handled) return campaignResult;
+    }
+  }
+
   const result: RunnerResult = { matched: 0, sent: 0, skipped: 0, failed: 0 };
 
   for (const automation of automations) {
