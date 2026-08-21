@@ -1,4 +1,4 @@
-import type { MetaConnection, MetaMessage, MetaSendResult } from "./types";
+import type { MetaConnection, MetaMedia, MetaMediaPage, MetaMessage, MetaPrivateReply, MetaSendResult } from "./types";
 
 type MetaClientOptions = {
   apiVersion: string;
@@ -18,8 +18,25 @@ export class MetaApiError extends Error {
   }
 }
 
-export function buildPrivateReplyPayload(commentId: string, text: string) {
-  return { recipient: { comment_id: commentId }, message: { text } };
+const MEDIA_FIELDS = "id,caption,media_type,media_product_type,permalink,media_url,thumbnail_url,timestamp";
+const MEDIA_TYPES = new Set<MetaMedia["mediaType"]>(["IMAGE", "VIDEO", "CAROUSEL_ALBUM"]);
+const MEDIA_PRODUCT_TYPES = new Set<NonNullable<MetaMedia["mediaProductType"]>>(["AD", "FEED", "REELS", "STORY"]);
+
+export function buildPrivateReplyPayload(commentId: string, message: string | MetaPrivateReply) {
+  const normalized = typeof message === "string" ? { text: message } : message;
+  return {
+    recipient: { comment_id: commentId },
+    message: {
+      text: normalized.text,
+      ...(normalized.quickReply ? {
+        quick_replies: [{
+          content_type: "text" as const,
+          title: normalized.quickReply.title,
+          payload: normalized.quickReply.payload,
+        }],
+      } : {}),
+    },
+  };
 }
 
 export function buildDirectMessagePayload(recipientId: string, message: MetaMessage) {
@@ -52,17 +69,79 @@ export class MetaClient {
     this.fetcher = options.fetcher ?? fetch;
   }
 
-  async sendPrivateReply(connection: MetaConnection, commentId: string, text: string): Promise<MetaSendResult> {
-    return this.post(connection, buildPrivateReplyPayload(commentId, text));
+  async replyToComment(connection: MetaConnection, commentId: string, text: string): Promise<{ id: string }> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${commentId}/replies`);
+    const data = await this.request(url, connection.accessToken, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: text }),
+    });
+    if (typeof data.id !== "string" || !data.id) {
+      throw new MetaApiError("Meta did not return comment reply ID", 502);
+    }
+    return { id: data.id };
+  }
+
+  async sendPrivateReply(connection: MetaConnection, commentId: string, message: string | MetaPrivateReply): Promise<MetaSendResult> {
+    return this.post(connection, buildPrivateReplyPayload(commentId, message));
   }
 
   async sendDirectMessage(connection: MetaConnection, recipientId: string, message: MetaMessage): Promise<MetaSendResult> {
     return this.post(connection, buildDirectMessagePayload(recipientId, message));
   }
 
+  async sendQuickReply(
+    connection: MetaConnection,
+    recipientId: string,
+    text: string,
+    reply: NonNullable<MetaPrivateReply["quickReply"]>,
+  ): Promise<MetaSendResult> {
+    return this.post(connection, {
+      recipient: { id: recipientId },
+      messaging_type: "RESPONSE",
+      message: {
+        text,
+        quick_replies: [{ content_type: "text", title: reply.title, payload: reply.payload }],
+      },
+    });
+  }
+
+  async listMedia(connection: MetaConnection, after?: string): Promise<MetaMediaPage> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/media`);
+    url.searchParams.set("fields", MEDIA_FIELDS);
+    if (after) url.searchParams.set("after", after);
+    const data = await this.request(url, connection.accessToken);
+    if (!Array.isArray(data.data)) throw new MetaApiError("Meta did not return valid media", 502);
+    const paging = asRecord(data.paging);
+    const cursors = asRecord(paging?.cursors);
+    if (cursors?.after !== undefined && typeof cursors.after !== "string") {
+      throw new MetaApiError("Meta did not return valid media", 502);
+    }
+    return {
+      data: data.data.map(normalizeMedia),
+      ...(typeof cursors?.after === "string" ? { after: cursors.after } : {}),
+    };
+  }
+
+  async getMedia(connection: MetaConnection, mediaId: string): Promise<MetaMedia> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${mediaId}`);
+    url.searchParams.set("fields", MEDIA_FIELDS);
+    return normalizeMedia(await this.request(url, connection.accessToken));
+  }
+
+  async getUserFollowStatus(connection: MetaConnection, igScopedUserId: string): Promise<{ isUserFollowingBusiness: boolean }> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${igScopedUserId}`);
+    url.searchParams.set("fields", "is_user_follow_business");
+    const data = await this.request(url, connection.accessToken);
+    if (typeof data.is_user_follow_business !== "boolean") {
+      throw new MetaApiError("Meta did not return follower status", 502);
+    }
+    return { isUserFollowingBusiness: data.is_user_follow_business };
+  }
+
   async subscribeToWebhooks(connection: MetaConnection): Promise<void> {
     const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/subscribed_apps`);
-    url.searchParams.set("subscribed_fields", "comments,messages");
+    url.searchParams.set("subscribed_fields", "comments,messages,messaging_postbacks,messaging_optins,messaging_referral");
     const data = await this.request(url, connection.accessToken, { method: "POST" });
     if (data.success !== true) throw new MetaApiError("Meta did not confirm the webhook subscription", 502);
   }
@@ -119,6 +198,38 @@ export class MetaClient {
       message_id: typeof data.message_id === "string" ? data.message_id : undefined,
     };
   }
+}
+
+function normalizeMedia(value: unknown): MetaMedia {
+  const media = asRecord(value);
+  if (
+    !media ||
+    typeof media.id !== "string" || !media.id ||
+    typeof media.media_type !== "string" || !MEDIA_TYPES.has(media.media_type as MetaMedia["mediaType"]) ||
+    typeof media.permalink !== "string" || !media.permalink ||
+    typeof media.timestamp !== "string" || !media.timestamp ||
+    (media.caption !== undefined && typeof media.caption !== "string") ||
+    (media.media_product_type !== undefined &&
+      (typeof media.media_product_type !== "string" || !MEDIA_PRODUCT_TYPES.has(media.media_product_type as NonNullable<MetaMedia["mediaProductType"]>))) ||
+    (media.media_url !== undefined && typeof media.media_url !== "string") ||
+    (media.thumbnail_url !== undefined && typeof media.thumbnail_url !== "string")
+  ) {
+    throw new MetaApiError("Meta did not return valid media", 502);
+  }
+  return {
+    id: media.id,
+    mediaType: media.media_type as MetaMedia["mediaType"],
+    permalink: media.permalink,
+    timestamp: media.timestamp,
+    ...(typeof media.caption === "string" ? { caption: media.caption } : {}),
+    ...(typeof media.media_product_type === "string" ? { mediaProductType: media.media_product_type as NonNullable<MetaMedia["mediaProductType"]> } : {}),
+    ...(typeof media.media_url === "string" ? { mediaUrl: media.media_url } : {}),
+    ...(typeof media.thumbnail_url === "string" ? { thumbnailUrl: media.thumbnail_url } : {}),
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null ? value as Record<string, unknown> : undefined;
 }
 
 const TRANSIENT_META_CODES = new Set([1, 2, 4, 17, 32, 341, 613]);

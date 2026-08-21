@@ -1,11 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
-import { MetaClient, buildDirectMessagePayload, buildPrivateReplyPayload } from "./client";
+import { MetaApiError, MetaClient, buildDirectMessagePayload, buildPrivateReplyPayload } from "./client";
 
 describe("Meta message payloads", () => {
   it("builds a private reply addressed by comment ID", () => {
     expect(buildPrivateReplyPayload("comment_1", "Here is the link")).toEqual({
       recipient: { comment_id: "comment_1" },
       message: { text: "Here is the link" },
+    });
+  });
+
+  it("adds a quick reply to a private reply addressed by comment ID", () => {
+    expect(buildPrivateReplyPayload("comment_1", {
+      text: "Reply below so I can check your follow status.",
+      quickReply: { title: "Check follow", payload: "signed-opt-in" },
+    })).toEqual({
+      recipient: { comment_id: "comment_1" },
+      message: {
+        text: "Reply below so I can check your follow status.",
+        quick_replies: [{ content_type: "text", title: "Check follow", payload: "signed-opt-in" }],
+      },
     });
   });
 
@@ -62,14 +75,14 @@ describe("Meta message payloads", () => {
     await expect(graphClient.sendPrivateReply({ igUserId: "ig_1", accessToken: "secret" }, "comment_1", "Hello")).rejects.toMatchObject({ retryable: true, status: 400 });
   });
 
-  it("subscribes the professional account to comment and message webhooks", async () => {
+  it("subscribes the professional account to the campaign webhook fields", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     const client = new MetaClient({ apiVersion: "v25.0", fetcher });
 
     await expect(client.subscribeToWebhooks({ igUserId: "ig_1", accessToken: "secret" })).resolves.toBeUndefined();
     const [url, init] = fetcher.mock.calls[0];
     expect(String(url)).toContain("/v25.0/ig_1/subscribed_apps");
-    expect(String(url)).toContain("subscribed_fields=comments%2Cmessages");
+    expect(String(url)).toContain("subscribed_fields=comments%2Cmessages%2Cmessaging_postbacks%2Cmessaging_optins%2Cmessaging_referral");
     expect(init).toMatchObject({ method: "POST", headers: { authorization: "Bearer secret" } });
   });
 
@@ -88,5 +101,156 @@ describe("Meta message payloads", () => {
 
     await expect(client.unsubscribeFromWebhooks({ igUserId: "ig_1", accessToken: "secret" })).resolves.toBeUndefined();
     expect(fetcher.mock.calls[0][1]).toMatchObject({ method: "DELETE" });
+  });
+
+  it("posts a public reply to a comment", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ id: "reply_1" }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+
+    await expect(client.replyToComment({ igUserId: "ig_1", accessToken: "access-token" }, "comment_1", "Check your DMs")).resolves.toEqual({ id: "reply_1" });
+
+    const [url, init] = fetcher.mock.calls[0];
+    expect(String(url)).toContain("/v25.0/comment_1/replies");
+    expect(init).toMatchObject({ method: "POST", body: JSON.stringify({ message: "Check your DMs" }) });
+  });
+
+  it("sends a private reply with an opt-in quick reply", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ recipient_id: "commenter_1", message_id: "message_1" }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+
+    await client.sendPrivateReply(
+      { igUserId: "ig_1", accessToken: "access-token" },
+      "comment_1",
+      { text: "Reply below so I can check your follow status.", quickReply: { title: "Check follow", payload: "signed-opt-in" } },
+    );
+
+    const [url, init] = fetcher.mock.calls[0];
+    expect(String(url)).toContain("/v25.0/ig_1/messages");
+    expect(init).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({
+        recipient: { comment_id: "comment_1" },
+        message: {
+          text: "Reply below so I can check your follow status.",
+          quick_replies: [{ content_type: "text", title: "Check follow", payload: "signed-opt-in" }],
+        },
+      }),
+    });
+  });
+
+  it("sends a response quick reply to an Instagram-scoped recipient", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ recipient_id: "igsid_1", message_id: "message_1" }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+
+    await client.sendQuickReply(
+      { igUserId: "ig_1", accessToken: "access-token" },
+      "igsid_1",
+      "Follow this account, then tap below.",
+      { title: "I've followed", payload: "signed-value" },
+    );
+
+    expect(fetcher.mock.calls[0][1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({
+        recipient: { id: "igsid_1" },
+        messaging_type: "RESPONSE",
+        message: {
+          text: "Follow this account, then tap below.",
+          quick_replies: [{ content_type: "text", title: "I've followed", payload: "signed-value" }],
+        },
+      }),
+    });
+  });
+
+  it("normalizes media pages and sends the cursor only as an after query parameter", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      data: [{
+        id: "media_1",
+        caption: "A reel",
+        media_type: "VIDEO",
+        media_product_type: "REELS",
+        permalink: "https://www.instagram.com/reel/media_1/",
+        media_url: "https://cdn.instagram.com/media_1.mp4",
+        thumbnail_url: "https://cdn.instagram.com/media_1.jpg",
+        timestamp: "2026-08-21T10:00:00+0000",
+      }],
+      paging: { cursors: { after: "next-page" } },
+    }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+
+    await expect(client.listMedia({ igUserId: "ig_1", accessToken: "access-token" }, "current-page")).resolves.toEqual({
+      data: [{
+        id: "media_1",
+        caption: "A reel",
+        mediaType: "VIDEO",
+        mediaProductType: "REELS",
+        permalink: "https://www.instagram.com/reel/media_1/",
+        mediaUrl: "https://cdn.instagram.com/media_1.mp4",
+        thumbnailUrl: "https://cdn.instagram.com/media_1.jpg",
+        timestamp: "2026-08-21T10:00:00+0000",
+      }],
+      after: "next-page",
+    });
+
+    const requestUrl = new URL(String(fetcher.mock.calls[0][0]));
+    expect(requestUrl.pathname).toBe("/v25.0/ig_1/media");
+    expect(requestUrl.searchParams.get("fields")).toBe("id,caption,media_type,media_product_type,permalink,media_url,thumbnail_url,timestamp");
+    expect(requestUrl.searchParams.get("after")).toBe("current-page");
+  });
+
+  it("normalizes one media item", async () => {
+    const client = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({
+        id: "media_1",
+        media_type: "IMAGE",
+        permalink: "https://www.instagram.com/p/media_1/",
+        timestamp: "2026-08-21T10:00:00+0000",
+      }), { status: 200 }),
+    });
+
+    await expect(client.getMedia({ igUserId: "ig_1", accessToken: "access-token" }, "media_1")).resolves.toEqual({
+      id: "media_1",
+      mediaType: "IMAGE",
+      permalink: "https://www.instagram.com/p/media_1/",
+      timestamp: "2026-08-21T10:00:00+0000",
+    });
+  });
+
+  it("returns the literal follower status supplied by Meta", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ is_user_follow_business: true }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+
+    await expect(client.getUserFollowStatus({ igUserId: "ig_1", accessToken: "access-token" }, "igsid_1")).resolves.toEqual({ isUserFollowingBusiness: true });
+
+    const requestUrl = new URL(String(fetcher.mock.calls[0][0]));
+    expect(requestUrl.pathname).toBe("/v25.0/igsid_1");
+    expect(requestUrl.searchParams.get("fields")).toBe("is_user_follow_business");
+  });
+
+  it("rejects malformed media, public reply, and follower-status responses", async () => {
+    const malformedMedia = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({ data: [{ id: "media_1", media_type: "VIDEO" }] }), { status: 200 }),
+    });
+    await expect(malformedMedia.listMedia({ igUserId: "ig_1", accessToken: "access-token" })).rejects.toEqual(
+      new MetaApiError("Meta did not return valid media", 502),
+    );
+
+    const malformedReply = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({}), { status: 200 }),
+    });
+    await expect(malformedReply.replyToComment({ igUserId: "ig_1", accessToken: "access-token" }, "comment_1", "Check your DMs")).rejects.toEqual(
+      new MetaApiError("Meta did not return comment reply ID", 502),
+    );
+
+    const malformedFollowStatus = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({ is_user_follow_business: "true" }), { status: 200 }),
+    });
+    await expect(malformedFollowStatus.getUserFollowStatus({ igUserId: "ig_1", accessToken: "access-token" }, "igsid_1")).rejects.toEqual(
+      new MetaApiError("Meta did not return follower status", 502),
+    );
   });
 });
