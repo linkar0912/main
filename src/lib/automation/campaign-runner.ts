@@ -891,6 +891,42 @@ async function promptForFollow(
   return prompted ?? currentParticipant(participant, repository);
 }
 
+const COOLDOWN_NOTICE_TEXT = "Give it a few more seconds, then tap the button below again.";
+
+async function sendCooldownNotice(
+  participant: AutomationParticipantRecord,
+  definition: FlowDefinitionV2,
+  event: NormalizedEvent,
+  client: CampaignRunnerClient,
+  connection: MetaConnection,
+  repository: AutomationRepository,
+  interactionSecret: string,
+): Promise<void> {
+  const action = `cooldown_notice:${event.id}`;
+  const prepared = await prepareDeliveryAction(participant, repository, action, event.id);
+  if (prepared.kind !== "send") return;
+
+  try {
+    const response = await client.sendQuickReply(
+      connection,
+      event.recipientId!,
+      COOLDOWN_NOTICE_TEXT,
+      {
+        title: definition.followGate.recheckButtonLabel,
+        payload: createInteractionPayload(
+          { participantId: participant.id, action: "recheck" },
+          interactionSecret,
+          event.timestamp,
+        ),
+      },
+    );
+    if (!response.message_id) throw new Error("Meta accepted the cooldown notice without a delivery identifier");
+    await completeOwnedAction(participant, repository, action, prepared.dispatchOwner, "SENT", response.message_id);
+  } catch {
+    await completeOwnedAction(participant, repository, action, prepared.dispatchOwner, "FAILED", undefined, "Meta cooldown notice failed");
+  }
+}
+
 async function deliverFinalMessage(
   verified: AutomationParticipantRecord,
   definition: FlowDefinitionV2,
@@ -1411,6 +1447,17 @@ export async function processPendingCampaignInteraction(
     }
     const checkedAt = participant.followCheckedAt ? Date.parse(participant.followCheckedAt) : Number.NaN;
     if (Number.isFinite(checkedAt) && event.timestamp - checkedAt < RECHECK_COOLDOWN_MS) {
+      if (options.client && options.tokenEncryptionKey) {
+        await sendCooldownNotice(
+          participant,
+          definition,
+          event,
+          options.client,
+          metaConnection(mapping.connection, options.tokenEncryptionKey),
+          repository,
+          options.interactionSecret,
+        );
+      }
       return { handled: true, result: handledResult(participant.id) };
     }
   }

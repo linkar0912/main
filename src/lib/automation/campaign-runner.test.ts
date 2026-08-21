@@ -602,6 +602,47 @@ describe("follow-gated campaign runner", () => {
     expect((await readParticipant(harness.repository)).recheckCount).toBe(1);
   });
 
+  it("sends a wait notice instead of silence when a recheck violates the cooldown", async () => {
+    const harness = await openParticipant();
+    vi.mocked(harness.client.getUserFollowStatus).mockResolvedValue({ isUserFollowingBusiness: false });
+    const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
+    vi.setSystemTime(optInEvent.timestamp);
+    await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
+    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
+    if (!recheckPayload) throw new Error("recheck payload was not sent");
+
+    await processPendingCampaignInteraction(
+      interactionEvent(recheckPayload, optInEvent.timestamp + 5_000),
+      harness.mapping,
+      harness.repository,
+      harness.options,
+    );
+
+    expect(harness.client.getUserFollowStatus).toHaveBeenCalledTimes(1);
+    expect((await readParticipant(harness.repository)).recheckCount).toBe(0);
+    expect(harness.client.sendQuickReply).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(harness.client.sendQuickReply).mock.calls[1]?.[2]).toMatch(/few more seconds/i);
+    const noticePayload = vi.mocked(harness.client.sendQuickReply).mock.calls[1]?.[3]?.payload;
+    expect(typeof noticePayload).toBe("string");
+    expect(noticePayload).not.toBe(recheckPayload);
+  });
+
+  it("does not resend the cooldown notice for a replayed cooldown-violating event", async () => {
+    const harness = await openParticipant();
+    vi.mocked(harness.client.getUserFollowStatus).mockResolvedValue({ isUserFollowingBusiness: false });
+    const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
+    vi.setSystemTime(optInEvent.timestamp);
+    await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
+    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
+    if (!recheckPayload) throw new Error("recheck payload was not sent");
+
+    const violatingEvent = interactionEvent(recheckPayload, optInEvent.timestamp + 5_000, { id: "recheck_replay" });
+    await processPendingCampaignInteraction(violatingEvent, harness.mapping, harness.repository, harness.options);
+    await processPendingCampaignInteraction(violatingEvent, harness.mapping, harness.repository, harness.options);
+
+    expect(harness.client.sendQuickReply).toHaveBeenCalledTimes(2);
+  });
+
   it("allows only one competing recheck to claim the next cooldown slot", async () => {
     const harness = await openParticipant();
     vi.mocked(harness.client.getUserFollowStatus).mockResolvedValue({ isUserFollowingBusiness: false });
