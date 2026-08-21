@@ -757,7 +757,70 @@ describe("follow-gated campaign runner", () => {
     });
   });
 
-  it("reclaims a known-not-dispatched action claim instead of stranding delivery", async () => {
+  it("keeps an unexpired foreign dispatch live across independent worker module contexts", async () => {
+    const harness = await openParticipant();
+    await harness.repository.transitionParticipant(harness.participant.id, ["OPENING_SENT"], {
+      state: "FOLLOW_VERIFIED",
+      followStatus: true,
+      followCheckedAt: new Date(NOW + 1_000).toISOString(),
+      messagingWindowExpiresAt: new Date(NOW + 60_000).toISOString(),
+      finalDeliveryStatus: "PENDING",
+    });
+    const payload = createInteractionPayload(
+      { participantId: harness.participant.id, action: "recheck" },
+      INTERACTION_SECRET,
+      NOW,
+    );
+    let releaseSend: (() => void) | undefined;
+    vi.mocked(harness.client.sendDirectMessage).mockImplementation(() => new Promise((resolve) => {
+      releaseSend = () => resolve({ recipient_id: "scoped_user_1", message_id: "final_cross_worker" });
+    }));
+    vi.resetModules();
+    const workerA = await import("./campaign-runner");
+    vi.resetModules();
+    const workerB = await import("./campaign-runner");
+    const event = interactionEvent(payload, NOW + 1_000, { id: "final_cross_worker_event" });
+
+    const first = workerA.processPendingCampaignInteraction(
+      event,
+      harness.mapping,
+      harness.repository,
+      harness.options,
+    );
+    await vi.waitFor(() => expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1));
+    const second = await workerB.processPendingCampaignInteraction(
+      { ...event, id: "final_cross_worker_duplicate" },
+      harness.mapping,
+      harness.repository,
+      harness.options,
+    );
+
+    expect(second).toMatchObject({ handled: true });
+    expect(await readParticipant(harness.repository)).toMatchObject({
+      state: "FOLLOW_VERIFIED",
+      finalDeliveryStatus: "PENDING",
+    });
+    expect(await harness.repository.getExecution(
+      automation.workspaceId,
+      `campaign:${harness.participant.id}:final_delivery`,
+    )).toMatchObject({
+      status: "PROCESSING",
+      dispatchStatus: "DISPATCHING",
+      dispatchOwner: expect.any(String),
+    });
+
+    releaseSend?.();
+    await first;
+
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect(await readParticipant(harness.repository)).toMatchObject({
+      state: "LINK_SENT",
+      finalDeliveryStatus: "SENT",
+      finalProviderId: "final_cross_worker",
+    });
+  });
+
+  it("fails a historical PROCESSING claim without durable ownership instead of resending", async () => {
     const harness = await openParticipant();
     await harness.repository.transitionParticipant(harness.participant.id, ["OPENING_SENT"], {
       state: "FOLLOW_VERIFIED",
@@ -786,8 +849,16 @@ describe("follow-gated campaign runner", () => {
       harness.options,
     );
 
-    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
-    expect(await readParticipant(harness.repository)).toMatchObject({ state: "LINK_SENT" });
+    expect(harness.client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(await readParticipant(harness.repository)).toMatchObject({
+      state: "FAILED",
+      finalDeliveryStatus: "FAILED",
+      finalDeliveryError: expect.stringContaining("durable dispatch owner"),
+    });
+    expect(await harness.repository.getExecution(automation.workspaceId, dedupeKey)).toMatchObject({
+      status: "FAILED",
+      dispatchStatus: "CLAIMED",
+    });
   });
 
   it("does not resume protected delivery from a stale prior true follow status", async () => {
@@ -821,7 +892,7 @@ describe("follow-gated campaign runner", () => {
     });
   });
 
-  it("fails closed and resolves an abandoned dispatching claim without a duplicate send", async () => {
+  it("fails closed on a historical DISPATCHING execution without an owner", async () => {
     const harness = await openParticipant();
     await harness.repository.transitionParticipant(harness.participant.id, ["OPENING_SENT"], {
       state: "FOLLOW_VERIFIED",
@@ -831,13 +902,14 @@ describe("follow-gated campaign runner", () => {
       finalDeliveryStatus: "PENDING",
     });
     const dedupeKey = `campaign:${harness.participant.id}:final_delivery`;
-    await harness.repository.claimExecution({
+    await harness.repository.recordExecution({
       workspaceId: automation.workspaceId,
       automationId: automation.id,
       externalEventId: "crashed_during_dispatch",
       dedupeKey,
+      status: "PROCESSING",
+      dispatchStatus: "DISPATCHING",
     });
-    await harness.repository.markExecutionDispatching(automation.workspaceId, dedupeKey);
     const payload = createInteractionPayload(
       { participantId: harness.participant.id, action: "recheck" },
       INTERACTION_SECRET,
@@ -860,6 +932,50 @@ describe("follow-gated campaign runner", () => {
     expect(await harness.repository.getExecution(automation.workspaceId, dedupeKey)).toMatchObject({
       status: "FAILED",
       dispatchStatus: "DISPATCHING",
+    });
+  });
+
+  it("fails closed on an owned dispatch whose durable lease expired", async () => {
+    const harness = await openParticipant();
+    await harness.repository.transitionParticipant(harness.participant.id, ["OPENING_SENT"], {
+      state: "FOLLOW_VERIFIED",
+      followStatus: true,
+      followCheckedAt: new Date(NOW + 1_000).toISOString(),
+      messagingWindowExpiresAt: new Date(NOW + 60_000).toISOString(),
+      finalDeliveryStatus: "PENDING",
+    });
+    const dedupeKey = `campaign:${harness.participant.id}:final_delivery`;
+    await harness.repository.claimExecutionDispatch({
+      workspaceId: automation.workspaceId,
+      automationId: automation.id,
+      externalEventId: "expired_dispatch_owner",
+      dedupeKey,
+      dispatchOwner: "expired_owner",
+      dispatchStartedAt: new Date(NOW - 30_000).toISOString(),
+      dispatchLeaseExpiresAt: new Date(NOW).toISOString(),
+    });
+    const payload = createInteractionPayload(
+      { participantId: harness.participant.id, action: "recheck" },
+      INTERACTION_SECRET,
+      NOW,
+    );
+
+    await processPendingCampaignInteraction(
+      interactionEvent(payload, NOW + 1_000),
+      harness.mapping,
+      harness.repository,
+      harness.options,
+    );
+
+    expect(harness.client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(await readParticipant(harness.repository)).toMatchObject({
+      state: "FAILED",
+      finalDeliveryStatus: "FAILED",
+      finalDeliveryError: expect.stringContaining("abandoned dispatch lease"),
+    });
+    expect(await harness.repository.getExecution(automation.workspaceId, dedupeKey)).toMatchObject({
+      status: "FAILED",
+      dispatchOwner: "expired_owner",
     });
   });
 

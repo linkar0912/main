@@ -134,19 +134,22 @@ model AutomationParticipant {
 }
 
 model AutomationExecution {
-  id                  String          @id
-  workspaceId         String
-  automationId        String
-  externalEventId     String
-  dedupeKey           String
-  status              ExecutionStatus
-  dispatchStatus      String          @default("CLAIMED")
-  reason              String?
-  providerMessageId   String?
-  providerRecipientId String?
-  createdAt           DateTime        @default(now())
-  workspace           Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  automation          Automation      @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  id                     String          @id
+  workspaceId            String
+  automationId           String
+  externalEventId        String
+  dedupeKey              String
+  status                 ExecutionStatus
+  dispatchStatus         String          @default("CLAIMED")
+  dispatchOwner          String?         @unique
+  dispatchStartedAt      DateTime?
+  dispatchLeaseExpiresAt DateTime?
+  reason                 String?
+  providerMessageId      String?
+  providerRecipientId    String?
+  createdAt              DateTime        @default(now())
+  workspace              Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation             Automation      @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, dedupeKey])
   @@index([workspaceId, createdAt])

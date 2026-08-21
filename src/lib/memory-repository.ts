@@ -210,23 +210,29 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return true;
     },
 
+    async claimExecutionDispatch(input) {
+      const existing = [...executions.values()].some(
+        (record) =>
+          (record.workspaceId === input.workspaceId && record.dedupeKey === input.dedupeKey)
+          || record.dispatchOwner === input.dispatchOwner,
+      );
+      if (existing) return false;
+      const record: ExecutionRecord = {
+        id: createId("execution"),
+        createdAt: now(),
+        status: "PROCESSING",
+        dispatchStatus: "DISPATCHING",
+        ...input,
+      };
+      executions.set(record.id, record);
+      return true;
+    },
+
     async getExecution(workspaceId, dedupeKey) {
       const record = [...executions.values()].find(
         (candidate) => candidate.workspaceId === workspaceId && candidate.dedupeKey === dedupeKey,
       );
       return record ? copy(record) : null;
-    },
-
-    async markExecutionDispatching(workspaceId, dedupeKey) {
-      const entry = [...executions.entries()].find(([, record]) =>
-        record.workspaceId === workspaceId
-        && record.dedupeKey === dedupeKey
-        && record.status === "PROCESSING"
-        && record.dispatchStatus === "CLAIMED",
-      );
-      if (!entry) return false;
-      executions.set(entry[0], { ...entry[1], dispatchStatus: "DISPATCHING" });
-      return true;
     },
 
     async completeExecution(workspaceId, dedupeKey, result) {
@@ -237,11 +243,61 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       executions.set(entry[0], { ...entry[1], ...result });
     },
 
+    async completeOwnedExecution(workspaceId, dedupeKey, dispatchOwner, result) {
+      const entry = [...executions.entries()].find(([, record]) =>
+        record.workspaceId === workspaceId
+        && record.dedupeKey === dedupeKey
+        && record.status === "PROCESSING"
+        && record.dispatchStatus === "DISPATCHING"
+        && record.dispatchOwner === dispatchOwner,
+      );
+      if (!entry) return false;
+      executions.set(entry[0], { ...entry[1], ...result });
+      return true;
+    },
+
+    async failAbandonedExecution(workspaceId, dedupeKey, observedAt, reason) {
+      const observedAtMs = Date.parse(observedAt);
+      if (!Number.isFinite(observedAtMs)) throw new Error("observedAt must be a valid timestamp");
+      const entry = [...executions.entries()].find(([, record]) => {
+        if (
+          record.workspaceId !== workspaceId
+          || record.dedupeKey !== dedupeKey
+          || record.status !== "PROCESSING"
+          || record.dispatchStatus !== "DISPATCHING"
+        ) return false;
+        const startedAtMs = record.dispatchStartedAt ? Date.parse(record.dispatchStartedAt) : Number.NaN;
+        const leaseExpiresAtMs = record.dispatchLeaseExpiresAt
+          ? Date.parse(record.dispatchLeaseExpiresAt)
+          : Number.NaN;
+        return !record.dispatchOwner
+          || !Number.isFinite(startedAtMs)
+          || !Number.isFinite(leaseExpiresAtMs)
+          || leaseExpiresAtMs <= observedAtMs;
+      });
+      if (!entry) return false;
+      executions.set(entry[0], { ...entry[1], status: "FAILED", reason });
+      return true;
+    },
+
     async releaseExecutionClaim(workspaceId, dedupeKey) {
       const entry = [...executions.entries()].find(([, record]) =>
         record.workspaceId === workspaceId && record.dedupeKey === dedupeKey && record.status === "PROCESSING",
       );
       if (entry) executions.delete(entry[0]);
+    },
+
+    async releaseOwnedExecutionClaim(workspaceId, dedupeKey, dispatchOwner) {
+      const entry = [...executions.entries()].find(([, record]) =>
+        record.workspaceId === workspaceId
+        && record.dedupeKey === dedupeKey
+        && record.status === "PROCESSING"
+        && record.dispatchStatus === "DISPATCHING"
+        && record.dispatchOwner === dispatchOwner,
+      );
+      if (!entry) return false;
+      executions.delete(entry[0]);
+      return true;
     },
 
     async hasExecution(workspaceId, dedupeKey) {

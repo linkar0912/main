@@ -109,43 +109,156 @@ describe("memory repository", () => {
     expect(await repository.claimExecution(claim)).toBe(false);
   });
 
-  it("persists the provider dispatch phase and identifiers for action reconciliation", async () => {
+  it("allows only the durable dispatch owner to persist provider success", async () => {
     const repository = createMemoryRepository();
     const claim = {
       workspaceId: "workspace_a",
       automationId: "automation_1",
       externalEventId: "comment_1",
       dedupeKey: "campaign:participant_1:opening_reply",
+      dispatchOwner: "attempt_owner_a",
+      dispatchStartedAt: "2026-08-21T10:00:00.000Z",
+      dispatchLeaseExpiresAt: "2026-08-21T10:00:30.000Z",
     };
 
-    expect(await repository.claimExecution(claim)).toBe(true);
-    const claimed = await repository.getExecution(claim.workspaceId, claim.dedupeKey);
-    expect(claimed).toMatchObject({
-      status: "PROCESSING",
-      dispatchStatus: "CLAIMED",
-    });
-    expect(claimed?.providerMessageId).toBeUndefined();
-    expect(claimed?.providerRecipientId).toBeUndefined();
-    expect(await repository.markExecutionDispatching(claim.workspaceId, claim.dedupeKey)).toBe(true);
-    expect(await repository.markExecutionDispatching(claim.workspaceId, claim.dedupeKey)).toBe(false);
+    expect(await repository.claimExecutionDispatch(claim)).toBe(true);
+    expect(await repository.claimExecutionDispatch({ ...claim, dispatchOwner: "attempt_owner_b" })).toBe(false);
     expect(await repository.getExecution(claim.workspaceId, claim.dedupeKey)).toMatchObject({
+      status: "PROCESSING",
+      dispatchStatus: "DISPATCHING",
+      dispatchOwner: "attempt_owner_a",
+      dispatchStartedAt: claim.dispatchStartedAt,
+      dispatchLeaseExpiresAt: claim.dispatchLeaseExpiresAt,
+    });
+
+    expect(await repository.completeOwnedExecution(
+      claim.workspaceId,
+      claim.dedupeKey,
+      "attempt_owner_b",
+      { status: "SENT", providerMessageId: "wrong_owner_message" },
+    )).toBe(false);
+    expect(await repository.failAbandonedExecution(
+      claim.workspaceId,
+      claim.dedupeKey,
+      "2026-08-21T10:00:29.999Z",
+      "must remain live",
+    )).toBe(false);
+    expect(await repository.completeOwnedExecution(claim.workspaceId, claim.dedupeKey, claim.dispatchOwner, {
+      status: "SENT",
+      providerMessageId: "opening_message_1",
+      providerRecipientId: "scoped_user_1",
+    })).toBe(true);
+
+    expect(await repository.getExecution(claim.workspaceId, claim.dedupeKey)).toMatchObject({
+      status: "SENT",
+      dispatchStatus: "DISPATCHING",
+      providerMessageId: "opening_message_1",
+      providerRecipientId: "scoped_user_1",
+    });
+  });
+
+  it("rejects reuse of a dispatch owner token across executions", async () => {
+    const repository = createMemoryRepository();
+    const claim = {
+      workspaceId: "workspace_a",
+      automationId: "automation_1",
+      externalEventId: "comment_1",
+      dedupeKey: "campaign:participant_1:opening_reply",
+      dispatchOwner: "unique_attempt_owner",
+      dispatchStartedAt: "2026-08-21T10:00:00.000Z",
+      dispatchLeaseExpiresAt: "2026-08-21T10:00:30.000Z",
+    };
+
+    expect(await repository.claimExecutionDispatch(claim)).toBe(true);
+    expect(await repository.claimExecutionDispatch({
+      ...claim,
+      dedupeKey: "campaign:participant_2:opening_reply",
+      externalEventId: "comment_2",
+    })).toBe(false);
+  });
+
+  it("terminally fails an expired dispatch lease and rejects late owner success", async () => {
+    const repository = createMemoryRepository();
+    const claim = {
+      workspaceId: "workspace_a",
+      automationId: "automation_1",
+      externalEventId: "comment_1",
+      dedupeKey: "campaign:participant_1:final_delivery",
+      dispatchOwner: "attempt_owner_a",
+      dispatchStartedAt: "2026-08-21T10:00:00.000Z",
+      dispatchLeaseExpiresAt: "2026-08-21T10:00:30.000Z",
+    };
+    await repository.claimExecutionDispatch(claim);
+
+    expect(await repository.failAbandonedExecution(
+      claim.workspaceId,
+      claim.dedupeKey,
+      claim.dispatchLeaseExpiresAt,
+      "Meta delivery outcome is ambiguous after dispatch lease expiry",
+    )).toBe(true);
+    expect(await repository.completeOwnedExecution(
+      claim.workspaceId,
+      claim.dedupeKey,
+      claim.dispatchOwner,
+      { status: "SENT", providerMessageId: "late_message" },
+    )).toBe(false);
+    expect(await repository.getExecution(claim.workspaceId, claim.dedupeKey)).toMatchObject({
+      status: "FAILED",
+      dispatchStatus: "DISPATCHING",
+      reason: "Meta delivery outcome is ambiguous after dispatch lease expiry",
+    });
+  });
+
+  it("terminally fails a historical DISPATCHING execution without durable ownership", async () => {
+    const repository = createMemoryRepository();
+    const execution = {
+      workspaceId: "workspace_a",
+      automationId: "automation_1",
+      externalEventId: "comment_1",
+      dedupeKey: "campaign:participant_1:opening_reply",
+    };
+    await repository.recordExecution({
+      ...execution,
       status: "PROCESSING",
       dispatchStatus: "DISPATCHING",
     });
 
-    await repository.completeExecution(claim.workspaceId, claim.dedupeKey, {
-      status: "SENT",
-      providerMessageId: "opening_message_1",
-      providerRecipientId: "scoped_user_1",
+    expect(await repository.failAbandonedExecution(
+      execution.workspaceId,
+      execution.dedupeKey,
+      "2026-08-21T10:00:00.000Z",
+      "Historical dispatch has no valid owner",
+    )).toBe(true);
+    expect(await repository.getExecution(execution.workspaceId, execution.dedupeKey)).toMatchObject({
+      status: "FAILED",
+      reason: "Historical dispatch has no valid owner",
     });
+  });
 
-    expect(await repository.getExecution(claim.workspaceId, claim.dedupeKey)).toMatchObject({
-      status: "SENT",
-      dispatchStatus: "DISPATCHING",
-      providerMessageId: "opening_message_1",
-      providerRecipientId: "scoped_user_1",
-    });
-    expect(await repository.markExecutionDispatching(claim.workspaceId, claim.dedupeKey)).toBe(false);
+  it("allows only the dispatch owner to release a known-not-sent attempt", async () => {
+    const repository = createMemoryRepository();
+    const claim = {
+      workspaceId: "workspace_a",
+      automationId: "automation_1",
+      externalEventId: "comment_1",
+      dedupeKey: "campaign:participant_1:opening_reply",
+      dispatchOwner: "attempt_owner_a",
+      dispatchStartedAt: "2026-08-21T10:00:00.000Z",
+      dispatchLeaseExpiresAt: "2026-08-21T10:00:30.000Z",
+    };
+    await repository.claimExecutionDispatch(claim);
+
+    expect(await repository.releaseOwnedExecutionClaim(
+      claim.workspaceId,
+      claim.dedupeKey,
+      "attempt_owner_b",
+    )).toBe(false);
+    expect(await repository.releaseOwnedExecutionClaim(
+      claim.workspaceId,
+      claim.dedupeKey,
+      claim.dispatchOwner,
+    )).toBe(true);
+    expect(await repository.getExecution(claim.workspaceId, claim.dedupeKey)).toBeNull();
   });
 
   it("deduplicates a source comment across matching automations", async () => {

@@ -51,6 +51,9 @@ function mapExecution(record: {
   dedupeKey: string;
   status: ExecutionRecord["status"];
   dispatchStatus: string;
+  dispatchOwner: string | null;
+  dispatchStartedAt: Date | null;
+  dispatchLeaseExpiresAt: Date | null;
   reason: string | null;
   providerMessageId: string | null;
   providerRecipientId: string | null;
@@ -59,6 +62,9 @@ function mapExecution(record: {
   return {
     ...record,
     dispatchStatus: record.dispatchStatus as ExecutionDispatchStatus,
+    dispatchOwner: record.dispatchOwner ?? undefined,
+    dispatchStartedAt: record.dispatchStartedAt?.toISOString(),
+    dispatchLeaseExpiresAt: record.dispatchLeaseExpiresAt?.toISOString(),
     reason: record.reason ?? undefined,
     providerMessageId: record.providerMessageId ?? undefined,
     providerRecipientId: record.providerRecipientId ?? undefined,
@@ -342,17 +348,28 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       }
     },
 
+    async claimExecutionDispatch(input) {
+      try {
+        await client.automationExecution.create({
+          data: {
+            id: createId("execution"),
+            status: "PROCESSING",
+            dispatchStatus: "DISPATCHING",
+            ...input,
+            dispatchStartedAt: new Date(input.dispatchStartedAt),
+            dispatchLeaseExpiresAt: new Date(input.dispatchLeaseExpiresAt),
+          },
+        });
+        return true;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
+        throw error;
+      }
+    },
+
     async getExecution(workspaceId, dedupeKey) {
       const record = await client.automationExecution.findFirst({ where: { workspaceId, dedupeKey } });
       return record ? mapExecution(record) : null;
-    },
-
-    async markExecutionDispatching(workspaceId, dedupeKey) {
-      const result = await client.automationExecution.updateMany({
-        where: { workspaceId, dedupeKey, status: "PROCESSING", dispatchStatus: "CLAIMED" },
-        data: { dispatchStatus: "DISPATCHING" },
-      });
-      return result.count === 1;
     },
 
     async completeExecution(workspaceId, dedupeKey, result) {
@@ -362,10 +379,56 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       });
     },
 
+    async completeOwnedExecution(workspaceId, dedupeKey, dispatchOwner, result) {
+      const completed = await client.automationExecution.updateMany({
+        where: {
+          workspaceId,
+          dedupeKey,
+          status: "PROCESSING",
+          dispatchStatus: "DISPATCHING",
+          dispatchOwner,
+        },
+        data: result,
+      });
+      return completed.count === 1;
+    },
+
+    async failAbandonedExecution(workspaceId, dedupeKey, observedAt, reason) {
+      const failed = await client.automationExecution.updateMany({
+        where: {
+          workspaceId,
+          dedupeKey,
+          status: "PROCESSING",
+          dispatchStatus: "DISPATCHING",
+          OR: [
+            { dispatchOwner: null },
+            { dispatchStartedAt: null },
+            { dispatchLeaseExpiresAt: null },
+            { dispatchLeaseExpiresAt: { lte: new Date(observedAt) } },
+          ],
+        },
+        data: { status: "FAILED", reason },
+      });
+      return failed.count === 1;
+    },
+
     async releaseExecutionClaim(workspaceId, dedupeKey) {
       await client.automationExecution.deleteMany({
         where: { workspaceId, dedupeKey, status: "PROCESSING" },
       });
+    },
+
+    async releaseOwnedExecutionClaim(workspaceId, dedupeKey, dispatchOwner) {
+      const released = await client.automationExecution.deleteMany({
+        where: {
+          workspaceId,
+          dedupeKey,
+          status: "PROCESSING",
+          dispatchStatus: "DISPATCHING",
+          dispatchOwner,
+        },
+      });
+      return released.count === 1;
     },
 
     async hasExecution(workspaceId, dedupeKey) {

@@ -72,6 +72,9 @@ export type ExecutionRecord = {
   dedupeKey: string;
   status: ExecutionStatus;
   dispatchStatus: ExecutionDispatchStatus;
+  dispatchOwner?: string;
+  dispatchStartedAt?: string;
+  dispatchLeaseExpiresAt?: string;
   reason?: string;
   providerMessageId?: string;
   providerRecipientId?: string;
@@ -101,6 +104,14 @@ export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt" | "d
   dispatchStatus?: ExecutionDispatchStatus;
 };
 export type ClaimExecutionInput = Pick<ExecutionRecord, "workspaceId" | "automationId" | "externalEventId" | "dedupeKey">;
+export type ClaimExecutionDispatchInput = ClaimExecutionInput & Required<Pick<
+  ExecutionRecord,
+  "dispatchOwner" | "dispatchStartedAt" | "dispatchLeaseExpiresAt"
+>>;
+export type CompleteExecutionResult = Pick<
+  RecordExecutionInput,
+  "status" | "reason" | "providerMessageId" | "providerRecipientId"
+>;
 
 export type RecordExecutionResult =
   | { created: true; record: ExecutionRecord }
@@ -141,10 +152,13 @@ export interface AutomationRepository {
   upsertConnection(input: Omit<InstagramConnectionRecord, "id" | "connectedAt">): Promise<InstagramConnectionRecord>;
   recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult>;
   claimExecution(input: ClaimExecutionInput): Promise<boolean>;
+  claimExecutionDispatch(input: ClaimExecutionDispatchInput): Promise<boolean>;
   getExecution(workspaceId: string, dedupeKey: string): Promise<ExecutionRecord | null>;
-  markExecutionDispatching(workspaceId: string, dedupeKey: string): Promise<boolean>;
-  completeExecution(workspaceId: string, dedupeKey: string, result: Pick<RecordExecutionInput, "status" | "reason" | "providerMessageId" | "providerRecipientId">): Promise<void>;
+  completeExecution(workspaceId: string, dedupeKey: string, result: CompleteExecutionResult): Promise<void>;
+  completeOwnedExecution(workspaceId: string, dedupeKey: string, dispatchOwner: string, result: CompleteExecutionResult): Promise<boolean>;
+  failAbandonedExecution(workspaceId: string, dedupeKey: string, observedAt: string, reason: string): Promise<boolean>;
   releaseExecutionClaim(workspaceId: string, dedupeKey: string): Promise<void>;
+  releaseOwnedExecutionClaim(workspaceId: string, dedupeKey: string, dispatchOwner: string): Promise<boolean>;
   hasExecution(workspaceId: string, dedupeKey: string): Promise<boolean>;
   createParticipant(input: CreateParticipantInput): Promise<{ created: boolean; record: AutomationParticipantRecord }>;
   getParticipant(workspaceId: string, instagramAccountId: string, id: string): Promise<AutomationParticipantRecord | null>;

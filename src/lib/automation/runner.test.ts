@@ -463,7 +463,14 @@ describe("automation runner", () => {
     expect(await repository.hasExecution("workspace_a", "legacy_postback:postback_1")).toBe(false);
   });
 
-  it("consumes a tampered campaign interaction before generic V1 message handling", async () => {
+  it.each([
+    ["invalid signature character", (payload: string) => `${payload}!`, "invalid_signature"],
+    ["extra separator", (payload: string) => `${payload}.extra`, "extra_separator"],
+  ])("consumes a campaign interaction with %s before generic V1 message handling", async (
+    _case,
+    corruptPayload,
+    eventSuffix,
+  ) => {
     const key = randomBytes(32).toString("hex");
     const campaign = { id: "campaign_invalid_interaction", workspaceId: "workspace_a", name: "Campaign", status: "ACTIVE" as const, version: 2, definition: campaignDefinition, createdAt: new Date(1).toISOString(), updatedAt: new Date(2).toISOString() };
     const messageFlow: FlowDefinition = {
@@ -479,19 +486,23 @@ describe("automation runner", () => {
     await processNormalizedEvent({ ...event, mediaId: "media_1", timestamp: Date.now() }, repository, { client, tokenEncryptionKey: key, interactionSecret: "app-secret", campaignsEnabled: true });
     const opening = vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2];
     if (typeof opening === "string" || !opening?.quickReply) throw new Error("opening payload missing");
+    const interactionId = `postback_${eventSuffix}`;
 
     const result = await processNormalizedEvent({
-      id: "postback_tampered",
+      id: interactionId,
       accountId: "ig_1",
       type: "postback.received",
       text: "legacy would match",
       recipientId: "person_1",
-      interactionPayload: `${opening.quickReply.payload}tampered`,
+      interactionPayload: corruptPayload(opening.quickReply.payload),
       timestamp: Date.now() + 1_000,
     }, repository, { client, tokenEncryptionKey: key, interactionSecret: "app-secret", campaignsEnabled: true });
 
     expect(result).toMatchObject({ handled: true, failed: 1 });
     expect(client.sendDirectMessage).not.toHaveBeenCalled();
-    expect(await repository.hasExecution("workspace_a", "legacy_invalid_campaign_payload:postback_tampered")).toBe(false);
+    expect(await repository.hasExecution(
+      "workspace_a",
+      `legacy_invalid_campaign_payload:${interactionId}`,
+    )).toBe(false);
   });
 });
