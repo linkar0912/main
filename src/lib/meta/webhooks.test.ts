@@ -225,6 +225,51 @@ describe("normalizeWebhook", () => {
     expect(events[2]).not.toHaveProperty("interactionPayload");
   });
 
+  it("ignores comments authored by the connected business account itself", () => {
+    const events = normalizeWebhook({
+      object: "instagram",
+      entry: [
+        {
+          id: "ig_business_1",
+          time: 1710000000,
+          changes: [
+            {
+              field: "comments",
+              value: {
+                id: "comment_self",
+                text: "Check your DMs for the guide",
+                media: { id: "media_1" },
+                from: { id: "ig_business_1", username: "business" },
+              },
+            },
+            {
+              field: "comments",
+              value: {
+                id: "comment_other",
+                text: "guide please",
+                media: { id: "media_1" },
+                from: { id: "person_1", username: "customer" },
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(events).toEqual([
+      {
+        id: "comment_other",
+        accountId: "ig_business_1",
+        type: "comment.created",
+        text: "guide please",
+        commentId: "comment_other",
+        mediaId: "media_1",
+        recipientId: "person_1",
+        timestamp: 1710000000,
+      },
+    ]);
+  });
+
   it("ignores outbound echoes and self messages", () => {
     expect(normalizeWebhook({
       object: "instagram",

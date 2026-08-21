@@ -42,6 +42,22 @@ export async function PATCH(request: Request, context: RouteContext) {
     patch.activatedAt = new Date().toISOString();
     const definition = patch.definition ?? current.definition;
     if (definition.version === 2 && definition.trigger.source === "next_media") patch.boundMediaId = null;
+  } else if (patch.definition) {
+    // The automation was already ACTIVE (or is staying ACTIVE via this same PATCH) and its
+    // definition is being edited. If the resulting definition uses next_media, re-arm the
+    // binding: clear any stale boundMediaId from a prior trigger-source config and refresh
+    // activatedAt so the next-media resolver (publishedAt > activatedAt) doesn't bind to an
+    // already-published post. Without this, switching trigger sources while ACTIVE leaves
+    // stale state that silently breaks binding (see task 8 edit-while-active follow-up).
+    const resultingStatus = patch.status ?? current.status;
+    if (
+      resultingStatus === "ACTIVE"
+      && patch.definition.version === 2
+      && patch.definition.trigger.source === "next_media"
+    ) {
+      patch.boundMediaId = null;
+      patch.activatedAt = new Date().toISOString();
+    }
   }
 
   const automation = await repository.updateAutomation(session.workspaceId, id, patch);

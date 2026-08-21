@@ -1135,6 +1135,38 @@ describe("follow-gated campaign runner", () => {
     expect(harness.client.sendDirectMessage).not.toHaveBeenCalled();
   });
 
+  it("releases the follow-check claim and rethrows on a retryable Meta error instead of failing the participant", async () => {
+    const harness = await openParticipant();
+    vi.mocked(harness.client.getUserFollowStatus)
+      .mockRejectedValueOnce(new MetaApiError("temporarily unavailable", 503))
+      .mockResolvedValueOnce({ isUserFollowingBusiness: true });
+
+    await expect(
+      processPendingCampaignInteraction(
+        interactionEvent(harness.optInPayload, NOW + 1_000),
+        harness.mapping,
+        harness.repository,
+        harness.options,
+      ),
+    ).rejects.toThrow("temporarily unavailable");
+
+    const afterFailure = await readParticipant(harness.repository);
+    expect(afterFailure.state).not.toBe("FAILED");
+    expect(afterFailure.state).toBe("OPTED_IN");
+    expect(afterFailure.followCheckError).toBeUndefined();
+
+    const result = await processPendingCampaignInteraction(
+      interactionEvent(harness.optInPayload, NOW + 1_000),
+      harness.mapping,
+      harness.repository,
+      harness.options,
+    );
+
+    expect(result).toMatchObject({ handled: true, result: { sent: 1 } });
+    expect(await readParticipant(harness.repository)).toMatchObject({ state: "LINK_SENT" });
+    expect(harness.client.getUserFollowStatus).toHaveBeenCalledTimes(2);
+  });
+
   it("deduplicates a repeated successful interaction webhook", async () => {
     const harness = await openParticipant();
     const event = interactionEvent(harness.optInPayload, NOW + 1_000);

@@ -387,6 +387,22 @@ describe("AutomationBuilder", () => {
     expect(Array.isArray(body.definition.publicReplies)).toBe(true);
   });
 
+  it("dedupes keywords case-insensitively so the server's post-normalization uniqueness check never 400s", async () => {
+    const fetchMock = stubFetch({ media: { data: [reel], paging: {} } });
+    render(<AutomationBuilder />);
+
+    await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("checkbox"));
+    await fillRequiredCampaignFields();
+    fireEvent.change(screen.getByLabelText(/^keywords$/i), { target: { value: "Guide, guide, GUIDE , help" } });
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const request = findRequest(fetchMock, (url) => url === "/api/automations");
+    const body = JSON.parse(String(request.body));
+    expect(body.definition.trigger.keywords).toEqual(["Guide", "help"]);
+  });
+
   it("exercises the next-media trigger source, hiding the picker and saving an empty next_media trigger", async () => {
     const fetchMock = stubFetch();
     render(<AutomationBuilder />);

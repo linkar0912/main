@@ -126,7 +126,24 @@ function mapParticipant(record: {
   };
 }
 
+// Diagnostic/error fields that campaign-runner.ts intentionally clears by passing `undefined`
+// in a transitionParticipant patch (e.g. once a retried action succeeds). Prisma's `update`
+// treats `undefined` as "leave this column untouched" (not "set to null"), unlike the memory
+// repository's plain object spread, which does clear it. Map `undefined` to `null` for exactly
+// these fields — and only when the caller explicitly included the key (clearing intent) rather
+// than omitted it (leave-untouched intent) — so both repositories share the same clear semantics.
+const CLEARABLE_PARTICIPANT_ERROR_FIELDS = [
+  "publicReplyError",
+  "openingError",
+  "followCheckError",
+  "finalDeliveryError",
+] as const;
+
 function mapParticipantPatch(patch: ParticipantPatch) {
+  const clearedErrors: Partial<Record<typeof CLEARABLE_PARTICIPANT_ERROR_FIELDS[number], null>> = {};
+  for (const field of CLEARABLE_PARTICIPANT_ERROR_FIELDS) {
+    if (field in patch && patch[field] === undefined) clearedErrors[field] = null;
+  }
   return {
     ...patch,
     publicReplySentAt: patch.publicReplySentAt ? new Date(patch.publicReplySentAt) : undefined,
@@ -134,6 +151,7 @@ function mapParticipantPatch(patch: ParticipantPatch) {
     followCheckedAt: patch.followCheckedAt ? new Date(patch.followCheckedAt) : undefined,
     finalDeliveredAt: patch.finalDeliveredAt ? new Date(patch.finalDeliveredAt) : undefined,
     messagingWindowExpiresAt: patch.messagingWindowExpiresAt ? new Date(patch.messagingWindowExpiresAt) : undefined,
+    ...clearedErrors,
   };
 }
 
@@ -442,8 +460,8 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           data: {
             id: createId("participant"),
             ...input,
-            sourceMediaSnapshot: input.sourceMediaSnapshot as Prisma.InputJsonValue,
             ...mapParticipantPatch(input),
+            sourceMediaSnapshot: input.sourceMediaSnapshot as Prisma.InputJsonValue,
           },
         });
         return { created: true, record: mapParticipant(record) };

@@ -58,6 +58,12 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
       if (!commentId) continue;
       const media = record(value.media);
       const from = record(value.from);
+      // Skip comments authored by the connected business account itself. v2 posts a
+      // *public* comment reply (unlike v1's private-only reply), so if Meta ever
+      // delivers a webhook for the business's own reply and its text happens to match
+      // a campaign keyword, treating it as inbound would create a self-triggering loop
+      // of public replies. Mirrors the sender/recipient echo-skip used for messaging below.
+      if (stringValue(from?.id) === accountId) continue;
       events.push({
         id: commentId,
         accountId,

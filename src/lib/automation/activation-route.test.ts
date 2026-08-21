@@ -40,6 +40,16 @@ async function activate(automationId: string) {
   );
 }
 
+async function patchDefinition(automationId: string, definition: unknown, status?: string) {
+  return PATCH(
+    new Request("http://localhost/api/automations/" + automationId, {
+      method: "PATCH",
+      body: JSON.stringify({ definition, ...(status ? { status } : {}) }),
+    }),
+    { params: Promise.resolve({ id: automationId }) },
+  );
+}
+
 describe("PATCH /api/automations/[id] activation", () => {
   beforeEach(() => {
     repository = createMemoryRepository();
@@ -78,5 +88,71 @@ describe("PATCH /api/automations/[id] activation", () => {
       activatedAt: "2026-08-21T10:00:00.000Z",
       boundMediaId: "media_won",
     });
+  });
+
+  it("re-arms next_media binding when editing the definition of an already-ACTIVE campaign", async () => {
+    const automation = await repository.createAutomation("workspace_a", { name: "Next Reel", definition: campaignDefinition });
+    await repository.updateAutomation("workspace_a", automation.id, {
+      status: "ACTIVE",
+      activatedAt: "2026-08-21T09:00:00.000Z",
+      boundMediaId: "media_stale",
+    });
+
+    const editedDefinition = {
+      ...campaignDefinition,
+      trigger: { ...campaignDefinition.trigger, keywords: ["guide", "help"] },
+    };
+    const response = await patchDefinition(automation.id, editedDefinition);
+    const body = await response.json() as { data: { status: string; activatedAt?: string; boundMediaId?: string } };
+
+    expect(response.status).toBe(200);
+    expect(body.data.status).toBe("ACTIVE");
+    expect(body.data.boundMediaId).toBeUndefined();
+    expect(body.data.activatedAt).not.toBe("2026-08-21T09:00:00.000Z");
+  });
+
+  it("re-arms next_media binding when switching an ACTIVE campaign's trigger source back to next_media", async () => {
+    const specificMediaDefinition = {
+      ...campaignDefinition,
+      trigger: { ...campaignDefinition.trigger, source: "specific_media" as const, mediaIds: ["media_old"] },
+    };
+    const automation = await repository.createAutomation("workspace_a", {
+      name: "Next Reel",
+      definition: specificMediaDefinition,
+    });
+    await repository.updateAutomation("workspace_a", automation.id, {
+      status: "ACTIVE",
+      activatedAt: "2026-08-21T09:00:00.000Z",
+      boundMediaId: "media_stale_from_before",
+    });
+
+    const response = await patchDefinition(automation.id, campaignDefinition);
+    const body = await response.json() as { data: { status: string; activatedAt?: string; boundMediaId?: string } };
+
+    expect(response.status).toBe(200);
+    expect(body.data.status).toBe("ACTIVE");
+    expect(body.data.boundMediaId).toBeUndefined();
+    expect(body.data.activatedAt).not.toBe("2026-08-21T09:00:00.000Z");
+  });
+
+  it("does not re-arm binding when editing a PAUSED campaign's next_media definition (not yet active)", async () => {
+    const automation = await repository.createAutomation("workspace_a", { name: "Next Reel", definition: campaignDefinition });
+    await repository.updateAutomation("workspace_a", automation.id, {
+      status: "PAUSED",
+      activatedAt: "2026-08-21T09:00:00.000Z",
+      boundMediaId: "media_won",
+    });
+
+    const editedDefinition = {
+      ...campaignDefinition,
+      trigger: { ...campaignDefinition.trigger, keywords: ["guide", "help"] },
+    };
+    const response = await patchDefinition(automation.id, editedDefinition);
+    const body = await response.json() as { data: { status: string; activatedAt?: string; boundMediaId?: string } };
+
+    expect(response.status).toBe(200);
+    expect(body.data.status).toBe("PAUSED");
+    expect(body.data.activatedAt).toBe("2026-08-21T09:00:00.000Z");
+    expect(body.data.boundMediaId).toBe("media_won");
   });
 });

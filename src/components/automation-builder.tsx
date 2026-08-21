@@ -43,6 +43,24 @@ function parseCommaSeparated(value: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Parses a comma-separated keyword field and drops case-insensitive duplicates, keeping the
+ * first occurrence. The server normalizes keywords the same way (trim + lowercase) and rejects
+ * the whole request with a raw Zod error if duplicates remain after normalization — deduping
+ * here client-side avoids surfacing that confusing error for something like "Guide, guide".
+ */
+function parseKeywords(value: string): string[] {
+  const seen = new Set<string>();
+  const keywords: string[] = [];
+  for (const keyword of parseCommaSeparated(value)) {
+    const key = keyword.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    keywords.push(keyword);
+  }
+  return keywords;
+}
+
 /** Legacy single-response flow. Kept unchanged so existing version 1 automations remain editable. */
 const defaultDefinitionV1: FlowDefinitionV1 = {
   version: 1,
@@ -119,20 +137,20 @@ function AutomationBuilderV1({
         ? {
             type: "comment" as const,
             match: triggerMatch,
-            keywords: triggerMatch === "keyword" ? parseCommaSeparated(keywords) : [],
+            keywords: triggerMatch === "keyword" ? parseKeywords(keywords) : [],
             mediaIds: parseCommaSeparated(mediaIds),
           }
         : {
             type: "message" as const,
             match: triggerMatch,
-            keywords: triggerMatch === "keyword" ? parseCommaSeparated(keywords) : [],
+            keywords: triggerMatch === "keyword" ? parseKeywords(keywords) : [],
           };
 
     const conditions: FlowCondition[] =
       conditionType === "none"
         ? []
         : conditionType === "contains_keyword"
-          ? [{ type: conditionType, keywords: parseCommaSeparated(conditionValue) }]
+          ? [{ type: conditionType, keywords: parseKeywords(conditionValue) }]
           : [{ type: conditionType, mediaIds: parseCommaSeparated(conditionValue) }];
 
     const action: FlowAction =
@@ -480,7 +498,7 @@ function AutomationBuilderV2({
         mediaIds: source === "specific_media" ? mediaIds : [],
         mediaSnapshots: source === "specific_media" ? mediaSnapshots : [],
         match,
-        keywords: match === "keyword" ? parseCommaSeparated(keywords) : [],
+        keywords: match === "keyword" ? parseKeywords(keywords) : [],
       },
       publicReplies: publicReplies.map((reply) => reply.trim()).filter(Boolean),
       openingMessage: { text: openingText.trim(), optInButtonLabel: optInButtonLabel.trim() },
@@ -496,7 +514,7 @@ function AutomationBuilderV2({
   function validate(): string | null {
     if (!name.trim()) return "Give this automation a name first.";
     if (source === "specific_media" && mediaIds.length === 0) return "Select at least one post or Reel to watch.";
-    if (match === "keyword" && parseCommaSeparated(keywords).length === 0) return "Add at least one keyword.";
+    if (match === "keyword" && parseKeywords(keywords).length === 0) return "Add at least one keyword.";
     if (publicReplies.map((reply) => reply.trim()).filter(Boolean).length > MAX_PUBLIC_REPLIES) {
       return `Use up to ${MAX_PUBLIC_REPLIES} public reply variations.`;
     }
@@ -550,7 +568,7 @@ function AutomationBuilderV2({
     }
   }
 
-  const keywordList = parseCommaSeparated(keywords);
+  const keywordList = parseKeywords(keywords);
   const nonEmptyReplies = publicReplies.map((reply) => reply.trim()).filter(Boolean);
   const sourceSummary =
     source === "specific_media"

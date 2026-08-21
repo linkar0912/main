@@ -124,7 +124,7 @@ export function AutomationList({
               <Pencil size={16} />
             </Link>
           )}
-          {!compact && (
+          {!compact && automation.definition.version === 2 && (
             <Link
               className="icon-button"
               href={`/automations/${automation.id}/activity`}

@@ -1089,13 +1089,6 @@ async function verifyAndDeliver(
   );
 }
 
-async function reloadParticipant(
-  participant: AutomationParticipantRecord,
-  repository: AutomationRepository,
-): Promise<AutomationParticipantRecord> {
-  return currentParticipant(participant, repository);
-}
-
 export async function processExistingCampaignParticipant(
   participant: AutomationParticipantRecord,
   mapping: CampaignMapping,
@@ -1150,7 +1143,7 @@ export async function processExistingCampaignParticipant(
     );
   }
 
-  participant = await reloadParticipant(participant, repository);
+  participant = await currentParticipant(participant, repository);
   if (participant.openingStatus === "SENT") {
     return handledResult(participant.id, { sent: 1 });
   }
@@ -1458,7 +1451,11 @@ export async function processPendingCampaignInteraction(
       throw new Error("Meta did not return follower status");
     }
     follows = response.isUserFollowingBusiness;
-  } catch {
+  } catch (error) {
+    if (isKnownNotSentRetryable(error) && !options.finalAttempt) {
+      await releaseAction(participant, repository, followCheckAction);
+      throw error;
+    }
     await completeAction(
       participant,
       repository,
