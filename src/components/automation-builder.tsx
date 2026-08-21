@@ -609,6 +609,7 @@ function AutomationBuilderV2({
               <div className="field-spaced">
                 <MediaPicker
                   selectedIds={mediaIds}
+                  initialSnapshots={mediaSnapshots}
                   onChange={(ids, snapshots) => {
                     setMediaIds(ids);
                     setMediaSnapshots(snapshots);

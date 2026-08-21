@@ -37,13 +37,20 @@ function jsonResponse(body: unknown, ok = true) {
   return { ok, json: async () => body };
 }
 
-function ControlledPicker() {
-  const [ids, setIds] = useState<string[]>([]);
-  const [snapshots, setSnapshots] = useState<MediaSnapshot[]>([]);
+function ControlledPicker({
+  initialIds = [],
+  initialSnapshots = [],
+}: {
+  initialIds?: string[];
+  initialSnapshots?: MediaSnapshot[];
+}) {
+  const [ids, setIds] = useState<string[]>(initialIds);
+  const [snapshots, setSnapshots] = useState<MediaSnapshot[]>(initialSnapshots);
   return (
     <div>
       <MediaPicker
         selectedIds={ids}
+        initialSnapshots={initialSnapshots}
         onChange={(nextIds, nextSnapshots) => {
           setIds(nextIds);
           setSnapshots(nextSnapshots);
@@ -194,5 +201,42 @@ describe("MediaPicker", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[1][0])).toContain("after=cursor-2");
     expect(screen.queryByRole("button", { name: /load more/i })).toBeNull();
+  });
+
+  it("preserves the snapshot of an already-selected item this instance never fetched when an unrelated item is toggled", async () => {
+    const unfetchedSnapshot: MediaSnapshot = {
+      id: "media_page2",
+      caption: "Selected in an earlier session, lives on page 2",
+      mediaType: "VIDEO",
+      mediaProductType: "REELS",
+      permalink: "https://www.instagram.com/reel/media_page2/",
+      timestamp: "2026-08-10T08:00:00.000Z",
+    };
+    // Only page 1 (containing `reel`, not `media_page2`) is ever fetched by this instance.
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [reel], paging: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ControlledPicker initialIds={["media_page2"]} initialSnapshots={[unfetchedSnapshot]} />);
+
+    // The unfetched item never renders as a card (its page was never loaded) — only `reel` does.
+    await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(1));
+    fireEvent.click(screen.getByText("Our newest Reel drop"));
+
+    const state = JSON.parse(screen.getByTestId("picker-state").textContent ?? "{}") as {
+      ids: string[];
+      snapshots: MediaSnapshot[];
+    };
+    expect(state.ids).toEqual(["media_page2", "media_1"]);
+    expect(state.snapshots).toEqual([
+      unfetchedSnapshot,
+      {
+        id: "media_1",
+        caption: "Our newest Reel drop",
+        mediaType: "VIDEO",
+        mediaProductType: "REELS",
+        permalink: "https://www.instagram.com/reel/media_1/",
+        timestamp: "2026-08-20T08:00:00.000Z",
+      },
+    ]);
   });
 });

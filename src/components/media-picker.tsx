@@ -18,6 +18,13 @@ type PickerMedia = {
 export type MediaPickerProps = {
   selectedIds: string[];
   onChange: (ids: string[], snapshots: MediaSnapshot[]) => void;
+  /**
+   * Snapshots already known for `selectedIds` before this picker instance has fetched
+   * anything — typically the previously saved `mediaSnapshots` when editing an existing
+   * campaign. Without this, toggling one item while another selected item lives on a page
+   * this picker hasn't fetched yet would silently drop that other item's snapshot.
+   */
+  initialSnapshots?: MediaSnapshot[];
 };
 
 function mediaLabel(media: PickerMedia): string {
@@ -42,13 +49,17 @@ function toSnapshot(media: PickerMedia): MediaSnapshot {
   };
 }
 
-export function MediaPicker({ selectedIds, onChange }: MediaPickerProps) {
+export function MediaPicker({ selectedIds, onChange, initialSnapshots = [] }: MediaPickerProps) {
   const [items, setItems] = useState<PickerMedia[]>([]);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const itemsById = useRef(new Map<string, PickerMedia>());
+  // Seeded once from `initialSnapshots` so a selected item this instance never fetches
+  // (e.g. it lives on a later page) still has a snapshot to fall back to when some other
+  // item is toggled. Kept up to date as real pages load so the data stays fresh.
+  const knownSnapshots = useRef(new Map<string, MediaSnapshot>(initialSnapshots.map((snapshot) => [snapshot.id, snapshot])));
 
   async function loadPage(after?: string) {
     const url = after ? `/api/meta/media?after=${encodeURIComponent(after)}` : "/api/meta/media";
@@ -59,7 +70,10 @@ export function MediaPicker({ selectedIds, onChange }: MediaPickerProps) {
       error?: string;
     };
     if (!response.ok) throw new Error(payload.error ?? "Could not load your Instagram media");
-    for (const media of payload.data ?? []) itemsById.current.set(media.id, media);
+    for (const media of payload.data ?? []) {
+      itemsById.current.set(media.id, media);
+      knownSnapshots.current.set(media.id, toSnapshot(media));
+    }
     setItems([...itemsById.current.values()]);
     setCursor(payload.paging?.after);
   }
@@ -95,9 +109,13 @@ export function MediaPicker({ selectedIds, onChange }: MediaPickerProps) {
   function toggle(id: string) {
     const nextIds = selectedIds.includes(id) ? selectedIds.filter((value) => value !== id) : [...selectedIds, id];
     const snapshots = nextIds
-      .map((value) => itemsById.current.get(value))
-      .filter((value): value is PickerMedia => Boolean(value))
-      .map(toSnapshot);
+      .map((value) => {
+        const media = itemsById.current.get(value);
+        // Prefer freshly fetched data; fall back to a previously known snapshot for
+        // selected items this instance hasn't loaded (see `initialSnapshots`).
+        return media ? toSnapshot(media) : knownSnapshots.current.get(value);
+      })
+      .filter((value): value is MediaSnapshot => Boolean(value));
     onChange(nextIds, snapshots);
   }
 

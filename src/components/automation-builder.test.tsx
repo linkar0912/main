@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AutomationBuilder } from "./automation-builder";
 import { PRODUCT_MARK } from "@/src/lib/branding";
-import type { FlowDefinitionV1 } from "@/src/lib/automation/types";
+import type { FlowDefinitionV1, FlowDefinitionV2 } from "@/src/lib/automation/types";
 
 type FetchOverrides = {
   media?: unknown;
@@ -385,5 +385,77 @@ describe("AutomationBuilder", () => {
       },
     });
     expect(Array.isArray(body.definition.publicReplies)).toBe(true);
+  });
+
+  it("exercises the next-media trigger source, hiding the picker and saving an empty next_media trigger", async () => {
+    const fetchMock = stubFetch();
+    render(<AutomationBuilder />);
+
+    fireEvent.change(screen.getByLabelText(/trigger source/i), { target: { value: "next_media" } });
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByTestId("review-summary").textContent).toContain("next post you publish");
+
+    await fillRequiredCampaignFields();
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const request = findRequest(fetchMock, (url) => url === "/api/automations");
+    const body = JSON.parse(String(request.body));
+    expect(body.definition.trigger).toMatchObject({ source: "next_media", mediaIds: [], mediaSnapshots: [] });
+  });
+
+  it("preserves a previously saved media snapshot that this session never re-fetched when editing and toggling an unrelated item", async () => {
+    const previouslySelectedSnapshot = {
+      id: "media_page2",
+      caption: "Selected in an earlier session, lives on a later page",
+      mediaType: "VIDEO" as const,
+      mediaProductType: "REELS" as const,
+      permalink: "https://www.instagram.com/reel/media_page2/",
+      timestamp: "2026-08-10T08:00:00.000Z",
+    };
+    const existingDefinition: FlowDefinitionV2 = {
+      version: 2,
+      trigger: {
+        type: "comment",
+        source: "specific_media",
+        mediaIds: ["media_page2"],
+        mediaSnapshots: [previouslySelectedSnapshot],
+        match: "keyword",
+        keywords: ["drop"],
+      },
+      publicReplies: ["Nice!"],
+      openingMessage: { text: "Follow to unlock the link!", optInButtonLabel: "Get it" },
+      followGate: { required: true, notFollowingMessage: "Please follow first.", recheckButtonLabel: "I followed" },
+      delivery: { text: "Here is your link.", url: "https://example.com/prize" },
+    };
+    // Only `reel` (a different, already-fetched item) is ever returned by the mocked API —
+    // `media_page2` is never re-fetched, simulating it living on a page this editor never loads.
+    const fetchMock = stubFetch({ media: { data: [reel], paging: {} } });
+
+    render(
+      <AutomationBuilder automationId="automation_edit" initialName="Existing campaign" initialDefinition={existingDefinition} />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(1));
+    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("checkbox"));
+
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/automations/automation_edit", expect.anything()));
+    const request = findRequest(fetchMock, (url) => url === "/api/automations/automation_edit");
+    const body = JSON.parse(String(request.body));
+    expect(body.definition.trigger.mediaIds).toEqual(["media_page2", "media_1"]);
+    expect(body.definition.trigger.mediaSnapshots).toEqual([
+      previouslySelectedSnapshot,
+      {
+        id: "media_1",
+        caption: "Giveaway Reel",
+        mediaType: "VIDEO",
+        mediaProductType: "REELS",
+        permalink: "https://www.instagram.com/reel/media_1/",
+        timestamp: "2026-08-20T08:00:00.000Z",
+      },
+    ]);
   });
 });
