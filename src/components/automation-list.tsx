@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Pause, Play, Workflow } from "lucide-react";
+import { ArrowUpRight, Pause, Pencil, Play, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
@@ -69,7 +69,7 @@ function triggerSummary(automation: AutomationRecord): string {
 }
 
 function actionSummary(automation: AutomationRecord): string {
-  if (automation.definition.version !== 1) return "";
+  if (automation.definition.version !== 1) return "Follow-gated DM delivery";
 
   const action = automation.definition.actions[0];
   if (!action) return "No action configured";
@@ -114,6 +114,16 @@ export function AutomationList({
             <div className="automation-title"><strong>{automation.name}</strong><StatusBadge status={automation.status} /></div>
             <p>{triggerSummary(automation)} <span className="row-divider">·</span> {actionSummary(automation)}</p>
           </div>
+          {!compact && (
+            <Link
+              className="icon-button"
+              href={`/automations/${automation.id}/edit`}
+              aria-label={`Edit ${automation.name}`}
+              title="Edit automation"
+            >
+              <Pencil size={16} />
+            </Link>
+          )}
           {!compact && (
             <button
               className="icon-button"
