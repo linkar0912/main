@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Pause, Pencil, Play, Workflow } from "lucide-react";
+import { Activity, ArrowUpRight, Pause, Pencil, Play, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
@@ -122,6 +122,16 @@ export function AutomationList({
               title="Edit automation"
             >
               <Pencil size={16} />
+            </Link>
+          )}
+          {!compact && (
+            <Link
+              className="icon-button"
+              href={`/automations/${automation.id}/activity`}
+              aria-label={`View activity for ${automation.name}`}
+              title="View activity"
+            >
+              <Activity size={16} />
             </Link>
           )}
           {!compact && (
