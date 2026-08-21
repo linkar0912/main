@@ -41,6 +41,28 @@ const participantInput = {
 };
 
 describe("memory repository", () => {
+  it("lists automations newest-updated first with a deterministic ID tie-breaker", async () => {
+    const base = {
+      workspaceId: "workspace_a",
+      name: "Campaign",
+      status: "ACTIVE" as const,
+      version: 2,
+      definition,
+      createdAt: "2026-08-21T08:00:00.000Z",
+    };
+    const repository = createMemoryRepository([
+      { ...base, id: "campaign_b", updatedAt: "2026-08-21T10:00:00.000Z" },
+      { ...base, id: "campaign_old", updatedAt: "2026-08-21T09:00:00.000Z" },
+      { ...base, id: "campaign_a", updatedAt: "2026-08-21T10:00:00.000Z" },
+    ]);
+
+    expect((await repository.listAutomations("workspace_a")).map((item) => item.id)).toEqual([
+      "campaign_a",
+      "campaign_b",
+      "campaign_old",
+    ]);
+  });
+
   it("creates, lists, and updates automations within a workspace", async () => {
     const repository = createMemoryRepository();
     const created = await repository.createAutomation("workspace_a", {
@@ -87,6 +109,45 @@ describe("memory repository", () => {
     expect(await repository.claimExecution(claim)).toBe(false);
   });
 
+  it("persists the provider dispatch phase and identifiers for action reconciliation", async () => {
+    const repository = createMemoryRepository();
+    const claim = {
+      workspaceId: "workspace_a",
+      automationId: "automation_1",
+      externalEventId: "comment_1",
+      dedupeKey: "campaign:participant_1:opening_reply",
+    };
+
+    expect(await repository.claimExecution(claim)).toBe(true);
+    const claimed = await repository.getExecution(claim.workspaceId, claim.dedupeKey);
+    expect(claimed).toMatchObject({
+      status: "PROCESSING",
+      dispatchStatus: "CLAIMED",
+    });
+    expect(claimed?.providerMessageId).toBeUndefined();
+    expect(claimed?.providerRecipientId).toBeUndefined();
+    expect(await repository.markExecutionDispatching(claim.workspaceId, claim.dedupeKey)).toBe(true);
+    expect(await repository.markExecutionDispatching(claim.workspaceId, claim.dedupeKey)).toBe(false);
+    expect(await repository.getExecution(claim.workspaceId, claim.dedupeKey)).toMatchObject({
+      status: "PROCESSING",
+      dispatchStatus: "DISPATCHING",
+    });
+
+    await repository.completeExecution(claim.workspaceId, claim.dedupeKey, {
+      status: "SENT",
+      providerMessageId: "opening_message_1",
+      providerRecipientId: "scoped_user_1",
+    });
+
+    expect(await repository.getExecution(claim.workspaceId, claim.dedupeKey)).toMatchObject({
+      status: "SENT",
+      dispatchStatus: "DISPATCHING",
+      providerMessageId: "opening_message_1",
+      providerRecipientId: "scoped_user_1",
+    });
+    expect(await repository.markExecutionDispatching(claim.workspaceId, claim.dedupeKey)).toBe(false);
+  });
+
   it("deduplicates a source comment across matching automations", async () => {
     const repository = createMemoryRepository();
     const first = await repository.createParticipant(participantInput);
@@ -98,6 +159,26 @@ describe("memory repository", () => {
     expect(otherAutomation.created).toBe(false);
     expect(duplicate.record.id).toBe(first.record.id);
     expect(otherAutomation.record.id).toBe(first.record.id);
+  });
+
+  it("looks up the exact participant by scoped identity or source comment", async () => {
+    const repository = createMemoryRepository();
+    const { record } = await repository.createParticipant({
+      ...participantInput,
+      igScopedUserId: "scoped_user_1",
+    });
+
+    expect(await repository.getParticipant("workspace_a", "ig_123", record.id)).toMatchObject({
+      id: record.id,
+      sourceCommentId: "comment_1",
+    });
+    expect(await repository.getParticipant("workspace_b", "ig_123", record.id)).toBeNull();
+    expect(await repository.getParticipant("workspace_a", "ig_other", record.id)).toBeNull();
+    expect(await repository.findParticipantBySource("workspace_a", "ig_123", "comment_1")).toMatchObject({
+      id: record.id,
+      automationId: "automation_1",
+    });
+    expect(await repository.findParticipantBySource("workspace_a", "ig_123", "comment_missing")).toBeNull();
   });
 
   it("claims participant state transitions once and prevents duplicate final delivery", async () => {

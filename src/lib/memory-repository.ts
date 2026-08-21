@@ -38,7 +38,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return copy(
         [...automations.values()]
           .filter((automation) => automation.workspaceId === workspaceId)
-          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)),
       );
     },
 
@@ -184,7 +184,12 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         (record) => record.workspaceId === input.workspaceId && record.dedupeKey === input.dedupeKey,
       );
       if (existing) return { created: false, record: copy(existing) };
-      const record: ExecutionRecord = { id: createId("execution"), createdAt: now(), ...input };
+      const record: ExecutionRecord = {
+        id: createId("execution"),
+        createdAt: now(),
+        ...input,
+        dispatchStatus: input.dispatchStatus ?? "CLAIMED",
+      };
       executions.set(record.id, record);
       return { created: true, record: copy(record) };
     },
@@ -198,9 +203,29 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         id: createId("execution"),
         createdAt: now(),
         status: "PROCESSING",
+        dispatchStatus: "CLAIMED",
         ...input,
       };
       executions.set(record.id, record);
+      return true;
+    },
+
+    async getExecution(workspaceId, dedupeKey) {
+      const record = [...executions.values()].find(
+        (candidate) => candidate.workspaceId === workspaceId && candidate.dedupeKey === dedupeKey,
+      );
+      return record ? copy(record) : null;
+    },
+
+    async markExecutionDispatching(workspaceId, dedupeKey) {
+      const entry = [...executions.entries()].find(([, record]) =>
+        record.workspaceId === workspaceId
+        && record.dedupeKey === dedupeKey
+        && record.status === "PROCESSING"
+        && record.dispatchStatus === "CLAIMED",
+      );
+      if (!entry) return false;
+      executions.set(entry[0], { ...entry[1], dispatchStatus: "DISPATCHING" });
       return true;
     },
 
@@ -248,6 +273,19 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       participants.set(record.id, record);
       participantIdsBySource.set(sourceKey, record.id);
       return { created: true, record: copy(record) };
+    },
+
+    async getParticipant(workspaceId, instagramAccountId, id) {
+      const record = participants.get(id);
+      return record?.workspaceId === workspaceId && record.instagramAccountId === instagramAccountId
+        ? copy(record)
+        : null;
+    },
+
+    async findParticipantBySource(workspaceId, instagramAccountId, sourceCommentId) {
+      const id = participantIdsBySource.get(`${workspaceId}:${instagramAccountId}:${sourceCommentId}`);
+      const record = id ? participants.get(id) : undefined;
+      return record ? copy(record) : null;
     },
 
     async findPendingParticipant(instagramAccountId, igScopedUserId) {

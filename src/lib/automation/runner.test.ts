@@ -216,6 +216,68 @@ describe("automation runner", () => {
     expect(await repository.listParticipants("workspace_a", newer.id, 10)).toHaveLength(0);
   });
 
+  it("recovers an existing source winner before V1 after its V2 campaign is paused and edited", async () => {
+    const key = randomBytes(32).toString("hex");
+    const editedDefinition: FlowDefinitionV2 = {
+      ...campaignDefinition,
+      trigger: {
+        ...campaignDefinition.trigger,
+        mediaIds: ["media_other"],
+        mediaSnapshots: [{ ...campaignDefinition.trigger.mediaSnapshots[0]!, id: "media_other" }],
+      },
+      openingMessage: { ...campaignDefinition.openingMessage, text: "Recovered source winner" },
+    };
+    const original = {
+      id: "campaign_paused_source",
+      workspaceId: "workspace_a",
+      name: "Paused original",
+      status: "PAUSED" as const,
+      version: 2,
+      definition: editedDefinition,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(3).toISOString(),
+    };
+    const legacy = {
+      id: "legacy_source_replay",
+      workspaceId: "workspace_a",
+      name: "Legacy overlap",
+      status: "ACTIVE" as const,
+      version: 1,
+      definition: flow,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(2).toISOString(),
+    };
+    const repository = createMemoryRepository([original, legacy]);
+    await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_1", username: "creator", accessTokenEncrypted: sealSecret("access-token", key), status: "CONNECTED" });
+    await repository.createParticipant({
+      workspaceId: "workspace_a",
+      automationId: original.id,
+      instagramAccountId: "ig_1",
+      sourceCommentId: "comment_1",
+      sourceMediaId: "media_1",
+      sourceMediaSnapshot: campaignDefinition.trigger.mediaSnapshots[0]!,
+      publicReplyStatus: "SENT",
+      publicReplyProviderId: "public_original",
+    });
+    const client = createRunnerClient();
+
+    const result = await processNormalizedEvent({ ...event, mediaId: "media_1" }, repository, {
+      client,
+      tokenEncryptionKey: key,
+      interactionSecret: "app-secret",
+      campaignsEnabled: true,
+    });
+
+    expect(result).toMatchObject({ handled: true, sent: 1 });
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(client.sendPrivateReply).toHaveBeenCalledWith(
+      { igUserId: "ig_1", accessToken: "access-token" },
+      "comment_1",
+      expect.objectContaining({ text: "Recovered source winner" }),
+    );
+    expect(await repository.hasExecution("workspace_a", "legacy_source_replay:comment_1")).toBe(false);
+  });
+
   it("falls back to version 1 unchanged when no enabled version 2 campaign matches", async () => {
     const key = randomBytes(32).toString("hex");
     const nonMatchingCampaign = {
@@ -312,6 +374,29 @@ describe("automation runner", () => {
     expect(client.sendPrivateReply).not.toHaveBeenCalled();
   });
 
+  it("does not bind next-media when publication is exactly equal to activation", async () => {
+    const key = randomBytes(32).toString("hex");
+    const nextDefinition: FlowDefinitionV2 = {
+      ...campaignDefinition,
+      trigger: { ...campaignDefinition.trigger, source: "next_media", mediaIds: [], mediaSnapshots: [] },
+    };
+    const campaign = { id: "campaign_next_equal", workspaceId: "workspace_a", name: "Next Reel equality", status: "ACTIVE" as const, version: 2, definition: nextDefinition, activatedAt: "2026-08-21T10:00:00.000Z", createdAt: new Date(1).toISOString(), updatedAt: new Date(2).toISOString() };
+    const repository = createMemoryRepository([campaign]);
+    await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_1", username: "creator", accessTokenEncrypted: sealSecret("access-token", key), status: "CONNECTED" });
+    const client = createRunnerClient({
+      getMedia: vi.fn().mockResolvedValue({ id: "media_equal", mediaType: "VIDEO", mediaProductType: "REELS", permalink: "https://www.instagram.com/reel/media_equal", timestamp: campaign.activatedAt }),
+    });
+
+    await expect(processNormalizedEvent({ ...event, mediaId: "media_equal" }, repository, {
+      client,
+      tokenEncryptionKey: key,
+      interactionSecret: "app-secret",
+      campaignsEnabled: true,
+    })).resolves.toEqual({ matched: 0, sent: 0, skipped: 0, failed: 0 });
+    expect((await repository.getAutomation("workspace_a", campaign.id))?.boundMediaId).toBeUndefined();
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+  });
+
   it("atomically binds one competing post-activation media event and only that event continues", async () => {
     const key = randomBytes(32).toString("hex");
     const nextDefinition: FlowDefinitionV2 = {
@@ -376,5 +461,37 @@ describe("automation runner", () => {
     expect(client.sendQuickReply).toHaveBeenCalledTimes(1);
     expect(client.sendDirectMessage).not.toHaveBeenCalled();
     expect(await repository.hasExecution("workspace_a", "legacy_postback:postback_1")).toBe(false);
+  });
+
+  it("consumes a tampered campaign interaction before generic V1 message handling", async () => {
+    const key = randomBytes(32).toString("hex");
+    const campaign = { id: "campaign_invalid_interaction", workspaceId: "workspace_a", name: "Campaign", status: "ACTIVE" as const, version: 2, definition: campaignDefinition, createdAt: new Date(1).toISOString(), updatedAt: new Date(2).toISOString() };
+    const messageFlow: FlowDefinition = {
+      version: 1,
+      trigger: { type: "message", match: "any", keywords: [] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Legacy must not run" }],
+    };
+    const legacy = { id: "legacy_invalid_campaign_payload", workspaceId: "workspace_a", name: "Legacy", status: "ACTIVE" as const, version: 1, definition: messageFlow, createdAt: new Date(1).toISOString(), updatedAt: new Date(1).toISOString() };
+    const repository = createMemoryRepository([campaign, legacy]);
+    await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_1", username: "creator", accessTokenEncrypted: sealSecret("access-token", key), status: "CONNECTED" });
+    const client = createRunnerClient();
+    await processNormalizedEvent({ ...event, mediaId: "media_1", timestamp: Date.now() }, repository, { client, tokenEncryptionKey: key, interactionSecret: "app-secret", campaignsEnabled: true });
+    const opening = vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2];
+    if (typeof opening === "string" || !opening?.quickReply) throw new Error("opening payload missing");
+
+    const result = await processNormalizedEvent({
+      id: "postback_tampered",
+      accountId: "ig_1",
+      type: "postback.received",
+      text: "legacy would match",
+      recipientId: "person_1",
+      interactionPayload: `${opening.quickReply.payload}tampered`,
+      timestamp: Date.now() + 1_000,
+    }, repository, { client, tokenEncryptionKey: key, interactionSecret: "app-secret", campaignsEnabled: true });
+
+    expect(result).toMatchObject({ handled: true, failed: 1 });
+    expect(client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(await repository.hasExecution("workspace_a", "legacy_invalid_campaign_payload:postback_tampered")).toBe(false);
   });
 });

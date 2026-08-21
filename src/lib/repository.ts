@@ -3,6 +3,7 @@ import type { FlowDefinition, MediaSnapshot } from "./automation/types";
 export type AutomationStatus = "DRAFT" | "ACTIVE" | "PAUSED";
 export type ConnectionStatus = "CONNECTED" | "DISCONNECTED" | "EXPIRED";
 export type ExecutionStatus = "PROCESSING" | "SENT" | "SKIPPED" | "FAILED";
+export type ExecutionDispatchStatus = "CLAIMED" | "DISPATCHING";
 export type ParticipantState =
   | "COMMENT_MATCHED" | "OPENING_SENT" | "OPTED_IN" | "FOLLOW_REQUIRED"
   | "FOLLOW_VERIFIED" | "LINK_SENT" | "EXPIRED" | "FAILED";
@@ -70,8 +71,10 @@ export type ExecutionRecord = {
   externalEventId: string;
   dedupeKey: string;
   status: ExecutionStatus;
+  dispatchStatus: ExecutionDispatchStatus;
   reason?: string;
   providerMessageId?: string;
+  providerRecipientId?: string;
   createdAt: string;
 };
 
@@ -94,7 +97,9 @@ export type ParticipantPatch = Partial<Pick<
   "igScopedUserId" | "matchedKeyword" | "state" | "publicReplyStatus" | "publicReplyProviderId" | "publicReplySentAt" | "publicReplyError" | "openingStatus" | "openingProviderId" | "openingSentAt" | "openingError" | "followStatus" | "followCheckedAt" | "followCheckError" | "finalDeliveryStatus" | "finalProviderId" | "finalDeliveredAt" | "finalDeliveryError" | "messagingWindowExpiresAt" | "recheckCount"
 >>;
 
-export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt">;
+export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt" | "dispatchStatus"> & {
+  dispatchStatus?: ExecutionDispatchStatus;
+};
 export type ClaimExecutionInput = Pick<ExecutionRecord, "workspaceId" | "automationId" | "externalEventId" | "dedupeKey">;
 
 export type RecordExecutionResult =
@@ -136,10 +141,14 @@ export interface AutomationRepository {
   upsertConnection(input: Omit<InstagramConnectionRecord, "id" | "connectedAt">): Promise<InstagramConnectionRecord>;
   recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult>;
   claimExecution(input: ClaimExecutionInput): Promise<boolean>;
-  completeExecution(workspaceId: string, dedupeKey: string, result: Pick<RecordExecutionInput, "status" | "reason" | "providerMessageId">): Promise<void>;
+  getExecution(workspaceId: string, dedupeKey: string): Promise<ExecutionRecord | null>;
+  markExecutionDispatching(workspaceId: string, dedupeKey: string): Promise<boolean>;
+  completeExecution(workspaceId: string, dedupeKey: string, result: Pick<RecordExecutionInput, "status" | "reason" | "providerMessageId" | "providerRecipientId">): Promise<void>;
   releaseExecutionClaim(workspaceId: string, dedupeKey: string): Promise<void>;
   hasExecution(workspaceId: string, dedupeKey: string): Promise<boolean>;
   createParticipant(input: CreateParticipantInput): Promise<{ created: boolean; record: AutomationParticipantRecord }>;
+  getParticipant(workspaceId: string, instagramAccountId: string, id: string): Promise<AutomationParticipantRecord | null>;
+  findParticipantBySource(workspaceId: string, instagramAccountId: string, sourceCommentId: string): Promise<AutomationParticipantRecord | null>;
   findPendingParticipant(igAccountId: string, igScopedUserId: string): Promise<AutomationParticipantRecord | null>;
   transitionParticipant(id: string, expectedStates: ParticipantState[], patch: ParticipantPatch): Promise<AutomationParticipantRecord | null>;
   bindNextMedia(workspaceId: string, automationId: string, mediaId: string, publishedAt: string): Promise<boolean>;

@@ -6,6 +6,7 @@ import type {
   AutomationRepository,
   CreateAutomationInput,
   CreateParticipantInput,
+  ExecutionDispatchStatus,
   ExecutionRecord,
   InstagramConnectionRecord,
   RecordExecutionInput,
@@ -39,6 +40,29 @@ function mapAutomation(record: {
     boundMediaId: record.boundMediaId ?? undefined,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapExecution(record: {
+  id: string;
+  workspaceId: string;
+  automationId: string;
+  externalEventId: string;
+  dedupeKey: string;
+  status: ExecutionRecord["status"];
+  dispatchStatus: string;
+  reason: string | null;
+  providerMessageId: string | null;
+  providerRecipientId: string | null;
+  createdAt: Date;
+}): ExecutionRecord {
+  return {
+    ...record,
+    dispatchStatus: record.dispatchStatus as ExecutionDispatchStatus,
+    reason: record.reason ?? undefined,
+    providerMessageId: record.providerMessageId ?? undefined,
+    providerRecipientId: record.providerRecipientId ?? undefined,
+    createdAt: record.createdAt.toISOString(),
   };
 }
 
@@ -158,7 +182,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async listAutomations(workspaceId) {
       const records = await client.automation.findMany({
         where: { workspaceId },
-        orderBy: { updatedAt: "desc" },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       });
       return records.map(mapAutomation);
     },
@@ -290,32 +314,45 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: { workspaceId: input.workspaceId, dedupeKey: input.dedupeKey },
       });
       if (existing) {
-        return { created: false, record: { ...existing, createdAt: existing.createdAt.toISOString() } as ExecutionRecord };
+        return { created: false, record: mapExecution(existing) };
       }
       try {
         const record = await client.automationExecution.create({
-          data: { id: createId("execution"), ...input },
+          data: { id: createId("execution"), ...input, dispatchStatus: input.dispatchStatus ?? "CLAIMED" },
         });
-        return { created: true, record: { ...record, createdAt: record.createdAt.toISOString() } as ExecutionRecord };
+        return { created: true, record: mapExecution(record) };
       } catch (error) {
         if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
         const record = await client.automationExecution.findFirstOrThrow({
           where: { workspaceId: input.workspaceId, dedupeKey: input.dedupeKey },
         });
-        return { created: false, record: { ...record, createdAt: record.createdAt.toISOString() } as ExecutionRecord };
+        return { created: false, record: mapExecution(record) };
       }
     },
 
     async claimExecution(input) {
       try {
         await client.automationExecution.create({
-          data: { id: createId("execution"), status: "PROCESSING", ...input },
+          data: { id: createId("execution"), status: "PROCESSING", dispatchStatus: "CLAIMED", ...input },
         });
         return true;
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
         throw error;
       }
+    },
+
+    async getExecution(workspaceId, dedupeKey) {
+      const record = await client.automationExecution.findFirst({ where: { workspaceId, dedupeKey } });
+      return record ? mapExecution(record) : null;
+    },
+
+    async markExecutionDispatching(workspaceId, dedupeKey) {
+      const result = await client.automationExecution.updateMany({
+        where: { workspaceId, dedupeKey, status: "PROCESSING", dispatchStatus: "CLAIMED" },
+        data: { dispatchStatus: "DISPATCHING" },
+      });
+      return result.count === 1;
     },
 
     async completeExecution(workspaceId, dedupeKey, result) {
@@ -357,6 +394,20 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         });
         return { created: false, record: mapParticipant(record) };
       }
+    },
+
+    async getParticipant(workspaceId, instagramAccountId, id) {
+      const record = await client.automationParticipant.findFirst({
+        where: { id, workspaceId, instagramAccountId },
+      });
+      return record ? mapParticipant(record) : null;
+    },
+
+    async findParticipantBySource(workspaceId, instagramAccountId, sourceCommentId) {
+      const record = await client.automationParticipant.findFirst({
+        where: { workspaceId, instagramAccountId, sourceCommentId },
+      });
+      return record ? mapParticipant(record) : null;
     },
 
     async findPendingParticipant(instagramAccountId, igScopedUserId) {

@@ -6,6 +6,7 @@ import { MetaApiError } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
 import {
   processCampaignEvent,
+  processExistingCampaignParticipant,
   processPendingCampaignInteraction,
   type CampaignRunnerClient,
   type CampaignRunnerOptions,
@@ -71,6 +72,17 @@ export async function processNormalizedEvent(
       options,
     );
     if (interaction.handled) return interaction.result;
+
+    if (event.type === "comment.created" && event.commentId) {
+      const participant = await repository.findParticipantBySource(
+        mapping.workspaceId,
+        event.accountId,
+        event.commentId,
+      );
+      if (participant) {
+        return processExistingCampaignParticipant(participant, mapping, repository, options);
+      }
+    }
 
     for (const campaign of automations) {
       if (campaign.definition.version !== 2) continue;

@@ -2,11 +2,12 @@ import { matchCampaign, selectPublicReply } from "./campaign-match";
 import { createInteractionPayload, readInteractionPayload } from "./postback";
 import type { FlowDefinitionV2, MediaSnapshot, NormalizedEvent } from "./types";
 import { MetaApiError, type MetaClient } from "../meta/client";
-import type { MetaConnection, MetaMedia, MetaMessage } from "../meta/types";
+import type { MetaConnection, MetaMedia, MetaMessage, MetaSendResult } from "../meta/types";
 import type {
   AutomationParticipantRecord,
   AutomationRecord,
   AutomationRepository,
+  ExecutionRecord,
   InstagramConnectionRecord,
   ParticipantState,
 } from "../repository";
@@ -15,6 +16,7 @@ import { unsealSecret } from "../security/secrets";
 const RECHECK_COOLDOWN_MS = 10_000;
 const MAX_RECHECKS = 10;
 const MESSAGE_WINDOW_MS = 24 * 60 * 60 * 1_000;
+const activeDispatches = new Set<string>();
 
 const INTERACTION_EVENT_TYPES = new Set<NormalizedEvent["type"]>([
   "quick_reply.received",
@@ -98,6 +100,10 @@ function actionDedupeKey(participantId: string, action: string): string {
   return `campaign:${participantId}:${action}`;
 }
 
+function activeDispatchKey(participant: AutomationParticipantRecord, action: string): string {
+  return `${participant.workspaceId}:${actionDedupeKey(participant.id, action)}`;
+}
+
 function actionClaim(
   participant: AutomationParticipantRecord,
   repository: AutomationRepository,
@@ -119,11 +125,12 @@ function completeAction(
   status: "SENT" | "FAILED",
   providerMessageId?: string,
   reason?: string,
+  providerRecipientId?: string,
 ): Promise<void> {
   return repository.completeExecution(
     participant.workspaceId,
     actionDedupeKey(participant.id, action),
-    { status, providerMessageId, reason },
+    { status, providerMessageId, providerRecipientId, reason },
   );
 }
 
@@ -136,6 +143,100 @@ function releaseAction(
     participant.workspaceId,
     actionDedupeKey(participant.id, action),
   );
+}
+
+type PreparedDeliveryAction =
+  | { kind: "send"; finish: () => void }
+  | { kind: "sent"; execution: ExecutionRecord }
+  | { kind: "failed"; reason: string }
+  | { kind: "in_flight" };
+
+async function prepareDeliveryAction(
+  participant: AutomationParticipantRecord,
+  repository: AutomationRepository,
+  action: string,
+  externalEventId: string,
+): Promise<PreparedDeliveryAction> {
+  const dedupeKey = actionDedupeKey(participant.id, action);
+  const dispatchKey = activeDispatchKey(participant, action);
+  if (activeDispatches.has(dispatchKey)) return { kind: "in_flight" };
+
+  const existing = await repository.getExecution(participant.workspaceId, dedupeKey);
+  if (existing?.status === "SENT") return { kind: "sent", execution: existing };
+  if (existing?.status === "FAILED") {
+    return { kind: "failed", reason: existing.reason ?? "Meta delivery failed" };
+  }
+  if (existing?.status === "PROCESSING" && existing.dispatchStatus === "DISPATCHING") {
+    const reason = "Meta delivery outcome is ambiguous; delivery was not retried";
+    await repository.completeExecution(participant.workspaceId, dedupeKey, {
+      status: "FAILED",
+      reason,
+    });
+    return { kind: "failed", reason };
+  }
+  if (existing?.status === "PROCESSING") {
+    await repository.releaseExecutionClaim(participant.workspaceId, dedupeKey);
+  }
+
+  if (activeDispatches.has(dispatchKey)) return { kind: "in_flight" };
+  activeDispatches.add(dispatchKey);
+  try {
+    const claimed = await repository.claimExecution({
+      workspaceId: participant.workspaceId,
+      automationId: participant.automationId,
+      externalEventId,
+      dedupeKey,
+    });
+    if (!claimed) {
+      activeDispatches.delete(dispatchKey);
+      return prepareDeliveryAction(participant, repository, action, externalEventId);
+    }
+    if (!await repository.markExecutionDispatching(participant.workspaceId, dedupeKey)) {
+      activeDispatches.delete(dispatchKey);
+      return prepareDeliveryAction(participant, repository, action, externalEventId);
+    }
+    return { kind: "send", finish: () => activeDispatches.delete(dispatchKey) };
+  } catch (error) {
+    activeDispatches.delete(dispatchKey);
+    throw error;
+  }
+}
+
+function isKnownNotSentRetryable(error: unknown): error is MetaApiError {
+  return error instanceof MetaApiError && error.status > 0 && error.retryable;
+}
+
+function isAmbiguousProviderOutcome(error: unknown): boolean {
+  return !(error instanceof MetaApiError) || error.status === 0;
+}
+
+function looksLikeCampaignInteractionPayload(value: string): boolean {
+  const [encoded, signature, extra] = value.split(".");
+  if (!encoded || !signature || extra !== undefined) return false;
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded) || !/^[A-Za-z0-9_-]+$/.test(signature)) return false;
+  try {
+    if (Buffer.from(encoded, "base64url").toString("base64url") !== encoded) return false;
+    const body = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Record<string, unknown>;
+    return body.v === 1
+      && typeof body.p === "string"
+      && body.p.length > 0
+      && (body.a === "opt_in" || body.a === "recheck")
+      && typeof body.exp === "number"
+      && Number.isFinite(body.exp);
+  } catch {
+    return false;
+  }
+}
+
+async function currentParticipant(
+  participant: AutomationParticipantRecord,
+  repository: AutomationRepository,
+): Promise<AutomationParticipantRecord> {
+  return await repository.getParticipant(
+    participant.workspaceId,
+    participant.instagramAccountId,
+    participant.id,
+  ) ?? participant;
 }
 
 function mediaSnapshot(media: MetaMedia): MediaSnapshot {
@@ -304,30 +405,44 @@ async function deliverPublicReply(
   }
 
   const action = "public_reply";
-  if (!await actionClaim(participant, repository, action, participant.sourceCommentId)) {
-    return participant;
-  }
-
-  try {
-    const response = await client.replyToComment(
-      connection,
-      participant.sourceCommentId,
-      text,
-    );
-    await completeAction(participant, repository, action, "SENT", response.id);
+  const prepared = await prepareDeliveryAction(
+    participant,
+    repository,
+    action,
+    participant.sourceCommentId,
+  );
+  if (prepared.kind === "in_flight") return currentParticipant(participant, repository);
+  if (prepared.kind === "sent") {
     const sent = await repository.transitionParticipant(
       participant.id,
       PARTICIPANT_ACTION_STATES,
       {
         publicReplyStatus: "SENT",
-        publicReplyProviderId: response.id,
-        publicReplySentAt: new Date().toISOString(),
+        publicReplyProviderId: prepared.execution.providerMessageId,
+        publicReplySentAt: prepared.execution.createdAt,
         publicReplyError: undefined,
       },
     );
-    return sent ?? participant;
+    return sent ?? currentParticipant(participant, repository);
+  }
+  if (prepared.kind === "failed") {
+    const failed = await repository.transitionParticipant(participant.id, PARTICIPANT_ACTION_STATES, {
+      publicReplyStatus: "FAILED",
+      publicReplyError: prepared.reason,
+    });
+    return failed ?? currentParticipant(participant, repository);
+  }
+
+  let response: { id: string };
+  try {
+    response = await client.replyToComment(
+      connection,
+      participant.sourceCommentId,
+      text,
+    );
+    await completeAction(participant, repository, action, "SENT", response.id);
   } catch (error) {
-    if (error instanceof MetaApiError && error.retryable && !finalAttempt) {
+    if (isKnownNotSentRetryable(error) && !finalAttempt) {
       await releaseAction(participant, repository, action);
       await repository.transitionParticipant(participant.id, PARTICIPANT_ACTION_STATES, {
         publicReplyStatus: "PENDING",
@@ -336,21 +451,38 @@ async function deliverPublicReply(
       throw error;
     }
 
+    const reason = isAmbiguousProviderOutcome(error)
+      ? "Meta public reply outcome is ambiguous; delivery was not retried"
+      : "Meta public reply failed";
     await completeAction(
       participant,
       repository,
       action,
       "FAILED",
       undefined,
-      "Meta public reply failed",
+      reason,
     );
     const failed = await repository.transitionParticipant(
       participant.id,
       PARTICIPANT_ACTION_STATES,
-      { publicReplyStatus: "FAILED", publicReplyError: "Meta public reply failed" },
+      { publicReplyStatus: "FAILED", publicReplyError: reason },
     );
-    return failed ?? participant;
+    return failed ?? currentParticipant(participant, repository);
+  } finally {
+    prepared.finish();
   }
+
+  const sent = await repository.transitionParticipant(
+    participant.id,
+    PARTICIPANT_ACTION_STATES,
+    {
+      publicReplyStatus: "SENT",
+      publicReplyProviderId: response.id,
+      publicReplySentAt: new Date().toISOString(),
+      publicReplyError: undefined,
+    },
+  );
+  return sent ?? currentParticipant(participant, repository);
 }
 
 async function deliverOpeningReply(
@@ -363,12 +495,49 @@ async function deliverOpeningReply(
   finalAttempt: boolean,
 ): Promise<AutomationParticipantRecord> {
   const action = "opening_reply";
-  if (!await actionClaim(participant, repository, action, participant.sourceCommentId)) {
-    return participant;
+  const prepared = await prepareDeliveryAction(
+    participant,
+    repository,
+    action,
+    participant.sourceCommentId,
+  );
+  if (prepared.kind === "in_flight") return currentParticipant(participant, repository);
+  if (prepared.kind === "sent") {
+    if (!prepared.execution.providerMessageId || !prepared.execution.providerRecipientId) {
+      const reason = "Recorded opening delivery success is missing provider identifiers";
+      const failed = await repository.transitionParticipant(participant.id, ["COMMENT_MATCHED"], {
+        state: "FAILED",
+        openingStatus: "FAILED",
+        openingError: reason,
+      });
+      return failed ?? currentParticipant(participant, repository);
+    }
+    const sent = await repository.transitionParticipant(
+      participant.id,
+      ["COMMENT_MATCHED"],
+      {
+        state: "OPENING_SENT",
+        openingStatus: "SENT",
+        openingProviderId: prepared.execution.providerMessageId,
+        openingSentAt: prepared.execution.createdAt,
+        openingError: undefined,
+        igScopedUserId: prepared.execution.providerRecipientId,
+      },
+    );
+    return sent ?? currentParticipant(participant, repository);
+  }
+  if (prepared.kind === "failed") {
+    const failed = await repository.transitionParticipant(participant.id, ["COMMENT_MATCHED"], {
+      state: "FAILED",
+      openingStatus: "FAILED",
+      openingError: prepared.reason,
+    });
+    return failed ?? currentParticipant(participant, repository);
   }
 
+  let response: MetaSendResult;
   try {
-    const response = await client.sendPrivateReply(
+    response = await client.sendPrivateReply(
       connection,
       participant.sourceCommentId,
       {
@@ -383,25 +552,20 @@ async function deliverOpeningReply(
       },
     );
     if (!response.message_id || !response.recipient_id) {
-      throw new MetaApiError("Meta did not return opening reply identifiers", 502);
+      throw new Error("Meta accepted the opening reply without delivery identifiers");
     }
 
-    await completeAction(participant, repository, action, "SENT", response.message_id);
-    const sent = await repository.transitionParticipant(
-      participant.id,
-      ["COMMENT_MATCHED"],
-      {
-        state: "OPENING_SENT",
-        openingStatus: "SENT",
-        openingProviderId: response.message_id,
-        openingSentAt: new Date().toISOString(),
-        openingError: undefined,
-        igScopedUserId: response.recipient_id,
-      },
+    await completeAction(
+      participant,
+      repository,
+      action,
+      "SENT",
+      response.message_id,
+      undefined,
+      response.recipient_id,
     );
-    return sent ?? participant;
   } catch (error) {
-    if (error instanceof MetaApiError && error.retryable && !finalAttempt) {
+    if (isKnownNotSentRetryable(error) && !finalAttempt) {
       await releaseAction(participant, repository, action);
       await repository.transitionParticipant(participant.id, ["COMMENT_MATCHED"], {
         openingStatus: "PENDING",
@@ -410,13 +574,16 @@ async function deliverOpeningReply(
       throw error;
     }
 
+    const reason = isAmbiguousProviderOutcome(error)
+      ? "Meta opening reply outcome is ambiguous; delivery was not retried"
+      : "Meta opening reply failed";
     await completeAction(
       participant,
       repository,
       action,
       "FAILED",
       undefined,
-      "Meta opening reply failed",
+      reason,
     );
     const failed = await repository.transitionParticipant(
       participant.id,
@@ -424,11 +591,27 @@ async function deliverOpeningReply(
       {
         state: "FAILED",
         openingStatus: "FAILED",
-        openingError: "Meta opening reply failed",
+        openingError: reason,
       },
     );
-    return failed ?? participant;
+    return failed ?? currentParticipant(participant, repository);
+  } finally {
+    prepared.finish();
   }
+
+  const sent = await repository.transitionParticipant(
+    participant.id,
+    ["COMMENT_MATCHED"],
+    {
+      state: "OPENING_SENT",
+      openingStatus: "SENT",
+      openingProviderId: response.message_id,
+      openingSentAt: new Date().toISOString(),
+      openingError: undefined,
+      igScopedUserId: response.recipient_id,
+    },
+  );
+  return sent ?? currentParticipant(participant, repository);
 }
 
 async function promptForFollow(
@@ -443,10 +626,34 @@ async function promptForFollow(
   finalAttempt: boolean,
 ): Promise<AutomationParticipantRecord> {
   const action = `follow_prompt:${event.id}`;
-  if (!await actionClaim(participant, repository, action, event.id)) return participant;
+  const prepared = await prepareDeliveryAction(participant, repository, action, event.id);
+  if (prepared.kind === "in_flight") return currentParticipant(participant, repository);
+  if (prepared.kind === "sent") {
+    const prompted = await repository.transitionParticipant(
+      participant.id,
+      [participant.state],
+      {
+        state: "FOLLOW_REQUIRED",
+        followStatus: false,
+        followCheckedAt: new Date(event.timestamp).toISOString(),
+        followCheckError: undefined,
+        messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+        recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
+      },
+    );
+    return prompted ?? currentParticipant(participant, repository);
+  }
+  if (prepared.kind === "failed") {
+    const failed = await repository.transitionParticipant(participant.id, [participant.state], {
+      state: "FAILED",
+      finalDeliveryError: prepared.reason,
+    });
+    return failed ?? currentParticipant(participant, repository);
+  }
 
+  let response: MetaSendResult;
   try {
-    const response = await client.sendQuickReply(
+    response = await client.sendQuickReply(
       connection,
       event.recipientId!,
       definition.followGate.notFollowingMessage,
@@ -460,43 +667,159 @@ async function promptForFollow(
       },
     );
     if (!response.message_id) {
-      throw new MetaApiError("Meta did not return follow prompt ID", 502);
+      throw new Error("Meta accepted the follow prompt without a delivery identifier");
     }
 
     await completeAction(participant, repository, action, "SENT", response.message_id);
-    const prompted = await repository.transitionParticipant(
-      participant.id,
-      [participant.state],
-      {
-        state: "FOLLOW_REQUIRED",
-        followStatus: false,
-        followCheckedAt: new Date(event.timestamp).toISOString(),
-        followCheckError: undefined,
-        messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
-        recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
-      },
-    );
-    return prompted ?? participant;
   } catch (error) {
-    if (error instanceof MetaApiError && error.retryable && !finalAttempt) {
+    if (isKnownNotSentRetryable(error) && !finalAttempt) {
       await releaseAction(participant, repository, action);
       throw error;
     }
 
+    const reason = isAmbiguousProviderOutcome(error)
+      ? "Meta follow prompt outcome is ambiguous; delivery was not retried"
+      : "Meta follow prompt failed";
     await completeAction(
       participant,
       repository,
       action,
       "FAILED",
       undefined,
-      "Meta follow prompt failed",
+      reason,
     );
     const failed = await repository.transitionParticipant(participant.id, [participant.state], {
       state: "FAILED",
-      finalDeliveryError: "Meta follow prompt failed",
+      finalDeliveryError: reason,
     });
-    return failed ?? participant;
+    return failed ?? currentParticipant(participant, repository);
+  } finally {
+    prepared.finish();
   }
+
+  const prompted = await repository.transitionParticipant(
+    participant.id,
+    [participant.state],
+    {
+      state: "FOLLOW_REQUIRED",
+      followStatus: false,
+      followCheckedAt: new Date(event.timestamp).toISOString(),
+      followCheckError: undefined,
+      messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+      recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
+    },
+  );
+  return prompted ?? currentParticipant(participant, repository);
+}
+
+async function deliverFinalMessage(
+  verified: AutomationParticipantRecord,
+  definition: FlowDefinitionV2,
+  event: NormalizedEvent,
+  client: CampaignRunnerClient,
+  connection: MetaConnection,
+  repository: AutomationRepository,
+  finalAttempt: boolean,
+): Promise<AutomationParticipantRecord> {
+  const action = "final_delivery";
+  const prepared = await prepareDeliveryAction(verified, repository, action, event.id);
+  if (prepared.kind === "in_flight") return currentParticipant(verified, repository);
+  if (prepared.kind === "sent") {
+    if (!prepared.execution.providerMessageId) {
+      const reason = "Recorded final delivery success is missing provider identifier";
+      const failed = await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
+        state: "FAILED",
+        finalDeliveryStatus: "FAILED",
+        finalDeliveryError: reason,
+      });
+      return failed ?? currentParticipant(verified, repository);
+    }
+    const delivered = await repository.transitionParticipant(
+      verified.id,
+      ["FOLLOW_VERIFIED"],
+      {
+        state: "LINK_SENT",
+        finalDeliveryStatus: "SENT",
+        finalProviderId: prepared.execution.providerMessageId,
+        finalDeliveredAt: prepared.execution.createdAt,
+        finalDeliveryError: undefined,
+      },
+    );
+    return delivered ?? currentParticipant(verified, repository);
+  }
+  if (prepared.kind === "failed") {
+    const failed = await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
+      state: "FAILED",
+      finalDeliveryStatus: "FAILED",
+      finalDeliveryError: prepared.reason,
+    });
+    return failed ?? currentParticipant(verified, repository);
+  }
+
+  const message: MetaMessage = definition.delivery.buttonLabel
+    ? {
+        type: "button",
+        text: definition.delivery.text,
+        buttonLabel: definition.delivery.buttonLabel,
+        url: definition.delivery.url,
+      }
+    : { type: "link", text: definition.delivery.text, url: definition.delivery.url };
+
+  let response: MetaSendResult;
+  try {
+    response = await client.sendDirectMessage(
+      connection,
+      event.recipientId!,
+      message,
+    );
+    if (!response.message_id) {
+      throw new Error("Meta accepted the final delivery without a delivery identifier");
+    }
+
+    await completeAction(verified, repository, action, "SENT", response.message_id);
+  } catch (error) {
+    if (isKnownNotSentRetryable(error) && !finalAttempt) {
+      await releaseAction(verified, repository, action);
+      await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
+        finalDeliveryStatus: "PENDING",
+        finalDeliveryError: "Meta final delivery temporarily failed",
+      });
+      throw error;
+    }
+
+    const reason = isAmbiguousProviderOutcome(error)
+      ? "Meta final delivery outcome is ambiguous; delivery was not retried"
+      : "Meta final delivery failed";
+    await completeAction(
+      verified,
+      repository,
+      action,
+      "FAILED",
+      undefined,
+      reason,
+    );
+    const failed = await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
+      state: "FAILED",
+      finalDeliveryStatus: "FAILED",
+      finalDeliveryError: reason,
+    });
+    return failed ?? currentParticipant(verified, repository);
+  } finally {
+    prepared.finish();
+  }
+
+  const delivered = await repository.transitionParticipant(
+    verified.id,
+    ["FOLLOW_VERIFIED"],
+    {
+      state: "LINK_SENT",
+      finalDeliveryStatus: "SENT",
+      finalProviderId: response.message_id,
+      finalDeliveredAt: new Date().toISOString(),
+      finalDeliveryError: undefined,
+    },
+  );
+  return delivered ?? currentParticipant(verified, repository);
 }
 
 async function verifyAndDeliver(
@@ -520,80 +843,87 @@ async function verifyAndDeliver(
       finalDeliveryStatus: "PENDING",
     },
   );
-  if (!verified) return participant;
-
-  const action = "final_delivery";
-  if (!await actionClaim(verified, repository, action, event.id)) return verified;
-
-  const message: MetaMessage = definition.delivery.buttonLabel
-    ? {
-        type: "button",
-        text: definition.delivery.text,
-        buttonLabel: definition.delivery.buttonLabel,
-        url: definition.delivery.url,
-      }
-    : { type: "link", text: definition.delivery.text, url: definition.delivery.url };
-
-  try {
-    const response = await client.sendDirectMessage(
-      connection,
-      event.recipientId!,
-      message,
-    );
-    if (!response.message_id) {
-      throw new MetaApiError("Meta did not return final delivery ID", 502);
-    }
-
-    await completeAction(verified, repository, action, "SENT", response.message_id);
-    const delivered = await repository.transitionParticipant(
-      verified.id,
-      ["FOLLOW_VERIFIED"],
-      {
-        state: "LINK_SENT",
-        finalDeliveryStatus: "SENT",
-        finalProviderId: response.message_id,
-        finalDeliveredAt: new Date().toISOString(),
-        finalDeliveryError: undefined,
-      },
-    );
-    return delivered ?? verified;
-  } catch (error) {
-    if (error instanceof MetaApiError && error.retryable && !finalAttempt) {
-      await releaseAction(verified, repository, action);
-      await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
-        finalDeliveryStatus: "PENDING",
-        finalDeliveryError: "Meta final delivery temporarily failed",
-      });
-      throw error;
-    }
-
-    await completeAction(
-      verified,
-      repository,
-      action,
-      "FAILED",
-      undefined,
-      "Meta final delivery failed",
-    );
-    const failed = await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
-      state: "FAILED",
-      finalDeliveryStatus: "FAILED",
-      finalDeliveryError: "Meta final delivery failed",
-    });
-    return failed ?? verified;
-  }
+  if (!verified) return currentParticipant(participant, repository);
+  return deliverFinalMessage(
+    verified,
+    definition,
+    event,
+    client,
+    connection,
+    repository,
+    finalAttempt,
+  );
 }
 
 async function reloadParticipant(
   participant: AutomationParticipantRecord,
   repository: AutomationRepository,
 ): Promise<AutomationParticipantRecord> {
-  const participants = await repository.listParticipants(
-    participant.workspaceId,
-    participant.automationId,
-    100,
-  );
-  return participants.find((candidate) => candidate.id === participant.id) ?? participant;
+  return currentParticipant(participant, repository);
+}
+
+export async function processExistingCampaignParticipant(
+  participant: AutomationParticipantRecord,
+  mapping: CampaignMapping,
+  repository: AutomationRepository,
+  options: CampaignRunnerOptions,
+): Promise<CampaignRunnerResult> {
+  if (["LINK_SENT", "EXPIRED", "FAILED"].includes(participant.state)) {
+    return handledResult(participant.id);
+  }
+
+  const automation = await repository.getAutomation(participant.workspaceId, participant.automationId);
+  if (!automation || automation.definition.version !== 2) {
+    await repository.transitionParticipant(participant.id, [participant.state], {
+      state: "FAILED",
+      openingError: "Original campaign definition is unavailable",
+    });
+    return handledResult(participant.id, { failed: 1 });
+  }
+  if (!options.client) {
+    return handledResult(participant.id, { skipped: 1 });
+  }
+  if (!options.tokenEncryptionKey || !options.interactionSecret) {
+    await repository.transitionParticipant(participant.id, [participant.state], {
+      state: "FAILED",
+      openingError: !options.tokenEncryptionKey
+        ? "Token encryption key is not configured"
+        : "Interaction signing secret is not configured",
+    });
+    return handledResult(participant.id, { failed: 1 });
+  }
+
+  const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+  if (participant.publicReplyStatus !== "SENT" && participant.publicReplyStatus !== "SKIPPED") {
+    participant = await deliverPublicReply(
+      participant,
+      automation.definition,
+      options.client,
+      connection,
+      repository,
+      options.finalAttempt === true,
+    );
+  }
+  if (participant.openingStatus !== "SENT" && participant.state !== "FAILED") {
+    participant = await deliverOpeningReply(
+      participant,
+      automation.definition,
+      options.client,
+      connection,
+      repository,
+      options.interactionSecret,
+      options.finalAttempt === true,
+    );
+  }
+
+  participant = await reloadParticipant(participant, repository);
+  if (participant.openingStatus === "SENT") {
+    return handledResult(participant.id, { sent: 1 });
+  }
+  if (participant.state === "FAILED" || participant.openingStatus === "FAILED") {
+    return handledResult(participant.id, { failed: 1 });
+  }
+  return handledResult(participant.id);
 }
 
 export async function processCampaignEvent(
@@ -603,6 +933,16 @@ export async function processCampaignEvent(
   repository: AutomationRepository,
   options: CampaignRunnerOptions,
 ): Promise<CampaignRunnerResult> {
+  if (event.type === "comment.created" && event.commentId) {
+    const existing = await repository.findParticipantBySource(
+      mapping.workspaceId,
+      event.accountId,
+      event.commentId,
+    );
+    if (existing) {
+      return processExistingCampaignParticipant(existing, mapping, repository, options);
+    }
+  }
   if (automation.definition.version !== 2) return emptyResult();
   let campaign = automation as AutomationRecord & { definition: FlowDefinitionV2 };
   let resolvedSnapshot: MediaSnapshot | undefined;
@@ -692,57 +1032,7 @@ export async function processCampaignEvent(
     sourceMediaSnapshot: snapshot,
     ...(match.keyword ? { matchedKeyword: match.keyword } : {}),
   });
-  let participant = created.record;
-  let deliveryDefinition = campaign.definition;
-
-  if (!created.created && participant.automationId !== campaign.id) {
-    const winningAutomation = await repository.getAutomation(
-      participant.workspaceId,
-      participant.automationId,
-    );
-    if (!winningAutomation || winningAutomation.definition.version !== 2) {
-      await repository.transitionParticipant(participant.id, [participant.state], {
-        state: "FAILED",
-        openingError: "Original campaign definition is unavailable",
-      });
-      return handledResult(participant.id, { failed: 1 });
-    }
-    deliveryDefinition = winningAutomation.definition;
-  }
-
-  if (["LINK_SENT", "EXPIRED", "FAILED"].includes(participant.state)) {
-    return handledResult(participant.id);
-  }
-  if (participant.publicReplyStatus !== "SENT" && participant.publicReplyStatus !== "SKIPPED") {
-    participant = await deliverPublicReply(
-      participant,
-      deliveryDefinition,
-      options.client,
-      connection,
-      repository,
-      options.finalAttempt === true,
-    );
-  }
-  if (participant.openingStatus !== "SENT" && participant.state !== "FAILED") {
-    participant = await deliverOpeningReply(
-      participant,
-      deliveryDefinition,
-      options.client,
-      connection,
-      repository,
-      options.interactionSecret,
-      options.finalAttempt === true,
-    );
-  }
-
-  participant = await reloadParticipant(participant, repository);
-  if (participant.openingStatus === "SENT") {
-    return handledResult(participant.id, { sent: 1 });
-  }
-  if (participant.state === "FAILED" || participant.openingStatus === "FAILED") {
-    return handledResult(participant.id, { failed: 1 });
-  }
-  return handledResult(participant.id);
+  return processExistingCampaignParticipant(created.record, mapping, repository, options);
 }
 
 async function failInteractionParticipant(
@@ -767,31 +1057,12 @@ export async function processPendingCampaignInteraction(
     return { handled: false };
   }
 
-  let participant = await repository.findPendingParticipant(event.accountId, event.recipientId);
-  const existingWindowExpiresAt = participant?.messagingWindowExpiresAt
-    ? Date.parse(participant.messagingWindowExpiresAt)
-    : Number.NaN;
-  if (participant && Number.isFinite(existingWindowExpiresAt) && event.timestamp >= existingWindowExpiresAt) {
-    await repository.transitionParticipant(participant.id, [participant.state], {
-      state: "EXPIRED",
-      finalDeliveryError: "Messaging window expired",
-    });
-    return {
-      handled: true,
-      result: handledResult(participant.id, { failed: 1 }),
-    };
-  }
+  const campaignPayload = looksLikeCampaignInteractionPayload(event.interactionPayload);
 
   if (!options.interactionSecret) {
-    if (!participant) return { handled: false };
-    return {
-      handled: true,
-      result: await failInteractionParticipant(
-        participant,
-        repository,
-        "Interaction signing secret is not configured",
-      ),
-    };
+    return campaignPayload
+      ? { handled: true, result: handledResult(undefined, { failed: 1 }) }
+      : { handled: false };
   }
 
   const payload = readInteractionPayload(
@@ -799,21 +1070,88 @@ export async function processPendingCampaignInteraction(
     options.interactionSecret,
     event.timestamp,
   );
-  if (!payload) return { handled: false };
+  if (!payload) {
+    return campaignPayload
+      ? { handled: true, result: handledResult(undefined, { failed: 1 }) }
+      : { handled: false };
+  }
 
-  if (
-    !participant
-    || participant.id !== payload.participantId
-    || participant.workspaceId !== mapping.workspaceId
-    || participant.instagramAccountId !== event.accountId
-    || participant.igScopedUserId !== event.recipientId
-  ) {
-    return { handled: false };
+  let participant = await repository.getParticipant(
+    mapping.workspaceId,
+    event.accountId,
+    payload.participantId,
+  );
+  if (!participant || participant.igScopedUserId !== event.recipientId) {
+    return { handled: true, result: handledResult(undefined, { failed: 1 }) };
   }
 
   const automation = await repository.getAutomation(mapping.workspaceId, participant.automationId);
-  if (!automation || automation.definition.version !== 2) return { handled: false };
+  if (!automation || automation.definition.version !== 2) {
+    return { handled: true, result: handledResult(participant.id, { failed: 1 }) };
+  }
   const definition = automation.definition;
+
+  const purposeAllowed = payload.action === "opt_in"
+    ? ["OPENING_SENT", "OPTED_IN", "FOLLOW_VERIFIED"].includes(participant.state)
+    : ["FOLLOW_REQUIRED", "FOLLOW_VERIFIED"].includes(participant.state);
+  if (!purposeAllowed) {
+    return { handled: true, result: handledResult(participant.id) };
+  }
+
+  const verifiedAt = participant.followCheckedAt ? Date.parse(participant.followCheckedAt) : Number.NaN;
+  if (
+    participant.state === "FOLLOW_VERIFIED"
+    && participant.finalDeliveryStatus === "PENDING"
+    && Number.isFinite(verifiedAt)
+    && verifiedAt === event.timestamp
+  ) {
+    const expiresAt = participant.messagingWindowExpiresAt
+      ? Date.parse(participant.messagingWindowExpiresAt)
+      : Number.NaN;
+    if (!Number.isFinite(expiresAt) || event.timestamp >= expiresAt) {
+      await repository.transitionParticipant(participant.id, ["FOLLOW_VERIFIED"], {
+        state: "EXPIRED",
+        finalDeliveryError: "Messaging window expired",
+      });
+      return { handled: true, result: handledResult(participant.id, { failed: 1 }) };
+    }
+    if (!options.client) {
+      return {
+        handled: true,
+        result: await failInteractionParticipant(
+          participant,
+          repository,
+          "Meta delivery is disabled in demo mode",
+        ),
+      };
+    }
+    if (!options.tokenEncryptionKey) {
+      return {
+        handled: true,
+        result: await failInteractionParticipant(
+          participant,
+          repository,
+          "Token encryption key is not configured",
+        ),
+      };
+    }
+    const resumed = await deliverFinalMessage(
+      participant,
+      definition,
+      event,
+      options.client,
+      metaConnection(mapping.connection, options.tokenEncryptionKey),
+      repository,
+      options.finalAttempt === true,
+    );
+    if (resumed.state === "LINK_SENT") {
+      return { handled: true, result: handledResult(resumed.id, { sent: 1 }) };
+    }
+    if (resumed.state === "FAILED") {
+      return { handled: true, result: handledResult(resumed.id, { failed: 1 }) };
+    }
+    return { handled: true, result: handledResult(resumed.id) };
+  }
 
   if (payload.action === "opt_in") {
     if (participant.state === "OPENING_SENT") {
