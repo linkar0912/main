@@ -287,7 +287,9 @@ describe("follow-gated campaign runner", () => {
         type: "button",
         text: definition.delivery.text,
         buttonLabel: definition.delivery.buttonLabel,
-        url: definition.delivery.url,
+        // The delivered link points at the click-tracking redirect for this
+        // participant; the redirect forwards to the real delivery URL.
+        url: expect.stringMatching(new RegExp(`/api/t/${harness.participant.id}$`)),
       },
     );
     expect(await readParticipant(harness.repository)).toMatchObject({
@@ -1218,5 +1220,80 @@ describe("follow-gated campaign runner", () => {
     expect(await readParticipant(harness.repository)).toMatchObject({ state: "LINK_SENT" });
     expect(harness.client.getUserFollowStatus).toHaveBeenCalledTimes(1);
     expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("campaign expansion behavior", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("delivers immediately on opt-in when the follow gate is disabled", async () => {
+    const ungatedAutomation: AutomationRecord = {
+      ...automation,
+      id: "automation_ungated",
+      definition: { ...definition, followGate: { ...definition.followGate, required: false } },
+    };
+    const followSpy = vi.fn();
+    const client = createClient({ getUserFollowStatus: followSpy });
+    const repository = createMemoryRepository([ungatedAutomation]);
+    await repository.upsertConnection({
+      workspaceId: automation.workspaceId,
+      igUserId: commentEvent.accountId,
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", TOKEN_KEY),
+      status: "CONNECTED",
+    });
+    const mapping = await repository.findWorkspaceByInstagramAccount(commentEvent.accountId);
+    if (!mapping) throw new Error("missing mapping");
+    const options: CampaignRunnerOptions = { client, tokenEncryptionKey: TOKEN_KEY, interactionSecret: INTERACTION_SECRET };
+
+    await processCampaignEvent(commentEvent, ungatedAutomation, mapping, repository, options);
+    const openingCall = vi.mocked(client.sendPrivateReply).mock.calls[0];
+    const payload = (openingCall?.[2] as { quickReply?: { payload: string } }).quickReply?.payload;
+    if (!payload) throw new Error("opening quick reply was not sent");
+
+    const result = await processPendingCampaignInteraction(
+      interactionEvent(payload, NOW + 1_000),
+      mapping,
+      repository,
+      options,
+    );
+
+    expect(followSpy).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ handled: true, result: { sent: 1 } });
+    const [updated] = await repository.listParticipants(ungatedAutomation.workspaceId, ungatedAutomation.id, 1);
+    expect(updated.state).toBe("LINK_SENT");
+  });
+
+  it("skips comments outside the scheduled window without creating participants", async () => {
+    const scheduledAutomation: AutomationRecord = {
+      ...automation,
+      id: "automation_scheduled",
+      definition: { ...definition, schedule: { endsAt: new Date(NOW - 1_000).toISOString() } },
+    };
+    const client = createClient();
+    const repository = createMemoryRepository([scheduledAutomation]);
+    await repository.upsertConnection({
+      workspaceId: automation.workspaceId,
+      igUserId: commentEvent.accountId,
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", TOKEN_KEY),
+      status: "CONNECTED",
+    });
+    const mapping = await repository.findWorkspaceByInstagramAccount(commentEvent.accountId);
+    if (!mapping) throw new Error("missing mapping");
+    const options: CampaignRunnerOptions = { client, tokenEncryptionKey: TOKEN_KEY, interactionSecret: INTERACTION_SECRET };
+
+    const result = await processCampaignEvent(commentEvent, scheduledAutomation, mapping, repository, options);
+
+    expect(result).toMatchObject({ handled: true, skipped: 1 });
+    expect(await repository.listParticipants(scheduledAutomation.workspaceId, scheduledAutomation.id, 10)).toHaveLength(0);
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
   });
 });

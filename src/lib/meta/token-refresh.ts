@@ -1,5 +1,6 @@
 import type { AutomationRepository } from "../repository";
 import { sealSecret, unsealSecret } from "../security/secrets";
+import { notifyWorkspaceManagers } from "../notifications";
 import { MetaOAuthError } from "./oauth";
 
 type RefreshResult = { accessToken: string; expiresIn?: number };
@@ -37,6 +38,12 @@ export async function refreshExpiringInstagramTokens(
         (error instanceof MetaOAuthError && !error.retryable)
       ) {
         await repository.updateConnectionStatus(connection.id, "EXPIRED");
+        void notifyWorkspaceManagers(
+          connection.workspaceId,
+          `token-expired:${connection.id}`,
+          `Action needed: reconnect @${connection.username}`,
+          `The Instagram connection for @${connection.username} expired, so its automations cannot deliver right now. Reconnect the account from Settings to resume.`,
+        ).catch(() => undefined);
       }
       failed += 1;
     }

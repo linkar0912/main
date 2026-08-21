@@ -31,13 +31,13 @@ const WEBHOOK_FIELD_LABELS: Record<string, string> = {
 };
 
 export function SettingsScreen() {
-  const [connection, setConnection] = useState<Connection | null>(null);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [health, setHealth] = useState<ConnectionHealth | null>(null);
   const [mode, setMode] = useState<"demo" | "configured">("demo");
   const [metaState] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("meta") ?? "");
   const [accountSaved] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("accountSaved") ?? "");
   const [accountError] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("accountError") ?? "");
-  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectingId, setDisconnectingId] = useState("");
   const [disconnectError, setDisconnectError] = useState("");
   const [team, setTeam] = useState<TeamOverview | null>(null);
   const [teamManageable, setTeamManageable] = useState(true);
@@ -46,22 +46,22 @@ export function SettingsScreen() {
   const [inviteRole, setInviteRole] = useState("MEMBER");
   const [inviteBusy, setInviteBusy] = useState(false);
 
-  async function disconnect() {
-    if (!connection || disconnecting) return;
-    setDisconnecting(true);
+  async function disconnect(id: string) {
+    if (disconnectingId) return;
+    setDisconnectingId(id);
     setDisconnectError("");
     try {
       const response = await fetch("/api/meta/connection", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: connection.id }),
+        body: JSON.stringify({ id }),
       });
       if (!response.ok) throw new Error("Could not disconnect Instagram");
-      setConnection(null);
+      setConnections((current) => current.filter((connection) => connection.id !== id));
     } catch (error) {
       setDisconnectError(error instanceof Error ? error.message : "Could not disconnect Instagram");
     } finally {
-      setDisconnecting(false);
+      setDisconnectingId("");
     }
   }
 
@@ -74,7 +74,7 @@ export function SettingsScreen() {
       const connectionPayload = (await connectionResponse.json()) as { data?: Connection[] };
       const healthPayload = (await healthResponse.json()) as { mode?: "demo" | "configured" };
       const connectionHealthPayload = (await connectionHealthResponse.json()) as { data?: ConnectionHealth[] };
-      setConnection(connectionPayload.data?.[0] ?? null);
+      setConnections(connectionPayload.data ?? []);
       setMode(healthPayload.mode ?? "demo");
       setHealth(connectionHealthPayload.data?.[0] ?? null);
     }).catch(() => undefined);
@@ -147,12 +147,34 @@ export function SettingsScreen() {
 
         <section className="settings-hero panel">
           <div className="settings-icon"><Camera size={25} /></div>
-          <div className="settings-copy"><p className="eyebrow">Instagram connection</p><h2>{connection ? `@${connection.username}` : "No account connected"}</h2><p>{connection ? "This account can receive comment and DM webhooks." : "Connect a professional Instagram account to enable delivery."}</p></div>
-          <div className="settings-action">{connection ? <><StatusBadge status={connection.status} /> <button className="button button-secondary" type="button" disabled={disconnecting} onClick={() => void disconnect()}>{disconnecting ? "Disconnecting…" : "Disconnect"}</button></> : <a className="button button-primary" href="/api/meta/oauth/start">Connect Instagram <ExternalLink size={15} /></a>}</div>
+          <div className="settings-copy"><p className="eyebrow">Instagram connections</p><h2>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h2><p>{connections.length > 0 ? "Connected accounts receive comment and DM webhooks for this workspace." : "Connect a professional Instagram account to enable delivery."}</p></div>
+          <div className="settings-action"><a className="button button-primary" href="/api/meta/oauth/start">{connections.length > 0 ? "Connect another account" : "Connect Instagram"} <ExternalLink size={15} /></a></div>
         </section>
+        {connections.length > 0 && (
+          <ul className="connection-list">
+            {connections.map((connection) => (
+              <li className="panel connection-row" key={connection.id}>
+                <span className="connection-avatar">@{connection.username.slice(0, 2).toUpperCase()}</span>
+                <div className="connection-copy">
+                  <strong>@{connection.username}</strong>
+                  <small>Connected {new Date(connection.connectedAt).toLocaleDateString()} · ID {connection.igUserId}</small>
+                </div>
+                <StatusBadge status={connection.status} />
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  disabled={disconnectingId === connection.id}
+                  onClick={() => void disconnect(connection.id)}
+                >
+                  {disconnectingId === connection.id ? "Disconnecting…" : "Disconnect"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {disconnectError && <p className="form-error" role="alert">{disconnectError}</p>}
 
-        {connection && health && (
+        {connections.length > 0 && health && (
           <section className="panel settings-panel" aria-label="Webhook health">
             <div className="panel-heading">
               <div><p className="eyebrow">Webhook health</p><h2>{health.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>

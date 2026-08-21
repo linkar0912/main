@@ -49,6 +49,7 @@ export type AutomationParticipantRecord = {
   finalDeliveryError?: string;
   messagingWindowExpiresAt?: string;
   recheckCount: number;
+  deliveryClickedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -97,8 +98,11 @@ export type CreateParticipantInput = Pick<
 
 export type ParticipantPatch = Partial<Pick<
   AutomationParticipantRecord,
-  "igScopedUserId" | "matchedKeyword" | "state" | "publicReplyStatus" | "publicReplyProviderId" | "publicReplySentAt" | "publicReplyError" | "openingStatus" | "openingProviderId" | "openingSentAt" | "openingError" | "followStatus" | "followCheckedAt" | "followCheckError" | "finalDeliveryStatus" | "finalProviderId" | "finalDeliveredAt" | "finalDeliveryError" | "messagingWindowExpiresAt" | "recheckCount"
+  "igScopedUserId" | "matchedKeyword" | "state" | "publicReplyStatus" | "publicReplyProviderId" | "publicReplySentAt" | "publicReplyError" | "openingStatus" | "openingProviderId" | "openingSentAt" | "openingError" | "followStatus" | "followCheckedAt" | "followCheckError" | "finalDeliveryStatus" | "finalProviderId" | "finalDeliveredAt" | "finalDeliveryError" | "deliveryClickedAt" | "messagingWindowExpiresAt" | "recheckCount"
 >>;
+
+export type DailyCount = { day: string; count: number };
+export type MediaPerformance = { mediaId: string; matched: number; delivered: number; clicked: number };
 
 export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt" | "dispatchStatus"> & {
   dispatchStatus?: ExecutionDispatchStatus;
@@ -204,6 +208,13 @@ export interface AutomationRepository {
   countParticipantsByState(workspaceId: string, automationId?: string): Promise<Record<string, number>>;
   countExecutionsSentSince(automationId: string, sinceIso: string): Promise<number>;
   countParticipantsCreatedSince(workspaceId: string, sinceIso: string): Promise<number>;
+  // Analytics helpers (UTC day buckets over the trailing window).
+  countParticipantsPerDay(workspaceId: string, days: number): Promise<DailyCount[]>;
+  countExecutionsSentPerDay(workspaceId: string, days: number): Promise<DailyCount[]>;
+  countParticipantsByMedia(workspaceId: string): Promise<MediaPerformance[]>;
+  // Click tracking for delivered links.
+  getParticipantById(id: string): Promise<AutomationParticipantRecord | null>;
+  markDeliveryClicked(id: string, atIso: string): Promise<boolean>;
   findWorkspaceIdByMemberEmail(email: string): Promise<string | null>;
   listAutomations(workspaceId: string): Promise<AutomationRecord[]>;
   getAutomation(workspaceId: string, id: string): Promise<AutomationRecord | null>;
@@ -245,6 +256,7 @@ export interface AutomationRepository {
   transitionParticipant(id: string, expectedStates: ParticipantState[], patch: ParticipantPatch): Promise<AutomationParticipantRecord | null>;
   bindNextMedia(workspaceId: string, automationId: string, mediaId: string, publishedAt: string): Promise<boolean>;
   listParticipants(workspaceId: string, automationId: string, limit: number): Promise<AutomationParticipantRecord[]>;
+  listRecentParticipants(workspaceId: string, limit: number): Promise<AutomationParticipantRecord[]>;
   expireParticipantsByInstagramAccount(igAccountId: string, reason: string): Promise<number>;
   deleteParticipantsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
   expireStaleParticipants(now: string, reason: string): Promise<number>;

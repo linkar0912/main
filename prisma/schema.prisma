@@ -124,7 +124,7 @@ model InstagramConnection {
   connectedAt          DateTime         @default(now())
   workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([workspaceId])
+  // A workspace may connect several professional accounts; uniqueness is per account.
   @@unique([workspaceId, igUserId])
   @@index([workspaceId, status])
 }
@@ -173,6 +173,7 @@ model AutomationParticipant {
   finalProviderId          String?
   finalDeliveredAt         DateTime?
   finalDeliveryError       String?
+  deliveryClickedAt        DateTime?
   messagingWindowExpiresAt DateTime?
   recheckCount             Int              @default(0)
   createdAt                DateTime         @default(now())

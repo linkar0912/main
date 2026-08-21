@@ -43,6 +43,21 @@ test("dashboard and automation list are reachable", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Automations" })).toBeVisible();
 });
 
+test("classic builder creates a keyword autoresponder", async ({ page }) => {
+  await page.goto("/automations/new?type=classic");
+  await expect(page.getByRole("heading", { name: /Build a reply flow/i })).toBeVisible();
+
+  await page.getByLabel("Automation name").fill(`E2E Autoresponder ${Date.now()}`);
+  await page.getByLabel("Trigger source").selectOption("message");
+  await page.getByLabel("Keywords").fill("price");
+  await page.getByLabel("Message text").fill("Here is the pricing you asked for.");
+  await page.getByRole("button", { name: "Save automation" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved to your workspace.");
+
+  await page.goto("/automations");
+  await expect(page.getByText(/DM contains price/).first()).toBeVisible();
+});
+
 test("guided builder saves an automation", async ({ page }) => {
   // `/automations/new` now always opens the version 2 campaign builder (see the
   // "guided builder creates a follow-gated Reel campaign" test below); the
@@ -87,6 +102,8 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
 
   await page.goto("/automations");
   await page.getByRole("link", { name: "New automation" }).click();
+  await expect(page.getByRole("heading", { name: "Pick a starting point." })).toBeVisible();
+  await page.getByRole("link", { name: /Build campaign/i }).click();
   await expect(page.getByRole("heading", { name: "Build a follow-gated Reel campaign" })).toBeVisible();
 
   await page.getByLabel("Automation name").fill(automationName);
@@ -107,9 +124,9 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("status")).toContainText("Saved to your workspace.");
 
-  await page.getByRole("link", { name: "Back to automations" }).click();
-  await expect(page.getByRole("heading", { name: "Automations" })).toBeVisible();
+  await page.goto("/automations");
   const row = page.getByRole("article").filter({ hasText: automationName });
+  await expect(row).toBeVisible();
   await expect(row.getByRole("link", { name: /activity/i })).toBeVisible();
 });
 

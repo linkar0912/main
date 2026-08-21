@@ -65,6 +65,8 @@ export function useAutomations() {
 
 function triggerSummary(automation: AutomationRecord): string {
   const trigger = automation.definition.trigger;
+  if (trigger.type === "referral") return "Referral link tap";
+  if (trigger.type === "optin") return "Opt-in tap";
   const source = trigger.type === "comment" ? "Comment" : "DM";
   const match = trigger.match === "any" ? "any message" : trigger.keywords.join(", ");
   return `${source} contains ${match || "a keyword"}`;

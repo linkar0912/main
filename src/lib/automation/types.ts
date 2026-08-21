@@ -11,6 +11,16 @@ export type MessageTrigger = {
   keywords: string[];
 };
 
+// Fires when someone taps a Meta referral link (messaging_referral webhook).
+export type ReferralTrigger = {
+  type: "referral";
+};
+
+// Fires when someone opts in through a One-Time-Notification request.
+export type OptInTrigger = {
+  type: "optin";
+};
+
 export type FlowCondition =
   | { type: "contains_keyword"; keywords: string[] }
   | { type: "media_is"; mediaIds: string[] };
@@ -21,11 +31,34 @@ export type FlowAction =
   | { type: "send_link"; text: string; url: string }
   | { type: "send_button"; text: string; buttonLabel: string; url: string };
 
+/** Optional activation window; both bounds are optional ISO datetimes. */
+export type FlowSchedule = {
+  startsAt?: string;
+  endsAt?: string;
+};
+
+/**
+ * True when the automation's schedule window (if any) includes `at`.
+ * Open bounds mean "no bound on that side".
+ */
+export function withinSchedule(schedule: FlowSchedule | undefined, at: Date): boolean {
+  if (!schedule) return true;
+  const startsAt = schedule.startsAt ? Date.parse(schedule.startsAt) : Number.NaN;
+  const endsAt = schedule.endsAt ? Date.parse(schedule.endsAt) : Number.NaN;
+  if (Number.isFinite(startsAt) && at.getTime() < startsAt) return false;
+  if (Number.isFinite(endsAt) && at.getTime() >= endsAt) return false;
+  return true;
+}
+
 export type FlowDefinitionV1 = {
   version: 1;
-  trigger: CommentTrigger | MessageTrigger;
+  trigger: CommentTrigger | MessageTrigger | ReferralTrigger | OptInTrigger;
   conditions: FlowCondition[];
   actions: FlowAction[];
+  /** Optional per-automation daily cap on Meta sends, enforced by the runner. */
+  dailySendLimit?: number;
+  /** Optional activation window; events outside it are skipped. */
+  schedule?: FlowSchedule;
 };
 
 export type MediaSnapshot = {
@@ -48,11 +81,29 @@ export type FlowDefinitionV2 = {
     keywords: string[];
   };
   publicReplies: string[];
-  openingMessage: { text: string; optInButtonLabel: string };
-  followGate: { required: true; notFollowingMessage: string; recheckButtonLabel: string };
+  openingMessage: {
+    text: string;
+    /** Extra variants; one is picked per participant alongside `text`. */
+    textVariants?: string[];
+    optInButtonLabel: string;
+  };
+  followGate: {
+    /** When false, the delivery link is sent right after the opt-in tap. */
+    required: boolean;
+    notFollowingMessage: string;
+    recheckButtonLabel: string;
+  };
   /** Optional per-automation daily cap on Meta sends, enforced by the runner. */
   dailySendLimit?: number;
-  delivery: { text: string; url: string; buttonLabel?: string };
+  delivery: {
+    text: string;
+    /** Extra variants; one is picked per participant alongside `text`. */
+    textVariants?: string[];
+    url: string;
+    buttonLabel?: string;
+  };
+  /** Optional activation window; comments outside it are skipped. */
+  schedule?: FlowSchedule;
 };
 
 export type FlowDefinition = FlowDefinitionV1 | FlowDefinitionV2;

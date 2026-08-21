@@ -167,6 +167,7 @@ function mapParticipant(record: {
   finalProviderId: string | null;
   finalDeliveredAt: Date | null;
   finalDeliveryError: string | null;
+  deliveryClickedAt: Date | null;
   messagingWindowExpiresAt: Date | null;
   recheckCount: number;
   createdAt: Date;
@@ -189,6 +190,7 @@ function mapParticipant(record: {
     finalProviderId: record.finalProviderId ?? undefined,
     finalDeliveredAt: record.finalDeliveredAt?.toISOString(),
     finalDeliveryError: record.finalDeliveryError ?? undefined,
+    deliveryClickedAt: record.deliveryClickedAt?.toISOString(),
     messagingWindowExpiresAt: record.messagingWindowExpiresAt?.toISOString(),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -219,6 +221,7 @@ function mapParticipantPatch(patch: ParticipantPatch) {
     openingSentAt: patch.openingSentAt ? new Date(patch.openingSentAt) : undefined,
     followCheckedAt: patch.followCheckedAt ? new Date(patch.followCheckedAt) : undefined,
     finalDeliveredAt: patch.finalDeliveredAt ? new Date(patch.finalDeliveredAt) : undefined,
+    deliveryClickedAt: patch.deliveryClickedAt ? new Date(patch.deliveryClickedAt) : undefined,
     messagingWindowExpiresAt: patch.messagingWindowExpiresAt ? new Date(patch.messagingWindowExpiresAt) : undefined,
     ...clearedErrors,
   };
@@ -255,6 +258,22 @@ function mapDeletionRequest(record: {
     requestedAt: record.requestedAt.toISOString(),
     completedAt: record.completedAt?.toISOString(),
   };
+}
+
+/** Buckets ISO timestamps into UTC day counts over the trailing `days` window. */
+function bucketCountsByDay(timestamps: string[], days: number): { day: string; count: number }[] {
+  const buckets = new Map<string, number>();
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCDate(date.getUTCDate() - offset);
+    buckets.set(date.toISOString().slice(0, 10), 0);
+  }
+  for (const timestamp of timestamps) {
+    const day = timestamp.slice(0, 10);
+    if (buckets.has(day)) buckets.set(day, (buckets.get(day) ?? 0) + 1);
+  }
+  return [...buckets.entries()].map(([day, count]) => ({ day, count }));
 }
 
 export function createPrismaRepository(client = prisma): AutomationRepository {
@@ -486,6 +505,71 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       });
     },
 
+    async countParticipantsPerDay(workspaceId, days) {
+      const since = new Date();
+      since.setUTCHours(0, 0, 0, 0);
+      since.setUTCDate(since.getUTCDate() - (days - 1));
+      const rows = await client.automationParticipant.findMany({
+        where: { workspaceId, createdAt: { gte: since } },
+        select: { createdAt: true },
+      });
+      return bucketCountsByDay(rows.map((row) => row.createdAt.toISOString()), days);
+    },
+
+    async countExecutionsSentPerDay(workspaceId, days) {
+      const since = new Date();
+      since.setUTCHours(0, 0, 0, 0);
+      since.setUTCDate(since.getUTCDate() - (days - 1));
+      const rows = await client.automationExecution.findMany({
+        where: { workspaceId, status: "SENT", createdAt: { gte: since } },
+        select: { createdAt: true },
+      });
+      return bucketCountsByDay(rows.map((row) => row.createdAt.toISOString()), days);
+    },
+
+    async countParticipantsByMedia(workspaceId) {
+      // Three filtered group-bys are clearer and more portable than one raw query.
+      const [matchedRows, deliveredRows, clickedRows] = await Promise.all([
+        client.automationParticipant.groupBy({
+          by: ["sourceMediaId"],
+          where: { workspaceId },
+          _count: { _all: true },
+        }),
+        client.automationParticipant.groupBy({
+          by: ["sourceMediaId"],
+          where: { workspaceId, state: "LINK_SENT" },
+          _count: { _all: true },
+        }).catch(() => [] as { sourceMediaId: string; _count: { _all: number } }[]),
+        client.automationParticipant.groupBy({
+          by: ["sourceMediaId"],
+          where: { workspaceId, NOT: { deliveryClickedAt: null } },
+          _count: { _all: true },
+        }).catch(() => [] as { sourceMediaId: string; _count: { _all: number } }[]),
+      ]);
+      const delivered = new Map(deliveredRows.map((group) => [group.sourceMediaId, group._count._all]));
+      const clicked = new Map(clickedRows.map((group) => [group.sourceMediaId, group._count._all]));
+      return matchedRows.map((group) => ({
+        mediaId: group.sourceMediaId,
+        matched: group._count._all,
+        delivered: delivered.get(group.sourceMediaId) ?? 0,
+        clicked: clicked.get(group.sourceMediaId) ?? 0,
+      }));
+    },
+
+    async getParticipantById(id) {
+      const record = await client.automationParticipant.findUnique({ where: { id } });
+      return record ? mapParticipant(record) : null;
+    },
+
+    async markDeliveryClicked(id, atIso) {
+      // First click wins: only participants without a recorded click update.
+      const updated = await client.automationParticipant.updateMany({
+        where: { id, deliveryClickedAt: null },
+        data: { deliveryClickedAt: new Date(atIso) },
+      });
+      return updated.count === 1;
+    },
+
     async findWorkspaceIdByMemberEmail(email) {
       const member = await client.workspaceMember.findFirst({
         where: { email: email.toLowerCase() },
@@ -618,19 +702,14 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async upsertConnection(input) {
-      // One Instagram account per workspace: retire sibling connections and upsert the
-      // new one atomically so a crash between the two steps can't leave zero connections.
-      const record = await client.$transaction([
-        client.instagramConnection.deleteMany({
-          where: { workspaceId: input.workspaceId, NOT: { igUserId: input.igUserId } },
-        }),
-        client.instagramConnection.upsert({
-          where: { workspaceId_igUserId: { workspaceId: input.workspaceId, igUserId: input.igUserId } },
-          create: { id: createId("connection"), ...input },
-          update: input,
-        }),
-      ]);
-      return mapConnection(record[1]);
+      // Workspaces may connect several professional accounts; upsert per
+      // (workspaceId, igUserId) and leave sibling connections untouched.
+      const record = await client.instagramConnection.upsert({
+        where: { workspaceId_igUserId: { workspaceId: input.workspaceId, igUserId: input.igUserId } },
+        create: { id: createId("connection"), ...input },
+        update: input,
+      });
+      return mapConnection(record);
     },
 
     async recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult> {
@@ -831,6 +910,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       const records = await client.automationParticipant.findMany({
         where: { workspaceId, automationId },
         orderBy: { updatedAt: "desc" },
+        take: limit,
+      });
+      return records.map(mapParticipant);
+    },
+
+    async listRecentParticipants(workspaceId, limit) {
+      const records = await client.automationParticipant.findMany({
+        where: { workspaceId },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
         take: limit,
       });
       return records.map(mapParticipant);

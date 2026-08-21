@@ -27,6 +27,10 @@ export function matchesTrigger(flow: FlowDefinitionV1, event: NormalizedEvent): 
       return false;
     }
     if (trigger.match === "keyword" && !containsKeyword(event.text, trigger.keywords)) return false;
+  } else if (trigger.type === "referral") {
+    if (event.type !== "referral.received") return false;
+  } else if (trigger.type === "optin") {
+    if (event.type !== "optin.received") return false;
   } else {
     if (event.type !== "message.received" && event.type !== "postback.received") return false;
     if (trigger.match === "keyword" && !containsKeyword(event.text, trigger.keywords)) return false;

@@ -1,7 +1,12 @@
 import { matchesTrigger } from "./match";
 import type { EvaluationResult, ExecutionAction, FlowDefinitionV1, NormalizedEvent } from "./types";
+import { withinSchedule } from "./types";
 
 export function evaluateFlow(flow: FlowDefinitionV1, event: NormalizedEvent): EvaluationResult {
+  if (!withinSchedule(flow.schedule, new Date(event.timestamp))) {
+    return { status: "skipped", reason: "outside scheduled window", actions: [] };
+  }
+
   if (!matchesTrigger(flow, event)) {
     return { status: "skipped", reason: "trigger did not match", actions: [] };
   }

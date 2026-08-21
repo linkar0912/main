@@ -4,6 +4,8 @@ import { unsealSecret } from "../security/secrets";
 import type { AutomationRepository, InstagramConnectionRecord } from "../repository";
 import { MetaApiError } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
+import { notifyWorkspaceManagers } from "../notifications";
+import { checkDailySendLimit } from "./send-limits";
 import {
   processCampaignEvent,
   processExistingCampaignParticipant,
@@ -128,6 +130,29 @@ export async function processNormalizedEvent(
         dedupeKey,
         status: "SKIPPED",
         reason: "Meta delivery is disabled in demo mode",
+      });
+      result.skipped += 1;
+      continue;
+    }
+
+    const dailyLimit = await checkDailySendLimit(automation.definition, {
+      workspaceId: mapping.workspaceId,
+      automationId: automation.id,
+    });
+    if (!dailyLimit.allowed) {
+      void notifyWorkspaceManagers(
+        mapping.workspaceId,
+        `limit:daily:${automation.id}:${new Date().toISOString().slice(0, 10)}`,
+        `Automation paused: daily send limit reached`,
+        `Your automation hit its daily send cap (${dailyLimit.reason}). It will resume automatically tomorrow, or raise the cap in the builder.`,
+      ).catch(() => undefined);
+      await repository.recordExecution({
+        workspaceId: mapping.workspaceId,
+        automationId: automation.id,
+        externalEventId: event.id,
+        dedupeKey,
+        status: "SKIPPED",
+        reason: dailyLimit.reason,
       });
       result.skipped += 1;
       continue;

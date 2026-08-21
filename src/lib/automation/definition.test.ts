@@ -42,6 +42,8 @@ describe("validateFlowDefinition", () => {
       actions: [{ type: "private_reply", text: "Here is the guide: https://example.com/guide" }],
     });
 
+    expect(flow.trigger.type).toBe("comment");
+    if (flow.trigger.type !== "comment") return;
     expect(flow.trigger.keywords).toEqual(["guide"]);
   });
 

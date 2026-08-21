@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { matchCampaign, selectPublicReply } from "./campaign-match";
 import { createInteractionPayload, decodeInteractionPayloadShape, readInteractionPayload } from "./postback";
 import type { FlowDefinitionV2, MediaSnapshot, NormalizedEvent } from "./types";
+import { withinSchedule } from "./types";
+import { getServerEnv } from "../env";
 import { MetaApiError, type MetaClient } from "../meta/client";
+import { notifyWorkspaceManagers } from "../notifications";
 import type { MetaConnection, MetaMedia, MetaMessage, MetaSendResult } from "../meta/types";
 import type {
   AutomationParticipantRecord,
@@ -98,6 +101,29 @@ function metaConnection(
     igUserId: connection.igUserId,
     accessToken: unsealSecret(connection.accessTokenEncrypted, tokenEncryptionKey),
   };
+}
+
+/**
+ * Picks one message variant per participant deterministically-ish: a random
+ * draw spread across the configured variants. Falls back to the base text.
+ */
+function pickVariant(text: string, variants: string[] | undefined): string {
+  const options = [text, ...(variants ?? [])].filter((candidate) => candidate.trim().length > 0);
+  if (options.length <= 1) return text;
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+/** Wraps the delivery link through the click-tracking redirect. */
+function trackedDeliveryUrl(participantId: string, targetUrl: string): string {
+  try {
+    return new URL(`/api/t/${participantId}`, getServerEnv().appUrl).toString();
+  } catch {
+    return targetUrl;
+  }
+}
+
+function monthKey(now = new Date()): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function actionDedupeKey(participantId: string, action: string): string {
@@ -635,6 +661,12 @@ async function deliverOpeningReply(
 ): Promise<AutomationParticipantRecord> {
   const dailyLimit = await checkDailySendLimit(definition, participant);
   if (!dailyLimit.allowed) {
+    void notifyWorkspaceManagers(
+      participant.workspaceId,
+      `limit:daily:${participant.automationId}:${new Date().toISOString().slice(0, 10)}`,
+      `Automation paused: daily send limit reached`,
+      `Your automation hit its daily send cap (${dailyLimit.reason}). It will resume automatically tomorrow, or raise the cap in the builder.`,
+    ).catch(() => undefined);
     const skipped = await ctx.repository.transitionParticipant(
       participant.id,
       ["COMMENT_MATCHED"],
@@ -644,6 +676,12 @@ async function deliverOpeningReply(
   }
   const monthlyLimit = await checkMonthlyParticipantLimit(participant);
   if (!monthlyLimit.allowed) {
+    void notifyWorkspaceManagers(
+      participant.workspaceId,
+      `limit:monthly:${participant.workspaceId}:${monthKey()}`,
+      `Workspace paused: monthly participant limit reached`,
+      `Your workspace reached this month's participant limit (${monthlyLimit.reason}). New comments are being skipped until the counter resets.`,
+    ).catch(() => undefined);
     const skipped = await ctx.repository.transitionParticipant(
       participant.id,
       ["COMMENT_MATCHED"],
@@ -651,7 +689,9 @@ async function deliverOpeningReply(
     );
     return skipped ?? participant;
   }
-  const openingText = renderTemplate(definition.openingMessage.text, { keyword: participant.matchedKeyword });
+  const openingText = renderTemplate(pickVariant(definition.openingMessage.text, definition.openingMessage.textVariants), {
+    keyword: participant.matchedKeyword,
+  });
   return guardedDelivery(
     participant,
     {
@@ -817,6 +857,12 @@ async function deliverFinalMessage(
 ): Promise<AutomationParticipantRecord> {
   const dailyLimit = await checkDailySendLimit(definition, verified);
   if (!dailyLimit.allowed) {
+    void notifyWorkspaceManagers(
+      verified.workspaceId,
+      `limit:daily:${verified.automationId}:${new Date().toISOString().slice(0, 10)}`,
+      `Automation paused: daily send limit reached`,
+      `Your automation hit its daily send cap (${dailyLimit.reason}). It will resume automatically tomorrow, or raise the cap in the builder.`,
+    ).catch(() => undefined);
     const skipped = await ctx.repository.transitionParticipant(
       verified.id,
       ["FOLLOW_VERIFIED"],
@@ -824,15 +870,21 @@ async function deliverFinalMessage(
     );
     return skipped ?? verified;
   }
-  const deliveryText = renderTemplate(definition.delivery.text, { keyword: verified.matchedKeyword });
+  const deliveryText = renderTemplate(pickVariant(definition.delivery.text, definition.delivery.textVariants), {
+    keyword: verified.matchedKeyword,
+    post_link: verified.sourceMediaSnapshot?.permalink,
+  });
+  // Deliveries point at the click-tracking redirect so link performance is
+  // measurable per participant; the redirect forwards to the real target.
+  const deliveryUrl = trackedDeliveryUrl(verified.id, definition.delivery.url);
   const message: MetaMessage = definition.delivery.buttonLabel
     ? {
       type: "button",
       text: deliveryText,
       buttonLabel: definition.delivery.buttonLabel,
-      url: definition.delivery.url,
+      url: deliveryUrl,
     }
-    : { type: "link", text: deliveryText, url: definition.delivery.url };
+    : { type: "link", text: deliveryText, url: deliveryUrl };
 
   return guardedDelivery(
     verified,
@@ -904,6 +956,25 @@ async function verifyAndDeliver(
       finalDeliveryStatus: "PENDING",
     },
   );
+  if (!verified) return currentParticipant(participant, ctx.repository);
+  return deliverFinalMessage(verified, definition, event, ctx);
+}
+
+/** Opt-ins on ungated campaigns skip follower verification entirely. */
+async function deliverWithoutFollowGate(
+  participant: AutomationParticipantRecord,
+  definition: FlowDefinitionV2,
+  event: NormalizedEvent,
+  ctx: DeliveryContext,
+): Promise<AutomationParticipantRecord> {
+  const verified = await ctx.repository.transitionParticipant(participant.id, ["OPTED_IN"], {
+    state: "FOLLOW_VERIFIED",
+    followStatus: true,
+    followCheckedAt: new Date(event.timestamp).toISOString(),
+    followCheckError: undefined,
+    messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+    finalDeliveryStatus: "PENDING",
+  });
   if (!verified) return currentParticipant(participant, ctx.repository);
   return deliverFinalMessage(verified, definition, event, ctx);
 }
@@ -996,6 +1067,16 @@ export async function processCampaignEvent(
 
   const match = matchCampaign(campaign.definition, event);
   if (!match.matched) return emptyResult();
+
+  if (!withinSchedule(campaign.definition.schedule, new Date(event.timestamp))) {
+    return recordCampaignConfigurationResult(
+      event,
+      campaign,
+      repository,
+      "SKIPPED",
+      "outside scheduled window",
+    );
+  }
 
   if (!event.commentId || !event.mediaId) {
     return recordCampaignConfigurationResult(
@@ -1260,9 +1341,6 @@ export async function processPendingCampaignInteraction(
   const followCheckAction = payload.action === "recheck"
     ? `follow_check:recheck:${participant.recheckCount + 1}`
     : "follow_check:opt_in";
-  if (!await actionClaim(participant, repository, followCheckAction, event.id)) {
-    return { handled: true, result: handledResult(participant.id) };
-  }
 
   const ctx: DeliveryContext = {
     client: options.client,
@@ -1272,6 +1350,33 @@ export async function processPendingCampaignInteraction(
     finalAttempt: options.finalAttempt === true,
     dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
   };
+
+  // Ungated campaigns deliver straight after the opt-in tap — no follower
+  // verification call to Meta and no FOLLOW_REQUIRED detour.
+  if (definition.followGate.required === false && payload.action === "opt_in") {
+    if (!await actionClaim(participant, repository, "direct_delivery:opt_in", event.id)) {
+      return { handled: true, result: handledResult(participant.id) };
+    }
+    let ungated: AutomationParticipantRecord;
+    try {
+      ungated = await deliverWithoutFollowGate(participant, definition, event, ctx);
+    } catch (error) {
+      await releaseAction(participant, repository, "direct_delivery:opt_in");
+      throw error;
+    }
+    await completeAction(participant, repository, "direct_delivery:opt_in", "SENT");
+    if (ungated.state === "LINK_SENT") {
+      return { handled: true, result: handledResult(ungated.id, { sent: 1 }) };
+    }
+    if (ungated.state === "FAILED") {
+      return { handled: true, result: handledResult(ungated.id, { failed: 1 }) };
+    }
+    return { handled: true, result: handledResult(ungated.id) };
+  }
+
+  if (!await actionClaim(participant, repository, followCheckAction, event.id)) {
+    return { handled: true, result: handledResult(participant.id) };
+  }
 
   let follows: boolean;
   try {

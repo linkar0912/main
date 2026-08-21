@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -62,13 +62,49 @@ function parseKeywords(value: string): string[] {
   return keywords;
 }
 
-/** Legacy single-response flow. Kept unchanged so existing version 1 automations remain editable. */
+/** Classic single/multi-response flow: comment, DM, referral, and opt-in triggers. */
 const defaultDefinitionV1: FlowDefinitionV1 = {
   version: 1,
   trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
   conditions: [],
   actions: [{ type: "private_reply", text: "Thanks for asking — I’ll send that over now." }],
 };
+
+type ClassicTriggerType = FlowDefinitionV1["trigger"]["type"];
+const MAX_CLASSIC_ACTIONS = 3;
+
+function classicActionOptions(trigger: ClassicTriggerType): { value: FlowAction["type"]; label: string; description: string }[] {
+  if (trigger === "comment") {
+    return [{ value: "private_reply", label: "Private reply", description: "Reply to the comment privately" }];
+  }
+  return [
+    { value: "send_text", label: "Send a DM", description: "Send a plain text message" },
+    { value: "send_link", label: "Send a link", description: "Deliver a link in a DM" },
+    { value: "send_button", label: "Send a button", description: "Deliver a tappable link" },
+  ];
+}
+
+function newClassicAction(type: FlowAction["type"]): FlowAction {
+  if (type === "private_reply") return { type, text: "" };
+  if (type === "send_text") return { type, text: "" };
+  if (type === "send_link") return { type, text: "", url: "" };
+  return { type, text: "", buttonLabel: "Open link", url: "" };
+}
+
+/** datetime-local inputs produce "" or "YYYY-MM-DDTHH:mm" in the local zone. */
+function localInputToIso(value: string): string | undefined {
+  if (!value.trim()) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+function isoToLocalInput(value: string | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 function AutomationBuilderV1({
   automationId,
@@ -82,14 +118,22 @@ function AutomationBuilderV1({
   onSaved?: (automation: unknown) => void;
 }) {
   const [name, setName] = useState(initialName);
-  const [triggerType, setTriggerType] = useState<"comment" | "message">(initialDefinition.trigger.type);
-  const [triggerMatch, setTriggerMatch] = useState<"keyword" | "any">(initialDefinition.trigger.match);
-  const [keywords, setKeywords] = useState(commaSeparated(initialDefinition.trigger.keywords));
+  const [triggerType, setTriggerType] = useState<ClassicTriggerType>(initialDefinition.trigger.type);
+  const [triggerMatch, setTriggerMatch] = useState<"keyword" | "any">(
+    initialDefinition.trigger.type === "comment" || initialDefinition.trigger.type === "message"
+      ? initialDefinition.trigger.match
+      : "keyword",
+  );
+  const [keywords, setKeywords] = useState(
+    initialDefinition.trigger.type === "comment" || initialDefinition.trigger.type === "message"
+      ? commaSeparated(initialDefinition.trigger.keywords)
+      : "",
+  );
   const [mediaIds, setMediaIds] = useState(
     initialDefinition.trigger.type === "comment" ? commaSeparated(initialDefinition.trigger.mediaIds) : "",
   );
-  const [conditionType, setConditionType] = useState<"none" | FlowCondition["type"]>(
-    initialDefinition.conditions[0]?.type ?? "none",
+  const [conditionType, setConditionType] = useState<"" | FlowCondition["type"]>(
+    initialDefinition.conditions[0]?.type ?? "",
   );
   const [conditionValue, setConditionValue] = useState(() => {
     const condition = initialDefinition.conditions[0];
@@ -98,72 +142,90 @@ function AutomationBuilderV1({
       ? commaSeparated(condition.keywords)
       : commaSeparated(condition.mediaIds);
   });
-  const [actionType, setActionType] = useState<FlowAction["type"]>(initialDefinition.actions[0]?.type ?? "private_reply");
-  const [messageText, setMessageText] = useState(initialDefinition.actions[0]?.text ?? "");
-  const [linkUrl, setLinkUrl] = useState(() => {
-    const action = initialDefinition.actions[0];
-    return action?.type === "send_link" || action?.type === "send_button" ? action.url : "";
-  });
-  const [buttonLabel, setButtonLabel] = useState(() => {
-    const action = initialDefinition.actions[0];
-    return action?.type === "send_button" ? action.buttonLabel : "Open link";
-  });
+  const [actions, setActions] = useState<FlowAction[]>(() =>
+    initialDefinition.actions.length > 0 ? initialDefinition.actions : [newClassicAction("private_reply")],
+  );
+  const [scheduleStart, setScheduleStart] = useState(isoToLocalInput(initialDefinition.schedule?.startsAt));
+  const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
+  const [dailyLimit, setDailyLimit] = useState(initialDefinition.dailySendLimit ? String(initialDefinition.dailySendLimit) : "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
-  const actionOptions = useMemo(
-    () =>
-      triggerType === "comment"
-        ? [
-            { value: "private_reply", label: "Private reply", description: "Reply to the comment privately" },
-          ]
-        : [
-            { value: "send_text", label: "Send a DM", description: "Reply to the incoming message" },
-            { value: "send_link", label: "Send a link", description: "Deliver a link in a DM" },
-            { value: "send_button", label: "Send a button", description: "Deliver a tappable link" },
-          ],
-    [triggerType],
-  );
+  const usesTextTrigger = triggerType === "comment" || triggerType === "message";
+  const allowedActionTypes = classicActionOptions(triggerType);
 
-  function changeTriggerType(value: "comment" | "message") {
+  function updateAction(index: number, patch: Partial<FlowAction>) {
+    setActions((current) => current.map((action, actionIndex) => {
+      if (actionIndex !== index) return action;
+      return { ...action, ...patch } as FlowAction;
+    }));
+  }
+
+  function changeActionType(index: number, type: FlowAction["type"]) {
+    setActions((current) => current.map((action, actionIndex) => {
+      if (actionIndex !== index) return action;
+      const previous = action;
+      if (type === previous.type) return previous;
+      if (type === "send_link") return { type, text: previous.text, url: "" };
+      if (type === "send_button") return { type, text: previous.text, url: "", buttonLabel: "Open link" };
+      return { type, text: previous.text };
+    }));
+  }
+
+  function changeTriggerType(value: ClassicTriggerType) {
     setTriggerType(value);
-    if (value === "message" && actionType === "private_reply") setActionType("send_text");
-    if (value === "comment") setActionType("private_reply");
+    if (value === "comment") {
+      setActions((current) => (current.every((action) => action.type === "private_reply") ? current : [newClassicAction("private_reply")]));
+      setTriggerMatch((current) => current);
+    }
+    if (value === "message" || value === "referral" || value === "optin") {
+      setActions((current) => current.filter((action) => action.type !== "private_reply").length > 0
+        ? current.filter((action) => action.type !== "private_reply")
+        : [newClassicAction("send_text")]);
+    }
   }
 
   function buildDefinition(): FlowDefinitionV1 {
-    const trigger =
+    const trigger: FlowDefinitionV1["trigger"] =
       triggerType === "comment"
         ? {
-            type: "comment" as const,
+            type: "comment",
             match: triggerMatch,
             keywords: triggerMatch === "keyword" ? parseKeywords(keywords) : [],
             mediaIds: parseCommaSeparated(mediaIds),
           }
-        : {
-            type: "message" as const,
-            match: triggerMatch,
-            keywords: triggerMatch === "keyword" ? parseKeywords(keywords) : [],
-          };
+        : triggerType === "message"
+          ? {
+              type: "message",
+              match: triggerMatch,
+              keywords: triggerMatch === "keyword" ? parseKeywords(keywords) : [],
+            }
+          : { type: triggerType };
 
     const conditions: FlowCondition[] =
-      conditionType === "none"
+      !usesTextTrigger || conditionType === ""
         ? []
         : conditionType === "contains_keyword"
           ? [{ type: conditionType, keywords: parseKeywords(conditionValue) }]
           : [{ type: conditionType, mediaIds: parseCommaSeparated(conditionValue) }];
 
-    const action: FlowAction =
-      actionType === "private_reply"
-        ? { type: actionType, text: messageText }
-        : actionType === "send_text"
-          ? { type: actionType, text: messageText }
-          : actionType === "send_link"
-            ? { type: actionType, text: messageText, url: linkUrl }
-            : { type: actionType, text: messageText, buttonLabel, url: linkUrl };
+    const schedule: FlowDefinitionV1["schedule"] = {};
+    const startsAt = localInputToIso(scheduleStart);
+    const endsAt = localInputToIso(scheduleEnd);
+    if (startsAt) schedule.startsAt = startsAt;
+    if (endsAt) schedule.endsAt = endsAt;
 
-    return { version: 1, trigger, conditions, actions: [action] };
+    const parsedLimit = Number.parseInt(dailyLimit, 10);
+
+    return {
+      version: 1,
+      trigger,
+      conditions,
+      actions: actions.map((action) => ({ ...action, text: action.text.trim() })),
+      ...(Number.isFinite(parsedLimit) && parsedLimit > 0 ? { dailySendLimit: parsedLimit } : {}),
+      ...(startsAt || endsAt ? { schedule } : {}),
+    };
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -172,6 +234,32 @@ function AutomationBuilderV1({
     setSaved(false);
     if (!name.trim()) {
       setError("Give this automation a name first.");
+      return;
+    }
+    if (usesTextTrigger && triggerMatch === "keyword" && parseKeywords(keywords).length === 0) {
+      setError("Add at least one keyword.");
+      return;
+    }
+    const startsAt = localInputToIso(scheduleStart);
+    const endsAt = localInputToIso(scheduleEnd);
+    if (scheduleStart && !startsAt) {
+      setError("Enter a valid start date and time.");
+      return;
+    }
+    if (scheduleEnd && !endsAt) {
+      setError("Enter a valid end date and time.");
+      return;
+    }
+    if (startsAt && endsAt && startsAt > endsAt) {
+      setError("The start must come before the end of the schedule.");
+      return;
+    }
+    if (actions.some((action) => !action.text.trim())) {
+      setError("Every message needs text.");
+      return;
+    }
+    if (actions.some((action) => (action.type === "send_link" || action.type === "send_button") && !action.url.trim())) {
+      setError("Link actions need a URL.");
       return;
     }
     setSaving(true);
@@ -232,30 +320,34 @@ function AutomationBuilderV1({
                   <select
                     aria-label="Trigger source"
                     value={triggerType}
-                    onChange={(event) => changeTriggerType(event.target.value as "comment" | "message")}
+                    onChange={(event) => changeTriggerType(event.target.value as ClassicTriggerType)}
                   >
                     <option value="comment">Instagram comment</option>
                     <option value="message">Instagram DM</option>
+                    <option value="referral">Referral link tap</option>
+                    <option value="optin">Opt-in tap</option>
                   </select>
                   <ChevronDown size={16} />
                 </span>
               </label>
-              <label className="field">
-                <span>Match mode</span>
-                <span className="select-wrap">
-                  <select
-                    aria-label="Match mode"
-                    value={triggerMatch}
-                    onChange={(event) => setTriggerMatch(event.target.value as "keyword" | "any")}
-                  >
-                    <option value="keyword">A keyword</option>
-                    <option value="any">Any {triggerType === "comment" ? "comment" : "message"}</option>
-                  </select>
-                  <ChevronDown size={16} />
-                </span>
-              </label>
+              {usesTextTrigger && (
+                <label className="field">
+                  <span>Match mode</span>
+                  <span className="select-wrap">
+                    <select
+                      aria-label="Match mode"
+                      value={triggerMatch}
+                      onChange={(event) => setTriggerMatch(event.target.value as "keyword" | "any")}
+                    >
+                      <option value="keyword">A keyword</option>
+                      <option value="any">Any {triggerType === "comment" ? "comment" : "message"}</option>
+                    </select>
+                    <ChevronDown size={16} />
+                  </span>
+                </label>
+              )}
             </div>
-            {triggerMatch === "keyword" && (
+            {usesTextTrigger && triggerMatch === "keyword" && (
               <label className="field field-spaced">
                 <span>Keywords</span>
                 <input
@@ -283,100 +375,178 @@ function AutomationBuilderV1({
 
         <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
 
+        {usesTextTrigger && (
+          <section className="flow-step">
+            <div className="step-marker condition-marker">02</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Condition <em>optional</em></p>
+                  <h2>Keep the audience precise</h2>
+                </div>
+                <CircleHelp size={21} strokeWidth={1.7} />
+              </div>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Only continue if</span>
+                  <span className="select-wrap">
+                    <select
+                      aria-label="Condition type"
+                      value={conditionType}
+                      onChange={(event) => setConditionType(event.target.value as "" | FlowCondition["type"])}
+                    >
+                      <option value="">No extra condition</option>
+                      <option value="contains_keyword">The text contains a keyword</option>
+                      <option value="media_is">The post is one of these IDs</option>
+                    </select>
+                    <ChevronDown size={16} />
+                  </span>
+                </label>
+                {conditionType !== "" && (
+                  <label className="field">
+                    <span>{conditionType === "contains_keyword" ? "Condition keywords" : "Post IDs"}</span>
+                    <input
+                      aria-label="Condition value"
+                      value={conditionValue}
+                      onChange={(event) => setConditionValue(event.target.value)}
+                      placeholder="Separate values with commas"
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
+
         <section className="flow-step">
-          <div className="step-marker condition-marker">02</div>
+          <div className="step-marker action-marker">{usesTextTrigger ? "03" : "02"}</div>
           <div className="step-content">
             <div className="step-heading">
               <div>
-                <p className="eyebrow">Condition <em>optional</em></p>
-                <h2>Keep the audience precise</h2>
+                <p className="eyebrow">{actions.length > 1 ? "Actions" : "Action"}</p>
+                <h2>What should the person receive?</h2>
               </div>
-              <CircleHelp size={21} strokeWidth={1.7} />
+              <Send size={21} strokeWidth={1.7} />
             </div>
-            <div className="field-grid">
-              <label className="field">
-                <span>Only continue if</span>
-                <span className="select-wrap">
-                  <select
-                    aria-label="Condition type"
-                    value={conditionType}
-                    onChange={(event) => setConditionType(event.target.value as "none" | FlowCondition["type"])}
-                  >
-                    <option value="none">No extra condition</option>
-                    <option value="contains_keyword">The text contains a keyword</option>
-                    <option value="media_is">The post is one of these IDs</option>
-                  </select>
-                  <ChevronDown size={16} />
-                </span>
-              </label>
-              {conditionType !== "none" && (
+            {actions.map((action, index) => (
+              <div className="classic-action" key={index}>
+                <div className="classic-action-head">
+                  <span className="classic-action-index">Step {index + 1}</span>
+                  {!usesTextTrigger && (
+                    <span className="select-wrap">
+                      <select
+                        aria-label={`Action ${index + 1} type`}
+                        value={action.type}
+                        onChange={(event) => changeActionType(index, event.target.value as FlowAction["type"])}
+                      >
+                        {allowedActionTypes.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={16} />
+                    </span>
+                  )}
+                  {actions.length > 1 && (
+                    <button
+                      className="icon-button"
+                      type="button"
+                      aria-label={`Remove step ${index + 1}`}
+                      onClick={() => setActions((current) => current.filter((_, actionIndex) => actionIndex !== index))}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
                 <label className="field">
-                  <span>{conditionType === "contains_keyword" ? "Condition keywords" : "Post IDs"}</span>
-                  <input
-                    aria-label="Condition value"
-                    value={conditionValue}
-                    onChange={(event) => setConditionValue(event.target.value)}
-                    placeholder="Separate values with commas"
+                  <span>{actions.length > 1 ? `Step ${index + 1} message` : "Message text"}</span>
+                  <textarea
+                    aria-label={actions.length > 1 ? `Step ${index + 1} message` : "Message text"}
+                    value={action.text}
+                    onChange={(event) => updateAction(index, { text: event.target.value })}
+                    rows={3}
+                    placeholder="Write the exact message to send"
+                    maxLength={1_000}
                   />
                 </label>
-              )}
-            </div>
+                {(action.type === "send_link" || action.type === "send_button") && (
+                  <div className="field-grid field-spaced">
+                    <label className="field">
+                      <span>{actions.length > 1 ? `Step ${index + 1} link URL` : "Link URL"}</span>
+                      <div className="input-with-icon"><Link2 size={16} /><input aria-label={actions.length > 1 ? `Step ${index + 1} link URL` : "Link URL"} value={action.url} onChange={(event) => updateAction(index, { url: event.target.value } as Partial<FlowAction>)} placeholder="https://your-site.com/guide" /></div>
+                    </label>
+                    {action.type === "send_button" && (
+                      <label className="field">
+                        <span>{actions.length > 1 ? `Step ${index + 1} button label` : "Button label"}</span>
+                        <input aria-label={actions.length > 1 ? `Step ${index + 1} button label` : "Button label"} value={action.buttonLabel} onChange={(event) => updateAction(index, { buttonLabel: event.target.value } as Partial<FlowAction>)} placeholder="Open guide" />
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            {!usesTextTrigger && actions.length < MAX_CLASSIC_ACTIONS && (
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => setActions((current) => [...current, newClassicAction("send_text")])}
+              >
+                <Plus size={15} /> Add another message
+              </button>
+            )}
+            {!usesTextTrigger && actions.length > 1 && (
+              <p className="muted">Messages are sent in order, one after another.</p>
+            )}
           </div>
         </section>
 
         <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
 
         <section className="flow-step">
-          <div className="step-marker action-marker">03</div>
+          <div className="step-marker guard-marker">{usesTextTrigger ? "04" : "03"}</div>
           <div className="step-content">
             <div className="step-heading">
               <div>
-                <p className="eyebrow">Action</p>
-                <h2>What should the person receive?</h2>
+                <p className="eyebrow">Guardrails <em>optional</em></p>
+                <h2>Set limits and timing</h2>
               </div>
-              <Send size={21} strokeWidth={1.7} />
+              <ShieldCheck size={21} strokeWidth={1.7} />
             </div>
             <label className="field">
-              <span>Action type</span>
-              <span className="select-wrap">
-                <select
-                  aria-label="Action type"
-                  value={actionType}
-                  onChange={(event) => setActionType(event.target.value as FlowAction["type"])}
-                >
-                  {actionOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-                <ChevronDown size={16} />
-              </span>
-              <small>{actionOptions.find((option) => option.value === actionType)?.description}</small>
-            </label>
-            <label className="field field-spaced">
-              <span>Message text</span>
-              <textarea
-                aria-label="Message text"
-                value={messageText}
-                onChange={(event) => setMessageText(event.target.value)}
-                rows={3}
-                placeholder="Write the exact message to send"
-                maxLength={1_000}
+              <span>Daily send limit</span>
+              <input
+                aria-label="Daily send limit"
+                type="number"
+                min={1}
+                max={1000}
+                value={dailyLimit}
+                onChange={(event) => setDailyLimit(event.target.value)}
+                placeholder="No limit"
               />
+              <small>Pauses the automation for the rest of the day when the cap is reached.</small>
             </label>
-            {(actionType === "send_link" || actionType === "send_button") && (
-              <div className="field-grid field-spaced">
-                <label className="field">
-                  <span>Link URL</span>
-                  <div className="input-with-icon"><Link2 size={16} /><input aria-label="Link URL" value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://your-site.com/guide" /></div>
-                </label>
-                {actionType === "send_button" && (
-                  <label className="field">
-                    <span>Button label</span>
-                    <input aria-label="Button label" value={buttonLabel} onChange={(event) => setButtonLabel(event.target.value)} placeholder="Open guide" />
-                  </label>
-                )}
-              </div>
-            )}
+            <div className="field-grid field-spaced">
+              <label className="field">
+                <span>Active from <em>optional</em></span>
+                <input
+                  aria-label="Schedule start"
+                  type="datetime-local"
+                  value={scheduleStart}
+                  onChange={(event) => setScheduleStart(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Active until <em>optional</em></span>
+                <input
+                  aria-label="Schedule end"
+                  type="datetime-local"
+                  value={scheduleEnd}
+                  onChange={(event) => setScheduleEnd(event.target.value)}
+                />
+              </label>
+            </div>
+            <p className="muted">Events outside the window are ignored — perfect for launches and limited offers.</p>
           </div>
         </section>
 
@@ -394,23 +564,27 @@ function AutomationBuilderV1({
       <aside className="builder-preview">
         <p className="eyebrow">Signal preview</p>
         <div className="preview-line" />
-        <p className="preview-kicker">A person writes</p>
+        <p className="preview-kicker">
+          {triggerType === "comment" ? "A person comments" : triggerType === "message" ? "A person DMs you" : triggerType === "referral" ? "Someone taps your referral link" : "Someone taps the opt-in button"}
+        </p>
         <div className="preview-message">
           <span className="preview-avatar">P</span>
           <div>
-            <strong>{triggerType === "comment" ? "“guide”" : "“price please”"}</strong>
-            <small>{triggerType === "comment" ? "on your Instagram post" : "in Instagram DMs"}</small>
+            <strong>{usesTextTrigger ? (triggerMatch === "keyword" ? `“${parseKeywords(keywords)[0] ?? "your keyword"}”` : "any message") : "Tap"}</strong>
+            <small>{triggerType === "comment" ? "on your Instagram post" : triggerType === "message" ? "in Instagram DMs" : "in Instagram DMs"}</small>
           </div>
         </div>
         <div className="preview-arrow"><ArrowRight size={18} /></div>
         <p className="preview-kicker">ReplyConnect sends</p>
-        <div className="preview-message preview-response">
-          <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
-          <div>
-            <strong>{messageText || "Your exact reply appears here"}</strong>
-            {linkUrl && <small>{linkUrl}</small>}
+        {actions.map((action, index) => (
+          <div className="preview-message preview-response" key={index}>
+            <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
+            <div>
+              <strong>{action.text || "Your exact reply appears here"}</strong>
+              {"url" in action && action.url ? <small>{action.url}</small> : null}
+            </div>
           </div>
-        </div>
+        ))}
         <div className="preview-note">
           <span className="signal-dot" />
           <span>No AI. Every reply follows your saved rule.</span>
@@ -466,6 +640,12 @@ function AutomationBuilderV2({
   const [optInButtonLabel, setOptInButtonLabel] = useState(initialDefinition.openingMessage.optInButtonLabel);
   const [notFollowingMessage, setNotFollowingMessage] = useState(initialDefinition.followGate.notFollowingMessage);
   const [recheckButtonLabel, setRecheckButtonLabel] = useState(initialDefinition.followGate.recheckButtonLabel);
+  const [followGateRequired, setFollowGateRequired] = useState(initialDefinition.followGate.required);
+  const [openingVariants, setOpeningVariants] = useState((initialDefinition.openingMessage.textVariants ?? []).join("\n"));
+  const [deliveryVariants, setDeliveryVariants] = useState((initialDefinition.delivery.textVariants ?? []).join("\n"));
+  const [scheduleStart, setScheduleStart] = useState(isoToLocalInput(initialDefinition.schedule?.startsAt));
+  const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
+  const [campaignDailyLimit, setCampaignDailyLimit] = useState(initialDefinition.dailySendLimit ? String(initialDefinition.dailySendLimit) : "");
   const [deliveryText, setDeliveryText] = useState(initialDefinition.delivery.text);
   const [deliveryUrl, setDeliveryUrl] = useState(initialDefinition.delivery.url);
   const [deliveryButtonLabel, setDeliveryButtonLabel] = useState(initialDefinition.delivery.buttonLabel ?? "");
@@ -495,6 +675,15 @@ function AutomationBuilderV2({
   }
 
   function buildDefinition(): FlowDefinitionV2 {
+    const schedule: FlowDefinitionV2["schedule"] = {};
+    const startsAt = localInputToIso(scheduleStart);
+    const endsAt = localInputToIso(scheduleEnd);
+    if (startsAt) schedule.startsAt = startsAt;
+    if (endsAt) schedule.endsAt = endsAt;
+    const parsedLimit = Number.parseInt(campaignDailyLimit, 10);
+    const splitVariants = (value: string) =>
+      value.split("\n").map((variant) => variant.trim()).filter(Boolean);
+
     return {
       version: 2,
       trigger: {
@@ -506,13 +695,24 @@ function AutomationBuilderV2({
         keywords: match === "keyword" ? parseKeywords(keywords) : [],
       },
       publicReplies: publicReplies.map((reply) => reply.trim()).filter(Boolean),
-      openingMessage: { text: openingText.trim(), optInButtonLabel: optInButtonLabel.trim() },
-      followGate: { required: true, notFollowingMessage: notFollowingMessage.trim(), recheckButtonLabel: recheckButtonLabel.trim() },
+      openingMessage: {
+        text: openingText.trim(),
+        ...(splitVariants(openingVariants).length > 0 ? { textVariants: splitVariants(openingVariants) } : {}),
+        optInButtonLabel: optInButtonLabel.trim(),
+      },
+      followGate: {
+        required: followGateRequired,
+        notFollowingMessage: followGateRequired ? notFollowingMessage.trim() : "",
+        recheckButtonLabel: followGateRequired ? recheckButtonLabel.trim() : "",
+      },
       delivery: {
         text: deliveryText.trim(),
+        ...(splitVariants(deliveryVariants).length > 0 ? { textVariants: splitVariants(deliveryVariants) } : {}),
         url: deliveryUrl.trim(),
         ...(deliveryButtonLabel.trim() ? { buttonLabel: deliveryButtonLabel.trim() } : {}),
       },
+      ...(Number.isFinite(parsedLimit) && parsedLimit > 0 ? { dailySendLimit: parsedLimit } : {}),
+      ...(startsAt || endsAt ? { schedule } : {}),
     };
   }
 
@@ -525,7 +725,15 @@ function AutomationBuilderV2({
     }
     if (optInButtonLabel.trim().length > QUICK_REPLY_LABEL_MAX_LENGTH) return "Quick-reply labels must be 20 characters or fewer.";
     if (recheckButtonLabel.trim().length > QUICK_REPLY_LABEL_MAX_LENGTH) return "Quick-reply labels must be 20 characters or fewer.";
+    if (followGateRequired && !notFollowingMessage.trim()) return "Write the not-following prompt, or turn the follow gate off.";
     if (!deliveryUrl.trim()) return "Add a delivery link.";
+    const startsAt = localInputToIso(scheduleStart);
+    const endsAt = localInputToIso(scheduleEnd);
+    if (scheduleStart && !startsAt) return "Enter a valid schedule start.";
+    if (scheduleEnd && !endsAt) return "Enter a valid schedule end.";
+    if (startsAt && endsAt && startsAt > endsAt) return "The start must come before the end of the schedule.";
+    if (openingVariants.split("\n").filter((variant) => variant.trim()).length > 5) return "Use up to 5 opening message variations.";
+    if (deliveryVariants.split("\n").filter((variant) => variant.trim()).length > 5) return "Use up to 5 delivery message variations.";
     try {
       const url = new URL(deliveryUrl.trim());
       if (url.protocol !== "https:" && !isLocalDeliveryUrl(url)) return "Delivery links must use HTTPS.";
@@ -761,6 +969,17 @@ function AutomationBuilderV2({
               />
               <small>{optInButtonLabel.length}/{QUICK_REPLY_LABEL_MAX_LENGTH} characters</small>
             </label>
+            <label className="field field-spaced">
+              <span>Opening copy variations <em>optional</em></span>
+              <textarea
+                aria-label="Opening copy variations"
+                value={openingVariants}
+                onChange={(event) => setOpeningVariants(event.target.value)}
+                rows={3}
+                placeholder={"One variation per line — one is picked per person at random"}
+              />
+              <small>Variations keep the same opt-in button and rotate per participant.</small>
+            </label>
           </div>
         </section>
 
@@ -776,12 +995,24 @@ function AutomationBuilderV2({
               </div>
               <ShieldCheck size={21} strokeWidth={1.7} />
             </div>
-            <FollowGateFields
-              notFollowingMessage={notFollowingMessage}
-              onNotFollowingMessageChange={setNotFollowingMessage}
-              recheckButtonLabel={recheckButtonLabel}
-              onRecheckButtonLabelChange={setRecheckButtonLabel}
-            />
+            <label className="field field-spaced gate-toggle">
+              <input
+                type="checkbox"
+                role="switch"
+                aria-label="Follow gate enabled"
+                checked={followGateRequired}
+                onChange={(event) => setFollowGateRequired(event.target.checked)}
+              />
+              <span>{followGateRequired ? "On — verify they follow you before delivering" : "Off — deliver right after the opt-in tap"}</span>
+            </label>
+            {followGateRequired && (
+              <FollowGateFields
+                notFollowingMessage={notFollowingMessage}
+                onNotFollowingMessageChange={setNotFollowingMessage}
+                recheckButtonLabel={recheckButtonLabel}
+                onRecheckButtonLabelChange={setRecheckButtonLabel}
+              />
+            )}
           </div>
         </section>
 
@@ -838,6 +1069,65 @@ function AutomationBuilderV2({
                 />
               </label>
             </div>
+            <label className="field field-spaced">
+              <span>Delivery copy variations <em>optional</em></span>
+              <textarea
+                aria-label="Delivery copy variations"
+                value={deliveryVariants}
+                onChange={(event) => setDeliveryVariants(event.target.value)}
+                rows={3}
+                placeholder={"One variation per line — one is picked per person at random"}
+              />
+            </label>
+          </div>
+        </section>
+
+        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
+
+        <section className="flow-step">
+          <div className="step-marker guard-marker">07</div>
+          <div className="step-content">
+            <div className="step-heading">
+              <div>
+                <p className="eyebrow">Guardrails <em>optional</em></p>
+                <h2>Set limits and timing</h2>
+              </div>
+              <ShieldCheck size={21} strokeWidth={1.7} />
+            </div>
+            <label className="field">
+              <span>Daily send limit</span>
+              <input
+                aria-label="Campaign daily send limit"
+                type="number"
+                min={1}
+                max={1000}
+                value={campaignDailyLimit}
+                onChange={(event) => setCampaignDailyLimit(event.target.value)}
+                placeholder="No limit"
+              />
+              <small>Pauses new deliveries for the rest of the day when the cap is reached.</small>
+            </label>
+            <div className="field-grid field-spaced">
+              <label className="field">
+                <span>Active from <em>optional</em></span>
+                <input
+                  aria-label="Campaign schedule start"
+                  type="datetime-local"
+                  value={scheduleStart}
+                  onChange={(event) => setScheduleStart(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Active until <em>optional</em></span>
+                <input
+                  aria-label="Campaign schedule end"
+                  type="datetime-local"
+                  value={scheduleEnd}
+                  onChange={(event) => setScheduleEnd(event.target.value)}
+                />
+              </label>
+            </div>
+            <p className="muted">Comments outside the window are ignored — perfect for launches and limited drops.</p>
           </div>
         </section>
 
@@ -857,8 +1147,14 @@ function AutomationBuilderV2({
               <li>Watching {sourceSummary}</li>
               <li>Triggered by {match === "keyword" ? (keywordList.length ? `a comment containing “${keywordList.join("”, “")}”` : "a keyword (add one below)") : "any comment"}</li>
               <li>{nonEmptyReplies.length || "No"} public reply variation{nonEmptyReplies.length === 1 ? "" : "s"} ready</li>
-              <li>Opening DM asks for a follow before delivering anything</li>
-              <li>Recheck button reads “{recheckButtonLabel || "add a label"}”</li>
+              {followGateRequired ? (
+                <>
+                  <li>Opening DM asks for a follow before delivering anything</li>
+                  <li>Recheck button reads “{recheckButtonLabel || "add a label"}”</li>
+                </>
+              ) : (
+                <li>Follow gate is off — the link goes out right after the opt-in tap</li>
+              )}
               <li>
                 Verified followers land on{" "}
                 {deliveryUrl ? (
@@ -867,6 +1163,10 @@ function AutomationBuilderV2({
                   "no link yet"
                 )}
               </li>
+              {campaignDailyLimit && <li>Daily send limit: {campaignDailyLimit}</li>}
+              {(scheduleStart || scheduleEnd) && (
+                <li>Active {scheduleStart ? `from ${scheduleStart}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${scheduleEnd}` : ""}</li>
+              )}
             </ul>
           </div>
         </section>
@@ -995,7 +1295,13 @@ function AutomationBuilderV2({
   );
 }
 
-export function AutomationBuilder({ automationId, initialName, initialDefinition, onSaved }: AutomationBuilderProps) {
+export function AutomationBuilder({
+  automationId,
+  initialName,
+  initialDefinition,
+  onSaved,
+  variant,
+}: AutomationBuilderProps & { variant?: "campaign" | "classic" }) {
   if (initialDefinition?.version === 1) {
     return (
       <AutomationBuilderV1
@@ -1006,11 +1312,20 @@ export function AutomationBuilder({ automationId, initialName, initialDefinition
       />
     );
   }
+  if (!initialDefinition && variant === "classic") {
+    return (
+      <AutomationBuilderV1
+        automationId={automationId}
+        initialName={initialName}
+        onSaved={onSaved}
+      />
+    );
+  }
   return (
     <AutomationBuilderV2
       automationId={automationId}
       initialName={initialName}
-      initialDefinition={initialDefinition}
+      initialDefinition={initialDefinition as FlowDefinitionV2 | undefined}
       onSaved={onSaved}
     />
   );

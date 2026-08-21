@@ -27,6 +27,22 @@ function now(): string {
   return new Date().toISOString();
 }
 
+/** Buckets ISO timestamps into UTC day counts over the trailing `days` window. */
+function bucketCountsByDay(timestamps: string[], days: number): { day: string; count: number }[] {
+  const buckets = new Map<string, number>();
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCDate(date.getUTCDate() - offset);
+    buckets.set(date.toISOString().slice(0, 10), 0);
+  }
+  for (const timestamp of timestamps) {
+    const day = timestamp.slice(0, 10);
+    if (buckets.has(day)) buckets.set(day, (buckets.get(day) ?? 0) + 1);
+  }
+  return [...buckets.entries()].map(([day, count]) => ({ day, count }));
+}
+
 function copy<T>(value: T): T {
   return structuredClone(value);
 }
@@ -213,6 +229,45 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       ).length;
     },
 
+    async countParticipantsPerDay(workspaceId, days) {
+      const timestamps = [...participants.values()]
+        .filter((participant) => participant.workspaceId === workspaceId)
+        .map((participant) => participant.createdAt);
+      return bucketCountsByDay(timestamps, days);
+    },
+
+    async countExecutionsSentPerDay(workspaceId, days) {
+      const timestamps = [...executions.values()]
+        .filter((execution) => execution.workspaceId === workspaceId && execution.status === "SENT")
+        .map((execution) => execution.createdAt);
+      return bucketCountsByDay(timestamps, days);
+    },
+
+    async countParticipantsByMedia(workspaceId) {
+      const byMedia = new Map<string, { matched: number; delivered: number; clicked: number }>();
+      for (const participant of participants.values()) {
+        if (participant.workspaceId !== workspaceId) continue;
+        const entry = byMedia.get(participant.sourceMediaId) ?? { matched: 0, delivered: 0, clicked: 0 };
+        entry.matched += 1;
+        if (participant.state === "LINK_SENT") entry.delivered += 1;
+        if (participant.deliveryClickedAt) entry.clicked += 1;
+        byMedia.set(participant.sourceMediaId, entry);
+      }
+      return [...byMedia.entries()].map(([mediaId, counts]) => ({ mediaId, ...counts }));
+    },
+
+    async getParticipantById(id) {
+      const record = participants.get(id);
+      return record ? copy(record) : null;
+    },
+
+    async markDeliveryClicked(id, atIso) {
+      const record = participants.get(id);
+      if (!record || record.deliveryClickedAt) return false;
+      participants.set(id, { ...record, deliveryClickedAt: atIso, updatedAt: now() });
+      return true;
+    },
+
     async findWorkspaceIdByMemberEmail(email) {
       return memberWorkspacesByEmail.get(email.toLowerCase()) ?? null;
     },
@@ -348,9 +403,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     },
 
     async upsertConnection(input) {
-      for (const [id, connection] of connections.entries()) {
-        if (connection.workspaceId === input.workspaceId && connection.igUserId !== input.igUserId) connections.delete(id);
-      }
+      // Several professional accounts may live in one workspace; keep siblings.
       const existing = [...connections.values()].find(
         (connection) => connection.workspaceId === input.workspaceId && connection.igUserId === input.igUserId,
       );
@@ -566,6 +619,15 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         [...participants.values()]
           .filter((participant) => participant.workspaceId === workspaceId && participant.automationId === automationId)
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .slice(0, limit),
+      );
+    },
+
+    async listRecentParticipants(workspaceId, limit) {
+      return copy(
+        [...participants.values()]
+          .filter((participant) => participant.workspaceId === workspaceId)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
           .slice(0, limit),
       );
     },
