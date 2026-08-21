@@ -1,10 +1,15 @@
-import { Queue } from "bullmq";
+import { Queue, type Job, type JobType } from "bullmq";
 import Redis from "ioredis";
 import { createHash } from "node:crypto";
 import { getServerEnv } from "./env";
 import type { NormalizedEvent } from "./automation/types";
 
 export const WEBHOOK_QUEUE_NAME = "replyconnect-webhooks";
+
+// Scanning the whole queue at once (getJobs without bounds) loads every retained
+// job into memory; page through instead so data-deletion sweeps stay cheap even
+// with thousands of completed/failed jobs retained.
+const JOB_SCAN_PAGE_SIZE = 500;
 
 export function createWebhookJobId(event: NormalizedEvent): string {
   return createHash("sha256").update(`${event.accountId}\0${event.id}`).digest("base64url");
@@ -27,13 +32,36 @@ function getWebhookQueue(): Queue | null {
   return queue;
 }
 
+async function findJobsByAccount(queue: Queue, igUserId: string, includeActive: boolean): Promise<Job[]> {
+  const states: JobType[] = [
+    "waiting",
+    "delayed",
+    "prioritized",
+    "waiting-children",
+    "failed",
+    "completed",
+    ...(includeActive ? ["active" as const] : []),
+  ];
+  const matches: Job[] = [];
+  let start = 0;
+  for (; ;) {
+    const page = await queue.getJobs(states, start, start + JOB_SCAN_PAGE_SIZE - 1);
+    for (const job of page) {
+      if (job && job.data?.accountId === igUserId) matches.push(job);
+    }
+    if (page.length < JOB_SCAN_PAGE_SIZE) break;
+    start += JOB_SCAN_PAGE_SIZE;
+  }
+  return matches;
+}
+
 export async function deleteQueuedInstagramEvents(igUserId: string): Promise<void> {
   const queue = getWebhookQueue();
   if (!queue) return;
-  const jobs = await queue.getJobs(["waiting", "delayed", "prioritized", "waiting-children", "failed", "completed"]);
-  await Promise.all(jobs.filter((job) => job.data?.accountId === igUserId).map((job) => job.remove()));
-  const remaining = await queue.getJobs(["waiting", "delayed", "prioritized", "waiting-children", "failed", "completed", "active"]);
-  if (remaining.some((job) => job.data?.accountId === igUserId)) {
+  const removable = await findJobsByAccount(queue, igUserId, false);
+  await Promise.all(removable.map((job) => job.remove()));
+  const remaining = await findJobsByAccount(queue, igUserId, true);
+  if (remaining.length > 0) {
     throw new Error("Instagram deletion is waiting for an active queue job to finish");
   }
 }

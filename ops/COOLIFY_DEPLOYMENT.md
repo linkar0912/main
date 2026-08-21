@@ -62,12 +62,11 @@ commit, and select the repository `Dockerfile` as the build method.
 | Application | Start command | Public routing |
 | --- | --- | --- |
 | `replyconnect-web` | `./node_modules/.bin/next start` | Assign the ReplyConnect domain and container port `3000`. |
-| `replyconnect-worker` | `./node_modules/.bin/tsx src/worker.ts` | No domain and no published port. |
+| `replyconnect-worker` | `node dist/worker.js` | No domain and no published port. |
 
 Give both applications the same server-side variables: `APP_NAME`,
 `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL`, `DATABASE_URL`, `REDIS_URL`,
-`OWNER_EMAIL`, `OWNER_PASSWORD_HASH`, `OWNER_SESSION_SECRET`,
-`OWNER_WORKSPACE_ID`,
+`AUTH_SESSION_SECRET`,
 `META_APP_ID`, `META_APP_SECRET`, `META_TOKEN_ENCRYPTION_KEY`,
 `META_REDIRECT_URI`, `META_VERIFY_TOKEN`, `META_API_VERSION`,
 `META_SCOPES`, `FOLLOW_GATED_CAMPAIGNS_ENABLED`, and `SOURCE_COMMIT`. Keep
@@ -91,13 +90,12 @@ template. Replace its placeholders with owner-provided values. Generate
 `META_TOKEN_ENCRYPTION_KEY` with `openssl rand -hex 32`; it is a 64-character
 hex value and must remain stable after Instagram tokens have been stored.
 
-Generate `OWNER_PASSWORD_HASH` with `pnpm auth:hash-password` as shown in the
-README and generate `OWNER_SESSION_SECRET` with a password manager or
-`openssl rand -hex 32`. The first successful owner login creates the configured
-`OWNER_WORKSPACE_ID`; use the same value in web and worker environments.
+Users create their own accounts through `/signup`; no password pre-provisioning
+is needed. Generate `AUTH_SESSION_SECRET` with a password manager or
+`openssl rand -hex 32`. Each user signs up through `/signup`, which provisions their
 
 The image defaults to `./node_modules/.bin/next start`; the worker application's command override
-is `./node_modules/.bin/tsx src/worker.ts`. The runtime image also contains `./node_modules/.bin/prisma migrate deploy` for
+is `node dist/worker.js` (the worker is precompiled to `dist/worker.js` at image build time). The runtime image also contains `./node_modules/.bin/prisma migrate deploy` for
 the explicit migration step below. Both applications must also attach to
 `replyconnect-private`; only `replyconnect-web` receives the public domain.
 The shared image intentionally has no Dockerfile `HEALTHCHECK`: configure the
@@ -133,10 +131,10 @@ For every release, use this order:
    - **Recommended one-build path:** CI or a dedicated build server builds the
      Dockerfile once, pushes a private-registry image, and records its immutable
      digest. Configure both Coolify applications to deploy that exact digest;
-     their commands remain `./node_modules/.bin/tsx src/worker.ts` and `./node_modules/.bin/next start` respectively.
+     their commands remain `node dist/worker.js` and `./node_modules/.bin/next start` respectively.
 3. Run this one-off command from the release image in Coolify before promoting
    either application: `./node_modules/.bin/prisma migrate deploy`.
-4. Start or redeploy `replyconnect-worker` with `./node_modules/.bin/tsx src/worker.ts`.
+4. Start or redeploy `replyconnect-worker` with `node dist/worker.js`.
 5. Start or redeploy `replyconnect-web` with `./node_modules/.bin/next start`; only this service
    listens on container port 3000 and receives a public domain.
 

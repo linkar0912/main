@@ -69,18 +69,14 @@ openssl rand -hex 32
 
 Put the result in `META_TOKEN_ENCRYPTION_KEY`. Never commit `.env` or any Meta secret.
 
-Generate the single-owner password hash without storing the plain password in
-the repository:
+Accounts are self-serve: anyone can create a workspace at `/signup` (email +
+password, hashed with scrypt), then connect their Instagram account through the
+settings page. Configure one app-level `AUTH_SESSION_SECRET` of at least 32
+characters to sign session cookies — generate it with a password manager or:
 
 ```bash
-read -s REPLYCONNECT_OWNER_PASSWORD
-OWNER_PASSWORD="$REPLYCONNECT_OWNER_PASSWORD" pnpm auth:hash-password
-unset REPLYCONNECT_OWNER_PASSWORD
+openssl rand -hex 32
 ```
-
-Put the printed `scrypt$...` value in `OWNER_PASSWORD_HASH`, then configure
-`OWNER_EMAIL`, a random `OWNER_SESSION_SECRET` of at least 32 characters, and
-`OWNER_WORKSPACE_ID`. The first successful owner login creates that workspace.
 
 ReplyConnect claims each automation event before calling Meta. A successful or terminally failed delivery is persisted; a retryable failure releases the claim for BullMQ retry. If a worker loses power after Meta accepts a message but before the result is persisted, the claim remains `PROCESSING` so the system favors preventing a duplicate reply over blindly resending an ambiguous delivery.
 
@@ -95,7 +91,7 @@ pnpm test:e2e
 
 ## Production requirements
 
-Production needs a public HTTPS deployment, PostgreSQL, Valkey, a stable `NEXT_PUBLIC_APP_URL`, the single-owner authentication secrets, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of PostgreSQL and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. This MVP is deliberately single-owner; multi-customer signup and tenant administration remain a later phase.
+Production needs a public HTTPS deployment, PostgreSQL, Valkey, a stable `NEXT_PUBLIC_APP_URL`, an `AUTH_SESSION_SECRET`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of PostgreSQL and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. Accounts are self-serve via `/signup`; each account gets its own isolated workspace.
 
 The local production topology can be checked with:
 

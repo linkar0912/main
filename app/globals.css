@@ -90,7 +90,7 @@ h3 { font-size: 1rem; margin-bottom: 6px; }
 .demo-banner strong, .demo-banner span { font-size: .8rem; }
 .demo-banner a { align-items: center; display: inline-flex; font-size: .76rem; font-weight: 750; gap: 4px; white-space: nowrap; }
 .signal-dot { background: var(--saffron); border-radius: 50%; box-shadow: 0 0 0 4px rgba(242,166,58,.15); display: inline-block; flex: 0 0 7px; height: 7px; width: 7px; }
-.metrics-grid { display: grid; gap: 14px; grid-template-columns: repeat(3, 1fr); margin-bottom: 28px; }
+.metrics-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 28px; }
 .metric-card { border: 1px solid var(--line); border-radius: 12px; min-height: 145px; padding: 18px 20px; position: relative; }
 .metric-saffron { background: #fbead0; border-color: #f2d4a6; }
 .metric-mint { background: #dff5ef; border-color: #bce6db; }
@@ -274,6 +274,15 @@ h3 { font-size: 1rem; margin-bottom: 6px; }
 .orb-demo { background: var(--saffron); box-shadow: 0 0 0 5px rgba(242,166,58,.15); }
 .orb-live { background: var(--mint); box-shadow: 0 0 0 5px rgba(85,214,190,.15); }
 .settings-panel > .muted { font-size: .78rem; line-height: 1.65; margin: 22px 0 18px; max-width: 360px; }
+.account-form { display: grid; gap: 12px; margin: 18px 0 16px; max-width: 340px; }
+.account-form + form { margin-top: 4px; }
+.team-list { display: grid; gap: 9px; list-style: none; margin: 20px 0 0; padding: 0; }
+.team-list li { align-items: center; border: 1px solid var(--line); border-radius: 8px; display: flex; font-size: .78rem; gap: 12px; justify-content: space-between; padding: 9px 12px; }
+.team-who { display: grid; gap: 2px; min-width: 0; }
+.team-who strong { font-size: .8rem; overflow-wrap: anywhere; }
+.team-who small { color: #6c6b72; font-size: .7rem; }
+.invite-form { align-items: flex-end; display: flex; gap: 10px; margin-top: 16px; }
+.invite-form .field:first-child { flex: 1; }
 .review-links { align-items: center; display: flex; gap: 25px; justify-content: space-between; }
 .review-links h2 { margin: 0; }
 .review-link-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
@@ -314,7 +323,7 @@ h3 { font-size: 1rem; margin-bottom: 6px; }
   .sidebar-link.is-active { box-shadow: inset 0 -3px 0 var(--saffron); }
   .sidebar-note { justify-content: center; padding: 12px 8px; }
   .sidebar-bottom > .sidebar-link { margin-bottom: 8px; }
-  .metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metric-card { padding: 15px; }
   .metric-card strong { font-size: 1.9rem; }
   .dashboard-grid { grid-template-columns: 1fr; }

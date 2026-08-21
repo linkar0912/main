@@ -1,4 +1,5 @@
 import { getServerEnv } from "@/src/lib/env";
+import { logger } from "@/src/lib/logger";
 import { processNormalizedEvent } from "@/src/lib/automation/runner";
 import { MetaClient } from "@/src/lib/meta/client";
 import { normalizeWebhook } from "@/src/lib/meta/webhooks";
@@ -40,16 +41,29 @@ export async function POST(request: Request) {
   const events = normalizeWebhook(payload);
   const enqueued = await enqueueWebhookEvents(events);
   if (events.length > 0 && enqueued === 0) {
+    // No Redis queue configured (demo/self-hosted without REDIS_URL): fall back to
+    // processing inline. Process sequentially — each event can make several Meta API
+    // calls, and fanning out concurrently risks blowing past Meta's webhook timeout,
+    // which triggers redeliveries. The response stays minimal so internal delivery
+    // details never leak to the caller.
     const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
-    const results = await Promise.all(
-      events.map((event) => processNormalizedEvent(event, getRepository(), {
-        client,
-        tokenEncryptionKey: env.metaTokenEncryptionKey,
-        interactionSecret: env.metaAppSecret,
-        campaignsEnabled: env.followGatedCampaignsEnabled,
-      })),
-    );
-    return Response.json({ received: true, events: events.length, enqueued, processed: results });
+    for (const event of events) {
+      try {
+        await processNormalizedEvent(event, getRepository(), {
+          client,
+          tokenEncryptionKey: env.metaTokenEncryptionKey,
+          interactionSecret: env.metaAppSecret,
+          campaignsEnabled: env.followGatedCampaignsEnabled,
+          dispatchLeaseMs: env.dispatchLeaseMs,
+        });
+      } catch (error) {
+        logger.error("Inline webhook event processing failed", {
+          eventId: event.id,
+          accountId: event.accountId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
   return Response.json({ received: true, events: events.length, enqueued });
 }

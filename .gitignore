@@ -1,8 +1,12 @@
 node_modules/
 .next/
+dist/
+tsconfig.tsbuildinfo
 coverage/
 playwright-report/
 test-results/
+.playwright/
+.claude/
 .worktrees/
 .env
 .env.local

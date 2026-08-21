@@ -125,8 +125,86 @@ export type DataDeletionRequestRecord = {
   completedAt?: string;
 };
 
+export type UserRecord = {
+  id: string;
+  email: string;
+  passwordHash: string;
+  emailVerifiedAt?: string;
+  tokenVersion: number;
+  createdAt: string;
+};
+
+export type CreateUserInput = {
+  email: string;
+  passwordHash: string;
+};
+
+export type AuthTokenType = "PASSWORD_RESET" | "EMAIL_VERIFY";
+
+export type AuthTokenRecord = {
+  id: string;
+  userId: string;
+  type: AuthTokenType;
+  tokenHash: string;
+  expiresAt: string;
+  usedAt?: string;
+  createdAt: string;
+};
+
+export type CreateAuthTokenInput = Pick<AuthTokenRecord, "userId" | "type" | "tokenHash" | "expiresAt">;
+
+export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
+
+export type MemberRecord = {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: MemberRole;
+};
+
+export type InvitationRecord = {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: Exclude<MemberRole, "OWNER">;
+  tokenHash: string;
+  invitedByUserId: string;
+  expiresAt: string;
+  acceptedAt?: string;
+  revokedAt?: string;
+  createdAt: string;
+};
+
+export type CreateInvitationInput = Omit<InvitationRecord, "id" | "acceptedAt" | "revokedAt" | "createdAt">;
+
 export interface AutomationRepository {
   ensureWorkspace(workspaceId: string, ownerEmail: string): Promise<void>;
+  createUser(input: CreateUserInput): Promise<{ created: boolean; record: UserRecord }>;
+  findUserByEmail(email: string): Promise<UserRecord | null>;
+  findUserById(id: string): Promise<UserRecord | null>;
+  updateUserPassword(userId: string, passwordHash: string): Promise<void>;
+  markUserEmailVerified(userId: string): Promise<void>;
+  getUserTokenVersion(userId: string): Promise<number | null>;
+  bumpUserTokenVersion(userId: string): Promise<number>;
+  createAuthToken(input: CreateAuthTokenInput): Promise<AuthTokenRecord>;
+  // Single-use consumption: returns null when unknown, wrong type, expired, or already used.
+  consumeAuthToken(tokenHash: string, type: AuthTokenType, now: string): Promise<AuthTokenRecord | null>;
+  isSessionRevoked(sessionId: string): Promise<boolean>;
+  revokeSession(sessionId: string, userId: string, expiresAt: string): Promise<void>;
+  listMembers(workspaceId: string): Promise<MemberRecord[]>;
+  getMemberRole(workspaceId: string, email: string): Promise<MemberRole | null>;
+  addMember(workspaceId: string, email: string, role: MemberRole): Promise<{ created: boolean }>;
+  updateMemberRole(workspaceId: string, email: string, role: MemberRole): Promise<boolean>;
+  removeMember(workspaceId: string, email: string): Promise<boolean>;
+  createInvitation(input: CreateInvitationInput): Promise<InvitationRecord>;
+  listInvitations(workspaceId: string): Promise<InvitationRecord[]>;
+  findInvitationByTokenHash(tokenHash: string): Promise<InvitationRecord | null>;
+  acceptInvitation(id: string, now: string): Promise<InvitationRecord | null>;
+  revokeInvitation(workspaceId: string, id: string): Promise<boolean>;
+  countParticipantsByState(workspaceId: string, automationId?: string): Promise<Record<string, number>>;
+  countExecutionsSentSince(automationId: string, sinceIso: string): Promise<number>;
+  countParticipantsCreatedSince(workspaceId: string, sinceIso: string): Promise<number>;
+  findWorkspaceIdByMemberEmail(email: string): Promise<string | null>;
   listAutomations(workspaceId: string): Promise<AutomationRecord[]>;
   getAutomation(workspaceId: string, id: string): Promise<AutomationRecord | null>;
   createAutomation(workspaceId: string, input: CreateAutomationInput): Promise<AutomationRecord>;

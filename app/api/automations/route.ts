@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 import { validateFlowDefinition } from "@/src/lib/automation/definition";
 import { getRepository } from "@/src/lib/repository-provider";
-import { getOwnerSessionFromRequest } from "@/src/lib/auth/session";
+import { getSessionFromRequest } from "@/src/lib/auth/session";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const session = getOwnerSessionFromRequest(request);
+  const session = getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   return NextResponse.json({ data: await getRepository().listAutomations(session.workspaceId) });
 }
 
 export async function POST(request: Request) {
-  const session = getOwnerSessionFromRequest(request);
+  const session = getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const body = (await request.json()) as { name?: unknown; definition?: unknown };

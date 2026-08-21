@@ -50,6 +50,8 @@ export type FlowDefinitionV2 = {
   publicReplies: string[];
   openingMessage: { text: string; optInButtonLabel: string };
   followGate: { required: true; notFollowingMessage: string; recheckButtonLabel: string };
+  /** Optional per-automation daily cap on Meta sends, enforced by the runner. */
+  dailySendLimit?: number;
   delivery: { text: string; url: string; buttonLabel?: string };
 };
 
@@ -59,12 +61,12 @@ export type NormalizedEvent = {
   id: string;
   accountId: string;
   type:
-    | "comment.created"
-    | "message.received"
-    | "quick_reply.received"
-    | "postback.received"
-    | "optin.received"
-    | "referral.received";
+  | "comment.created"
+  | "message.received"
+  | "quick_reply.received"
+  | "postback.received"
+  | "optin.received"
+  | "referral.received";
   text: string;
   commentId?: string;
   mediaId?: string;
@@ -78,12 +80,12 @@ export type ExecutionAction =
   | { type: "send_text"; recipientId: string; text: string }
   | { type: "send_link"; recipientId: string; text: string; url: string }
   | {
-      type: "send_button";
-      recipientId: string;
-      text: string;
-      buttonLabel: string;
-      url: string;
-    };
+    type: "send_button";
+    recipientId: string;
+    text: string;
+    buttonLabel: string;
+    url: string;
+  };
 
 export type EvaluationResult =
   | { status: "matched"; actions: ExecutionAction[] }

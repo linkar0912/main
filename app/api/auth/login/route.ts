@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import {
-  createOwnerSessionToken,
-  getOwnerAuthConfig,
-  ownerSessionCookieName,
+  createSessionToken,
+  sessionCookieName,
   safeNextPath,
-  verifyOwnerPassword,
+  verifyPassword,
 } from "@/src/lib/auth/session";
 import { LoginRateLimitStore, loginRateLimitKey } from "@/src/lib/auth/rate-limit";
+import { clientAddress } from "@/src/lib/auth/client-address";
 import { getServerEnv } from "@/src/lib/env";
 import { getRepository } from "@/src/lib/repository-provider";
 
@@ -14,29 +14,24 @@ export const runtime = "nodejs";
 
 let loginLimiter: LoginRateLimitStore | undefined;
 
-function clientAddress(request: Request): string {
-  return request.headers.get("cf-connecting-ip") ?? "unknown";
-}
-
 export async function POST(request: Request) {
-  const config = getOwnerAuthConfig();
   const env = getServerEnv();
+  const repository = getRepository();
   loginLimiter ??= new LoginRateLimitStore(env.redisUrl);
-  const address = clientAddress(request);
+  const address = clientAddress(request, env.trustedProxyHops);
   const form = await request.formData();
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
   const nextPath = safeNextPath(String(form.get("next") ?? "/"));
 
-  if (!config) {
-    return NextResponse.redirect(new URL("/login?error=not-configured", env.appUrl), 303);
-  }
-  const limitKey = loginRateLimitKey(config.sessionSecret, config.email, address);
+  const limitKey = loginRateLimitKey(env.authSessionSecret, email || "-", address);
   if (!(await loginLimiter.isAllowed(limitKey))) {
     return NextResponse.redirect(new URL("/login?error=locked", env.appUrl), 303);
   }
-  const passwordValid = verifyOwnerPassword(password, config.passwordHash);
-  if (email !== config.email || !passwordValid) {
+
+  const user = email ? await repository.findUserByEmail(email) : null;
+  const passwordValid = user ? await verifyPassword(password, user.passwordHash) : false;
+  if (!user || !passwordValid) {
     await loginLimiter.recordFailure(limitKey);
     const url = new URL("/login", env.appUrl);
     url.searchParams.set("error", "invalid");
@@ -44,12 +39,23 @@ export async function POST(request: Request) {
     return NextResponse.redirect(url, 303);
   }
 
+  const workspaceId = await repository.findWorkspaceIdByMemberEmail(user.email);
+  if (!workspaceId) {
+    // Account exists but has no workspace (e.g. interrupted signup). Treat as
+    // invalid rather than crashing; the user can sign up again with the same
+    // email once the orphaned row is cleaned up, or contact support.
+    await loginLimiter.recordFailure(limitKey);
+    return NextResponse.redirect(
+      new URL(`/login?error=invalid&next=${encodeURIComponent(nextPath)}`, env.appUrl),
+      303,
+    );
+  }
+
   await loginLimiter.reset(limitKey);
-  await getRepository().ensureWorkspace(config.workspaceId, config.email);
   const response = NextResponse.redirect(new URL(nextPath, env.appUrl), 303);
   response.cookies.set({
-    name: ownerSessionCookieName(env.appUrl),
-    value: createOwnerSessionToken({ email: config.email, workspaceId: config.workspaceId }, config.sessionSecret),
+    name: sessionCookieName(env.appUrl),
+    value: createSessionToken({ userId: user.id, workspaceId, ver: user.tokenVersion }, env.authSessionSecret),
     httpOnly: true,
     sameSite: "lax",
     secure: env.appUrl.startsWith("https://"),

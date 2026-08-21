@@ -37,6 +37,58 @@ enum ParticipantState {
   FAILED
 }
 
+model User {
+  id               String    @id
+  email            String    @unique
+  passwordHash     String
+  emailVerifiedAt  DateTime?
+  // Bumped to invalidate every outstanding session for this user at once.
+  tokenVersion     Int       @default(0)
+  createdAt        DateTime  @default(now())
+
+  authTokens       AuthToken[]
+}
+
+// Single-use, expiring tokens for password reset and email verification.
+// Only the SHA-256 hash of the token is stored; the raw value lives in the link.
+model AuthToken {
+  id        String    @id
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // PASSWORD_RESET | EMAIL_VERIFY
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, type])
+}
+
+// Denylist for individual session revocation ("log out this device").
+// Logout-everywhere uses User.tokenVersion instead and does not touch this table.
+model RevokedSession {
+  sessionId String   @id
+  userId    String
+  revokedAt DateTime @default(now())
+  expiresAt DateTime // when the underlying session would have expired anyway
+}
+
+model WorkspaceInvitation {
+  id             String    @id
+  workspaceId    String
+  email          String
+  role           String // ADMIN | MEMBER
+  tokenHash      String    @unique
+  invitedByUserId String
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([workspaceId, email])
+  @@index([email])
+}
+
 model Workspace {
   id            String                  @id
   name          String
@@ -131,6 +183,7 @@ model AutomationParticipant {
   @@unique([workspaceId, instagramAccountId, sourceCommentId])
   @@index([instagramAccountId, igScopedUserId, state])
   @@index([workspaceId, automationId, updatedAt])
+  @@index([messagingWindowExpiresAt])
 }
 
 model AutomationExecution {

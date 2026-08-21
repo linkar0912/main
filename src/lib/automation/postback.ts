@@ -11,7 +11,7 @@ type InteractionPayloadBody = {
   exp: number;
 };
 
-function isCanonicalBase64Url(value: string): boolean {
+export function isCanonicalBase64Url(value: string): boolean {
   return /^[A-Za-z0-9_-]+$/.test(value) && Buffer.from(value, "base64url").toString("base64url") === value;
 }
 
@@ -35,6 +35,27 @@ export function createInteractionPayload(
   return `${encoded}.${signature}`;
 }
 
+/**
+ * Decodes and structurally validates the encoded payload half WITHOUT verifying the
+ * signature or expiry. Used to cheaply recognize ReplyConnect interaction payloads
+ * (e.g. to distinguish them from arbitrary user text before spending a signature check).
+ */
+export function decodeInteractionPayloadShape(encoded: string): { participantId: string; action: InteractionAction } | null {
+  try {
+    if (!isCanonicalBase64Url(encoded)) return null;
+    const body = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Partial<InteractionPayloadBody>;
+    if (
+      body.v !== 1 ||
+      typeof body.p !== "string" ||
+      !body.p ||
+      (body.a !== "opt_in" && body.a !== "recheck")
+    ) return null;
+    return { participantId: body.p, action: body.a };
+  } catch {
+    return null;
+  }
+}
+
 export function readInteractionPayload(
   value: string,
   secret: string,
@@ -53,18 +74,17 @@ export function readInteractionPayload(
     const actual = Buffer.from(encodedSignature, "base64url");
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
 
+    const shape = decodeInteractionPayloadShape(encoded);
+    if (!shape) return null;
+
     const body = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Partial<InteractionPayloadBody>;
     if (
-      body.v !== 1 ||
-      typeof body.p !== "string" ||
-      !body.p ||
-      (body.a !== "opt_in" && body.a !== "recheck") ||
       typeof body.exp !== "number" ||
       !Number.isFinite(body.exp) ||
       body.exp <= now
     ) return null;
 
-    return { participantId: body.p, action: body.a };
+    return shape;
   } catch {
     return null;
   }

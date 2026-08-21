@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Activity, ArrowUpRight, CheckCircle2, Plus, ShieldCheck, Sparkles, Workflow } from "lucide-react";
+import { Activity, ArrowUpRight, CheckCircle2, Gauge, Plus, Sparkles, Workflow } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { AutomationList, useAutomations } from "./automation-list";
 import { MetricCard } from "./metric-card";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 
+type PlanUsage = { participantsThisMonth: number; monthlyLimit: number | null };
+
 export function DashboardScreen() {
   const { automations, loading, error, setStatus } = useAutomations();
   const [demoMode, setDemoMode] = useState(false);
+  const [usage, setUsage] = useState<PlanUsage | null>(null);
   const activeCount = automations.filter((automation) => automation.status === "ACTIVE").length;
 
   useEffect(() => {
@@ -18,6 +21,10 @@ export function DashboardScreen() {
       .then((response) => response.json())
       .then((health: { mode?: string }) => setDemoMode(health.mode === "demo"))
       .catch(() => setDemoMode(false));
+    void fetch("/api/insights")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { usage?: PlanUsage } | null) => setUsage(payload?.usage ?? null))
+      .catch(() => undefined);
   }, []);
 
   return (
@@ -41,7 +48,7 @@ export function DashboardScreen() {
         <section className="metrics-grid" aria-label="Workspace summary">
           <MetricCard label="Active flows" value={loading ? "—" : String(activeCount)} note="Ready to listen" icon={Activity} tone="saffron" />
           <MetricCard label="Total automations" value={loading ? "—" : String(automations.length)} note="Across your workspace" icon={Workflow} tone="mint" />
-          <MetricCard label="AI assistant" value="Off" note="Deterministic rules only" icon={ShieldCheck} tone="lavender" />
+          <MetricCard label="Plan usage" value={usage ? `${usage.participantsThisMonth}${usage.monthlyLimit ? ` / ${usage.monthlyLimit}` : ""}` : "—"} note="Participants this month" icon={Gauge} tone="lavender" />
         </section>
 
         <div className="dashboard-grid">

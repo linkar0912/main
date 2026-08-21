@@ -1,29 +1,42 @@
 import { expect, test } from "@playwright/test";
 
-async function signIn(page: import("@playwright/test").Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill("owner@example.com");
-  await page.getByLabel("Password").fill("replyconnect-e2e-password");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/$/);
-}
+test.describe("unauthenticated visitor", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
 
-test("owner workspace requires authentication", async ({ page, request }) => {
-  await page.goto("/");
-  await expect(page).toHaveURL(/\/login\?next=%2F$/);
+  test("workspace requires authentication", async ({ page, request }) => {
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/login\?next=%2F$/);
 
-  const response = await request.get("/api/automations");
-  expect(response.status()).toBe(401);
+    const response = await request.get("/api/automations");
+    expect(response.status()).toBe(401);
+  });
 });
 
 test("owner can sign out", async ({ page }) => {
-  await signIn(page);
+  await page.goto("/");
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
 });
 
+test("member can sign up and sign back in", async ({ page }) => {
+  const email = `member-${Date.now()}@example.com`;
+  await page.goto("/signup");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("replyconnect-e2e-password");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/automations$/);
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("replyconnect-e2e-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Make every signal useful." })).toBeVisible();
+});
+
 test("dashboard and automation list are reachable", async ({ page }) => {
-  await signIn(page);
+  await page.goto("/");
   await expect(page.getByText("ReplyConnect", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Make every signal useful." })).toBeVisible();
   await page.getByRole("link", { name: "Automations" }).first().click();
@@ -35,7 +48,6 @@ test("guided builder saves an automation", async ({ page }) => {
   // "guided builder creates a follow-gated Reel campaign" test below); the
   // legacy single-response version 1 builder is only reachable by editing an
   // existing version 1 automation, so exercise that path directly here.
-  await signIn(page);
   // `page.request` shares the signed-in page's cookies; the standalone `request`
   // fixture does not, and would get 401s here.
   const created = await page.request.post("/api/automations", {
@@ -68,12 +80,11 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
     permalink: "https://www.instagram.com/reel/demo/",
     thumbnailUrl: "https://cdn.example/reel.jpg",
     timestamp: "2026-08-21T00:00:00.000Z",
-  };
+  } as const;
   await page.route("**/api/meta/media", (route) =>
     route.fulfill({ json: { data: [reelFixture], paging: {} } }),
   );
 
-  await signIn(page);
   await page.goto("/automations");
   await page.getByRole("link", { name: "New automation" }).click();
   await expect(page.getByRole("heading", { name: "Build a follow-gated Reel campaign" })).toBeVisible();

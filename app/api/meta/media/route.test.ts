@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MetaApiError } from "@/src/lib/meta/client";
 import type { MetaMedia } from "@/src/lib/meta/types";
 
 const mocks = vi.hoisted(() => ({
-  getOwnerSessionFromRequest: vi.fn(),
+  getSessionFromRequest: vi.fn(),
   getRepository: vi.fn(),
   getServerEnv: vi.fn(),
   listConnections: vi.fn(),
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
-  getOwnerSessionFromRequest: mocks.getOwnerSessionFromRequest,
+  getSessionFromRequest: mocks.getSessionFromRequest,
 }));
 
 vi.mock("@/src/lib/repository-provider", () => ({
@@ -22,11 +23,15 @@ vi.mock("@/src/lib/env", () => ({
   getServerEnv: mocks.getServerEnv,
 }));
 
-vi.mock("@/src/lib/meta/client", () => ({
-  MetaClient: class {
-    listMedia = mocks.listMedia;
-  },
-}));
+vi.mock("@/src/lib/meta/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/src/lib/meta/client")>();
+  return {
+    ...actual,
+    MetaClient: class {
+      listMedia = mocks.listMedia;
+    },
+  };
+});
 
 vi.mock("@/src/lib/security/secrets", () => ({
   unsealSecret: mocks.unsealSecret,
@@ -57,7 +62,7 @@ const media: MetaMedia = {
 
 describe("GET /api/meta/media", () => {
   beforeEach(() => {
-    mocks.getOwnerSessionFromRequest.mockReturnValue({ email: "owner@example.com", workspaceId: "workspace_a" });
+    mocks.getSessionFromRequest.mockReturnValue({ email: "owner@example.com", workspaceId: "workspace_a" });
     mocks.listConnections.mockReset();
     mocks.listConnections.mockResolvedValue([connectedAccount]);
     mocks.getRepository.mockReturnValue({ listConnections: mocks.listConnections });
@@ -68,7 +73,7 @@ describe("GET /api/meta/media", () => {
   });
 
   it("returns 401 when the owner session is missing", async () => {
-    mocks.getOwnerSessionFromRequest.mockReturnValue(null);
+    mocks.getSessionFromRequest.mockReturnValue(null);
 
     const response = await GET(new Request("http://localhost/api/meta/media"));
 
@@ -134,10 +139,7 @@ describe("GET /api/meta/media", () => {
   });
 
   it("preserves a valid MetaApiError HTTP status", async () => {
-    const error = new Error("Meta rate limit");
-    error.name = "MetaApiError";
-    Object.assign(error, { status: 429 });
-    mocks.listMedia.mockRejectedValue(error);
+    mocks.listMedia.mockRejectedValue(new MetaApiError("Meta rate limit", 429));
 
     const response = await GET(new Request("http://localhost/api/meta/media"));
 

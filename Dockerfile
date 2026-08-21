@@ -35,7 +35,9 @@ COPY --from=build --chown=replyconnect:replyconnect /app/package.json ./
 COPY --from=build --chown=replyconnect:replyconnect /app/node_modules ./node_modules
 COPY --from=build --chown=replyconnect:replyconnect /app/.next ./.next
 COPY --from=build --chown=replyconnect:replyconnect /app/public ./public
-COPY --from=build --chown=replyconnect:replyconnect /app/src ./src
+# The worker is bundled to plain JS at build time (pnpm build:worker), so the
+# runtime image needs neither the TypeScript sources nor a TS loader.
+COPY --from=build --chown=replyconnect:replyconnect /app/dist ./dist
 COPY --from=build --chown=replyconnect:replyconnect /app/prisma/schema.prisma ./prisma/schema.prisma
 COPY --from=build --chown=replyconnect:replyconnect /app/prisma/migrations ./prisma/migrations
 COPY --from=build --chown=replyconnect:replyconnect /app/next.config.ts ./

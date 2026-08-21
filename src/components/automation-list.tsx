@@ -6,18 +6,41 @@ import { useEffect, useState } from "react";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
 
+async function requestAutomations(): Promise<AutomationRecord[]> {
+  const response = await fetch("/api/automations");
+  const payload = (await response.json()) as { data?: AutomationRecord[] };
+  if (!response.ok) throw new Error("Could not load automations");
+  return payload.data ?? [];
+}
+
 export function useAutomations() {
   const [automations, setAutomations] = useState<AutomationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    let mounted = true;
+    void requestAutomations()
+      .then((data) => {
+        if (mounted) {
+          setAutomations(data);
+          setError("");
+        }
+      })
+      .catch((caught: unknown) => {
+        if (mounted) setError(caught instanceof Error ? caught.message : "Could not load automations");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => { mounted = false; };
+  }, []);
+
   async function reload() {
     setLoading(true);
     try {
-      const response = await fetch("/api/automations");
-      const payload = (await response.json()) as { data?: AutomationRecord[] };
-      if (!response.ok) throw new Error("Could not load automations");
-      setAutomations(payload.data ?? []);
+      const data = await requestAutomations();
+      setAutomations(data);
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load automations");
@@ -25,27 +48,6 @@ export function useAutomations() {
       setLoading(false);
     }
   }
-
-  useEffect(() => {
-    let mounted = true;
-    void fetch("/api/automations")
-      .then(async (response) => {
-        const payload = (await response.json()) as { data?: AutomationRecord[] };
-        if (!response.ok) throw new Error("Could not load automations");
-        if (mounted) {
-          setAutomations(payload.data ?? []);
-          setError("");
-          setLoading(false);
-        }
-      })
-      .catch((caught: unknown) => {
-        if (mounted) {
-          setError(caught instanceof Error ? caught.message : "Could not load automations");
-          setLoading(false);
-        }
-      });
-    return () => { mounted = false; };
-  }, []);
 
   async function setStatus(id: string, status: AutomationStatus) {
     const response = await fetch(`/api/automations/${id}`, {

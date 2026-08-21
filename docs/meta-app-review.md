@@ -24,8 +24,8 @@ be completed:
 - the final public ReplyConnect domain and a monitored support mailbox;
 - Coolify/server access and private PostgreSQL and Valkey connection values;
 - the Meta developer app ID, app secret, and the business account that owns it;
-- a stable token-encryption key and a high-entropy webhook verify token;
-- an owner email, scrypt password hash, session secret, and stable owner workspace ID; and
+- a stable token-encryption key, a high-entropy webhook verify token, and a
+  session signing secret (`AUTH_SESSION_SECRET`); and
 - two eligible Instagram test accounts: one connected Professional account and
   one account that can send test comments and direct messages.
 
@@ -35,10 +35,7 @@ Set these production values on the web app and worker:
 APP_NAME=ReplyConnect
 NEXT_PUBLIC_APP_URL=https://<replyconnect-domain>
 SUPPORT_EMAIL=<owner-monitored-support-email>
-OWNER_EMAIL=<owner-login-email>
-OWNER_PASSWORD_HASH=<output from pnpm auth:hash-password>
-OWNER_SESSION_SECRET=<at least 32 random characters>
-OWNER_WORKSPACE_ID=replyconnect_owner_workspace
+AUTH_SESSION_SECRET=<at least 32 random characters>
 DATABASE_URL=postgresql://...
 REDIS_URL=redis://...
 META_APP_ID=your_meta_app_id

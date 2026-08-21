@@ -1,42 +1,47 @@
 import { describe, expect, it } from "vitest";
 import {
-  createOwnerSessionToken,
-  hashOwnerPassword,
-  readOwnerSession,
-  verifyOwnerPassword,
+  createSessionToken,
+  hashPassword,
+  readSessionToken,
+  verifyPassword,
   safeNextPath,
   createLoginAttemptLimiter,
-  ownerSessionCookieName,
+  sessionCookieName,
 } from "./session";
 
 describe("owner authentication", () => {
-  it("accepts the configured password and rejects a different password", () => {
-    const passwordHash = hashOwnerPassword("correct horse battery staple", "00112233445566778899aabbccddeeff");
+  it("accepts the configured password and rejects a different password", async () => {
+    const passwordHash = await hashPassword("correct horse battery staple", "00112233445566778899aabbccddeeff");
 
-    expect(verifyOwnerPassword("correct horse battery staple", passwordHash)).toBe(true);
-    expect(verifyOwnerPassword("wrong password", passwordHash)).toBe(false);
+    expect(await verifyPassword("correct horse battery staple", passwordHash)).toBe(true);
+    expect(await verifyPassword("wrong password", passwordHash)).toBe(false);
   });
 
   it("returns the workspace carried by a valid signed session", () => {
-    const token = createOwnerSessionToken(
-      { email: "owner@example.com", workspaceId: "workspace_owner" },
+    const token = createSessionToken(
+      { userId: "user_owner", workspaceId: "workspace_owner" },
       "session-secret-with-at-least-32-characters",
       new Date("2026-08-20T10:00:00.000Z"),
     );
 
     expect(
-      readOwnerSession(
+      readSessionToken(
         token,
         "session-secret-with-at-least-32-characters",
         new Date("2026-08-20T11:00:00.000Z"),
       ),
-    ).toEqual({ email: "owner@example.com", workspaceId: "workspace_owner" });
+    ).toEqual({
+      userId: "user_owner",
+      workspaceId: "workspace_owner",
+      sid: expect.any(String),
+      ver: 0,
+    });
   });
 
   it("serializes only public owner claims into the signed session payload", () => {
-    const token = createOwnerSessionToken(
+    const token = createSessionToken(
       {
-        email: "owner@example.com",
+        userId: "user_owner",
         workspaceId: "workspace_owner",
         passwordHash: "must-not-leak",
         sessionSecret: "must-not-leak",
@@ -47,27 +52,31 @@ describe("owner authentication", () => {
 
     const payload = JSON.parse(Buffer.from(token.split(".")[0], "base64url").toString("utf8"));
     expect(payload).toEqual({
-      email: "owner@example.com",
+      userId: "user_owner",
       workspaceId: "workspace_owner",
-      expiresAt: new Date("2026-08-21T10:00:00.000Z").getTime(),
+      sid: expect.any(String),
+      ver: 0,
+      expiresAt: 1787306400000,
     });
+    expect(payload.passwordHash).toBeUndefined();
+    expect(payload.sessionSecret).toBeUndefined();
   });
 
   it("rejects expired and forged sessions", () => {
     const secret = "session-secret-with-at-least-32-characters";
-    const token = createOwnerSessionToken(
-      { email: "owner@example.com", workspaceId: "workspace_owner" },
+    const token = createSessionToken(
+      { userId: "user_owner", workspaceId: "workspace_owner" },
       secret,
       new Date("2026-08-20T10:00:00.000Z"),
     );
 
-    expect(readOwnerSession(token, secret, new Date("2026-08-21T10:00:01.000Z"))).toBeNull();
-    expect(readOwnerSession(`${token.slice(0, -1)}x`, secret, new Date("2026-08-20T11:00:00.000Z"))).toBeNull();
+    expect(readSessionToken(token, secret, new Date("2026-08-21T10:00:01.000Z"))).toBeNull();
+    expect(readSessionToken(`${token.slice(0, -1)}x`, secret, new Date("2026-08-20T11:00:00.000Z"))).toBeNull();
   });
 
   it("uses a host-only secure cookie name in production", () => {
-    expect(ownerSessionCookieName("https://reply.example.com")).toBe("__Host-replyconnect_owner_session");
-    expect(ownerSessionCookieName("http://localhost:3000")).toBe("replyconnect_owner_session");
+    expect(sessionCookieName("https://reply.example.com")).toBe("__Host-replyconnect_session");
+    expect(sessionCookieName("http://localhost:3000")).toBe("replyconnect_session");
   });
 
   it("rejects external and backslash-based post-login redirects", () => {

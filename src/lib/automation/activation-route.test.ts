@@ -5,7 +5,7 @@ import type { AutomationRepository } from "@/src/lib/repository";
 let repository: AutomationRepository;
 
 vi.mock("@/src/lib/auth/session", () => ({
-  getOwnerSessionFromRequest: () => ({ email: "owner@example.com", workspaceId: "workspace_a" }),
+  getSessionFromRequest: () => ({ email: "owner@example.com", workspaceId: "workspace_a" }),
 }));
 
 vi.mock("@/src/lib/repository-provider", () => ({

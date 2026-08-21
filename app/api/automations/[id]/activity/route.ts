@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
-import { getOwnerSessionFromRequest } from "@/src/lib/auth/session";
+import { getSessionFromRequest } from "@/src/lib/auth/session";
 import type { AutomationParticipantRecord } from "@/src/lib/repository";
 
 export const runtime = "nodejs";
@@ -83,7 +83,7 @@ function toActivitySummary(participant: AutomationParticipantRecord): Participan
 }
 
 export async function GET(request: Request, context: RouteContext) {
-  const session = getOwnerSessionFromRequest(request);
+  const session = getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await context.params;

@@ -1,27 +1,37 @@
 import {
   createHmac,
   randomBytes,
-  scryptSync,
+  scrypt as scryptCallback,
   timingSafeEqual,
 } from "node:crypto";
+import { promisify } from "node:util";
 import { getServerEnv } from "../env";
+import { createId } from "../id";
+import { getRepository } from "../repository-provider";
 
-export const OWNER_SESSION_COOKIE = "replyconnect_owner_session";
-const OWNER_PRODUCTION_SESSION_COOKIE = "__Host-replyconnect_owner_session";
+// Async scrypt keeps the Node event loop free while hashing (~50–100ms of CPU work);
+// the login/signup routes serve other requests concurrently.
+const scrypt = promisify(scryptCallback) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+) => Promise<Buffer>;
+
+export const SESSION_COOKIE = "replyconnect_session";
+const PRODUCTION_SESSION_COOKIE = "__Host-replyconnect_session";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
 
-export type OwnerSession = {
-  email: string;
+export type AppSession = {
+  userId: string;
   workspaceId: string;
+  // Per-session identifier, used to revoke a single session ("log out this device").
+  sid?: string;
+  // User token version at issue time; a mismatch means every session was invalidated.
+  ver?: number;
 };
 
-type StoredSession = OwnerSession & {
+type StoredSession = AppSession & {
   expiresAt: number;
-};
-
-export type OwnerAuthConfig = OwnerSession & {
-  passwordHash: string;
-  sessionSecret: string;
 };
 
 export type LoginAttemptLimiter = {
@@ -62,40 +72,46 @@ function signature(value: string, secret: string): Buffer {
   return createHmac("sha256", secret).update(value).digest();
 }
 
-export function hashOwnerPassword(password: string, salt = randomBytes(16).toString("hex")): string {
-  const digest = scryptSync(password, Buffer.from(salt, "hex"), 64).toString("hex");
+export async function hashPassword(
+  password: string,
+  salt = randomBytes(16).toString("hex"),
+): Promise<string> {
+  const digest = (await scrypt(password, Buffer.from(salt, "hex"), 64)).toString("hex");
   return `scrypt$${salt}$${digest}`;
 }
 
-export function verifyOwnerPassword(password: string, storedHash: string): boolean {
+export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   const [algorithm, salt, expectedHex] = storedHash.split("$");
   if (algorithm !== "scrypt" || !salt || !expectedHex) return false;
 
   try {
     const expected = Buffer.from(expectedHex, "hex");
-    const actual = scryptSync(password, Buffer.from(salt, "hex"), expected.length);
-    return expected.length > 0 && actual.length === expected.length && timingSafeEqual(actual, expected);
+    if (expected.length === 0) return false;
+    const actual = await scrypt(password, Buffer.from(salt, "hex"), expected.length);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
   } catch {
     return false;
   }
 }
 
-export function createOwnerSessionToken(
-  session: OwnerSession,
+export function createSessionToken(
+  session: AppSession,
   secret: string,
   now = new Date(),
 ): string {
   const payload = Buffer.from(
     JSON.stringify({
-      email: session.email,
+      userId: session.userId,
       workspaceId: session.workspaceId,
+      sid: session.sid ?? createId("session"),
+      ver: session.ver ?? 0,
       expiresAt: now.getTime() + SESSION_TTL_MS,
     } satisfies StoredSession),
   ).toString("base64url");
   return `${payload}.${signature(payload, secret).toString("base64url")}`;
 }
 
-export function readOwnerSession(token: string | undefined, secret: string, now = new Date()): OwnerSession | null {
+export function readSessionToken(token: string | undefined, secret: string, now = new Date()): AppSession | null {
   if (!token || secret.length < 32) return null;
   const [payload, encodedSignature] = token.split(".");
   if (!payload || !encodedSignature) return null;
@@ -107,37 +123,23 @@ export function readOwnerSession(token: string | undefined, secret: string, now 
 
     const value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<StoredSession>;
     if (
-      typeof value.email !== "string" ||
-      !value.email ||
+      typeof value.userId !== "string" ||
+      !value.userId ||
       typeof value.workspaceId !== "string" ||
       !value.workspaceId ||
       typeof value.expiresAt !== "number" ||
       value.expiresAt <= now.getTime()
     ) return null;
 
-    return { email: value.email, workspaceId: value.workspaceId };
+    return {
+      userId: value.userId,
+      workspaceId: value.workspaceId,
+      sid: typeof value.sid === "string" && value.sid ? value.sid : undefined,
+      ver: typeof value.ver === "number" ? value.ver : undefined,
+    };
   } catch {
     return null;
   }
-}
-
-export function getOwnerAuthConfig(): OwnerAuthConfig | null {
-  const env = getServerEnv();
-  if (
-    !env.ownerEmail ||
-    !env.ownerPasswordHash ||
-    !/^scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}$/i.test(env.ownerPasswordHash) ||
-    !env.ownerSessionSecret ||
-    env.ownerSessionSecret.length < 32 ||
-    !env.ownerWorkspaceId
-  ) return null;
-
-  return {
-    email: env.ownerEmail.toLowerCase(),
-    workspaceId: env.ownerWorkspaceId,
-    passwordHash: env.ownerPasswordHash,
-    sessionSecret: env.ownerSessionSecret,
-  };
 }
 
 function readCookie(cookieHeader: string | null, name: string): string | undefined {
@@ -149,15 +151,25 @@ function readCookie(cookieHeader: string | null, name: string): string | undefin
     .join("=");
 }
 
-export function getOwnerSessionFromRequest(request: Request): OwnerSession | null {
+export function getSessionFromRequest(request: Request): AppSession | null {
   const env = getServerEnv();
-  const config = getOwnerAuthConfig();
-  if (!config) return null;
-  const session = readOwnerSession(
-    readCookie(request.headers.get("cookie"), ownerSessionCookieName(env.appUrl)),
-    config.sessionSecret,
+  return readSessionToken(
+    readCookie(request.headers.get("cookie"), sessionCookieName(env.appUrl)),
+    env.authSessionSecret,
   );
-  return session?.email === config.email && session.workspaceId === config.workspaceId ? session : null;
+}
+
+// Full validation: signature + expiry (readSessionToken) plus server-side
+// revocation state — single-session denylist and per-user token version.
+// Routes that mutate state should use this instead of getSessionFromRequest.
+export async function getValidatedSession(request: Request): Promise<AppSession | null> {
+  const session = getSessionFromRequest(request);
+  if (!session?.sid) return session;
+  const repository = getRepository();
+  if (await repository.isSessionRevoked(session.sid)) return null;
+  const currentVersion = await repository.getUserTokenVersion(session.userId);
+  if (currentVersion === null || (session.ver !== undefined && session.ver !== currentVersion)) return null;
+  return session;
 }
 
 export function safeNextPath(value: string | null | undefined): string {
@@ -166,6 +178,6 @@ export function safeNextPath(value: string | null | undefined): string {
     : "/";
 }
 
-export function ownerSessionCookieName(appUrl: string): string {
-  return appUrl.startsWith("https://") ? OWNER_PRODUCTION_SESSION_COOKIE : OWNER_SESSION_COOKIE;
+export function sessionCookieName(appUrl: string): string {
+  return appUrl.startsWith("https://") ? PRODUCTION_SESSION_COOKIE : SESSION_COOKIE;
 }

@@ -112,6 +112,8 @@ const flowV2Schema = z
       recheckButtonLabel: quickReplyLabel,
     }),
     delivery: z.object({ text: campaignText, url: deliveryUrl, buttonLabel: z.string().trim().min(1).max(80).optional() }),
+    // Optional per-automation daily cap on Meta sends; enforced by the runner.
+    dailySendLimit: z.number().int().min(1).max(1_000).optional(),
   })
   .superRefine((flow, context) => {
     const mediaIds = new Set(flow.trigger.mediaIds.map((mediaId) => mediaId.trim()));
@@ -189,16 +191,16 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
     trigger:
       parsed.trigger.type === "comment"
         ? {
-            type: "comment",
-            match: parsed.trigger.match,
-            keywords: normalizeKeywords(parsed.trigger.keywords),
-            mediaIds: parsed.trigger.mediaIds.map((mediaId) => mediaId.trim()).filter(Boolean),
-          }
+          type: "comment",
+          match: parsed.trigger.match,
+          keywords: normalizeKeywords(parsed.trigger.keywords),
+          mediaIds: parsed.trigger.mediaIds.map((mediaId) => mediaId.trim()).filter(Boolean),
+        }
         : {
-            type: "message",
-            match: parsed.trigger.match,
-            keywords: normalizeKeywords(parsed.trigger.keywords),
-          },
+          type: "message",
+          match: parsed.trigger.match,
+          keywords: normalizeKeywords(parsed.trigger.keywords),
+        },
     conditions: parsed.conditions.map((item) =>
       item.type === "contains_keyword"
         ? { type: item.type, keywords: normalizeKeywords(item.keywords) }
@@ -239,6 +241,7 @@ function normalizeV2(parsed: z.output<typeof flowV2Schema>): FlowDefinitionV2 {
       url: parsed.delivery.url.trim(),
       ...(parsed.delivery.buttonLabel ? { buttonLabel: parsed.delivery.buttonLabel.trim() } : {}),
     },
+    ...(parsed.dailySendLimit ? { dailySendLimit: parsed.dailySendLimit } : {}),
   };
 }
 

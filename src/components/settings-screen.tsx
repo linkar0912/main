@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Camera, Check, ExternalLink, LockKeyhole, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, Camera, Check, ExternalLink, LockKeyhole, ShieldCheck, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
 import { StatusBadge } from "./status-badge";
@@ -18,6 +18,9 @@ type ConnectionHealth = {
   missingFields: string[];
   checkError?: string;
 };
+type TeamMember = { email: string; role: string };
+type TeamInvitation = { id: string; email: string; role: string; expiresAt: string };
+type TeamOverview = { members: TeamMember[]; invitations: TeamInvitation[] };
 
 const WEBHOOK_FIELD_LABELS: Record<string, string> = {
   comments: "Comments",
@@ -32,8 +35,16 @@ export function SettingsScreen() {
   const [health, setHealth] = useState<ConnectionHealth | null>(null);
   const [mode, setMode] = useState<"demo" | "configured">("demo");
   const [metaState] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("meta") ?? "");
+  const [accountSaved] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("accountSaved") ?? "");
+  const [accountError] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("accountError") ?? "");
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState("");
+  const [team, setTeam] = useState<TeamOverview | null>(null);
+  const [teamManageable, setTeamManageable] = useState(true);
+  const [teamError, setTeamError] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("MEMBER");
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   async function disconnect() {
     if (!connection || disconnecting) return;
@@ -68,6 +79,56 @@ export function SettingsScreen() {
       setHealth(connectionHealthPayload.data?.[0] ?? null);
     }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    void fetch("/api/team/invitations").then(async (response) => {
+      if (!response.ok) {
+        setTeamManageable(false);
+        return;
+      }
+      setTeam(await response.json() as TeamOverview);
+    }).catch(() => setTeamManageable(false));
+  }, []);
+
+  async function refreshTeam() {
+    const response = await fetch("/api/team/invitations");
+    if (response.ok) setTeam(await response.json() as TeamOverview);
+  }
+
+  async function sendInvitation(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (inviteBusy) return;
+    setInviteBusy(true);
+    setTeamError("");
+    try {
+      const response = await fetch("/api/team/invitations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error === "already_member" ? "That person is already in the workspace." : "Could not send the invitation.");
+      }
+      setInviteEmail("");
+      await refreshTeam();
+    } catch (error) {
+      setTeamError(error instanceof Error ? error.message : "Could not send the invitation.");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function revokeInvitation(id: string) {
+    setTeamError("");
+    try {
+      const response = await fetch(`/api/team/invitations?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not revoke the invitation.");
+      await refreshTeam();
+    } catch (error) {
+      setTeamError(error instanceof Error ? error.message : "Could not revoke the invitation.");
+    }
+  }
 
   const statusMessage: Record<string, string> = {
     connected: "Instagram is connected. The account is ready for review testing.",
@@ -123,6 +184,60 @@ export function SettingsScreen() {
         <div className="settings-grid">
           <section className="panel settings-panel"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Built for review</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> No AI or scraping is used in this MVP.</li></ul></section>
           <section className="panel settings-panel"><div className="panel-heading"><div><p className="eyebrow">App mode</p><h2>{mode === "demo" ? "Demo mode" : "Connected mode"}</h2></div><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} /></div><p className="muted">{mode === "demo" ? "The workspace runs on sample data until DATABASE_URL and Meta credentials are configured." : "This workspace is configured for Meta-backed delivery."}</p><Link className="text-link" href="/support">Read setup support <ExternalLink size={15} /></Link></section>
+        </div>
+
+        <div className="settings-grid">
+          <section className="panel settings-panel" aria-label="Account security">
+            <div className="panel-heading"><div><p className="eyebrow">Account</p><h2>Sign-in & security</h2></div><LockKeyhole size={21} /></div>
+            {accountSaved === "password" && <p className="form-success" role="status">Password updated.</p>}
+            {accountError && <p className="form-error" role="alert">{accountError === "current" ? "That current password is incorrect." : accountError === "password" ? "The new password must be at least 12 characters." : "That action is not available."}</p>}
+            <form action="/api/account" method="post" className="account-form">
+              <input type="hidden" name="action" value="change-password" />
+              <label className="field"><span>Current password</span><input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+              <label className="field"><span>New password</span><input name="newPassword" type="password" autoComplete="new-password" minLength={12} required /></label>
+              <p className="muted">At least 12 characters. Your other devices stay signed in.</p>
+              <button className="button button-secondary" type="submit">Update password</button>
+            </form>
+            <form action="/api/account" method="post">
+              <input type="hidden" name="action" value="logout-all" />
+              <button className="button button-secondary" type="submit">Sign out all devices</button>
+            </form>
+          </section>
+
+          <section className="panel settings-panel" aria-label="Team">
+            <div className="panel-heading"><div><p className="eyebrow">Team</p><h2>Members & invitations</h2></div><Users size={21} /></div>
+            {teamError && <p className="form-error" role="alert">{teamError}</p>}
+            {teamManageable && team ? (
+              <>
+                <ul className="team-list">
+                  {team.members.map((member) => (
+                    <li key={member.email}>
+                      <span className="team-who"><strong>{member.email}</strong><small>{member.role}</small></span>
+                    </li>
+                  ))}
+                  {team.invitations.map((invitation) => (
+                    <li key={invitation.id}>
+                      <span className="team-who"><strong>{invitation.email}</strong><small>{invitation.role} · invitation expires {new Date(invitation.expiresAt).toLocaleDateString()}</small></span>
+                      <button className="text-link" type="button" onClick={() => void revokeInvitation(invitation.id)}>Revoke</button>
+                    </li>
+                  ))}
+                </ul>
+                <form className="invite-form" onSubmit={(event) => void sendInvitation(event)}>
+                  <label className="field"><span>Invite by email</span><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="teammate@example.com" required /></label>
+                  <label className="field"><span>Role</span>
+                    <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
+                      <option value="MEMBER">Member</option>
+                      <option value="ADMIN">Admin</option>
+                    </select>
+                  </label>
+                  <button className="button button-secondary" type="submit" disabled={inviteBusy}><UserPlus size={15} /> {inviteBusy ? "Inviting…" : "Invite"}</button>
+                </form>
+                <p className="muted">Invitations expire after 7 days and must be accepted with the invited email address.</p>
+              </>
+            ) : (
+              <p className="muted">Only workspace owners and admins can manage the team.</p>
+            )}
+          </section>
         </div>
 
         <section className="review-links panel"><div><p className="eyebrow">Submission surfaces</p><h2>Public pages your reviewers can open</h2></div><div className="review-link-grid"><Link href="/privacy">Privacy policy <ExternalLink size={14} /></Link><Link href="/terms">Terms of service <ExternalLink size={14} /></Link><Link href="/data-deletion">Data deletion <ExternalLink size={14} /></Link><Link href="/support">Support <ExternalLink size={14} /></Link></div></section>

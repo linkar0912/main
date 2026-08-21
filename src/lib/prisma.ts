@@ -15,7 +15,76 @@ import type {
   DataDeletionRequestRecord,
   ParticipantPatch,
   ParticipantState,
+  AuthTokenType,
+  AuthTokenRecord,
+  MemberRole,
+  MemberRecord,
+  InvitationRecord,
 } from "./repository";
+
+function mapUser(record: {
+  id: string;
+  email: string;
+  passwordHash: string;
+  emailVerifiedAt: Date | null;
+  tokenVersion: number;
+  createdAt: Date;
+}) {
+  return {
+    id: record.id,
+    email: record.email,
+    passwordHash: record.passwordHash,
+    emailVerifiedAt: record.emailVerifiedAt?.toISOString(),
+    tokenVersion: record.tokenVersion,
+    createdAt: record.createdAt.toISOString(),
+  };
+}
+
+function mapAuthToken(record: {
+  id: string;
+  userId: string;
+  type: string;
+  tokenHash: string;
+  expiresAt: Date;
+  usedAt: Date | null;
+  createdAt: Date;
+}): AuthTokenRecord {
+  return {
+    id: record.id,
+    userId: record.userId,
+    type: record.type as AuthTokenType,
+    tokenHash: record.tokenHash,
+    expiresAt: record.expiresAt.toISOString(),
+    usedAt: record.usedAt?.toISOString(),
+    createdAt: record.createdAt.toISOString(),
+  };
+}
+
+function mapInvitation(record: {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: string;
+  tokenHash: string;
+  invitedByUserId: string;
+  expiresAt: Date;
+  acceptedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+}): InvitationRecord {
+  return {
+    id: record.id,
+    workspaceId: record.workspaceId,
+    email: record.email,
+    role: record.role as InvitationRecord["role"],
+    tokenHash: record.tokenHash,
+    invitedByUserId: record.invitedByUserId,
+    expiresAt: record.expiresAt.toISOString(),
+    acceptedAt: record.acceptedAt?.toISOString(),
+    revokedAt: record.revokedAt?.toISOString(),
+    createdAt: record.createdAt.toISOString(),
+  };
+}
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 export const prisma = globalForPrisma.prisma ?? new PrismaClient();
@@ -203,6 +272,228 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       });
     },
 
+    async createUser(input) {
+      const email = input.email.toLowerCase();
+      try {
+        const record = await client.user.create({
+          data: { id: createId("user"), email, passwordHash: input.passwordHash },
+        });
+        return { created: true, record: mapUser(record) };
+      } catch (error) {
+        // P2002 = unique constraint violation on email.
+        if ((error as { code?: string }).code === "P2002") {
+          const existing = await client.user.findUnique({ where: { email } });
+          if (!existing) throw error;
+          return { created: false, record: mapUser(existing) };
+        }
+        throw error;
+      }
+    },
+
+    async findUserByEmail(email) {
+      const record = await client.user.findUnique({ where: { email: email.toLowerCase() } });
+      return record ? mapUser(record) : null;
+    },
+
+    async findUserById(id) {
+      const record = await client.user.findUnique({ where: { id } });
+      return record ? mapUser(record) : null;
+    },
+
+    async updateUserPassword(userId, passwordHash) {
+      await client.user.update({ where: { id: userId }, data: { passwordHash } });
+    },
+
+    async markUserEmailVerified(userId) {
+      await client.user.updateMany({
+        where: { id: userId, emailVerifiedAt: null },
+        data: { emailVerifiedAt: new Date() },
+      });
+    },
+
+    async getUserTokenVersion(userId) {
+      const record = await client.user.findUnique({ where: { id: userId }, select: { tokenVersion: true } });
+      return record?.tokenVersion ?? null;
+    },
+
+    async bumpUserTokenVersion(userId) {
+      const record = await client.user.update({
+        where: { id: userId },
+        data: { tokenVersion: { increment: 1 } },
+        select: { tokenVersion: true },
+      });
+      return record.tokenVersion;
+    },
+
+    async createAuthToken(input) {
+      const record = await client.authToken.create({
+        data: {
+          id: createId("token"),
+          userId: input.userId,
+          type: input.type,
+          tokenHash: input.tokenHash,
+          expiresAt: new Date(input.expiresAt),
+        },
+      });
+      return mapAuthToken(record);
+    },
+
+    async consumeAuthToken(tokenHash, type, nowIso) {
+      // Single-use consumption guarded by the unique hash and the usedAt-null filter.
+      const updated = await client.authToken.updateMany({
+        where: { tokenHash, type, usedAt: null, expiresAt: { gt: new Date(nowIso) } },
+        data: { usedAt: new Date(nowIso) },
+      });
+      if (updated.count !== 1) return null;
+      const record = await client.authToken.findUniqueOrThrow({ where: { tokenHash } });
+      return mapAuthToken(record);
+    },
+
+    async isSessionRevoked(sessionId) {
+      const record = await client.revokedSession.findUnique({
+        where: { sessionId },
+        select: { expiresAt: true },
+      });
+      if (!record) return false;
+      if (record.expiresAt.getTime() <= Date.now()) {
+        await client.revokedSession.delete({ where: { sessionId } }).catch(() => undefined);
+        return false;
+      }
+      return true;
+    },
+
+    async revokeSession(sessionId, userId, expiresAt) {
+      await client.revokedSession.upsert({
+        where: { sessionId },
+        create: { sessionId, userId, expiresAt: new Date(expiresAt) },
+        update: {},
+      });
+    },
+
+    async listMembers(workspaceId): Promise<MemberRecord[]> {
+      const records = await client.workspaceMember.findMany({
+        where: { workspaceId },
+        orderBy: [{ role: "asc" }, { email: "asc" }],
+      });
+      return records.map((record) => ({
+        id: record.id,
+        workspaceId: record.workspaceId,
+        email: record.email,
+        role: record.role as MemberRole,
+      }));
+    },
+
+    async getMemberRole(workspaceId, email) {
+      const record = await client.workspaceMember.findUnique({
+        where: { workspaceId_email: { workspaceId, email: email.toLowerCase() } },
+        select: { role: true },
+      });
+      return (record?.role as MemberRole | undefined) ?? null;
+    },
+
+    async addMember(workspaceId, email, role) {
+      try {
+        await client.workspaceMember.create({
+          data: { id: createId("member"), workspaceId, email: email.toLowerCase(), role },
+        });
+        return { created: true };
+      } catch (error) {
+        if ((error as { code?: string }).code === "P2002") return { created: false };
+        throw error;
+      }
+    },
+
+    async updateMemberRole(workspaceId, email, role) {
+      const result = await client.workspaceMember.updateMany({
+        where: { workspaceId, email: email.toLowerCase(), NOT: { role: "OWNER" } },
+        data: { role },
+      });
+      return result.count === 1;
+    },
+
+    async removeMember(workspaceId, email) {
+      const result = await client.workspaceMember.deleteMany({
+        where: { workspaceId, email: email.toLowerCase(), NOT: { role: "OWNER" } },
+      });
+      return result.count === 1;
+    },
+
+    async createInvitation(input) {
+      const record = await client.workspaceInvitation.create({
+        data: {
+          id: createId("invitation"),
+          workspaceId: input.workspaceId,
+          email: input.email.toLowerCase(),
+          role: input.role,
+          tokenHash: input.tokenHash,
+          invitedByUserId: input.invitedByUserId,
+          expiresAt: new Date(input.expiresAt),
+        },
+      });
+      return mapInvitation(record);
+    },
+
+    async listInvitations(workspaceId) {
+      const records = await client.workspaceInvitation.findMany({
+        where: { workspaceId, revokedAt: null, acceptedAt: null, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: "desc" },
+      });
+      return records.map(mapInvitation);
+    },
+
+    async findInvitationByTokenHash(tokenHash) {
+      const record = await client.workspaceInvitation.findUnique({ where: { tokenHash } });
+      return record ? mapInvitation(record) : null;
+    },
+
+    async acceptInvitation(id, nowIso) {
+      const accepted = await client.workspaceInvitation.updateMany({
+        where: { id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date(nowIso) } },
+        data: { acceptedAt: new Date(nowIso) },
+      });
+      if (accepted.count !== 1) return null;
+      const record = await client.workspaceInvitation.findUniqueOrThrow({ where: { id } });
+      await this.addMember(record.workspaceId, record.email, record.role as MemberRole);
+      return mapInvitation(record);
+    },
+
+    async revokeInvitation(workspaceId, id) {
+      const revoked = await client.workspaceInvitation.updateMany({
+        where: { id, workspaceId, acceptedAt: null, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return revoked.count === 1;
+    },
+
+    async countParticipantsByState(workspaceId, automationId) {
+      const grouped = await client.automationParticipant.groupBy({
+        by: ["state"],
+        where: { workspaceId, ...(automationId ? { automationId } : {}) },
+        _count: { _all: true },
+      });
+      return Object.fromEntries(grouped.map((group) => [group.state, group._count._all]));
+    },
+
+    async countExecutionsSentSince(automationId, sinceIso) {
+      return client.automationExecution.count({
+        where: { automationId, status: "SENT", createdAt: { gte: new Date(sinceIso) } },
+      });
+    },
+
+    async countParticipantsCreatedSince(workspaceId, sinceIso) {
+      return client.automationParticipant.count({
+        where: { workspaceId, createdAt: { gte: new Date(sinceIso) } },
+      });
+    },
+
+    async findWorkspaceIdByMemberEmail(email) {
+      const member = await client.workspaceMember.findFirst({
+        where: { email: email.toLowerCase() },
+        select: { workspaceId: true },
+      });
+      return member?.workspaceId ?? null;
+    },
+
     async listAutomations(workspaceId) {
       const records = await client.automation.findMany({
         where: { workspaceId },
@@ -230,13 +521,17 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async updateAutomation(workspaceId, id, patch: UpdateAutomationInput) {
-      const existing = await client.automation.findFirst({ where: { workspaceId, id } });
-      if (!existing) return null;
-      const record = await client.automation.update({
-        where: { id },
-        data: { ...patch, ...(patch.definition ? { version: patch.definition.version } : {}) },
+      // Transaction keeps the existence check and the update atomic so a concurrent
+      // delete cannot turn the findFirst/update pair into a spurious P2025 failure.
+      const record = await client.$transaction(async (transaction) => {
+        const existing = await transaction.automation.findFirst({ where: { workspaceId, id } });
+        if (!existing) return null;
+        return transaction.automation.update({
+          where: { id },
+          data: { ...patch, ...(patch.definition ? { version: patch.definition.version } : {}) },
+        });
       });
-      return mapAutomation(record);
+      return record ? mapAutomation(record) : null;
     },
 
     async listConnections(workspaceId) {
@@ -323,15 +618,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async upsertConnection(input) {
-      await client.instagramConnection.deleteMany({
-        where: { workspaceId: input.workspaceId, NOT: { igUserId: input.igUserId } },
-      });
-      const record = await client.instagramConnection.upsert({
-        where: { workspaceId_igUserId: { workspaceId: input.workspaceId, igUserId: input.igUserId } },
-        create: { id: createId("connection"), ...input },
-        update: input,
-      });
-      return mapConnection(record);
+      // One Instagram account per workspace: retire sibling connections and upsert the
+      // new one atomically so a crash between the two steps can't leave zero connections.
+      const record = await client.$transaction([
+        client.instagramConnection.deleteMany({
+          where: { workspaceId: input.workspaceId, NOT: { igUserId: input.igUserId } },
+        }),
+        client.instagramConnection.upsert({
+          where: { workspaceId_igUserId: { workspaceId: input.workspaceId, igUserId: input.igUserId } },
+          create: { id: createId("connection"), ...input },
+          update: input,
+        }),
+      ]);
+      return mapConnection(record[1]);
     },
 
     async recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult> {

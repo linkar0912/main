@@ -13,6 +13,14 @@ import type {
   DataDeletionRequestRecord,
   ParticipantPatch,
   ParticipantState,
+  CreateUserInput,
+  UserRecord,
+  AuthTokenType,
+  AuthTokenRecord,
+  MemberRole,
+  MemberRecord,
+  InvitationRecord,
+  CreateInvitationInput,
 } from "./repository";
 
 function now(): string {
@@ -30,9 +38,184 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const deletionRequests = new Map<string, DataDeletionRequestRecord>();
   const participants = new Map<string, AutomationParticipantRecord>();
   const participantIdsBySource = new Map<string, string>();
+  const usersByEmail = new Map<string, UserRecord>();
+  const usersById = new Map<string, UserRecord>();
+  // email -> workspaceId, mirroring WorkspaceMember rows for login lookups.
+  const memberWorkspacesByEmail = new Map<string, string>();
+  const membersByEmail = new Map<string, MemberRecord>();
+  const authTokensByHash = new Map<string, AuthTokenRecord>();
+  const revokedSessions = new Map<string, { userId: string; expiresAt: string }>();
+  const invitationsById = new Map<string, InvitationRecord>();
 
   return {
-    async ensureWorkspace() {},
+    async ensureWorkspace(workspaceId, ownerEmail) {
+      if (ownerEmail) memberWorkspacesByEmail.set(ownerEmail.toLowerCase(), workspaceId);
+    },
+
+    async createUser(input: CreateUserInput) {
+      const email = input.email.toLowerCase();
+      const existing = usersByEmail.get(email);
+      if (existing) return { created: false, record: copy(existing) };
+      const record: UserRecord = {
+        id: createId("user"),
+        email,
+        passwordHash: input.passwordHash,
+        tokenVersion: 0,
+        createdAt: now(),
+      };
+      usersByEmail.set(email, record);
+      usersById.set(record.id, record);
+      return { created: true, record: copy(record) };
+    },
+
+    async findUserByEmail(email) {
+      const record = usersByEmail.get(email.toLowerCase());
+      return record ? copy(record) : null;
+    },
+
+    async findUserById(id) {
+      const record = usersById.get(id);
+      return record ? copy(record) : null;
+    },
+
+    async updateUserPassword(userId, passwordHash) {
+      const record = usersById.get(userId);
+      if (record) usersById.set(userId, { ...record, passwordHash });
+    },
+
+    async markUserEmailVerified(userId) {
+      const record = usersById.get(userId);
+      if (record && !record.emailVerifiedAt) usersById.set(userId, { ...record, emailVerifiedAt: now() });
+    },
+
+    async getUserTokenVersion(userId) {
+      return usersById.get(userId)?.tokenVersion ?? null;
+    },
+
+    async bumpUserTokenVersion(userId) {
+      const record = usersById.get(userId);
+      if (!record) throw new Error("User not found");
+      const tokenVersion = record.tokenVersion + 1;
+      usersById.set(userId, { ...record, tokenVersion });
+      return tokenVersion;
+    },
+
+    async createAuthToken(input) {
+      const record: AuthTokenRecord = { id: createId("token"), createdAt: now(), ...input };
+      authTokensByHash.set(record.tokenHash, record);
+      return copy(record);
+    },
+
+    async consumeAuthToken(tokenHash, type, nowIso) {
+      const record = authTokensByHash.get(tokenHash);
+      if (!record || record.type !== type || record.usedAt || record.expiresAt <= nowIso) return null;
+      const consumed: AuthTokenRecord = { ...record, usedAt: nowIso };
+      authTokensByHash.set(tokenHash, consumed);
+      return copy(consumed);
+    },
+
+    async isSessionRevoked(sessionId) {
+      const entry = revokedSessions.get(sessionId);
+      if (!entry) return false;
+      if (entry.expiresAt <= now()) {
+        revokedSessions.delete(sessionId);
+        return false;
+      }
+      return true;
+    },
+
+    async revokeSession(sessionId, userId, expiresAt) {
+      revokedSessions.set(sessionId, { userId, expiresAt });
+    },
+
+    async listMembers(workspaceId) {
+      return copy([...membersByEmail.values()].filter((member) => member.workspaceId === workspaceId));
+    },
+
+    async getMemberRole(workspaceId, email) {
+      return membersByEmail.get(`${workspaceId}:${email.toLowerCase()}`)?.role ?? null;
+    },
+
+    async addMember(workspaceId, email, role: MemberRole) {
+      const key = `${workspaceId}:${email.toLowerCase()}`;
+      if (membersByEmail.has(key)) return { created: false };
+      membersByEmail.set(key, { id: createId("member"), workspaceId, email: email.toLowerCase(), role });
+      memberWorkspacesByEmail.set(email.toLowerCase(), workspaceId);
+      return { created: true };
+    },
+
+    async updateMemberRole(workspaceId, email, role: MemberRole) {
+      const key = `${workspaceId}:${email.toLowerCase()}`;
+      const member = membersByEmail.get(key);
+      if (!member) return false;
+      membersByEmail.set(key, { ...member, role });
+      return true;
+    },
+
+    async removeMember(workspaceId, email) {
+      const key = `${workspaceId}:${email.toLowerCase()}`;
+      const member = membersByEmail.get(key);
+      if (!member || member.role === "OWNER") return false;
+      membersByEmail.delete(key);
+      return true;
+    },
+
+    async createInvitation(input: CreateInvitationInput) {
+      const record: InvitationRecord = { id: createId("invitation"), createdAt: now(), ...input };
+      invitationsById.set(record.id, record);
+      return copy(record);
+    },
+
+    async listInvitations(workspaceId) {
+      return copy([...invitationsById.values()].filter((invitation) => invitation.workspaceId === workspaceId));
+    },
+
+    async findInvitationByTokenHash(tokenHash) {
+      const record = [...invitationsById.values()].find((invitation) => invitation.tokenHash === tokenHash);
+      return record ? copy(record) : null;
+    },
+
+    async acceptInvitation(id, nowIso) {
+      const record = invitationsById.get(id);
+      if (!record || record.acceptedAt || record.revokedAt || record.expiresAt <= nowIso) return null;
+      const accepted: InvitationRecord = { ...record, acceptedAt: nowIso };
+      invitationsById.set(id, accepted);
+      await this.addMember(record.workspaceId, record.email, record.role);
+      return copy(accepted);
+    },
+
+    async revokeInvitation(workspaceId, id) {
+      const record = invitationsById.get(id);
+      if (!record || record.workspaceId !== workspaceId || record.acceptedAt) return false;
+      invitationsById.set(id, { ...record, revokedAt: now() });
+      return true;
+    },
+
+    async countParticipantsByState(workspaceId, automationId) {
+      const counts: Record<string, number> = {};
+      for (const participant of participants.values()) {
+        if (participant.workspaceId !== workspaceId) continue;
+        if (automationId && participant.automationId !== automationId) continue;
+        counts[participant.state] = (counts[participant.state] ?? 0) + 1;
+      }
+      return counts;
+    },
+
+    async countExecutionsSentSince(automationId, sinceIso) {
+      return [...executions.values()].filter(
+        (execution) => execution.automationId === automationId && execution.status === "SENT" && execution.createdAt >= sinceIso,
+      ).length;
+    },
+
+    async countParticipantsCreatedSince(workspaceId, sinceIso) {
+      return [...participants.values()].filter(
+        (participant) => participant.workspaceId === workspaceId && participant.createdAt >= sinceIso,
+      ).length;
+    },
+
+    async findWorkspaceIdByMemberEmail(email) {
+      return memberWorkspacesByEmail.get(email.toLowerCase()) ?? null;
+    },
 
     async listAutomations(workspaceId) {
       return copy(

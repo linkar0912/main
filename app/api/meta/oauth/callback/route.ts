@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getServerEnv } from "@/src/lib/env";
+import { logger } from "@/src/lib/logger";
 import { exchangeInstagramCode } from "@/src/lib/meta/oauth";
 import { MetaClient } from "@/src/lib/meta/client";
 import { META_OAUTH_STATE_COOKIE, readOAuthState } from "@/src/lib/meta/oauth-state";
-import { getOwnerAuthConfig } from "@/src/lib/auth/session";
 import { sealSecret } from "@/src/lib/security/secrets";
 import { getRepository } from "@/src/lib/repository-provider";
 
@@ -20,9 +20,8 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const storedState = (await cookies()).get(META_OAUTH_STATE_COOKIE)?.value;
-  const auth = getOwnerAuthConfig();
-  const responseState = state && storedState && state === storedState && auth
-    ? readOAuthState(state, auth.sessionSecret)
+  const responseState = state && storedState && state === storedState
+    ? readOAuthState(state, env.authSessionSecret)
     : null;
 
   if (!code || !responseState) return settingsRedirect(env, "invalid-state");
@@ -49,7 +48,10 @@ export async function GET(request: Request) {
     const response = settingsRedirect(env, "connected");
     response.cookies.delete(META_OAUTH_STATE_COOKIE);
     return response;
-  } catch {
+  } catch (error) {
+    logger.error("Instagram OAuth callback failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return settingsRedirect(env, "error");
   }
 }

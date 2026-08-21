@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const STORAGE_STATE = ".playwright/auth.json";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -14,11 +16,16 @@ export default defineConfig({
     reuseExistingServer: true,
     env: {
       NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3000",
-      OWNER_EMAIL: "owner@example.com",
-      OWNER_PASSWORD_HASH: "scrypt$00112233445566778899aabbccddeeff$b9c71a45979181289d12b6d5db8bd89c367031cf1a2a9004395ded06d7019e3ebe84bd09ce203a64544a215e05afe3a474d8a68f5ad19e4d88aa5708b6457bd8",
-      OWNER_SESSION_SECRET: "replyconnect-e2e-session-secret-32-chars",
-      OWNER_WORKSPACE_ID: "demo_workspace",
     },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // Signs up one workspace owner through the real /signup flow and saves the
+    // session; the chromium project depends on it and starts authenticated.
+    { name: "setup", testMatch: /auth\.setup\.ts/ },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+      dependencies: ["setup"],
+    },
+  ],
 });

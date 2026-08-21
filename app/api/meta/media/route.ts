@@ -1,6 +1,6 @@
-import { getOwnerSessionFromRequest } from "@/src/lib/auth/session";
+import { getSessionFromRequest } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
-import { MetaClient } from "@/src/lib/meta/client";
+import { MetaApiError, MetaClient } from "@/src/lib/meta/client";
 import type { MetaMedia } from "@/src/lib/meta/types";
 import { getRepository } from "@/src/lib/repository-provider";
 import { unsealSecret } from "@/src/lib/security/secrets";
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 const MAX_CURSOR_LENGTH = 500;
 
 export async function GET(request: Request) {
-  const session = getOwnerSessionFromRequest(request);
+  const session = getSessionFromRequest(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const env = getServerEnv();
@@ -68,12 +68,8 @@ function toPublicMedia(media: MetaMedia): MetaMedia {
 }
 
 function mapMediaError(error: unknown): Response {
-  if (error instanceof Error && error.name === "MetaApiError") {
-    const status = typeof (error as Error & { status?: unknown }).status === "number" &&
-      (error as Error & { status: number }).status >= 400 &&
-      (error as Error & { status: number }).status <= 599
-      ? (error as Error & { status: number }).status
-      : 502;
+  if (error instanceof MetaApiError) {
+    const status = error.status >= 400 && error.status <= 599 ? error.status : 502;
     return Response.json({ error: error.message }, { status });
   }
   return Response.json({ error: "Unable to load media" }, { status: 502 });

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { matchCampaign, selectPublicReply } from "./campaign-match";
-import { createInteractionPayload, readInteractionPayload } from "./postback";
+import { createInteractionPayload, decodeInteractionPayloadShape, readInteractionPayload } from "./postback";
 import type { FlowDefinitionV2, MediaSnapshot, NormalizedEvent } from "./types";
 import { MetaApiError, type MetaClient } from "../meta/client";
 import type { MetaConnection, MetaMedia, MetaMessage, MetaSendResult } from "../meta/types";
@@ -12,12 +12,14 @@ import type {
   InstagramConnectionRecord,
   ParticipantState,
 } from "../repository";
+import type { ParticipantPatch } from "../repository";
 import { unsealSecret } from "../security/secrets";
+import { checkDailySendLimit, checkMonthlyParticipantLimit, renderTemplate } from "./send-limits";
 
 const RECHECK_COOLDOWN_MS = 10_000;
 const MAX_RECHECKS = 10;
 const MESSAGE_WINDOW_MS = 24 * 60 * 60 * 1_000;
-const DISPATCH_LEASE_MS = 30_000;
+const DEFAULT_DISPATCH_LEASE_MS = 30_000;
 
 const INTERACTION_EVENT_TYPES = new Set<NormalizedEvent["type"]>([
   "quick_reply.received",
@@ -49,6 +51,7 @@ export type CampaignRunnerOptions = {
   tokenEncryptionKey?: string;
   interactionSecret?: string;
   finalAttempt?: boolean;
+  dispatchLeaseMs?: number;
 };
 
 export type CampaignMapping = {
@@ -195,56 +198,58 @@ async function prepareDeliveryAction(
   repository: AutomationRepository,
   action: string,
   externalEventId: string,
+  dispatchLeaseMs: number,
 ): Promise<PreparedDeliveryAction> {
-  const dedupeKey = actionDedupeKey(participant.id, action);
-  const existing = await repository.getExecution(participant.workspaceId, dedupeKey);
-  if (existing?.status === "SENT") return { kind: "sent", execution: existing };
-  if (existing?.status === "FAILED") {
-    return { kind: "failed", reason: existing.reason ?? "Meta delivery failed" };
-  }
-  if (existing?.status === "PROCESSING" && existing.dispatchStatus === "DISPATCHING") {
-    const startedAt = existing.dispatchStartedAt ? Date.parse(existing.dispatchStartedAt) : Number.NaN;
-    const leaseExpiresAt = existing.dispatchLeaseExpiresAt
-      ? Date.parse(existing.dispatchLeaseExpiresAt)
-      : Number.NaN;
-    if (
-      existing.dispatchOwner
-      && Number.isFinite(startedAt)
-      && Number.isFinite(leaseExpiresAt)
-      && leaseExpiresAt > Date.now()
-    ) return { kind: "in_flight" };
+  // Loop instead of recursing on contention so pathological claim races cannot
+  // build up unbounded call stacks; each iteration re-reads current state.
+  for (; ;) {
+    const dedupeKey = actionDedupeKey(participant.id, action);
+    const existing = await repository.getExecution(participant.workspaceId, dedupeKey);
+    if (existing?.status === "SENT") return { kind: "sent", execution: existing };
+    if (existing?.status === "FAILED") {
+      return { kind: "failed", reason: existing.reason ?? "Meta delivery failed" };
+    }
+    if (existing?.status === "PROCESSING" && existing.dispatchStatus === "DISPATCHING") {
+      const startedAt = existing.dispatchStartedAt ? Date.parse(existing.dispatchStartedAt) : Number.NaN;
+      const leaseExpiresAt = existing.dispatchLeaseExpiresAt
+        ? Date.parse(existing.dispatchLeaseExpiresAt)
+        : Number.NaN;
+      if (
+        existing.dispatchOwner
+        && Number.isFinite(startedAt)
+        && Number.isFinite(leaseExpiresAt)
+        && leaseExpiresAt > Date.now()
+      ) return { kind: "in_flight" };
 
-    const reason = "Meta delivery outcome is ambiguous after an abandoned dispatch lease";
-    const failed = await repository.failAbandonedExecution(
-      participant.workspaceId,
+      const reason = "Meta delivery outcome is ambiguous after an abandoned dispatch lease";
+      const failed = await repository.failAbandonedExecution(
+        participant.workspaceId,
+        dedupeKey,
+        new Date().toISOString(),
+        reason,
+      );
+      if (failed) return { kind: "failed", reason };
+      continue;
+    }
+    if (existing?.status === "PROCESSING") {
+      const reason = "Historical processing execution has no durable dispatch owner";
+      await repository.completeExecution(participant.workspaceId, dedupeKey, { status: "FAILED", reason });
+      return { kind: "failed", reason };
+    }
+
+    const dispatchStartedAt = Date.now();
+    const dispatchOwner = randomUUID();
+    const claimed = await repository.claimExecutionDispatch({
+      workspaceId: participant.workspaceId,
+      automationId: participant.automationId,
+      externalEventId,
       dedupeKey,
-      new Date().toISOString(),
-      reason,
-    );
-    return failed
-      ? { kind: "failed", reason }
-      : prepareDeliveryAction(participant, repository, action, externalEventId);
+      dispatchOwner,
+      dispatchStartedAt: new Date(dispatchStartedAt).toISOString(),
+      dispatchLeaseExpiresAt: new Date(dispatchStartedAt + dispatchLeaseMs).toISOString(),
+    });
+    if (claimed) return { kind: "send", dispatchOwner };
   }
-  if (existing?.status === "PROCESSING") {
-    const reason = "Historical processing execution has no durable dispatch owner";
-    await repository.completeExecution(participant.workspaceId, dedupeKey, { status: "FAILED", reason });
-    return { kind: "failed", reason };
-  }
-
-  const dispatchStartedAt = Date.now();
-  const dispatchOwner = randomUUID();
-  const claimed = await repository.claimExecutionDispatch({
-    workspaceId: participant.workspaceId,
-    automationId: participant.automationId,
-    externalEventId,
-    dedupeKey,
-    dispatchOwner,
-    dispatchStartedAt: new Date(dispatchStartedAt).toISOString(),
-    dispatchLeaseExpiresAt: new Date(dispatchStartedAt + DISPATCH_LEASE_MS).toISOString(),
-  });
-  return claimed
-    ? { kind: "send", dispatchOwner }
-    : prepareDeliveryAction(participant, repository, action, externalEventId);
 }
 
 function isKnownNotSentRetryable(error: unknown): error is MetaApiError {
@@ -258,18 +263,7 @@ function isAmbiguousProviderOutcome(error: unknown): boolean {
 function looksLikeCampaignInteractionPayload(value: string): boolean {
   const separator = value.indexOf(".");
   if (separator <= 0) return false;
-  const encoded = value.slice(0, separator);
-  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) return false;
-  try {
-    if (Buffer.from(encoded, "base64url").toString("base64url") !== encoded) return false;
-    const body = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Record<string, unknown>;
-    return body.v === 1
-      && typeof body.p === "string"
-      && body.p.length > 0
-      && (body.a === "opt_in" || body.a === "recheck");
-  } catch {
-    return false;
-  }
+  return decodeInteractionPayloadShape(value.slice(0, separator)) !== null;
 }
 
 async function currentParticipant(
@@ -426,13 +420,162 @@ async function resolveNextMedia(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Guarded delivery
+//
+// Every outbound Meta action (public reply, opening DM, follow prompt, final
+// delivery) shares the same crash-safe protocol: claim a dispatch lease, send,
+// persist the outcome under the lease owner, and reconcile contention (another
+// worker completed it, lease expired, ownership lost). The spec below captures
+// what varies per action; guardedDelivery implements the shared protocol once.
+// ---------------------------------------------------------------------------
+
+type DeliveryContext = {
+  client: CampaignRunnerClient;
+  connection: MetaConnection;
+  repository: AutomationRepository;
+  interactionSecret: string;
+  finalAttempt: boolean;
+  dispatchLeaseMs: number;
+};
+
+type GuardedDeliverySpec = {
+  action: string;
+  externalEventId: string;
+  allowedStates: ParticipantState[];
+  /** Sends via Meta; throws on provider-side rejection or missing identifiers. */
+  send: () => Promise<{ messageId?: string; recipientId?: string }>;
+  /** Patch applied when a previous attempt already recorded SENT for this action. */
+  onRecordedSent: (execution: ExecutionRecord) => ParticipantPatch;
+  /** When non-null, a recorded SENT execution missing identifiers is treated as a failure. */
+  validateRecordedExecution?: (execution: ExecutionRecord) => string | null;
+  /** Patch applied after this worker's own successful send. */
+  onSuccess: (ids: { messageId?: string; recipientId?: string }) => ParticipantPatch;
+  /** Patch applied when the action terminally fails (recorded or fresh). */
+  onFailure: (reason: string) => ParticipantPatch;
+  /** Patch applied before rethrowing a retryable error for BullMQ to redeliver. */
+  onRetryablePending?: () => ParticipantPatch;
+  /**
+   * Patch applied when dispatch ownership was lost mid-send. Return null to skip
+   * the transition (the winner of the claim owns the outcome).
+   */
+  onOwnershipLost: () => ParticipantPatch | null;
+  ambiguousReason: string;
+  failureReason: string;
+};
+
+async function guardedDelivery(
+  participant: AutomationParticipantRecord,
+  spec: GuardedDeliverySpec,
+  ctx: Pick<DeliveryContext, "client" | "connection" | "repository" | "finalAttempt" | "dispatchLeaseMs">,
+): Promise<AutomationParticipantRecord> {
+  const { repository } = ctx;
+  for (; ;) {
+    const prepared = await prepareDeliveryAction(
+      participant,
+      repository,
+      spec.action,
+      spec.externalEventId,
+      ctx.dispatchLeaseMs,
+    );
+
+    if (prepared.kind === "in_flight") return currentParticipant(participant, repository);
+
+    if (prepared.kind === "sent") {
+      const invalidReason = spec.validateRecordedExecution?.(prepared.execution) ?? null;
+      if (invalidReason) {
+        const failed = await repository.transitionParticipant(
+          participant.id,
+          spec.allowedStates,
+          spec.onFailure(invalidReason),
+        );
+        return failed ?? currentParticipant(participant, repository);
+      }
+      const updated = await repository.transitionParticipant(
+        participant.id,
+        spec.allowedStates,
+        spec.onRecordedSent(prepared.execution),
+      );
+      return updated ?? currentParticipant(participant, repository);
+    }
+
+    if (prepared.kind === "failed") {
+      const failed = await repository.transitionParticipant(
+        participant.id,
+        spec.allowedStates,
+        spec.onFailure(prepared.reason),
+      );
+      return failed ?? currentParticipant(participant, repository);
+    }
+
+    // prepared.kind === "send": this worker owns the dispatch lease.
+    let sentIds: { messageId?: string; recipientId?: string };
+    try {
+      const response = await spec.send();
+      sentIds = response;
+      const completed = await completeOwnedAction(
+        participant,
+        repository,
+        spec.action,
+        prepared.dispatchOwner,
+        "SENT",
+        response.messageId,
+        undefined,
+        response.recipientId,
+      );
+      if (!completed) {
+        if (await getActionExecution(participant, repository, spec.action)) continue;
+        const patch = spec.onOwnershipLost();
+        if (!patch) return currentParticipant(participant, repository);
+        const failed = await repository.transitionParticipant(participant.id, spec.allowedStates, patch);
+        return failed ?? currentParticipant(participant, repository);
+      }
+    } catch (error) {
+      if (isKnownNotSentRetryable(error) && !ctx.finalAttempt) {
+        const released = await releaseOwnedAction(
+          participant,
+          repository,
+          spec.action,
+          prepared.dispatchOwner,
+        );
+        if (!released) {
+          if (await getActionExecution(participant, repository, spec.action)) continue;
+          return currentParticipant(participant, repository);
+        }
+        if (spec.onRetryablePending) {
+          await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
+        }
+        throw error;
+      }
+
+      const reason = isAmbiguousProviderOutcome(error) ? spec.ambiguousReason : spec.failureReason;
+      const failedPersisted = await completeOwnedAction(
+        participant,
+        repository,
+        spec.action,
+        prepared.dispatchOwner,
+        "FAILED",
+        undefined,
+        reason,
+      );
+      if (!failedPersisted && await getActionExecution(participant, repository, spec.action)) continue;
+      const failed = await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onFailure(reason));
+      return failed ?? currentParticipant(participant, repository);
+    }
+
+    const updated = await repository.transitionParticipant(
+      participant.id,
+      spec.allowedStates,
+      spec.onSuccess(sentIds),
+    );
+    return updated ?? currentParticipant(participant, repository);
+  }
+}
+
 async function deliverPublicReply(
   participant: AutomationParticipantRecord,
   definition: FlowDefinitionV2,
-  client: CampaignRunnerClient,
-  connection: MetaConnection,
-  repository: AutomationRepository,
-  finalAttempt: boolean,
+  ctx: DeliveryContext,
 ): Promise<AutomationParticipantRecord> {
   const text = selectPublicReply(
     definition.publicReplies,
@@ -440,7 +583,7 @@ async function deliverPublicReply(
     participant.sourceCommentId,
   );
   if (!text) {
-    const skipped = await repository.transitionParticipant(
+    const skipped = await ctx.repository.transitionParticipant(
       participant.id,
       PARTICIPANT_ACTION_STATES,
       { publicReplyStatus: "SKIPPED" },
@@ -448,447 +591,183 @@ async function deliverPublicReply(
     return skipped ?? participant;
   }
 
-  const action = "public_reply";
-  const prepared = await prepareDeliveryAction(
+  return guardedDelivery(
     participant,
-    repository,
-    action,
-    participant.sourceCommentId,
-  );
-  if (prepared.kind === "in_flight") return currentParticipant(participant, repository);
-  if (prepared.kind === "sent") {
-    const sent = await repository.transitionParticipant(
-      participant.id,
-      PARTICIPANT_ACTION_STATES,
-      {
+    {
+      action: "public_reply",
+      externalEventId: participant.sourceCommentId,
+      allowedStates: PARTICIPANT_ACTION_STATES,
+      send: async () => ({
+        messageId: (await ctx.client.replyToComment(ctx.connection, participant.sourceCommentId, text)).id,
+      }),
+      onRecordedSent: (execution) => ({
         publicReplyStatus: "SENT",
-        publicReplyProviderId: prepared.execution.providerMessageId,
-        publicReplySentAt: prepared.execution.createdAt,
+        publicReplyProviderId: execution.providerMessageId,
+        publicReplySentAt: execution.createdAt,
         publicReplyError: undefined,
-      },
-    );
-    return sent ?? currentParticipant(participant, repository);
-  }
-  if (prepared.kind === "failed") {
-    const failed = await repository.transitionParticipant(participant.id, PARTICIPANT_ACTION_STATES, {
-      publicReplyStatus: "FAILED",
-      publicReplyError: prepared.reason,
-    });
-    return failed ?? currentParticipant(participant, repository);
-  }
-
-  let response: { id: string };
-  try {
-    response = await client.replyToComment(
-      connection,
-      participant.sourceCommentId,
-      text,
-    );
-    const completed = await completeOwnedAction(
-      participant,
-      repository,
-      action,
-      prepared.dispatchOwner,
-      "SENT",
-      response.id,
-    );
-    if (!completed) {
-      if (await getActionExecution(participant, repository, action)) {
-        return deliverPublicReply(participant, definition, client, connection, repository, finalAttempt);
-      }
-      const failed = await repository.transitionParticipant(participant.id, PARTICIPANT_ACTION_STATES, {
-        publicReplyStatus: "FAILED",
-        publicReplyError: "Meta public reply dispatch ownership was lost",
-      });
-      return failed ?? currentParticipant(participant, repository);
-    }
-  } catch (error) {
-    if (isKnownNotSentRetryable(error) && !finalAttempt) {
-      const released = await releaseOwnedAction(
-        participant,
-        repository,
-        action,
-        prepared.dispatchOwner,
-      );
-      if (!released) {
-        if (await getActionExecution(participant, repository, action)) {
-          return deliverPublicReply(participant, definition, client, connection, repository, finalAttempt);
-        }
-        return currentParticipant(participant, repository);
-      }
-      await repository.transitionParticipant(participant.id, PARTICIPANT_ACTION_STATES, {
+      }),
+      onSuccess: (ids) => ({
+        publicReplyStatus: "SENT",
+        publicReplyProviderId: ids.messageId,
+        publicReplySentAt: new Date().toISOString(),
+        publicReplyError: undefined,
+      }),
+      onFailure: (reason) => ({ publicReplyStatus: "FAILED", publicReplyError: reason }),
+      onRetryablePending: () => ({
         publicReplyStatus: "PENDING",
         publicReplyError: "Meta public reply temporarily failed",
-      });
-      throw error;
-    }
-
-    const reason = isAmbiguousProviderOutcome(error)
-      ? "Meta public reply outcome is ambiguous; delivery was not retried"
-      : "Meta public reply failed";
-    const failedPersisted = await completeOwnedAction(
-      participant,
-      repository,
-      action,
-      prepared.dispatchOwner,
-      "FAILED",
-      undefined,
-      reason,
-    );
-    if (!failedPersisted && await getActionExecution(participant, repository, action)) {
-      return deliverPublicReply(participant, definition, client, connection, repository, finalAttempt);
-    }
-    const failed = await repository.transitionParticipant(
-      participant.id,
-      PARTICIPANT_ACTION_STATES,
-      { publicReplyStatus: "FAILED", publicReplyError: reason },
-    );
-    return failed ?? currentParticipant(participant, repository);
-  }
-
-  const sent = await repository.transitionParticipant(
-    participant.id,
-    PARTICIPANT_ACTION_STATES,
-    {
-      publicReplyStatus: "SENT",
-      publicReplyProviderId: response.id,
-      publicReplySentAt: new Date().toISOString(),
-      publicReplyError: undefined,
+      }),
+      onOwnershipLost: () => ({
+        publicReplyStatus: "FAILED",
+        publicReplyError: "Meta public reply dispatch ownership was lost",
+      }),
+      ambiguousReason: "Meta public reply outcome is ambiguous; delivery was not retried",
+      failureReason: "Meta public reply failed",
     },
+    ctx,
   );
-  return sent ?? currentParticipant(participant, repository);
 }
 
 async function deliverOpeningReply(
   participant: AutomationParticipantRecord,
   definition: FlowDefinitionV2,
-  client: CampaignRunnerClient,
-  connection: MetaConnection,
-  repository: AutomationRepository,
-  interactionSecret: string,
-  finalAttempt: boolean,
+  ctx: DeliveryContext,
 ): Promise<AutomationParticipantRecord> {
-  const action = "opening_reply";
-  const prepared = await prepareDeliveryAction(
-    participant,
-    repository,
-    action,
-    participant.sourceCommentId,
-  );
-  if (prepared.kind === "in_flight") return currentParticipant(participant, repository);
-  if (prepared.kind === "sent") {
-    if (!prepared.execution.providerMessageId || !prepared.execution.providerRecipientId) {
-      const reason = "Recorded opening delivery success is missing provider identifiers";
-      const failed = await repository.transitionParticipant(participant.id, ["COMMENT_MATCHED"], {
-        state: "FAILED",
-        openingStatus: "FAILED",
-        openingError: reason,
-      });
-      return failed ?? currentParticipant(participant, repository);
-    }
-    const sent = await repository.transitionParticipant(
+  const dailyLimit = await checkDailySendLimit(definition, participant);
+  if (!dailyLimit.allowed) {
+    const skipped = await ctx.repository.transitionParticipant(
       participant.id,
       ["COMMENT_MATCHED"],
-      {
+      { openingStatus: "SKIPPED", openingError: dailyLimit.reason },
+    );
+    return skipped ?? participant;
+  }
+  const monthlyLimit = await checkMonthlyParticipantLimit(participant);
+  if (!monthlyLimit.allowed) {
+    const skipped = await ctx.repository.transitionParticipant(
+      participant.id,
+      ["COMMENT_MATCHED"],
+      { openingStatus: "SKIPPED", openingError: monthlyLimit.reason },
+    );
+    return skipped ?? participant;
+  }
+  const openingText = renderTemplate(definition.openingMessage.text, { keyword: participant.matchedKeyword });
+  return guardedDelivery(
+    participant,
+    {
+      action: "opening_reply",
+      externalEventId: participant.sourceCommentId,
+      allowedStates: ["COMMENT_MATCHED"],
+      send: async () => {
+        const response = await ctx.client.sendPrivateReply(
+          ctx.connection,
+          participant.sourceCommentId,
+          {
+            text: openingText,
+            quickReply: {
+              title: definition.openingMessage.optInButtonLabel,
+              payload: createInteractionPayload(
+                { participantId: participant.id, action: "opt_in" },
+                ctx.interactionSecret,
+              ),
+            },
+          },
+        );
+        if (!response.message_id || !response.recipient_id) {
+          throw new Error("Meta accepted the opening reply without delivery identifiers");
+        }
+        return { messageId: response.message_id, recipientId: response.recipient_id };
+      },
+      onRecordedSent: (execution) => ({
         state: "OPENING_SENT",
         openingStatus: "SENT",
-        openingProviderId: prepared.execution.providerMessageId,
-        openingSentAt: prepared.execution.createdAt,
+        openingProviderId: execution.providerMessageId,
+        openingSentAt: execution.createdAt,
         openingError: undefined,
-        igScopedUserId: prepared.execution.providerRecipientId,
-      },
-    );
-    return sent ?? currentParticipant(participant, repository);
-  }
-  if (prepared.kind === "failed") {
-    const failed = await repository.transitionParticipant(participant.id, ["COMMENT_MATCHED"], {
-      state: "FAILED",
-      openingStatus: "FAILED",
-      openingError: prepared.reason,
-    });
-    return failed ?? currentParticipant(participant, repository);
-  }
-
-  let response: MetaSendResult;
-  try {
-    response = await client.sendPrivateReply(
-      connection,
-      participant.sourceCommentId,
-      {
-        text: definition.openingMessage.text,
-        quickReply: {
-          title: definition.openingMessage.optInButtonLabel,
-          payload: createInteractionPayload(
-            { participantId: participant.id, action: "opt_in" },
-            interactionSecret,
-          ),
-        },
-      },
-    );
-    if (!response.message_id || !response.recipient_id) {
-      throw new Error("Meta accepted the opening reply without delivery identifiers");
-    }
-
-    const completed = await completeOwnedAction(
-      participant,
-      repository,
-      action,
-      prepared.dispatchOwner,
-      "SENT",
-      response.message_id,
-      undefined,
-      response.recipient_id,
-    );
-    if (!completed) {
-      if (await getActionExecution(participant, repository, action)) {
-        return deliverOpeningReply(
-          participant,
-          definition,
-          client,
-          connection,
-          repository,
-          interactionSecret,
-          finalAttempt,
-        );
-      }
-      const failed = await repository.transitionParticipant(participant.id, ["COMMENT_MATCHED"], {
+        igScopedUserId: execution.providerRecipientId,
+      }),
+      validateRecordedExecution: (execution) =>
+        !execution.providerMessageId || !execution.providerRecipientId
+          ? "Recorded opening delivery success is missing provider identifiers"
+          : null,
+      onSuccess: (ids) => ({
+        state: "OPENING_SENT",
+        openingStatus: "SENT",
+        openingProviderId: ids.messageId,
+        openingSentAt: new Date().toISOString(),
+        openingError: undefined,
+        igScopedUserId: ids.recipientId,
+      }),
+      onFailure: (reason) => ({ state: "FAILED", openingStatus: "FAILED", openingError: reason }),
+      onRetryablePending: () => ({
+        openingStatus: "PENDING",
+        openingError: "Meta opening reply temporarily failed",
+      }),
+      onOwnershipLost: () => ({
         state: "FAILED",
         openingStatus: "FAILED",
         openingError: "Meta opening reply dispatch ownership was lost",
-      });
-      return failed ?? currentParticipant(participant, repository);
-    }
-  } catch (error) {
-    if (isKnownNotSentRetryable(error) && !finalAttempt) {
-      const released = await releaseOwnedAction(
-        participant,
-        repository,
-        action,
-        prepared.dispatchOwner,
-      );
-      if (!released) {
-        if (await getActionExecution(participant, repository, action)) {
-          return deliverOpeningReply(
-            participant,
-            definition,
-            client,
-            connection,
-            repository,
-            interactionSecret,
-            finalAttempt,
-          );
-        }
-        return currentParticipant(participant, repository);
-      }
-      await repository.transitionParticipant(participant.id, ["COMMENT_MATCHED"], {
-        openingStatus: "PENDING",
-        openingError: "Meta opening reply temporarily failed",
-      });
-      throw error;
-    }
-
-    const reason = isAmbiguousProviderOutcome(error)
-      ? "Meta opening reply outcome is ambiguous; delivery was not retried"
-      : "Meta opening reply failed";
-    const failedPersisted = await completeOwnedAction(
-      participant,
-      repository,
-      action,
-      prepared.dispatchOwner,
-      "FAILED",
-      undefined,
-      reason,
-    );
-    if (!failedPersisted && await getActionExecution(participant, repository, action)) {
-      return deliverOpeningReply(
-        participant,
-        definition,
-        client,
-        connection,
-        repository,
-        interactionSecret,
-        finalAttempt,
-      );
-    }
-    const failed = await repository.transitionParticipant(
-      participant.id,
-      ["COMMENT_MATCHED"],
-      {
-        state: "FAILED",
-        openingStatus: "FAILED",
-        openingError: reason,
-      },
-    );
-    return failed ?? currentParticipant(participant, repository);
-  }
-
-  const sent = await repository.transitionParticipant(
-    participant.id,
-    ["COMMENT_MATCHED"],
-    {
-      state: "OPENING_SENT",
-      openingStatus: "SENT",
-      openingProviderId: response.message_id,
-      openingSentAt: new Date().toISOString(),
-      openingError: undefined,
-      igScopedUserId: response.recipient_id,
+      }),
+      ambiguousReason: "Meta opening reply outcome is ambiguous; delivery was not retried",
+      failureReason: "Meta opening reply failed",
     },
+    ctx,
   );
-  return sent ?? currentParticipant(participant, repository);
 }
 
 async function promptForFollow(
   participant: AutomationParticipantRecord,
   definition: FlowDefinitionV2,
   event: NormalizedEvent,
-  client: CampaignRunnerClient,
-  connection: MetaConnection,
-  repository: AutomationRepository,
-  interactionSecret: string,
   actionPurpose: "opt_in" | "recheck",
-  finalAttempt: boolean,
+  ctx: DeliveryContext,
 ): Promise<AutomationParticipantRecord> {
-  const action = `follow_prompt:${event.id}`;
-  const prepared = await prepareDeliveryAction(participant, repository, action, event.id);
-  if (prepared.kind === "in_flight") return currentParticipant(participant, repository);
-  if (prepared.kind === "sent") {
-    const prompted = await repository.transitionParticipant(
-      participant.id,
-      [participant.state],
-      {
-        state: "FOLLOW_REQUIRED",
-        followStatus: false,
-        followCheckedAt: new Date(event.timestamp).toISOString(),
-        followCheckError: undefined,
-        messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
-        recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
-      },
-    );
-    return prompted ?? currentParticipant(participant, repository);
-  }
-  if (prepared.kind === "failed") {
-    const failed = await repository.transitionParticipant(participant.id, [participant.state], {
-      state: "FAILED",
-      finalDeliveryError: prepared.reason,
-    });
-    return failed ?? currentParticipant(participant, repository);
-  }
+  const followRequiredPatch = (): ParticipantPatch => ({
+    state: "FOLLOW_REQUIRED",
+    followStatus: false,
+    followCheckedAt: new Date(event.timestamp).toISOString(),
+    followCheckError: undefined,
+    messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+    recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
+  });
 
-  let response: MetaSendResult;
-  try {
-    response = await client.sendQuickReply(
-      connection,
-      event.recipientId!,
-      definition.followGate.notFollowingMessage,
-      {
-        title: definition.followGate.recheckButtonLabel,
-        payload: createInteractionPayload(
-          { participantId: participant.id, action: "recheck" },
-          interactionSecret,
-          event.timestamp,
-        ),
-      },
-    );
-    if (!response.message_id) {
-      throw new Error("Meta accepted the follow prompt without a delivery identifier");
-    }
-
-    const completed = await completeOwnedAction(
-      participant,
-      repository,
-      action,
-      prepared.dispatchOwner,
-      "SENT",
-      response.message_id,
-    );
-    if (!completed) {
-      if (await getActionExecution(participant, repository, action)) {
-        return promptForFollow(
-          participant,
-          definition,
-          event,
-          client,
-          connection,
-          repository,
-          interactionSecret,
-          actionPurpose,
-          finalAttempt,
-        );
-      }
-      return currentParticipant(participant, repository);
-    }
-  } catch (error) {
-    if (isKnownNotSentRetryable(error) && !finalAttempt) {
-      const released = await releaseOwnedAction(
-        participant,
-        repository,
-        action,
-        prepared.dispatchOwner,
-      );
-      if (!released) {
-        if (await getActionExecution(participant, repository, action)) {
-          return promptForFollow(
-            participant,
-            definition,
-            event,
-            client,
-            connection,
-            repository,
-            interactionSecret,
-            actionPurpose,
-            finalAttempt,
-          );
-        }
-        return currentParticipant(participant, repository);
-      }
-      throw error;
-    }
-
-    const reason = isAmbiguousProviderOutcome(error)
-      ? "Meta follow prompt outcome is ambiguous; delivery was not retried"
-      : "Meta follow prompt failed";
-    const failedPersisted = await completeOwnedAction(
-      participant,
-      repository,
-      action,
-      prepared.dispatchOwner,
-      "FAILED",
-      undefined,
-      reason,
-    );
-    if (!failedPersisted && await getActionExecution(participant, repository, action)) {
-      return promptForFollow(
-        participant,
-        definition,
-        event,
-        client,
-        connection,
-        repository,
-        interactionSecret,
-        actionPurpose,
-        finalAttempt,
-      );
-    }
-    const failed = await repository.transitionParticipant(participant.id, [participant.state], {
-      state: "FAILED",
-      finalDeliveryError: reason,
-    });
-    return failed ?? currentParticipant(participant, repository);
-  }
-
-  const prompted = await repository.transitionParticipant(
-    participant.id,
-    [participant.state],
+  return guardedDelivery(
+    participant,
     {
-      state: "FOLLOW_REQUIRED",
-      followStatus: false,
-      followCheckedAt: new Date(event.timestamp).toISOString(),
-      followCheckError: undefined,
-      messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
-      recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
+      action: `follow_prompt:${event.id}`,
+      externalEventId: event.id,
+      allowedStates: [participant.state],
+      send: async () => {
+        const response = await ctx.client.sendQuickReply(
+          ctx.connection,
+          event.recipientId!,
+          definition.followGate.notFollowingMessage,
+          {
+            title: definition.followGate.recheckButtonLabel,
+            payload: createInteractionPayload(
+              { participantId: participant.id, action: "recheck" },
+              ctx.interactionSecret,
+              event.timestamp,
+            ),
+          },
+        );
+        if (!response.message_id) {
+          throw new Error("Meta accepted the follow prompt without a delivery identifier");
+        }
+        return { messageId: response.message_id };
+      },
+      onRecordedSent: () => followRequiredPatch(),
+      onSuccess: () => followRequiredPatch(),
+      onFailure: (reason) => ({ state: "FAILED", finalDeliveryError: reason }),
+      onRetryablePending: undefined,
+      // The worker that wins the re-claim owns the follow-prompt outcome; no
+      // terminal transition is forced here (matches historical behavior).
+      onOwnershipLost: () => null,
+      ambiguousReason: "Meta follow prompt outcome is ambiguous; delivery was not retried",
+      failureReason: "Meta follow prompt failed",
     },
+    ctx,
   );
-  return prompted ?? currentParticipant(participant, repository);
 }
 
 const COOLDOWN_NOTICE_TEXT = "Give it a few more seconds, then tap the button below again.";
@@ -897,33 +776,36 @@ async function sendCooldownNotice(
   participant: AutomationParticipantRecord,
   definition: FlowDefinitionV2,
   event: NormalizedEvent,
-  client: CampaignRunnerClient,
-  connection: MetaConnection,
-  repository: AutomationRepository,
-  interactionSecret: string,
+  ctx: DeliveryContext,
 ): Promise<void> {
   const action = `cooldown_notice:${event.id}`;
-  const prepared = await prepareDeliveryAction(participant, repository, action, event.id);
+  const prepared = await prepareDeliveryAction(
+    participant,
+    ctx.repository,
+    action,
+    event.id,
+    ctx.dispatchLeaseMs,
+  );
   if (prepared.kind !== "send") return;
 
   try {
-    const response = await client.sendQuickReply(
-      connection,
+    const response = await ctx.client.sendQuickReply(
+      ctx.connection,
       event.recipientId!,
       COOLDOWN_NOTICE_TEXT,
       {
         title: definition.followGate.recheckButtonLabel,
         payload: createInteractionPayload(
           { participantId: participant.id, action: "recheck" },
-          interactionSecret,
+          ctx.interactionSecret,
           event.timestamp,
         ),
       },
     );
     if (!response.message_id) throw new Error("Meta accepted the cooldown notice without a delivery identifier");
-    await completeOwnedAction(participant, repository, action, prepared.dispatchOwner, "SENT", response.message_id);
+    await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "SENT", response.message_id);
   } catch {
-    await completeOwnedAction(participant, repository, action, prepared.dispatchOwner, "FAILED", undefined, "Meta cooldown notice failed");
+    await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "FAILED", undefined, "Meta cooldown notice failed");
   }
 }
 
@@ -931,177 +813,86 @@ async function deliverFinalMessage(
   verified: AutomationParticipantRecord,
   definition: FlowDefinitionV2,
   event: NormalizedEvent,
-  client: CampaignRunnerClient,
-  connection: MetaConnection,
-  repository: AutomationRepository,
-  finalAttempt: boolean,
+  ctx: DeliveryContext,
 ): Promise<AutomationParticipantRecord> {
-  const action = "final_delivery";
-  const prepared = await prepareDeliveryAction(verified, repository, action, event.id);
-  if (prepared.kind === "in_flight") return currentParticipant(verified, repository);
-  if (prepared.kind === "sent") {
-    if (!prepared.execution.providerMessageId) {
-      const reason = "Recorded final delivery success is missing provider identifier";
-      const failed = await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
+  const dailyLimit = await checkDailySendLimit(definition, verified);
+  if (!dailyLimit.allowed) {
+    const skipped = await ctx.repository.transitionParticipant(
+      verified.id,
+      ["FOLLOW_VERIFIED"],
+      { finalDeliveryStatus: "SKIPPED", finalDeliveryError: dailyLimit.reason },
+    );
+    return skipped ?? verified;
+  }
+  const deliveryText = renderTemplate(definition.delivery.text, { keyword: verified.matchedKeyword });
+  const message: MetaMessage = definition.delivery.buttonLabel
+    ? {
+      type: "button",
+      text: deliveryText,
+      buttonLabel: definition.delivery.buttonLabel,
+      url: definition.delivery.url,
+    }
+    : { type: "link", text: deliveryText, url: definition.delivery.url };
+
+  return guardedDelivery(
+    verified,
+    {
+      action: "final_delivery",
+      externalEventId: event.id,
+      allowedStates: ["FOLLOW_VERIFIED"],
+      send: async () => {
+        const response = await ctx.client.sendDirectMessage(ctx.connection, event.recipientId!, message);
+        if (!response.message_id) {
+          throw new Error("Meta accepted the final delivery without a delivery identifier");
+        }
+        return { messageId: response.message_id };
+      },
+      onRecordedSent: (execution) => ({
+        state: "LINK_SENT",
+        finalDeliveryStatus: "SENT",
+        finalProviderId: execution.providerMessageId,
+        finalDeliveredAt: execution.createdAt,
+        finalDeliveryError: undefined,
+      }),
+      validateRecordedExecution: (execution) =>
+        !execution.providerMessageId
+          ? "Recorded final delivery success is missing provider identifier"
+          : null,
+      onSuccess: (ids) => ({
+        state: "LINK_SENT",
+        finalDeliveryStatus: "SENT",
+        finalProviderId: ids.messageId,
+        finalDeliveredAt: new Date().toISOString(),
+        finalDeliveryError: undefined,
+      }),
+      onFailure: (reason) => ({
         state: "FAILED",
         finalDeliveryStatus: "FAILED",
         finalDeliveryError: reason,
-      });
-      return failed ?? currentParticipant(verified, repository);
-    }
-    const delivered = await repository.transitionParticipant(
-      verified.id,
-      ["FOLLOW_VERIFIED"],
-      {
-        state: "LINK_SENT",
-        finalDeliveryStatus: "SENT",
-        finalProviderId: prepared.execution.providerMessageId,
-        finalDeliveredAt: prepared.execution.createdAt,
-        finalDeliveryError: undefined,
-      },
-    );
-    return delivered ?? currentParticipant(verified, repository);
-  }
-  if (prepared.kind === "failed") {
-    const failed = await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
-      state: "FAILED",
-      finalDeliveryStatus: "FAILED",
-      finalDeliveryError: prepared.reason,
-    });
-    return failed ?? currentParticipant(verified, repository);
-  }
-
-  const message: MetaMessage = definition.delivery.buttonLabel
-    ? {
-        type: "button",
-        text: definition.delivery.text,
-        buttonLabel: definition.delivery.buttonLabel,
-        url: definition.delivery.url,
-      }
-    : { type: "link", text: definition.delivery.text, url: definition.delivery.url };
-
-  let response: MetaSendResult;
-  try {
-    response = await client.sendDirectMessage(
-      connection,
-      event.recipientId!,
-      message,
-    );
-    if (!response.message_id) {
-      throw new Error("Meta accepted the final delivery without a delivery identifier");
-    }
-
-    const completed = await completeOwnedAction(
-      verified,
-      repository,
-      action,
-      prepared.dispatchOwner,
-      "SENT",
-      response.message_id,
-    );
-    if (!completed) {
-      if (await getActionExecution(verified, repository, action)) {
-        return deliverFinalMessage(
-          verified,
-          definition,
-          event,
-          client,
-          connection,
-          repository,
-          finalAttempt,
-        );
-      }
-      const failed = await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
+      }),
+      onRetryablePending: () => ({
+        finalDeliveryStatus: "PENDING",
+        finalDeliveryError: "Meta final delivery temporarily failed",
+      }),
+      onOwnershipLost: () => ({
         state: "FAILED",
         finalDeliveryStatus: "FAILED",
         finalDeliveryError: "Meta final delivery dispatch ownership was lost",
-      });
-      return failed ?? currentParticipant(verified, repository);
-    }
-  } catch (error) {
-    if (isKnownNotSentRetryable(error) && !finalAttempt) {
-      const released = await releaseOwnedAction(
-        verified,
-        repository,
-        action,
-        prepared.dispatchOwner,
-      );
-      if (!released) {
-        if (await getActionExecution(verified, repository, action)) {
-          return deliverFinalMessage(
-            verified,
-            definition,
-            event,
-            client,
-            connection,
-            repository,
-            finalAttempt,
-          );
-        }
-        return currentParticipant(verified, repository);
-      }
-      await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
-        finalDeliveryStatus: "PENDING",
-        finalDeliveryError: "Meta final delivery temporarily failed",
-      });
-      throw error;
-    }
-
-    const reason = isAmbiguousProviderOutcome(error)
-      ? "Meta final delivery outcome is ambiguous; delivery was not retried"
-      : "Meta final delivery failed";
-    const failedPersisted = await completeOwnedAction(
-      verified,
-      repository,
-      action,
-      prepared.dispatchOwner,
-      "FAILED",
-      undefined,
-      reason,
-    );
-    if (!failedPersisted && await getActionExecution(verified, repository, action)) {
-      return deliverFinalMessage(
-        verified,
-        definition,
-        event,
-        client,
-        connection,
-        repository,
-        finalAttempt,
-      );
-    }
-    const failed = await repository.transitionParticipant(verified.id, ["FOLLOW_VERIFIED"], {
-      state: "FAILED",
-      finalDeliveryStatus: "FAILED",
-      finalDeliveryError: reason,
-    });
-    return failed ?? currentParticipant(verified, repository);
-  }
-
-  const delivered = await repository.transitionParticipant(
-    verified.id,
-    ["FOLLOW_VERIFIED"],
-    {
-      state: "LINK_SENT",
-      finalDeliveryStatus: "SENT",
-      finalProviderId: response.message_id,
-      finalDeliveredAt: new Date().toISOString(),
-      finalDeliveryError: undefined,
+      }),
+      ambiguousReason: "Meta final delivery outcome is ambiguous; delivery was not retried",
+      failureReason: "Meta final delivery failed",
     },
+    ctx,
   );
-  return delivered ?? currentParticipant(verified, repository);
 }
 
 async function verifyAndDeliver(
   participant: AutomationParticipantRecord,
   definition: FlowDefinitionV2,
   event: NormalizedEvent,
-  client: CampaignRunnerClient,
-  connection: MetaConnection,
-  repository: AutomationRepository,
-  finalAttempt: boolean,
+  ctx: DeliveryContext,
 ): Promise<AutomationParticipantRecord> {
-  const verified = await repository.transitionParticipant(
+  const verified = await ctx.repository.transitionParticipant(
     participant.id,
     [participant.state],
     {
@@ -1113,16 +904,8 @@ async function verifyAndDeliver(
       finalDeliveryStatus: "PENDING",
     },
   );
-  if (!verified) return currentParticipant(participant, repository);
-  return deliverFinalMessage(
-    verified,
-    definition,
-    event,
-    client,
-    connection,
-    repository,
-    finalAttempt,
-  );
+  if (!verified) return currentParticipant(participant, ctx.repository);
+  return deliverFinalMessage(verified, definition, event, ctx);
 }
 
 export async function processExistingCampaignParticipant(
@@ -1156,27 +939,20 @@ export async function processExistingCampaignParticipant(
     return handledResult(participant.id, { failed: 1 });
   }
 
-  const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+  const ctx: DeliveryContext = {
+    client: options.client,
+    connection: metaConnection(mapping.connection, options.tokenEncryptionKey),
+    repository,
+    interactionSecret: options.interactionSecret,
+    finalAttempt: options.finalAttempt === true,
+    dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
+  };
+
   if (participant.publicReplyStatus !== "SENT" && participant.publicReplyStatus !== "SKIPPED") {
-    participant = await deliverPublicReply(
-      participant,
-      automation.definition,
-      options.client,
-      connection,
-      repository,
-      options.finalAttempt === true,
-    );
+    participant = await deliverPublicReply(participant, automation.definition, ctx);
   }
   if (participant.openingStatus !== "SENT" && participant.state !== "FAILED") {
-    participant = await deliverOpeningReply(
-      participant,
-      automation.definition,
-      options.client,
-      connection,
-      repository,
-      options.interactionSecret,
-      options.finalAttempt === true,
-    );
+    participant = await deliverOpeningReply(participant, automation.definition, ctx);
   }
 
   participant = await currentParticipant(participant, repository);
@@ -1398,15 +1174,14 @@ export async function processPendingCampaignInteraction(
         ),
       };
     }
-    const resumed = await deliverFinalMessage(
-      participant,
-      definition,
-      event,
-      options.client,
-      metaConnection(mapping.connection, options.tokenEncryptionKey),
+    const resumed = await deliverFinalMessage(participant, definition, event, {
+      client: options.client,
+      connection: metaConnection(mapping.connection, options.tokenEncryptionKey),
       repository,
-      options.finalAttempt === true,
-    );
+      interactionSecret: options.interactionSecret,
+      finalAttempt: options.finalAttempt === true,
+      dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
+    });
     if (resumed.state === "LINK_SENT") {
       return { handled: true, result: handledResult(resumed.id, { sent: 1 }) };
     }
@@ -1448,15 +1223,14 @@ export async function processPendingCampaignInteraction(
     const checkedAt = participant.followCheckedAt ? Date.parse(participant.followCheckedAt) : Number.NaN;
     if (Number.isFinite(checkedAt) && event.timestamp - checkedAt < RECHECK_COOLDOWN_MS) {
       if (options.client && options.tokenEncryptionKey) {
-        await sendCooldownNotice(
-          participant,
-          definition,
-          event,
-          options.client,
-          metaConnection(mapping.connection, options.tokenEncryptionKey),
+        await sendCooldownNotice(participant, definition, event, {
+          client: options.client,
+          connection: metaConnection(mapping.connection, options.tokenEncryptionKey),
           repository,
-          options.interactionSecret,
-        );
+          interactionSecret: options.interactionSecret,
+          finalAttempt: options.finalAttempt === true,
+          dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
+        });
       }
       return { handled: true, result: handledResult(participant.id) };
     }
@@ -1490,10 +1264,18 @@ export async function processPendingCampaignInteraction(
     return { handled: true, result: handledResult(participant.id) };
   }
 
-  const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+  const ctx: DeliveryContext = {
+    client: options.client,
+    connection: metaConnection(mapping.connection, options.tokenEncryptionKey),
+    repository,
+    interactionSecret: options.interactionSecret,
+    finalAttempt: options.finalAttempt === true,
+    dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
+  };
+
   let follows: boolean;
   try {
-    const response = await options.client.getUserFollowStatus(connection, event.recipientId);
+    const response = await options.client.getUserFollowStatus(ctx.connection, event.recipientId);
     if (response.isUserFollowingBusiness !== true && response.isUserFollowingBusiness !== false) {
       throw new Error("Meta did not return follower status");
     }
@@ -1524,15 +1306,7 @@ export async function processPendingCampaignInteraction(
   let updated: AutomationParticipantRecord;
   try {
     if (follows) {
-      updated = await verifyAndDeliver(
-        participant,
-        definition,
-        event,
-        options.client,
-        connection,
-        repository,
-        options.finalAttempt === true,
-      );
+      updated = await verifyAndDeliver(participant, definition, event, ctx);
     } else if (participant.state === "FOLLOW_VERIFIED") {
       await completeAction(
         participant,
@@ -1551,17 +1325,7 @@ export async function processPendingCampaignInteraction(
         ),
       };
     } else {
-      updated = await promptForFollow(
-        participant,
-        definition,
-        event,
-        options.client,
-        connection,
-        repository,
-        options.interactionSecret,
-        payload.action,
-        options.finalAttempt === true,
-      );
+      updated = await promptForFollow(participant, definition, event, payload.action, ctx);
     }
   } catch (error) {
     await releaseAction(participant, repository, followCheckAction);

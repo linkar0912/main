@@ -24,11 +24,15 @@ describe("production runtime commands", () => {
     expect(coolifyCompose).toContain(
       'command: ["./node_modules/.bin/prisma", "migrate", "deploy"]',
     );
+    // The worker ships as a prebuilt esbuild bundle: no TS loader, no pnpm runtime.
     expect(coolifyCompose).toContain(
-      'command: ["./node_modules/.bin/tsx", "src/worker.ts"]',
+      'command: ["node", "dist/worker.js"]',
     );
     expect(productionCompose).toContain(
       'command: ["./node_modules/.bin/next", "start"]',
+    );
+    expect(productionCompose).toContain(
+      'command: ["node", "dist/worker.js"]',
     );
 
     for (const contents of [dockerfile, coolifyCompose, productionCompose]) {
