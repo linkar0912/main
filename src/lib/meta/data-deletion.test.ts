@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createDeletionResponse, isFreshDeletionRequest, parseSignedRequest } from "./data-deletion";
+import { createMemoryRepository } from "../memory-repository";
 
 function signedRequest(payload: Record<string, unknown>, secret: string): string {
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -28,5 +29,61 @@ describe("Meta data deletion", () => {
       url: "https://replyconnect.example/data-deletion/status/replyconnect_delete_123",
       confirmation_code: "replyconnect_delete_123",
     });
+  });
+
+  it("removes all participant rows for workspaces connected to the deauthorized Instagram account, leaving unrelated workspaces untouched", async () => {
+    const repository = createMemoryRepository();
+    const mediaSnapshot = (id: string) => ({
+      id,
+      mediaType: "VIDEO" as const,
+      mediaProductType: "REELS" as const,
+      permalink: `https://instagram.com/reel/${id}`,
+      timestamp: "2026-08-21T09:00:00.000Z",
+    });
+    await repository.upsertConnection({
+      workspaceId: "workspace_1",
+      igUserId: "ig_123",
+      username: "creator",
+      accessTokenEncrypted: "sealed-token",
+      status: "CONNECTED",
+    });
+    await repository.upsertConnection({
+      workspaceId: "workspace_2",
+      igUserId: "ig_999",
+      username: "unrelated",
+      accessTokenEncrypted: "sealed-token-2",
+      status: "CONNECTED",
+    });
+    const { record: affectedFirst } = await repository.createParticipant({
+      workspaceId: "workspace_1",
+      automationId: "automation_1",
+      instagramAccountId: "ig_123",
+      sourceCommentId: "comment_1",
+      sourceMediaId: "media_1",
+      sourceMediaSnapshot: mediaSnapshot("media_1"),
+    });
+    const { record: affectedSecond } = await repository.createParticipant({
+      workspaceId: "workspace_1",
+      automationId: "automation_1",
+      instagramAccountId: "ig_123",
+      sourceCommentId: "comment_2",
+      sourceMediaId: "media_1",
+      sourceMediaSnapshot: mediaSnapshot("media_1"),
+      state: "LINK_SENT",
+    });
+    const { record: unrelated } = await repository.createParticipant({
+      workspaceId: "workspace_2",
+      automationId: "automation_2",
+      instagramAccountId: "ig_999",
+      sourceCommentId: "comment_3",
+      sourceMediaId: "media_2",
+      sourceMediaSnapshot: mediaSnapshot("media_2"),
+    });
+
+    await repository.beginInstagramDataDeletion("ig_123", "replyconnect_delete_1", "hash_1");
+
+    expect(await repository.getParticipant("workspace_1", "ig_123", affectedFirst.id)).toBeNull();
+    expect(await repository.getParticipant("workspace_1", "ig_123", affectedSecond.id)).toBeNull();
+    expect(await repository.getParticipant("workspace_2", "ig_999", unrelated.id)).toMatchObject({ id: unrelated.id });
   });
 });

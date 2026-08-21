@@ -9,11 +9,12 @@ ReplyConnect is an India-first Instagram automation MVP for deterministic commen
 - Optional keyword/media conditions.
 - One private text reply (including optional URLs) for comment triggers; text, link, and button replies for genuine inbound DMs.
 - Current Instagram Business Login callback handling, webhook verification, inbound-only event normalization, BullMQ worker retries, and atomic execution claims.
+- A visual follow-gated Reel/post campaign builder: a matched comment triggers a public reply and a private opening message with an opt-in prompt, then Meta's own follower relationship gates a single private link delivery — with a participant activity view for diagnostics.
 - AES-256-GCM encryption for stored Instagram access tokens.
 - Public privacy, terms, data deletion, and support pages for Meta App Review.
 - Local demo mode when `DATABASE_URL` and `REDIS_URL` are omitted.
 
-Out of scope: AI, follower-triggered DMs, scraping, bulk cold messaging, WhatsApp, publishing, insights, billing, and team invitations.
+Out of scope: AI, unsolicited DMs sent purely because someone followed the account, scraping, bulk cold messaging, WhatsApp, publishing, insights, billing, and team invitations.
 
 ## Local demo (no database or worker)
 

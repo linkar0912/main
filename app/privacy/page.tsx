@@ -10,6 +10,7 @@ export default function PrivacyPage() {
     <PublicPage title="Privacy policy" intro={`${PRODUCT_NAME} helps creators and businesses automate specific Instagram comment and direct-message replies. This policy explains what we collect, why we use it, and how you can ask us to delete it.`}>
       <h2>Information we receive</h2>
       <p>When you connect an Instagram professional account, we receive the account identifier, username where available, access token, and the Instagram comments, messages, media identifiers, and delivery events needed to run the rules you create. We also receive your workspace details and support messages.</p>
+      <p>For comment-to-message automations, we store the Instagram-scoped participant identifier, source comment and media identifiers, interaction and delivery timestamps, and the latest follow-status result needed to enforce your configured follow gate and prevent duplicate delivery.</p>
       <h2>How we use information</h2>
       <p>We use this information to authenticate your Instagram account, receive official Meta webhooks, evaluate your saved trigger/condition/action rules, send the replies you configured, prevent duplicate delivery, provide support, and keep the service secure. {PRODUCT_NAME} does not use AI-generated replies in this MVP.</p>
       <h2>Sharing and processors</h2>

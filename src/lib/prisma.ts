@@ -268,6 +268,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         });
         const workspaceIds = [...new Set(connections.map((connection) => connection.workspaceId))];
         if (workspaceIds.length > 0) {
+          await transaction.automationParticipant.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
           await transaction.automationExecution.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
           await transaction.webhookEvent.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
           await transaction.automation.deleteMany({ where: { workspaceId: { in: workspaceIds } } });

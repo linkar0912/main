@@ -79,7 +79,15 @@ Use these deployed URLs:
 | Data deletion instructions URL | `https://<replyconnect-domain>/data-deletion` |
 | Support URL | `https://<replyconnect-domain>/support` |
 
-Set the webhook verify token in the dashboard to the same value as `META_VERIFY_TOKEN`. Configure the app-level `comments` and `messages` webhook fields in Meta; after OAuth, ReplyConnect automatically subscribes the connected Professional account to those two fields through `/{ig-user-id}/subscribed_apps`. Request only the permissions required by the MVP:
+Set the webhook verify token in the dashboard to the same value as `META_VERIFY_TOKEN`. Configure these five app-level webhook fields in Meta:
+
+- `comments`
+- `messages`
+- `messaging_postbacks`
+- `messaging_optins`
+- `messaging_referral`
+
+After OAuth, ReplyConnect automatically subscribes the connected Professional account to all five fields through `/{ig-user-id}/subscribed_apps`. `messages` and `messaging_postbacks` carry the opt-in tap and the "I've followed" recheck tap for follow-gated Reel campaigns; `messaging_optins` and `messaging_referral` are subscribed for completeness even though the current flow does not depend on them. Request only the permissions required by the product — no new permission is needed for follower verification, since `GET /{igsid}?fields=is_user_follow_business` is covered by the existing messaging scope:
 
 - `instagram_business_basic`
 - `instagram_business_manage_comments`
@@ -94,30 +102,43 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
 3. Sign in at `/login` with the configured owner account, open Settings, and choose **Connect Instagram**.
 4. Complete the official Meta login with the test Instagram Professional account.
 5. Confirm the callback returns to Settings and shows the account as connected.
-6. Create this automation:
-   - Trigger: Instagram comment
-   - Match: keyword `guide`
-   - Action: private reply containing a real test URL in the reply text
-7. Activate the automation.
-8. From the second Instagram test account, comment `guide` on the selected test post.
-9. Confirm the configured reply arrives once. Send a second identical event only to confirm deduplication; it must not produce a second reply for the same provider event ID.
-10. Create an inbound-DM keyword rule such as `price`, send that DM from the second test account, and confirm the exact configured response.
-11. Pause the automation and repeat the event; confirm no new reply is sent.
+6. Create this follow-gated Reel campaign, using a test Reel on the connected Professional account:
+   - Trigger: Instagram comment on the selected test Reel, keyword `guide`.
+   - Opening message: a private reply with an opt-in quick reply (for example, button label "Get the guide").
+   - Follow gate (required): a not-following message with an "I've followed" recheck quick reply.
+   - Delivery: a private message containing a real test URL, released only after the follow check passes.
+7. Activate the campaign.
+8. Using the second Instagram test account — while it does **not** yet follow the connected Professional account — comment `guide` on the test Reel.
+9. Confirm the opening private reply arrives with the opt-in quick reply, and tap it. This is the opening interaction that establishes consent and captures the commenter's Instagram-scoped ID.
+10. Confirm the false-follow prompt arrives immediately after: because the second account does not yet follow the connected account, ReplyConnect sends the configured not-following message with the "I've followed" recheck quick reply.
+11. From the second test account, follow the connected Instagram Professional account (the follow action).
+12. Tap "I've followed". Confirm ReplyConnect rechecks the follower relationship against Meta and delivers the configured link message exactly once — this is the successful delivery.
+13. Tap "I've followed" again to resend an identical recheck event; confirm it does not produce a second delivery for the same participant.
+14. Pause the campaign and repeat the comment event from a third account or a fresh comment; confirm no new opening reply is sent while paused.
 
 ## 5. App Review submission copy
 
 Use plain, testable language in each permission explanation:
 
-> ReplyConnect lets a connected Instagram Professional account owner create explicit keyword or any-message rules. When Meta sends a comment or inbound-message webhook, ReplyConnect evaluates the saved rule and sends the exact reply configured by the account owner. We do not generate copy with AI, scrape Instagram, or send follower blasts.
+> ReplyConnect lets a connected Instagram Professional account owner build a follow-gated Reel campaign: a public reply and a private opening message reply to a matching comment, an explicit opt-in tap, a follower check against the account's own audience via Meta's API, and a private message with a link delivered only once Meta confirms the commenter follows the connected account. We do not generate copy with AI, scrape Instagram, or message anyone outside this explicit comment-triggered, opt-in, and follow-verified flow.
+
+Request only the three permissions required by the product:
+
+- `instagram_business_basic`
+- `instagram_business_manage_comments`
+- `instagram_business_manage_messages`
 
 For the reviewer instructions, provide:
 
 - the production URL;
-- the test Instagram username and login path accepted by Meta’s review process;
-- the second account to use for a comment/DM event, if Meta allows it;
-- the exact automation name and trigger phrase (`guide` or `price`);
-- the expected reply text and where to observe it;
-- a note that follower-to-DM automation is intentionally not part of this submission.
+- reviewer credentials for the owner login: the owner email and a password created for review (never commit the plaintext password or any Meta access token to Git; rotate the password after review completes);
+- the test Instagram username and login path accepted by Meta's review process for the connected Professional account;
+- the second Instagram test account used to comment, noting that it does not yet follow the connected account so the reviewer can observe the false-follow prompt;
+- the exact campaign name, the trigger phrase (`guide`), the opt-in button label, and the recheck button label ("I've followed");
+- the expected message sequence and where to observe each step: opening private reply with opt-in button → tap opt-in → false-follow prompt with recheck button → follow the connected account → tap "I've followed" → delivered link message;
+- confirmation that the delivered link is only sent once Meta's `is_user_follow_business` field returns `true` for that commenter.
+
+Record one uninterrupted screencast covering, in order: signing in and connecting the test Instagram account, building the campaign (Reel selection, keyword `guide`, opening message, follow gate, delivery link), activating it, commenting `guide` from the second account, tapping the opt-in button, receiving the false-follow prompt, following the connected account, tapping "I've followed", and the delivered link message arriving. Do not narrate or display any access token, and do not include the reviewer password on screen.
 
 ## 6. Submission blockers to resolve before clicking Submit
 
@@ -126,8 +147,9 @@ For the reviewer instructions, provide:
 - Confirm the webhook endpoint is publicly reachable and returns the challenge on GET.
 - Confirm the owner login redirects unauthenticated dashboard/API requests and the reviewer credentials work.
 - Confirm the connected account shows its real Instagram username, proving profile lookup and webhook subscription completed.
+- Confirm all five webhook fields (`comments`, `messages`, `messaging_postbacks`, `messaging_optins`, `messaging_referral`) show as subscribed for the connected account.
 - Confirm `X-Hub-Signature-256` requests are accepted only with the correct App Secret.
 - Confirm the worker is running and can reach Redis and PostgreSQL.
 - Confirm the app is not in demo mode.
 - Confirm your business, test accounts, and app roles meet Meta’s current eligibility rules.
-- Capture a short screen recording of the reviewer flow in case Meta asks for one.
+- Capture the screencast described in section 5 in case Meta asks for one.

@@ -41,6 +41,7 @@ export async function DELETE(request: Request) {
   } catch {
     remoteUnsubscribed = false;
   }
+  await getRepository().expireParticipantsByInstagramAccount(connection.igUserId, "Instagram account disconnected");
   await getRepository().deleteConnection(session.workspaceId, connection.id);
   return Response.json({ disconnected: true, remoteUnsubscribed });
 }

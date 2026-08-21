@@ -13,6 +13,7 @@ export async function processDeauthorization(
   const payload = parseSignedRequest(signedRequest, appSecret);
   if (!payload) return { ok: false, reason: "invalid-signed-request" };
 
+  await repository.expireParticipantsByInstagramAccount(payload.user_id, "Instagram account deauthorized");
   await repository.deleteConnectionByInstagramAccount(payload.user_id);
   return { ok: true, instagramUserId: payload.user_id };
 }
