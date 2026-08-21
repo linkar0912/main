@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { MetaApiError, MetaClient, buildDirectMessagePayload, buildPrivateReplyPayload } from "./client";
 
 describe("Meta message payloads", () => {
+  it("rejects Meta client versions other than Instagram Login v25.0", () => {
+    expect(() => new MetaClient({ apiVersion: "v24.0" })).toThrow(/v25\.0/);
+  });
+
   it("builds a private reply addressed by comment ID", () => {
     expect(buildPrivateReplyPayload("comment_1", "Here is the link")).toEqual({
       recipient: { comment_id: "comment_1" },
@@ -198,6 +202,17 @@ describe("Meta message payloads", () => {
     expect(requestUrl.searchParams.get("after")).toBe("current-page");
   });
 
+  it("preserves an explicitly supplied empty media cursor", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+
+    await expect(client.listMedia({ igUserId: "ig_1", accessToken: "access-token" }, "")).resolves.toEqual({ data: [] });
+
+    const requestUrl = new URL(String(fetcher.mock.calls[0][0]));
+    expect(requestUrl.searchParams.has("after")).toBe(true);
+    expect(requestUrl.searchParams.get("after")).toBe("");
+  });
+
   it("normalizes one media item", async () => {
     const client = new MetaClient({
       apiVersion: "v25.0",
@@ -252,5 +267,44 @@ describe("Meta message payloads", () => {
     await expect(malformedFollowStatus.getUserFollowStatus({ igUserId: "ig_1", accessToken: "access-token" }, "igsid_1")).rejects.toEqual(
       new MetaApiError("Meta did not return follower status", 502),
     );
+  });
+
+  it("fails closed for null and primitive top-level Meta responses", async () => {
+    const nullReply = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response("null", { status: 200 }),
+    });
+    await expect(nullReply.replyToComment({ igUserId: "ig_1", accessToken: "access-token" }, "comment_1", "Check your DMs")).rejects.toEqual(
+      new MetaApiError("Meta did not return comment reply ID", 502),
+    );
+
+    const nullPage = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response("null", { status: 200 }),
+    });
+    await expect(nullPage.listMedia({ igUserId: "ig_1", accessToken: "access-token" })).rejects.toEqual(
+      new MetaApiError("Meta did not return valid media", 502),
+    );
+
+    const primitiveFollowStatus = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response("false", { status: 200 }),
+    });
+    await expect(primitiveFollowStatus.getUserFollowStatus({ igUserId: "ig_1", accessToken: "access-token" }, "igsid_1")).rejects.toEqual(
+      new MetaApiError("Meta did not return follower status", 502),
+    );
+  });
+
+  it("rejects malformed media paging containers", async () => {
+    for (const paging of [null, { cursors: "not-an-object" }]) {
+      const client = new MetaClient({
+        apiVersion: "v25.0",
+        fetcher: async () => new Response(JSON.stringify({ data: [], paging }), { status: 200 }),
+      });
+
+      await expect(client.listMedia({ igUserId: "ig_1", accessToken: "access-token" })).rejects.toEqual(
+        new MetaApiError("Meta did not return valid media", 502),
+      );
+    }
   });
 });

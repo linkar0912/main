@@ -21,6 +21,7 @@ export class MetaApiError extends Error {
 const MEDIA_FIELDS = "id,caption,media_type,media_product_type,permalink,media_url,thumbnail_url,timestamp";
 const MEDIA_TYPES = new Set<MetaMedia["mediaType"]>(["IMAGE", "VIDEO", "CAROUSEL_ALBUM"]);
 const MEDIA_PRODUCT_TYPES = new Set<NonNullable<MetaMedia["mediaProductType"]>>(["AD", "FEED", "REELS", "STORY"]);
+const INSTAGRAM_LOGIN_API_VERSION = "v25.0";
 
 export function buildPrivateReplyPayload(commentId: string, message: string | MetaPrivateReply) {
   const normalized = typeof message === "string" ? { text: message } : message;
@@ -64,6 +65,9 @@ export class MetaClient {
   private readonly fetcher: typeof fetch;
 
   constructor(options: MetaClientOptions) {
+    if (options.apiVersion !== INSTAGRAM_LOGIN_API_VERSION) {
+      throw new Error(`Meta client requires Instagram Login API version ${INSTAGRAM_LOGIN_API_VERSION}`);
+    }
     this.apiVersion = options.apiVersion;
     this.baseUrl = options.baseUrl ?? "https://graph.instagram.com";
     this.fetcher = options.fetcher ?? fetch;
@@ -71,12 +75,12 @@ export class MetaClient {
 
   async replyToComment(connection: MetaConnection, commentId: string, text: string): Promise<{ id: string }> {
     const url = new URL(`${this.baseUrl}/${this.apiVersion}/${commentId}/replies`);
-    const data = await this.request(url, connection.accessToken, {
+    const data = asRecord(await this.request(url, connection.accessToken, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ message: text }),
-    });
-    if (typeof data.id !== "string" || !data.id) {
+    }));
+    if (!data || typeof data.id !== "string" || !data.id) {
       throw new MetaApiError("Meta did not return comment reply ID", 502);
     }
     return { id: data.id };
@@ -109,11 +113,13 @@ export class MetaClient {
   async listMedia(connection: MetaConnection, after?: string): Promise<MetaMediaPage> {
     const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/media`);
     url.searchParams.set("fields", MEDIA_FIELDS);
-    if (after) url.searchParams.set("after", after);
-    const data = await this.request(url, connection.accessToken);
-    if (!Array.isArray(data.data)) throw new MetaApiError("Meta did not return valid media", 502);
+    if (after !== undefined) url.searchParams.set("after", after);
+    const data = asRecord(await this.request(url, connection.accessToken));
+    if (!data || !Array.isArray(data.data)) throw new MetaApiError("Meta did not return valid media", 502);
     const paging = asRecord(data.paging);
-    const cursors = asRecord(paging?.cursors);
+    if (data.paging !== undefined && !paging) throw new MetaApiError("Meta did not return valid media", 502);
+    const cursors = paging ? asRecord(paging.cursors) : undefined;
+    if (paging?.cursors !== undefined && !cursors) throw new MetaApiError("Meta did not return valid media", 502);
     if (cursors?.after !== undefined && typeof cursors.after !== "string") {
       throw new MetaApiError("Meta did not return valid media", 502);
     }
@@ -132,8 +138,8 @@ export class MetaClient {
   async getUserFollowStatus(connection: MetaConnection, igScopedUserId: string): Promise<{ isUserFollowingBusiness: boolean }> {
     const url = new URL(`${this.baseUrl}/${this.apiVersion}/${igScopedUserId}`);
     url.searchParams.set("fields", "is_user_follow_business");
-    const data = await this.request(url, connection.accessToken);
-    if (typeof data.is_user_follow_business !== "boolean") {
+    const data = asRecord(await this.request(url, connection.accessToken));
+    if (!data || typeof data.is_user_follow_business !== "boolean") {
       throw new MetaApiError("Meta did not return follower status", 502);
     }
     return { isUserFollowingBusiness: data.is_user_follow_business };
@@ -229,7 +235,7 @@ function normalizeMedia(value: unknown): MetaMedia {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null ? value as Record<string, unknown> : undefined;
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
 const TRANSIENT_META_CODES = new Set([1, 2, 4, 17, 32, 341, 613]);
