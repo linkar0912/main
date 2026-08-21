@@ -2,12 +2,12 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AutomationActivity } from "./automation-activity";
-import type { ParticipantActivitySummary } from "./automation-activity";
+import type { ParticipantActivitySummary, ParticipantFunnelSummary } from "./automation-activity";
 
-function stubFetch(data: ParticipantActivitySummary[]) {
+function stubFetch(data: ParticipantActivitySummary[], summary?: ParticipantFunnelSummary) {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({ ok: true, json: async () => ({ data }) }) as unknown as Response),
+    vi.fn(async () => ({ ok: true, json: async () => ({ data, summary }) }) as unknown as Response),
   );
 }
 
@@ -47,6 +47,28 @@ describe("AutomationActivity", () => {
     render(<AutomationActivity automationId="automation_1" />);
 
     expect(await screen.findByText(/no activity yet/i)).toBeTruthy();
+  });
+
+  it("renders the funnel summary above the participant list", async () => {
+    stubFetch(
+      [participant({ state: "LINK_SENT", followStatus: true, finalDeliveryStatus: "SENT" })],
+      { commented: 12, openingSent: 9, optedIn: 6, followed: 4, linkSent: 3 },
+    );
+    render(<AutomationActivity automationId="automation_1" />);
+
+    const funnel = await screen.findByLabelText("Campaign funnel");
+    expect(funnel.textContent).toContain("12");
+    expect(funnel.textContent).toContain("Commented");
+    expect(funnel.textContent).toContain("Got the link");
+    expect(funnel.textContent).toContain("3");
+  });
+
+  it("does not render a funnel summary when the server does not return one", async () => {
+    stubFetch([participant({ state: "FOLLOW_REQUIRED" })]);
+    render(<AutomationActivity automationId="automation_1" />);
+
+    await screen.findByText(/follow required/i);
+    expect(screen.queryByLabelText("Campaign funnel")).toBeNull();
   });
 
   it("renders a row for a participant who still needs to follow", async () => {

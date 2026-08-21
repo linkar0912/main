@@ -169,4 +169,6 @@ export interface AutomationRepository {
   listParticipants(workspaceId: string, automationId: string, limit: number): Promise<AutomationParticipantRecord[]>;
   expireParticipantsByInstagramAccount(igAccountId: string, reason: string): Promise<number>;
   deleteParticipantsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
+  expireStaleParticipants(now: string, reason: string): Promise<number>;
+  deleteStaleTerminalParticipants(before: string): Promise<number>;
 }

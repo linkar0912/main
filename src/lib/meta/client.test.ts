@@ -103,6 +103,34 @@ describe("Meta message payloads", () => {
     }
   });
 
+  it("reads back the currently subscribed webhook fields for the connected account", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [{ subscribed_fields: ["comments", "messages"], id: "app_1" }] }),
+        { status: 200 },
+      ),
+    );
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+
+    await expect(client.getSubscribedFields({ igUserId: "ig_1", accessToken: "secret" })).resolves.toEqual([
+      "comments",
+      "messages",
+    ]);
+    const [url, init] = fetcher.mock.calls[0];
+    expect(String(url)).toContain("/v25.0/ig_1/subscribed_apps");
+    expect(init).not.toMatchObject({ method: "POST" });
+  });
+
+  it("returns no fields when Meta reports an empty or malformed subscription list", async () => {
+    for (const body of ["null", "{}", JSON.stringify({ data: [] }), JSON.stringify({ data: [{ id: "app_1" }] })]) {
+      const client = new MetaClient({
+        apiVersion: "v25.0",
+        fetcher: async () => new Response(body, { status: 200 }),
+      });
+      await expect(client.getSubscribedFields({ igUserId: "ig_1", accessToken: "secret" })).resolves.toEqual([]);
+    }
+  });
+
   it("bootstraps the canonical professional account through /me", async () => {
     const client = new MetaClient({
       apiVersion: "v25.0",

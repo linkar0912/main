@@ -408,5 +408,31 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       }
       return count;
     },
+
+    async expireStaleParticipants(nowIso, reason) {
+      const nowMs = Date.parse(nowIso);
+      let count = 0;
+      for (const [id, participant] of participants.entries()) {
+        if (["LINK_SENT", "EXPIRED", "FAILED"].includes(participant.state)) continue;
+        const expiresAt = participant.messagingWindowExpiresAt ? Date.parse(participant.messagingWindowExpiresAt) : Number.NaN;
+        if (!Number.isFinite(expiresAt) || expiresAt > nowMs) continue;
+        participants.set(id, { ...participant, state: "EXPIRED", finalDeliveryError: reason, updatedAt: now() });
+        count += 1;
+      }
+      return count;
+    },
+
+    async deleteStaleTerminalParticipants(beforeIso) {
+      const beforeMs = Date.parse(beforeIso);
+      let count = 0;
+      for (const [id, participant] of participants.entries()) {
+        if (!["LINK_SENT", "EXPIRED", "FAILED"].includes(participant.state)) continue;
+        if (Date.parse(participant.updatedAt) >= beforeMs) continue;
+        participants.delete(id);
+        participantIdsBySource.delete(`${participant.workspaceId}:${participant.instagramAccountId}:${participant.sourceCommentId}`);
+        count += 1;
+      }
+      return count;
+    },
   };
 }

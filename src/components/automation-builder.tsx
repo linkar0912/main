@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
   Check,
   ChevronDown,
@@ -436,6 +437,10 @@ function isLocalDeliveryUrl(url: URL): boolean {
   return url.protocol === "http:" && url.hostname === "localhost";
 }
 
+function looksLikeTwoLinksPastedTogether(url: string): boolean {
+  return (url.match(/https?:\/\//gi)?.length ?? 0) > 1;
+}
+
 function AutomationBuilderV2({
   automationId,
   initialName = "",
@@ -816,6 +821,11 @@ function AutomationBuilderV2({
                   />
                 </div>
                 <small>HTTPS required. http://localhost is permitted while developing.</small>
+                {looksLikeTwoLinksPastedTogether(deliveryUrl) && (
+                  <p className="form-warning" role="status">
+                    <AlertTriangle size={14} /> This looks like two links pasted together — double check it before saving.
+                  </p>
+                )}
               </label>
               <label className="field">
                 <span>Delivery button label <em>optional</em></span>
@@ -849,7 +859,14 @@ function AutomationBuilderV2({
               <li>{nonEmptyReplies.length || "No"} public reply variation{nonEmptyReplies.length === 1 ? "" : "s"} ready</li>
               <li>Opening DM asks for a follow before delivering anything</li>
               <li>Recheck button reads “{recheckButtonLabel || "add a label"}”</li>
-              <li>Verified followers land on {deliveryUrl || "no link yet"}</li>
+              <li>
+                Verified followers land on{" "}
+                {deliveryUrl ? (
+                  <a href={deliveryUrl} target="_blank" rel="noreferrer" className="text-link">{deliveryUrl}</a>
+                ) : (
+                  "no link yet"
+                )}
+              </li>
             </ul>
           </div>
         </section>
@@ -961,7 +978,9 @@ function AutomationBuilderV2({
               <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
               <div>
                 <strong>{deliveryText || "Add your delivery message"}</strong>
-                {deliveryUrl && <small>{deliveryUrl}</small>}
+                {deliveryUrl && (
+                  <a href={deliveryUrl} target="_blank" rel="noreferrer"><small>{deliveryUrl}</small></a>
+                )}
               </div>
             </div>
           </div>

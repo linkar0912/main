@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AutomationBuilder } from "./automation-builder";
 import { PRODUCT_MARK } from "@/src/lib/branding";
@@ -280,6 +280,28 @@ describe("AutomationBuilder", () => {
     const summary = screen.getByTestId("review-summary");
     expect(summary.textContent).toContain("drop");
     expect(summary.textContent).toContain("example.com/prize");
+    const link = within(summary).getByRole("link", { name: /example\.com\/prize/i });
+    expect(link.getAttribute("href")).toBe("https://example.com/prize");
+    expect(link.getAttribute("target")).toBe("_blank");
+  });
+
+  it("warns when the delivery link looks like two links pasted together, without blocking the field", async () => {
+    stubFetch({ media: { data: [reel], paging: {} } });
+    render(<AutomationBuilder />);
+
+    await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("checkbox"));
+    await fillRequiredCampaignFields();
+
+    expect(screen.queryByText(/two links pasted together/i)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(/delivery link/i), {
+      target: { value: "https://example.com/prizehttps://example.com/prize" },
+    });
+    expect(await screen.findByText(/two links pasted together/i)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/delivery link/i), { target: { value: "https://example.com/prize" } });
+    await waitFor(() => expect(screen.queryByText(/two links pasted together/i)).toBeNull());
   });
 
   it("cycles the local test preview through comment, opening, not-following, and delivery states without any network calls and without leaking the final URL early", async () => {

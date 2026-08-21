@@ -152,6 +152,21 @@ export class MetaClient {
     if (!data || data.success !== true) throw new MetaApiError("Meta did not confirm the webhook subscription", 502);
   }
 
+  async getSubscribedFields(connection: MetaConnection): Promise<string[]> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/subscribed_apps`);
+    const data = asRecord(await this.request(url, connection.accessToken));
+    const entries = data && Array.isArray(data.data) ? data.data : [];
+    const fields = new Set<string>();
+    for (const entry of entries) {
+      const record = asRecord(entry);
+      if (!record || !Array.isArray(record.subscribed_fields)) continue;
+      for (const field of record.subscribed_fields) {
+        if (typeof field === "string") fields.add(field);
+      }
+    }
+    return [...fields];
+  }
+
   async unsubscribeFromWebhooks(connection: MetaConnection): Promise<void> {
     const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/subscribed_apps`);
     const data = await this.request(url, connection.accessToken, { method: "DELETE" });

@@ -18,7 +18,7 @@ export default function PrivacyPage() {
       <h2>Storage and security</h2>
       <p>Access tokens are encrypted at rest. Webhook signatures are verified before processing, and event identifiers are deduplicated. No online service can guarantee absolute security; please use a strong account and workspace password and report suspected misuse promptly.</p>
       <h2>Retention and deletion</h2>
-      <p>We retain workspace configuration and delivery records for as long as needed to provide the service or meet legal obligations. You can disconnect an Instagram account in the app or request deletion at <a href="/data-deletion">/data-deletion</a>. Meta data deletion callbacks are handled at <code>/api/meta/data-deletion</code>.</p>
+      <p>We retain workspace configuration and delivery records for as long as needed to provide the service or meet legal obligations. Comment-to-message participant records are automatically deleted 90 days after their automation finishes running (delivered, expired, or failed) or after their messaging window closes without a reply. You can disconnect an Instagram account in the app or request deletion sooner at <a href="/data-deletion">/data-deletion</a>. Meta data deletion callbacks are handled at <code>/api/meta/data-deletion</code>.</p>
       <h2>Your choices</h2>
       <p>You can stop an automation, disconnect your account, request access to information associated with your workspace, or request correction or deletion. Contact <a href={`mailto:${supportEmail}`}>{supportEmail}</a> with your workspace and Instagram username.</p>
       <h2>Changes</h2>

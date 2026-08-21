@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AutomationParticipantRecord } from "@/src/lib/repository";
+import { computeFunnelSummary } from "./route";
 
 const mocks = vi.hoisted(() => ({
   getOwnerSessionFromRequest: vi.fn(),
@@ -54,6 +55,31 @@ function makeParticipant(overrides: Partial<AutomationParticipantRecord> = {}): 
     ...overrides,
   };
 }
+
+describe("computeFunnelSummary", () => {
+  it("counts commented, opening-sent, opted-in-or-further, followed, and link-delivered participants", () => {
+    const summary = computeFunnelSummary([
+      { state: "COMMENT_MATCHED", openingStatus: "PENDING", followStatus: undefined, finalDeliveryStatus: "PENDING" },
+      { state: "OPENING_SENT", openingStatus: "SENT", followStatus: undefined, finalDeliveryStatus: "PENDING" },
+      { state: "FOLLOW_REQUIRED", openingStatus: "SENT", followStatus: false, finalDeliveryStatus: "PENDING" },
+      { state: "FOLLOW_VERIFIED", openingStatus: "SENT", followStatus: true, finalDeliveryStatus: "PENDING" },
+      { state: "LINK_SENT", openingStatus: "SENT", followStatus: true, finalDeliveryStatus: "SENT" },
+      { state: "EXPIRED", openingStatus: "SENT", followStatus: true, finalDeliveryStatus: "PENDING" },
+    ]);
+
+    expect(summary).toEqual({
+      commented: 6,
+      openingSent: 5,
+      optedIn: 3,
+      followed: 3,
+      linkSent: 1,
+    });
+  });
+
+  it("returns all zeros for an empty participant list", () => {
+    expect(computeFunnelSummary([])).toEqual({ commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 });
+  });
+});
 
 describe("GET /api/automations/[id]/activity", () => {
   beforeEach(() => {
@@ -141,7 +167,9 @@ describe("GET /api/automations/[id]/activity", () => {
           finalDeliveryStatus: "SKIPPED",
         },
       ],
+      summary: { commented: 2, openingSent: 2, optedIn: 2, followed: 1, linkSent: 1 },
     });
+    expect(mocks.listParticipants).toHaveBeenCalledWith("workspace_a", "automation_1", 10_000);
 
     const raw = JSON.stringify(body);
     expect(raw).not.toContain("must-not-escape");

@@ -148,6 +148,15 @@ h3 { font-size: 1rem; margin-bottom: 6px; }
 .full-list-panel { padding: 10px 24px 24px; }
 
 .activity-list { display: grid; gap: 14px; }
+.activity-funnel { align-items: center; background: rgba(255,254,250,.74); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-wrap: wrap; gap: 6px 4px; padding: 16px 20px; }
+.funnel-stage { align-items: center; display: flex; gap: 10px; }
+.funnel-count { font-size: 1.1rem; font-weight: 750; }
+.funnel-label { color: #8c8b91; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.funnel-arrow { color: #b8b4ab; margin-left: 4px; }
+@media (max-width: 600px) {
+  .activity-funnel { flex-direction: column; align-items: flex-start; }
+  .funnel-arrow { display: none; }
+}
 .activity-row { background: rgba(255,254,250,.74); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
 .activity-row-top { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 6px; }
 .activity-media { min-width: 0; }
@@ -191,9 +200,10 @@ h3 { font-size: 1rem; margin-bottom: 6px; }
 .step-heading .eyebrow { margin-bottom: 7px; }
 .flow-connector { align-items: center; color: #b8b4ab; display: flex; height: 25px; justify-content: center; transform: rotate(90deg); }
 .builder-footer { align-items: center; border-top: 1px solid var(--line); display: flex; justify-content: space-between; margin-top: 21px; padding-top: 18px; }
-.form-error, .form-success { align-items: center; display: flex; font-size: .77rem; gap: 6px; margin: 0; }
+.form-error, .form-success, .form-warning { align-items: center; display: flex; font-size: .77rem; gap: 6px; margin: 0; }
 .form-error { color: #ad4a42; }
 .form-success { color: #2c806d; }
+.form-warning { color: #8f601d; margin-top: 4px; }
 .builder-preview { background: var(--slate); color: #f9f6ef; min-height: 475px; padding: 25px; position: sticky; top: 28px; }
 .builder-preview .eyebrow { color: #a5a9b7; }
 .preview-line { background: var(--saffron); height: 2px; margin: 16px 0 24px; width: 41px; }

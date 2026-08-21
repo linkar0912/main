@@ -553,5 +553,26 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       const result = await client.automationParticipant.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       return result.count;
     },
+
+    async expireStaleParticipants(now, reason) {
+      const result = await client.automationParticipant.updateMany({
+        where: {
+          state: { notIn: ["LINK_SENT", "EXPIRED", "FAILED"] },
+          messagingWindowExpiresAt: { not: null, lte: new Date(now) },
+        },
+        data: { state: "EXPIRED", finalDeliveryError: reason },
+      });
+      return result.count;
+    },
+
+    async deleteStaleTerminalParticipants(before) {
+      const result = await client.automationParticipant.deleteMany({
+        where: {
+          state: { in: ["LINK_SENT", "EXPIRED", "FAILED"] },
+          updatedAt: { lt: new Date(before) },
+        },
+      });
+      return result.count;
+    },
   };
 }

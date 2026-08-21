@@ -8,6 +8,7 @@ import { processNormalizedEvent } from "./lib/automation/runner";
 import type { NormalizedEvent } from "./lib/automation/types";
 import { refreshInstagramToken } from "./lib/meta/oauth";
 import { refreshExpiringInstagramTokens } from "./lib/meta/token-refresh";
+import { sweepStaleParticipants } from "./lib/automation/participant-retention";
 
 const env = getServerEnv();
 
@@ -53,4 +54,13 @@ if (!env.redisUrl) {
     void refreshTokens().catch((error) => console.error(`Instagram token refresh failed: ${error.message}`));
     setInterval(() => void refreshTokens().catch((error) => console.error(`Instagram token refresh failed: ${error.message}`)), 24 * 60 * 60 * 1_000).unref();
   }
+
+  const sweepParticipants = async () => {
+    const result = await sweepStaleParticipants(getRepository());
+    if (result.expired || result.deleted) {
+      console.log(`Participant retention sweep: ${result.expired} expired, ${result.deleted} deleted`);
+    }
+  };
+  void sweepParticipants().catch((error) => console.error(`Participant retention sweep failed: ${error.message}`));
+  setInterval(() => void sweepParticipants().catch((error) => console.error(`Participant retention sweep failed: ${error.message}`)), 60 * 60 * 1_000).unref();
 }

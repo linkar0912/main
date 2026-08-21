@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRepository } from "./memory-repository";
 
 const definition = {
@@ -41,6 +41,10 @@ const participantInput = {
 };
 
 describe("memory repository", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("lists automations newest-updated first with a deterministic ID tie-breaker", async () => {
     const base = {
       workspaceId: "workspace_a",
@@ -427,5 +431,78 @@ describe("memory repository", () => {
       confirmationCode: "replyconnect_delete_123",
       status: "COMPLETED",
     });
+  });
+
+  it("expires non-terminal participants whose messaging window has closed, leaving terminal and still-open ones untouched", async () => {
+    const repository = createMemoryRepository();
+    const { record: closedWindow } = await repository.createParticipant({
+      ...participantInput,
+      state: "FOLLOW_REQUIRED",
+      messagingWindowExpiresAt: "2026-08-20T00:00:00.000Z",
+    });
+    const { record: openWindow } = await repository.createParticipant({
+      ...participantInput,
+      sourceCommentId: "comment_2",
+      state: "FOLLOW_REQUIRED",
+      messagingWindowExpiresAt: "2026-08-22T00:00:00.000Z",
+    });
+    const { record: alreadyTerminal } = await repository.createParticipant({
+      ...participantInput,
+      sourceCommentId: "comment_3",
+      state: "LINK_SENT",
+      messagingWindowExpiresAt: "2026-08-20T00:00:00.000Z",
+    });
+    const { record: noWindowSet } = await repository.createParticipant({
+      ...participantInput,
+      sourceCommentId: "comment_4",
+      state: "OPENING_SENT",
+    });
+
+    const count = await repository.expireStaleParticipants("2026-08-21T00:00:00.000Z", "Messaging window expired");
+
+    expect(count).toBe(1);
+    expect((await repository.getParticipant("workspace_a", "ig_123", closedWindow.id))?.state).toBe("EXPIRED");
+    expect((await repository.getParticipant("workspace_a", "ig_123", closedWindow.id))?.finalDeliveryError).toBe("Messaging window expired");
+    expect((await repository.getParticipant("workspace_a", "ig_123", openWindow.id))?.state).toBe("FOLLOW_REQUIRED");
+    expect((await repository.getParticipant("workspace_a", "ig_123", alreadyTerminal.id))?.state).toBe("LINK_SENT");
+    expect((await repository.getParticipant("workspace_a", "ig_123", noWindowSet.id))?.state).toBe("OPENING_SENT");
+  });
+
+  it("deletes only terminal participants updated before the cutoff, freeing the source-comment slot", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-08-01T00:00:00.000Z"));
+      const repository = createMemoryRepository();
+      const { record: oldTerminal } = await repository.createParticipant({
+        ...participantInput,
+        state: "LINK_SENT",
+      });
+      const { record: stillActive } = await repository.createParticipant({
+        ...participantInput,
+        sourceCommentId: "comment_3",
+        state: "FOLLOW_REQUIRED",
+      });
+
+      const cutoff = "2026-08-15T00:00:00.000Z";
+      vi.setSystemTime(new Date("2026-08-20T00:00:00.000Z"));
+      const { record: recentTerminal } = await repository.createParticipant({
+        ...participantInput,
+        sourceCommentId: "comment_2",
+        state: "EXPIRED",
+      });
+
+      const count = await repository.deleteStaleTerminalParticipants(cutoff);
+
+      expect(count).toBe(1);
+      expect(await repository.getParticipant("workspace_a", "ig_123", oldTerminal.id)).toBeNull();
+      expect(await repository.getParticipant("workspace_a", "ig_123", recentTerminal.id)).toMatchObject({ state: "EXPIRED" });
+      expect(await repository.getParticipant("workspace_a", "ig_123", stillActive.id)).toMatchObject({ state: "FOLLOW_REQUIRED" });
+
+      const reCreated = await repository.createParticipant(participantInput);
+      expect(reCreated.created).toBe(true);
+      expect(reCreated.record.id).not.toBe(oldTerminal.id);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

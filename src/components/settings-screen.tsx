@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Camera, Check, ExternalLink, LockKeyhole, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Camera, Check, ExternalLink, LockKeyhole, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
 import { StatusBadge } from "./status-badge";
@@ -9,9 +9,27 @@ import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 
 type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string };
+type ConnectionHealth = {
+  id: string;
+  username: string;
+  status: ConnectionStatus;
+  requiredFields: string[];
+  subscribedFields: string[];
+  missingFields: string[];
+  checkError?: string;
+};
+
+const WEBHOOK_FIELD_LABELS: Record<string, string> = {
+  comments: "Comments",
+  messages: "Messages",
+  messaging_postbacks: "Quick-reply taps",
+  messaging_optins: "Opt-ins",
+  messaging_referral: "Referrals",
+};
 
 export function SettingsScreen() {
   const [connection, setConnection] = useState<Connection | null>(null);
+  const [health, setHealth] = useState<ConnectionHealth | null>(null);
   const [mode, setMode] = useState<"demo" | "configured">("demo");
   const [metaState] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("meta") ?? "");
   const [disconnecting, setDisconnecting] = useState(false);
@@ -37,11 +55,17 @@ export function SettingsScreen() {
   }
 
   useEffect(() => {
-    void Promise.all([fetch("/api/meta/connection"), fetch("/api/health")]).then(async ([connectionResponse, healthResponse]) => {
+    void Promise.all([
+      fetch("/api/meta/connection"),
+      fetch("/api/health"),
+      fetch("/api/meta/connection/health"),
+    ]).then(async ([connectionResponse, healthResponse, connectionHealthResponse]) => {
       const connectionPayload = (await connectionResponse.json()) as { data?: Connection[] };
       const healthPayload = (await healthResponse.json()) as { mode?: "demo" | "configured" };
+      const connectionHealthPayload = (await connectionHealthResponse.json()) as { data?: ConnectionHealth[] };
       setConnection(connectionPayload.data?.[0] ?? null);
       setMode(healthPayload.mode ?? "demo");
+      setHealth(connectionHealthPayload.data?.[0] ?? null);
     }).catch(() => undefined);
   }, []);
 
@@ -66,6 +90,35 @@ export function SettingsScreen() {
           <div className="settings-action">{connection ? <><StatusBadge status={connection.status} /> <button className="button button-secondary" type="button" disabled={disconnecting} onClick={() => void disconnect()}>{disconnecting ? "Disconnecting…" : "Disconnect"}</button></> : <a className="button button-primary" href="/api/meta/oauth/start">Connect Instagram <ExternalLink size={15} /></a>}</div>
         </section>
         {disconnectError && <p className="form-error" role="alert">{disconnectError}</p>}
+
+        {connection && health && (
+          <section className="panel settings-panel" aria-label="Webhook health">
+            <div className="panel-heading">
+              <div><p className="eyebrow">Webhook health</p><h2>{health.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>
+              {health.missingFields.length === 0 ? <ShieldCheck size={21} /> : <AlertTriangle size={21} />}
+            </div>
+            {health.checkError ? (
+              <p className="muted">Could not check with Meta right now: {health.checkError}</p>
+            ) : (
+              <ul className="check-list">
+                {health.requiredFields.map((field) => {
+                  const subscribed = !health.missingFields.includes(field);
+                  return (
+                    <li key={field}>
+                      {subscribed ? <Check size={16} /> : <X size={16} />}
+                      {WEBHOOK_FIELD_LABELS[field] ?? field}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {(health.missingFields.length > 0 || health.checkError) && (
+              <p className="muted">
+                Reconnect Instagram to refresh the subscription. <a className="text-link" href="/api/meta/oauth/start">Reconnect <ExternalLink size={15} /></a>
+              </p>
+            )}
+          </section>
+        )}
 
         <div className="settings-grid">
           <section className="panel settings-panel"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Built for review</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> No AI or scraping is used in this MVP.</li></ul></section>
