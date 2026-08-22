@@ -72,9 +72,16 @@ export type FlowEmailCapture = {
   delivery?: EmailDelivery;
   /**
    * Optional webhook (Zapier/Make/n8n) that receives {email, automationId,
-   * automationName, capturedAt} as JSON the moment an address is stored.
+   * automationName, capturedAt, fields} as JSON the moment collection completes.
    */
   notifyUrl?: string;
+  /** Extra questions asked after the email (conversational form). Answers are stored on the contact. */
+  fields?: EmailCaptureField[];
+};
+
+export type EmailCaptureField = {
+  id: string;
+  question: string;
 };
 
 /** Fulfillment email configuration for a captured lead. */

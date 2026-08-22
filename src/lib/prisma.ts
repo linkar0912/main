@@ -29,7 +29,9 @@ import type {
   SequenceEnrollmentCount,
   DueSequenceSend,
   BroadcastRecord,
+  MessagingWindow,
 } from "./repository";
+import type { EmailCaptureField } from "./automation/types";
 
 function mapUser(record: {
   id: string;
@@ -231,6 +233,8 @@ function mapContact(record: {
     awaitingAutomationId: record.awaitingAutomationId ?? undefined,
     awaitingSince: record.awaitingSince?.toISOString(),
     attempts: record.attempts,
+    fields: (record as unknown as { fields?: Record<string, string> | null }).fields ?? undefined,
+    awaitingFields: (record as unknown as { awaitingFields?: { id: string; question: string }[] | null }).awaitingFields ?? undefined,
     suppressedAt: record.suppressedAt?.toISOString(),
     lastSeenAt: record.lastSeenAt.toISOString(),
     createdAt: record.createdAt.toISOString(),
@@ -1181,8 +1185,44 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           state: current.email ? "CAPTURED" : "NONE",
           awaitingAutomationId: null,
           awaitingSince: null,
+          awaitingFields: Prisma.DbNull,
         },
       });
+    },
+
+    async beginContactFieldCollection(workspaceId, instagramAccountId, igScopedUserId, remainingFields, automationId, atIso) {
+      const updated = await client.automationContact.update({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+        data: {
+          state: "AWAITING_FIELD",
+          awaitingAutomationId: automationId,
+          awaitingSince: new Date(atIso),
+          awaitingFields: remainingFields,
+        },
+      });
+      return mapContact(updated);
+    },
+
+    async recordContactFieldAnswer(workspaceId, instagramAccountId, igScopedUserId, fieldId, answer, remainingAfter, atIso) {
+      const current = await client.automationContact.findUniqueOrThrow({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      const existingFields = (current.fields ?? {}) as Record<string, string>;
+      const updated = await client.automationContact.update({
+        where: { id: current.id },
+        data: {
+          fields: { ...existingFields, [fieldId]: answer.trim().slice(0, 200) },
+          awaitingFields: remainingAfter,
+          state: remainingAfter.length > 0 ? "AWAITING_FIELD" : "CAPTURED",
+          ...(remainingAfter.length === 0 ? { awaitingAutomationId: null, awaitingSince: null } : {}),
+          lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
+        },
+      });
+      return mapContact(updated);
     },
 
     async suppressContact(workspaceId, instagramAccountId, igScopedUserId, atIso) {
@@ -1198,6 +1238,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           state: current.email ? "CAPTURED" : "NONE",
           awaitingAutomationId: null,
           awaitingSince: null,
+          awaitingFields: Prisma.DbNull,
           lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
         },
       });
@@ -1420,6 +1461,24 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       if (!broadcast || broadcast.status !== "RUNNING") return;
       if (broadcast.sent + broadcast.failed + broadcast.skipped < broadcast.total) return;
       await client.broadcast.update({ where: { id: broadcast.id }, data: { status: "COMPLETED", completedAt: new Date() } });
+    },
+
+    async getMessagingWindow(workspaceId) {
+      const row = await client.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { quietStartHour: true, quietEndHour: true, timezone: true },
+      });
+      if (!row?.quietStartHour || row?.quietEndHour === null || row?.quietEndHour === undefined || !row.timezone) return null;
+      return { startHour: row.quietStartHour, endHour: row.quietEndHour, timezone: row.timezone };
+    },
+
+    async setMessagingWindow(workspaceId, window) {
+      await client.workspace.update({
+        where: { id: workspaceId },
+        data: window
+          ? { quietStartHour: window.startHour, quietEndHour: window.endHour, timezone: window.timezone }
+          : { quietStartHour: null, quietEndHour: null, timezone: null },
+      });
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {

@@ -1,7 +1,7 @@
 import { evaluateFlow } from "./engine";
 import type { EvaluationContext, ExecutionAction, NormalizedEvent } from "./types";
 import { unsealSecret } from "../security/secrets";
-import type { AutomationRepository, InstagramConnectionRecord } from "../repository";
+import type { AutomationContactRecord, AutomationRepository, InstagramConnectionRecord } from "../repository";
 import { MetaApiError } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
 import { notifyWorkspaceManagers } from "../notifications";
@@ -155,7 +155,13 @@ async function enrollNewLeadInSequences(
  */
 async function notifyLeadWebhook(
   notifyUrl: string,
-  payload: { email: string; automationId: string; automationName: string; capturedAt: string },
+  payload: {
+    email: string;
+    automationId: string;
+    automationName: string;
+    capturedAt: string;
+    fields?: Record<string, string>;
+  },
 ): Promise<void> {
   try {
     await fetch(notifyUrl, {
@@ -269,7 +275,11 @@ async function processEmailCaptureReply(
   const senderId = event.recipientId;
 
   const contact = await repository.getContact(mapping.workspaceId, event.accountId, senderId);
-  if (!contact || contact.state !== "AWAITING_EMAIL" || !contact.awaitingAutomationId) return null;
+  if (!contact) return null;
+  if (contact.state === "AWAITING_FIELD" && contact.awaitingAutomationId) {
+    return processFieldAnswer(event, mapping, contact, repository, options);
+  }
+  if (contact.state !== "AWAITING_EMAIL" || !contact.awaitingAutomationId) return null;
 
   const automation = (await repository.listAutomations(mapping.workspaceId)).find(
     (item) => item.id === contact.awaitingAutomationId,
@@ -333,6 +343,30 @@ async function processEmailCaptureReply(
         candidate,
         new Date(event.timestamp).toISOString(),
       );
+      const fieldQueue = emailCapture.fields ?? [];
+      if (fieldQueue.length > 0) {
+        // Conversational form: ask question 1 now; confirmation + fulfillment fire
+        // after the last answer (see processFieldAnswer).
+        await repository.beginContactFieldCollection(
+          mapping.workspaceId,
+          event.accountId,
+          senderId,
+          fieldQueue,
+          automation.id,
+          new Date(event.timestamp).toISOString(),
+        );
+        const providerMessageId = await sendAction(options.client, connection, {
+          type: "send_text",
+          recipientId: senderId,
+          text: fieldQueue[0].question,
+        });
+        await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+          status: "SENT",
+          reason: `email_captured:${candidate};field_asked:${fieldQueue[0].id}`,
+          providerMessageId,
+        });
+        return { matched: 1, sent: 1, skipped: 0, failed: 0 };
+      }
       const providerMessageId = await sendAction(options.client, connection, {
         type: "send_text",
         recipientId: senderId,
@@ -382,6 +416,134 @@ async function processEmailCaptureReply(
     await repository.completeExecution(mapping.workspaceId, dedupeKey, {
       status: "SENT",
       reason: `email_retry:${attempts}`,
+      providerMessageId,
+    });
+    return { matched: 1, sent: 1, skipped: 0, failed: 0 };
+  } catch (error) {
+    if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
+      await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
+      throw error;
+    }
+    await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+      status: "FAILED",
+      reason: error instanceof Error ? error.message : "Meta delivery failed",
+    });
+    return { matched: 0, sent: 0, skipped: 0, failed: 1 };
+  }
+}
+
+/**
+ * Handles one conversational-field answer: stores it, asks the next question, and —
+ * after the final answer — fires confirmation DM, fulfillment email, lead webhook,
+ * sequence enrollment, and the owner notification. The lead is complete only here.
+ */
+async function processFieldAnswer(
+  event: NormalizedEvent,
+  mapping: WorkspaceMapping,
+  contact: AutomationContactRecord,
+  repository: AutomationRepository,
+  options: RunnerOptions,
+): Promise<RunnerResult> {
+  const senderId = event.recipientId!;
+  const automation = (await repository.listAutomations(mapping.workspaceId)).find(
+    (item) => item.id === contact.awaitingAutomationId,
+  );
+  if (
+    !automation
+    || automation.status !== "ACTIVE"
+    || automation.definition.version !== 1
+    || !automation.definition.emailCapture
+  ) {
+    await repository.clearContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId);
+    return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  }
+
+  const emailCapture = automation.definition.emailCapture;
+  const dedupeKey = `${automation.id}:${event.id}:field-answer`;
+  if (await repository.hasExecution(mapping.workspaceId, dedupeKey)) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+
+  const claimed = await repository.claimExecution({
+    workspaceId: mapping.workspaceId,
+    automationId: automation.id,
+    externalEventId: event.id,
+    dedupeKey,
+  });
+  if (!claimed) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+
+  try {
+    const queue = contact.awaitingFields ?? [];
+    const current = queue[0];
+    const rest = queue.slice(1);
+    if (!current) {
+      await repository.clearContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId);
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, { status: "SKIPPED", reason: "field_queue_empty" });
+      return { matched: 0, sent: 0, skipped: 1, failed: 0 };
+    }
+
+    const answer = event.text.trim().slice(0, 200);
+    const atIso = new Date().toISOString();
+    const updated = await repository.recordContactFieldAnswer(
+      mapping.workspaceId,
+      event.accountId,
+      senderId,
+      current.id,
+      answer || current.question, // blank replies store the question as a placeholder
+      rest,
+      atIso,
+    );
+
+    const dailyLimit = await checkDailySendLimit(automation.definition, {
+      workspaceId: mapping.workspaceId,
+      automationId: automation.id,
+    });
+    if (!dailyLimit.allowed) {
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, { status: "SKIPPED", reason: dailyLimit.reason });
+      return { matched: updated.state === "CAPTURED" ? 1 : 0, sent: 0, skipped: 1, failed: 0 };
+    }
+
+    if (!options.client || !options.tokenEncryptionKey) {
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+        status: "SKIPPED",
+        reason: "Meta delivery is disabled in demo mode",
+      });
+      return { matched: 1, sent: 0, skipped: 1, failed: 0 };
+    }
+
+    const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+    const outgoing = rest.length > 0 ? rest[0].question : emailCapture.confirmationText;
+    const providerMessageId = await sendAction(options.client, connection, {
+      type: "send_text",
+      recipientId: senderId,
+      text: outgoing,
+    });
+
+    let completionReason = `field_answered:${current.id}`;
+    if (updated.state === "CAPTURED") {
+      completionReason = `lead_complete:${updated.email ?? "no-email"}`;
+      if (updated.email && emailCapture.delivery) {
+        await deliverLeadEmail(mapping, automation.name, contact.id, updated.email, emailCapture.delivery);
+      }
+      if (updated.email && emailCapture.notifyUrl) {
+        await notifyLeadWebhook(emailCapture.notifyUrl, {
+          email: updated.email,
+          automationId: automation.id,
+          automationName: automation.name,
+          capturedAt: atIso,
+          fields: updated.fields ?? {},
+        });
+      }
+      await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
+      void notifyWorkspaceManagers(
+        mapping.workspaceId,
+        `lead:email:${contact.id}`,
+        "New lead captured",
+        `${updated.email ?? senderId} completed “${automation.name}”${updated.fields ? ` (${Object.values(updated.fields).join(", ")})` : ""}.`,
+      ).catch(() => undefined);
+    }
+
+    await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+      status: "SENT",
+      reason: completionReason,
       providerMessageId,
     });
     return { matched: 1, sent: 1, skipped: 0, failed: 0 };
@@ -576,9 +738,13 @@ export async function processNormalizedEvent(
         const embeddedEmail = extractEmailAddress(event.text);
         if (embeddedEmail) {
           captureOutcome = "instant";
+          // With conversational fields the follow-up is question 1, not the confirmation.
+          const followUpText =
+            automation.definition.emailCapture.fields?.[0]?.question
+            ?? automation.definition.emailCapture.confirmationText;
           actionsToSend = [
             ...evaluation.actions,
-            { type: "send_text", recipientId: senderId, text: automation.definition.emailCapture.confirmationText },
+            { type: "send_text", recipientId: senderId, text: followUpText },
           ];
         } else {
           captureOutcome = "prompt";
@@ -607,30 +773,44 @@ export async function processNormalizedEvent(
             capturedEmail,
             atIso,
           );
-          if (automation.definition.emailCapture?.delivery) {
-            await deliverLeadEmail(
-              mapping,
-              automation.name,
-              `${automation.id}:${senderId}`,
-              capturedEmail,
-              automation.definition.emailCapture.delivery,
+          const fieldQueue = automation.definition.emailCapture?.fields ?? [];
+          if (fieldQueue.length > 0) {
+            // Conversational form in progress — confirmation + fulfillment + enrollment
+            // fire after the last answer (processFieldAnswer).
+            await repository.beginContactFieldCollection(
+              mapping.workspaceId,
+              event.accountId,
+              senderId,
+              fieldQueue.slice(1),
+              automation.id,
+              atIso,
             );
+          } else {
+            if (automation.definition.emailCapture?.delivery) {
+              await deliverLeadEmail(
+                mapping,
+                automation.name,
+                `${automation.id}:${senderId}`,
+                capturedEmail,
+                automation.definition.emailCapture.delivery,
+              );
+            }
+            if (automation.definition.emailCapture?.notifyUrl) {
+              await notifyLeadWebhook(automation.definition.emailCapture.notifyUrl, {
+                email: capturedEmail,
+                automationId: automation.id,
+                automationName: automation.name,
+                capturedAt: new Date().toISOString(),
+              });
+            }
+            await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
+            void notifyWorkspaceManagers(
+              mapping.workspaceId,
+              `lead:email:${senderId}`,
+              "New email captured",
+              `An email was captured via your “${automation.name}” automation.`,
+            ).catch(() => undefined);
           }
-          if (automation.definition.emailCapture?.notifyUrl) {
-            await notifyLeadWebhook(automation.definition.emailCapture.notifyUrl, {
-              email: capturedEmail,
-              automationId: automation.id,
-              automationName: automation.name,
-              capturedAt: new Date().toISOString(),
-            });
-          }
-          await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
-          void notifyWorkspaceManagers(
-            mapping.workspaceId,
-            `lead:email:${senderId}`,
-            "New email captured",
-            `An email was captured via your “${automation.name}” automation.`,
-          ).catch(() => undefined);
         } else {
           await repository.setContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId, automation.id, atIso);
         }

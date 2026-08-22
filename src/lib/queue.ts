@@ -94,7 +94,7 @@ export type BroadcastSendJob = {
   igScopedUserId: string;
 };
 
-export async function enqueueBroadcastSends(jobs: BroadcastSendJob[]): Promise<number> {
+export async function enqueueBroadcastSends(jobs: BroadcastSendJob[], baseDelayMs = 0): Promise<number> {
   const queue = getWebhookQueue();
   if (!queue) return 0;
   let enqueued = 0;
@@ -106,7 +106,7 @@ export async function enqueueBroadcastSends(jobs: BroadcastSendJob[]): Promise<n
           job,
           {
             jobId: `broadcast:${job.broadcastId}:${job.igScopedUserId}`,
-            delay: Math.min(index, 600) * 1_000,
+            delay: baseDelayMs + Math.min(index, 600) * 1_000,
             attempts: 2,
             backoff: { type: "fixed", delay: 5_000 },
             removeOnComplete: 500,

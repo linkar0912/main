@@ -1,7 +1,8 @@
 import type { EvaluationContext, FlowCondition, FlowDefinitionV1, NormalizedEvent } from "./types";
 
+/** Trim, lowercase, and strip diacritics so café matches cafe across locales. */
 function normalizedText(value: string): string {
-  return value.trim().toLowerCase();
+  return value.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
 function containsKeyword(text: string, keywords: string[]): boolean {

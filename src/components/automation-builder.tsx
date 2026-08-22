@@ -156,6 +156,9 @@ function AutomationBuilderV1({
   const [deliveryLinkUrl, setDeliveryLinkUrl] = useState(initialDefinition.emailCapture?.delivery?.linkUrl ?? "");
   const [deliveryLinkLabel, setDeliveryLinkLabel] = useState(initialDefinition.emailCapture?.delivery?.linkLabel ?? "");
   const [notifyUrl, setNotifyUrl] = useState(initialDefinition.emailCapture?.notifyUrl ?? "");
+  const [captureFields, setCaptureFields] = useState<{ id: string; question: string }[]>(
+    () => (initialDefinition.emailCapture?.fields ?? []).map((field, index) => ({ id: field.id || `field-${index + 1}`, question: field.question })),
+  );
   const [scheduleStart, setScheduleStart] = useState(isoToLocalInput(initialDefinition.schedule?.startsAt));
   const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
   const [dailyLimit, setDailyLimit] = useState(initialDefinition.dailySendLimit ? String(initialDefinition.dailySendLimit) : "");
@@ -257,6 +260,13 @@ function AutomationBuilderV1({
                   }
                 : {}),
               ...(notifyUrl.trim() ? { notifyUrl: notifyUrl.trim() } : {}),
+              ...(captureFields.filter((field) => field.question.trim()).length > 0
+                ? {
+                    fields: captureFields
+                      .filter((field) => field.question.trim())
+                      .map((field, index) => ({ id: field.id || `field-${index + 1}`, question: field.question.trim() })),
+                  }
+                : {}),
             },
           }
         : {}),
@@ -672,6 +682,40 @@ function AutomationBuilderV1({
                         />
                         <small>Receives {'{email, automationName, capturedAt}'} as JSON on every capture.</small>
                       </label>
+                      <p className="eyebrow field-spaced">Extra questions <em>up to 5</em></p>
+                      {captureFields.map((field, index) => (
+                        <div className="field field-spaced public-reply-row" key={field.id}>
+                          <span>Question {index + 1}</span>
+                          <div className="public-reply-input">
+                            <input
+                              value={field.question}
+                              onChange={(event) =>
+                                setCaptureFields((current) => current.map((f, i) => (i === index ? { ...f, question: event.target.value } : f)))
+                              }
+                              maxLength={300}
+                              placeholder="e.g. What's your name?"
+                            />
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label={`Remove question ${index + 1}`}
+                              onClick={() => setCaptureFields((current) => current.filter((_, i) => i !== index))}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {captureFields.length < 5 && (
+                        <button
+                          type="button"
+                          className="button button-secondary field-spaced"
+                          onClick={() => setCaptureFields((current) => [...current, { id: `field-${Date.now()}`, question: "" }])}
+                        >
+                          <Plus size={15} /> Add question
+                        </button>
+                      )}
+                      <small>Asked after their email — answers are stored on the lead and included in the lead webhook.</small>
                     </>
                   )}
                 </>

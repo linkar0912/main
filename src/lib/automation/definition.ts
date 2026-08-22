@@ -82,6 +82,21 @@ const emailCaptureSchema = z.object({
     .optional(),
   // Outbound lead webhook (Zapier/Make/n8n): receives the captured email as JSON.
   notifyUrl: link.optional(),
+  // Follow-up questions asked after the email (answers stored on the contact).
+  fields: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(40),
+        question: z.string().trim().min(1).max(300),
+      }),
+    )
+    .max(5)
+    .optional(),
+})
+.superRefine((capture, context) => {
+  if (capture.fields && new Set(capture.fields.map((field) => field.id)).size !== capture.fields.length) {
+    context.addIssue({ code: "custom", path: ["fields"], message: "Field IDs must be unique" });
+  }
 });
 
 const condition = z.discriminatedUnion("type", [
@@ -363,6 +378,14 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
               : {}),
             ...(parsed.emailCapture.notifyUrl?.trim()
               ? { notifyUrl: parsed.emailCapture.notifyUrl.trim() }
+              : {}),
+            ...(parsed.emailCapture.fields
+              ? {
+                  fields: parsed.emailCapture.fields.map((field) => ({
+                    id: field.id.trim(),
+                    question: field.question.trim(),
+                  })),
+                }
               : {}),
           },
         }

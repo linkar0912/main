@@ -109,7 +109,7 @@ export type MediaPerformance = { mediaId: string; matched: number; delivered: nu
  * Doubles as the "have we seen this sender before" source for first_contact triggers and
  * the store for emails captured by DM email-capture flows.
  */
-export type ContactState = "NONE" | "AWAITING_EMAIL" | "CAPTURED";
+export type ContactState = "NONE" | "AWAITING_EMAIL" | "AWAITING_FIELD" | "CAPTURED";
 
 export type AutomationContactRecord = {
   id: string;
@@ -123,6 +123,10 @@ export type AutomationContactRecord = {
   awaitingSince?: string;
   /** Invalid email replies received while awaiting (retry budget). */
   attempts: number;
+  /** Answers collected by conversational field questions, keyed by field id. */
+  fields?: Record<string, string>;
+  /** Remaining questions while state is AWAITING_FIELD. */
+  awaitingFields?: { id: string; question: string }[];
   /** Set when the person opted out (STOP/unsubscribe); every automated send is skipped. */
   suppressedAt?: string;
   lastSeenAt: string;
@@ -184,6 +188,9 @@ export type DueSequenceSend = {
   sequence: AutomationSequenceRecord;
   contact: AutomationContactRecord;
 };
+
+/** Optional do-not-disturb window, evaluated in the workspace timezone. */
+export type MessagingWindow = { startHour: number; endHour: number; timezone: string };
 
 export type BroadcastSegment = "all_contacts" | "captured_email";
 export type BroadcastStatus = "PENDING" | "RUNNING" | "COMPLETED";
@@ -394,6 +401,25 @@ export interface AutomationRepository {
   clearContactAwaitingEmail(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<void>;
   /** Marks the person as opted out; idempotent. All automated sends skip them afterwards. */
   suppressContact(workspaceId: string, instagramAccountId: string, igScopedUserId: string, atIso: string): Promise<AutomationContactRecord>;
+  /** Starts the conversational field queue after the email is stored. */
+  beginContactFieldCollection(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+    remainingFields: { id: string; question: string }[],
+    automationId: string,
+    atIso: string,
+  ): Promise<AutomationContactRecord>;
+  /** Stores one answer and advances the queue; completes collection on the last field. */
+  recordContactFieldAnswer(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+    fieldId: string,
+    answer: string,
+    remainingAfter: { id: string; question: string }[],
+    atIso: string,
+  ): Promise<AutomationContactRecord>;
   countCapturedContacts(workspaceId: string): Promise<number>;
   listCapturedContacts(workspaceId: string, limit: number): Promise<CapturedContactSummary[]>;
   deleteContactsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
@@ -433,6 +459,9 @@ export interface AutomationRepository {
   listBroadcasts(workspaceId: string, limit: number): Promise<BroadcastRecord[]>;
   incrementBroadcastCounters(id: string, delta: { sent?: number; failed?: number; skipped?: number }): Promise<void>;
   finalizeBroadcastIfDone(workspaceId: string, id: string): Promise<void>;
+  // Workspace messaging quiet hours (null when disabled).
+  getMessagingWindow(workspaceId: string): Promise<MessagingWindow | null>;
+  setMessagingWindow(workspaceId: string, window: MessagingWindow | null): Promise<void>;
   /** Recipients for a broadcast segment — suppressed contacts and DM-less rows excluded. */
   listBroadcastRecipients(
     workspaceId: string,

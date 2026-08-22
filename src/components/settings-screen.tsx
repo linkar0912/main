@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Camera, Check, ExternalLink, LockKeyhole, ShieldCheck, UserPlus, Users, X } from "lucide-react";
+import { AlertTriangle, Camera, Check, Clock, ExternalLink, LockKeyhole, ShieldCheck, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
 import { StatusBadge } from "./status-badge";
@@ -45,6 +45,49 @@ export function SettingsScreen() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("MEMBER");
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [quietEnabled, setQuietEnabled] = useState(false);
+  const [quietStart, setQuietStart] = useState(22);
+  const [quietEnd, setQuietEnd] = useState(8);
+  const [quietTz, setQuietTz] = useState("UTC");
+  const [quietSaved, setQuietSaved] = useState(false);
+  const [quietBusy, setQuietBusy] = useState(false);
+  const [quietError, setQuietError] = useState("");
+
+  useEffect(() => {
+    void fetch("/api/workspace/messaging")
+      .then((r) => r.json())
+      .then((payload: { data?: { startHour: number; endHour: number; timezone: string } | null }) => {
+        if (payload?.data) {
+          setQuietEnabled(true);
+          setQuietStart(payload.data.startHour);
+          setQuietEnd(payload.data.endHour);
+          setQuietTz(payload.data.timezone);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  async function saveMessagingWindow(enabled: boolean) {
+    setQuietBusy(true);
+    setQuietSaved(false);
+    try {
+      const response = await fetch("/api/workspace/messaging", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(enabled ? { startHour: quietStart, endHour: quietEnd, timezone: quietTz.trim() || "UTC" } : null),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? "Could not save messaging hours.");
+      }
+      setQuietSaved(true);
+      setTimeout(() => setQuietSaved(false), 2500);
+    } catch (error) {
+      setQuietError(error instanceof Error ? error.message : "Could not save messaging hours.");
+    } finally {
+      setQuietBusy(false);
+    }
+  }
 
   async function disconnect(id: string) {
     if (disconnectingId) return;
@@ -229,6 +272,42 @@ export function SettingsScreen() {
               <input type="hidden" name="action" value="logout-all" />
               <button className="button button-secondary" type="submit">Sign out all devices</button>
             </form>
+          </section>
+
+          <section className="panel settings-panel" aria-label="Messaging hours">
+            <div className="panel-heading"><div><p className="eyebrow">Delivery defaults</p><h2>Messaging quiet hours</h2></div><Clock size={21} /></div>
+            <p className="muted">Sequences and broadcasts hold all DMs during this window (workspace time). Direct replies to a person’s own message are never delayed.</p>
+            {quietError && <p className="form-error" role="alert">{quietError}</p>}
+            <label className="field checkbox-field">
+              <input type="checkbox" checked={quietEnabled} onChange={(event) => setQuietEnabled(event.target.checked)} />
+              <span>Hold automated DMs during quiet hours</span>
+            </label>
+            {quietEnabled && (
+              <div className="field-grid">
+                <label className="field">
+                  <span>Quiet from (hour)</span>
+                  <select value={String(quietStart)} onChange={(e) => setQuietStart(Number(e.target.value))}>
+                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Quiet until (hour)</span>
+                  <select value={String(quietEnd)} onChange={(e) => setQuietEnd(Number(e.target.value))}>
+                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Timezone</span>
+                  <input value={quietTz} onChange={(e) => setQuietTz(e.target.value)} placeholder="Europe/Berlin" />
+                </label>
+              </div>
+            )}
+            <div className="builder-footer">
+              <div>{quietSaved && <span className="form-success" role="status"><Check size={15} /> Saved.</span>}</div>
+              <button className="button button-secondary" type="button" disabled={quietBusy} onClick={() => void saveMessagingWindow(quietEnabled)}>
+                {quietBusy ? "Saving…" : "Save messaging hours"}
+              </button>
+            </div>
           </section>
 
           <section className="panel settings-panel" aria-label="Team">

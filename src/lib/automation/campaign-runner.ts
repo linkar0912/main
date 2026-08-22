@@ -17,7 +17,7 @@ import type {
 } from "../repository";
 import type { ParticipantPatch } from "../repository";
 import { unsealSecret } from "../security/secrets";
-import { checkDailySendLimit, checkMonthlyParticipantLimit, renderTemplate } from "./send-limits";
+import { checkDailySendLimit, renderTemplate } from "./send-limits";
 
 const RECHECK_COOLDOWN_MS = 10_000;
 const MAX_RECHECKS = 10;
@@ -671,21 +671,6 @@ async function deliverOpeningReply(
       participant.id,
       ["COMMENT_MATCHED"],
       { openingStatus: "SKIPPED", openingError: dailyLimit.reason },
-    );
-    return skipped ?? participant;
-  }
-  const monthlyLimit = await checkMonthlyParticipantLimit(participant);
-  if (!monthlyLimit.allowed) {
-    void notifyWorkspaceManagers(
-      participant.workspaceId,
-      `limit:monthly:${participant.workspaceId}:${monthKey()}`,
-      `Workspace paused: monthly participant limit reached`,
-      `Your workspace reached this month's participant limit (${monthlyLimit.reason}). New comments are being skipped until the counter resets.`,
-    ).catch(() => undefined);
-    const skipped = await ctx.repository.transitionParticipant(
-      participant.id,
-      ["COMMENT_MATCHED"],
-      { openingStatus: "SKIPPED", openingError: monthlyLimit.reason },
     );
     return skipped ?? participant;
   }

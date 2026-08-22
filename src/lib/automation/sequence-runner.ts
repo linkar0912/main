@@ -3,6 +3,7 @@ import type { AutomationRepository } from "../repository";
 import type { MetaConnection } from "../meta/types";
 import { MetaApiError } from "../meta/client";
 import { logger } from "../logger";
+import { isQuietNow, msUntilQuietEnd } from "../messaging-window";
 
 export type SequenceRunnerClient = { sendDirectMessage: (connection: MetaConnection, recipientId: string, message: { type: "text"; text: string }) => Promise<unknown> };
 
@@ -41,8 +42,20 @@ export async function processDueSequences(
     return result;
   }
 
+  const messagingWindow = await repository.getMessagingWindow(due[0].enrollment.workspaceId).catch(() => null);
+
   for (const { enrollment, sequence, contact } of due) {
     result.processed += 1;
+
+    // Quiet hours: hold the step (keep it due) until the window reopens.
+    if (messagingWindow && isQuietNow(new Date(), messagingWindow)) {
+      await repository.advanceSequenceEnrollment(
+        enrollment.id,
+        enrollment.currentStepIndex,
+        new Date(Date.now() + msUntilQuietEnd(new Date(), messagingWindow)).toISOString(),
+      );
+      continue;
+    }
 
     if (contact.suppressedAt) {
       await repository.cancelEnrollmentsForContact(contact.id);

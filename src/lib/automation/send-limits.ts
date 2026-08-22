@@ -28,22 +28,6 @@ export async function checkDailySendLimit(
     return { allowed: true };
 }
 
-// Workspace-level monthly participant ceiling for the current plan tier.
-// The FREE tier default keeps an MVP deployment inside predictable cost and
-// Meta quality boundaries; paid tiers raise it via PLAN_MONTHLY_PARTICIPANT_LIMIT.
-const DEFAULT_MONTHLY_LIMIT = Number(process.env.PLAN_MONTHLY_PARTICIPANT_LIMIT ?? 500);
-
-export async function checkMonthlyParticipantLimit(ctx: SendLimitContext): Promise<SendLimitDecision> {
-    const limit = DEFAULT_MONTHLY_LIMIT;
-    if (!Number.isFinite(limit) || limit <= 0) return { allowed: true };
-    const now = ctx.now ?? new Date();
-    const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const createdThisMonth = await getRepository().countParticipantsCreatedSince(ctx.workspaceId, since.toISOString());
-    if (createdThisMonth >= limit) {
-        return { allowed: false, reason: `monthly_participant_limit_reached:${createdThisMonth}/${limit}` };
-    }
-    return { allowed: true };
-}
 
 // Template variables available in reply texts: {username}, {keyword}.
 // Unknown placeholders are left untouched so typos never corrupt a reply.

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getSessionFromRequest } from "@/src/lib/auth/session";
 import { enqueueBroadcastSends, type BroadcastSendJob } from "@/src/lib/queue";
+import { isQuietNow, msUntilQuietEnd } from "@/src/lib/messaging-window";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -47,6 +48,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ data: broadcast }, { status: 201 });
   }
 
+  const messagingWindow = await repository.getMessagingWindow(session.workspaceId).catch(() => null);
+  const now = new Date();
+  const quietHoldMs = messagingWindow && isQuietNow(now, messagingWindow)
+    ? msUntilQuietEnd(now, messagingWindow)
+    : 0;
+
   const jobs: BroadcastSendJob[] = recipients.map((recipient) => ({
     broadcastId: broadcast.id,
     workspaceId: session.workspaceId,
@@ -56,7 +63,7 @@ export async function POST(request: Request) {
     igScopedUserId: recipient.igScopedUserId,
   }));
 
-  const enqueued = await enqueueBroadcastSends(jobs);
+  const enqueued = await enqueueBroadcastSends(jobs, quietHoldMs);
   if (enqueued < jobs.length) {
     // No Redis queue configured — broadcasting needs background delivery.
     return NextResponse.json(

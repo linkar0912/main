@@ -40,6 +40,7 @@ enum ParticipantState {
 enum ContactState {
   NONE
   AWAITING_EMAIL
+  AWAITING_FIELD
   CAPTURED
 }
 
@@ -100,6 +101,10 @@ model Workspace {
   name          String
   slug          String                  @unique
   createdAt     DateTime                @default(now())
+  // Optional messaging quiet hours (workspace-local time). Null = always-on.
+  quietStartHour Int?
+  quietEndHour   Int?
+  timezone       String?
   members       WorkspaceMember[]
   connections   InstagramConnection[]
   automations   Automation[]
@@ -209,6 +214,8 @@ model AutomationContact {
   awaitingAutomationId String?
   awaitingSince        DateTime?
   attempts             Int          @default(0)
+  fields               Json?
+  awaitingFields       Json?
   suppressedAt         DateTime?
   lastSeenAt           DateTime     @default(now())
   createdAt            DateTime     @default(now())

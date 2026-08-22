@@ -33,7 +33,9 @@ import type {
   DueSequenceSend,
   BroadcastRecord,
   BroadcastSegment,
+  MessagingWindow,
 } from "./repository";
+import type { EmailCaptureField } from "./automation/types";
 
 function now(): string {
   return new Date().toISOString();
@@ -72,6 +74,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const enrollments = new Map<string, SequenceEnrollmentRecord>();
   const enrollmentIdsByPair = new Map<string, string>();
   const broadcasts = new Map<string, BroadcastRecord>();
+  const messagingWindows = new Map<string, MessagingWindow>();
   const usersByEmail = new Map<string, UserRecord>();
   const usersById = new Map<string, UserRecord>();
   // email -> workspaceId, mirroring WorkspaceMember rows for login lookups.
@@ -799,8 +802,42 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         state: current.email ? "CAPTURED" : "NONE",
         awaitingAutomationId: undefined,
         awaitingSince: undefined,
+        awaitingFields: undefined,
         updatedAt: now(),
       });
+    },
+
+    async beginContactFieldCollection(workspaceId, instagramAccountId, igScopedUserId, remainingFields, automationId, atIso) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) throw new Error("Contact not found");
+      const current = contacts.get(id)!;
+      const updated: AutomationContactRecord = {
+        ...current,
+        state: "AWAITING_FIELD",
+        awaitingAutomationId: automationId,
+        awaitingSince: atIso,
+        awaitingFields: copy(remainingFields),
+        updatedAt: now(),
+      };
+      contacts.set(id, updated);
+      return copy(updated);
+    },
+
+    async recordContactFieldAnswer(workspaceId, instagramAccountId, igScopedUserId, fieldId, answer, remainingAfter, atIso) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) throw new Error("Contact not found");
+      const current = contacts.get(id)!;
+      const updated: AutomationContactRecord = {
+        ...current,
+        fields: { ...(current.fields ?? {}), [fieldId]: answer.trim().slice(0, 200) },
+        awaitingFields: copy(remainingAfter),
+        state: remainingAfter.length > 0 ? "AWAITING_FIELD" : "CAPTURED",
+        ...(remainingAfter.length === 0 ? { awaitingAutomationId: undefined, awaitingSince: undefined } : {}),
+        lastSeenAt: atIso > current.lastSeenAt ? atIso : current.lastSeenAt,
+        updatedAt: now(),
+      };
+      contacts.set(id, updated);
+      return copy(updated);
     },
 
     async suppressContact(workspaceId, instagramAccountId, igScopedUserId, atIso) {
@@ -813,6 +850,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         state: current.email ? "CAPTURED" : "NONE",
         awaitingAutomationId: undefined,
         awaitingSince: undefined,
+        awaitingFields: undefined,
         lastSeenAt: atIso > current.lastSeenAt ? atIso : current.lastSeenAt,
         updatedAt: now(),
       };
@@ -1061,6 +1099,15 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       if (broadcast.status !== "RUNNING") return;
       if (broadcast.sent + broadcast.failed + broadcast.skipped < broadcast.total) return;
       broadcasts.set(id, { ...broadcast, status: "COMPLETED", completedAt: now() });
+    },
+
+    async getMessagingWindow(workspaceId) {
+      return copy(messagingWindows.get(workspaceId) ?? null);
+    },
+
+    async setMessagingWindow(workspaceId, window) {
+      if (window) messagingWindows.set(workspaceId, copy(window));
+      else messagingWindows.delete(workspaceId);
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {

@@ -329,6 +329,104 @@ describe("validation: email delivery configuration", () => {
   });
 });
 
+describe("conversational fields", () => {
+  function fieldsFlow(): FlowDefinitionV1 {
+    return {
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Guide incoming!" }],
+      emailCapture: {
+        promptText: "Email?",
+        confirmationText: "All set ✅",
+        fields: [
+          { id: "name", question: "What is your name?" },
+          { id: "city", question: "Which city?" },
+        ],
+      },
+    };
+  }
+
+  it("asks every field after the email and stores all answers", async () => {
+    const repository = await seed([fieldsFlow()]);
+    const client = createRunnerClient();
+
+    await processNormalizedEvent(messageEvent({ id: "c0", text: "guide" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    await processNormalizedEvent(messageEvent({ id: "c1", text: "me@example.com" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+    // Question 1 asked right after the email lands.
+    let texts = vi.mocked(client.sendDirectMessage).mock.calls.map((call) => (call[2] as { text: string }).text);
+    expect(texts.at(-1)).toBe("What is your name?");
+
+    await processNormalizedEvent(messageEvent({ id: "c2", text: "Ada Lovelace" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    texts = vi.mocked(client.sendDirectMessage).mock.calls.map((call) => (call[2] as { text: string }).text);
+    expect(texts.at(-1)).toBe("Which city?");
+
+    await processNormalizedEvent(messageEvent({ id: "c3", text: "London" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    texts = vi.mocked(client.sendDirectMessage).mock.calls.map((call) => (call[2] as { text: string }).text);
+    expect(texts.at(-1)).toBe("All set ✅");
+
+    const stored = await repository.getContact("workspace_a", "ig_1", "person_1");
+    expect(stored?.state).toBe("CAPTURED");
+    expect(stored?.fields).toEqual({ name: "Ada Lovelace", city: "London" });
+    expect(await repository.countCapturedContacts("workspace_a")).toBe(1);
+  });
+
+  it("includes collected fields in the lead webhook payload", async () => {
+    mockedSendEmail.mockClear();
+    const fetchMock = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const repository = await seed([
+        {
+          version: 1,
+          trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+          conditions: [],
+          actions: [{ type: "send_text", text: "Guide!" }],
+          emailCapture: {
+            promptText: "Email?",
+            confirmationText: "Done",
+            notifyUrl: "https://hooks.example.com/lead",
+            fields: [{ id: "name", question: "Name?" }],
+          },
+        },
+      ]);
+      const client = createRunnerClient();
+      await processNormalizedEvent(messageEvent({ id: "w0", text: "guide" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+      await processNormalizedEvent(messageEvent({ id: "w1", text: "lead@example.com" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+      await processNormalizedEvent(messageEvent({ id: "w2", text: "Grace Hopper" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+      const webhookCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("hooks.example.com"));
+      expect(webhookCalls).toHaveLength(1);
+      expect(JSON.parse(webhookCalls[0][1].body as string)).toMatchObject({
+        email: "lead@example.com",
+        fields: { name: "Grace Hopper" },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("rejects duplicate field ids at validation time", () => {
+    expect(() =>
+      validateFlowDefinition({
+        version: 1,
+        trigger: { type: "message", match: "any", keywords: [] },
+        conditions: [],
+        actions: [{ type: "send_text", text: "x" }],
+        emailCapture: {
+          promptText: "p",
+          confirmationText: "c",
+          fields: [
+            { id: "a", question: "one" },
+            { id: "a", question: "two" },
+          ],
+        },
+      }),
+    ).toThrow();
+  });
+});
+
 describe("opt-out handling", () => {
   function optOutFlow(): FlowDefinitionV1 {
     return { version: 1, trigger: { type: "first_contact" }, conditions: [], actions: [{ type: "send_text", text: "Welcome!" }] };
