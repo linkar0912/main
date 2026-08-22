@@ -1,165 +1,257 @@
 # Linkar production deployment: Coolify behind Cloudflare
 
-This runbook packages Linkar as two long-running Coolify applications
-from the same repository and commit:
+Production runs as **one Coolify service** built from the checked-in
+[`docker-compose.coolify.yml`](../docker-compose.coolify.yml) — not as separate
+applications. Five containers share one image and one private network:
 
 ```text
-Cloudflare (public HTTPS) -> Coolify web -> Next.js dashboard and API
-                                         -> private PostgreSQL
-                                         -> private Valkey
-                       -> Coolify worker -> BullMQ -> Meta Graph API
+Cloudflare (public HTTPS)
+  └── web       ./node_modules/.bin/next start   (only container with a domain)
+      worker    node dist/worker.js              (BullMQ -> Meta Graph API)
+      migrate   prisma migrate deploy            (one-shot, gates web + worker)
+      postgres  postgres:17-alpine               (private, named volume)
+      valkey    valkey:9.1.1-alpine3.24          (private, named volume)
 ```
 
-The owner must provide the real Linkar domain, Cloudflare zone access,
-Coolify project/server access, Meta credentials, and high-entropy database,
-Valkey, webhook, and encryption secrets. This repository does not deploy or
-contain any of those values.
+GitHub Actions builds and publishes `ghcr.io/tejastelkar/replyconnect:main` on
+every push to `main`. Coolify only pulls that image; it never runs a Next.js
+build on the production host. Create Linkar as its own Coolify project and do
+**not** enable *Connect to Predefined Network* — the resource-specific network
+and `replyconnect-*` volumes keep this stack separate from TrackParcel.
 
-For the current shared single-vCPU server, use the checked-in
-`docker-compose.coolify.yml`. GitHub Actions builds and publishes
-`ghcr.io/tejastelkar/replyconnect:main`; Coolify only pulls that image and does
-not run a Next.js build on the production host. Create Linkar as a new
-Coolify project/resource and do not enable **Connect to Predefined Network**.
-The resource-specific network and `replyconnect-*` volumes keep this stack
-separate from TrackParcel.
+The Compose file caps each container's CPU and memory. Those ceilings are
+deliberate for the shared single-vCPU host; do not remove them without moving
+Linkar to a larger server.
 
-The checked-in Compose file also caps each container's CPU and memory. These
-ceilings are intentional for the shared single-vCPU host: do not remove them
-without first moving Linkar to a larger or dedicated server.
+The owner supplies the domain, Cloudflare zone access, Meta credentials, and
+high-entropy database/Valkey/webhook/encryption secrets. None of those values
+live in this repository.
 
-## 1. Provision private data services
+---
 
-Create a dedicated Linkar PostgreSQL 17 service and a dedicated Valkey
-service in the Linkar Coolify project. Do not reuse TrackParcel's data,
-services, networks, volumes, aliases, or credentials.
+## 1. The dependency gate — read this before deploying
 
-Create one Linkar-only private Coolify network, for example
-`replyconnect-private`, and attach exactly these production services to it:
-`replyconnect-web`, `replyconnect-worker`, `replyconnect-postgres`, and
-`replyconnect-valkey`. Configure the stable Linkar-only private aliases
-`replyconnect-postgres` and `replyconnect-valkey` for the data services. Never
-use a TrackParcel alias or attach a Linkar service to a TrackParcel
-network. PostgreSQL and Valkey must have neither public ports nor FQDNs.
+This is the single most important thing to understand about the stack, and the
+cause of the 2026-08-22 outage.
 
-- Create the PostgreSQL database, user, and password from owner-provided
-  values. Do not expose port 5432 or assign an FQDN.
-- Create Valkey from the contract in [`valkey/README.md`](valkey/README.md).
-  Use a distinct `VALKEY_PASSWORD`; do not expose port 6379 or assign an FQDN.
-- The local compose fixture uses `postgres` and `valkey`. In Coolify, use only
-  the stable private aliases `replyconnect-postgres` and `replyconnect-valkey`.
-- Put the URLs in both application secret sets using those aliases:
-  `DATABASE_URL=postgresql://<user>:<password>@replyconnect-postgres:5432/<database>?schema=public`
-  and `REDIS_URL=redis://:<valkey-password>@replyconnect-valkey:6379/0`.
+`web` and `worker` both declare:
 
-Wait for both data-service health checks before applying migrations or starting
-the application processes.
+```yaml
+depends_on:
+  migrate:
+    condition: service_completed_successfully
+```
 
-## 2. Create the two applications
+They will not start until the `migrate` container **exits 0**. If a migration
+fails, the whole application stays down — the failure is not isolated to the
+database step. Three consequences follow, and each one has bitten this stack:
 
-Create two Coolify applications that point to the same repository, branch, and
-commit, and select the repository `Dockerfile` as the build method.
+**A failed migration is sticky.** `prisma migrate deploy` records the failed
+attempt in `_prisma_migrations` with `finished_at` NULL. Every later run then
+aborts with **P3009 before executing any SQL**. Redeploying cannot clear it —
+the fix must be applied to the database by hand (§5).
 
-| Application | Start command | Public routing |
-| --- | --- | --- |
-| `replyconnect-web` | `./node_modules/.bin/next start` | Assign the Linkar domain and container port `3000`. |
-| `replyconnect-worker` | `node dist/worker.js` | No domain and no published port. |
+**A plain redeploy does not re-run the one-shot.** `migrate` is
+`restart: "no"`, so Docker leaves the exited container in place with its old
+exit code, and the gate keeps reading that stale failure. The containers must
+be *recreated* for the one-shot to run again (§5, step 3).
 
-Give both applications the same server-side variables: `APP_NAME`,
-`NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL`, `DATABASE_URL`, `REDIS_URL`,
-`AUTH_SESSION_SECRET`,
-`META_APP_ID`, `META_APP_SECRET`, `META_TOKEN_ENCRYPTION_KEY`,
-`META_REDIRECT_URI`, `META_VERIFY_TOKEN`, `META_API_VERSION`,
-`META_SCOPES`, `FOLLOW_GATED_CAMPAIGNS_ENABLED`, and `SOURCE_COMMIT`. Keep
-secrets in Coolify, never in a Git variable or `NEXT_PUBLIC_*` variable.
+**Coolify's Stop is `docker compose down`.** It removes containers rather than
+stopping them, which also destroys their logs. Never interleave Stop with an
+in-flight Deploy; use the force/recreate option on Deploy instead.
 
-`FOLLOW_GATED_CAMPAIGNS_ENABLED` gates version 2 (follow-gated Reel campaign)
-execution only; automation creation, preview, and version 1 execution work
-regardless of its value. Deploy with `FOLLOW_GATED_CAMPAIGNS_ENABLED=false` on
-both `replyconnect-web` and `replyconnect-worker`. If the tester Instagram
-connection is new or stale, reconnect it through Linkar's OAuth flow so
-`subscribeToWebhooks` re-applies all five webhook fields, then confirm in
-Meta's dashboard that the app-level webhook fields match the same five
-(`comments`, `messages`, `messaging_postbacks`, `messaging_optins`,
-`messaging_referral`) — see the webhook subscription checklist in
-[`docs/meta-app-review.md`](../docs/meta-app-review.md). Only after that
-connection and subscription check passes, set
-`FOLLOW_GATED_CAMPAIGNS_ENABLED=true` on both services and redeploy.
+---
 
-Use [`.env.production.example`](../.env.production.example) as a names-only
-template. Replace its placeholders with owner-provided values. Generate
-`META_TOKEN_ENCRYPTION_KEY` with `openssl rand -hex 32`; it is a 64-character
-hex value and must remain stable after Instagram tokens have been stored.
+## 2. Provision private data services
 
-Users create their own accounts through `/signup`; no password pre-provisioning
-is needed. Generate `AUTH_SESSION_SECRET` with a password manager or
-`openssl rand -hex 32`. Each user signs up through `/signup`, which provisions their
+PostgreSQL and Valkey are defined inside the Compose file and are reachable
+only on the service's private network. They must have **no public ports and no
+FQDN**.
 
-The image defaults to `./node_modules/.bin/next start`; the worker application's command override
-is `node dist/worker.js` (the worker is precompiled to `dist/worker.js` at image build time). The runtime image also contains `./node_modules/.bin/prisma migrate deploy` for
-the explicit migration step below. Both applications must also attach to
-`replyconnect-private`; only `replyconnect-web` receives the public domain.
-The shared image intentionally has no Dockerfile `HEALTHCHECK`: configure the
-HTTP `/api/health` check only for `replyconnect-web`, because the worker shares
-the image but does not listen on port 3000.
+Their data lives in the named volumes `replyconnect-postgres` and
+`replyconnect-valkey`. Deleting the Coolify service deletes those volumes and
+every workspace, contact, and automation with them. There is no undo.
+
+Environment values Compose requires (`?` means the deploy fails fast if unset):
+
+| Variable | Notes |
+| --- | --- |
+| `POSTGRES_PASSWORD` | required |
+| `VALKEY_PASSWORD` | required |
+| `AUTH_SESSION_SECRET` | required, ≥ 32 characters |
+| `META_TOKEN_ENCRYPTION_KEY` | required |
+| `META_REDIRECT_URI`, `META_VERIFY_TOKEN` | required, must match Meta exactly |
+| `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL` | required |
+| `POSTGRES_USER`, `POSTGRES_DB` | default `replyconnect` |
+
+`DATABASE_URL` and `REDIS_URL` are assembled inside the Compose file from those
+values against the in-network hostnames `postgres` and `valkey`. Do not set
+them by hand.
+
+`NEXT_PUBLIC_APP_URL` is inlined at **image build time**, not read at runtime.
+Changing it requires a rebuild, not just a redeploy — a mismatch sends every
+unauthenticated request to the wrong host on redirect.
+
+---
 
 ## 3. Route the web app through Cloudflare
 
-Set `NEXT_PUBLIC_APP_URL` to `https://<linkar-domain>` and use matching
-HTTPS URLs throughout Meta and Coolify. In Cloudflare, create the DNS record
-for the Coolify web application and keep proxying enabled. Use Full (strict)
-TLS with a valid origin certificate.
+Set `NEXT_PUBLIC_APP_URL` to `https://<linkar-domain>` and use matching HTTPS
+URLs throughout Meta and Coolify. Create the DNS record for the web container
+with proxying enabled, and use Full (strict) TLS with a valid origin
+certificate.
 
-Lock the Coolify origin to Cloudflare. Preferred: route through a Cloudflare
-Tunnel and close public inbound TCP 80/443 on the server firewall. Alternative:
-allow inbound TCP 80/443 only from Cloudflare's current published IP ranges and
-deny all other sources. Keep SSH limited to the owner's management network.
+Lock the origin to Cloudflare. Preferred: a Cloudflare Tunnel with public
+inbound TCP 80/443 closed on the server firewall. Alternative: allow 80/443
+only from Cloudflare's published ranges. Keep SSH limited to the owner's
+management network.
 
-Do not route Cloudflare, a public hostname, or any port to the worker,
-PostgreSQL, or Valkey.
+Never route Cloudflare, a public hostname, or any port to `worker`, `postgres`,
+or `valkey`.
 
-## 4. Apply migrations and deploy
+---
 
-For every release, use this order:
+## 4. Normal release
 
-1. Confirm both private data services are healthy and back up PostgreSQL before
-   any migration.
-2. Choose the image delivery path before deploying:
-   - **Normal Dockerfile path:** Coolify builds `replyconnect-worker` and
-     `replyconnect-web` independently from the same immutable commit SHA. Deploy
-     them sequentially and budget for two builds on the host; on a single-vCPU
-     server, wait for the first build to finish before starting the second.
-   - **Recommended one-build path:** CI or a dedicated build server builds the
-     Dockerfile once, pushes a private-registry image, and records its immutable
-     digest. Configure both Coolify applications to deploy that exact digest;
-     their commands remain `node dist/worker.js` and `./node_modules/.bin/next start` respectively.
-3. Run this one-off command from the release image in Coolify before promoting
-   either application: `./node_modules/.bin/prisma migrate deploy`.
-4. Start or redeploy `replyconnect-worker` with `node dist/worker.js`.
-5. Start or redeploy `replyconnect-web` with `./node_modules/.bin/next start`; only this service
-   listens on container port 3000 and receives a public domain.
+1. **Merge to `main`.** CI runs lint, typecheck, and the unit suite; the
+   container workflow publishes `ghcr.io/tejastelkar/replyconnect:main`.
+2. **Wait for both workflows to go green.** Deploying before the image is
+   published just redeploys the previous build.
+   ```bash
+   gh run list --workflow="Build production container" --limit 1
+   ```
+3. **Back up PostgreSQL** if the release contains a migration (§6).
+4. **Deploy.** Either press Deploy in Coolify, or fire the webhook:
+   ```bash
+   curl -H "Authorization: Bearer $COOLIFY_API_TOKEN" "$COOLIFY_DEPLOY_WEBHOOK_URL"
+   ```
+5. **Watch it settle.** A rollout takes roughly 60–90 seconds and takes the
+   *whole stack* down in the middle — a brief window where `postgres` and
+   `valkey` also read as exited is normal, not an outage.
+   ```bash
+   curl -s -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+     "$COOLIFY_HOST/api/v1/services/$SERVICE_UUID" \
+     | jq -r '((.applications//[])[] , (.databases//[])[]) | "\(.name): \(.status)"'
+   ```
+   Success looks like: `web: running:healthy`, `worker: running:unknown`,
+   `migrate: exited`, `postgres`/`valkey` `running:healthy`.
 
-Application startup never runs migrations automatically. Do not use
-`pnpm db:migrate` in production because it is Prisma's development command.
+`worker: running:unknown` is correct — the worker has no healthcheck because it
+does not listen on a port. `migrate: exited` is correct for a completed
+one-shot.
 
-## 5. Verify the release
+`web: running:healthy` is meaningful evidence: that healthcheck runs
+`fetch('http://127.0.0.1:3000/api/health')` inside the container and fails
+unless the response is `ok`.
 
-After the web domain is live, call:
+Then verify from outside:
 
 ```bash
 curl --fail --show-error https://<linkar-domain>/api/health
 ```
 
-Require `status: "ok"`, `mode: "configured"`,
-`dependencies.database: "ok"`, `dependencies.redis: "ok"`, and the expected
-`SOURCE_COMMIT` release marker. Then confirm the web and worker services are
-running, inspect worker logs for a clean Redis connection, and exercise one
-controlled webhook event before enabling customer automations.
+Require `status: "ok"`, `mode: "configured"`, `dependencies.database: "ok"`,
+`dependencies.redis: "ok"`, and the expected `SOURCE_COMMIT`. Inspect worker
+logs for a clean Redis connection, then exercise one controlled webhook event
+before re-enabling customer automations.
 
-## 6. Configure Meta after the public health check
+---
 
-Use the final public domain, not a Coolify internal URL:
+## 5. Recovering a failed migration (P3009)
 
-| Meta setting | Owner-provided production value |
+Symptom: the site is down, `migrate` shows `exited`, and `web`/`worker` never
+leave `created`/`starting`. Redeploying changes nothing.
+
+**Step 1 — confirm the diagnosis.** Coolify 4.1.2 has no logs API for compose
+services (`/api/v1/services/{uuid}/logs` returns 404), so use the UI logs, or
+ask the database directly from the `postgres` container's Terminal:
+
+```sql
+SELECT migration_name, finished_at, rolled_back_at
+FROM "_prisma_migrations"
+WHERE finished_at IS NULL;
+```
+
+One row with an empty `finished_at` is a wedged migration. No rows at all means
+`migrate` never ran the SQL — skip to step 3, it is a container-recreation
+problem, not a database problem.
+
+**Step 2 — clear the failed row.** Back up first. Either method works; both
+have been verified end-to-end against PostgreSQL 17.
+
+From the `postgres` container Terminal (no app container needed — usually the
+easier option, since `web` is not running to exec into):
+
+```sql
+DELETE FROM "_prisma_migrations"
+WHERE migration_name = '<failed_migration_name>'
+  AND finished_at IS NULL;
+```
+
+Expect `DELETE 1`. The `AND finished_at IS NULL` guard means it can only ever
+match a failed attempt, never a successful migration.
+
+Or, from a one-off container of the release image:
+
+```bash
+docker run --rm --network <service-network> -e DATABASE_URL='<url>' \
+  ghcr.io/tejastelkar/replyconnect:main \
+  ./node_modules/.bin/prisma migrate resolve --rolled-back <failed_migration_name>
+```
+
+Both are safe because Postgres DDL is transactional: a failed migration rolls
+back completely, leaving no partial tables. Confirm before assuming — if the
+migration contains `CREATE INDEX CONCURRENTLY` or similar non-transactional
+statements, inspect the schema by hand first.
+
+**Step 3 — recreate the containers.** A plain Deploy leaves the exited one-shot
+in place. Use Coolify's **force rebuild / force recreate** option on Deploy. If
+the UI offers no such option, press **Stop**, wait for it to finish completely,
+then press **Deploy** — never overlap the two.
+
+**Step 4 — verify.**
+
+```sql
+SELECT migration_name, finished_at
+FROM "_prisma_migrations" ORDER BY started_at DESC LIMIT 1;
+```
+
+A non-empty `finished_at` means the migration applied; `web` should be healthy
+within about 60 seconds.
+
+---
+
+## 6. Writing migrations that cannot wedge production
+
+The 2026-08-22 outage was one duplicated line: a migration re-added a column an
+earlier migration had already created, Postgres rejected it with `42701`, and
+the P3009 lock-out took the site down until an operator intervened.
+
+- `src/lib/migration-history.test.ts` lints every migration for
+  re-declared columns and tables. It runs in CI. Do not skip it.
+- Prefer additive, idempotent DDL. `ALTER TYPE ... ADD VALUE IF NOT EXISTS` is
+  the safe form for enum labels.
+- Adding a `UNIQUE` index to a populated table fails if duplicates exist, and
+  that failure wedges the one-shot exactly like a duplicate column. Check for
+  duplicates in the same release, before the index is created.
+- Test against a real PostgreSQL 17 before merging, applying the migration to a
+  database already at the previous revision — not only to an empty one. A fresh
+  database applies the whole history in order and hides ordering bugs.
+- Back up PostgreSQL before any release containing a migration.
+
+`prisma migrate diff` currently reports one known, pre-existing drift:
+`WorkspaceInvitation.tokenHash` is `@unique` in `schema.prisma` but no migration
+creates that index, so uniqueness is unenforced in the database. Fixing it needs
+the duplicate check described above. Three cosmetic index-name mismatches
+(Prisma identifier truncation) are harmless to `migrate deploy`.
+
+---
+
+## 7. Configure Meta after the public health check
+
+Use the final public domain, never a Coolify internal URL:
+
+| Meta setting | Production value |
 | --- | --- |
 | OAuth redirect URI | `https://<linkar-domain>/api/meta/oauth/callback` |
 | Webhooks callback URL | `https://<linkar-domain>/api/meta/webhook` |
@@ -170,16 +262,35 @@ Use the final public domain, not a Coolify internal URL:
 
 Set `META_REDIRECT_URI` to the OAuth row exactly. Keep `META_VERIFY_TOKEN`
 server-only and enter the same value in Meta when validating the webhook. See
-[`docs/meta-app-review.md`](../docs/meta-app-review.md) for the Meta reviewer
-test script and App Review checklist.
+[`docs/meta-app-review.md`](../docs/meta-app-review.md) for the reviewer test
+script and App Review checklist.
 
-## 7. Roll back safely
+---
 
-If web or worker verification fails after a release, stop external testing and
-redeploy the last known-good web and worker releases from Coolify's deployment
-history. Do not roll back PostgreSQL merely because an application deploy
-failed, and do not run a reverse migration unless it has been prepared and
-tested against the backup. If the failure is a data-service incident, recover
-that private service first and retain its volume; then repeat the health check
-and controlled webhook delivery. Rotate secrets only when compromise or a
-planned rotation requires it.
+## 8. Rolling back
+
+Redeploy the last known-good image tag or digest from Coolify's deployment
+history.
+
+Do **not** roll back PostgreSQL merely because an application deploy failed,
+and do not run a reverse migration unless one has been prepared and tested
+against the backup. A schema that has moved forward will usually still serve
+the previous image, because migrations here are additive.
+
+If the failure is a data-service incident, recover that private service first
+and keep its volume, then repeat the health check and a controlled webhook
+delivery. Rotate secrets only for a compromise or a planned rotation.
+
+---
+
+## 9. Quick reference
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Site down, `migrate: exited`, redeploy does nothing | Failed migration → P3009 | §5 |
+| No new row in `_prisma_migrations` after a deploy | One-shot never recreated (`restart: "no"`) | §5 step 3 |
+| Whole stack exited for ~60–90s right after a push | Normal rollout | Wait |
+| `web` never leaves `created` | Dependency gate reading a stale failure | §5 step 3 |
+| Container logs unavailable in the UI | Stop ran `docker compose down` | Deploy, then read logs |
+| Redirects point at `localhost:3000` | `NEXT_PUBLIC_APP_URL` wrong at build time | Rebuild the image |
+| `worker: running:unknown` | No healthcheck by design | Not a fault |
