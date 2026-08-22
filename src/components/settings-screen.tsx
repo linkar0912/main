@@ -70,6 +70,7 @@ export function SettingsScreen() {
   async function saveMessagingWindow(enabled: boolean) {
     setQuietBusy(true);
     setQuietSaved(false);
+    setQuietError("");
     try {
       const response = await fetch("/api/workspace/messaging", {
         method: "PATCH",

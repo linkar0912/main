@@ -94,6 +94,11 @@ export type BroadcastSendJob = {
   igScopedUserId: string;
 };
 
+/** Whether background delivery is available at all — broadcasts depend on it. */
+export function isQueueConfigured(): boolean {
+  return Boolean(getServerEnv().redisUrl);
+}
+
 export async function enqueueBroadcastSends(jobs: BroadcastSendJob[], baseDelayMs = 0): Promise<number> {
   const queue = getWebhookQueue();
   if (!queue) return 0;

@@ -4,13 +4,30 @@ import type { MessagingWindow } from "./repository";
  * Quiet-hours helpers. Instagram does not expose a contact's timezone, so the window
  * is evaluated in the workspace timezone — good enough to avoid 3 a.m. blasts.
  */
-export function localHour(now: Date, timezone: string): number | undefined {
+
+// Constructing an Intl.DateTimeFormat is comparatively expensive and msUntilQuietEnd
+// probes minute-by-minute, so formatters are built once per timezone. A timezone that
+// Intl rejects caches as null and reads as "always on".
+const hourFormatters = new Map<string, Intl.DateTimeFormat | null>();
+
+function hourFormatter(timezone: string): Intl.DateTimeFormat | null {
+  const cached = hourFormatters.get(timezone);
+  if (cached !== undefined) return cached;
+  let formatter: Intl.DateTimeFormat | null;
   try {
-    const formatter = new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: timezone });
-    return Number(formatter.format(now)) % 24;
+    formatter = new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: timezone });
   } catch {
-    return undefined; // invalid IANA timezone → treat as always-on
+    formatter = null; // invalid IANA timezone → treat as always-on
   }
+  hourFormatters.set(timezone, formatter);
+  return formatter;
+}
+
+export function localHour(now: Date, timezone: string): number | undefined {
+  const formatter = hourFormatter(timezone);
+  if (!formatter) return undefined;
+  // Some implementations render midnight as "24" under hour12:false.
+  return Number(formatter.format(now)) % 24;
 }
 
 export function isQuietNow(now: Date, window: MessagingWindow): boolean {
@@ -22,15 +39,41 @@ export function isQuietNow(now: Date, window: MessagingWindow): boolean {
     : hour >= window.startHour || hour < window.endHour;
 }
 
-/** Milliseconds until the quiet window ends (checked hour-by-hour, capped at 48h). */
+/**
+ * Milliseconds until the quiet window actually closes, or 0 when it is already open.
+ *
+ * Probed minute-by-minute rather than hourly: callers such as the broadcast fan-out
+ * turn this into a fixed BullMQ delay and never re-check, so an estimate that lands
+ * even a minute early would deliver inside the quiet window.
+ */
 export function msUntilQuietEnd(now: Date, window: MessagingWindow): number {
+  if (!isQuietNow(now, window)) return 0;
   const probe = new Date(now.getTime());
-  for (let minutes = 60; minutes <= 48 * 60; minutes += 60) {
+  const horizonMinutes = 48 * 60;
+  for (let minutes = 1; minutes <= horizonMinutes; minutes += 1) {
     probe.setTime(now.getTime() + minutes * 60_000);
-    if (!isQuietNow(probe, window)) {
-      // Back up to the boundary minute for a tidy resume time.
-      return Math.max(60_000, minutes * 60_000 - 59 * 60_000);
-    }
+    if (!isQuietNow(probe, window)) return minutes * 60_000;
   }
-  return 60_000;
+  return horizonMinutes * 60_000;
+}
+
+/**
+ * Narrows the three nullable quiet-hours columns into a window.
+ *
+ * Hour 0 is a legitimate boundary (a "00:00 -> 08:00" window is ordinary), so every
+ * column is compared against null/undefined explicitly — a truthiness check would
+ * silently discard midnight and disable quiet hours for that workspace.
+ */
+export function toMessagingWindow(
+  row:
+    | { quietStartHour?: number | null; quietEndHour?: number | null; timezone?: string | null }
+    | null
+    | undefined,
+): MessagingWindow | null {
+  if (!row) return null;
+  const { quietStartHour, quietEndHour, timezone } = row;
+  if (quietStartHour === null || quietStartHour === undefined) return null;
+  if (quietEndHour === null || quietEndHour === undefined) return null;
+  if (!timezone) return null;
+  return { startHour: quietStartHour, endHour: quietEndHour, timezone };
 }

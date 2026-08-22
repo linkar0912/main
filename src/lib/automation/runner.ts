@@ -1,6 +1,7 @@
 import { evaluateFlow } from "./engine";
 import type { EvaluationContext, ExecutionAction, NormalizedEvent } from "./types";
 import { unsealSecret } from "../security/secrets";
+import { isSafeOutboundUrl } from "../security/outbound-url";
 import type { AutomationContactRecord, AutomationRepository, InstagramConnectionRecord } from "../repository";
 import { MetaApiError } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
@@ -150,8 +151,8 @@ async function enrollNewLeadInSequences(
 }
 /**
  * Fire-and-forget lead webhook (Zapier/Make/n8n). A slow or broken endpoint must
- * never delay or fail the DM flow, so this is bounded by a 5s timeout and swallows
- * every error after logging.
+ * never delay or fail the DM flow, so callers invoke this with `void` (the 5s timeout
+ * bounds the request itself) and every error is swallowed after logging.
  */
 async function notifyLeadWebhook(
   notifyUrl: string,
@@ -163,6 +164,12 @@ async function notifyLeadWebhook(
     fields?: Record<string, string>;
   },
 ): Promise<void> {
+  // Re-checked at send time as well as on save: a definition stored before this guard
+  // existed could still point at the internal network.
+  if (!isSafeOutboundUrl(notifyUrl)) {
+    logger.warn("Lead webhook blocked: destination is not publicly routable", { notifyUrl });
+    return;
+  }
   try {
     await fetch(notifyUrl, {
       method: "POST",
@@ -376,7 +383,7 @@ async function processEmailCaptureReply(
         await deliverLeadEmail(mapping, automation.name, contact.id, candidate, emailCapture.delivery);
       }
       if (emailCapture.notifyUrl) {
-        await notifyLeadWebhook(emailCapture.notifyUrl, {
+        void notifyLeadWebhook(emailCapture.notifyUrl, {
           email: candidate,
           automationId: automation.id,
           automationName: automation.name,
@@ -487,7 +494,10 @@ async function processFieldAnswer(
       event.accountId,
       senderId,
       current.id,
-      answer || current.question, // blank replies store the question as a placeholder
+      // A blank reply is stored as an empty answer. Substituting the question text
+      // reads downstream (webhook payloads, notifications, CSV exports) as though the
+      // lead actually answered with the question.
+      answer,
       rest,
       atIso,
     );
@@ -524,7 +534,7 @@ async function processFieldAnswer(
         await deliverLeadEmail(mapping, automation.name, contact.id, updated.email, emailCapture.delivery);
       }
       if (updated.email && emailCapture.notifyUrl) {
-        await notifyLeadWebhook(emailCapture.notifyUrl, {
+        void notifyLeadWebhook(emailCapture.notifyUrl, {
           email: updated.email,
           automationId: automation.id,
           automationName: automation.name,
@@ -777,11 +787,17 @@ export async function processNormalizedEvent(
           if (fieldQueue.length > 0) {
             // Conversational form in progress — confirmation + fulfillment + enrollment
             // fire after the last answer (processFieldAnswer).
+            //
+            // The whole queue is stored, including the question just asked above as
+            // `followUpText`, because processFieldAnswer treats queue[0] as the
+            // outstanding question. Dropping it here filed the reply under the *next*
+            // field's id and skipped that field — and with a single field it left an
+            // empty queue that abandoned the lead as `field_queue_empty`.
             await repository.beginContactFieldCollection(
               mapping.workspaceId,
               event.accountId,
               senderId,
-              fieldQueue.slice(1),
+              fieldQueue,
               automation.id,
               atIso,
             );
@@ -796,7 +812,7 @@ export async function processNormalizedEvent(
               );
             }
             if (automation.definition.emailCapture?.notifyUrl) {
-              await notifyLeadWebhook(automation.definition.emailCapture.notifyUrl, {
+              void notifyLeadWebhook(automation.definition.emailCapture.notifyUrl, {
                 email: capturedEmail,
                 automationId: automation.id,
                 automationName: automation.name,

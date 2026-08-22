@@ -128,18 +128,32 @@ export function SequencesScreen() {
 
   async function toggleStatus(row: SequenceRow) {
     const status = row.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
-    await fetch(`/api/sequences/${row.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    setSequences((current) => current.map((s) => (s.id === row.id ? { ...s, status } : s)));
+    setPageError("");
+    // Only reflect the new status once the server has accepted it — otherwise a
+    // rejected pause keeps running while the UI claims it stopped.
+    try {
+      const response = await fetch(`/api/sequences/${row.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error("Could not update this sequence.");
+      setSequences((current) => current.map((s) => (s.id === row.id ? { ...s, status } : s)));
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Could not update this sequence.");
+    }
   }
 
   async function remove(row: SequenceRow) {
-    await fetch(`/api/sequences/${row.id}`, { method: "DELETE" });
-    setSequences((current) => current.filter((s) => s.id !== row.id));
-    if (editingId === row.id) resetForm();
+    setPageError("");
+    try {
+      const response = await fetch(`/api/sequences/${row.id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not delete this sequence.");
+      setSequences((current) => current.filter((s) => s.id !== row.id));
+      if (editingId === row.id) resetForm();
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Could not delete this sequence.");
+    }
   }
 
   return (

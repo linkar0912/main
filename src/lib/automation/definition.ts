@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { FlowDefinition, FlowDefinitionV1, FlowDefinitionV2, FlowSchedule } from "./types";
+import { isSafeOutboundUrl } from "../security/outbound-url";
 
 const keyword = z.string().trim().min(1);
 const link = z
@@ -81,7 +82,11 @@ const emailCaptureSchema = z.object({
     })
     .optional(),
   // Outbound lead webhook (Zapier/Make/n8n): receives the captured email as JSON.
-  notifyUrl: link.optional(),
+  // Unlike `link` (which only ever renders for the recipient) this URL is fetched by
+  // the server, so it must not resolve to the host's own network.
+  notifyUrl: link
+    .refine(isSafeOutboundUrl, "Webhook URL must be a public http(s) address")
+    .optional(),
   // Follow-up questions asked after the email (answers stored on the contact).
   fields: z
     .array(

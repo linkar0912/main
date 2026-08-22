@@ -8,7 +8,8 @@ import { AppShell } from "./app-shell";
 import { useAutomations } from "./automation-list";
 import type { AutomationRecord } from "@/src/lib/repository";
 
-type DayPoint = { date: string; count: number };
+// Mirrors DailyCount in src/lib/repository.ts — the key is `day`, not `date`.
+type DayPoint = { day: string; count: number };
 type InsightsPayload = {
   timeseries?: { participantsPerDay?: DayPoint[]; sentPerDay?: DayPoint[] };
 };
@@ -57,9 +58,10 @@ function DeltaPill({ delta }: { delta?: Delta | null }) {
   );
 }
 
-function formatDayLabel(date: string): string {
-  const day = Number(date.slice(-2));
-  return Number.isFinite(day) ? String(day) : date.slice(-2);
+function formatDayLabel(day: string | undefined): string {
+  if (!day) return "";
+  const dayOfMonth = Number(day.slice(-2));
+  return Number.isFinite(dayOfMonth) ? String(dayOfMonth) : day.slice(-2);
 }
 
 function VitalsChart({ points }: { points: DayPoint[] }) {
@@ -72,13 +74,13 @@ function VitalsChart({ points }: { points: DayPoint[] }) {
       <div className="vitals-plot">
         {points.map((point) => (
           <div
-            key={point.date}
+            key={point.day}
             className="vitals-col"
-            title={`${formatDayLabel(point.date)} — ${point.count} sent`}
+            title={`${formatDayLabel(point.day)} — ${point.count} sent`}
           >
             <div
               className="vitals-bar"
-              style={{ height: `${Math.max(3, Math.round((point.count / max) * 100))}%` }}
+              style={{ height: `${Math.max(3, Math.round(((point.count ?? 0) / max) * 100))}%` }}
             />
           </div>
         ))}
@@ -90,8 +92,8 @@ function VitalsChart({ points }: { points: DayPoint[] }) {
       </div>
       <div className="vitals-xrow">
         {points.map((point) => (
-          <span key={`x-${point.date}`} className="vitals-x">
-            {formatDayLabel(point.date)}
+          <span key={`x-${point.day}`} className="vitals-x">
+            {formatDayLabel(point.day)}
           </span>
         ))}
       </div>

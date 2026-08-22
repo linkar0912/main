@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getSessionFromRequest } from "@/src/lib/auth/session";
-import { enqueueBroadcastSends, type BroadcastSendJob } from "@/src/lib/queue";
+import { enqueueBroadcastSends, isQueueConfigured, type BroadcastSendJob } from "@/src/lib/queue";
 import { isQuietNow, msUntilQuietEnd } from "@/src/lib/messaging-window";
 import { z } from "zod";
 
@@ -37,6 +37,17 @@ export async function POST(request: Request) {
 
   const repository = getRepository();
   const recipients = await repository.listBroadcastRecipients(session.workspaceId, input.segment, MAX_BROADCAST_RECIPIENTS);
+
+  // Delivery needs the queue. Checked before the broadcast row is created, because a
+  // row created here with total > 0 can never reach COMPLETED without workers and
+  // would sit in the UI as permanently in-progress.
+  if (recipients.length > 0 && !isQueueConfigured()) {
+    return NextResponse.json(
+      { error: "Broadcasting requires the queue (REDIS_URL) to be configured." },
+      { status: 503 },
+    );
+  }
+
   const broadcast = await repository.createBroadcast(session.workspaceId, {
     name: input.name,
     text: input.text,
@@ -63,12 +74,15 @@ export async function POST(request: Request) {
     igScopedUserId: recipient.igScopedUserId,
   }));
 
-  const enqueued = await enqueueBroadcastSends(jobs, quietHoldMs);
+  const enqueued = await enqueueBroadcastSends(jobs, quietHoldMs).catch(() => 0);
   if (enqueued < jobs.length) {
-    // No Redis queue configured — broadcasting needs background delivery.
+    // The queue was reachable a moment ago but some jobs did not land. Account for the
+    // shortfall so the broadcast can still finalize instead of hanging at RUNNING.
+    await repository.incrementBroadcastCounters(broadcast.id, { failed: jobs.length - enqueued });
+    await repository.finalizeBroadcastIfDone(session.workspaceId, broadcast.id);
     return NextResponse.json(
-      { error: "Broadcasting requires the queue (REDIS_URL) to be configured." },
-      { status: 503 },
+      { error: "Some recipients could not be queued. Delivery is partial — check the queue.", data: broadcast },
+      { status: 502 },
     );
   }
 

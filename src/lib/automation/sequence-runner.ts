@@ -1,5 +1,5 @@
 import { unsealSecret } from "../security/secrets";
-import type { AutomationRepository } from "../repository";
+import type { AutomationRepository, MessagingWindow } from "../repository";
 import type { MetaConnection } from "../meta/types";
 import { MetaApiError } from "../meta/client";
 import { logger } from "../logger";
@@ -42,12 +42,23 @@ export async function processDueSequences(
     return result;
   }
 
-  const messagingWindow = await repository.getMessagingWindow(due[0].enrollment.workspaceId).catch(() => null);
+  // A sweep spans every workspace with due steps, so the window must be resolved per
+  // workspace — reusing one tenant's window would either DM through another tenant's
+  // quiet hours or hold a tenant that has none. Cached for the length of the sweep.
+  const windowCache = new Map<string, MessagingWindow | null>();
+  const messagingWindowFor = async (workspaceId: string): Promise<MessagingWindow | null> => {
+    const cached = windowCache.get(workspaceId);
+    if (cached !== undefined) return cached;
+    const resolved = await repository.getMessagingWindow(workspaceId).catch(() => null);
+    windowCache.set(workspaceId, resolved);
+    return resolved;
+  };
 
   for (const { enrollment, sequence, contact } of due) {
     result.processed += 1;
 
     // Quiet hours: hold the step (keep it due) until the window reopens.
+    const messagingWindow = await messagingWindowFor(enrollment.workspaceId);
     if (messagingWindow && isQuietNow(new Date(), messagingWindow)) {
       await repository.advanceSequenceEnrollment(
         enrollment.id,

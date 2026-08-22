@@ -32,6 +32,7 @@ import type {
   MessagingWindow,
 } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
+import { toMessagingWindow } from "./messaging-window";
 
 function mapUser(record: {
   id: string;
@@ -1468,8 +1469,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: { id: workspaceId },
         select: { quietStartHour: true, quietEndHour: true, timezone: true },
       });
-      if (!row?.quietStartHour || row?.quietEndHour === null || row?.quietEndHour === undefined || !row.timezone) return null;
-      return { startHour: row.quietStartHour, endHour: row.quietEndHour, timezone: row.timezone };
+      return toMessagingWindow(row);
     },
 
     async setMessagingWindow(workspaceId, window) {
