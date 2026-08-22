@@ -810,7 +810,7 @@ function AutomationBuilderV1({
         ))}
         <div className="preview-note">
           <span className="signal-dot" />
-          <span>No AI. Every reply follows your saved rule.</span>
+          <span>Every reply follows your saved rule.</span>
         </div>
       </aside>
     </form>
@@ -1511,7 +1511,7 @@ function AutomationBuilderV2({
 
         <div className="preview-note">
           <span className="signal-dot" />
-          <span>No AI. Preview only — nothing here is sent to Instagram.</span>
+          <span>Preview only — nothing here is sent to Instagram.</span>
         </div>
       </aside>
     </div>

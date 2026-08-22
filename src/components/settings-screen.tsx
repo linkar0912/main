@@ -253,7 +253,7 @@ export function SettingsScreen() {
         )}
 
         <div className="settings-grid">
-          <section className="panel settings-panel"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Built for review</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> No AI or scraping is used in this MVP.</li></ul></section>
+          <section className="panel settings-panel"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Built for review</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> Replies follow saved rules, never scraping.</li></ul></section>
           <section className="panel settings-panel"><div className="panel-heading"><div><p className="eyebrow">App mode</p><h2>{mode === "demo" ? "Demo mode" : "Connected mode"}</h2></div><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} /></div><p className="muted">{mode === "demo" ? "The workspace runs on sample data until DATABASE_URL and Meta credentials are configured." : "This workspace is configured for Meta-backed delivery."}</p><Link className="text-link" href="/support">Read setup support <ExternalLink size={15} /></Link></section>
         </div>
 
