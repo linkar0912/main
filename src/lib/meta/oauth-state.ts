@@ -27,9 +27,17 @@ export function readOAuthState(value: string, secret: string, now = new Date()):
   if (!payload || !encodedSignature || secret.length < 32) return null;
 
   try {
-    const expected = sign(payload, secret);
-    const actual = Buffer.from(encodedSignature, "base64url");
-    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+    // Compare the canonical base64url encoding rather than decoded bytes: the
+    // 32-byte signature encodes to 43 characters whose last character carries four
+    // padding bits, so several mutated final characters decode to the same buffer
+    // and would otherwise verify. readSessionToken hardens the same way.
+    const expectedEncoded = sign(payload, secret).toString("base64url");
+    if (
+      encodedSignature.length !== expectedEncoded.length
+      || !timingSafeEqual(Buffer.from(encodedSignature), Buffer.from(expectedEncoded))
+    ) {
+      return null;
+    }
     const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<OAuthStatePayload>;
     if (typeof decoded.workspaceId !== "string" || !decoded.workspaceId || typeof decoded.expiresAt !== "number" || decoded.expiresAt <= now.getTime()) return null;
     return { workspaceId: decoded.workspaceId };
