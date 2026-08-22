@@ -93,7 +93,7 @@ describe("GET /api/meta/connection/health", () => {
       username: "creator",
       status: "CONNECTED",
       subscribedFields: ["comments", "messages"],
-      missingFields: ["messaging_postbacks", "messaging_optins", "messaging_referral"],
+      missingFields: [],
     });
     expect(mocks.unsealSecret).toHaveBeenCalledWith("sealed-token", "encryption-key");
   });
@@ -136,7 +136,7 @@ describe("GET /api/meta/connection/health", () => {
     expect(response.status).toBe(200);
     expect(body.data[0]).toMatchObject({
       subscribedFields: [],
-      missingFields: ["comments", "messages", "messaging_postbacks", "messaging_optins", "messaging_referral"],
+      missingFields: ["comments", "messages"],
       checkError: "Meta request failed (500)",
     });
   });
@@ -156,7 +156,7 @@ describe("GET /api/meta/connection/health", () => {
     expect(mocks.getSubscribedFields).not.toHaveBeenCalled();
     expect(body.data[0]).toMatchObject({
       status: "DISCONNECTED",
-      missingFields: ["comments", "messages", "messaging_postbacks", "messaging_optins", "messaging_referral"],
+      missingFields: ["comments", "messages"],
     });
   });
 });

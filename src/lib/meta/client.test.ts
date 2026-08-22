@@ -83,24 +83,41 @@ describe("Meta message payloads", () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     const client = new MetaClient({ apiVersion: "v25.0", fetcher });
 
-    await expect(client.subscribeToWebhooks({ igUserId: "ig_1", accessToken: "secret" })).resolves.toBeUndefined();
+    await expect(client.subscribeToWebhooks({ igUserId: "ig_1", accessToken: "secret" })).resolves.toEqual({
+      fields: ["comments", "messages", "messaging_postbacks", "messaging_optins", "messaging_referral"],
+      requested: ["comments", "messages", "messaging_postbacks", "messaging_optins", "messaging_referral"],
+    });
     const [url, init] = fetcher.mock.calls[0];
     expect(String(url)).toContain("/v25.0/ig_1/subscribed_apps");
     expect(String(url)).toContain("subscribed_fields=comments%2Cmessages%2Cmessaging_postbacks%2Cmessaging_optins%2Cmessaging_referral");
     expect(init).toMatchObject({ method: "POST", headers: { authorization: "Bearer secret" } });
   });
 
-  it("fails closed for null and primitive webhook subscription confirmations", async () => {
-    for (const body of ["null", "false"]) {
-      const client = new MetaClient({
-        apiVersion: "v25.0",
-        fetcher: async () => new Response(body, { status: 200 }),
-      });
+  it("falls back to the core webhook fields when Meta rejects Messenger-era names", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "(#100) Invalid parameter", code: 100 } }), { status: 400 }))
+      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
 
-      await expect(client.subscribeToWebhooks({ igUserId: "ig_1", accessToken: "access-token" })).rejects.toEqual(
-        new MetaApiError("Meta did not confirm the webhook subscription", 502),
-      );
-    }
+    await expect(client.subscribeToWebhooks({ igUserId: "ig_1", accessToken: "secret" })).resolves.toEqual({
+      fields: ["comments", "messages"],
+      requested: ["comments", "messages", "messaging_postbacks", "messaging_optins", "messaging_referral"],
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(String(fetcher.mock.calls[1][0])).toContain("subscribed_fields=comments%2Cmessages");
+  });
+
+  it("never fails the connection over a rejected subscription — it reports the gap instead", async () => {
+    const client = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({ error: { message: "(#100) Invalid parameter", code: 100 } }), { status: 400 }),
+    });
+
+    await expect(client.subscribeToWebhooks({ igUserId: "ig_1", accessToken: "secret" })).resolves.toEqual({
+      fields: [],
+      requested: ["comments", "messages", "messaging_postbacks", "messaging_optins", "messaging_referral"],
+      error: expect.stringContaining("(#100)"),
+    });
   });
 
   it("reads back the currently subscribed webhook fields for the connected account", async () => {

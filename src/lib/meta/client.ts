@@ -23,6 +23,29 @@ const MEDIA_TYPES = new Set<MetaMedia["mediaType"]>(["IMAGE", "VIDEO", "CAROUSEL
 const MEDIA_PRODUCT_TYPES = new Set<NonNullable<MetaMedia["mediaProductType"]>>(["AD", "FEED", "REELS", "STORY"]);
 const INSTAGRAM_LOGIN_API_VERSION = "v25.0";
 
+/**
+ * Webhook fields every connection needs: comment triggers and campaigns ride on
+ * `comments`, and all DM-side automation (messages, quick replies, postbacks,
+ * referrals, story mentions) arrives through `messages`.
+ */
+const CORE_WEBHOOK_FIELDS = ["comments", "messages"] as const;
+
+/**
+ * Messenger-era field names kept for parity wherever the platform accepts them.
+ * Business Login for Instagram (graph.instagram.com) rejects unknown names with
+ * #100, so they are attempted first and dropped on rejection.
+ */
+const EXTENDED_WEBHOOK_FIELDS = [...CORE_WEBHOOK_FIELDS, "messaging_postbacks", "messaging_optins", "messaging_referral"] as const;
+
+export type WebhookSubscriptionResult = {
+  /** Fields Meta confirmed subscribed (best effort — empty when nothing stuck). */
+  fields: string[];
+  /** The set originally requested, for diagnosing degraded results. */
+  requested: string[];
+  /** Present when Meta rejected every attempt or never confirmed success. */
+  error?: string;
+};
+
 export function buildPrivateReplyPayload(commentId: string, message: string | MetaPrivateReply) {
   const normalized = typeof message === "string" ? { text: message } : message;
   return {
@@ -145,11 +168,26 @@ export class MetaClient {
     return { isUserFollowingBusiness: data.is_user_follow_business };
   }
 
-  async subscribeToWebhooks(connection: MetaConnection): Promise<void> {
-    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/subscribed_apps`);
-    url.searchParams.set("subscribed_fields", "comments,messages,messaging_postbacks,messaging_optins,messaging_referral");
-    const data = asRecord(await this.request(url, connection.accessToken, { method: "POST" }));
-    if (!data || data.success !== true) throw new MetaApiError("Meta did not confirm the webhook subscription", 502);
+  async subscribeToWebhooks(connection: MetaConnection): Promise<WebhookSubscriptionResult> {
+    const attempts: readonly (readonly string[])[] = [EXTENDED_WEBHOOK_FIELDS, CORE_WEBHOOK_FIELDS];
+    let lastError = "Meta did not confirm any webhook subscription";
+    for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
+      const fields = attempts[attemptIndex];
+      try {
+        const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/subscribed_apps`);
+        url.searchParams.set("subscribed_fields", fields.join(","));
+        const data = asRecord(await this.request(url, connection.accessToken, { method: "POST" }));
+        if (!data || data.success !== true) throw new MetaApiError("Meta did not confirm the webhook subscription", 502);
+        return { fields: [...fields], requested: [...EXTENDED_WEBHOOK_FIELDS] };
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+    }
+    // Subscription is best-effort: the OAuth connection itself stays valid, and the
+    // settings health check surfaces whatever Meta is not sending. Business Login
+    // for Instagram rejects some Messenger-era field names with #100, so degrading
+    // here beats failing the whole connect flow.
+    return { fields: [], requested: [...EXTENDED_WEBHOOK_FIELDS], error: lastError };
   }
 
   async getSubscribedFields(connection: MetaConnection): Promise<string[]> {

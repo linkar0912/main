@@ -9,6 +9,12 @@ export const runtime = "nodejs";
 export const REQUIRED_WEBHOOK_FIELDS = [
   "comments",
   "messages",
+] as const;
+
+// Messenger-era fields attempted at connect time for parity where Meta accepts them.
+// Their absence is treated as informational rather than a functional gap: the engine's
+// required events ride on `comments` and `messages`.
+export const OPTIONAL_WEBHOOK_FIELDS = [
   "messaging_postbacks",
   "messaging_optins",
   "messaging_referral",

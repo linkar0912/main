@@ -13,6 +13,14 @@ export class MetaOAuthError extends Error {
   }
 }
 
+/** Meta completed sign-in but withheld one or more scopes the product requires. */
+export class InstagramPermissionError extends Error {
+  constructor() {
+    super("Meta did not grant the required Instagram permissions");
+    this.name = "InstagramPermissionError";
+  }
+}
+
 export function buildInstagramAuthorizeUrl(
   state: string,
   config: Pick<OAuthConfig, "metaAppId" | "metaRedirectUri" | "metaScopes">,
@@ -72,7 +80,7 @@ export async function exchangeInstagramCode(
         : typeof dataEntry.permissions === "string" ? dataEntry.permissions.split(",").map((permission) => permission.trim()) : [],
     );
     const missing = config.metaScopes.filter((scope) => !permissions.has(scope));
-    if (missing.length > 0) throw new Error("Meta did not grant the required Instagram permissions");
+    if (missing.length > 0) throw new InstagramPermissionError();
   }
 
   const longLivedResponse = await fetcher(
