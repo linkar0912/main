@@ -37,7 +37,7 @@ export function createInteractionPayload(
 
 /**
  * Decodes and structurally validates the encoded payload half WITHOUT verifying the
- * signature or expiry. Used to cheaply recognize ReplyConnect interaction payloads
+ * signature or expiry. Used to cheaply recognize Linkar interaction payloads
  * (e.g. to distinguish them from arbitrary user text before spending a signature check).
  */
 export function decodeInteractionPayloadShape(encoded: string): { participantId: string; action: InteractionAction } | null {

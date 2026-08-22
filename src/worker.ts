@@ -14,7 +14,7 @@ import { sweepStaleParticipants } from "./lib/automation/participant-retention";
 const env = getServerEnv();
 
 if (!env.redisUrl) {
-  logger.error("ReplyConnect worker requires REDIS_URL");
+  logger.error("Linkar worker requires REDIS_URL");
   process.exitCode = 1;
 } else {
   const redis = new Redis(env.redisUrl, { maxRetriesPerRequest: null });

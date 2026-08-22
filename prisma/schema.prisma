@@ -207,6 +207,7 @@ model AutomationContact {
   awaitingAutomationId String?
   awaitingSince        DateTime?
   attempts             Int          @default(0)
+  suppressedAt         DateTime?
   lastSeenAt           DateTime     @default(now())
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt

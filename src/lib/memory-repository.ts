@@ -775,6 +775,23 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       });
     },
 
+    async suppressContact(workspaceId, instagramAccountId, igScopedUserId, atIso) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) throw new Error("Contact not found");
+      const current = contacts.get(id)!;
+      const updated: AutomationContactRecord = {
+        ...current,
+        suppressedAt: current.suppressedAt ?? atIso,
+        state: current.email ? "CAPTURED" : "NONE",
+        awaitingAutomationId: undefined,
+        awaitingSince: undefined,
+        lastSeenAt: atIso > current.lastSeenAt ? atIso : current.lastSeenAt,
+        updatedAt: now(),
+      };
+      contacts.set(id, updated);
+      return copy(updated);
+    },
+
     async countCapturedContacts(workspaceId) {
       return [...contacts.values()].filter(
         (contact) => contact.workspaceId === workspaceId && contact.state === "CAPTURED" && Boolean(contact.email),
@@ -804,6 +821,22 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         count += 1;
       }
       return count;
+    },
+
+    async deleteAutomation(workspaceId, id) {
+      const current = automations.get(id);
+      if (!current || current.workspaceId !== workspaceId) return false;
+      automations.delete(id);
+      // Mirror the Prisma cascade so both repositories expose identical semantics.
+      for (const [participantId, participant] of [...participants.entries()]) {
+        if (participant.automationId !== id) continue;
+        participants.delete(participantId);
+        participantIdsBySource.delete(`${participant.workspaceId}:${participant.instagramAccountId}:${participant.sourceCommentId}`);
+      }
+      for (const [executionId, execution] of [...executions.entries()]) {
+        if (execution.automationId === id) executions.delete(executionId);
+      }
+      return true;
     },
   };
 }

@@ -62,7 +62,7 @@ describe("AutomationBuilder", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows the ReplyConnect brand mark in the preview", () => {
+  it("shows the Linkar brand mark in the preview", () => {
     stubFetch();
     render(<AutomationBuilder />);
 

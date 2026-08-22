@@ -7,7 +7,7 @@ import { deleteQueuedInstagramEvents } from "@/src/lib/queue";
 export const runtime = "nodejs";
 
 export async function GET() {
-  return Response.json({ status: "ok", message: "ReplyConnect data deletion callback is available" });
+  return Response.json({ status: "ok", message: "Linkar data deletion callback is available" });
 }
 
 export async function POST(request: Request) {

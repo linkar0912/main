@@ -65,6 +65,21 @@ export type FlowEmailCapture = {
   /** Sent when a reply arrives that is not a valid email address. */
   retryText?: string;
   confirmationText: string;
+  /**
+   * Optional fulfillment email sent to the lead the moment their address is stored —
+   * deliver the promised guide/link instead of leaving them with a bare DM.
+   */
+  delivery?: EmailDelivery;
+};
+
+/** Fulfillment email configuration for a captured lead. */
+export type EmailDelivery = {
+  subject: string;
+  message: string;
+  /** Included as a plain-text line under the message when present. */
+  linkUrl?: string;
+  /** Label shown before the link; requires `linkUrl`. */
+  linkLabel?: string;
 };
 
 /**

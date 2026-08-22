@@ -138,8 +138,8 @@ export function SettingsScreen() {
     cancelled: "You cancelled the Instagram authorization — click Connect again whenever you're ready.",
     denied: "Instagram refused this connection before it started. Make sure this workspace owner has a role on the Meta app (or the app is Live with Instagram advanced access), then retry.",
     "token-exchange": "Instagram rejected the app credentials while finishing sign-in. Verify META_APP_ID and META_APP_SECRET in the deployment, and that this exact callback URL is listed under Valid OAuth Redirect URIs in the Meta app: {callbackUrl}",
-    "missing-permissions": "Instagram signed in but did not approve every permission ReplyConnect needs. Reconnect and accept all requested scopes — until the app passes App Review, the Instagram account must belong to a role on the Meta app.",
-    "profile-fetch": "Signed in, but ReplyConnect could not read the account profile back from Instagram. This is usually transient — retry the connection.",
+    "missing-permissions": "Instagram signed in but did not approve every permission Linkar needs. Reconnect and accept all requested scopes — until the app passes App Review, the Instagram account must belong to a role on the Meta app.",
+    "profile-fetch": "Signed in, but Linkar could not read the account profile back from Instagram. This is usually transient — retry the connection.",
     error: "Meta could not finish the connection. Check the app settings and try again.",
   };
 

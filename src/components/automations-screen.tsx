@@ -42,7 +42,11 @@ function CapturedEmailsPanel() {
     <section className="panel full-list-panel" data-testid="captured-emails">
       <div className="list-intro">
         <div className="list-count"><AtSign size={17} /><span>{count} {count === 1 ? "email" : "emails"} captured</span></div>
-        <span className="muted">Collected automatically by your email collectors.</span>
+        {contacts.length > 0 && (
+          <a className="button button-secondary button-small" href="/api/contacts/export" download>
+            Export CSV
+          </a>
+        )}
       </div>
       {contacts.length === 0 ? (
         <p className="muted">No emails yet. Turn on an email collector — the Email Capture template is a good start.</p>
@@ -61,7 +65,26 @@ function CapturedEmailsPanel() {
 }
 
 export function AutomationsScreen() {
-  const { automations, loading, error, setStatus } = useAutomations();
+  const { automations, loading, error, setStatus, reload } = useAutomations();
+
+  async function duplicateAutomation(id: string) {
+    const response = await fetch(`/api/automations/${id}/duplicate`, { method: "POST" });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(payload.error ?? "Could not duplicate this automation.");
+    }
+    await reload();
+  }
+
+  async function deleteAutomation(id: string) {
+    const response = await fetch(`/api/automations/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(payload.error ?? "Could not delete this automation.");
+    }
+    await reload();
+  }
+
   return (
     <AppShell>
       <div className="page-wrap narrow-wrap">
@@ -77,7 +100,7 @@ export function AutomationsScreen() {
           <div className="section-content">
             <div className="list-intro"><div className="list-count"><Workflow size={17} /><span>{loading ? "Loading" : `${automations.length} ${automations.length === 1 ? "automation" : "automations"}`}</span></div><span className="muted">Everything is explicit and editable.</span></div>
             <section className="panel full-list-panel">
-              {error ? <p className="form-error" role="alert">{error}</p> : <AutomationList automations={automations} loading={loading} onStatusChange={setStatus} />}
+              {error ? <p className="form-error" role="alert">{error}</p> : <AutomationList automations={automations} loading={loading} onStatusChange={setStatus} onDuplicate={duplicateAutomation} onDelete={deleteAutomation} />}
             </section>
             <CapturedEmailsPanel />
           </div>

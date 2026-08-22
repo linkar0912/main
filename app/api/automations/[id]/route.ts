@@ -64,3 +64,12 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (!automation) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
   return NextResponse.json({ data: automation });
 }
+
+export async function DELETE(request: Request, context: RouteContext) {
+  const session = getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await context.params;
+  const deleted = await getRepository().deleteAutomation(session.workspaceId, id);
+  if (!deleted) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
+  return NextResponse.json({ data: { deleted: true } });
+}

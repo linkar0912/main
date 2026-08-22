@@ -51,6 +51,9 @@ describe("premade automation templates", () => {
     const capture = getTemplateById("email-capture")!;
     expect(capture.setup!.definition.emailCapture).toBeDefined();
     expect(capture.setup!.definition.trigger.type).toBe("message");
+    // The recipe fulfills its own promise: a delivery email ships with the capture.
+    expect(capture.setup!.definition.emailCapture?.delivery?.subject.trim().length).toBeGreaterThan(0);
+    expect(capture.setup!.definition.emailCapture?.delivery?.linkUrl).toBeDefined();
   });
 
   it("looks templates up by id", () => {

@@ -5,6 +5,8 @@ import type { AutomationRepository, InstagramConnectionRecord } from "../reposit
 import { MetaApiError } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
 import { notifyWorkspaceManagers } from "../notifications";
+import { sendEmail } from "../mailer";
+import { logger } from "../logger";
 import { checkDailySendLimit } from "./send-limits";
 import {
   processCampaignEvent,
@@ -77,7 +79,115 @@ export function extractEmailAddress(text: string): string | undefined {
   return match.toLowerCase();
 }
 
+/**
+ * Exact-match opt-out commands (case-insensitive). Deliberately conservative —
+ * "stop" inside a longer sentence is a normal message, not an opt-out.
+ */
+const OPT_OUT_COMMANDS = new Set(["stop", "unsubscribe", "optout", "opt-out", "remove me", "stop messaging"]);
+
+export function isOptOutCommand(text: string): boolean {
+  return OPT_OUT_COMMANDS.has(text.trim().toLowerCase());
+}
+
+const OPT_OUT_CONFIRMATION = "Got it — you won't receive any more automated messages from us. 🙏";
+
+/**
+ * Builds the fulfillment email for a freshly captured lead. The link (if any) is
+ * appended as its own plain-text line so it survives every mail client.
+ */
+function buildLeadDeliveryEmail(
+  to: string,
+  delivery: NonNullable<import("./types").FlowEmailCapture["delivery"]>,
+): Parameters<typeof sendEmail>[0] {
+  const lines = [delivery.message];
+  if (delivery.linkUrl) {
+    lines.push("", `${delivery.linkLabel ?? "Your link"}: ${delivery.linkUrl}`);
+  }
+  lines.push(
+    "",
+    `—\nYou're receiving this because you messaged our Instagram and requested it. To stop automated messages, reply STOP to our DM.`,
+  );
+  return { to, subject: delivery.subject, body: lines.join("\n") };
+}
+
 type WorkspaceMapping = NonNullable<Awaited<ReturnType<AutomationRepository["findWorkspaceByInstagramAccount"]>>>;
+
+/**
+ * Sends the optional fulfillment email for a freshly captured lead. Never throws:
+ * a failed delivery email must not fail the DM flow that already succeeded — the
+ * miss is logged and owners are notified so they can resend manually.
+ */
+async function deliverLeadEmail(
+  mapping: WorkspaceMapping,
+  automationName: string,
+  contactId: string,
+  leadEmail: string,
+  delivery: { subject: string; message: string; linkUrl?: string; linkLabel?: string },
+): Promise<boolean> {
+  try {
+    const result = await sendEmail(buildLeadDeliveryEmail(leadEmail, delivery));
+    if (!result.delivered) {
+      logger.warn("Lead fulfillment email used the log transport (no EMAIL_API_KEY)", { to: leadEmail });
+    }
+    return true;
+  } catch (error) {
+    logger.error("Lead fulfillment email failed", {
+      to: leadEmail,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    void notifyWorkspaceManagers(
+      mapping.workspaceId,
+      `lead-delivery-failed:${contactId}`,
+      "Fulfillment email failed",
+      `Could not deliver “${delivery.subject}” to ${leadEmail} (captured via “${automationName}”).`,
+    ).catch(() => undefined);
+    return false;
+  }
+}
+
+/**
+ * Honors opt-outs before anything else runs: a STOP-style reply permanently
+ * suppresses the sender (no automated send of any kind afterwards), clears any
+ * pending email prompt, and gets one final confirmation. Returns the handled
+ * result when the event was consumed by this phase.
+ */
+async function processOptOut(
+  event: NormalizedEvent,
+  mapping: WorkspaceMapping,
+  repository: AutomationRepository,
+  options: RunnerOptions,
+): Promise<RunnerResult | null> {
+  if (!event.recipientId) return null;
+  const dmSideText = event.type === "message.received" || event.type === "quick_reply.received";
+  const wantsOut = dmSideText && isOptOutCommand(event.text);
+  if (!wantsOut) return null;
+
+  const existing = await repository.getContact(mapping.workspaceId, event.accountId, event.recipientId);
+  if (existing?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 }; // already opted out — stay silent
+
+  // First-ever interaction may be the opt-out itself; make sure a row exists.
+  await repository.touchContact(mapping.workspaceId, event.accountId, event.recipientId, new Date(event.timestamp).toISOString());
+  await repository.suppressContact(mapping.workspaceId, event.accountId, event.recipientId, new Date(event.timestamp).toISOString());
+
+  if (options.client && options.tokenEncryptionKey) {
+    try {
+      const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+      await sendAction(options.client, connection, {
+        type: "send_text",
+        recipientId: event.recipientId,
+        text: OPT_OUT_CONFIRMATION,
+      });
+    } catch (error) {
+      // Suppression itself already persisted — never undo an opt-out over a failed send.
+      logger.error("Opt-out confirmation DM failed", {
+        accountId: event.accountId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  logger.info("Contact opted out", { workspaceId: mapping.workspaceId, accountId: event.accountId });
+  return { matched: 1, sent: options.client ? 1 : 0, skipped: 0, failed: 0 };
+}
 
 /**
  * Intercepts DMs from people who are mid email capture: validates their reply, stores
@@ -166,6 +276,9 @@ async function processEmailCaptureReply(
         recipientId: senderId,
         text: emailCapture.confirmationText,
       });
+      if (emailCapture.delivery) {
+        await deliverLeadEmail(mapping, automation.name, contact.id, candidate, emailCapture.delivery);
+      }
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SENT",
         reason: `email_captured:${candidate}`,
@@ -225,6 +338,17 @@ export async function processNormalizedEvent(
   const automations = (await repository.listAutomations(mapping.workspaceId)).filter(
     (automation) => automation.status === "ACTIVE",
   );
+
+  // Opt-outs win over everything: a STOP-style reply permanently suppresses the
+  // sender and is answered once. Suppressed senders are invisible to every engine
+  // (classic, campaign, capture, comments) from here on.
+  if (event.recipientId) {
+    const optOut = await processOptOut(event, mapping, repository, options);
+    if (optOut) return optOut;
+
+    const contact = await repository.getContact(mapping.workspaceId, event.accountId, event.recipientId);
+    if (contact?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  }
 
   // Email-capture conversations take precedence over everything else: a DM carrying
   // someone's email address must never also fire a keyword autoresponder or campaign.
@@ -404,13 +528,23 @@ export async function processNormalizedEvent(
       if (captureOutcome && senderId) {
         const atIso = new Date().toISOString();
         if (captureOutcome === "instant") {
+          const capturedEmail = extractEmailAddress(event.text)!;
           await repository.captureContactEmail(
             mapping.workspaceId,
             event.accountId,
             senderId,
-            extractEmailAddress(event.text)!,
+            capturedEmail,
             atIso,
           );
+          if (automation.definition.emailCapture?.delivery) {
+            await deliverLeadEmail(
+              mapping,
+              automation.name,
+              `${automation.id}:${senderId}`,
+              capturedEmail,
+              automation.definition.emailCapture.delivery,
+            );
+          }
           void notifyWorkspaceManagers(
             mapping.workspaceId,
             `lead:email:${senderId}`,

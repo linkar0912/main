@@ -123,6 +123,8 @@ export type AutomationContactRecord = {
   awaitingSince?: string;
   /** Invalid email replies received while awaiting (retry budget). */
   attempts: number;
+  /** Set when the person opted out (STOP/unsubscribe); every automated send is skipped. */
+  suppressedAt?: string;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
@@ -296,6 +298,8 @@ export interface AutomationRepository {
   deleteParticipantsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
   expireStaleParticipants(now: string, reason: string): Promise<number>;
   deleteStaleTerminalParticipants(before: string): Promise<number>;
+  /** Removes the automation and (by cascade) its participants/executions. */
+  deleteAutomation(workspaceId: string, id: string): Promise<boolean>;
   // Contact registry (first-contact detection + DM email capture).
   touchContact(
     workspaceId: string,
@@ -321,6 +325,8 @@ export interface AutomationRepository {
   /** Records one invalid reply; returns the updated attempts count. */
   bumpContactEmailAttempt(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<number>;
   clearContactAwaitingEmail(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<void>;
+  /** Marks the person as opted out; idempotent. All automated sends skip them afterwards. */
+  suppressContact(workspaceId: string, instagramAccountId: string, igScopedUserId: string, atIso: string): Promise<AutomationContactRecord>;
   countCapturedContacts(workspaceId: string): Promise<number>;
   listCapturedContacts(workspaceId: string, limit: number): Promise<CapturedContactSummary[]>;
   deleteContactsByWorkspaceIds(workspaceIds: string[]): Promise<number>;

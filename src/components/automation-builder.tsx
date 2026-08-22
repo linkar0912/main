@@ -150,6 +150,11 @@ function AutomationBuilderV1({
   const [emailPrompt, setEmailPrompt] = useState(initialDefinition.emailCapture?.promptText ?? "");
   const [emailRetry, setEmailRetry] = useState(initialDefinition.emailCapture?.retryText ?? "");
   const [emailConfirmation, setEmailConfirmation] = useState(initialDefinition.emailCapture?.confirmationText ?? "");
+  const [deliveryEnabled, setDeliveryEnabled] = useState(Boolean(initialDefinition.emailCapture?.delivery));
+  const [deliverySubject, setDeliverySubject] = useState(initialDefinition.emailCapture?.delivery?.subject ?? "");
+  const [deliveryMessage, setDeliveryMessage] = useState(initialDefinition.emailCapture?.delivery?.message ?? "");
+  const [deliveryLinkUrl, setDeliveryLinkUrl] = useState(initialDefinition.emailCapture?.delivery?.linkUrl ?? "");
+  const [deliveryLinkLabel, setDeliveryLinkLabel] = useState(initialDefinition.emailCapture?.delivery?.linkLabel ?? "");
   const [scheduleStart, setScheduleStart] = useState(isoToLocalInput(initialDefinition.schedule?.startsAt));
   const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
   const [dailyLimit, setDailyLimit] = useState(initialDefinition.dailySendLimit ? String(initialDefinition.dailySendLimit) : "");
@@ -238,6 +243,18 @@ function AutomationBuilderV1({
               promptText: emailPrompt.trim(),
               ...(emailRetry.trim() ? { retryText: emailRetry.trim() } : {}),
               confirmationText: emailConfirmation.trim(),
+              ...(deliveryEnabled && deliverySubject.trim() && deliveryMessage.trim()
+                ? {
+                    delivery: {
+                      subject: deliverySubject.trim(),
+                      message: deliveryMessage.trim(),
+                      ...(deliveryLinkUrl.trim() ? { linkUrl: deliveryLinkUrl.trim() } : {}),
+                      ...(deliveryLinkLabel.trim() && deliveryLinkUrl.trim()
+                        ? { linkLabel: deliveryLinkLabel.trim() }
+                        : {}),
+                    },
+                  }
+                : {}),
             },
           }
         : {}),
@@ -280,6 +297,10 @@ function AutomationBuilderV1({
     }
     if (emailCaptureEnabled && triggerType !== "comment" && (!emailPrompt.trim() || !emailConfirmation.trim())) {
       setError("The email collector needs both a prompt and a confirmation message.");
+      return;
+    }
+    if (emailCaptureEnabled && deliveryEnabled && (!deliverySubject.trim() || !deliveryMessage.trim())) {
+      setError("The fulfillment email needs a subject and a message.");
       return;
     }
     setSaving(true);
@@ -329,7 +350,7 @@ function AutomationBuilderV1({
             <div className="step-heading">
               <div>
                 <p className="eyebrow">Trigger</p>
-                <h2>When should ReplyConnect listen?</h2>
+                <h2>When should Linkar listen?</h2>
               </div>
               <MessageCircle size={21} strokeWidth={1.7} />
             </div>
@@ -547,7 +568,7 @@ function AutomationBuilderV1({
               {emailCaptureEnabled && (
                 <>
                   <p className="muted field-spaced">
-                    After your messages send, ReplyConnect asks for their email, checks the reply looks like a real
+                    After your messages send, Linkar asks for their email, checks the reply looks like a real
                     address (up to two retries), saves it to your audience list, and confirms. If someone already sent
                     an email in their first message, it’s captured instantly.
                   </p>
@@ -583,8 +604,64 @@ function AutomationBuilderV1({
                       maxLength={500}
                       placeholder="You’re in! ✅ Check your inbox."
                     />
-                    <small>Captured emails appear on your My Automations page.</small>
+                    <small>Captured emails appear on your My Automations page — export them as CSV any time.</small>
                   </label>
+
+                  <label className="field checkbox-field field-spaced">
+                    <input
+                      type="checkbox"
+                      checked={deliveryEnabled}
+                      onChange={(event) => setDeliveryEnabled(event.target.checked)}
+                    />
+                    <span>Email them the deliverable the moment they subscribe</span>
+                  </label>
+                  {deliveryEnabled && (
+                    <>
+                      <label className="field field-spaced">
+                        <span>Delivery email subject</span>
+                        <input
+                          aria-label="Delivery email subject"
+                          value={deliverySubject}
+                          onChange={(event) => setDeliverySubject(event.target.value)}
+                          maxLength={200}
+                          placeholder="Here’s your guide 🎁"
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Delivery email message</span>
+                        <textarea
+                          aria-label="Delivery email message"
+                          value={deliveryMessage}
+                          onChange={(event) => setDeliveryMessage(event.target.value)}
+                          rows={3}
+                          maxLength={1000}
+                          placeholder="Thanks for subscribing! Your guide is right here."
+                        />
+                      </label>
+                      <div className="field-grid">
+                        <label className="field">
+                          <span>Fulfillment link <em>optional</em></span>
+                          <input
+                            aria-label="Fulfillment link URL"
+                            value={deliveryLinkUrl}
+                            onChange={(event) => setDeliveryLinkUrl(event.target.value)}
+                            placeholder="https://your-site.com/guide.pdf"
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Link label <em>optional</em></span>
+                          <input
+                            aria-label="Fulfillment link label"
+                            value={deliveryLinkLabel}
+                            onChange={(event) => setDeliveryLinkLabel(event.target.value)}
+                            maxLength={80}
+                            placeholder="Download the guide"
+                          />
+                        </label>
+                      </div>
+                      <p className="muted">Sent from your workspace support address the moment their email is stored.</p>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -665,7 +742,7 @@ function AutomationBuilderV1({
           </div>
         </div>
         <div className="preview-arrow"><ArrowRight size={18} /></div>
-        <p className="preview-kicker">ReplyConnect sends</p>
+        <p className="preview-kicker">Linkar sends</p>
         {actions.map((action, index) => (
           <div className="preview-message preview-response" key={index}>
             <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
@@ -911,7 +988,7 @@ function AutomationBuilderV2({
             <div className="step-heading">
               <div>
                 <p className="eyebrow">Content</p>
-                <h2>Which posts should ReplyConnect watch?</h2>
+                <h2>Which posts should Linkar watch?</h2>
               </div>
               <Film size={21} strokeWidth={1.7} />
             </div>
@@ -986,7 +1063,7 @@ function AutomationBuilderV2({
             <div className="step-heading">
               <div>
                 <p className="eyebrow">Public reply <em>up to 5 variations</em></p>
-                <h2>What public reply should ReplyConnect post?</h2>
+                <h2>What public reply should Linkar post?</h2>
               </div>
               <Send size={21} strokeWidth={1.7} />
             </div>
@@ -1021,7 +1098,7 @@ function AutomationBuilderV2({
             >
               <Plus size={15} /> Add variation
             </button>
-            <small>ReplyConnect rotates between variations so the same public comment doesn’t repeat.</small>
+            <small>Linkar rotates between variations so the same public comment doesn’t repeat.</small>
           </div>
         </section>
 
@@ -1327,7 +1404,7 @@ function AutomationBuilderV2({
               </div>
             </div>
             <div className="preview-arrow"><ArrowRight size={18} /></div>
-            <p className="preview-kicker">ReplyConnect replies publicly</p>
+            <p className="preview-kicker">Linkar replies publicly</p>
             <div className="preview-message preview-response">
               <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
               <div><strong>{nonEmptyReplies[0] || "Add a public reply variation"}</strong></div>
@@ -1337,7 +1414,7 @@ function AutomationBuilderV2({
 
         {previewStep === 1 && (
           <div className="message-step-preview">
-            <p className="preview-kicker">ReplyConnect DMs them</p>
+            <p className="preview-kicker">Linkar DMs them</p>
             <div className="preview-message preview-response">
               <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
               <div>

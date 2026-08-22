@@ -62,6 +62,24 @@ const emailCaptureSchema = z.object({
   promptText: z.string().trim().min(1).max(500),
   retryText: z.string().trim().min(1).max(500).optional(),
   confirmationText: z.string().trim().min(1).max(500),
+  // Optional fulfillment email delivered to the lead once their address is stored.
+  delivery: z
+    .object({
+      subject: z.string().trim().min(1).max(200),
+      message: z.string().trim().min(1).max(1_000),
+      linkUrl: link.optional(),
+      linkLabel: z.string().trim().min(1).max(80).optional(),
+    })
+    .superRefine((delivery, context) => {
+      if (delivery.linkLabel && !delivery.linkUrl) {
+        context.addIssue({
+          code: "custom",
+          path: ["linkLabel"],
+          message: "A button label needs a link URL",
+        });
+      }
+    })
+    .optional(),
 });
 
 const condition = z.discriminatedUnion("type", [
@@ -327,6 +345,20 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
               ? { retryText: parsed.emailCapture.retryText.trim() }
               : {}),
             confirmationText: parsed.emailCapture.confirmationText.trim(),
+            ...(parsed.emailCapture.delivery
+              ? {
+                  delivery: {
+                    subject: parsed.emailCapture.delivery.subject.trim(),
+                    message: parsed.emailCapture.delivery.message.trim(),
+                    ...(parsed.emailCapture.delivery.linkUrl?.trim()
+                      ? { linkUrl: parsed.emailCapture.delivery.linkUrl.trim() }
+                      : {}),
+                    ...(parsed.emailCapture.delivery.linkLabel?.trim()
+                      ? { linkLabel: parsed.emailCapture.delivery.linkLabel.trim() }
+                      : {}),
+                  },
+                }
+              : {}),
           },
         }
       : {}),

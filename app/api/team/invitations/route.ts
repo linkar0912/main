@@ -72,8 +72,8 @@ export async function POST(request: Request) {
     });
     await sendEmail({
         to: email,
-        subject: "You're invited to a ReplyConnect workspace",
-        body: `Join your team's ReplyConnect workspace with this link (valid for 7 days):
+        subject: "You're invited to a Linkar workspace",
+        body: `Join your team's Linkar workspace with this link (valid for 7 days):
 ${env.appUrl}/signup?invite=${encodeURIComponent(raw)}
 
 You will need to create an account with this exact email address.`,

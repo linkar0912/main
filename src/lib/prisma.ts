@@ -209,6 +209,7 @@ function mapContact(record: {
   awaitingAutomationId: string | null;
   awaitingSince: Date | null;
   attempts: number;
+  suppressedAt: Date | null;
   lastSeenAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -223,6 +224,7 @@ function mapContact(record: {
     awaitingAutomationId: record.awaitingAutomationId ?? undefined,
     awaitingSince: record.awaitingSince?.toISOString(),
     attempts: record.attempts,
+    suppressedAt: record.suppressedAt?.toISOString(),
     lastSeenAt: record.lastSeenAt.toISOString(),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -1107,6 +1109,25 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       });
     },
 
+    async suppressContact(workspaceId, instagramAccountId, igScopedUserId, atIso) {
+      const current = await client.automationContact.findUniqueOrThrow({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      const updated = await client.automationContact.update({
+        where: { id: current.id },
+        data: {
+          suppressedAt: current.suppressedAt ?? new Date(atIso),
+          state: current.email ? "CAPTURED" : "NONE",
+          awaitingAutomationId: null,
+          awaitingSince: null,
+          lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
+        },
+      });
+      return mapContact(updated);
+    },
+
     async countCapturedContacts(workspaceId) {
       return client.automationContact.count({
         where: { workspaceId, state: "CAPTURED", email: { not: null } },
@@ -1131,6 +1152,11 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       if (workspaceIds.length === 0) return 0;
       const result = await client.automationContact.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       return result.count;
+    },
+
+    async deleteAutomation(workspaceId, id) {
+      const result = await client.automation.deleteMany({ where: { workspaceId, id } });
+      return result.count > 0;
     },
   };
 }

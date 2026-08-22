@@ -5,7 +5,7 @@ import { getRepository } from "@/src/lib/repository-provider";
 export const runtime = "nodejs";
 
 export async function GET() {
-  return Response.json({ status: "ok", message: "ReplyConnect deauthorization callback is available" });
+  return Response.json({ status: "ok", message: "Linkar deauthorization callback is available" });
 }
 
 export async function POST(request: Request) {

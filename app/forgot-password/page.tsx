@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const metadata = { title: "Forgot password · ReplyConnect" };
+export const metadata = { title: "Forgot password · Linkar" };
 
 export default async function ForgotPasswordPage({
     searchParams,

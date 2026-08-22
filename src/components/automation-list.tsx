@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ArrowUpRight, Pause, Pencil, Play, Workflow } from "lucide-react";
+import { Activity, ArrowUpRight, Copy, Pause, Pencil, Play, Trash2, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
@@ -90,12 +90,35 @@ export function AutomationList({
   loading,
   compact = false,
   onStatusChange,
+  onDuplicate,
+  onDelete,
 }: {
   automations: AutomationRecord[];
   loading: boolean;
   compact?: boolean;
   onStatusChange: (id: string, status: AutomationStatus) => Promise<void>;
+  /** Optional management actions; omitted by the dashboard's compact list. */
+  onDuplicate?: (id: string) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
 }) {
+  const [pendingId, setPendingId] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState("");
+  const [actionError, setActionError] = useState("");
+
+  async function runAction(id: string, action: () => Promise<void>) {
+    if (pendingId) return;
+    setPendingId(id);
+    setActionError("");
+    try {
+      await action();
+      setConfirmDeleteId("");
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "That action failed.");
+    } finally {
+      setPendingId("");
+    }
+  }
+
   if (loading) {
     return <div className="empty-state"><div className="loading-line" /><div className="loading-line short" /><div className="loading-line" /></div>;
   }
@@ -113,6 +136,7 @@ export function AutomationList({
   const visible = compact ? automations.slice(0, 3) : automations;
   return (
     <div className={`automation-list ${compact ? "is-compact" : ""}`}>
+      {actionError && <p className="form-error" role="alert">{actionError}</p>}
       {visible.map((automation) => (
         <article className="automation-row" key={automation.id}>
           <div className="automation-icon"><Workflow size={19} strokeWidth={1.7} /></div>
@@ -150,6 +174,42 @@ export function AutomationList({
             >
               {automation.status === "ACTIVE" ? <Pause size={16} /> : <Play size={16} />}
             </button>
+          )}
+          {!compact && onDuplicate && (
+            <button
+              className="icon-button"
+              type="button"
+              disabled={pendingId === automation.id}
+              aria-label={`Duplicate ${automation.name}`}
+              title="Duplicate automation"
+              onClick={() => void runAction(automation.id, () => onDuplicate(automation.id))}
+            >
+              <Copy size={16} />
+            </button>
+          )}
+          {!compact && onDelete && (
+            confirmDeleteId === automation.id ? (
+              <button
+                className="icon-button icon-danger"
+                type="button"
+                disabled={pendingId === automation.id}
+                aria-label={`Confirm delete ${automation.name}`}
+                title="Click again to permanently delete"
+                onClick={() => void runAction(automation.id, () => onDelete(automation.id))}
+              >
+                <Trash2 size={16} />
+              </button>
+            ) : (
+              <button
+                className="icon-button"
+                type="button"
+                aria-label={`Delete ${automation.name}`}
+                title="Delete automation"
+                onClick={() => setConfirmDeleteId(automation.id)}
+              >
+                <Trash2 size={16} />
+              </button>
+            )
           )}
           {compact && <Link className="row-link" href="/automations"><ArrowUpRight size={17} /></Link>}
         </article>

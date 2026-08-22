@@ -465,6 +465,9 @@ a.section-nav-link:hover { background: #ecebe3; color: var(--ink); }
 .checkbox-field { align-items: center; cursor: pointer; display: flex; flex-direction: row; gap: 10px; }
 .checkbox-field input[type="checkbox"] { accent-color: #2563eb; height: 17px; margin: 0; width: 17px; }
 .checkbox-field span { font-weight: 650; }
+.icon-button.icon-danger { color: #b42318; }
+.icon-button.icon-danger:hover { background: #fdecea; color: #8f1d13; }
+.button-small { min-height: 34px; padding: 0 12px; font-size: .82rem; }
 
 @media (max-width: 1020px) {
   .section-layout { grid-template-columns: minmax(0, 1fr); }

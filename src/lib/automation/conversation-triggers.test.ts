@@ -6,6 +6,10 @@ import { createMemoryRepository } from "../memory-repository";
 import { sealSecret } from "../security/secrets";
 import { normalizeWebhook } from "../meta/webhooks";
 import { validateFlowDefinition } from "./definition";
+import { sendEmail } from "../mailer";
+
+vi.mock("../mailer", () => ({ sendEmail: vi.fn().mockResolvedValue({ delivered: true }) }));
+const mockedSendEmail = vi.mocked(sendEmail);
 
 const TOKEN_KEY = "a".repeat(64);
 
@@ -36,6 +40,12 @@ function captureFlow(): FlowDefinitionV1 {
       promptText: "What is your email?",
       retryText: "That is not an email — try again.",
       confirmationText: "You are in! ✅",
+      delivery: {
+        subject: "Your guide, as promised",
+        message: "Thanks for subscribing! Here it is.",
+        linkUrl: "https://example.com/guide.pdf",
+        linkLabel: "Download the guide",
+      },
     },
   };
 }
@@ -288,6 +298,116 @@ describe("runner: conversation triggers end to end", () => {
     const stored = await repository.getContact("workspace_a", "ig_1", "person_1");
     expect(stored?.state).toBe("CAPTURED");
     expect(stored?.email).toBe("me@example.com");
+  });
+});
+
+describe("validation: email delivery configuration", () => {
+  const base = {
+    version: 1,
+    trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+    conditions: [],
+    actions: [{ type: "send_text", text: "x" }],
+    emailCapture: {
+      promptText: "email?",
+      confirmationText: "done",
+      delivery: { subject: "Guide", message: "Here.", linkLabel: "Download" },
+    },
+  };
+
+  it("rejects a link label without a link URL", () => {
+    expect(() => validateFlowDefinition(base)).toThrow();
+  });
+
+  it("accepts a complete delivery block and normalizes it", () => {
+    const normalized = validateFlowDefinition({
+      ...base,
+      emailCapture: { ...base.emailCapture, delivery: { ...base.emailCapture.delivery, linkUrl: "https://x.dev/g" } },
+    });
+    if (normalized.version !== 1 || !normalized.emailCapture?.delivery) throw new Error("expected V1 delivery");
+    expect(normalized.emailCapture.delivery.linkUrl).toBe("https://x.dev/g");
+    expect(normalized.emailCapture.delivery.linkLabel).toBe("Download");
+  });
+});
+
+describe("opt-out handling", () => {
+  function optOutFlow(): FlowDefinitionV1 {
+    return { version: 1, trigger: { type: "first_contact" }, conditions: [], actions: [{ type: "send_text", text: "Welcome!" }] };
+  }
+
+  it("suppresses STOP senders, confirms once, and silences every engine afterwards", async () => {
+    const repository = await seed([captureFlow()]);
+    const client = createRunnerClient();
+
+    await processNormalizedEvent(messageEvent({ id: "o0", text: "guide" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    vi.mocked(client.sendDirectMessage).mockClear();
+
+    const stop = await processNormalizedEvent(messageEvent({ id: "o1", text: "STOP" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect(stop.sent).toBe(1); // one final confirmation DM
+    expect((await repository.getContact("workspace_a", "ig_1", "person_1"))?.suppressedAt).toBeTruthy();
+
+    vi.mocked(client.sendDirectMessage).mockClear();
+    const keywordAttempt = await processNormalizedEvent(messageEvent({ id: "o2", text: "guide again" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect(keywordAttempt).toEqual({ matched: 0, sent: 0, skipped: 0, failed: 0 });
+    const repeatStop = await processNormalizedEvent(messageEvent({ id: "o3", text: "unsubscribe" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect(repeatStop.sent).toBe(0); // no duplicate confirmation
+    expect(client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(await repository.countCapturedContacts("workspace_a")).toBe(0);
+  });
+
+  it("never greets someone whose very first message is an opt-out", async () => {
+    const repository = await seed([optOutFlow()]);
+    const client = createRunnerClient();
+
+    const result = await processNormalizedEvent(messageEvent({ id: "n0", text: "remove me" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect(result.sent).toBe(1); // only the opt-out confirmation
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
+
+    const later = await processNormalizedEvent(messageEvent({ id: "n1", text: "actually hi" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect(later.matched).toBe(0);
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect((await repository.getContact("workspace_a", "ig_1", "person_1"))?.suppressedAt).toBeTruthy();
+  });
+
+  it("keeps treating ordinary sentences as normal messages", async () => {
+    const repository = await seed([captureFlow()]);
+    const client = createRunnerClient();
+
+    await processNormalizedEvent(messageEvent({ id: "k0", text: "where do we stop by for pickup?" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect((await repository.getContact("workspace_a", "ig_1", "person_1"))?.suppressedAt).toBeFalsy();
+  });
+});
+
+describe("lead fulfillment emails", () => {
+  it("emails the deliverable the moment an address is stored", async () => {
+    const repository = await seed([captureFlow()]);
+    const client = createRunnerClient();
+
+    await processNormalizedEvent(messageEvent({ id: "f1", text: "guide please" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    mockedSendEmail.mockClear();
+    await processNormalizedEvent(messageEvent({ id: "f2", text: "me@example.com" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+    expect(mockedSendEmail).toHaveBeenCalledTimes(1);
+    const payload = mockedSendEmail.mock.calls[0][0];
+    expect(payload.to).toBe("me@example.com");
+    expect(payload.subject).toContain("guide");
+    expect(payload.body).toContain("https://example.com/guide.pdf");
+    expect(payload.body.toLowerCase()).toContain("stop");
+  });
+
+  it("captures embedded emails instantly and fulfills without a prompt round-trip", async () => {
+    const repository = await seed([captureFlow()]);
+    const client = createRunnerClient();
+    mockedSendEmail.mockClear();
+
+    await processNormalizedEvent(
+      messageEvent({ id: "f3", text: "guide → instant@lead.dev" }),
+      repository,
+      { client, tokenEncryptionKey: TOKEN_KEY },
+    );
+
+    expect(mockedSendEmail).toHaveBeenCalledTimes(1);
+    expect(mockedSendEmail.mock.calls[0][0].to).toBe("instant@lead.dev");
+    expect((await repository.getContact("workspace_a", "ig_1", "person_1"))?.state).toBe("CAPTURED");
   });
 });
 

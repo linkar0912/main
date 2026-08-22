@@ -22,7 +22,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
     id: "welcome-new-followers",
     title: "Say hi to new followers: first impressions are everything",
     description:
-      "A one-time welcome DM for every new person who starts their first conversation with you. Meta’s API never exposes follows directly, so ReplyConnect greets each first-time contact exactly once — no repeats, ever.",
+      "A one-time welcome DM for every new person who starts their first conversation with you. Meta’s API never exposes follows directly, so Linkar greets each first-time contact exactly once — no repeats, ever.",
     icon: "user-plus",
     illustration: "follow",
     setup: {
@@ -97,7 +97,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
     id: "email-capture",
     title: "Email Capture: turn conversations into subscribers",
     description:
-      "Collect emails without lifting a finger. When someone texts your keyword, they get your offer and are asked for their email — ReplyConnect validates the reply, saves it to your audience list, and confirms automatically.",
+      "Collect emails without lifting a finger. Someone texts your keyword, gets asked for their email, and Linkar validates it, stores it, confirms in the DM, and emails them your deliverable automatically.",
     icon: "mail",
     illustration: "email",
     setup: {
@@ -116,6 +116,12 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
           promptText: "What’s the best email address to send it to?",
           retryText: "Hmm, that doesn’t look like an email address. Mind typing it again? (e.g. you@example.com)",
           confirmationText: "You’re in! ✅ Check your inbox — the guide is on its way. Talk soon!",
+          delivery: {
+            subject: "Your guide, as promised 🎁",
+            message: "Thanks for subscribing! Here’s the guide you asked about on Instagram.",
+            linkUrl: "https://example.com/your-guide-link",
+            linkLabel: "Download the guide",
+          },
         },
       },
     },
