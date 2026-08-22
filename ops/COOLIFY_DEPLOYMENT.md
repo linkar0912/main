@@ -121,9 +121,24 @@ or `valkey`.
    gh run list --workflow="Build production container" --limit 1
    ```
 3. **Back up PostgreSQL** if the release contains a migration (§6).
-4. **Deploy.** Either press Deploy in Coolify, or fire the webhook:
+4. **Deploy.** Press Deploy in Coolify, or call the restart endpoint:
    ```bash
-   curl -H "Authorization: Bearer $COOLIFY_API_TOKEN" "$COOLIFY_DEPLOY_WEBHOOK_URL"
+   curl -X POST -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+     "$COOLIFY_HOST/api/v1/services/$SERVICE_UUID/restart"
+   ```
+   **Do not rely on the deploy webhook for a release.** Against a stack that is
+   already running, `GET $COOLIFY_DEPLOY_WEBHOOK_URL` answers
+   `"Service ReplyConnect started"` and then does nothing: no pull, no
+   recreation, no new code. It only has an effect when the containers are
+   absent, which is why it appears to work right after a Stop. The restart
+   endpoint above performs a real down/up and honours `pull_policy: always`.
+
+   Verify by asset, not by the deploy's own say-so — §5 of this file explains
+   why the `release` field cannot be trusted:
+   ```bash
+   CSS=$(curl -sk https://<linkar-domain>/login \
+     | grep -oE '/_next/static/[a-z0-9/_-]+\.css' | head -1)
+   curl -sk "https://<linkar-domain>$CSS" | grep -c icon-rail   # 0 = old build
    ```
 5. **Watch it settle.** A rollout takes roughly 60–90 seconds and takes the
    *whole stack* down in the middle — a brief window where `postgres` and
@@ -150,10 +165,16 @@ Then verify from outside:
 curl --fail --show-error https://<linkar-domain>/api/health
 ```
 
-Require `status: "ok"`, `mode: "configured"`, `dependencies.database: "ok"`,
-`dependencies.redis: "ok"`, and the expected `SOURCE_COMMIT`. Inspect worker
-logs for a clean Redis connection, then exercise one controlled webhook event
-before re-enabling customer automations.
+Require `status: "ok"`, `mode: "configured"`, `dependencies.database: "ok"`
+and `dependencies.redis: "ok"`. Inspect worker logs for a clean Redis
+connection, then exercise one controlled webhook event before re-enabling
+customer automations.
+
+**Ignore the `release` field.** It echoes the `SOURCE_COMMIT` environment
+variable, which is set by hand in Coolify and is not updated by a deploy — as
+of 2026-08-23 it still reports `2b43339`, many releases old. It will happily
+confirm a release that never shipped. Until it is wired to the real commit,
+verify with the asset check in step 4.
 
 ---
 
@@ -292,5 +313,6 @@ delivery. Rotate secrets only for a compromise or a planned rotation.
 | Whole stack exited for ~60–90s right after a push | Normal rollout | Wait |
 | `web` never leaves `created` | Dependency gate reading a stale failure | §5 step 3 |
 | Container logs unavailable in the UI | Stop ran `docker compose down` | Deploy, then read logs |
+| Deploy reports success but nothing changes | Webhook no-ops on a running stack | Use the restart endpoint (§4) |
 | Redirects point at `localhost:3000` | `NEXT_PUBLIC_APP_URL` wrong at build time | Rebuild the image |
 | `worker: running:unknown` | No healthcheck by design | Not a fault |
