@@ -1,6 +1,6 @@
-# ReplyConnect Meta App Review runbook
+# Linkar Meta App Review runbook
 
-This runbook is for the first production deployment of ReplyConnect. Meta’s dashboard labels and permission requirements can change, so confirm the current product documentation and the scopes shown in your app before submitting.
+This runbook is for the first production deployment of Linkar. Meta’s dashboard labels and permission requirements can change, so confirm the current product documentation and the scopes shown in your app before submitting.
 
 Reference the current [Meta Instagram Private Replies collection](https://www.postman.com/meta/instagram/request/23987686-189d7215-22b3-403f-b2f5-a46c7e66a514) and [Meta comment webhook example](https://www.postman.com/meta/instagram/request/23987686-db99ce99-bf76-475c-8b76-718576c11cae) while validating the live payloads.
 
@@ -21,7 +21,7 @@ Before requesting advanced access, make sure:
 The owner must supply all of the following before this production procedure can
 be completed:
 
-- the final public ReplyConnect domain and a monitored support mailbox;
+- the final public Linkar domain and a monitored support mailbox;
 - Coolify/server access and private PostgreSQL and Valkey connection values;
 - the Meta developer app ID, app secret, and the business account that owns it;
 - a stable token-encryption key, a high-entropy webhook verify token, and a
@@ -32,8 +32,8 @@ be completed:
 Set these production values on the web app and worker:
 
 ```dotenv
-APP_NAME=ReplyConnect
-NEXT_PUBLIC_APP_URL=https://<replyconnect-domain>
+APP_NAME=Linkar
+NEXT_PUBLIC_APP_URL=https://<linkar-domain>
 SUPPORT_EMAIL=<owner-monitored-support-email>
 AUTH_SESSION_SECRET=<at least 32 random characters>
 DATABASE_URL=postgresql://...
@@ -41,7 +41,7 @@ REDIS_URL=redis://...
 META_APP_ID=your_meta_app_id
 META_APP_SECRET=your_meta_app_secret
 META_TOKEN_ENCRYPTION_KEY=<64 hex characters from openssl rand -hex 32>
-META_REDIRECT_URI=https://<replyconnect-domain>/api/meta/oauth/callback
+META_REDIRECT_URI=https://<linkar-domain>/api/meta/oauth/callback
 META_VERIFY_TOKEN=<long random verify token>
 META_API_VERSION=v25.0
 META_SCOPES=instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages
@@ -66,15 +66,15 @@ In the Meta developer dashboard, configure the Instagram Login/Business Login fo
 
 Use these deployed URLs:
 
-| Meta field | ReplyConnect URL |
+| Meta field | Linkar URL |
 | --- | --- |
-| OAuth redirect URI | `https://<replyconnect-domain>/api/meta/oauth/callback` |
-| Webhooks callback URL | `https://<replyconnect-domain>/api/meta/webhook` |
-| Data deletion callback URL | `https://<replyconnect-domain>/api/meta/data-deletion` |
-| Privacy policy URL | `https://<replyconnect-domain>/privacy` |
-| Terms URL | `https://<replyconnect-domain>/terms` |
-| Data deletion instructions URL | `https://<replyconnect-domain>/data-deletion` |
-| Support URL | `https://<replyconnect-domain>/support` |
+| OAuth redirect URI | `https://<linkar-domain>/api/meta/oauth/callback` |
+| Webhooks callback URL | `https://<linkar-domain>/api/meta/webhook` |
+| Data deletion callback URL | `https://<linkar-domain>/api/meta/data-deletion` |
+| Privacy policy URL | `https://<linkar-domain>/privacy` |
+| Terms URL | `https://<linkar-domain>/terms` |
+| Data deletion instructions URL | `https://<linkar-domain>/data-deletion` |
+| Support URL | `https://<linkar-domain>/support` |
 
 Set the webhook verify token in the dashboard to the same value as `META_VERIFY_TOKEN`. Configure these five app-level webhook fields in Meta:
 
@@ -84,7 +84,7 @@ Set the webhook verify token in the dashboard to the same value as `META_VERIFY_
 - `messaging_optins`
 - `messaging_referral`
 
-After OAuth, ReplyConnect subscribes the connected Professional account through `/{ig-user-id}/subscribed_apps` on `graph.instagram.com`: the extended set is requested first (`comments`, `messages`, plus Messenger-era `messaging_*` names where the platform accepts them) and automatically falls back to just `comments,messages` if Meta rejects any field — a rejected field never fails the connection, and `/api/meta/connection/health` reports exactly what Meta is sending. Story-mention automations need **no extra field** — Meta delivers story mentions as `messages` payloads with a `story_mention` attachment. First-contact welcome automations likewise rely only on inbound messaging events; Meta does not offer a follower webhook, so "new follower" greetings are implemented as once-per-person first-contact greetings. Request only the permissions required by the product — no new permission is needed for follower verification, since `GET /{igsid}?fields=is_user_follow_business` is covered by the existing messaging scope:
+After OAuth, Linkar subscribes the connected Professional account through `/{ig-user-id}/subscribed_apps` on `graph.instagram.com`: the extended set is requested first (`comments`, `messages`, plus Messenger-era `messaging_*` names where the platform accepts them) and automatically falls back to just `comments,messages` if Meta rejects any field — a rejected field never fails the connection, and `/api/meta/connection/health` reports exactly what Meta is sending. Story-mention automations need **no extra field** — Meta delivers story mentions as `messages` payloads with a `story_mention` attachment. First-contact welcome automations likewise rely only on inbound messaging events; Meta does not offer a follower webhook, so "new follower" greetings are implemented as once-per-person first-contact greetings. Request only the permissions required by the product — no new permission is needed for follower verification, since `GET /{igsid}?fields=is_user_follow_business` is covered by the existing messaging scope:
 
 - `instagram_business_basic`
 - `instagram_business_manage_comments`
@@ -94,7 +94,7 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
 
 ## 4. Verify the deployed app yourself
 
-1. Call `GET https://<replyconnect-domain>/api/health`; confirm the response reports `configured`.
+1. Call `GET https://<linkar-domain>/api/health`; confirm the response reports `configured`.
 2. Open `/privacy`, `/terms`, `/data-deletion`, and `/support` in a private browser window. Confirm they load without login and use the final business contact details.
 3. Sign in at `/login` with the configured owner account, open Settings, and choose **Connect Instagram**.
 4. Complete the official Meta login with the test Instagram Professional account.
@@ -107,9 +107,9 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
 7. Activate the campaign.
 8. Using the second Instagram test account — while it does **not** yet follow the connected Professional account — comment `guide` on the test Reel.
 9. Confirm the opening private reply arrives with the opt-in quick reply, and tap it. This is the opening interaction that establishes consent and captures the commenter's Instagram-scoped ID.
-10. Confirm the false-follow prompt arrives immediately after: because the second account does not yet follow the connected account, ReplyConnect sends the configured not-following message with the "I've followed" recheck quick reply.
+10. Confirm the false-follow prompt arrives immediately after: because the second account does not yet follow the connected account, Linkar sends the configured not-following message with the "I've followed" recheck quick reply.
 11. From the second test account, follow the connected Instagram Professional account (the follow action).
-12. Tap "I've followed". Confirm ReplyConnect rechecks the follower relationship against Meta and delivers the configured link message exactly once — this is the successful delivery.
+12. Tap "I've followed". Confirm Linkar rechecks the follower relationship against Meta and delivers the configured link message exactly once — this is the successful delivery.
 13. Tap "I've followed" again to resend an identical recheck event; confirm it does not produce a second delivery for the same participant.
 14. Pause the campaign and repeat the comment event from a third account or a fresh comment; confirm no new opening reply is sent while paused.
 
@@ -117,7 +117,7 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
 
 Use plain, testable language in each permission explanation:
 
-> ReplyConnect lets a connected Instagram Professional account owner build a follow-gated Reel campaign: a public reply and a private opening message reply to a matching comment, an explicit opt-in tap, a follower check against the account's own audience via Meta's API, and a private message with a link delivered only once Meta confirms the commenter follows the connected account. We do not generate copy with AI, scrape Instagram, or message anyone outside this explicit comment-triggered, opt-in, and follow-verified flow.
+> Linkar lets a connected Instagram Professional account owner build a follow-gated Reel campaign: a public reply and a private opening message reply to a matching comment, an explicit opt-in tap, a follower check against the account's own audience via Meta's API, and a private message with a link delivered only once Meta confirms the commenter follows the connected account. We do not generate copy with AI, scrape Instagram, or message anyone outside this explicit comment-triggered, opt-in, and follow-verified flow.
 
 Request only the three permissions required by the product:
 

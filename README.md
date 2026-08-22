@@ -1,6 +1,6 @@
-# ReplyConnect
+# Linkar
 
-ReplyConnect is an India-first Instagram automation MVP for deterministic comment and inbound-DM replies. It uses a guided Trigger → Condition → Action builder and Meta’s official Instagram APIs. There is no AI integration in this version.
+Linkar is an India-first Instagram automation MVP for deterministic comment and inbound-DM replies. It uses a guided Trigger → Condition → Action builder and Meta’s official Instagram APIs. There is no AI integration in this version.
 
 ## What is built
 
@@ -78,7 +78,7 @@ characters to sign session cookies — generate it with a password manager or:
 openssl rand -hex 32
 ```
 
-ReplyConnect claims each automation event before calling Meta. A successful or terminally failed delivery is persisted; a retryable failure releases the claim for BullMQ retry. If a worker loses power after Meta accepts a message but before the result is persisted, the claim remains `PROCESSING` so the system favors preventing a duplicate reply over blindly resending an ambiguous delivery.
+Linkar claims each automation event before calling Meta. A successful or terminally failed delivery is persisted; a retryable failure releases the claim for BullMQ retry. If a worker loses power after Meta accepts a message but before the result is persisted, the claim remains `PROCESSING` so the system favors preventing a duplicate reply over blindly resending an ambiguous delivery.
 
 ## Verification
 

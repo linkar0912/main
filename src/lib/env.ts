@@ -55,7 +55,7 @@ export function getServerEnv(): ServerEnv {
   return {
     appName: process.env.APP_NAME ?? "ReplyConnect",
     appUrl,
-    supportEmail: process.env.SUPPORT_EMAIL ?? "support@replyconnect.in",
+    supportEmail: process.env.SUPPORT_EMAIL ?? "support@linkar.in",
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
     metaAppId: process.env.META_APP_ID || undefined,

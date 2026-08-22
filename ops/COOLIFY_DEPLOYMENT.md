@@ -1,6 +1,6 @@
-# ReplyConnect production deployment: Coolify behind Cloudflare
+# Linkar production deployment: Coolify behind Cloudflare
 
-This runbook packages ReplyConnect as two long-running Coolify applications
+This runbook packages Linkar as two long-running Coolify applications
 from the same repository and commit:
 
 ```text
@@ -10,7 +10,7 @@ Cloudflare (public HTTPS) -> Coolify web -> Next.js dashboard and API
                        -> Coolify worker -> BullMQ -> Meta Graph API
 ```
 
-The owner must provide the real ReplyConnect domain, Cloudflare zone access,
+The owner must provide the real Linkar domain, Cloudflare zone access,
 Coolify project/server access, Meta credentials, and high-entropy database,
 Valkey, webhook, and encryption secrets. This repository does not deploy or
 contain any of those values.
@@ -18,27 +18,27 @@ contain any of those values.
 For the current shared single-vCPU server, use the checked-in
 `docker-compose.coolify.yml`. GitHub Actions builds and publishes
 `ghcr.io/tejastelkar/replyconnect:main`; Coolify only pulls that image and does
-not run a Next.js build on the production host. Create ReplyConnect as a new
+not run a Next.js build on the production host. Create Linkar as a new
 Coolify project/resource and do not enable **Connect to Predefined Network**.
 The resource-specific network and `replyconnect-*` volumes keep this stack
 separate from TrackParcel.
 
 The checked-in Compose file also caps each container's CPU and memory. These
 ceilings are intentional for the shared single-vCPU host: do not remove them
-without first moving ReplyConnect to a larger or dedicated server.
+without first moving Linkar to a larger or dedicated server.
 
 ## 1. Provision private data services
 
-Create a dedicated ReplyConnect PostgreSQL 17 service and a dedicated Valkey
-service in the ReplyConnect Coolify project. Do not reuse TrackParcel's data,
+Create a dedicated Linkar PostgreSQL 17 service and a dedicated Valkey
+service in the Linkar Coolify project. Do not reuse TrackParcel's data,
 services, networks, volumes, aliases, or credentials.
 
-Create one ReplyConnect-only private Coolify network, for example
+Create one Linkar-only private Coolify network, for example
 `replyconnect-private`, and attach exactly these production services to it:
 `replyconnect-web`, `replyconnect-worker`, `replyconnect-postgres`, and
-`replyconnect-valkey`. Configure the stable ReplyConnect-only private aliases
+`replyconnect-valkey`. Configure the stable Linkar-only private aliases
 `replyconnect-postgres` and `replyconnect-valkey` for the data services. Never
-use a TrackParcel alias or attach a ReplyConnect service to a TrackParcel
+use a TrackParcel alias or attach a Linkar service to a TrackParcel
 network. PostgreSQL and Valkey must have neither public ports nor FQDNs.
 
 - Create the PostgreSQL database, user, and password from owner-provided
@@ -61,7 +61,7 @@ commit, and select the repository `Dockerfile` as the build method.
 
 | Application | Start command | Public routing |
 | --- | --- | --- |
-| `replyconnect-web` | `./node_modules/.bin/next start` | Assign the ReplyConnect domain and container port `3000`. |
+| `replyconnect-web` | `./node_modules/.bin/next start` | Assign the Linkar domain and container port `3000`. |
 | `replyconnect-worker` | `node dist/worker.js` | No domain and no published port. |
 
 Give both applications the same server-side variables: `APP_NAME`,
@@ -76,7 +76,7 @@ secrets in Coolify, never in a Git variable or `NEXT_PUBLIC_*` variable.
 execution only; automation creation, preview, and version 1 execution work
 regardless of its value. Deploy with `FOLLOW_GATED_CAMPAIGNS_ENABLED=false` on
 both `replyconnect-web` and `replyconnect-worker`. If the tester Instagram
-connection is new or stale, reconnect it through ReplyConnect's OAuth flow so
+connection is new or stale, reconnect it through Linkar's OAuth flow so
 `subscribeToWebhooks` re-applies all five webhook fields, then confirm in
 Meta's dashboard that the app-level webhook fields match the same five
 (`comments`, `messages`, `messaging_postbacks`, `messaging_optins`,
@@ -104,7 +104,7 @@ the image but does not listen on port 3000.
 
 ## 3. Route the web app through Cloudflare
 
-Set `NEXT_PUBLIC_APP_URL` to `https://<replyconnect-domain>` and use matching
+Set `NEXT_PUBLIC_APP_URL` to `https://<linkar-domain>` and use matching
 HTTPS URLs throughout Meta and Coolify. In Cloudflare, create the DNS record
 for the Coolify web application and keep proxying enabled. Use Full (strict)
 TLS with a valid origin certificate.
@@ -146,7 +146,7 @@ Application startup never runs migrations automatically. Do not use
 After the web domain is live, call:
 
 ```bash
-curl --fail --show-error https://<replyconnect-domain>/api/health
+curl --fail --show-error https://<linkar-domain>/api/health
 ```
 
 Require `status: "ok"`, `mode: "configured"`,
@@ -161,12 +161,12 @@ Use the final public domain, not a Coolify internal URL:
 
 | Meta setting | Owner-provided production value |
 | --- | --- |
-| OAuth redirect URI | `https://<replyconnect-domain>/api/meta/oauth/callback` |
-| Webhooks callback URL | `https://<replyconnect-domain>/api/meta/webhook` |
-| Data deletion callback URL | `https://<replyconnect-domain>/api/meta/data-deletion` |
-| Privacy policy | `https://<replyconnect-domain>/privacy` |
-| Terms of service | `https://<replyconnect-domain>/terms` |
-| Support URL | `https://<replyconnect-domain>/support` |
+| OAuth redirect URI | `https://<linkar-domain>/api/meta/oauth/callback` |
+| Webhooks callback URL | `https://<linkar-domain>/api/meta/webhook` |
+| Data deletion callback URL | `https://<linkar-domain>/api/meta/data-deletion` |
+| Privacy policy | `https://<linkar-domain>/privacy` |
+| Terms of service | `https://<linkar-domain>/terms` |
+| Support URL | `https://<linkar-domain>/support` |
 
 Set `META_REDIRECT_URI` to the OAuth row exactly. Keep `META_VERIFY_TOKEN`
 server-only and enter the same value in Meta when validating the webhook. See

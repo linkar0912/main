@@ -25,7 +25,7 @@ export async function sendEmail(email: OutboundEmail): Promise<{ delivered: bool
 export function passwordResetEmail(appUrl: string, resetPath: string): (to: string) => OutboundEmail {
     return (to) => ({
         to,
-        subject: "Reset your ReplyConnect password",
+        subject: "Reset your Linkar password",
         body: `Reset your password with this link (valid for 1 hour):
 ${appUrl}${resetPath}
 
@@ -36,7 +36,7 @@ If you did not request this, you can ignore this email.`,
 export function emailVerificationEmail(appUrl: string, verifyPath: string): (to: string) => OutboundEmail {
     return (to) => ({
         to,
-        subject: "Verify your ReplyConnect email",
+        subject: "Verify your Linkar email",
         body: `Verify your email address with this link (valid for 24 hours):
 ${appUrl}${verifyPath}`,
     });

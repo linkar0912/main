@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     return new Response(`${lines.join("\n")}\n`, {
         headers: {
             "content-type": "text/csv; charset=utf-8",
-            "content-disposition": `attachment; filename="replyconnect-participants-${new Date().toISOString().slice(0, 10)}.csv"`,
+            "content-disposition": `attachment; filename="linkar-participants-${new Date().toISOString().slice(0, 10)}.csv"`,
             "cache-control": "no-store",
         },
     });

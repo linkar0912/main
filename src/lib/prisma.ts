@@ -315,8 +315,8 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: { id: workspaceId },
         create: {
           id: workspaceId,
-          name: "ReplyConnect workspace",
-          slug: `replyconnect-${workspaceId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40)}`,
+          name: "Linkar workspace",
+          slug: `linkar-${workspaceId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40)}`,
           members: { create: { id: createId("member"), email: ownerEmail, role: "OWNER" } },
         },
         update: {},

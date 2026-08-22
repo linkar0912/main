@@ -112,7 +112,7 @@ describe("getHealth", () => {
 
 describe("public support pages", () => {
   it("renders the runtime support email and opts out of static rendering", async () => {
-    vi.stubEnv("SUPPORT_EMAIL", "runtime-support@replyconnect.in");
+    vi.stubEnv("SUPPORT_EMAIL", "runtime-support@linkar.in");
 
     const pages = await Promise.all([
       import("../../app/privacy/page"),
@@ -129,7 +129,7 @@ describe("public support pages", () => {
     ]);
 
     for (const page of pages) {
-      expect(renderToStaticMarkup(createElement(page.default))).toContain("runtime-support@replyconnect.in");
+      expect(renderToStaticMarkup(createElement(page.default))).toContain("runtime-support@linkar.in");
     }
   });
 });

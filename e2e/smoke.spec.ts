@@ -37,7 +37,7 @@ test("member can sign up and sign back in", async ({ page }) => {
 
 test("dashboard and automation list are reachable", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("ReplyConnect", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Linkar", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Make every signal useful." })).toBeVisible();
   await page.getByRole("link", { name: "Automations" }).first().click();
   await expect(page.getByRole("heading", { name: "Automations" })).toBeVisible();
