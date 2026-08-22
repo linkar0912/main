@@ -394,6 +394,40 @@ describe("lead fulfillment emails", () => {
     expect(payload.body.toLowerCase()).toContain("stop");
   });
 
+  it("posts the lead to the configured webhook URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const repository = await seed([
+        {
+          version: 1,
+          trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+          conditions: [],
+          actions: [{ type: "send_text", text: "Guide!" }],
+          emailCapture: {
+            promptText: "Email?",
+            confirmationText: "In!",
+            notifyUrl: "https://hooks.zapier.com/hook/123",
+          },
+        },
+      ]);
+      const client = createRunnerClient();
+
+      await processNormalizedEvent(
+        messageEvent({ id: "w1", text: "guide → hooked@lead.dev" }),
+        repository,
+        { client, tokenEncryptionKey: TOKEN_KEY },
+      );
+
+      const webhookCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("hooks.zapier.com"));
+      expect(webhookCalls).toHaveLength(1);
+      const sentBody = JSON.parse(webhookCalls[0][1].body as string);
+      expect(sentBody).toMatchObject({ email: "hooked@lead.dev", automationName: "Automation 0" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("captures embedded emails instantly and fulfills without a prompt round-trip", async () => {
     const repository = await seed([captureFlow()]);
     const client = createRunnerClient();

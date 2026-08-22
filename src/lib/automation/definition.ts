@@ -80,6 +80,8 @@ const emailCaptureSchema = z.object({
       }
     })
     .optional(),
+  // Outbound lead webhook (Zapier/Make/n8n): receives the captured email as JSON.
+  notifyUrl: link.optional(),
 });
 
 const condition = z.discriminatedUnion("type", [
@@ -358,6 +360,9 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
                       : {}),
                   },
                 }
+              : {}),
+            ...(parsed.emailCapture.notifyUrl?.trim()
+              ? { notifyUrl: parsed.emailCapture.notifyUrl.trim() }
               : {}),
           },
         }

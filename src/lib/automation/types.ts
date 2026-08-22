@@ -70,6 +70,11 @@ export type FlowEmailCapture = {
    * deliver the promised guide/link instead of leaving them with a bare DM.
    */
   delivery?: EmailDelivery;
+  /**
+   * Optional webhook (Zapier/Make/n8n) that receives {email, automationId,
+   * automationName, capturedAt} as JSON the moment an address is stored.
+   */
+  notifyUrl?: string;
 };
 
 /** Fulfillment email configuration for a captured lead. */

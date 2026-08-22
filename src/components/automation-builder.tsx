@@ -155,6 +155,7 @@ function AutomationBuilderV1({
   const [deliveryMessage, setDeliveryMessage] = useState(initialDefinition.emailCapture?.delivery?.message ?? "");
   const [deliveryLinkUrl, setDeliveryLinkUrl] = useState(initialDefinition.emailCapture?.delivery?.linkUrl ?? "");
   const [deliveryLinkLabel, setDeliveryLinkLabel] = useState(initialDefinition.emailCapture?.delivery?.linkLabel ?? "");
+  const [notifyUrl, setNotifyUrl] = useState(initialDefinition.emailCapture?.notifyUrl ?? "");
   const [scheduleStart, setScheduleStart] = useState(isoToLocalInput(initialDefinition.schedule?.startsAt));
   const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
   const [dailyLimit, setDailyLimit] = useState(initialDefinition.dailySendLimit ? String(initialDefinition.dailySendLimit) : "");
@@ -255,6 +256,7 @@ function AutomationBuilderV1({
                     },
                   }
                 : {}),
+              ...(notifyUrl.trim() ? { notifyUrl: notifyUrl.trim() } : {}),
             },
           }
         : {}),
@@ -660,6 +662,16 @@ function AutomationBuilderV1({
                         </label>
                       </div>
                       <p className="muted">Sent from your workspace support address the moment their email is stored.</p>
+                      <label className="field">
+                        <span>Lead webhook URL <em>optional</em></span>
+                        <input
+                          aria-label="Lead webhook URL"
+                          value={notifyUrl}
+                          onChange={(event) => setNotifyUrl(event.target.value)}
+                          placeholder="https://hooks.zapier.com/…"
+                        />
+                        <small>Receives {'{email, automationName, capturedAt}'} as JSON on every capture.</small>
+                      </label>
                     </>
                   )}
                 </>

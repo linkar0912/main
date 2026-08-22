@@ -148,6 +148,30 @@ async function enrollNewLeadInSequences(
     });
   }
 }
+/**
+ * Fire-and-forget lead webhook (Zapier/Make/n8n). A slow or broken endpoint must
+ * never delay or fail the DM flow, so this is bounded by a 5s timeout and swallows
+ * every error after logging.
+ */
+async function notifyLeadWebhook(
+  notifyUrl: string,
+  payload: { email: string; automationId: string; automationName: string; capturedAt: string },
+): Promise<void> {
+  try {
+    await fetch(notifyUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch (error) {
+    logger.warn("Lead webhook failed", {
+      notifyUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 type WorkspaceMapping = NonNullable<Awaited<ReturnType<AutomationRepository["findWorkspaceByInstagramAccount"]>>>;
 
 /**
@@ -316,6 +340,14 @@ async function processEmailCaptureReply(
       });
       if (emailCapture.delivery) {
         await deliverLeadEmail(mapping, automation.name, contact.id, candidate, emailCapture.delivery);
+      }
+      if (emailCapture.notifyUrl) {
+        await notifyLeadWebhook(emailCapture.notifyUrl, {
+          email: candidate,
+          automationId: automation.id,
+          automationName: automation.name,
+          capturedAt: new Date(event.timestamp).toISOString(),
+        });
       }
       await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
@@ -583,6 +615,14 @@ export async function processNormalizedEvent(
               capturedEmail,
               automation.definition.emailCapture.delivery,
             );
+          }
+          if (automation.definition.emailCapture?.notifyUrl) {
+            await notifyLeadWebhook(automation.definition.emailCapture.notifyUrl, {
+              email: capturedEmail,
+              automationId: automation.id,
+              automationName: automation.name,
+              capturedAt: new Date().toISOString(),
+            });
           }
           await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
           void notifyWorkspaceManagers(
