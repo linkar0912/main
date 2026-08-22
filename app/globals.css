@@ -128,7 +128,7 @@ h3 { font-size: .98rem; font-weight: 700; margin-bottom: 6px; }
 .panel-heading h2 { margin-bottom: 0; }
 .automations-panel { min-height: 350px; }
 .way-panel { background: var(--slate); border-color: var(--slate); color: #f8f5ee; }
-.way-icon { align-items: center; background: rgba(242,166,58,.15); border-radius: 10px; color: var(--saffron); display: flex; height: 40px; justify-content: center; margin-bottom: 31px; width: 40px; }
+.way-icon { align-items: center; background: rgba(168, 217, 75, .18); border-radius: 10px; color: #6f8f2a; display: flex; height: 40px; justify-content: center; margin-bottom: 31px; width: 40px; }
 .way-panel .eyebrow { color: #9fa4b4; }
 .way-panel h2 { font-family: Georgia, serif; font-size: 1.7rem; font-weight: 500; line-height: 1.1; max-width: 220px; }
 .way-steps { display: grid; gap: 16px; margin: 29px 0; }
@@ -266,7 +266,7 @@ h3 { font-size: .98rem; font-weight: 700; margin-bottom: 6px; }
 .media-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .media-card { background: var(--white); border: 1px solid #d9d7ce; border-radius: 10px; cursor: pointer; display: flex; flex-direction: column; gap: 8px; overflow: hidden; padding: 8px; transition: border-color .15s ease, box-shadow .15s ease; }
 .media-card:hover { border-color: var(--saffron); }
-.media-card.is-selected { border-color: var(--saffron); box-shadow: 0 0 0 3px rgba(242,166,58,.18); }
+.media-card.is-selected { border-color: var(--saffron); box-shadow: 0 0 0 3px rgba(168, 217, 75, .28); }
 .media-thumb { aspect-ratio: 1; background: #ece9e0; border-radius: 7px; display: block; overflow: hidden; position: relative; }
 .media-thumb img { display: block; height: 100%; object-fit: cover; width: 100%; }
 .media-thumb-fallback { align-items: center; color: #9a988f; display: flex; height: 100%; justify-content: center; width: 100%; }
@@ -293,9 +293,9 @@ h3 { font-size: .98rem; font-weight: 700; margin-bottom: 6px; }
 .settings-panel > .panel-heading > svg { color: #6b6c7b; }
 .check-list { display: grid; gap: 13px; list-style: none; margin: 25px 0 0; padding: 0; }
 .check-list li { align-items: flex-start; color: #696a73; display: flex; font-size: .78rem; gap: 8px; }
-.check-list svg { color: #2d957d; flex: 0 0 16px; margin-top: 2px; }
+.check-list svg { color: var(--mint); flex: 0 0 16px; margin-top: 2px; }
 .mode-orb { border-radius: 50%; display: block; height: 12px; margin: 5px 4px 0 0; width: 12px; }
-.orb-demo { background: var(--saffron); box-shadow: 0 0 0 5px rgba(242,166,58,.15); }
+.orb-demo { background: var(--saffron); box-shadow: 0 0 0 5px rgba(168, 217, 75, .22); }
 .orb-live { background: var(--mint); box-shadow: 0 0 0 5px rgba(85,214,190,.15); }
 .settings-panel > .muted { font-size: .78rem; line-height: 1.65; margin: 22px 0 18px; max-width: 360px; }
 .account-form { display: grid; gap: 12px; margin: 18px 0 16px; max-width: 340px; }
@@ -342,15 +342,15 @@ h3 { font-size: .98rem; font-weight: 700; margin-bottom: 6px; }
 .insights-chart { display: flex; gap: 7px; }
 .chart-column { display: grid; flex: 1; gap: 6px; min-width: 0; text-align: center; }
 .chart-column small { color: #6c6b72; font-size: .58rem; }
-.chart-bars { align-items: flex-end; background: #f4f3ee; border-radius: 6px; display: flex; gap: 2px; height: 96px; justify-content: center; padding: 5px 3px; }
+.chart-bars { align-items: flex-end; background: var(--surface-soft); border-radius: 8px; display: flex; gap: 2px; height: 96px; justify-content: center; padding: 5px 3px; }
 .chart-bar { border-radius: 3px 3px 0 0; display: inline-block; min-height: 2px; width: 42%; }
 .bar-participants { background: var(--saffron); }
-.bar-sent { background: #2d957d; }
+.bar-sent { background: var(--slate); }
 .chart-legend { align-items: center; color: #6c6b72; display: flex; font-size: .72rem; gap: 7px; margin: 10px 0 0; }
 .legend-swatch { border-radius: 3px; display: inline-block; height: 10px; margin-left: 8px; width: 10px; }
 .legend-swatch:first-child { margin-left: 0; }
 .swatch-participants { background: var(--saffron); }
-.swatch-sent { background: #2d957d; }
+.swatch-sent { background: var(--slate); }
 .insights-table { border-collapse: collapse; font-size: .76rem; margin-top: 14px; width: 100%; }
 .insights-table th, .insights-table td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; }
 .insights-table th { color: #6b6a73; font-size: .66rem; letter-spacing: .05em; text-transform: uppercase; }
