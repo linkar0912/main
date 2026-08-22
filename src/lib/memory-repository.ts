@@ -21,6 +21,9 @@ import type {
   MemberRecord,
   InvitationRecord,
   CreateInvitationInput,
+  AutomationContactRecord,
+  CapturedContactSummary,
+  TouchContactResult,
 } from "./repository";
 
 function now(): string {
@@ -54,6 +57,8 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const deletionRequests = new Map<string, DataDeletionRequestRecord>();
   const participants = new Map<string, AutomationParticipantRecord>();
   const participantIdsBySource = new Map<string, string>();
+  const contacts = new Map<string, AutomationContactRecord>();
+  const contactIdsBySender = new Map<string, string>();
   const usersByEmail = new Map<string, UserRecord>();
   const usersById = new Map<string, UserRecord>();
   // email -> workspaceId, mirroring WorkspaceMember rows for login lookups.
@@ -675,6 +680,127 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         if (Date.parse(participant.updatedAt) >= beforeMs) continue;
         participants.delete(id);
         participantIdsBySource.delete(`${participant.workspaceId}:${participant.instagramAccountId}:${participant.sourceCommentId}`);
+        count += 1;
+      }
+      return count;
+    },
+
+    async touchContact(workspaceId, instagramAccountId, igScopedUserId, seenAt): Promise<TouchContactResult> {
+      const senderKey = `${workspaceId}:${instagramAccountId}:${igScopedUserId}`;
+      const existingId = contactIdsBySender.get(senderKey);
+      if (existingId) {
+        const existing = contacts.get(existingId);
+        if (existing) {
+          const updated: AutomationContactRecord = { ...existing, lastSeenAt: seenAt, updatedAt: now() };
+          contacts.set(existingId, updated);
+          return { created: false, record: copy(updated) };
+        }
+      }
+      const timestamp = now();
+      const record: AutomationContactRecord = {
+        id: createId("contact"),
+        workspaceId,
+        instagramAccountId,
+        igScopedUserId,
+        state: "NONE",
+        attempts: 0,
+        lastSeenAt: seenAt > timestamp ? seenAt : timestamp,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      contacts.set(record.id, record);
+      contactIdsBySender.set(senderKey, record.id);
+      return { created: true, record: copy(record) };
+    },
+
+    async getContact(workspaceId, instagramAccountId, igScopedUserId) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      const record = id ? contacts.get(id) : undefined;
+      return record ? copy(record) : null;
+    },
+
+    async setContactAwaitingEmail(workspaceId, instagramAccountId, igScopedUserId, automationId, atIso) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) throw new Error("Contact not found");
+      const current = contacts.get(id)!;
+      const updated: AutomationContactRecord = {
+        ...current,
+        state: "AWAITING_EMAIL",
+        awaitingAutomationId: automationId,
+        awaitingSince: atIso,
+        attempts: 0,
+        updatedAt: now(),
+      };
+      contacts.set(id, updated);
+      return copy(updated);
+    },
+
+    async captureContactEmail(workspaceId, instagramAccountId, igScopedUserId, email, atIso) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) throw new Error("Contact not found");
+      const current = contacts.get(id)!;
+      const updated: AutomationContactRecord = {
+        ...current,
+        email: email.trim().toLowerCase(),
+        state: "CAPTURED",
+        awaitingAutomationId: undefined,
+        awaitingSince: undefined,
+        attempts: 0,
+        lastSeenAt: atIso > current.lastSeenAt ? atIso : current.lastSeenAt,
+        updatedAt: now(),
+      };
+      contacts.set(id, updated);
+      return copy(updated);
+    },
+
+    async bumpContactEmailAttempt(workspaceId, instagramAccountId, igScopedUserId) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) throw new Error("Contact not found");
+      const current = contacts.get(id)!;
+      const updated: AutomationContactRecord = { ...current, attempts: current.attempts + 1, updatedAt: now() };
+      contacts.set(id, updated);
+      return updated.attempts;
+    },
+
+    async clearContactAwaitingEmail(workspaceId, instagramAccountId, igScopedUserId) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) return;
+      const current = contacts.get(id)!;
+      contacts.set(id, {
+        ...current,
+        state: current.email ? "CAPTURED" : "NONE",
+        awaitingAutomationId: undefined,
+        awaitingSince: undefined,
+        updatedAt: now(),
+      });
+    },
+
+    async countCapturedContacts(workspaceId) {
+      return [...contacts.values()].filter(
+        (contact) => contact.workspaceId === workspaceId && contact.state === "CAPTURED" && Boolean(contact.email),
+      ).length;
+    },
+
+    async listCapturedContacts(workspaceId, limit): Promise<CapturedContactSummary[]> {
+      return [...contacts.values()]
+        .filter((contact) => contact.workspaceId === workspaceId && contact.state === "CAPTURED" && Boolean(contact.email))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id))
+        .slice(0, limit)
+        .map((contact) => ({
+          id: contact.id,
+          email: contact.email!,
+          instagramAccountId: contact.instagramAccountId,
+          capturedAt: contact.updatedAt,
+        }));
+    },
+
+    async deleteContactsByWorkspaceIds(workspaceIds) {
+      const workspaceIdSet = new Set(workspaceIds);
+      let count = 0;
+      for (const [id, contact] of contacts.entries()) {
+        if (!workspaceIdSet.has(contact.workspaceId)) continue;
+        contacts.delete(id);
+        contactIdsBySender.delete(`${contact.workspaceId}:${contact.instagramAccountId}:${contact.igScopedUserId}`);
         count += 1;
       }
       return count;

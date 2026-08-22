@@ -104,6 +104,41 @@ export type ParticipantPatch = Partial<Pick<
 export type DailyCount = { day: string; count: number };
 export type MediaPerformance = { mediaId: string; matched: number; delivered: number; clicked: number };
 
+/**
+ * Workspace-wide registry of people who interacted with a connected Instagram account.
+ * Doubles as the "have we seen this sender before" source for first_contact triggers and
+ * the store for emails captured by DM email-capture flows.
+ */
+export type ContactState = "NONE" | "AWAITING_EMAIL" | "CAPTURED";
+
+export type AutomationContactRecord = {
+  id: string;
+  workspaceId: string;
+  instagramAccountId: string;
+  igScopedUserId: string;
+  email?: string;
+  state: ContactState;
+  /** Automation that asked for the email while state is AWAITING_EMAIL. */
+  awaitingAutomationId?: string;
+  awaitingSince?: string;
+  /** Invalid email replies received while awaiting (retry budget). */
+  attempts: number;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Marks the sender as seen; `created` is true when this was their first interaction. */
+export type TouchContactResult = { created: boolean; record: AutomationContactRecord };
+
+export type CapturedContactSummary = {
+  id: string;
+  email: string;
+  instagramAccountId: string;
+  automationId?: string;
+  capturedAt: string;
+};
+
 export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt" | "dispatchStatus"> & {
   dispatchStatus?: ExecutionDispatchStatus;
 };
@@ -261,4 +296,32 @@ export interface AutomationRepository {
   deleteParticipantsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
   expireStaleParticipants(now: string, reason: string): Promise<number>;
   deleteStaleTerminalParticipants(before: string): Promise<number>;
+  // Contact registry (first-contact detection + DM email capture).
+  touchContact(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+    seenAt: string,
+  ): Promise<TouchContactResult>;
+  getContact(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<AutomationContactRecord | null>;
+  setContactAwaitingEmail(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+    automationId: string,
+    atIso: string,
+  ): Promise<AutomationContactRecord>;
+  captureContactEmail(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+    email: string,
+    atIso: string,
+  ): Promise<AutomationContactRecord>;
+  /** Records one invalid reply; returns the updated attempts count. */
+  bumpContactEmailAttempt(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<number>;
+  clearContactAwaitingEmail(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<void>;
+  countCapturedContacts(workspaceId: string): Promise<number>;
+  listCapturedContacts(workspaceId: string, limit: number): Promise<CapturedContactSummary[]>;
+  deleteContactsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
 }

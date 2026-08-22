@@ -8,8 +8,8 @@ describe("premade automation templates", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("gives every available template a valid classic builder prefill", () => {
-    for (const template of basicAutomationTemplates.filter((entry) => entry.available)) {
+  it("gives every template a valid classic builder prefill", () => {
+    for (const template of basicAutomationTemplates) {
       const setup = template.setup;
       expect(setup, `${template.id} needs a setup prefill`).toBeDefined();
       const normalized = validateFlowDefinition(setup!.definition);
@@ -22,16 +22,40 @@ describe("premade automation templates", () => {
     }
   });
 
-  it("keeps unavailable templates free of prefills and explains why", () => {
-    for (const template of basicAutomationTemplates.filter((entry) => !entry.available)) {
-      expect(template.setup).toBeUndefined();
-      expect(template.unavailableNote?.trim().length ?? 0).toBeGreaterThan(0);
+  it("runs every recipe on an engine capability that exists today", () => {
+    // Nothing may ship as BETA/unavailable: each template's trigger must be one the
+    // engine can actually fire on, and email collectors must carry full copy.
+    for (const template of basicAutomationTemplates) {
+      const definition = template.setup!.definition;
+      expect(["comment", "message", "referral", "optin", "first_contact", "story_mention"]).toContain(
+        definition.trigger.type,
+      );
+      if (definition.emailCapture) {
+        expect(definition.emailCapture.promptText.trim().length).toBeGreaterThan(0);
+        expect(definition.emailCapture.confirmationText.trim().length).toBeGreaterThan(0);
+      }
     }
+  });
+
+  it("greets first-time contacts exactly once via the first_contact trigger", () => {
+    const welcome = getTemplateById("welcome-new-followers")!;
+    expect(welcome.setup!.definition.trigger.type).toBe("first_contact");
+  });
+
+  it("replies to story mentions via the story_mention trigger", () => {
+    const story = getTemplateById("story-mention-reply")!;
+    expect(story.setup!.definition.trigger.type).toBe("story_mention");
+  });
+
+  it("captures emails with the email-capture template", () => {
+    const capture = getTemplateById("email-capture")!;
+    expect(capture.setup!.definition.emailCapture).toBeDefined();
+    expect(capture.setup!.definition.trigger.type).toBe("message");
   });
 
   it("looks templates up by id", () => {
     expect(getTemplateById("default-reply")?.title).toContain("Default Reply");
-    expect(getTemplateById("conversation-starters")?.available).toBe(true);
+    expect(getTemplateById("conversation-starters")?.setup).toBeDefined();
     expect(getTemplateById("does-not-exist")).toBeUndefined();
   });
 });

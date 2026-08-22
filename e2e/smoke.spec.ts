@@ -62,9 +62,11 @@ test("basic template gallery sets up a ready-to-edit automation", async ({ page 
   await page.goto("/automations/templates");
   await expect(page.getByRole("heading", { name: "Automation", exact: true })).toBeVisible();
 
-  // Unavailable recipes show a note instead of Set Up.
+  // Every recipe ships runnable — nothing is BETA or unavailable any more.
   const followCard = page.locator(".template-card", { hasText: "Say hi to new followers" });
-  await expect(followCard.getByText("Unavailable for now.")).toBeVisible();
+  await expect(followCard.getByRole("link", { name: "Set Up" })).toBeVisible();
+  await expect(page.getByText(/Unavailable for now\./)).toHaveCount(0);
+  await expect(page.getByText("BETA")).toHaveCount(0);
 
   const startersCard = page.locator(".template-card", { hasText: "Conversation Starters" });
   await startersCard.getByRole("link", { name: "Set Up" }).click();

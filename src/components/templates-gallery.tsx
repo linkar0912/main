@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AtSign, CircleHelp, Menu, MessageCircle, Reply, UserPlus } from "lucide-react";
+import { AtSign, Mail, Menu, MessageCircle, Reply, UserPlus } from "lucide-react";
 import { basicAutomationTemplates, type PremadeTemplate } from "@/src/lib/automation/templates";
 import { AutomationSectionNav } from "./automation-section-nav";
 
@@ -11,6 +11,7 @@ const cardIcons = {
   "at-sign": AtSign,
   reply: Reply,
   menu: Menu,
+  mail: Mail,
 } as const;
 
 /** Peach chat-bubble previews recreated with plain markup, one per template kind. */
@@ -43,6 +44,15 @@ function TemplateIllustration({ kind }: { kind: PremadeTemplate["illustration"] 
       </div>
     );
   }
+  if (kind === "email") {
+    return (
+      <div className="template-illustration" aria-hidden="true">
+        <span className="bubble bubble-accent">Send me the guide 📬</span>
+        <span className="bubble bubble-email-pill"><Mail size={13} strokeWidth={2} /> you@example.com</span>
+        <span className="bubble">You’re in! ✅ Check your inbox.</span>
+      </div>
+    );
+  }
   if (kind === "default") {
     return (
       <div className="template-illustration" aria-hidden="true">
@@ -72,28 +82,15 @@ function TemplateCard({ template }: { template: PremadeTemplate }) {
       <div className="template-body">
         <div className="template-heading">
           <span className="template-icon"><Icon size={19} strokeWidth={1.8} /></span>
-          <h2>
-            {template.title}
-            {template.badge && <em className="badge-beta">{template.badge}</em>}
-          </h2>
+          <h2>{template.title}</h2>
         </div>
         <p className="muted">{template.description}</p>
-        {template.available ? (
-          <Link
-            className="button button-setup"
-            href={`/automations/new?type=classic&template=${template.id}`}
-          >
-            Set Up
-          </Link>
-        ) : (
-          <p className="template-note">
-            <CircleHelp size={15} />
-            <span>
-              Unavailable for now.{" "}
-              <Link className="text-link" href="/support">Learn more</Link>
-            </span>
-          </p>
-        )}
+        <Link
+          className="button button-setup"
+          href={`/automations/new?type=classic&template=${template.id}`}
+        >
+          Set Up
+        </Link>
       </div>
       <TemplateIllustration kind={template.illustration} />
     </article>

@@ -1,4 +1,4 @@
-import type { FlowCondition, FlowDefinitionV1, NormalizedEvent } from "./types";
+import type { EvaluationContext, FlowCondition, FlowDefinitionV1, NormalizedEvent } from "./types";
 
 function normalizedText(value: string): string {
   return value.trim().toLowerCase();
@@ -18,7 +18,21 @@ function matchesConditions(conditions: FlowCondition[], event: NormalizedEvent):
   });
 }
 
-export function matchesTrigger(flow: FlowDefinitionV1, event: NormalizedEvent): boolean {
+/** Inbound DM-side events a person can use to start a conversation with the account. */
+const CONVERSATION_EVENT_TYPES: NormalizedEvent["type"][] = [
+  "message.received",
+  "quick_reply.received",
+  "postback.received",
+  "optin.received",
+  "referral.received",
+  "story_mention.received",
+];
+
+export function matchesTrigger(
+  flow: FlowDefinitionV1,
+  event: NormalizedEvent,
+  context: EvaluationContext = {},
+): boolean {
   const trigger = flow.trigger;
 
   if (trigger.type === "comment") {
@@ -31,6 +45,11 @@ export function matchesTrigger(flow: FlowDefinitionV1, event: NormalizedEvent): 
     if (event.type !== "referral.received") return false;
   } else if (trigger.type === "optin") {
     if (event.type !== "optin.received") return false;
+  } else if (trigger.type === "story_mention") {
+    if (event.type !== "story_mention.received") return false;
+  } else if (trigger.type === "first_contact") {
+    if (!context.isNewContact) return false;
+    if (!CONVERSATION_EVENT_TYPES.includes(event.type)) return false;
   } else {
     if (event.type !== "message.received" && event.type !== "postback.received") return false;
     if (trigger.match === "keyword" && !containsKeyword(event.text, trigger.keywords)) return false;

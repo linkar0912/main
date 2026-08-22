@@ -20,6 +20,8 @@ import type {
   MemberRole,
   MemberRecord,
   InvitationRecord,
+  AutomationContactRecord,
+  CapturedContactSummary,
 } from "./repository";
 
 function mapUser(record: {
@@ -192,6 +194,36 @@ function mapParticipant(record: {
     finalDeliveryError: record.finalDeliveryError ?? undefined,
     deliveryClickedAt: record.deliveryClickedAt?.toISOString(),
     messagingWindowExpiresAt: record.messagingWindowExpiresAt?.toISOString(),
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapContact(record: {
+  id: string;
+  workspaceId: string;
+  instagramAccountId: string;
+  igScopedUserId: string;
+  email: string | null;
+  state: AutomationContactRecord["state"];
+  awaitingAutomationId: string | null;
+  awaitingSince: Date | null;
+  attempts: number;
+  lastSeenAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}): AutomationContactRecord {
+  return {
+    id: record.id,
+    workspaceId: record.workspaceId,
+    instagramAccountId: record.instagramAccountId,
+    igScopedUserId: record.igScopedUserId,
+    email: record.email ?? undefined,
+    state: record.state,
+    awaitingAutomationId: record.awaitingAutomationId ?? undefined,
+    awaitingSince: record.awaitingSince?.toISOString(),
+    attempts: record.attempts,
+    lastSeenAt: record.lastSeenAt.toISOString(),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -665,6 +697,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         });
         const workspaceIds = [...new Set(connections.map((connection) => connection.workspaceId))];
         if (workspaceIds.length > 0) {
+          await transaction.automationContact.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
           await transaction.automationParticipant.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
           await transaction.automationExecution.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
           await transaction.webhookEvent.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
@@ -959,6 +992,144 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           updatedAt: { lt: new Date(before) },
         },
       });
+      return result.count;
+    },
+
+    async touchContact(workspaceId, instagramAccountId, igScopedUserId, seenAt) {
+      const existing = await client.automationContact.findUnique({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      if (existing) {
+        const updated = await client.automationContact.update({
+          where: { id: existing.id },
+          data: { lastSeenAt: new Date(seenAt) },
+        });
+        return { created: false, record: mapContact(updated) };
+      }
+      try {
+        const created = await client.automationContact.create({
+          data: {
+            id: createId("contact"),
+            workspaceId,
+            instagramAccountId,
+            igScopedUserId,
+            lastSeenAt: new Date(seenAt),
+          },
+        });
+        return { created: true, record: mapContact(created) };
+      } catch (error) {
+        // Lost a create race with a concurrent webhook delivery for the same sender —
+        // the sender exists, so this is not their first contact.
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        const record = await client.automationContact.findUniqueOrThrow({
+          where: {
+            workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+          },
+        });
+        return { created: false, record: mapContact(record) };
+      }
+    },
+
+    async getContact(workspaceId, instagramAccountId, igScopedUserId) {
+      const record = await client.automationContact.findUnique({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      return record ? mapContact(record) : null;
+    },
+
+    async setContactAwaitingEmail(workspaceId, instagramAccountId, igScopedUserId, automationId, atIso) {
+      const updated = await client.automationContact.update({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+        data: {
+          state: "AWAITING_EMAIL",
+          awaitingAutomationId: automationId,
+          awaitingSince: new Date(atIso),
+          attempts: 0,
+        },
+      });
+      return mapContact(updated);
+    },
+
+    async captureContactEmail(workspaceId, instagramAccountId, igScopedUserId, email, atIso) {
+      const normalized = email.trim().toLowerCase();
+      const current = await client.automationContact.findUniqueOrThrow({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      const updated = await client.automationContact.update({
+        where: { id: current.id },
+        data: {
+          email: normalized,
+          state: "CAPTURED",
+          awaitingAutomationId: null,
+          awaitingSince: null,
+          attempts: 0,
+          lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
+        },
+      });
+      return mapContact(updated);
+    },
+
+    async bumpContactEmailAttempt(workspaceId, instagramAccountId, igScopedUserId) {
+      const current = await client.automationContact.findUniqueOrThrow({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      const updated = await client.automationContact.update({
+        where: { id: current.id },
+        data: { attempts: { increment: 1 } },
+      });
+      return updated.attempts;
+    },
+
+    async clearContactAwaitingEmail(workspaceId, instagramAccountId, igScopedUserId) {
+      const current = await client.automationContact.findUnique({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      if (!current) return;
+      await client.automationContact.update({
+        where: { id: current.id },
+        data: {
+          state: current.email ? "CAPTURED" : "NONE",
+          awaitingAutomationId: null,
+          awaitingSince: null,
+        },
+      });
+    },
+
+    async countCapturedContacts(workspaceId) {
+      return client.automationContact.count({
+        where: { workspaceId, state: "CAPTURED", email: { not: null } },
+      });
+    },
+
+    async listCapturedContacts(workspaceId, limit): Promise<CapturedContactSummary[]> {
+      const records = await client.automationContact.findMany({
+        where: { workspaceId, state: "CAPTURED", email: { not: null } },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: limit,
+      });
+      return records.map((record) => ({
+        id: record.id,
+        email: record.email!,
+        instagramAccountId: record.instagramAccountId,
+        capturedAt: record.updatedAt.toISOString(),
+      }));
+    },
+
+    async deleteContactsByWorkspaceIds(workspaceIds) {
+      if (workspaceIds.length === 0) return 0;
+      const result = await client.automationContact.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
       return result.count;
     },
   };

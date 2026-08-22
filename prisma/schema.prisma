@@ -37,6 +37,12 @@ enum ParticipantState {
   FAILED
 }
 
+enum ContactState {
+  NONE
+  AWAITING_EMAIL
+  CAPTURED
+}
+
 model User {
   id               String    @id
   email            String    @unique
@@ -100,6 +106,7 @@ model Workspace {
   participants  AutomationParticipant[]
   executions    AutomationExecution[]
   webhookEvents WebhookEvent[]
+  contacts      AutomationContact[]
 }
 
 model WorkspaceMember {
@@ -185,6 +192,28 @@ model AutomationParticipant {
   @@index([instagramAccountId, igScopedUserId, state])
   @@index([workspaceId, automationId, updatedAt])
   @@index([messagingWindowExpiresAt])
+}
+
+// Workspace-wide registry of people who interacted with a connected Instagram account.
+// Powers once-only first-contact greetings (first_contact triggers) and stores emails
+// captured by DM email-capture flows.
+model AutomationContact {
+  id                   String       @id
+  workspaceId          String
+  instagramAccountId   String
+  igScopedUserId       String
+  email                String?
+  state                ContactState @default(NONE)
+  awaitingAutomationId String?
+  awaitingSince        DateTime?
+  attempts             Int          @default(0)
+  lastSeenAt           DateTime     @default(now())
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  workspace            Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, instagramAccountId, igScopedUserId])
+  @@index([workspaceId, state])
 }
 
 model AutomationExecution {

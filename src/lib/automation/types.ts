@@ -21,6 +21,22 @@ export type OptInTrigger = {
   type: "optin";
 };
 
+/**
+ * Fires on the first interaction a person ever has with the account (any inbound DM-side
+ * event). Meta does not expose follower events through its official API, so this is the
+ * compliant stand-in for "welcome new followers": each person is greeted exactly once,
+ * tracked via the workspace contact registry.
+ */
+export type FirstContactTrigger = {
+  type: "first_contact";
+};
+
+// Fires when someone mentions the account in their Instagram Story (delivered by Meta
+// as a messages-webhook attachment of type story_mention).
+export type StoryMentionTrigger = {
+  type: "story_mention";
+};
+
 export type FlowCondition =
   | { type: "contains_keyword"; keywords: string[] }
   | { type: "media_is"; mediaIds: string[] };
@@ -38,6 +54,20 @@ export type FlowSchedule = {
 };
 
 /**
+ * When enabled, flows that match collect the person's email address over DM: the runner
+ * appends `promptText` to the flow's actions and waits for the next message from that
+ * person, validates it as an email, stores it against their contact record, and replies
+ * with `confirmationText` (or `retryText`, up to a small retry budget, when the reply
+ * is not an email address).
+ */
+export type FlowEmailCapture = {
+  promptText: string;
+  /** Sent when a reply arrives that is not a valid email address. */
+  retryText?: string;
+  confirmationText: string;
+};
+
+/**
  * True when the automation's schedule window (if any) includes `at`.
  * Open bounds mean "no bound on that side".
  */
@@ -52,13 +82,15 @@ export function withinSchedule(schedule: FlowSchedule | undefined, at: Date): bo
 
 export type FlowDefinitionV1 = {
   version: 1;
-  trigger: CommentTrigger | MessageTrigger | ReferralTrigger | OptInTrigger;
+  trigger: CommentTrigger | MessageTrigger | ReferralTrigger | OptInTrigger | FirstContactTrigger | StoryMentionTrigger;
   conditions: FlowCondition[];
   actions: FlowAction[];
   /** Optional per-automation daily cap on Meta sends, enforced by the runner. */
   dailySendLimit?: number;
   /** Optional activation window; events outside it are skipped. */
   schedule?: FlowSchedule;
+  /** Optional DM email-collection follow-up, executed by the runner. */
+  emailCapture?: FlowEmailCapture;
 };
 
 export type MediaSnapshot = {
@@ -117,13 +149,23 @@ export type NormalizedEvent = {
   | "quick_reply.received"
   | "postback.received"
   | "optin.received"
-  | "referral.received";
+  | "referral.received"
+  | "story_mention.received";
   text: string;
   commentId?: string;
   mediaId?: string;
   recipientId?: string;
   interactionPayload?: string;
   timestamp: number;
+};
+
+/**
+ * Runtime context the runner computes per event and hands to the pure evaluator —
+ * currently just whether this sender has never been seen on this account before,
+ * which `first_contact` triggers require.
+ */
+export type EvaluationContext = {
+  isNewContact?: boolean;
 };
 
 export type ExecutionAction =

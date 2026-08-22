@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ListOrdered, Workflow, Zap } from "lucide-react";
+import { Workflow, Zap } from "lucide-react";
 
 /** Left-hand sub-navigation shared by the My Automations list and the Basic gallery. */
 export function AutomationSectionNav({ active }: { active: "my" | "basic" }) {
@@ -15,11 +15,6 @@ export function AutomationSectionNav({ active }: { active: "my" | "basic" }) {
         <Zap size={18} strokeWidth={1.8} />
         <span>Basic</span>
       </Link>
-      <span className="section-nav-link is-disabled" aria-disabled="true" title="Coming soon">
-        <ListOrdered size={18} strokeWidth={1.8} />
-        <span>Sequences</span>
-        <em className="soon-chip">Soon</em>
-      </span>
     </nav>
   );
 }

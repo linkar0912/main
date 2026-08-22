@@ -31,6 +31,20 @@ function interactionEventId(
     .digest("base64url");
 }
 
+/**
+ * Story mentions arrive inside the regular `messages` webhook as a message attachment
+ * of type `story_mention` (payload.story carries the story media id/URL). Returns the
+ * attachment record when the message is a story mention.
+ */
+function storyMentionAttachment(message: JsonRecord): JsonRecord | null {
+  const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+  for (const attachmentValue of attachments) {
+    const attachment = record(attachmentValue);
+    if (attachment && stringValue(attachment.type) === "story_mention") return attachment;
+  }
+  return null;
+}
+
 export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
   const root = record(payload);
   const entries = Array.isArray(root?.entry) ? root.entry : [];
@@ -100,6 +114,24 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
         message.is_deleted !== true
       ) {
         const messageId = stringValue(message.mid) ?? `${accountId}:${timestamp}`;
+        const storyAttachment = storyMentionAttachment(message);
+        if (storyAttachment) {
+          // A story mention is its own trigger type — emit it instead of a plain
+          // message so story-mention flows own the reply and default responders
+          // do not double-fire on the same notification.
+          const payload = record(storyAttachment.payload);
+          const story = record(payload?.story);
+          events.push({
+            id: messageId,
+            accountId,
+            type: "story_mention.received",
+            text: stringValue(message.text) ?? "",
+            ...(story?.id ? { mediaId: stringValue(story.id) } : {}),
+            recipientId,
+            timestamp,
+          });
+          continue;
+        }
         const quickReply = record(message.quick_reply);
         const interactionPayload = payloadValue(quickReply?.payload);
         events.push({

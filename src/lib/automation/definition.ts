@@ -52,6 +52,17 @@ const messageTrigger = z.object({
 
 const referralTrigger = z.object({ type: z.literal("referral") });
 const optinTrigger = z.object({ type: z.literal("optin") });
+const firstContactTrigger = z.object({ type: z.literal("first_contact") });
+const storyMentionTrigger = z.object({ type: z.literal("story_mention") });
+
+// DM email collection: the runner sends `promptText` after the flow's actions, waits
+// for the person's next message, and either stores it as their email (replying with
+// `confirmationText`) or asks again with `retryText` within a small retry budget.
+const emailCaptureSchema = z.object({
+  promptText: z.string().trim().min(1).max(500),
+  retryText: z.string().trim().min(1).max(500).optional(),
+  confirmationText: z.string().trim().min(1).max(500),
+});
 
 const condition = z.discriminatedUnion("type", [
   z.object({ type: z.literal("contains_keyword"), keywords: z.array(keyword).min(1) }),
@@ -73,11 +84,19 @@ const action = z.discriminatedUnion("type", [
 const flowV1Schema = z
   .object({
     version: z.literal(1),
-    trigger: z.discriminatedUnion("type", [commentTrigger, messageTrigger, referralTrigger, optinTrigger]),
+    trigger: z.discriminatedUnion("type", [
+      commentTrigger,
+      messageTrigger,
+      referralTrigger,
+      optinTrigger,
+      firstContactTrigger,
+      storyMentionTrigger,
+    ]),
     conditions: z.array(condition),
     actions: z.array(action).min(1).max(3),
     dailySendLimit: z.number().int().min(1).max(1_000).optional(),
     schedule: scheduleSchema.optional(),
+    emailCapture: emailCaptureSchema.optional(),
   })
   .superRefine((flow, context) => {
     if (flow.trigger.type === "comment") {
@@ -114,12 +133,31 @@ const flowV1Schema = z
     }
 
     // Referral/optin taps carry a ref payload rather than freeform text, so
-    // keyword conditions and media conditions cannot apply to them.
-    if ((flow.trigger.type === "referral" || flow.trigger.type === "optin") && flow.conditions.length > 0) {
+    // keyword conditions and media conditions cannot apply to them. The same
+    // holds for first-contact greetings and story mentions, which have no
+    // filterable message content.
+    if (
+      flow.trigger.type === "referral"
+      || flow.trigger.type === "optin"
+      || flow.trigger.type === "first_contact"
+      || flow.trigger.type === "story_mention"
+    ) {
+      if (flow.conditions.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["conditions"],
+          message: "Referral and opt-in triggers cannot include conditions",
+        });
+      }
+    }
+
+    // Comment flows may only send a single private reply, which cannot carry the
+    // extra email prompt the collector appends.
+    if (flow.trigger.type === "comment" && flow.emailCapture) {
       context.addIssue({
         code: "custom",
-        path: ["conditions"],
-        message: "Referral and opt-in triggers cannot include conditions",
+        path: ["emailCapture"],
+        message: "Comment triggers cannot collect emails — use a DM, story mention, or first-contact trigger",
       });
     }
   });
@@ -281,6 +319,17 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
     actions: parsed.actions.map((item) => ({ ...item, text: item.text.trim() })),
     ...(parsed.dailySendLimit ? { dailySendLimit: parsed.dailySendLimit } : {}),
     ...(parsed.schedule ? { schedule: normalizeSchedule(parsed.schedule) } : {}),
+    ...(parsed.emailCapture
+      ? {
+          emailCapture: {
+            promptText: parsed.emailCapture.promptText.trim(),
+            ...(parsed.emailCapture.retryText?.trim()
+              ? { retryText: parsed.emailCapture.retryText.trim() }
+              : {}),
+            confirmationText: parsed.emailCapture.confirmationText.trim(),
+          },
+        }
+      : {}),
   };
 }
 

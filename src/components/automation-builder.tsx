@@ -11,6 +11,7 @@ import {
   CircleHelp,
   Film,
   Link2,
+  Mail,
   MessageCircle,
   Plus,
   Send,
@@ -145,6 +146,10 @@ function AutomationBuilderV1({
   const [actions, setActions] = useState<FlowAction[]>(() =>
     initialDefinition.actions.length > 0 ? initialDefinition.actions : [newClassicAction("private_reply")],
   );
+  const [emailCaptureEnabled, setEmailCaptureEnabled] = useState(Boolean(initialDefinition.emailCapture));
+  const [emailPrompt, setEmailPrompt] = useState(initialDefinition.emailCapture?.promptText ?? "");
+  const [emailRetry, setEmailRetry] = useState(initialDefinition.emailCapture?.retryText ?? "");
+  const [emailConfirmation, setEmailConfirmation] = useState(initialDefinition.emailCapture?.confirmationText ?? "");
   const [scheduleStart, setScheduleStart] = useState(isoToLocalInput(initialDefinition.schedule?.startsAt));
   const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
   const [dailyLimit, setDailyLimit] = useState(initialDefinition.dailySendLimit ? String(initialDefinition.dailySendLimit) : "");
@@ -179,11 +184,13 @@ function AutomationBuilderV1({
       setActions((current) => (current.every((action) => action.type === "private_reply") ? current : [newClassicAction("private_reply")]));
       setTriggerMatch((current) => current);
     }
-    if (value === "message" || value === "referral" || value === "optin") {
+    if (value === "message" || value === "referral" || value === "optin" || value === "first_contact" || value === "story_mention") {
       setActions((current) => current.filter((action) => action.type !== "private_reply").length > 0
         ? current.filter((action) => action.type !== "private_reply")
         : [newClassicAction("send_text")]);
     }
+    // Comment flows cannot collect emails (they may only send a single private reply).
+    if (value === "comment") setEmailCaptureEnabled(false);
   }
 
   function buildDefinition(): FlowDefinitionV1 {
@@ -225,6 +232,15 @@ function AutomationBuilderV1({
       actions: actions.map((action) => ({ ...action, text: action.text.trim() })),
       ...(Number.isFinite(parsedLimit) && parsedLimit > 0 ? { dailySendLimit: parsedLimit } : {}),
       ...(startsAt || endsAt ? { schedule } : {}),
+      ...(emailCaptureEnabled && triggerType !== "comment" && emailPrompt.trim() && emailConfirmation.trim()
+        ? {
+            emailCapture: {
+              promptText: emailPrompt.trim(),
+              ...(emailRetry.trim() ? { retryText: emailRetry.trim() } : {}),
+              confirmationText: emailConfirmation.trim(),
+            },
+          }
+        : {}),
     };
   }
 
@@ -260,6 +276,10 @@ function AutomationBuilderV1({
     }
     if (actions.some((action) => (action.type === "send_link" || action.type === "send_button") && !action.url.trim())) {
       setError("Link actions need a URL.");
+      return;
+    }
+    if (emailCaptureEnabled && triggerType !== "comment" && (!emailPrompt.trim() || !emailConfirmation.trim())) {
+      setError("The email collector needs both a prompt and a confirmation message.");
       return;
     }
     setSaving(true);
@@ -324,6 +344,8 @@ function AutomationBuilderV1({
                   >
                     <option value="comment">Instagram comment</option>
                     <option value="message">Instagram DM</option>
+                    <option value="first_contact">First-time contact</option>
+                    <option value="story_mention">Story mention</option>
                     <option value="referral">Referral link tap</option>
                     <option value="optin">Opt-in tap</option>
                   </select>
@@ -503,8 +525,76 @@ function AutomationBuilderV1({
 
         <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
 
+        {triggerType !== "comment" && (
+          <section className="flow-step">
+            <div className="step-marker action-marker">{usesTextTrigger ? "04" : "03"}</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Email collector <em>optional</em></p>
+                  <h2>Collect email addresses automatically</h2>
+                </div>
+                <Mail size={21} strokeWidth={1.7} />
+              </div>
+              <label className="field checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={emailCaptureEnabled}
+                  onChange={(event) => setEmailCaptureEnabled(event.target.checked)}
+                />
+                <span>Ask for the person’s email after this flow runs</span>
+              </label>
+              {emailCaptureEnabled && (
+                <>
+                  <p className="muted field-spaced">
+                    After your messages send, ReplyConnect asks for their email, checks the reply looks like a real
+                    address (up to two retries), saves it to your audience list, and confirms. If someone already sent
+                    an email in their first message, it’s captured instantly.
+                  </p>
+                  <label className="field field-spaced">
+                    <span>Prompt asking for the email</span>
+                    <textarea
+                      aria-label="Email prompt"
+                      value={emailPrompt}
+                      onChange={(event) => setEmailPrompt(event.target.value)}
+                      rows={2}
+                      maxLength={500}
+                      placeholder="What’s the best email address to send it to?"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Retry message <em>optional</em></span>
+                    <textarea
+                      aria-label="Email retry message"
+                      value={emailRetry}
+                      onChange={(event) => setEmailRetry(event.target.value)}
+                      rows={2}
+                      maxLength={500}
+                      placeholder="Sent when a reply isn’t a valid email address"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Confirmation message</span>
+                    <textarea
+                      aria-label="Email confirmation message"
+                      value={emailConfirmation}
+                      onChange={(event) => setEmailConfirmation(event.target.value)}
+                      rows={2}
+                      maxLength={500}
+                      placeholder="You’re in! ✅ Check your inbox."
+                    />
+                    <small>Captured emails appear on your My Automations page.</small>
+                  </label>
+                </>
+              )}
+            </div>
+          </section>
+        )}
+
+        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
+
         <section className="flow-step">
-          <div className="step-marker guard-marker">{usesTextTrigger ? "04" : "03"}</div>
+          <div className="step-marker guard-marker">{usesTextTrigger ? "05" : "04"}</div>
           <div className="step-content">
             <div className="step-heading">
               <div>

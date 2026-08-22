@@ -51,14 +51,14 @@ export default async function NewAutomationPage({ searchParams }: NewAutomationP
   }
   const classic = type === "classic";
   const template = templateId ? getTemplateById(templateId) : undefined;
-  const setup = template?.available ? template.setup : undefined;
+  const setup = template?.setup;
   return (
     <AppShell>
       <div className="page-wrap builder-wrap">
-        <Link className="back-link" href={setup ? "/automations/templates" : "/automations/new"}>
-          <ArrowLeft size={16} /> {setup ? "Back to templates" : "Back to automation types"}
+        <Link className="back-link" href={template ? "/automations/templates" : "/automations/new"}>
+          <ArrowLeft size={16} /> {template ? "Back to templates" : "Back to automation types"}
         </Link>
-        {template?.available && setup && (
+        {template && setup && (
           <p className="template-prefill-note muted">
             Started from the “{template.title.split(":")[0]}” recipe — tweak anything before saving.
           </p>

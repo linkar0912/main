@@ -1,23 +1,17 @@
 import type { FlowDefinitionV1 } from "./types";
 
-export type TemplateIllustration = "follow" | "faq" | "story" | "default" | "menu";
+export type TemplateIllustration = "follow" | "faq" | "story" | "default" | "menu" | "email";
 
 /**
- * A premade automation recipe shown in the Basic gallery. Available recipes carry a
- * builder prefill (`setup`) that is always a version-1 definition so the classic
- * builder can open it directly; unavailable recipes describe a capability the engine
- * does not have yet and never carry one.
+ * A premade automation recipe shown in the Basic gallery. Every recipe is runnable on
+ * the current engine and carries a builder prefill (`setup`) that is always a version-1
+ * definition so the classic builder can open it directly.
  */
 export type PremadeTemplate = {
   id: string;
   title: string;
   description: string;
-  /** Small pill rendered next to the title, e.g. "BETA". */
-  badge?: string;
-  /** False when the engine cannot run this recipe yet; see `unavailableNote`. */
-  available: boolean;
-  unavailableNote?: string;
-  icon: "user-plus" | "message" | "at-sign" | "reply" | "menu";
+  icon: "user-plus" | "message" | "at-sign" | "reply" | "menu" | "mail";
   illustration: TemplateIllustration;
   /** Prefill handed to the builder when the template is set up. */
   setup?: { name: string; definition: FlowDefinitionV1 };
@@ -28,19 +22,29 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
     id: "welcome-new-followers",
     title: "Say hi to new followers: first impressions are everything",
     description:
-      "A one-time welcome DM sent through Meta’s official API to new Instagram followers the moment they hit follow, but only the first time they do.",
-    badge: "BETA",
-    available: false,
-    unavailableNote: "Follow events are not part of the engine yet.",
+      "A one-time welcome DM for every new person who starts their first conversation with you. Meta’s API never exposes follows directly, so ReplyConnect greets each first-time contact exactly once — no repeats, ever.",
     icon: "user-plus",
     illustration: "follow",
+    setup: {
+      name: "Welcome new contacts",
+      definition: {
+        version: 1,
+        trigger: { type: "first_contact" },
+        conditions: [],
+        actions: [
+          {
+            type: "send_text",
+            text: "Hi there 👋 Thanks for reaching out! I’m here whenever you need prices, hours, or anything else — just say the word.",
+          },
+        ],
+      },
+    },
   },
   {
     id: "conversation-starters",
     title: "Conversation Starters: help customers start a conversation with your business",
     description:
       "Creating a positive first impression is essential. When someone messages your Instagram account about prices, hours, or delivery, they instantly get a helpful reply with tappable buttons.",
-    available: true,
     icon: "message",
     illustration: "faq",
     setup: {
@@ -69,17 +73,58 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
     title: "Story Mention Reply: respond to users who mention you in their Story",
     description:
       "When followers mention your Instagram account in their Story, you can send a ‘Thank You’ message or start an automated conversation to engage and chat with customers at scale.",
-    available: false,
-    unavailableNote: "Story mention triggers are on the roadmap.",
     icon: "at-sign",
     illustration: "story",
+    setup: {
+      name: "Story mention reply",
+      definition: {
+        version: 1,
+        trigger: { type: "story_mention" },
+        conditions: [],
+        actions: [
+          { type: "send_text", text: "Thanks for mentioning us in your Story! 🧡 It means a lot." },
+          {
+            type: "send_button",
+            text: "Here’s a little thank-you gift for you.",
+            buttonLabel: "Claim your gift 🎁",
+            url: "https://example.com/gift",
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: "email-capture",
+    title: "Email Capture: turn conversations into subscribers",
+    description:
+      "Collect emails without lifting a finger. When someone texts your keyword, they get your offer and are asked for their email — ReplyConnect validates the reply, saves it to your audience list, and confirms automatically.",
+    icon: "mail",
+    illustration: "email",
+    setup: {
+      name: "Email capture",
+      definition: {
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: ["guide", "freebie", "newsletter"] },
+        conditions: [],
+        actions: [
+          {
+            type: "send_text",
+            text: "Awesome — here’s your free guide! 📬 Drop your email address in the chat and I’ll send it straight over.",
+          },
+        ],
+        emailCapture: {
+          promptText: "What’s the best email address to send it to?",
+          retryText: "Hmm, that doesn’t look like an email address. Mind typing it again? (e.g. you@example.com)",
+          confirmationText: "You’re in! ✅ Check your inbox — the guide is on its way. Talk soon!",
+        },
+      },
+    },
   },
   {
     id: "default-reply",
     title: "Default Reply: send instant replies to incoming Direct Messages",
     description:
       "To handle a high volume of messages, set up a Default Reply. When contacts send a message without matching Keywords, they will immediately receive a predefined Default Reply.",
-    available: true,
     icon: "reply",
     illustration: "default",
     setup: {
@@ -102,7 +147,6 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
     title: "Main Menu: assist followers in locating information quickly",
     description:
       "Give followers a reliable way to find information anytime. When they text MENU they get an automated reply with tappable options — no digging through the profile needed.",
-    available: true,
     icon: "menu",
     illustration: "menu",
     setup: {
