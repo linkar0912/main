@@ -2,9 +2,10 @@ import Link from "next/link";
 import { ArrowLeft, Clapperboard, Zap } from "lucide-react";
 import { AppShell } from "@/src/components/app-shell";
 import { AutomationBuilder } from "@/src/components/automation-builder";
+import { getTemplateById } from "@/src/lib/automation/templates";
 
 type NewAutomationPageProps = {
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; template?: string }>;
 };
 
 function TypeChooser() {
@@ -38,21 +39,35 @@ function TypeChooser() {
           <span className="chooser-cta">Build autoresponder</span>
         </Link>
       </div>
+      <p className="chooser-alt muted">Want a head start? <Link className="text-link" href="/automations/templates">Browse premade templates</Link></p>
     </div>
   );
 }
 
 export default async function NewAutomationPage({ searchParams }: NewAutomationPageProps) {
-  const { type } = await searchParams;
+  const { type, template: templateId } = await searchParams;
   if (type !== "campaign" && type !== "classic") {
     return <AppShell><TypeChooser /></AppShell>;
   }
   const classic = type === "classic";
+  const template = templateId ? getTemplateById(templateId) : undefined;
+  const setup = template?.available ? template.setup : undefined;
   return (
     <AppShell>
       <div className="page-wrap builder-wrap">
-        <Link className="back-link" href="/automations/new"><ArrowLeft size={16} /> Back to automation types</Link>
-        <AutomationBuilder variant={classic ? "classic" : "campaign"} />
+        <Link className="back-link" href={setup ? "/automations/templates" : "/automations/new"}>
+          <ArrowLeft size={16} /> {setup ? "Back to templates" : "Back to automation types"}
+        </Link>
+        {template?.available && setup && (
+          <p className="template-prefill-note muted">
+            Started from the “{template.title.split(":")[0]}” recipe — tweak anything before saving.
+          </p>
+        )}
+        <AutomationBuilder
+          variant={classic ? "classic" : "campaign"}
+          initialName={setup?.name}
+          initialDefinition={setup?.definition}
+        />
       </div>
     </AppShell>
   );

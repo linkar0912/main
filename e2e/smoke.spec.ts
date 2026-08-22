@@ -58,6 +58,26 @@ test("classic builder creates a keyword autoresponder", async ({ page }) => {
   await expect(page.getByText(/DM contains price/).first()).toBeVisible();
 });
 
+test("basic template gallery sets up a ready-to-edit automation", async ({ page }) => {
+  await page.goto("/automations/templates");
+  await expect(page.getByRole("heading", { name: "Automation", exact: true })).toBeVisible();
+
+  // Unavailable recipes show a note instead of Set Up.
+  const followCard = page.locator(".template-card", { hasText: "Say hi to new followers" });
+  await expect(followCard.getByText("Unavailable for now.")).toBeVisible();
+
+  const startersCard = page.locator(".template-card", { hasText: "Conversation Starters" });
+  await startersCard.getByRole("link", { name: "Set Up" }).click();
+  await expect(page.getByRole("heading", { name: /Build a reply flow/i })).toBeVisible();
+  await expect(page.getByLabel("Automation name")).toHaveValue("Conversation starters");
+
+  await page.getByRole("button", { name: "Save automation" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved to your workspace.");
+
+  await page.goto("/automations");
+  await expect(page.getByText(/DM contains price/).first()).toBeVisible();
+});
+
 test("guided builder saves an automation", async ({ page }) => {
   // `/automations/new` now always opens the version 2 campaign builder (see the
   // "guided builder creates a follow-gated Reel campaign" test below); the
