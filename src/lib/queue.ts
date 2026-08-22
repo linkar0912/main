@@ -83,3 +83,40 @@ export async function enqueueWebhookEvents(events: NormalizedEvent[]): Promise<n
   );
   return events.length;
 }
+// Broadcasts: one DM per contact, fanned out as staggered jobs (~1/second) so a
+// blast never hammers Meta's per-account messaging limits.
+export type BroadcastSendJob = {
+  broadcastId: string;
+  workspaceId: string;
+  broadcastName: string;
+  text: string;
+  igAccountId: string;
+  igScopedUserId: string;
+};
+
+export async function enqueueBroadcastSends(jobs: BroadcastSendJob[]): Promise<number> {
+  const queue = getWebhookQueue();
+  if (!queue) return 0;
+  let enqueued = 0;
+  await Promise.all(
+    jobs.map((job, index) =>
+      queue
+        .add(
+          "broadcast-send",
+          job,
+          {
+            jobId: `broadcast:${job.broadcastId}:${job.igScopedUserId}`,
+            delay: Math.min(index, 600) * 1_000,
+            attempts: 2,
+            backoff: { type: "fixed", delay: 5_000 },
+            removeOnComplete: 500,
+            removeOnFail: 1_000,
+          },
+        )
+        .then(() => {
+          enqueued += 1;
+        }),
+    ),
+  );
+  return enqueued;
+}

@@ -22,6 +22,13 @@ import type {
   InvitationRecord,
   AutomationContactRecord,
   CapturedContactSummary,
+  AutomationSequenceRecord,
+  SequenceStep,
+  SequenceEnrollmentRecord,
+  EnrollmentState,
+  SequenceEnrollmentCount,
+  DueSequenceSend,
+  BroadcastRecord,
 } from "./repository";
 
 function mapUser(record: {
@@ -228,6 +235,58 @@ function mapContact(record: {
     lastSeenAt: record.lastSeenAt.toISOString(),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapSequenceRow(record: {
+  id: string;
+  workspaceId: string;
+  name: string;
+  status: string;
+  steps: unknown;
+  sourceAutomationId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): AutomationSequenceRecord {
+  return {
+    id: record.id,
+    workspaceId: record.workspaceId,
+    name: record.name,
+    status: record.status as AutomationSequenceRecord["status"],
+    steps: record.steps as SequenceStep[],
+    ...(record.sourceAutomationId ? { sourceAutomationId: record.sourceAutomationId } : {}),
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapBroadcastRow(record: {
+  id: string;
+  workspaceId: string;
+  name: string;
+  text: string;
+  segment: string;
+  status: string;
+  total: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  createdAt: Date;
+  completedAt: Date | null;
+}): BroadcastRecord {
+  return {
+    id: record.id,
+    workspaceId: record.workspaceId,
+    name: record.name,
+    text: record.text,
+    segment: record.segment as BroadcastRecord["segment"],
+    status: record.status as BroadcastRecord["status"],
+    total: record.total,
+    sent: record.sent,
+    failed: record.failed,
+    skipped: record.skipped,
+    createdAt: record.createdAt.toISOString(),
+    completedAt: record.completedAt?.toISOString(),
   };
 }
 
@@ -959,6 +1018,23 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapParticipant);
     },
 
+    async countExecutionsByStatusPerAutomation(workspaceId, sinceIso) {
+      const grouped = await client.automationExecution.groupBy({
+        by: ["automationId", "status"],
+        where: { workspaceId, createdAt: { gte: new Date(sinceIso) }, status: { in: ["SENT", "FAILED", "SKIPPED"] } },
+        _count: { _all: true },
+      });
+      const tallies = new Map<string, { automationId: string; sent: number; failed: number; skipped: number }>();
+      for (const entry of grouped) {
+        const tally = tallies.get(entry.automationId) ?? { automationId: entry.automationId, sent: 0, failed: 0, skipped: 0 };
+        if (entry.status === "SENT") tally.sent += entry._count._all;
+        else if (entry.status === "FAILED") tally.failed += entry._count._all;
+        else tally.skipped += entry._count._all;
+        tallies.set(entry.automationId, tally);
+      }
+      return [...tallies.values()];
+    },
+
     async expireParticipantsByInstagramAccount(instagramAccountId, reason) {
       const result = await client.automationParticipant.updateMany({
         where: {
@@ -1125,6 +1201,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
         },
       });
+      await client.sequenceEnrollment.updateMany({
+        where: { contactId: current.id, state: "ACTIVE" },
+        data: { state: "CANCELLED" },
+      });
       return mapContact(updated);
     },
 
@@ -1157,6 +1237,203 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async deleteAutomation(workspaceId, id) {
       const result = await client.automation.deleteMany({ where: { workspaceId, id } });
       return result.count > 0;
+    },
+
+    async createSequence(workspaceId, input) {
+      const created = await client.automationSequence.create({
+        data: {
+          id: createId("sequence"),
+          workspaceId,
+          name: input.name.trim(),
+          status: input.status,
+          steps: input.steps,
+          ...(input.sourceAutomationId ? { sourceAutomationId: input.sourceAutomationId } : {}),
+        },
+      });
+      return mapSequenceRow(created);
+    },
+
+    async getSequence(workspaceId, id) {
+      const record = await client.automationSequence.findFirst({ where: { workspaceId, id } });
+      if (!record) return null;
+      return mapSequenceRow(record);
+    },
+
+    async updateSequence(workspaceId, id, patch) {
+      const updated = await client.automationSequence.updateMany({
+        where: { workspaceId, id },
+        data: {
+          ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+          ...(patch.status !== undefined ? { status: patch.status } : {}),
+          ...(patch.steps !== undefined ? { steps: patch.steps } : {}),
+          ...(patch.sourceAutomationId !== undefined ? { sourceAutomationId: patch.sourceAutomationId || null } : {}),
+        },
+      });
+      if (updated.count === 0) return null;
+      return this.getSequence(workspaceId, id);
+    },
+
+    async deleteSequence(workspaceId, id) {
+      const result = await client.automationSequence.deleteMany({ where: { workspaceId, id } });
+      return result.count > 0;
+    },
+
+    async listSequences(workspaceId) {
+      const records = await client.automationSequence.findMany({
+        where: { workspaceId },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      });
+      return records.map(mapSequenceRow);
+    },
+
+    async listActiveSequencesForSource(workspaceId, sourceAutomationId) {
+      const records = await client.automationSequence.findMany({
+        where: { workspaceId, status: "ACTIVE", sourceAutomationId },
+      });
+      return records
+        .map(mapSequenceRow)
+        .filter((sequence) => sequence.steps.length > 0);
+    },
+
+    async countEnrollmentsBySequence(workspaceId): Promise<SequenceEnrollmentCount[]> {
+      const grouped = await client.sequenceEnrollment.groupBy({
+        by: ["sequenceId"],
+        where: { workspaceId, state: { not: "CANCELLED" } },
+        _count: { _all: true },
+      });
+      return grouped.map((entry) => ({ sequenceId: entry.sequenceId, count: entry._count._all }));
+    },
+
+    async enrollContactInSequence(workspaceId, sequenceId, contactId, firstDelayHours, nowIso) {
+      const existing = await client.sequenceEnrollment.findUnique({
+        where: { sequenceId_contactId: { sequenceId, contactId } },
+      });
+      if (existing) return { created: false };
+      try {
+        await client.sequenceEnrollment.create({
+          data: {
+            id: createId("enrollment"),
+            workspaceId,
+            sequenceId,
+            contactId,
+            nextSendAt: new Date(Date.parse(nowIso) + firstDelayHours * 3_600_000),
+          },
+        });
+        return { created: true };
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        return { created: false };
+      }
+    },
+
+    async listDueSequenceSends(nowIso, limit): Promise<DueSequenceSend[]> {
+      const enrollments = await client.sequenceEnrollment.findMany({
+        where: { state: "ACTIVE", nextSendAt: { lte: new Date(nowIso) } },
+        orderBy: { nextSendAt: "asc" },
+        take: limit,
+      });
+      const due: DueSequenceSend[] = [];
+      for (const enrollment of enrollments) {
+        const sequenceRow = await client.automationSequence.findUnique({ where: { id: enrollment.sequenceId } });
+        const contactRow = await client.automationContact.findUnique({ where: { id: enrollment.contactId } });
+        if (!sequenceRow || !contactRow || contactRow.suppressedAt) continue;
+        if (sequenceRow.workspaceId !== enrollment.workspaceId) continue;
+        if (sequenceRow.status !== "ACTIVE") continue;
+        due.push({
+          enrollment: {
+            ...enrollment,
+            state: enrollment.state as SequenceEnrollmentRecord["state"],
+            nextSendAt: enrollment.nextSendAt?.toISOString(),
+            enrolledAt: enrollment.enrolledAt.toISOString(),
+            updatedAt: enrollment.updatedAt.toISOString(),
+          },
+          sequence: mapSequenceRow(sequenceRow),
+          contact: mapContact(contactRow),
+        });
+      }
+      return due;
+    },
+
+    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso) {
+      await client.sequenceEnrollment.update({
+        where: { id },
+        data: {
+          currentStepIndex: nextIndex,
+          nextSendAt: nextSendAtIso ? new Date(nextSendAtIso) : null,
+          state: nextSendAtIso ? "ACTIVE" : "COMPLETED",
+        },
+      });
+    },
+
+    async cancelEnrollmentsForContact(contactId) {
+      const result = await client.sequenceEnrollment.updateMany({
+        where: { contactId, state: "ACTIVE" },
+        data: { state: "CANCELLED" },
+      });
+      return result.count;
+    },
+
+    async createBroadcast(workspaceId, input) {
+      const created = await client.broadcast.create({
+        data: {
+          id: createId("broadcast"),
+          workspaceId,
+          name: input.name.trim(),
+          text: input.text,
+          segment: input.segment,
+          status: input.total > 0 ? "RUNNING" : "COMPLETED",
+          total: input.total,
+          ...(input.total > 0 ? {} : { completedAt: new Date() }),
+        },
+      });
+      return mapBroadcastRow(created);
+    },
+
+    async getBroadcast(workspaceId, id) {
+      const record = await client.broadcast.findFirst({ where: { workspaceId, id } });
+      if (!record) return null;
+      return mapBroadcastRow(record);
+    },
+
+    async listBroadcasts(workspaceId, limit) {
+      const records = await client.broadcast.findMany({
+        where: { workspaceId },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        take: limit,
+      });
+      return records.map(mapBroadcastRow);
+    },
+
+    async incrementBroadcastCounters(id, delta) {
+      await client.broadcast.update({
+        where: { id },
+        data: {
+          sent: { increment: delta.sent ?? 0 },
+          failed: { increment: delta.failed ?? 0 },
+          skipped: { increment: delta.skipped ?? 0 },
+        },
+      });
+    },
+
+    async finalizeBroadcastIfDone(workspaceId, id) {
+      const broadcast = await client.broadcast.findFirst({ where: { workspaceId, id } });
+      if (!broadcast || broadcast.status !== "RUNNING") return;
+      if (broadcast.sent + broadcast.failed + broadcast.skipped < broadcast.total) return;
+      await client.broadcast.update({ where: { id: broadcast.id }, data: { status: "COMPLETED", completedAt: new Date() } });
+    },
+
+    async listBroadcastRecipients(workspaceId, segment, limit) {
+      const records = await client.automationContact.findMany({
+        where: {
+          workspaceId,
+          suppressedAt: null,
+          ...(segment === "captured_email" ? { state: "CAPTURED", email: { not: null } } : {}),
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        take: limit,
+        select: { igScopedUserId: true, instagramAccountId: true },
+      });
+      return records;
     },
   };
 }

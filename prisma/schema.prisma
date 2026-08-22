@@ -107,6 +107,8 @@ model Workspace {
   executions    AutomationExecution[]
   webhookEvents WebhookEvent[]
   contacts      AutomationContact[]
+  sequences     AutomationSequence[]
+  broadcasts    Broadcast[]
 }
 
 model WorkspaceMember {
@@ -212,9 +214,64 @@ model AutomationContact {
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
   workspace            Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  enrollments          SequenceEnrollment[]
 
   @@unique([workspaceId, instagramAccountId, igScopedUserId])
   @@index([workspaceId, state])
+}
+
+// A timed drip campaign: ordered steps, each sent to enrolled contacts after a delay.
+model AutomationSequence {
+  id                 String    @id
+  workspaceId        String
+  name               String
+  status             String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED
+  steps              Json      // SequenceStep[]
+  sourceAutomationId String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  enrollments        SequenceEnrollment[]
+
+  @@index([workspaceId, status])
+}
+
+// Per-contact progress through a sequence.
+model SequenceEnrollment {
+  id               String             @id
+  workspaceId      String
+  sequenceId       String
+  contactId        String
+  currentStepIndex Int                @default(0)
+  nextSendAt       DateTime?
+  state            String             @default("ACTIVE") // ACTIVE | COMPLETED | CANCELLED
+  enrolledAt       DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  sequence         AutomationSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  contact          AutomationContact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([sequenceId, contactId])
+  @@index([state, nextSendAt])
+  @@index([contactId])
+}
+
+// A one-off DM blast to a segment of the contact registry.
+model Broadcast {
+  id          String    @id
+  workspaceId String
+  name        String
+  text        String
+  segment     String // all_contacts | captured_email
+  status      String    @default("PENDING") // PENDING | RUNNING | COMPLETED
+  total       Int       @default(0)
+  sent        Int       @default(0)
+  failed      Int       @default(0)
+  skipped     Int       @default(0)
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
 }
 
 model AutomationExecution {

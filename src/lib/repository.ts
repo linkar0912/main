@@ -141,6 +141,68 @@ export type CapturedContactSummary = {
   capturedAt: string;
 };
 
+export type SequenceStep = {
+  id: string;
+  /** Hours to wait after the previous step (0 = immediately on enrollment). */
+  delayHours: number;
+  text: string;
+};
+
+export type SequenceStatus = "DRAFT" | "ACTIVE" | "PAUSED";
+
+export type AutomationSequenceRecord = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  status: SequenceStatus;
+  steps: SequenceStep[];
+  /** When set, contacts captured by this automation enroll automatically. */
+  sourceAutomationId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EnrollmentState = "ACTIVE" | "COMPLETED" | "CANCELLED";
+
+export type SequenceEnrollmentRecord = {
+  id: string;
+  workspaceId: string;
+  sequenceId: string;
+  contactId: string;
+  currentStepIndex: number;
+  nextSendAt?: string;
+  state: EnrollmentState;
+  enrolledAt: string;
+  updatedAt: string;
+};
+
+export type SequenceEnrollmentCount = { sequenceId: string; count: number };
+
+/** One scheduler-ready send: enrollment plus everything needed to deliver it. */
+export type DueSequenceSend = {
+  enrollment: SequenceEnrollmentRecord;
+  sequence: AutomationSequenceRecord;
+  contact: AutomationContactRecord;
+};
+
+export type BroadcastSegment = "all_contacts" | "captured_email";
+export type BroadcastStatus = "PENDING" | "RUNNING" | "COMPLETED";
+
+export type BroadcastRecord = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  text: string;
+  segment: BroadcastSegment;
+  status: BroadcastStatus;
+  total: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  createdAt: string;
+  completedAt?: string;
+};
+
 export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt" | "dispatchStatus"> & {
   dispatchStatus?: ExecutionDispatchStatus;
 };
@@ -247,6 +309,11 @@ export interface AutomationRepository {
   countParticipantsCreatedSince(workspaceId: string, sinceIso: string): Promise<number>;
   // Analytics helpers (UTC day buckets over the trailing window).
   countParticipantsPerDay(workspaceId: string, days: number): Promise<DailyCount[]>;
+  /** Per-automation execution outcome tallies since the given instant (funnels). */
+  countExecutionsByStatusPerAutomation(
+    workspaceId: string,
+    sinceIso: string,
+  ): Promise<{ automationId: string; sent: number; failed: number; skipped: number }[]>;
   countExecutionsSentPerDay(workspaceId: string, days: number): Promise<DailyCount[]>;
   countParticipantsByMedia(workspaceId: string): Promise<MediaPerformance[]>;
   // Click tracking for delivered links.
@@ -330,4 +397,46 @@ export interface AutomationRepository {
   countCapturedContacts(workspaceId: string): Promise<number>;
   listCapturedContacts(workspaceId: string, limit: number): Promise<CapturedContactSummary[]>;
   deleteContactsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
+  // Sequences (timed drip campaigns over DM).
+  createSequence(
+    workspaceId: string,
+    input: { name: string; status: SequenceStatus; steps: SequenceStep[]; sourceAutomationId?: string },
+  ): Promise<AutomationSequenceRecord>;
+  getSequence(workspaceId: string, id: string): Promise<AutomationSequenceRecord | null>;
+  updateSequence(
+    workspaceId: string,
+    id: string,
+    patch: Partial<Pick<AutomationSequenceRecord, "name" | "status" | "steps" | "sourceAutomationId">>,
+  ): Promise<AutomationSequenceRecord | null>;
+  deleteSequence(workspaceId: string, id: string): Promise<boolean>;
+  listSequences(workspaceId: string): Promise<AutomationSequenceRecord[]>;
+  listActiveSequencesForSource(workspaceId: string, sourceAutomationId: string): Promise<AutomationSequenceRecord[]>;
+  countEnrollmentsBySequence(workspaceId: string): Promise<SequenceEnrollmentCount[]>;
+  /** Idempotent per (sequenceId, contactId); schedules step 0 at now + firstDelayHours. */
+  enrollContactInSequence(
+    workspaceId: string,
+    sequenceId: string,
+    contactId: string,
+    firstDelayHours: number,
+    nowIso: string,
+  ): Promise<{ created: boolean }>;
+  listDueSequenceSends(nowIso: string, limit: number): Promise<DueSequenceSend[]>;
+  /** Advances one step; nextIndex beyond the last step completes the enrollment. */
+  advanceSequenceEnrollment(id: string, nextIndex: number, nextSendAtIso: string | null): Promise<void>;
+  cancelEnrollmentsForContact(contactId: string): Promise<number>;
+  // Broadcasts (one-off DM blasts to a segment).
+  createBroadcast(
+    workspaceId: string,
+    input: { name: string; text: string; segment: BroadcastSegment; total: number },
+  ): Promise<BroadcastRecord>;
+  getBroadcast(workspaceId: string, id: string): Promise<BroadcastRecord | null>;
+  listBroadcasts(workspaceId: string, limit: number): Promise<BroadcastRecord[]>;
+  incrementBroadcastCounters(id: string, delta: { sent?: number; failed?: number; skipped?: number }): Promise<void>;
+  finalizeBroadcastIfDone(workspaceId: string, id: string): Promise<void>;
+  /** Recipients for a broadcast segment — suppressed contacts and DM-less rows excluded. */
+  listBroadcastRecipients(
+    workspaceId: string,
+    segment: BroadcastSegment,
+    limit: number,
+  ): Promise<{ igScopedUserId: string; instagramAccountId: string }[]>;
 }

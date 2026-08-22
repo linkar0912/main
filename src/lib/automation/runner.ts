@@ -110,6 +110,44 @@ function buildLeadDeliveryEmail(
   return { to, subject: delivery.subject, body: lines.join("\n") };
 }
 
+/**
+ * Enrolls a freshly captured lead into every ACTIVE sequence that sources from the
+ * automation which captured them. Idempotent per (sequence, contact); failures are
+ * logged and never break the capture flow.
+ */
+async function enrollNewLeadInSequences(
+  repository: AutomationRepository,
+  mapping: WorkspaceMapping,
+  accountId: string,
+  sourceAutomationId: string,
+  senderId: string,
+): Promise<void> {
+  try {
+    const contact = await repository.getContact(mapping.workspaceId, accountId, senderId);
+    if (!contact || contact.suppressedAt) return;
+    const sequences = await repository.listActiveSequencesForSource(mapping.workspaceId, sourceAutomationId);
+    for (const sequence of sequences) {
+      const result = await repository.enrollContactInSequence(
+        mapping.workspaceId,
+        sequence.id,
+        contact.id,
+        sequence.steps[0]?.delayHours ?? 0,
+        new Date().toISOString(),
+      );
+      if (result.created) {
+        logger.info("Contact enrolled in sequence", {
+          workspaceId: mapping.workspaceId,
+          sequenceId: sequence.id,
+          automationId: sourceAutomationId,
+        });
+      }
+    }
+  } catch (error) {
+    logger.warn("Sequence enrollment failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 type WorkspaceMapping = NonNullable<Awaited<ReturnType<AutomationRepository["findWorkspaceByInstagramAccount"]>>>;
 
 /**
@@ -279,6 +317,7 @@ async function processEmailCaptureReply(
       if (emailCapture.delivery) {
         await deliverLeadEmail(mapping, automation.name, contact.id, candidate, emailCapture.delivery);
       }
+      await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SENT",
         reason: `email_captured:${candidate}`,
@@ -545,6 +584,7 @@ export async function processNormalizedEvent(
               automation.definition.emailCapture.delivery,
             );
           }
+          await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
           void notifyWorkspaceManagers(
             mapping.workspaceId,
             `lead:email:${senderId}`,

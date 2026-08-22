@@ -10,6 +10,9 @@ import type { NormalizedEvent } from "./lib/automation/types";
 import { refreshInstagramToken } from "./lib/meta/oauth";
 import { refreshExpiringInstagramTokens } from "./lib/meta/token-refresh";
 import { sweepStaleParticipants } from "./lib/automation/participant-retention";
+import { processDueSequences } from "./lib/automation/sequence-runner";
+import { processBroadcastSend, type BroadcastRunnerOptions } from "./lib/automation/broadcast-runner";
+import type { BroadcastSendJob } from "./lib/queue";
 
 const env = getServerEnv();
 
@@ -21,6 +24,17 @@ if (!env.redisUrl) {
   const worker = new Worker(
     WEBHOOK_QUEUE_NAME,
     async (job) => {
+      if (job.name === "broadcast-send") {
+        const payload = job.data as BroadcastSendJob;
+        const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+        const options: BroadcastRunnerOptions = {
+          client,
+          tokenEncryptionKey: env.metaTokenEncryptionKey,
+          finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
+        };
+        return processBroadcastSend(payload, getRepository(), options);
+      }
+
       const event = job.data as NormalizedEvent;
       const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
       return processNormalizedEvent(event, getRepository(), {
@@ -85,4 +99,20 @@ if (!env.redisUrl) {
   };
   void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error.message }));
   setInterval(() => void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error.message })), 60 * 60 * 1_000).unref();
+
+  // Sequence scheduler: delivers drip steps that are due. Runs shortly after boot and
+  // then every 15 minutes — granular enough for hour-level step delays.
+  const runSequenceSweep = async () => {
+    const repository = getRepository();
+    const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+    const result = await processDueSequences(repository, {
+      client,
+      tokenEncryptionKey: env.metaTokenEncryptionKey ?? undefined,
+    });
+    if (result.processed > 0) {
+      logger.info("Sequence sweep", { ...result });
+    }
+  };
+  setTimeout(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error.message })), 45_000).unref();
+  setInterval(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error.message })), 15 * 60 * 1_000).unref();
 }

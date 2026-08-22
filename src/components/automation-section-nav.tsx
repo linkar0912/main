@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Workflow, Zap } from "lucide-react";
+import { ListOrdered, Workflow, Zap } from "lucide-react";
 
-/** Left-hand sub-navigation shared by the My Automations list and the Basic gallery. */
-export function AutomationSectionNav({ active }: { active: "my" | "basic" }) {
+/** Left-hand sub-navigation shared by My Automations, Basic and Sequences. */
+export function AutomationSectionNav({ active }: { active: "my" | "basic" | "sequences" }) {
   return (
     <nav className="section-nav" aria-label="Automation sections">
       <Link className={`section-nav-link ${active === "my" ? "is-active" : ""}`} href="/automations">
@@ -14,6 +14,10 @@ export function AutomationSectionNav({ active }: { active: "my" | "basic" }) {
       <Link className={`section-nav-link ${active === "basic" ? "is-active" : ""}`} href="/automations/templates">
         <Zap size={18} strokeWidth={1.8} />
         <span>Basic</span>
+      </Link>
+      <Link className={`section-nav-link ${active === "sequences" ? "is-active" : ""}`} href="/automations/sequences">
+        <ListOrdered size={18} strokeWidth={1.8} />
+        <span>Sequences</span>
       </Link>
     </nav>
   );

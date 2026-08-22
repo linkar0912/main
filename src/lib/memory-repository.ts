@@ -24,6 +24,15 @@ import type {
   AutomationContactRecord,
   CapturedContactSummary,
   TouchContactResult,
+  AutomationSequenceRecord,
+  SequenceStep,
+  SequenceStatus,
+  SequenceEnrollmentRecord,
+  EnrollmentState,
+  SequenceEnrollmentCount,
+  DueSequenceSend,
+  BroadcastRecord,
+  BroadcastSegment,
 } from "./repository";
 
 function now(): string {
@@ -59,6 +68,10 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const participantIdsBySource = new Map<string, string>();
   const contacts = new Map<string, AutomationContactRecord>();
   const contactIdsBySender = new Map<string, string>();
+  const sequences = new Map<string, AutomationSequenceRecord>();
+  const enrollments = new Map<string, SequenceEnrollmentRecord>();
+  const enrollmentIdsByPair = new Map<string, string>();
+  const broadcasts = new Map<string, BroadcastRecord>();
   const usersByEmail = new Map<string, UserRecord>();
   const usersById = new Map<string, UserRecord>();
   // email -> workspaceId, mirroring WorkspaceMember rows for login lookups.
@@ -637,6 +650,21 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       );
     },
 
+    async countExecutionsByStatusPerAutomation(workspaceId, sinceIso) {
+      const sinceMs = Date.parse(sinceIso);
+      const tallies = new Map<string, { sent: number; failed: number; skipped: number }>();
+      for (const execution of executions.values()) {
+        if (execution.workspaceId !== workspaceId || Date.parse(execution.createdAt) < sinceMs) continue;
+        if (!(["SENT", "FAILED", "SKIPPED"] as const).includes(execution.status as "SENT" | "FAILED" | "SKIPPED")) continue;
+        const tally = tallies.get(execution.automationId) ?? { sent: 0, failed: 0, skipped: 0 };
+        if (execution.status === "SENT") tally.sent += 1;
+        else if (execution.status === "FAILED") tally.failed += 1;
+        else tally.skipped += 1;
+        tallies.set(execution.automationId, tally);
+      }
+      return [...tallies.entries()].map(([automationId, t]) => ({ automationId, ...t }));
+    },
+
     async expireParticipantsByInstagramAccount(instagramAccountId, reason) {
       let count = 0;
       for (const [id, participant] of participants.entries()) {
@@ -789,6 +817,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         updatedAt: now(),
       };
       contacts.set(id, updated);
+      await this.cancelEnrollmentsForContact(id);
       return copy(updated);
     },
 
@@ -837,6 +866,213 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         if (execution.automationId === id) executions.delete(executionId);
       }
       return true;
+    },
+
+    async createSequence(workspaceId, input) {
+      const timestamp = now();
+      const record: AutomationSequenceRecord = {
+        id: createId("sequence"),
+        workspaceId,
+        name: input.name.trim(),
+        status: input.status,
+        steps: copy(input.steps),
+        ...(input.sourceAutomationId ? { sourceAutomationId: input.sourceAutomationId } : {}),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      sequences.set(record.id, record);
+      return copy(record);
+    },
+
+    async getSequence(workspaceId, id) {
+      const record = sequences.get(id);
+      return record?.workspaceId === workspaceId ? copy(record) : null;
+    },
+
+    async updateSequence(workspaceId, id, patch) {
+      const current = sequences.get(id);
+      if (!current || current.workspaceId !== workspaceId) return null;
+      const updated: AutomationSequenceRecord = {
+        ...current,
+        ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+        ...(patch.status !== undefined ? { status: patch.status satisfies SequenceStatus } : {}),
+        ...(patch.steps !== undefined ? { steps: copy(patch.steps) } : {}),
+        ...(patch.sourceAutomationId !== undefined
+          ? patch.sourceAutomationId
+            ? { sourceAutomationId: patch.sourceAutomationId }
+            : {}
+          : {}),
+        updatedAt: now(),
+      };
+      sequences.set(id, updated);
+      return copy(updated);
+    },
+
+    async deleteSequence(workspaceId, id) {
+      const record = sequences.get(id);
+      if (!record || record.workspaceId !== workspaceId) return false;
+      sequences.delete(id);
+      for (const [enrollmentId, enrollment] of [...enrollments.entries()]) {
+        if (enrollment.sequenceId === id) {
+          enrollments.delete(enrollmentId);
+          enrollmentIdsByPair.delete(`${enrollment.sequenceId}:${enrollment.contactId}`);
+        }
+      }
+      return true;
+    },
+
+    async listSequences(workspaceId) {
+      return copy(
+        [...sequences.values()]
+          .filter((sequence) => sequence.workspaceId === workspaceId)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)),
+      );
+    },
+
+    async listActiveSequencesForSource(workspaceId, sourceAutomationId) {
+      return [...sequences.values()].filter(
+        (sequence) =>
+          sequence.workspaceId === workspaceId
+          && sequence.status === "ACTIVE"
+          && sequence.sourceAutomationId === sourceAutomationId
+          && sequence.steps.length > 0,
+      );
+    },
+
+    async countEnrollmentsBySequence(workspaceId): Promise<SequenceEnrollmentCount[]> {
+      const counts = new Map<string, number>();
+      for (const enrollment of enrollments.values()) {
+        if (enrollment.workspaceId !== workspaceId || enrollment.state === "CANCELLED") continue;
+        counts.set(enrollment.sequenceId, (counts.get(enrollment.sequenceId) ?? 0) + 1);
+      }
+      return [...counts.entries()].map(([sequenceId, count]) => ({ sequenceId, count }));
+    },
+
+    async enrollContactInSequence(workspaceId, sequenceId, contactId, firstDelayHours, nowIso) {
+      const pairKey = `${sequenceId}:${contactId}`;
+      const existingId = enrollmentIdsByPair.get(pairKey);
+      if (existingId) return { created: false };
+      const nextSendAtMs = Date.parse(nowIso) + firstDelayHours * 3_600_000;
+      const record: SequenceEnrollmentRecord = {
+        id: createId("enrollment"),
+        workspaceId,
+        sequenceId,
+        contactId,
+        currentStepIndex: 0,
+        nextSendAt: new Date(nextSendAtMs).toISOString(),
+        state: "ACTIVE",
+        enrolledAt: nowIso,
+        updatedAt: nowIso,
+      };
+      enrollments.set(record.id, record);
+      enrollmentIdsByPair.set(pairKey, record.id);
+      return { created: true };
+    },
+
+    async listDueSequenceSends(nowIso, limit): Promise<DueSequenceSend[]> {
+      const nowMs = Date.parse(nowIso);
+      const due: DueSequenceSend[] = [];
+      for (const enrollment of enrollments.values()) {
+        if (due.length >= limit) break;
+        if (enrollment.state !== "ACTIVE") continue;
+        const nextMs = enrollment.nextSendAt ? Date.parse(enrollment.nextSendAt) : Number.NaN;
+        if (!Number.isFinite(nextMs) || nextMs > nowMs) continue;
+        const sequence = sequences.get(enrollment.sequenceId);
+        if (!sequence || sequence.status !== "ACTIVE") continue;
+        const contact = contacts.get(enrollment.contactId);
+        if (!contact || contact.suppressedAt) continue;
+        due.push({ enrollment: copy(enrollment), sequence: copy(sequence), contact: copy(contact) });
+      }
+      return due.sort((a, b) =>
+        (a.enrollment.nextSendAt ?? "").localeCompare(b.enrollment.nextSendAt ?? ""));
+    },
+
+    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso) {
+      const enrollment = enrollments.get(id);
+      if (!enrollment) return;
+      const completed = nextSendAtIso === null;
+      enrollments.set(id, {
+        ...enrollment,
+        currentStepIndex: nextIndex,
+        nextSendAt: nextSendAtIso ?? undefined,
+        state: (completed ? "COMPLETED" : "ACTIVE") satisfies EnrollmentState,
+        updatedAt: now(),
+      });
+    },
+
+    async cancelEnrollmentsForContact(contactId) {
+      let count = 0;
+      for (const [id, enrollment] of enrollments.entries()) {
+        if (enrollment.contactId !== contactId || enrollment.state !== "ACTIVE") continue;
+        enrollments.set(id, { ...enrollment, state: "CANCELLED", updatedAt: now() });
+        count += 1;
+      }
+      return count;
+    },
+
+    async createBroadcast(workspaceId, input) {
+      const timestamp = now();
+      const record: BroadcastRecord = {
+        id: createId("broadcast"),
+        workspaceId,
+        name: input.name.trim(),
+        text: input.text,
+        segment: input.segment satisfies BroadcastSegment,
+        status: input.total > 0 ? "RUNNING" : "COMPLETED",
+        total: input.total,
+        sent: 0,
+        failed: 0,
+        skipped: 0,
+        createdAt: timestamp,
+        ...(input.total > 0 ? {} : { completedAt: timestamp }),
+      };
+      broadcasts.set(record.id, record);
+      return copy(record);
+    },
+
+    async getBroadcast(workspaceId, id) {
+      const record = broadcasts.get(id);
+      return record?.workspaceId === workspaceId ? copy(record) : null;
+    },
+
+    async listBroadcasts(workspaceId, limit) {
+      return copy(
+        [...broadcasts.values()]
+          .filter((broadcast) => broadcast.workspaceId === workspaceId)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
+          .slice(0, limit),
+      );
+    },
+
+    async incrementBroadcastCounters(id, delta) {
+      const broadcast = broadcasts.get(id);
+      if (!broadcast) return;
+      broadcasts.set(id, {
+        ...broadcast,
+        sent: broadcast.sent + (delta.sent ?? 0),
+        failed: broadcast.failed + (delta.failed ?? 0),
+        skipped: broadcast.skipped + (delta.skipped ?? 0),
+      });
+    },
+
+    async finalizeBroadcastIfDone(workspaceId, id) {
+      const broadcast = broadcasts.get(id);
+      if (!broadcast || broadcast.workspaceId !== workspaceId) return;
+      if (broadcast.status !== "RUNNING") return;
+      if (broadcast.sent + broadcast.failed + broadcast.skipped < broadcast.total) return;
+      broadcasts.set(id, { ...broadcast, status: "COMPLETED", completedAt: now() });
+    },
+
+    async listBroadcastRecipients(workspaceId, segment, limit) {
+      return [...contacts.values()]
+        .filter((contact) => {
+          if (contact.workspaceId !== workspaceId || contact.suppressedAt) return false;
+          if (segment === "captured_email") return contact.state === "CAPTURED" && Boolean(contact.email);
+          return true;
+        })
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
+        .slice(0, limit)
+        .map((contact) => ({ igScopedUserId: contact.igScopedUserId, instagramAccountId: contact.instagramAccountId }));
     },
   };
 }

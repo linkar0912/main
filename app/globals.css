@@ -481,3 +481,17 @@ a.section-nav-link:hover { background: #ecebe3; color: var(--ink); }
   .template-prefill-note { margin-top: 0; }
 }
 
+
+/* Sequences + broadcasts */
+.sequence-step-row { border: 1px solid #e4e1d7; border-radius: 10px; padding: 12px 14px; }
+.sequence-step-head { align-items: center; display: flex; gap: 8px; justify-content: space-between; margin-bottom: 6px; }
+.sequence-step-head strong { font-size: .85rem; }
+.sequence-step-actions { display: inline-flex; gap: 4px; }
+.sequence-status { background: #80828f; border-radius: 5px; color: #fff; font-size: .58rem; font-style: normal; font-weight: 800; letter-spacing: .07em; margin-left: 8px; padding: 3px 7px; text-transform: uppercase; }
+.sequence-status[data-status="ACTIVE"] { background: #0f8a5f; }
+.sequence-status[data-status="RUNNING"] { background: #2563eb; }
+.sequence-status[data-status="PAUSED"], .sequence-status[data-status="PENDING"] { background: #b7791f; }
+.broadcast-form { border-bottom: 1px solid #e4e1d7; margin-bottom: 8px; padding-bottom: 14px; }
+.broadcast-list { display: flex; flex-direction: column; }
+.broadcast-list li { align-items: center; border-top: 1px solid #e4e1d7; display: flex; gap: 12px; padding: 9px 2px; }
+.broadcast-list li:first-child { border-top: 0; }
