@@ -117,9 +117,16 @@ export function readSessionToken(token: string | undefined, secret: string, now 
   if (!payload || !encodedSignature) return null;
 
   try {
-    const expected = signature(payload, secret);
-    const actual = Buffer.from(encodedSignature, "base64url");
-    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+    // Compare the canonical base64url encoding rather than decoded bytes: base64
+    // decoders ignore the trailing padding bits, so several mutated final
+    // characters would otherwise decode to the same signature and pass.
+    const expectedEncoded = signature(payload, secret).toString("base64url");
+    if (
+      encodedSignature.length !== expectedEncoded.length
+      || !timingSafeEqual(Buffer.from(encodedSignature), Buffer.from(expectedEncoded))
+    ) {
+      return null;
+    }
 
     const value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<StoredSession>;
     if (

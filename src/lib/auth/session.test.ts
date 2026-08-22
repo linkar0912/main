@@ -74,6 +74,28 @@ describe("owner authentication", () => {
     expect(readSessionToken(`${token.slice(0, -1)}x`, secret, new Date("2026-08-20T11:00:00.000Z"))).toBeNull();
   });
 
+  it("rejects every non-canonical trailing-character mutation of the signature", () => {
+    // The final base64url character carries unused padding bits; mutating it can
+    // decode to byte-identical signatures. Verification must compare the canonical
+    // encoding, so exactly zero of the 63 altered tokens may verify — regardless of
+    // which character the real signature happens to end with.
+    const secret = "session-secret-with-at-least-32-characters";
+    const token = createSessionToken(
+      { userId: "user_owner", workspaceId: "workspace_owner" },
+      secret,
+      new Date("2026-08-20T10:00:00.000Z"),
+    );
+    const body = token.slice(0, -1);
+    const originalLast = token.at(-1)!;
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+    const acceptedMutations = [...alphabet]
+      .filter((ch) => ch !== originalLast)
+      .filter((ch) => readSessionToken(`${body}${ch}`, secret, new Date("2026-08-20T11:00:00.000Z")));
+
+    expect(acceptedMutations).toEqual([]);
+  });
+
   it("uses a host-only secure cookie name in production", () => {
     expect(sessionCookieName("https://reply.example.com")).toBe("__Host-replyconnect_session");
     expect(sessionCookieName("http://localhost:3000")).toBe("replyconnect_session");
