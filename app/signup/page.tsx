@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { PRODUCT_MARK, PRODUCT_NAME } from "@/src/lib/branding";
+import { PRODUCT_NAME } from "@/src/lib/branding";
+import { InstagramGlyph } from "@/src/components/instagram-glyph";
 import { safeNextPath } from "@/src/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     return (
         <main className="login-page">
             <section className="login-card">
-                <div className="login-brand"><span className="brand-mark">{PRODUCT_MARK}</span><strong>{PRODUCT_NAME}</strong></div>
+                <div className="login-brand"><span className="brand-mark"><InstagramGlyph size={17} /></span><strong>{PRODUCT_NAME}</strong></div>
                 <p className="eyebrow">{invite ? "Team invitation" : "Get started"}</p>
                 <h1>{invite ? "Join your team's workspace." : "Create your workspace."}</h1>
                 <p className="muted">{invite ? "Create your account with the invited email address to accept the invitation." : "One account, one Instagram, automations in minutes."}</p>

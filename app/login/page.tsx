@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { PRODUCT_MARK, PRODUCT_NAME } from "@/src/lib/branding";
+import { PRODUCT_NAME } from "@/src/lib/branding";
+import { InstagramGlyph } from "@/src/components/instagram-glyph";
 import { safeNextPath } from "@/src/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main className="login-page">
       <section className="login-card">
-        <div className="login-brand"><span className="brand-mark">{PRODUCT_MARK}</span><strong>{PRODUCT_NAME}</strong></div>
+        <div className="login-brand"><span className="brand-mark"><InstagramGlyph size={17} /></span><strong>{PRODUCT_NAME}</strong></div>
         <p className="eyebrow">Welcome back</p>
         <h1>Sign in to your control room.</h1>
         <p className="muted">Connect your Instagram and automate replies.</p>

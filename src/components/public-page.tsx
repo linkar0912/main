@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { getServerEnv } from "@/src/lib/env";
-import { PRODUCT_MARK, PRODUCT_NAME } from "@/src/lib/branding";
+import { PRODUCT_NAME } from "@/src/lib/branding";
+import { InstagramGlyph } from "@/src/components/instagram-glyph";
 
 export function PublicPage({
   title,
@@ -12,7 +13,7 @@ export function PublicPage({
   return (
     <main className="legal-page">
       <div className="legal-top">
-        <Link className="brand" href="/"><span className="brand-mark">{PRODUCT_MARK}</span><span>{PRODUCT_NAME}</span></Link>
+        <Link className="brand" href="/"><span className="brand-mark"><InstagramGlyph size={17} /></span><span>{PRODUCT_NAME}</span></Link>
         <Link className="back-link" href="/"><ArrowLeft size={15} /> Back to app</Link>
       </div>
       <article className="legal-content">
