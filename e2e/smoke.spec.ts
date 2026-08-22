@@ -32,14 +32,15 @@ test("member can sign up and sign back in", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("replyconnect-e2e-password");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Make every signal useful." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
 });
 
 test("dashboard and automation list are reachable", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("Linkar", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Make every signal useful." })).toBeVisible();
-  await page.getByRole("link", { name: "Automations" }).first().click();
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Performance over time" })).toBeVisible();
+  await page.getByRole("link", { name: "My automations" }).first().click();
   await expect(page.getByRole("heading", { name: "Automations" })).toBeVisible();
 });
 
