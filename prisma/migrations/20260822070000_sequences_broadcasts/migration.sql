@@ -1,5 +1,3 @@
-ALTER TABLE "AutomationContact" ADD COLUMN "suppressedAt" TIMESTAMP(3);
-
 -- Sequences: timed drip campaigns + per-contact enrollment progress.
 CREATE TABLE "AutomationSequence" (
     "id" TEXT NOT NULL,
