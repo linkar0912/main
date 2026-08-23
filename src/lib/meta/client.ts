@@ -9,12 +9,19 @@ type MetaClientOptions = {
 export class MetaApiError extends Error {
   readonly status: number;
   readonly retryable: boolean;
+  readonly responseReceived: boolean;
 
-  constructor(message: string, status: number, retryable?: boolean) {
+  constructor(
+    message: string,
+    status: number,
+    responseReceived = status > 0,
+    retryable = status === 0 || status === 408 || status === 429 || status >= 500,
+  ) {
     super(message);
     this.name = "MetaApiError";
     this.status = status;
-    this.retryable = retryable ?? (status === 429 || status >= 500);
+    this.responseReceived = responseReceived;
+    this.retryable = retryable;
   }
 }
 
@@ -231,14 +238,23 @@ export class MetaClient {
         headers: { authorization: `Bearer ${accessToken}`, ...init.headers },
       });
     } catch {
-      throw new MetaApiError("Meta network request failed", 0, true);
+      throw new MetaApiError("Meta network request failed", 0, false);
     }
-    const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+    let data: Record<string, unknown>;
+    try {
+      data = await response.json() as Record<string, unknown>;
+    } catch {
+      if (!response.ok) {
+        throw new MetaApiError(`Meta request failed (${response.status})`, response.status, true);
+      }
+      throw new MetaApiError("Meta response could not be parsed", 0, true);
+    }
     if (!response.ok) {
       const error = typeof data.error === "object" && data.error !== null ? data.error as Record<string, unknown> : {};
       throw new MetaApiError(
         typeof error.message === "string" ? error.message : `Meta request failed (${response.status})`,
         response.status,
+        true,
         isTransientMetaError(error, response.status),
       );
     }

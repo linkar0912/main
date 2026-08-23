@@ -79,6 +79,28 @@ describe("Meta message payloads", () => {
     await expect(graphClient.sendPrivateReply({ igUserId: "ig_1", accessToken: "secret" }, "comment_1", "Hello")).rejects.toMatchObject({ retryable: true, status: 400 });
   });
 
+  it("records whether a Meta HTTP response was received", async () => {
+    const networkClient = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => { throw new TypeError("fetch failed"); },
+    });
+    await expect(networkClient.sendPrivateReply(
+      { igUserId: "ig_1", accessToken: "secret" },
+      "comment_1",
+      "Hello",
+    )).rejects.toMatchObject({ status: 0, responseReceived: false });
+
+    const rejectedClient = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({ error: { message: "Denied" } }), { status: 400 }),
+    });
+    await expect(rejectedClient.sendPrivateReply(
+      { igUserId: "ig_1", accessToken: "secret" },
+      "comment_1",
+      "Hello",
+    )).rejects.toMatchObject({ status: 400, responseReceived: true });
+  });
+
   it("subscribes the professional account to the campaign webhook fields", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     const client = new MetaClient({ apiVersion: "v25.0", fetcher });
