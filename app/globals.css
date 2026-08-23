@@ -384,6 +384,7 @@ h3 { font-size: .98rem; font-weight: 700; margin-bottom: var(--space-2); }
 }
 .avatar-small { flex-basis: 28px; font-size: .62rem; height: 28px; width: 28px; }
 .avatar-large { flex-basis: 76px; font-size: 1.45rem; height: 76px; width: 76px; }
+img.avatar.is-photo { background: transparent; object-fit: cover; }
 .workspace-id { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
 .workspace-id strong { font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-id small { color: var(--muted); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1055,7 +1056,8 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 /* Settings */
 .connection-list { display: grid; gap: 10px; list-style: none; margin: 0 0 var(--space-4); padding: 0; }
 .connection-row { align-items: center; display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 0; padding: 14px var(--space-4); }
-.connection-avatar { align-items: center; background: var(--accent-soft); border-radius: 50%; color: var(--accent-hover); display: inline-flex; font-size: .78rem; font-weight: 750; height: 38px; justify-content: center; width: 38px; }
+.connection-avatar { align-items: center; background: var(--accent-soft); border-radius: 50%; color: var(--accent-hover); display: inline-flex; flex-shrink: 0; font-size: .78rem; font-weight: 750; height: 38px; justify-content: center; width: 38px; }
+.connection-avatar.is-photo { object-fit: cover; }
 .connection-copy { display: grid; gap: 2px; min-width: 0; }
 .connection-copy small { color: var(--muted); font-size: .7rem; overflow-wrap: anywhere; }
 .connection-row .button { margin-left: auto; }

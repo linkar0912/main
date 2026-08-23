@@ -10,7 +10,7 @@ import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
 
-type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string };
+type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string; profilePictureUrl?: string | null };
 type ConnectionHealth = {
   id: string;
   username: string;
@@ -196,7 +196,16 @@ export function SettingsScreen() {
         {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status"><span>{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}</span><p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
 
         <section className="settings-hero panel">
-          <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
+          {connections[0]?.profilePictureUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value here.
+            <img
+              className="settings-avatar"
+              src={connections[0].profilePictureUrl}
+              alt={connections[0].username ? `@${connections[0].username} profile picture` : "Instagram profile picture"}
+            />
+          ) : (
+            <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
+          )}
           <div className="settings-copy"><p className="eyebrow">Instagram connections</p><h2>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h2><p>{connections.length > 0 ? "Connected accounts receive comment and DM webhooks for this workspace." : "Connect a professional Instagram account to enable delivery."}</p></div>
           <div className="settings-action"><a className="button button-primary" href="/api/meta/oauth/start">{connections.length > 0 ? "Connect another account" : "Connect Instagram"} <ExternalLink size={15} /></a></div>
         </section>
@@ -204,7 +213,16 @@ export function SettingsScreen() {
           <ul className="connection-list">
             {connections.map((connection) => (
               <li className="panel connection-row" key={connection.id}>
-                <span className="connection-avatar">@{connection.username.slice(0, 2).toUpperCase()}</span>
+                {connection.profilePictureUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+                  <img
+                    className="connection-avatar is-photo"
+                    src={connection.profilePictureUrl}
+                    alt={`@${connection.username} profile picture`}
+                  />
+                ) : (
+                  <span className="connection-avatar">@{connection.username.slice(0, 2).toUpperCase()}</span>
+                )}
                 <div className="connection-copy">
                   <strong>@{connection.username}</strong>
                   <small>Connected {formatDate(connection.connectedAt)} · ID {connection.igUserId}</small>

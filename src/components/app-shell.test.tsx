@@ -6,7 +6,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
 const { AppShell } = await import("./app-shell");
 
-function stubShellFetch(role = "MEMBER") {
+function stubShellFetch(role = "MEMBER", connections: unknown[] = []) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes("/api/account")) {
@@ -14,6 +14,9 @@ function stubShellFetch(role = "MEMBER") {
         ok: true,
         json: async () => ({ data: { email: "member@example.com", role, plan: "free" } }),
       } as Response;
+    }
+    if (url.includes("/api/meta/connection")) {
+      return { ok: true, json: async () => ({ data: connections }) } as Response;
     }
     if (url.includes("/api/contacts")) {
       return { ok: true, json: async () => ({ data: { count: 3 } }) } as Response;
@@ -49,6 +52,24 @@ describe("AppShell", () => {
     await screen.findByText("Member");
     expect(document.querySelector(".sidebar-brand .brand-mark")).toBeNull();
     expect(screen.getAllByText("Linkar").length).toBeGreaterThan(0);
+  });
+
+  it("shows the connected Instagram avatar on the identity card", async () => {
+    stubShellFetch("OWNER", [
+      {
+        id: "conn_1",
+        igUserId: "ig_1",
+        username: "brand.acct",
+        status: "CONNECTED",
+        connectedAt: "2026-08-20T00:00:00.000Z",
+        profilePictureUrl: "https://cdn.instagram.com/dp.jpg",
+      },
+    ]);
+
+    render(<AppShell><main>Workspace</main></AppShell>);
+
+    const avatar = await screen.findByAltText("Instagram profile picture");
+    expect(avatar.getAttribute("src")).toBe("https://cdn.instagram.com/dp.jpg");
   });
 
   it("closes the mobile drawer with Escape and restores page scrolling", async () => {

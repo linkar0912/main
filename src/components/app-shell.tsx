@@ -73,6 +73,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<AccountIdentity["role"] | "">("");
   const [plan, setPlan] = useState("free");
+  const [igAvatarUrl, setIgAvatarUrl] = useState("");
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -91,6 +92,22 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         setPlan(payload?.data?.plan ?? "free");
       })
       .catch(() => undefined);
+  }, []);
+
+  // Best-effort: surface the connected Instagram avatar on the identity card.
+  useEffect(() => {
+    let active = true;
+    fetch("/api/meta/connection")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { profilePictureUrl?: string | null }[] } | null) => {
+        if (!active || !payload || !Array.isArray(payload.data)) return;
+        const found = payload.data.find((connection) => typeof connection?.profilePictureUrl === "string" && connection.profilePictureUrl);
+        setIgAvatarUrl(found?.profilePictureUrl ?? "");
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -169,7 +186,12 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           <Skeleton style={{ height: 52, borderRadius: 12 }} />
         ) : (
           <div className="workspace-chip">
-            <span className="avatar" aria-hidden>{initialsOf(email)}</span>
+            {igAvatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+              <img className="avatar is-photo" src={igAvatarUrl} alt="Instagram profile picture" />
+            ) : (
+              <span className="avatar" aria-hidden>{initialsOf(email)}</span>
+            )}
             <span className="workspace-id">
               <strong>{displayRole(role)}</strong>
               <small>{email || `${PRODUCT_NAME} workspace`}</small>
