@@ -2,7 +2,7 @@
 
 Date: 2026-08-23  
 Service: `alzmminzroqpaftmprqt6lny`  
-Release commit: recorded after integration to `main`
+Release commit: `d9cb99a`
 
 ## Scope
 
@@ -34,4 +34,18 @@ Local verification on 2026-08-23 (Asia/Kolkata):
 - Prisma schema validation and client generation: passed.
 - Local Compose parsing: deferred because Docker is not installed in the Codex workspace; CI/production validation remains a deployment gate.
 
-Production backup/preflight evidence, image publication, container state, public health, and release-specific smoke observations are appended after each gate completes. Credentials, access tokens, customer messages, and personal data are never included.
+Production verification completed at 2026-08-23 15:50 IST:
+
+- GitHub CI and the production-container publication workflow completed successfully for `d9cb99a`.
+- Preflight database size: 9,126 kB.
+- Duplicate Instagram-account IDs: 0.
+- Pre-migration custom-format backup: 73,187 bytes, SHA-256 `535d9ce01500bf943e0fa6158e5077d495f66242f123f7c2af32d4b2b77b8096`.
+- Backup persisted across container recreation with filesystem mode `600`.
+- Both Release 1 migrations report a non-null successful completion in `_prisma_migrations`.
+- `InstagramConnection_igUserId_key` exists after migration.
+- Coolify state: web `running:healthy`, worker running, migrate exited, PostgreSQL and Valkey `running:healthy`.
+- Public `/api/health`: HTTP 200, `status=ok`, `mode=configured`, database and Redis `ok`.
+- Unauthenticated `/api/automations`, `/api/sequences`, `/api/broadcasts`, and `/api/insights/funnels`: HTTP 401.
+- A fresh production CSS asset was fetched successfully. The manually configured `/api/health.release` value remains stale and was not used as deployment evidence.
+
+Credentials, access tokens, customer messages, and personal data are intentionally excluded.
