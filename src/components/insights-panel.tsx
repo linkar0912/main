@@ -3,19 +3,12 @@
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 
-type DailyCount = { day: string; count: number };
 type MediaPerformance = { mediaId: string; matched: number; delivered: number; clicked: number };
 
 type InsightsPayload = {
   usage?: { participantsThisMonth: number; monthlyLimit: number | null };
-  timeseries?: { days: number; participantsPerDay: DailyCount[]; sentPerDay: DailyCount[] };
   mediaPerformance?: MediaPerformance[];
 };
-
-function dayLabel(day: string): string {
-  const date = new Date(`${day}T00:00:00Z`);
-  return Number.isNaN(date.getTime()) ? day : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
 
 export function InsightsPanel({ automationId }: { automationId?: string }) {
   const [insights, setInsights] = useState<InsightsPayload | null>(null);
@@ -48,10 +41,6 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
     );
   }
 
-  const participantsPerDay = insights.timeseries?.participantsPerDay ?? [];
-  const sentPerDay = insights.timeseries?.sentPerDay ?? [];
-  const peak = Math.max(1, ...participantsPerDay.map((entry) => entry.count), ...sentPerDay.map((entry) => entry.count));
-  const sentByDay = new Map(sentPerDay.map((entry) => [entry.day, entry.count]));
   const posts = insights.mediaPerformance ?? [];
   const usage = insights.usage;
   const usageLimit = usage?.monthlyLimit ?? null;
@@ -85,30 +74,6 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
           </div>
         </section>
       )}
-
-      <section className="panel insights-panel side-panel" aria-label="Last 14 days">
-        <div className="panel-heading">
-          <div><p className="eyebrow">Last 14 days</p><h2>Participants & deliveries</h2></div>
-        </div>
-        <div className="insights-chart" role="img" aria-label="Daily participants and deliveries for the last 14 days">
-          {participantsPerDay.map((entry) => {
-            const sent = sentByDay.get(entry.day) ?? 0;
-            return (
-              <div className="chart-column" key={entry.day} title={`${dayLabel(entry.day)}: ${entry.count} participants, ${sent} delivered`}>
-                <div className="chart-bars">
-                  <span className="chart-bar bar-participants" style={{ height: `${Math.round((entry.count / peak) * 100)}%` }} />
-                  <span className="chart-bar bar-sent" style={{ height: `${Math.round((sent / peak) * 100)}%` }} />
-                </div>
-                <small>{dayLabel(entry.day)}</small>
-              </div>
-            );
-          })}
-        </div>
-        <p className="chart-legend">
-          <span className="legend-swatch swatch-participants" /> Participants
-          <span className="legend-swatch swatch-sent" /> Delivered
-        </p>
-      </section>
 
       <section className="panel insights-panel side-panel" aria-label="Top posts">
         <div className="panel-heading">
