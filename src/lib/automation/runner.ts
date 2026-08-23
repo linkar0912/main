@@ -41,6 +41,27 @@ export type RunnerResult = {
   failed: number;
 };
 
+export class RetryableAutomationError extends Error {
+  readonly retryable = true;
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "RetryableAutomationError";
+  }
+}
+
+export function isRetryableAutomationError(error: unknown): error is RetryableAutomationError {
+  return error instanceof RetryableAutomationError;
+}
+
+function retryableAutomationError(error: unknown): RetryableAutomationError {
+  if (isRetryableAutomationError(error)) return error;
+  return new RetryableAutomationError(
+    error instanceof Error ? error.message : String(error),
+    { cause: error },
+  );
+}
+
 function metaConnection(connection: InstagramConnectionRecord, tokenEncryptionKey: string): MetaConnection {
   return {
     igUserId: connection.igUserId,
@@ -543,11 +564,11 @@ async function processEmailCaptureReply(
     }
     if (followUpDelivered) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-      throw error;
+      throw retryableAutomationError(error);
     }
     if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-      throw error;
+      throw retryableAutomationError(error);
     }
     await repository.completeExecution(mapping.workspaceId, dedupeKey, {
       status: "FAILED",
@@ -693,11 +714,11 @@ async function processFieldAnswer(
     }
     if (followUpDelivered) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-      throw error;
+      throw retryableAutomationError(error);
     }
     if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-      throw error;
+      throw retryableAutomationError(error);
     }
     await repository.completeExecution(mapping.workspaceId, dedupeKey, {
       status: "FAILED",
@@ -970,11 +991,11 @@ export async function processNormalizedEvent(
       }
       if (allActionsDelivered) {
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-        throw error;
+        throw retryableAutomationError(error);
       }
       if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-        throw error;
+        throw retryableAutomationError(error);
       }
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "FAILED",

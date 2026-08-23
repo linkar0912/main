@@ -488,6 +488,10 @@ export interface AutomationRepository {
     nowIso: string,
     limit: number,
   ): Promise<OutboundDeliveryRecord[]>;
+  listOutboundDeliveryProblems(
+    workspaceId: string,
+    limit: number,
+  ): Promise<OutboundDeliveryRecord[]>;
   claimAutomationSendSlots(
     automationId: string,
     utcDate: string,

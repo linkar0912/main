@@ -1,6 +1,6 @@
 import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
-import { processNormalizedEvent } from "@/src/lib/automation/runner";
+import { isRetryableAutomationError, processNormalizedEvent } from "@/src/lib/automation/runner";
 import { MetaClient } from "@/src/lib/meta/client";
 import { normalizeWebhook } from "@/src/lib/meta/webhooks";
 import { enqueueWebhookEvents } from "@/src/lib/queue";
@@ -40,6 +40,7 @@ export async function POST(request: Request) {
 
   const events = normalizeWebhook(payload);
   const enqueued = await enqueueWebhookEvents(events);
+  let retryableFailure = false;
   if (events.length > 0 && enqueued === 0) {
     // No Redis queue configured (demo/self-hosted without REDIS_URL): fall back to
     // processing inline. Process sequentially — each event can make several Meta API
@@ -62,8 +63,12 @@ export async function POST(request: Request) {
           accountId: event.accountId,
           error: error instanceof Error ? error.message : String(error),
         });
+        if (isRetryableAutomationError(error)) retryableFailure = true;
       }
     }
+  }
+  if (retryableFailure) {
+    return Response.json({ received: false, retryable: true }, { status: 503 });
   }
   return Response.json({ received: true, events: events.length, enqueued });
 }

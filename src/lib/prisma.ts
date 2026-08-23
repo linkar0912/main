@@ -1149,6 +1149,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapOutboundDelivery);
     },
 
+    async listOutboundDeliveryProblems(workspaceId, limit) {
+      const records = await client.outboundDelivery.findMany({
+        where: { workspaceId, state: { in: ["FAILED", "UNKNOWN"] } },
+        orderBy: { updatedAt: "desc" },
+        take: Math.min(100, Math.max(0, limit)),
+      });
+      return records.map(mapOutboundDelivery);
+    },
+
     async claimAutomationSendSlots(automationId, utcDate, amount, limit) {
       validateQuotaRequest(utcDate, amount, limit);
       const rows = await client.$queryRaw<Array<{ reserved: number }>>`

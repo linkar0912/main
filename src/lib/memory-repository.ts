@@ -754,6 +754,13 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         .slice(0, Math.max(0, limit)));
     },
 
+    async listOutboundDeliveryProblems(workspaceId, limit) {
+      return copy([...outboundDeliveries.values()]
+        .filter((record) => record.workspaceId === workspaceId && (record.state === "FAILED" || record.state === "UNKNOWN"))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .slice(0, Math.min(100, Math.max(0, limit))));
+    },
+
     async claimAutomationSendSlots(automationId, utcDate, amount, limit) {
       validateQuotaRequest(utcDate, amount, limit);
       const key = `${automationId}:${utcDate}`;

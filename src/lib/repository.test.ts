@@ -388,6 +388,19 @@ describe("memory repository", () => {
       .toBe("CLAIMED");
   });
 
+  it("lists only delivery problems for the requested workspace, newest first", async () => {
+    const repository = createMemoryRepository();
+    for (const [deliveryKey, workspaceId] of [["failed_a", "workspace_a"], ["failed_b", "workspace_b"]] as const) {
+      await repository.ensureOutboundDelivery({ ...outboundDeliveryInput, deliveryKey, workspaceId });
+      await repository.claimOutboundDelivery(deliveryKey, "worker", "2026-08-23T10:05:00.000Z");
+      await repository.failOutboundDelivery(deliveryKey, "worker", "Meta 429", true, "RETRYABLE_REJECTION");
+    }
+    await repository.ensureOutboundDelivery({ ...outboundDeliveryInput, deliveryKey: "sent_a" });
+
+    const problems = await repository.listOutboundDeliveryProblems("workspace_a", 100);
+    expect(problems.map((problem) => problem.deliveryKey)).toEqual(["failed_a"]);
+  });
+
   it("deduplicates a source comment across matching automations", async () => {
     const repository = createMemoryRepository();
     const first = await repository.createParticipant(participantInput);

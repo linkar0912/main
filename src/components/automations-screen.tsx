@@ -6,6 +6,7 @@ import { AtSign, Megaphone, LayoutTemplate, Plus, Workflow } from "lucide-react"
 import { AppShell } from "./app-shell";
 import { AutomationList, useAutomations } from "./automation-list";
 import { AutomationSectionNav } from "./automation-section-nav";
+import { DeliveryDiagnostics } from "./delivery-diagnostics";
 
 type CapturedContact = {
   id: string;
@@ -211,6 +212,7 @@ export function AutomationsScreen() {
               {error ? <p className="form-error" role="alert">{error}</p> : <AutomationList automations={automations} loading={loading} onStatusChange={setStatus} onDuplicate={duplicateAutomation} onDelete={deleteAutomation} />}
             </section>
             <CapturedEmailsPanel />
+            <DeliveryDiagnostics />
             <BroadcastsPanel />
           </div>
         </div>
