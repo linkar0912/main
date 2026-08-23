@@ -263,7 +263,11 @@ export function SequencesScreen() {
                 <Link className="text-link" href="/automations/sequences">Refresh</Link>
               </div>
               {!loading && !pageError && sequences.length === 0 && (
-                <p className="muted">No sequences yet - create one above and wire it to an email capture flow.</p>
+                <div className="empty-state">
+                  <span className="empty-icon"><ListOrdered size={22} /></span>
+                  <h3>No sequences yet.</h3>
+                  <p>Create one above and wire it to an email capture flow so new leads keep hearing from you.</p>
+                </div>
               )}
               {sequences.map((row) => (
                 <article className="automation-row" key={row.id}>

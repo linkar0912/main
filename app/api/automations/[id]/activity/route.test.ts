@@ -153,6 +153,7 @@ describe("GET /api/automations/[id]/activity", () => {
     expect(body).toEqual({
       data: [
         {
+          id: "participant_newer",
           sourceMediaSnapshot: newer.sourceMediaSnapshot,
           matchedKeyword: "drop",
           state: "LINK_SENT",
@@ -164,6 +165,7 @@ describe("GET /api/automations/[id]/activity", () => {
           finalDeliveredAt: "2026-08-21T09:10:00.000Z",
         },
         {
+          id: "participant_older",
           sourceMediaSnapshot: older.sourceMediaSnapshot,
           matchedKeyword: "drop",
           state: "FOLLOW_REQUIRED",

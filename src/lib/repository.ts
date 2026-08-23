@@ -596,7 +596,7 @@ export interface AutomationRepository {
   // Broadcasts (one-off DM blasts to a segment).
   createBroadcast(
     workspaceId: string,
-    input: { name: string; text: string; segment: BroadcastSegment; total: number },
+    input: { name: string; text: string; segment: BroadcastSegment; total: number; status?: BroadcastStatus },
   ): Promise<BroadcastRecord>;
   getBroadcast(workspaceId: string, id: string): Promise<BroadcastRecord | null>;
   listBroadcasts(workspaceId: string, limit: number): Promise<BroadcastRecord[]>;

@@ -3,6 +3,7 @@ import { getSessionFromRequest } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
 import { MetaClient } from "@/src/lib/meta/client";
+import { loadProfilePictureUrl } from "@/src/lib/meta/profile-picture";
 import { unsealSecret } from "@/src/lib/security/secrets";
 
 export const runtime = "nodejs";
@@ -27,26 +28,6 @@ export async function GET(request: Request) {
   return Response.json({ data });
 }
 
-async function loadProfilePictureUrl(
-  env: ReturnType<typeof getServerEnv>,
-  igUserId: string,
-  sealedAccessToken: string,
-): Promise<string | null> {
-  if (!env.metaTokenEncryptionKey) return null;
-  try {
-    const client = new MetaClient({ apiVersion: env.metaApiVersion });
-    return await client.getProfilePictureUrl({
-      igUserId,
-      accessToken: unsealSecret(sealedAccessToken, env.metaTokenEncryptionKey),
-    });
-  } catch (error) {
-    logger.warn("Could not load the connected account's profile picture", {
-      igUserId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
-  }
-}
 
 export async function DELETE(request: Request) {
   const session = getSessionFromRequest(request);

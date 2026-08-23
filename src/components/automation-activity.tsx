@@ -6,9 +6,11 @@ import {
   Clock,
   ExternalLink,
   Minus,
+  MousePointerClick,
   Pencil,
   Radio,
   RefreshCw,
+  RotateCcw,
   Search,
   Workflow,
   X,
@@ -19,6 +21,8 @@ import { formatDateTime } from "@/src/lib/format-date";
 
 export type ParticipantActivitySummary = Pick<
   AutomationParticipantRecord,
+  | "id"
+  | "state"
   | "sourceMediaSnapshot"
   | "matchedKeyword"
   | "state"
@@ -31,6 +35,7 @@ export type ParticipantActivitySummary = Pick<
   | "finalDeliveryStatus"
   | "finalDeliveryError"
   | "finalDeliveredAt"
+  | "deliveryClickedAt"
 >;
 
 export type ParticipantFunnelSummary = {
@@ -221,7 +226,15 @@ function JourneyTrack({ participant }: { participant: ParticipantActivitySummary
   );
 }
 
-function ActivityRow({ participant }: { participant: ParticipantActivitySummary }) {
+function ActivityRow({
+  participant,
+  onRetry,
+  retrying,
+}: {
+  participant: ParticipantActivitySummary;
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
   const media = participant.sourceMediaSnapshot;
   const publicReplyDetail = `${participant.publicReplyStatus}${participant.publicReplyError ? ` - ${participant.publicReplyError}` : ""}`;
   const openingDetail = `${participant.openingStatus}${participant.openingError ? ` - ${participant.openingError}` : ""}`;
@@ -257,6 +270,11 @@ function ActivityRow({ participant }: { participant: ParticipantActivitySummary 
         <Diagnostic label="Final delivery" tone={statusTone(participant.finalDeliveryStatus)} detail={deliveryDetail} />
       </dl>
       <footer className="activity-row-foot">
+        {participant.state === "FAILED" && onRetry && (
+          <button type="button" className="button button-secondary button-small activity-retry" onClick={onRetry} disabled={retrying}>
+            <RotateCcw size={13} /> {retrying ? "Retrying…" : "Retry delivery"}
+          </button>
+        )}
         <a className="text-link" href={media.permalink} target="_blank" rel="noreferrer">
           View on Instagram <ExternalLink size={13} />
         </a>
@@ -275,9 +293,29 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [retryingId, setRetryingId] = useState("");
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [query, setQuery] = useState("");
   const [campaign, setCampaign] = useState<CampaignContext | null>(null);
+
+  async function retryParticipant(participantId: string) {
+    setRetryingId(participantId);
+    setError("");
+    try {
+      const response = await fetch(`/api/automations/${automationId}/activity/retry`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ participantId }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Could not retry the delivery");
+      setReloadKey((key) => key + 1);
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "Could not retry the delivery");
+    } finally {
+      setRetryingId("");
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -346,6 +384,13 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
     } satisfies Record<FeedFilter, number>;
   }, [participants]);
 
+  const clickStats = useMemo(() => {
+    const delivered = (participants ?? []).filter((p) => p.finalDeliveryStatus === "SENT");
+    const clicked = delivered.filter((p) => p.deliveryClickedAt);
+    const rate = delivered.length > 0 ? Math.round((clicked.length / delivered.length) * 100) : 0;
+    return { delivered: delivered.length, clicked: clicked.length, rate };
+  }, [participants]);
+
   if (error && !participants) return <p className="form-error" role="alert">{error}</p>;
 
   if (!participants) {
@@ -393,6 +438,21 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
       )}
 
       {summary && <FunnelSummary summary={summary} />}
+
+      {summary && (
+        <p className="activity-clicks" title="Click rate across the participants currently loaded">
+          <MousePointerClick size={14} aria-hidden="true" />
+          {clickStats.delivered === 0
+            ? "Link clicks appear once the first delivery goes out."
+            : `${clickStats.clicked} of ${clickStats.delivered} delivered clicked the link (${clickStats.rate}%).`}
+        </p>
+      )}
+
+      {summary && summary.commented > participants.length && (
+        <p className="muted activity-truncated">
+          Showing the latest {participants.length} of {summary.commented} participants. Export CSV for the full history.
+        </p>
+      )}
 
       <div className="feed-toolbar">
         <div className="filter-chips" role="group" aria-label="Filter by status">
@@ -448,7 +508,9 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
       {filtered.length === 0 ? (
         <p className="muted feed-empty">No participants match this view. Try a different filter or search.</p>
       ) : (
-        filtered.map((participant, index) => <ActivityRow participant={participant} key={index} />)
+        filtered.map((participant) => (
+          <ActivityRow key={participant.id} participant={participant} onRetry={() => void retryParticipant(participant.id)} retrying={retryingId === participant.id} />
+        ))
       )}
     </div>
   );

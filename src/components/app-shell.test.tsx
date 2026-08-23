@@ -6,17 +6,14 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
 const { AppShell } = await import("./app-shell");
 
-function stubShellFetch(role = "MEMBER", connections: unknown[] = []) {
+function stubShellFetch(role = "MEMBER", igAvatarUrl: string | null = null) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("/api/account")) {
+    if (url.includes("/api/workspace/bootstrap")) {
       return {
         ok: true,
-        json: async () => ({ data: { email: "member@example.com", role, plan: "free" } }),
+        json: async () => ({ data: { email: "member@example.com", role, plan: "free", igAvatarUrl } }),
       } as Response;
-    }
-    if (url.includes("/api/meta/connection")) {
-      return { ok: true, json: async () => ({ data: connections }) } as Response;
     }
     if (url.includes("/api/contacts")) {
       return { ok: true, json: async () => ({ data: { count: 3 } }) } as Response;
@@ -55,16 +52,7 @@ describe("AppShell", () => {
   });
 
   it("shows the connected Instagram avatar on the identity card", async () => {
-    stubShellFetch("OWNER", [
-      {
-        id: "conn_1",
-        igUserId: "ig_1",
-        username: "brand.acct",
-        status: "CONNECTED",
-        connectedAt: "2026-08-20T00:00:00.000Z",
-        profilePictureUrl: "https://cdn.instagram.com/dp.jpg",
-      },
-    ]);
+    stubShellFetch("OWNER", "https://cdn.instagram.com/dp.jpg");
 
     render(<AppShell><main>Workspace</main></AppShell>);
 

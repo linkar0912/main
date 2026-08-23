@@ -11,9 +11,10 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export type ParticipantActivitySummary = Pick<
   AutomationParticipantRecord,
+  | "id"
+  | "state"
   | "sourceMediaSnapshot"
   | "matchedKeyword"
-  | "state"
   | "followStatus"
   | "followCheckedAt"
   | "publicReplyStatus"
@@ -23,6 +24,7 @@ export type ParticipantActivitySummary = Pick<
   | "finalDeliveryStatus"
   | "finalDeliveryError"
   | "finalDeliveredAt"
+  | "deliveryClickedAt"
 >;
 
 export type ParticipantFunnelSummary = {
@@ -52,6 +54,7 @@ export function computeFunnelSummary(participants: Pick<AutomationParticipantRec
 
 function toActivitySummary(participant: AutomationParticipantRecord): ParticipantActivitySummary {
   const {
+    id,
     sourceMediaSnapshot,
     matchedKeyword,
     state,
@@ -64,8 +67,10 @@ function toActivitySummary(participant: AutomationParticipantRecord): Participan
     finalDeliveryStatus,
     finalDeliveryError,
     finalDeliveredAt,
+    deliveryClickedAt,
   } = participant;
   return {
+    id,
     sourceMediaSnapshot,
     matchedKeyword,
     state,
@@ -78,6 +83,7 @@ function toActivitySummary(participant: AutomationParticipantRecord): Participan
     finalDeliveryStatus,
     finalDeliveryError,
     finalDeliveredAt,
+    deliveryClickedAt,
   };
 }
 

@@ -31,7 +31,7 @@ describe("DashboardScreen onboarding", () => {
   it("greets the signed-in user by their account handle", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes("/api/account")) {
+      if (url.includes("/api/workspace/bootstrap")) {
         return {
           ok: true,
           json: async () => ({ data: { email: "tejas.creator@example.com", role: "OWNER", plan: "free" } }),
@@ -90,7 +90,7 @@ describe("DashboardScreen onboarding", () => {
     }];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes("/api/account")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
+      if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
       if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [{}] }) } as Response;
       if (url.includes("/api/contacts")) return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
       if (url.includes("/api/health")) return { ok: true, json: async () => ({ mode: "configured" }) } as Response;

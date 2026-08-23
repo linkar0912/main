@@ -1683,7 +1683,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           name: input.name.trim(),
           text: input.text,
           segment: input.segment,
-          status: input.total > 0 ? "RUNNING" : "COMPLETED",
+          status: input.status ?? (input.total > 0 ? "RUNNING" : "COMPLETED"),
           total: input.total,
           ...(input.total > 0 ? {} : { completedAt: new Date() }),
         },

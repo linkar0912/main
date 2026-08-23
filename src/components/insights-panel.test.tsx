@@ -19,7 +19,7 @@ describe("InsightsPanel", () => {
     render(<InsightsPanel automationId="automation_1" />);
 
     await screen.findByLabelText("Campaign export");
-    expect(fetchMock).toHaveBeenCalledWith("/api/insights?automationId=automation_1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/insights?automationId=automation_1&include=usage");
     expect(screen.getByRole("link", { name: /export csv/i }).getAttribute("href"))
       .toBe("/api/insights/export?automationId=automation_1");
   });

@@ -23,6 +23,7 @@ export function BroadcastsScreen() {
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [segment, setSegment] = useState<"all_contacts" | "captured_email">("captured_email");
+  const [scheduleStart, setScheduleStart] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
@@ -47,10 +48,17 @@ export function BroadcastsScreen() {
     if (!name.trim() || !text.trim()) return setError("Give the blast a name and a message.");
     setSending(true);
     try {
+      const scheduledFor = scheduleStart ? new Date(scheduleStart) : null;
+      if (scheduledFor && Number.isNaN(scheduledFor.getTime())) return setError("Pick a valid schedule date.");
       const response = await fetch("/api/broadcasts", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), text: text.trim(), segment }),
+        body: JSON.stringify({
+          name: name.trim(),
+          text: text.trim(),
+          segment,
+          ...(scheduledFor && scheduledFor.getTime() > Date.now() ? { scheduleStart: scheduledFor.toISOString() } : {}),
+        }),
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -58,6 +66,7 @@ export function BroadcastsScreen() {
       }
       setName("");
       setText("");
+      setScheduleStart("");
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not start this broadcast.");
@@ -104,10 +113,15 @@ export function BroadcastsScreen() {
                 <span>Message</span>
                 <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={1000} placeholder="Write the DM blast" />
               </label>
+              <label className="field field-spaced">
+                <span>Schedule start (optional)</span>
+                <input type="datetime-local" value={scheduleStart} onChange={(e) => setScheduleStart(e.target.value)} />
+                <small className="muted">Leave empty to fan out now. Delivery also waits out quiet hours automatically.</small>
+              </label>
               <div className="builder-footer">
                 <div />
                 <button className="button button-primary" type="submit" disabled={sending}>
-                  {sending ? "Fanning out…" : "Send broadcast"}
+                  {sending ? "Fanning out…" : scheduleStart ? "Schedule broadcast" : "Send broadcast"}
                 </button>
               </div>
             </form>

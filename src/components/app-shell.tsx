@@ -84,30 +84,15 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   };
 
   useEffect(() => {
-    fetch("/api/account")
+    fetch("/api/workspace/bootstrap")
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: AccountIdentity } | null) => {
+      .then((payload: { data?: { email?: string; role?: AccountIdentity["role"]; plan?: string; igAvatarUrl?: string | null } } | null) => {
         setEmail(payload?.data?.email ?? "");
         setRole(payload?.data?.role ?? "");
         setPlan(payload?.data?.plan ?? "free");
+        setIgAvatarUrl(payload?.data?.igAvatarUrl ?? "");
       })
       .catch(() => undefined);
-  }, []);
-
-  // Best-effort: surface the connected Instagram avatar on the identity card.
-  useEffect(() => {
-    let active = true;
-    fetch("/api/meta/connection")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { profilePictureUrl?: string | null }[] } | null) => {
-        if (!active || !payload || !Array.isArray(payload.data)) return;
-        const found = payload.data.find((connection) => typeof connection?.profilePictureUrl === "string" && connection.profilePictureUrl);
-        setIgAvatarUrl(found?.profilePictureUrl ?? "");
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
   }, []);
 
   useEffect(() => {

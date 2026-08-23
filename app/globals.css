@@ -1402,3 +1402,9 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .skeleton-stack { display: flex; flex-direction: column; gap: 6px; }
 .sidebar-skeleton { gap: var(--space-3); }
 .page-header-skeleton { margin-bottom: var(--space-7, 30px); }
+
+/* Campaign activity: click-through + truncation notices */
+.activity-clicks { align-items: center; color: var(--slate); display: flex; font-size: .74rem; font-weight: 650; gap: 6px; margin: -6px 0 var(--space-4); }
+.activity-clicks svg { color: var(--accent); flex-shrink: 0; }
+.activity-truncated { background: var(--surface-soft); border-radius: var(--radius-sm); font-size: .72rem; margin: 0; padding: 9px 12px; }
+.template-example { background: var(--surface-soft); border-radius: 6px; color: var(--slate); font-size: .72rem; line-height: 1.4; padding: 6px 8px; }

@@ -26,6 +26,24 @@ const CATEGORY_ICONS: Record<TemplateTriggerType, typeof MessageCircle> = {
   optin: CheckCircle2,
 };
 
+/** One concrete line per recipe so the tile shows the flow, not just the label. */
+const TEMPLATE_EXAMPLES: Record<string, string> = {
+  "comment-link-dm": "Comment “link” → DM: “Here you go: https://…”",
+  "conversation-starters": "DM “hi” → menu: Pricing / Support / Catalog",
+  "email-capture": "Comment “guide” → DM asking for email → deliver it",
+  "welcome-new-followers": "First DM ever → “Hey! Thanks for reaching out.”",
+  "story-mention-reply": "They mention you in a story → thank-you DM",
+  "default-reply": "Anything unmatched → “Got it! Someone will reply soon.”",
+  "main-menu": "“MENU” → tappable list of everything you offer",
+  "comment-catch-all": "Any comment on any post → instant private reply",
+  "referral-welcome": "Tap from an ad/ref link → warm welcome DM",
+  "optin-confirmation": "Opt-in tap → “Done! Here is what you asked for.”",
+  "giveaway-entry": "DM “enter” → “You are in. Here are the rules.”",
+  "affiliate-link": "Comment your code word → affiliate link by DM",
+};
+
+const CAMPAIGN_EXAMPLE = "Comment “drop” → public reply → DM opt-in → follow check → link";
+
 // Order categories the way a person thinks about them, not alphabetically.
 const CATEGORY_ORDER: TemplateTriggerType[] = ["comment", "message", "story_mention", "first_contact", "referral", "optin"];
 
@@ -33,6 +51,7 @@ type PickerItem = {
   id: string;
   title: string;
   description: string;
+  example?: string;
   category: TemplateTriggerType;
   popular?: boolean;
   featured?: boolean;
@@ -48,6 +67,7 @@ function Tile({ item, onSelect }: { item: PickerItem; onSelect: () => void }) {
     <button type="button" className="template-picker-tile" onClick={onSelect}>
       <strong>{item.title}</strong>
       <p>{item.description}</p>
+      {item.example && <span className="template-example">{item.example}</span>}
       <span className="template-picker-tile-meta">
         <span>{item.featured ? "Quick automation" : triggerLabel(item.category)}</span>
         {item.popular && <span className="template-picker-badge">Popular</span>}
@@ -91,6 +111,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
       id: "campaign-follow-gate",
       title: "Follow-gated Reel campaign",
       description: "Comment keyword → public reply → DM opt-in → follow check → deliver your link.",
+      example: CAMPAIGN_EXAMPLE,
       category: "comment",
       popular: true,
       featured: true,
@@ -100,6 +121,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
       id: template.id,
       title: template.title,
       description: template.description,
+      example: TEMPLATE_EXAMPLES[template.id],
       category: template.setup.definition.trigger.type,
       popular: template.popular,
       href: `/automations/new?type=classic&template=${template.id}`,

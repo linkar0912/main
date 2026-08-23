@@ -13,6 +13,7 @@ function stubFetch(data: ParticipantActivitySummary[], summary?: ParticipantFunn
 
 function participant(overrides: Partial<ParticipantActivitySummary> = {}): ParticipantActivitySummary {
   return {
+    id: "participant_1",
     sourceMediaSnapshot: {
       id: "media_1",
       caption: "Giveaway Reel",

@@ -15,6 +15,9 @@ const broadcastSchema = z.object({
   name: z.string().trim().min(1).max(120),
   text: z.string().trim().min(1).max(1_000),
   segment: z.enum(["all_contacts", "captured_email"]),
+  // Optional ISO timestamp. When in the future, jobs are enqueued with a matching
+  // BullMQ delay instead of fanning out immediately (quiet hours still apply).
+  scheduleStart: z.string().datetime({ offset: true }).optional(),
 });
 
 // GET /api/broadcasts - recent blasts with progress.
@@ -50,11 +53,17 @@ export async function POST(request: Request) {
     );
   }
 
+  // A future scheduleStart turns the blast into delayed jobs; quiet hours stack on top.
+  const scheduledFor = input.scheduleStart ? new Date(input.scheduleStart) : null;
+  const scheduledHoldMs = scheduledFor ? Math.max(0, scheduledFor.getTime() - Date.now()) : 0;
+  const isScheduled = scheduledHoldMs > 60_000;
+
   const broadcast = await repository.createBroadcast(session.workspaceId, {
     name: input.name,
     text: input.text,
     segment: input.segment,
     total: recipients.length,
+    status: recipients.length === 0 ? undefined : isScheduled ? "PENDING" : undefined,
   });
 
   if (recipients.length === 0) {
@@ -90,7 +99,7 @@ export async function POST(request: Request) {
     igScopedUserId: recipient.igScopedUserId,
   }));
 
-  const enqueueResult = await enqueueBroadcastSends(jobs, quietHoldMs);
+  const enqueueResult = await enqueueBroadcastSends(jobs, quietHoldMs + scheduledHoldMs);
   if (enqueueResult.rejected.length > 0) {
     const deliveryKeyByRecipient = new Map(jobs.map((job) => [
       `${job.igAccountId}:${job.igScopedUserId}`,

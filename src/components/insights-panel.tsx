@@ -14,7 +14,7 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/insights${query}`)
+    fetch(`/api/insights${query}${query ? "&" : "?"}include=usage`)
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as InsightsPayload & { error?: string };
         if (!response.ok) throw new Error(payload.error ?? "Could not load insights");

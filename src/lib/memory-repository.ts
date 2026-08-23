@@ -1272,7 +1272,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         name: input.name.trim(),
         text: input.text,
         segment: input.segment satisfies BroadcastSegment,
-        status: input.total > 0 ? "RUNNING" : "COMPLETED",
+        status: input.status ?? (input.total > 0 ? "RUNNING" : "COMPLETED"),
         total: input.total,
         sent: 0,
         failed: 0,

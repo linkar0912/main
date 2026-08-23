@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   countParticipantsPerDay: vi.fn(),
   countExecutionsSentPerDay: vi.fn(),
   countParticipantsByMedia: vi.fn(),
+  countParticipantsCreatedSince: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidatedSession }));
@@ -17,6 +18,7 @@ vi.mock("@/src/lib/repository-provider", () => ({
     countParticipantsPerDay: mocks.countParticipantsPerDay,
     countExecutionsSentPerDay: mocks.countExecutionsSentPerDay,
     countParticipantsByMedia: mocks.countParticipantsByMedia,
+    countParticipantsCreatedSince: mocks.countParticipantsCreatedSince,
   }),
 }));
 
@@ -30,6 +32,7 @@ describe("GET /api/insights", () => {
     mocks.countParticipantsPerDay.mockReset().mockResolvedValue([]);
     mocks.countExecutionsSentPerDay.mockReset().mockResolvedValue([]);
     mocks.countParticipantsByMedia.mockReset().mockResolvedValue([]);
+    mocks.countParticipantsCreatedSince.mockReset().mockResolvedValue(0);
   });
 
   it("passes the selected automation to every analytics query", async () => {
@@ -41,6 +44,17 @@ describe("GET /api/insights", () => {
     expect(mocks.countParticipantsPerDay).toHaveBeenCalledWith("workspace_1", 14, "automation_1");
     expect(mocks.countExecutionsSentPerDay).toHaveBeenCalledWith("workspace_1", 14, "automation_1");
     expect(mocks.countParticipantsByMedia).toHaveBeenCalledWith("workspace_1", "automation_1");
+  });
+
+  it("include=usage skips the heavy analytics queries", async () => {
+    mocks.countParticipantsCreatedSince.mockResolvedValue(7);
+    const response = await GET(new Request("http://localhost/api/insights?automationId=automation_1&include=usage"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.usage).toEqual({ participantsThisMonth: 7, monthlyLimit: null });
+    expect(mocks.countParticipantsByState).not.toHaveBeenCalled();
+    expect(mocks.countParticipantsPerDay).not.toHaveBeenCalled();
   });
 
   it("returns 404 before analytics queries for a foreign automation", async () => {

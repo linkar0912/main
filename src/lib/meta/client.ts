@@ -28,7 +28,7 @@ export class MetaApiError extends Error {
 const MEDIA_FIELDS = "id,caption,media_type,media_product_type,permalink,media_url,thumbnail_url,timestamp";
 const MEDIA_TYPES = new Set<MetaMedia["mediaType"]>(["IMAGE", "VIDEO", "CAROUSEL_ALBUM"]);
 const MEDIA_PRODUCT_TYPES = new Set<NonNullable<MetaMedia["mediaProductType"]>>(["AD", "FEED", "REELS", "STORY"]);
-const INSTAGRAM_LOGIN_API_VERSION = "v25.0";
+export const INSTAGRAM_LOGIN_API_VERSION = "v25.0";
 
 /**
  * Webhook fields every connection needs: comment triggers and campaigns ride on

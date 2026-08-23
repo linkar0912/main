@@ -185,6 +185,32 @@ function AutomationBuilderV1({
   const [activeStep, setActiveStep] = useState(0);
   const [previewView, setPreviewView] = useState<PreviewView>(initialDefinition.trigger.type === "comment" ? "post" : "dm");
   const connection = useConnectedInstagram();
+  // Classic flows reference media by pasted IDs; pull thumbnails so the phone
+  // preview can render the real post. Display-only - never saved.
+  const [mediaThumbs, setMediaThumbs] = useState<Record<string, { thumbnailUrl?: string; isReel?: boolean }>>({});
+  useEffect(() => {
+    if (triggerType !== "comment") return;
+    let active = true;
+    fetch("/api/meta/media")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { id: string; thumbnailUrl?: string; mediaUrl?: string; mediaProductType?: string }[] } | null) => {
+        if (!active || !payload?.data) return;
+        const index: Record<string, { thumbnailUrl?: string; isReel?: boolean }> = {};
+        for (const media of payload.data) {
+          const thumbnailUrl = media.thumbnailUrl ?? media.mediaUrl;
+          if (!thumbnailUrl && media.mediaProductType !== "REELS") continue;
+          index[media.id] = {
+            ...(thumbnailUrl ? { thumbnailUrl } : {}),
+            ...(media.mediaProductType === "REELS" ? { isReel: true } : {}),
+          };
+        }
+        setMediaThumbs(index);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [triggerType]);
 
   const usesTextTrigger = triggerType === "comment" || triggerType === "message";
   const allowedActionTypes = classicActionOptions(triggerType);
@@ -394,6 +420,9 @@ function AutomationBuilderV1({
     }
     return bubbles;
   });
+
+  const previewMediaId = triggerType === "comment" ? parseCommaSeparated(mediaIds)[0] : undefined;
+  const previewThumb = previewMediaId ? mediaThumbs[previewMediaId] : undefined;
 
   return (
     <form className="builder-layout" onSubmit={save}>
@@ -911,6 +940,8 @@ function AutomationBuilderV1({
           showComments={false}
           username={connection?.username ?? "yourbrand"}
           profileId={connection?.igUserId || undefined}
+          postImageUrl={previewThumb?.thumbnailUrl}
+          postIsReel={previewThumb?.isReel}
           messages={dmMessages}
         />
       </aside>
