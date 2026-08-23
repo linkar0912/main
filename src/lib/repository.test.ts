@@ -452,6 +452,20 @@ describe("memory repository", () => {
     expect(await repository.findWorkspaceByInstagramAccount("ig_123")).toBeNull();
   });
 
+  it("refuses to connect an Instagram account that another workspace owns", async () => {
+    const repository = createMemoryRepository();
+    await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_123", username: "creator", accessTokenEncrypted: "token-a", status: "CONNECTED" });
+
+    await expect(repository.upsertConnection({
+      workspaceId: "workspace_b",
+      igUserId: "ig_123",
+      username: "creator",
+      accessTokenEncrypted: "token-b",
+      status: "CONNECTED",
+    })).rejects.toMatchObject({ code: "INSTAGRAM_ACCOUNT_ALREADY_CONNECTED" });
+    expect(await repository.listConnections("workspace_b")).toEqual([]);
+  });
+
   it("disconnects only the selected connection in the authorized workspace", async () => {
     const repository = createMemoryRepository();
     const first = await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_1", username: "one", accessTokenEncrypted: "token-one", status: "CONNECTED" });

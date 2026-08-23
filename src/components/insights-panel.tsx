@@ -36,7 +36,7 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
     return () => {
       active = false;
     };
-  }, [automationId]);
+  }, [query]);
 
   if (error) return <p className="form-error" role="alert">{error}</p>;
   if (!insights) {

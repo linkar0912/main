@@ -7,6 +7,7 @@ import { MetaClient, MetaApiError } from "@/src/lib/meta/client";
 import { META_OAUTH_STATE_COOKIE, readOAuthState } from "@/src/lib/meta/oauth-state";
 import { sealSecret } from "@/src/lib/security/secrets";
 import { getRepository } from "@/src/lib/repository-provider";
+import { InstagramAccountOwnershipError } from "@/src/lib/repository";
 
 export const runtime = "nodejs";
 
@@ -101,6 +102,7 @@ export async function GET(request: Request) {
     if (error instanceof InstagramPermissionError) status = "missing-permissions";
     else if (error instanceof MetaOAuthError) status = "token-exchange";
     else if (error instanceof MetaApiError && error.message.includes("profile")) status = "profile-fetch";
+    else if (error instanceof InstagramAccountOwnershipError) status = "already-connected";
     return withoutStateCookie(settingsRedirect(env, status));
   }
 }

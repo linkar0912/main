@@ -182,6 +182,7 @@ export function SettingsScreen() {
     "token-exchange": "Instagram rejected the app credentials while finishing sign-in. Verify META_APP_ID and META_APP_SECRET in the deployment, and that this exact callback URL is listed under Valid OAuth Redirect URIs in the Meta app: {callbackUrl}",
     "missing-permissions": "Instagram signed in but did not approve every permission Linkar needs. Reconnect and accept all requested scopes — until the app passes App Review, the Instagram account must belong to a role on the Meta app.",
     "profile-fetch": "Signed in, but Linkar could not read the account profile back from Instagram. This is usually transient — retry the connection.",
+    "already-connected": "That Instagram account already belongs to another Linkar workspace. Disconnect it there before connecting it here.",
     error: "Meta could not finish the connection. Check the app settings and try again.",
   };
 

@@ -35,6 +35,7 @@ import type {
   BroadcastSegment,
   MessagingWindow,
 } from "./repository";
+import { InstagramAccountOwnershipError } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 
 function now(): string {
@@ -410,15 +411,46 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       const workspaceIds = new Set(
         [...connections.values()].filter((connection) => connection.igUserId === igUserId).map((connection) => connection.workspaceId),
       );
-      await this.deleteParticipantsByWorkspaceIds([...workspaceIds]);
+      for (const [id, participant] of participants.entries()) {
+        if (participant.instagramAccountId !== igUserId) continue;
+        participants.delete(id);
+        participantIdsBySource.delete(`${participant.workspaceId}:${participant.instagramAccountId}:${participant.sourceCommentId}`);
+      }
+      const deletedContactIds = new Set<string>();
+      for (const [id, contact] of contacts.entries()) {
+        if (contact.instagramAccountId !== igUserId) continue;
+        contacts.delete(id);
+        deletedContactIds.add(id);
+        contactIdsBySender.delete(`${contact.workspaceId}:${contact.instagramAccountId}:${contact.igScopedUserId}`);
+      }
+      for (const [id, enrollment] of enrollments.entries()) {
+        if (!deletedContactIds.has(enrollment.contactId)) continue;
+        enrollments.delete(id);
+        enrollmentIdsByPair.delete(`${enrollment.sequenceId}:${enrollment.contactId}`);
+      }
       for (const [id, connection] of connections.entries()) {
         if (connection.igUserId === igUserId) connections.delete(id);
       }
-      for (const [id, automation] of automations.entries()) {
-        if (workspaceIds.has(automation.workspaceId)) automations.delete(id);
-      }
-      for (const [id, execution] of executions.entries()) {
-        if (workspaceIds.has(execution.workspaceId)) executions.delete(id);
+      for (const workspaceId of workspaceIds) {
+        const hasSiblingConnection = [...connections.values()].some((connection) => connection.workspaceId === workspaceId);
+        if (hasSiblingConnection) continue;
+        await this.deleteParticipantsByWorkspaceIds([workspaceId]);
+        const workspaceContactIds = new Set<string>();
+        for (const [id, contact] of contacts.entries()) {
+          if (contact.workspaceId !== workspaceId) continue;
+          contacts.delete(id);
+          workspaceContactIds.add(id);
+          contactIdsBySender.delete(`${contact.workspaceId}:${contact.instagramAccountId}:${contact.igScopedUserId}`);
+        }
+        for (const [id, enrollment] of enrollments.entries()) {
+          if (enrollment.workspaceId !== workspaceId && !workspaceContactIds.has(enrollment.contactId)) continue;
+          enrollments.delete(id);
+          enrollmentIdsByPair.delete(`${enrollment.sequenceId}:${enrollment.contactId}`);
+        }
+        for (const [id, sequence] of sequences.entries()) if (sequence.workspaceId === workspaceId) sequences.delete(id);
+        for (const [id, broadcast] of broadcasts.entries()) if (broadcast.workspaceId === workspaceId) broadcasts.delete(id);
+        for (const [id, automation] of automations.entries()) if (automation.workspaceId === workspaceId) automations.delete(id);
+        for (const [id, execution] of executions.entries()) if (execution.workspaceId === workspaceId) executions.delete(id);
       }
       const timestamp = now();
       const record: DataDeletionRequestRecord = {
@@ -451,9 +483,8 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
 
     async upsertConnection(input) {
       // Several professional accounts may live in one workspace; keep siblings.
-      const existing = [...connections.values()].find(
-        (connection) => connection.workspaceId === input.workspaceId && connection.igUserId === input.igUserId,
-      );
+      const existing = [...connections.values()].find((connection) => connection.igUserId === input.igUserId);
+      if (existing && existing.workspaceId !== input.workspaceId) throw new InstagramAccountOwnershipError();
       const connection: InstagramConnectionRecord = {
         id: existing?.id ?? createId("connection"),
         ...input,

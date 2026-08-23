@@ -24,6 +24,7 @@ describe("SettingsScreen webhook health panel", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/settings");
   });
 
   it("shows all-caught-up when every required field is subscribed", async () => {
@@ -82,5 +83,18 @@ describe("SettingsScreen webhook health panel", () => {
 
     await screen.findByText("No account connected");
     expect(screen.queryByLabelText("Webhook health")).toBeNull();
+  });
+
+  it("explains when the Instagram account belongs to another workspace", async () => {
+    window.history.replaceState({}, "", "/settings?meta=already-connected");
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": { data: [] },
+      "/api/health": { mode: "configured" },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+
+    expect(await screen.findByText(/already belongs to another Linkar workspace/)).toBeTruthy();
   });
 });

@@ -138,8 +138,8 @@ model InstagramConnection {
   connectedAt          DateTime         @default(now())
   workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  // A workspace may connect several professional accounts; uniqueness is per account.
-  @@unique([workspaceId, igUserId])
+  // One professional account has exactly one owning workspace.
+  @@unique([igUserId])
   @@index([workspaceId, status])
 }
 

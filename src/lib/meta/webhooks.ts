@@ -19,6 +19,21 @@ function numberValue(value: unknown, fallback: number): number {
   return typeof value === "number" ? value : fallback;
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  const object = record(value);
+  if (object) {
+    return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
+function messagingEventId(accountId: string, timestamp: number, item: JsonRecord): string {
+  return createHash("sha256")
+    .update(`${accountId}\0${timestamp}\0${stableJson(item)}`)
+    .digest("base64url");
+}
+
 function interactionEventId(
   accountId: string,
   kind: "optin" | "referral",
@@ -113,7 +128,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
         message.is_self !== true &&
         message.is_deleted !== true
       ) {
-        const messageId = stringValue(message.mid) ?? `${accountId}:${timestamp}`;
+        const messageId = stringValue(message.mid) ?? messagingEventId(accountId, timestamp, item);
         const storyAttachment = storyMentionAttachment(message);
         if (storyAttachment) {
           // A story mention is its own trigger type — emit it instead of a plain
@@ -146,7 +161,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
       } else if (postback && inbound) {
         const interactionPayload = payloadValue(postback.payload);
         events.push({
-          id: stringValue(postback.mid) ?? `${accountId}:postback:${timestamp}`,
+          id: stringValue(postback.mid) ?? messagingEventId(accountId, timestamp, item),
           accountId,
           type: "postback.received",
           text: stringValue(postback.payload) ?? stringValue(postback.title) ?? "",

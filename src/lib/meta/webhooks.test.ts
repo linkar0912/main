@@ -195,6 +195,34 @@ describe("normalizeWebhook", () => {
     expect(retry.map((event) => event.id)).toEqual(firstDelivery.map((event) => event.id));
   });
 
+  it("creates unique retry-stable IDs for identifier-less messages and postbacks", () => {
+    const payload = {
+      object: "instagram",
+      entry: [{
+        id: "ig_business_1",
+        time: 1710000000,
+        messaging: [
+          { sender: { id: "igsid_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, message: { text: "first" } },
+          { sender: { id: "igsid_2" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, message: { text: "second" } },
+          { sender: { id: "igsid_3" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, postback: { title: "First", payload: "first-action" } },
+          { sender: { id: "igsid_4" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, postback: { title: "Second", payload: "second-action" } },
+        ],
+      }],
+    };
+
+    const firstDelivery = normalizeWebhook(payload);
+    const retry = normalizeWebhook(payload);
+
+    expect(firstDelivery.map((event) => event.id)).toEqual([
+      expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+    ]);
+    expect(new Set(firstDelivery.map((event) => event.id)).size).toBe(4);
+    expect(retry.map((event) => event.id)).toEqual(firstDelivery.map((event) => event.id));
+  });
+
   it("classifies quick replies only when their payload is a string and preserves empty payloads", () => {
     const events = normalizeWebhook({
       object: "instagram",

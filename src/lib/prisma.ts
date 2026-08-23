@@ -31,6 +31,7 @@ import type {
   BroadcastRecord,
   MessagingWindow,
 } from "./repository";
+import { InstagramAccountOwnershipError } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { toMessagingWindow } from "./messaging-window";
 
@@ -760,7 +761,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async findWorkspaceByInstagramAccount(igUserId) {
-      const record = await client.instagramConnection.findFirst({
+      const record = await client.instagramConnection.findUnique({
         where: { igUserId, status: "CONNECTED" },
       });
       return record ? { workspaceId: record.workspaceId, connection: mapConnection(record) } : null;
@@ -782,13 +783,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           select: { workspaceId: true },
         });
         const workspaceIds = [...new Set(connections.map((connection) => connection.workspaceId))];
-        if (workspaceIds.length > 0) {
-          await transaction.automationContact.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
-          await transaction.automationParticipant.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
-          await transaction.automationExecution.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
-          await transaction.webhookEvent.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
-          await transaction.automation.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
-          await transaction.instagramConnection.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+        await transaction.automationContact.deleteMany({ where: { instagramAccountId: igUserId } });
+        await transaction.automationParticipant.deleteMany({ where: { instagramAccountId: igUserId } });
+        await transaction.instagramConnection.deleteMany({ where: { igUserId } });
+        for (const workspaceId of workspaceIds) {
+          const remainingConnections = await transaction.instagramConnection.count({ where: { workspaceId } });
+          if (remainingConnections > 0) continue;
+          await transaction.automationContact.deleteMany({ where: { workspaceId } });
+          await transaction.automationParticipant.deleteMany({ where: { workspaceId } });
+          await transaction.automationExecution.deleteMany({ where: { workspaceId } });
+          await transaction.webhookEvent.deleteMany({ where: { workspaceId } });
+          await transaction.automationSequence.deleteMany({ where: { workspaceId } });
+          await transaction.broadcast.deleteMany({ where: { workspaceId } });
+          await transaction.automation.deleteMany({ where: { workspaceId } });
         }
         return transaction.dataDeletionRequest.create({
           data: {
@@ -821,14 +828,22 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async upsertConnection(input) {
-      // Workspaces may connect several professional accounts; upsert per
-      // (workspaceId, igUserId) and leave sibling connections untouched.
-      const record = await client.instagramConnection.upsert({
-        where: { workspaceId_igUserId: { workspaceId: input.workspaceId, igUserId: input.igUserId } },
-        create: { id: createId("connection"), ...input },
-        update: input,
-      });
-      return mapConnection(record);
+      const owner = await client.instagramConnection.findUnique({ where: { igUserId: input.igUserId } });
+      if (owner && owner.workspaceId !== input.workspaceId) throw new InstagramAccountOwnershipError();
+      try {
+        const record = await client.instagramConnection.upsert({
+          where: { igUserId: input.igUserId },
+          create: { id: createId("connection"), ...input },
+          update: input,
+        });
+        return mapConnection(record);
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        const winner = await client.instagramConnection.findUnique({ where: { igUserId: input.igUserId } });
+        if (winner?.workspaceId !== input.workspaceId) throw new InstagramAccountOwnershipError();
+        if (!winner) throw error;
+        return mapConnection(winner);
+      }
     },
 
     async recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult> {

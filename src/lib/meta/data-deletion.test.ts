@@ -86,4 +86,45 @@ describe("Meta data deletion", () => {
     expect(await repository.getParticipant("workspace_1", "ig_123", affectedSecond.id)).toBeNull();
     expect(await repository.getParticipant("workspace_2", "ig_999", unrelated.id)).toMatchObject({ id: unrelated.id });
   });
+
+  it("removes only the requested account data when its workspace has another connection", async () => {
+    const repository = createMemoryRepository();
+    const mediaSnapshot = (id: string) => ({
+      id,
+      mediaType: "VIDEO" as const,
+      mediaProductType: "REELS" as const,
+      permalink: `https://instagram.com/reel/${id}`,
+      timestamp: "2026-08-21T09:00:00.000Z",
+    });
+    const automation = await repository.createAutomation("workspace_1", {
+      name: "Sibling-safe flow",
+      definition: {
+        version: 1 as const,
+        trigger: { type: "comment" as const, keywords: ["guide"], match: "any" as const, mediaIds: [] },
+        conditions: [],
+        actions: [{ type: "private_reply" as const, text: "Here you go" }],
+      },
+    });
+    await repository.upsertConnection({ workspaceId: "workspace_1", igUserId: "ig_target", username: "target", accessTokenEncrypted: "target-token", status: "CONNECTED" });
+    await repository.upsertConnection({ workspaceId: "workspace_1", igUserId: "ig_sibling", username: "sibling", accessTokenEncrypted: "sibling-token", status: "CONNECTED" });
+    const { record: targetParticipant } = await repository.createParticipant({
+      workspaceId: "workspace_1", automationId: automation.id, instagramAccountId: "ig_target",
+      sourceCommentId: "target-comment", sourceMediaId: "target-media", sourceMediaSnapshot: mediaSnapshot("target-media"),
+    });
+    const { record: siblingParticipant } = await repository.createParticipant({
+      workspaceId: "workspace_1", automationId: automation.id, instagramAccountId: "ig_sibling",
+      sourceCommentId: "sibling-comment", sourceMediaId: "sibling-media", sourceMediaSnapshot: mediaSnapshot("sibling-media"),
+    });
+    await repository.touchContact("workspace_1", "ig_target", "target-person", "2026-08-23T09:00:00.000Z");
+    await repository.touchContact("workspace_1", "ig_sibling", "sibling-person", "2026-08-23T09:00:00.000Z");
+
+    await repository.beginInstagramDataDeletion("ig_target", "replyconnect_delete_target", "hash_target");
+
+    expect(await repository.getParticipant("workspace_1", "ig_target", targetParticipant.id)).toBeNull();
+    expect(await repository.getParticipant("workspace_1", "ig_sibling", siblingParticipant.id)).toMatchObject({ id: siblingParticipant.id });
+    expect(await repository.getContact("workspace_1", "ig_target", "target-person")).toBeNull();
+    expect(await repository.getContact("workspace_1", "ig_sibling", "sibling-person")).toMatchObject({ igScopedUserId: "sibling-person" });
+    expect(await repository.listConnections("workspace_1")).toEqual([expect.objectContaining({ igUserId: "ig_sibling" })]);
+    expect(await repository.listAutomations("workspace_1")).toEqual([expect.objectContaining({ id: automation.id })]);
+  });
 });

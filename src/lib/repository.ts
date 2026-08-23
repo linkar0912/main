@@ -65,6 +65,15 @@ export type InstagramConnectionRecord = {
   connectedAt: string;
 };
 
+export class InstagramAccountOwnershipError extends Error {
+  readonly code = "INSTAGRAM_ACCOUNT_ALREADY_CONNECTED";
+
+  constructor() {
+    super("This Instagram account is already connected to another workspace");
+    this.name = "InstagramAccountOwnershipError";
+  }
+}
+
 export type ExecutionRecord = {
   id: string;
   workspaceId: string;

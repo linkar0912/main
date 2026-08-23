@@ -47,7 +47,7 @@ async function findJobsByAccount(queue: Queue, igUserId: string, includeActive: 
   for (; ;) {
     const page = await queue.getJobs(states, start, start + JOB_SCAN_PAGE_SIZE - 1);
     for (const job of page) {
-      if (job && job.data?.accountId === igUserId) matches.push(job);
+      if (job && (job.data?.accountId === igUserId || job.data?.igAccountId === igUserId)) matches.push(job);
     }
     if (page.length < JOB_SCAN_PAGE_SIZE) break;
     start += JOB_SCAN_PAGE_SIZE;
