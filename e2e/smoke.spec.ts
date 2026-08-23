@@ -54,6 +54,23 @@ test("dashboard and automation list are reachable", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Automations" })).toBeVisible();
 });
 
+test("automation delivery problems are visible without recipient payloads", async ({ page }) => {
+  await page.route("**/api/automations/deliveries?limit=25", (route) => route.fulfill({
+    json: { data: [{
+      kind: "LEAD_WEBHOOK",
+      state: "UNKNOWN",
+      attemptCount: 1,
+      automationId: "automation_1",
+      lastError: "Provider connection closed before a response",
+      updatedAt: "2026-08-23T12:00:00.000Z",
+    }] },
+  }));
+  await page.goto("/automations");
+  await expect(page.getByText("Needs review")).toBeVisible();
+  await expect(page.getByText("Provider connection closed before a response")).toBeVisible();
+  await expect(page.getByText(/recipientId|payload|access-token-secret/)).toHaveCount(0);
+});
+
 test("classic builder creates a keyword autoresponder", async ({ page }) => {
   await page.goto("/automations/new?type=classic");
   await expect(page.getByRole("heading", { name: /Build a reply flow/i })).toBeVisible();

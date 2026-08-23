@@ -260,6 +260,12 @@ the P3009 lock-out took the site down until an operator intervened.
   before recreating the service. Any reported account ID is a hard stop: back
   up the database and resolve ownership with the workspace owner; never merge,
   reassign, or delete duplicate rows automatically.
+- `20260823200000_outbound_delivery_ledger` creates the shared outbound ledger
+  and atomic daily quota counter used by classic flows, campaigns, sequences,
+  broadcasts, lead email, and lead webhooks. Before deploying this release,
+  capture a custom-format `pg_dump`, verify the file is non-empty with mode
+  `600`, and record its SHA-256 checksum outside the database volume. The
+  migration is additive and does not replay historical sends.
 - Test against a real PostgreSQL 17 before merging, applying the migration to a
   database already at the previous revision — not only to an empty one. A fresh
   database applies the whole history in order and hides ordering bugs.
