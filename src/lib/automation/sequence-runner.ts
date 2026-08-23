@@ -1,17 +1,24 @@
 import { unsealSecret } from "../security/secrets";
 import type { AutomationRepository, MessagingWindow } from "../repository";
 import type { MetaConnection } from "../meta/types";
-import { MetaApiError } from "../meta/client";
 import { logger } from "../logger";
 import { isQuietNow, msUntilQuietEnd } from "../messaging-window";
+import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
 
-export type SequenceRunnerClient = { sendDirectMessage: (connection: MetaConnection, recipientId: string, message: { type: "text"; text: string }) => Promise<unknown> };
+export type SequenceRunnerClient = {
+  sendDirectMessage: (
+    connection: MetaConnection,
+    recipientId: string,
+    message: { type: "text"; text: string },
+  ) => Promise<unknown>;
+};
 
 export type SequenceRunnerOptions = {
   client?: SequenceRunnerClient;
   tokenEncryptionKey?: string;
   /** Max sends per sweep — keeps the scheduler polite on shared hosts. */
   batchSize?: number;
+  claimLeaseMs?: number;
 };
 
 export type SequenceSweepResult = {
@@ -88,24 +95,40 @@ export async function processDueSequences(
       continue;
     }
 
-    try {
-      const connection: MetaConnection = {
-        igUserId: mapping.connection.igUserId,
-        accessToken: unsealSecret(mapping.connection.accessTokenEncrypted, options.tokenEncryptionKey),
-      };
-      await options.client.sendDirectMessage(connection, contact.igScopedUserId, { type: "text", text: step.text });
-    } catch (error) {
-      if (error instanceof MetaApiError && error.retryable) {
-        // Leave nextSendAt untouched — the next sweep retries the same step.
-        logger.warn("Sequence step send retryable failure", { enrollmentId: enrollment.id, error: error.message });
+    const connection: MetaConnection = {
+      igUserId: mapping.connection.igUserId,
+      accessToken: unsealSecret(mapping.connection.accessTokenEncrypted, options.tokenEncryptionKey),
+    };
+    const delivery = await executeOutboundDelivery({
+      deliveryKey: deliveryKeys.sequenceStep(enrollment.id, step.id),
+      workspaceId: enrollment.workspaceId,
+      sequenceEnrollmentId: enrollment.id,
+      instagramAccountId: contact.instagramAccountId,
+      recipientId: contact.igScopedUserId,
+      kind: "SEQUENCE_STEP",
+      payload: { type: "text", text: step.text },
+      claimLeaseMs: options.claimLeaseMs ?? 30_000,
+      repository,
+    }, async (payload) => {
+      const response = await options.client!.sendDirectMessage(
+        connection,
+        contact.igScopedUserId,
+        payload as { type: "text"; text: string },
+      );
+      const messageId = typeof response === "object" && response !== null
+        && "message_id" in response && typeof response.message_id === "string"
+        ? response.message_id
+        : undefined;
+      return { id: messageId };
+    });
+    if (delivery.status !== "SENT") {
+      if (delivery.status === "FAILED" || delivery.status === "UNKNOWN") {
+        logger.warn("Sequence step delivery did not complete", {
+          enrollmentId: enrollment.id,
+          status: delivery.status,
+        });
         result.failed += 1;
-        continue;
       }
-      // Permanent failure (bad recipient, revoked token, …) — stop this enrollment.
-      logger.error("Sequence step send failed permanently", { enrollmentId: enrollment.id, error: error instanceof Error ? error.message : String(error) });
-      await repository.cancelEnrollmentsForContact(contact.id);
-      result.cancelled += 1;
-      result.failed += 1;
       continue;
     }
 

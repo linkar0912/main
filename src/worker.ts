@@ -13,6 +13,9 @@ import { sweepStaleParticipants } from "./lib/automation/participant-retention";
 import { processDueSequences } from "./lib/automation/sequence-runner";
 import { processBroadcastSend, type BroadcastRunnerOptions } from "./lib/automation/broadcast-runner";
 import type { BroadcastSendJob } from "./lib/queue";
+import { reconcileExpiredDeliveryClaims } from "./lib/automation/delivery-reconciliation";
+
+const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 
 const env = getServerEnv();
 
@@ -99,6 +102,29 @@ if (!env.redisUrl) {
   };
   void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error.message }));
   setInterval(() => void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error.message })), 60 * 60 * 1_000).unref();
+
+  let deliveryReconciliationRunning = false;
+  const runDeliveryReconciliation = async () => {
+    if (deliveryReconciliationRunning) return;
+    deliveryReconciliationRunning = true;
+    try {
+      const result = await reconcileExpiredDeliveryClaims(
+        getRepository(),
+        new Date().toISOString(),
+        100,
+      );
+      if (result.unknown > 0) {
+        logger.warn("Expired outbound delivery claims marked unknown", result);
+      }
+    } finally {
+      deliveryReconciliationRunning = false;
+    }
+  };
+  void runDeliveryReconciliation().catch((error) =>
+    logger.error("Delivery reconciliation failed", { error: error.message }));
+  setInterval(() => void runDeliveryReconciliation().catch((error) =>
+    logger.error("Delivery reconciliation failed", { error: error.message })),
+  DELIVERY_RECONCILIATION_INTERVAL_MS).unref();
 
   // Sequence scheduler: delivers drip steps that are due. Runs shortly after boot and
   // then every 15 minutes — granular enough for hour-level step delays.

@@ -49,6 +49,13 @@ describe("production runtime commands", () => {
       expect(entrypoint).toContain("campaignsEnabled: env.followGatedCampaignsEnabled");
     }
   });
+
+  it("runs expired delivery reconciliation at startup and on an interval", () => {
+    const worker = readProjectFile("src/worker.ts");
+
+    expect(worker).toContain("reconcileExpiredDeliveryClaims");
+    expect(worker).toContain("DELIVERY_RECONCILIATION_INTERVAL_MS");
+  });
 });
 
 describe("follow-gated campaign environment flag", () => {
