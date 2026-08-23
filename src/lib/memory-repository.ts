@@ -980,9 +980,11 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       const updated: AutomationContactRecord = {
         ...current,
         email: email.trim().toLowerCase(),
-        state: "CAPTURED",
-        awaitingAutomationId: undefined,
-        awaitingSince: undefined,
+        state: current.state === "AWAITING_EMAIL" ? "AWAITING_EMAIL" : "CAPTURED",
+        ...(current.state === "AWAITING_EMAIL" ? {} : {
+          awaitingAutomationId: undefined,
+          awaitingSince: undefined,
+        }),
         attempts: 0,
         lastSeenAt: atIso > current.lastSeenAt ? atIso : current.lastSeenAt,
         updatedAt: now(),

@@ -7,6 +7,7 @@ import { sealSecret } from "../security/secrets";
 import { normalizeWebhook } from "../meta/webhooks";
 import { validateFlowDefinition } from "./definition";
 import { sendEmail } from "../mailer";
+import { MetaApiError } from "../meta/client";
 
 vi.mock("../mailer", () => ({ sendEmail: vi.fn().mockResolvedValue({ delivered: true }) }));
 const mockedSendEmail = vi.mocked(sendEmail);
@@ -242,6 +243,38 @@ describe("runner: conversation triggers end to end", () => {
     expect(await repository.countCapturedContacts("workspace_a")).toBe(1);
   });
 
+  it("retries the confirmation without replaying the original automation", async () => {
+    const repository = await seed([captureFlow()]);
+    const client = createRunnerClient();
+    await processNormalizedEvent(messageEvent({ id: "resume_0", text: "guide" }), repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+    vi.mocked(client.sendDirectMessage).mockClear();
+    vi.mocked(client.sendDirectMessage)
+      .mockRejectedValueOnce(new MetaApiError("temporarily unavailable", 503))
+      .mockResolvedValueOnce({ recipient_id: "person_1", message_id: "confirmation" });
+    const reply = messageEvent({ id: "resume_1", text: "lead@example.com" });
+
+    await expect(processNormalizedEvent(reply, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    })).rejects.toThrow("temporarily unavailable");
+    expect(await repository.getContact("workspace_a", "ig_1", "person_1"))
+      .toMatchObject({ state: "AWAITING_EMAIL", email: "lead@example.com" });
+
+    await expect(processNormalizedEvent(reply, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    })).resolves.toEqual({ matched: 1, sent: 1, skipped: 0, failed: 0 });
+
+    expect(vi.mocked(client.sendDirectMessage).mock.calls.map(
+      (call) => (call[2] as { text: string }).text,
+    )).toEqual(["You are in! ✅", "You are in! ✅"]);
+    expect((await repository.getContact("workspace_a", "ig_1", "person_1"))?.state)
+      .toBe("CAPTURED");
+  });
+
   it("never lets the capture interception double-fire another autoresponder", async () => {
     const repository = await seed([
       captureFlow(),
@@ -298,6 +331,31 @@ describe("runner: conversation triggers end to end", () => {
     const stored = await repository.getContact("workspace_a", "ig_1", "person_1");
     expect(stored?.state).toBe("CAPTURED");
     expect(stored?.email).toBe("me@example.com");
+  });
+
+  it("retries contact finalization without resending already delivered actions", async () => {
+    const repository = await seed([captureFlow()]);
+    const client = createRunnerClient();
+    const captureContactEmail = repository.captureContactEmail.bind(repository);
+    repository.captureContactEmail = vi.fn()
+      .mockRejectedValueOnce(new Error("contact write unavailable"))
+      .mockImplementation(captureContactEmail);
+    const incoming = messageEvent({ id: "instant_resume", text: "guide → saved@example.com" });
+
+    await expect(processNormalizedEvent(incoming, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    })).rejects.toThrow("contact write unavailable");
+    await expect(processNormalizedEvent(incoming, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    })).resolves.toMatchObject({ sent: 1, failed: 0 });
+
+    expect(vi.mocked(client.sendDirectMessage).mock.calls.map(
+      (call) => (call[2] as { text: string }).text,
+    )).toEqual(["Here comes the guide!", "You are in! ✅"]);
+    expect(await repository.getContact("workspace_a", "ig_1", "person_1"))
+      .toMatchObject({ state: "CAPTURED", email: "saved@example.com" });
   });
 });
 

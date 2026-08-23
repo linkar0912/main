@@ -3,6 +3,7 @@ import type { FlowDefinitionV1, NormalizedEvent } from "./types";
 import { processNormalizedEvent, type AutomationRunnerClient } from "./runner";
 import { createMemoryRepository } from "../memory-repository";
 import { sealSecret } from "../security/secrets";
+import { MetaApiError } from "../meta/client";
 
 vi.mock("../mailer", () => ({ sendEmail: vi.fn().mockResolvedValue({ delivered: true }) }));
 
@@ -136,5 +137,125 @@ describe("conversational fields when the email arrives up front", () => {
     const contact = await repository.getContact("workspace_a", "ig_1", "person_1");
     expect(contact?.fields?.name).toBe("");
     expect(contact?.fields?.name).not.toBe("What's your name?");
+  });
+
+  it("does not advance a field answer until the next question is durably sent", async () => {
+    const repository = await seed(flowWithFields([
+      { id: "name", question: "What's your name?" },
+      { id: "company", question: "Where do you work?" },
+    ]));
+    const client = runnerClient();
+    await processNormalizedEvent(
+      messageEvent({ id: "field_resume_0", text: "guide — lead@example.com" }),
+      repository,
+      { client, tokenEncryptionKey: TOKEN_KEY },
+    );
+    vi.mocked(client.sendDirectMessage).mockClear();
+    vi.mocked(client.sendDirectMessage)
+      .mockRejectedValueOnce(new MetaApiError("temporarily unavailable", 503))
+      .mockResolvedValueOnce({ recipient_id: "person_1", message_id: "next_question" });
+    const answer = messageEvent({ id: "field_resume_1", text: "Grace Hopper" });
+
+    await expect(processNormalizedEvent(answer, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    })).rejects.toThrow("temporarily unavailable");
+    const pendingContact = await repository.getContact("workspace_a", "ig_1", "person_1");
+    expect(pendingContact).toMatchObject({
+        state: "AWAITING_FIELD",
+        awaitingFields: [
+          { id: "name", question: "What's your name?" },
+          { id: "company", question: "Where do you work?" },
+        ],
+      });
+    expect(pendingContact?.fields).toBeUndefined();
+
+    await processNormalizedEvent(answer, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+    expect(vi.mocked(client.sendDirectMessage).mock.calls.map(
+      (call) => (call[2] as { text: string }).text,
+    )).toEqual(["Where do you work?", "Where do you work?"]);
+    expect(await repository.getContact("workspace_a", "ig_1", "person_1"))
+      .toMatchObject({
+        state: "AWAITING_FIELD",
+        fields: { name: "Grace Hopper" },
+        awaitingFields: [{ id: "company", question: "Where do you work?" }],
+      });
+  });
+
+  it("retries field-queue persistence without resending the first question", async () => {
+    const repository = await seed(flowWithFields([
+      { id: "name", question: "What's your name?" },
+    ]));
+    const client = runnerClient();
+    await processNormalizedEvent(
+      messageEvent({ id: "queue_resume_0", text: "guide" }),
+      repository,
+      { client, tokenEncryptionKey: TOKEN_KEY },
+    );
+    vi.mocked(client.sendDirectMessage).mockClear();
+    const beginContactFieldCollection = repository.beginContactFieldCollection.bind(repository);
+    repository.beginContactFieldCollection = vi.fn()
+      .mockRejectedValueOnce(new Error("field queue write unavailable"))
+      .mockImplementation(beginContactFieldCollection);
+    const emailReply = messageEvent({ id: "queue_resume_1", text: "lead@example.com" });
+
+    await expect(processNormalizedEvent(emailReply, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    })).rejects.toThrow("field queue write unavailable");
+    await processNormalizedEvent(emailReply, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+
+    expect(vi.mocked(client.sendDirectMessage).mock.calls.map(
+      (call) => (call[2] as { text: string }).text,
+    )).toEqual(["What's your name?"]);
+    expect(await repository.getContact("workspace_a", "ig_1", "person_1"))
+      .toMatchObject({
+        state: "AWAITING_FIELD",
+        email: "lead@example.com",
+        awaitingFields: [{ id: "name", question: "What's your name?" }],
+      });
+  });
+
+  it("retries answer persistence without resending the next question", async () => {
+    const repository = await seed(flowWithFields([
+      { id: "name", question: "What's your name?" },
+      { id: "company", question: "Where do you work?" },
+    ]));
+    const client = runnerClient();
+    await processNormalizedEvent(
+      messageEvent({ id: "answer_resume_0", text: "guide — lead@example.com" }),
+      repository,
+      { client, tokenEncryptionKey: TOKEN_KEY },
+    );
+    vi.mocked(client.sendDirectMessage).mockClear();
+    const recordContactFieldAnswer = repository.recordContactFieldAnswer.bind(repository);
+    repository.recordContactFieldAnswer = vi.fn()
+      .mockRejectedValueOnce(new Error("answer write unavailable"))
+      .mockImplementation(recordContactFieldAnswer);
+    const answer = messageEvent({ id: "answer_resume_1", text: "Grace Hopper" });
+
+    await expect(processNormalizedEvent(answer, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    })).rejects.toThrow("answer write unavailable");
+    await processNormalizedEvent(answer, repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+
+    expect(vi.mocked(client.sendDirectMessage).mock.calls.map(
+      (call) => (call[2] as { text: string }).text,
+    )).toEqual(["Where do you work?"]);
+    expect(await repository.getContact("workspace_a", "ig_1", "person_1"))
+      .toMatchObject({
+        fields: { name: "Grace Hopper" },
+        awaitingFields: [{ id: "company", question: "Where do you work?" }],
+      });
   });
 });

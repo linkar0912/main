@@ -17,6 +17,11 @@ import {
   type CampaignRunnerOptions,
   type CampaignRunnerResult,
 } from "./campaign-runner";
+import {
+  deliveryKeys,
+  executeOutboundDelivery,
+  type DeliveryExecutionResult,
+} from "./outbound-delivery";
 
 export type AutomationRunnerClient = CampaignRunnerClient;
 
@@ -55,6 +60,52 @@ async function sendAction(
         : { type: "button", text: action.text, buttonLabel: action.buttonLabel, url: action.url };
 
   return (await client.sendDirectMessage(connection, action.recipientId, message)).message_id;
+}
+
+const DEFAULT_DELIVERY_CLAIM_LEASE_MS = 30_000;
+
+async function executeActionDelivery(
+  repository: AutomationRepository,
+  request: {
+    deliveryKey: string;
+    workspaceId: string;
+    automationId: string;
+    instagramAccountId: string;
+    recipientId?: string;
+    kind: "CLASSIC_ACTION" | "EMAIL_CAPTURE";
+    action: ExecutionAction;
+    claimLeaseMs: number;
+  },
+  client: AutomationRunnerClient,
+  connection: MetaConnection,
+): Promise<DeliveryExecutionResult> {
+  return executeOutboundDelivery({
+    deliveryKey: request.deliveryKey,
+    workspaceId: request.workspaceId,
+    automationId: request.automationId,
+    instagramAccountId: request.instagramAccountId,
+    recipientId: request.recipientId,
+    kind: request.kind,
+    payload: { ...request.action },
+    claimLeaseMs: request.claimLeaseMs,
+    repository,
+  }, async (payload) => ({
+    id: await sendAction(client, connection, payload as ExecutionAction),
+  }));
+}
+
+function requireSentDelivery(
+  result: DeliveryExecutionResult,
+  finalAttempt: boolean | undefined,
+): string | undefined {
+  if (result.status === "SENT") return result.providerMessageId;
+  if (result.status === "BUSY") {
+    throw new MetaApiError("Outbound delivery is already in progress", 503, true);
+  }
+  if (result.status === "FAILED" && result.retryable && !finalAttempt) {
+    throw new MetaApiError(result.error, 503, true);
+  }
+  throw new Error(result.error);
 }
 
 /** Inbound events that represent a person reaching out on the DM side of the account. */
@@ -315,6 +366,7 @@ async function processEmailCaptureReply(
   });
   if (!claimed) return null;
 
+  let followUpDelivered = false;
   try {
     const candidate = extractEmailAddress(event.text);
     const dailyLimit = await checkDailySendLimit(automation.definition, {
@@ -352,8 +404,24 @@ async function processEmailCaptureReply(
       );
       const fieldQueue = emailCapture.fields ?? [];
       if (fieldQueue.length > 0) {
-        // Conversational form: ask question 1 now; confirmation + fulfillment fire
-        // after the last answer (see processFieldAnswer).
+        const delivery = await executeActionDelivery(repository, {
+          deliveryKey: deliveryKeys.emailCapture(
+            automation.id,
+            event.id,
+            `question:${fieldQueue[0].id}`,
+          ),
+          workspaceId: mapping.workspaceId,
+          automationId: automation.id,
+          instagramAccountId: event.accountId,
+          recipientId: senderId,
+          kind: "EMAIL_CAPTURE",
+          action: { type: "send_text", recipientId: senderId, text: fieldQueue[0].question },
+          claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+        }, options.client, connection);
+        const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
+        followUpDelivered = true;
+        // Advance only after the question is durably SENT. A retry reuses the ledger
+        // row and then performs this state transition without calling Meta again.
         await repository.beginContactFieldCollection(
           mapping.workspaceId,
           event.accountId,
@@ -362,11 +430,6 @@ async function processEmailCaptureReply(
           automation.id,
           new Date(event.timestamp).toISOString(),
         );
-        const providerMessageId = await sendAction(options.client, connection, {
-          type: "send_text",
-          recipientId: senderId,
-          text: fieldQueue[0].question,
-        });
         await repository.completeExecution(mapping.workspaceId, dedupeKey, {
           status: "SENT",
           reason: `email_captured:${candidate};field_asked:${fieldQueue[0].id}`,
@@ -374,11 +437,19 @@ async function processEmailCaptureReply(
         });
         return { matched: 1, sent: 1, skipped: 0, failed: 0 };
       }
-      const providerMessageId = await sendAction(options.client, connection, {
-        type: "send_text",
+      const delivery = await executeActionDelivery(repository, {
+        deliveryKey: deliveryKeys.emailCapture(automation.id, event.id, "confirmation"),
+        workspaceId: mapping.workspaceId,
+        automationId: automation.id,
+        instagramAccountId: event.accountId,
         recipientId: senderId,
-        text: emailCapture.confirmationText,
-      });
+        kind: "EMAIL_CAPTURE",
+        action: { type: "send_text", recipientId: senderId, text: emailCapture.confirmationText },
+        claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+      }, options.client, connection);
+      const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
+      followUpDelivered = true;
+      await repository.clearContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId);
       if (emailCapture.delivery) {
         await deliverLeadEmail(mapping, automation.name, contact.id, candidate, emailCapture.delivery);
       }
@@ -405,8 +476,8 @@ async function processEmailCaptureReply(
       return { matched: 1, sent: 1, skipped: 0, failed: 0 };
     }
 
-    const attempts = await repository.bumpContactEmailAttempt(mapping.workspaceId, event.accountId, senderId);
-    if (attempts > MAX_EMAIL_CAPTURE_RETRIES) {
+    const nextAttempt = contact.attempts + 1;
+    if (nextAttempt > MAX_EMAIL_CAPTURE_RETRIES) {
       await repository.clearContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId);
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SKIPPED",
@@ -415,11 +486,27 @@ async function processEmailCaptureReply(
       return { matched: 0, sent: 0, skipped: 1, failed: 0 };
     }
 
-    const providerMessageId = await sendAction(options.client, connection, {
-      type: "send_text",
+    const delivery = await executeActionDelivery(repository, {
+      deliveryKey: deliveryKeys.emailCapture(automation.id, event.id, `retry:${nextAttempt}`),
+      workspaceId: mapping.workspaceId,
+      automationId: automation.id,
+      instagramAccountId: event.accountId,
       recipientId: senderId,
-      text: emailCapture.retryText ?? emailCapture.promptText,
-    });
+      kind: "EMAIL_CAPTURE",
+      action: {
+        type: "send_text",
+        recipientId: senderId,
+        text: emailCapture.retryText ?? emailCapture.promptText,
+      },
+      claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+    }, options.client, connection);
+    const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
+    followUpDelivered = true;
+    const attempts = await repository.bumpContactEmailAttempt(
+      mapping.workspaceId,
+      event.accountId,
+      senderId,
+    );
     await repository.completeExecution(mapping.workspaceId, dedupeKey, {
       status: "SENT",
       reason: `email_retry:${attempts}`,
@@ -427,6 +514,10 @@ async function processEmailCaptureReply(
     });
     return { matched: 1, sent: 1, skipped: 0, failed: 0 };
   } catch (error) {
+    if (followUpDelivered) {
+      await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
+      throw error;
+    }
     if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
       throw error;
@@ -477,6 +568,7 @@ async function processFieldAnswer(
   });
   if (!claimed) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
 
+  let followUpDelivered = false;
   try {
     const queue = contact.awaitingFields ?? [];
     const current = queue[0];
@@ -489,18 +581,6 @@ async function processFieldAnswer(
 
     const answer = event.text.trim().slice(0, 200);
     const atIso = new Date().toISOString();
-    const updated = await repository.recordContactFieldAnswer(
-      mapping.workspaceId,
-      event.accountId,
-      senderId,
-      current.id,
-      // A blank reply is stored as an empty answer. Substituting the question text
-      // reads downstream (webhook payloads, notifications, CSV exports) as though the
-      // lead actually answered with the question.
-      answer,
-      rest,
-      atIso,
-    );
 
     const dailyLimit = await checkDailySendLimit(automation.definition, {
       workspaceId: mapping.workspaceId,
@@ -508,7 +588,7 @@ async function processFieldAnswer(
     });
     if (!dailyLimit.allowed) {
       await repository.completeExecution(mapping.workspaceId, dedupeKey, { status: "SKIPPED", reason: dailyLimit.reason });
-      return { matched: updated.state === "CAPTURED" ? 1 : 0, sent: 0, skipped: 1, failed: 0 };
+      return { matched: 1, sent: 0, skipped: 1, failed: 0 };
     }
 
     if (!options.client || !options.tokenEncryptionKey) {
@@ -521,11 +601,34 @@ async function processFieldAnswer(
 
     const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
     const outgoing = rest.length > 0 ? rest[0].question : emailCapture.confirmationText;
-    const providerMessageId = await sendAction(options.client, connection, {
-      type: "send_text",
+    const delivery = await executeActionDelivery(repository, {
+      deliveryKey: deliveryKeys.emailCapture(
+        automation.id,
+        event.id,
+        `field:${current.id}:${rest.length > 0 ? `question:${rest[0].id}` : "confirmation"}`,
+      ),
+      workspaceId: mapping.workspaceId,
+      automationId: automation.id,
+      instagramAccountId: event.accountId,
       recipientId: senderId,
-      text: outgoing,
-    });
+      kind: "EMAIL_CAPTURE",
+      action: { type: "send_text", recipientId: senderId, text: outgoing },
+      claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+    }, options.client, connection);
+    const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
+    followUpDelivered = true;
+
+    // Persist the answer transition only after the next prompt/confirmation is
+    // durably SENT. If this write fails, the same event reuses SENT and retries it.
+    const updated = await repository.recordContactFieldAnswer(
+      mapping.workspaceId,
+      event.accountId,
+      senderId,
+      current.id,
+      answer,
+      rest,
+      atIso,
+    );
 
     let completionReason = `field_answered:${current.id}`;
     if (updated.state === "CAPTURED") {
@@ -558,6 +661,10 @@ async function processFieldAnswer(
     });
     return { matched: 1, sent: 1, skipped: 0, failed: 0 };
   } catch (error) {
+    if (followUpDelivered) {
+      await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
+      throw error;
+    }
     if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
       throw error;
@@ -766,12 +873,24 @@ export async function processNormalizedEvent(
       }
     }
 
+    let allActionsDelivered = false;
     try {
       const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
       let providerMessageId: string | undefined;
-      for (const action of actionsToSend) {
-        providerMessageId = (await sendAction(options.client, connection, action)) ?? providerMessageId;
+      for (const [index, action] of actionsToSend.entries()) {
+        const delivery = await executeActionDelivery(repository, {
+          deliveryKey: deliveryKeys.classicAction(automation.id, event.id, index),
+          workspaceId: mapping.workspaceId,
+          automationId: automation.id,
+          instagramAccountId: event.accountId,
+          recipientId: event.recipientId,
+          kind: "CLASSIC_ACTION",
+          action,
+          claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+        }, options.client, connection);
+        providerMessageId = requireSentDelivery(delivery, options.finalAttempt) ?? providerMessageId;
       }
+      allActionsDelivered = true;
       if (captureOutcome && senderId) {
         const atIso = new Date().toISOString();
         if (captureOutcome === "instant") {
@@ -837,6 +956,10 @@ export async function processNormalizedEvent(
       });
       result.sent += 1;
     } catch (error) {
+      if (allActionsDelivered) {
+        await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
+        throw error;
+      }
       if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
         throw error;

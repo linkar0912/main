@@ -1394,9 +1394,11 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: { id: current.id },
         data: {
           email: normalized,
-          state: "CAPTURED",
-          awaitingAutomationId: null,
-          awaitingSince: null,
+          state: current.state === "AWAITING_EMAIL" ? "AWAITING_EMAIL" : "CAPTURED",
+          ...(current.state === "AWAITING_EMAIL" ? {} : {
+            awaitingAutomationId: null,
+            awaitingSince: null,
+          }),
           attempts: 0,
           lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
         },

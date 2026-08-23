@@ -1,7 +1,11 @@
 import { createId } from "../id";
 import { MetaApiError } from "../meta/client";
 import { getRepository } from "../repository-provider";
-import type { EnsureOutboundDeliveryInput, OutboundDeliveryRecord } from "../repository";
+import type {
+  AutomationRepository,
+  EnsureOutboundDeliveryInput,
+  OutboundDeliveryRecord,
+} from "../repository";
 
 export type ProviderFailureClass =
   | "KNOWN_RETRYABLE"
@@ -13,6 +17,7 @@ export type DeliveryExecutionRequest<
 > = EnsureOutboundDeliveryInput & {
   payload: TPayload;
   claimLeaseMs: number;
+  repository?: AutomationRepository;
 };
 
 export type DeliveryExecutionResult =
@@ -80,13 +85,18 @@ export async function executeOutboundDelivery<
   request: DeliveryExecutionRequest<TPayload>,
   send: (payload: TPayload) => Promise<{ id?: string; message_id?: string }>,
 ): Promise<DeliveryExecutionResult> {
-  const repository = getRepository();
-  const ensured = await repository.ensureOutboundDelivery(request);
+  const {
+    claimLeaseMs,
+    repository: suppliedRepository,
+    ...deliveryInput
+  } = request;
+  const repository = suppliedRepository ?? getRepository();
+  const ensured = await repository.ensureOutboundDelivery(deliveryInput);
   const terminal = existingResult(ensured);
   if (terminal) return terminal;
 
   const owner = createId("delivery_claim");
-  const leaseUntil = new Date(Date.now() + request.claimLeaseMs).toISOString();
+  const leaseUntil = new Date(Date.now() + claimLeaseMs).toISOString();
   const claim = await repository.claimOutboundDelivery(request.deliveryKey, owner, leaseUntil);
   if (!claim.claimed) return existingResult(claim.record) ?? { status: "BUSY" };
 
