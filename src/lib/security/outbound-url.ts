@@ -5,12 +5,13 @@
  * cloud metadata (169.254.169.254), the compose-internal `postgres`/`valkey` hosts,
  * or the app's own API — and make the server issue POSTs there on their behalf.
  *
- * Scope: this rejects private, loopback, link-local and single-label hosts by
- * inspecting the URL only. It deliberately does not resolve DNS, so a *public*
- * hostname that resolves to a private address is still reachable. Closing that
- * needs resolution at request time plus a connection-level check; the URL-level
- * guard is what removes the trivially exploitable cases.
+ * `isSafeOutboundUrl` performs the cheap syntax/literal-address check used while
+ * saving definitions. `resolveSafeOutboundTarget` is the mandatory send-time
+ * check: it resolves every A/AAAA answer and rejects the destination if any answer
+ * can reach a non-public network.
  */
+
+import { lookup as dnsLookup } from "node:dns/promises";
 
 const BLOCKED_HOSTNAMES = new Set(["localhost", "ip6-localhost", "ip6-loopback"]);
 const BLOCKED_SUFFIXES = [".localhost", ".local", ".internal", ".home.arpa"];
@@ -50,7 +51,13 @@ function isBlockedIpv6(hostname: string): boolean | undefined {
   }
   if (/^f[cd][0-9a-f]{2}:/.test(address)) return true; // unique local fc00::/7
   if (/^fe[89ab][0-9a-f]:/.test(address)) return true; // link local fe80::/10
+  if (/^ff[0-9a-f]{2}:/.test(address)) return true; // multicast ff00::/8
   return false;
+}
+
+export function isBlockedOutboundAddress(address: string): boolean {
+  const normalized = address.toLowerCase().replace(/%.+$/, "").replace(/^\[|\]$/g, "");
+  return isBlockedIpv6(normalized) ?? isBlockedIpv4(normalized) ?? true;
 }
 
 export function isSafeOutboundUrl(value: string): boolean {
@@ -79,4 +86,37 @@ export function isSafeOutboundUrl(value: string): boolean {
   if (!hostname.includes(".")) return false;
 
   return true;
+}
+
+export type OutboundLookup = (
+  hostname: string,
+) => Promise<Array<{ address: string; family: number }>>;
+
+const defaultLookup: OutboundLookup = async (hostname) =>
+  dnsLookup(hostname, { all: true, verbatim: true });
+
+export async function resolveSafeOutboundTarget(
+  value: string,
+  options: { lookup?: OutboundLookup } = {},
+): Promise<URL> {
+  if (!isSafeOutboundUrl(value)) {
+    throw new Error("Outbound destination is not publicly routable");
+  }
+  const url = new URL(value);
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  // Literal addresses have already been checked; avoiding DNS here also keeps
+  // resolution behavior consistent across Node/platform versions.
+  if (isBlockedIpv4(hostname) !== undefined || isBlockedIpv6(hostname) !== undefined) {
+    return url;
+  }
+  let answers: Array<{ address: string; family: number }>;
+  try {
+    answers = await (options.lookup ?? defaultLookup)(hostname);
+  } catch (error) {
+    throw new Error(`Outbound destination DNS lookup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (answers.length === 0 || answers.some(({ address }) => isBlockedOutboundAddress(address))) {
+    throw new Error("Outbound destination is not publicly routable");
+  }
+  return url;
 }

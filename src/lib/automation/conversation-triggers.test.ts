@@ -10,6 +10,9 @@ import { sendEmail } from "../mailer";
 import { MetaApiError } from "../meta/client";
 
 vi.mock("../mailer", () => ({ sendEmail: vi.fn().mockResolvedValue({ delivered: true }) }));
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn().mockResolvedValue([{ address: "93.184.216.34", family: 4 }]),
+}));
 const mockedSendEmail = vi.mocked(sendEmail);
 
 const TOKEN_KEY = "a".repeat(64);

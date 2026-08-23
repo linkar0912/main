@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { NormalizedEvent } from "./automation/types";
-import { createWebhookJobId, enqueueWebhookEvents } from "./queue";
+import {
+  createLeadDeliveryJobId,
+  createWebhookJobId,
+  enqueueLeadDelivery,
+  enqueueWebhookEvents,
+} from "./queue";
 
 const event: NormalizedEvent = {
   id: "quick_reply_1",
@@ -28,5 +33,19 @@ describe("webhook queue", () => {
   it("uses a deterministic BullMQ-safe job id", () => {
     expect(createWebhookJobId(event)).toBe(createWebhookJobId(event));
     expect(createWebhookJobId(event)).not.toContain(":");
+  });
+
+  it("uses a deterministic BullMQ-safe lead delivery id", () => {
+    expect(createLeadDeliveryJobId("lead:key:1")).toBe(createLeadDeliveryJobId("lead:key:1"));
+    expect(createLeadDeliveryJobId("lead:key:1")).not.toContain(":");
+  });
+
+  it("reports that durable lead queuing is unavailable without Redis", async () => {
+    delete process.env.REDIS_URL;
+    await expect(enqueueLeadDelivery({
+      deliveryKey: "lead:key:1",
+      workspaceId: "workspace_a",
+      kind: "LEAD_WEBHOOK",
+    })).resolves.toBe(false);
   });
 });

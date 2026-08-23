@@ -1,13 +1,13 @@
 import { evaluateFlow } from "./engine";
 import type { EvaluationContext, ExecutionAction, NormalizedEvent } from "./types";
 import { unsealSecret } from "../security/secrets";
-import { isSafeOutboundUrl } from "../security/outbound-url";
 import type { AutomationContactRecord, AutomationRepository, InstagramConnectionRecord } from "../repository";
 import { MetaApiError } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
 import { notifyWorkspaceManagers } from "../notifications";
-import { sendEmail } from "../mailer";
+import type { OutboundEmail } from "../mailer";
 import { logger } from "../logger";
+import { enqueueLeadDelivery, type LeadDeliveryJob } from "../queue";
 import {
   releaseDailySendSlots,
   reserveDailySendSlots,
@@ -26,6 +26,7 @@ import {
   executeOutboundDelivery,
   type DeliveryExecutionResult,
 } from "./outbound-delivery";
+import { processLeadDelivery } from "./lead-delivery";
 
 export type AutomationRunnerClient = CampaignRunnerClient;
 
@@ -197,7 +198,7 @@ const OPT_OUT_CONFIRMATION = "Got it — you won't receive any more automated me
 function buildLeadDeliveryEmail(
   to: string,
   delivery: NonNullable<import("./types").FlowEmailCapture["delivery"]>,
-): Parameters<typeof sendEmail>[0] {
+): OutboundEmail {
   const lines = [delivery.message];
   if (delivery.linkUrl) {
     lines.push("", `${delivery.linkLabel ?? "Your link"}: ${delivery.linkUrl}`);
@@ -247,74 +248,67 @@ async function enrollNewLeadInSequences(
     });
   }
 }
-/**
- * Fire-and-forget lead webhook (Zapier/Make/n8n). A slow or broken endpoint must
- * never delay or fail the DM flow, so callers invoke this with `void` (the 5s timeout
- * bounds the request itself) and every error is swallowed after logging.
- */
-async function notifyLeadWebhook(
-  notifyUrl: string,
-  payload: {
-    email: string;
-    automationId: string;
-    automationName: string;
-    capturedAt: string;
-    fields?: Record<string, string>;
-  },
-): Promise<void> {
-  // Re-checked at send time as well as on save: a definition stored before this guard
-  // existed could still point at the internal network.
-  if (!isSafeOutboundUrl(notifyUrl)) {
-    logger.warn("Lead webhook blocked: destination is not publicly routable", { notifyUrl });
-    return;
-  }
-  try {
-    await fetch(notifyUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(5_000),
-    });
-  } catch (error) {
-    logger.warn("Lead webhook failed", {
-      notifyUrl,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
 type WorkspaceMapping = NonNullable<Awaited<ReturnType<AutomationRepository["findWorkspaceByInstagramAccount"]>>>;
 
-/**
- * Sends the optional fulfillment email for a freshly captured lead. Never throws:
- * a failed delivery email must not fail the DM flow that already succeeded — the
- * miss is logged and owners are notified so they can resend manually.
- */
-async function deliverLeadEmail(
+async function queueOrDeliverLead(
+  repository: AutomationRepository,
   mapping: WorkspaceMapping,
+  automationId: string,
   automationName: string,
   contactId: string,
   leadEmail: string,
-  delivery: { subject: string; message: string; linkUrl?: string; linkLabel?: string },
-): Promise<boolean> {
-  try {
-    const result = await sendEmail(buildLeadDeliveryEmail(leadEmail, delivery));
-    if (!result.delivered) {
-      logger.warn("Lead fulfillment email used the log transport (no EMAIL_API_KEY)", { to: leadEmail });
-    }
-    return true;
-  } catch (error) {
-    logger.error("Lead fulfillment email failed", {
-      to: leadEmail,
-      error: error instanceof Error ? error.message : String(error),
+  capturedAt: string,
+  options: {
+    delivery?: { subject: string; message: string; linkUrl?: string; linkLabel?: string };
+    notifyUrl?: string;
+    fields?: Record<string, string>;
+  },
+): Promise<void> {
+  const jobs: LeadDeliveryJob[] = [];
+  if (options.delivery) {
+    const deliveryKey = deliveryKeys.lead(contactId, automationId, "email", "captured");
+    await repository.ensureOutboundDelivery({
+      deliveryKey,
+      workspaceId: mapping.workspaceId,
+      automationId,
+      recipientId: leadEmail,
+      kind: "LEAD_EMAIL",
+      payload: buildLeadDeliveryEmail(leadEmail, options.delivery),
     });
-    void notifyWorkspaceManagers(
-      mapping.workspaceId,
-      `lead-delivery-failed:${contactId}`,
-      "Fulfillment email failed",
-      `Could not deliver “${delivery.subject}” to ${leadEmail} (captured via “${automationName}”).`,
-    ).catch(() => undefined);
-    return false;
+    jobs.push({ deliveryKey, workspaceId: mapping.workspaceId, kind: "LEAD_EMAIL" });
+  }
+  if (options.notifyUrl) {
+    const deliveryKey = deliveryKeys.lead(contactId, automationId, "webhook", "captured");
+    await repository.ensureOutboundDelivery({
+      deliveryKey,
+      workspaceId: mapping.workspaceId,
+      automationId,
+      recipientId: leadEmail,
+      kind: "LEAD_WEBHOOK",
+      payload: {
+        url: options.notifyUrl,
+        body: {
+          email: leadEmail,
+          automationId,
+          automationName,
+          capturedAt,
+          ...(options.fields ? { fields: options.fields } : {}),
+        },
+      },
+    });
+    jobs.push({ deliveryKey, workspaceId: mapping.workspaceId, kind: "LEAD_WEBHOOK" });
+  }
+  for (const job of jobs) {
+    const queued = await enqueueLeadDelivery(job);
+    if (queued) continue;
+    const result = await processLeadDelivery(job, repository);
+    if (result.status !== "SENT") {
+      logger.warn("Lead delivery did not complete", {
+        deliveryKey: job.deliveryKey,
+        status: result.status,
+        ...("error" in result ? { error: result.error } : {}),
+      });
+    }
   }
 }
 
@@ -476,17 +470,16 @@ async function processEmailCaptureReply(
       const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
       followUpDelivered = true;
       await repository.clearContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId);
-      if (emailCapture.delivery) {
-        await deliverLeadEmail(mapping, automation.name, contact.id, candidate, emailCapture.delivery);
-      }
-      if (emailCapture.notifyUrl) {
-        void notifyLeadWebhook(emailCapture.notifyUrl, {
-          email: candidate,
-          automationId: automation.id,
-          automationName: automation.name,
-          capturedAt: new Date(event.timestamp).toISOString(),
-        });
-      }
+      await queueOrDeliverLead(
+        repository,
+        mapping,
+        automation.id,
+        automation.name,
+        contact.id,
+        candidate,
+        new Date(event.timestamp).toISOString(),
+        { delivery: emailCapture.delivery, notifyUrl: emailCapture.notifyUrl },
+      );
       await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SENT",
@@ -659,17 +652,21 @@ async function processFieldAnswer(
     let completionReason = `field_answered:${current.id}`;
     if (updated.state === "CAPTURED") {
       completionReason = `lead_complete:${updated.email ?? "no-email"}`;
-      if (updated.email && emailCapture.delivery) {
-        await deliverLeadEmail(mapping, automation.name, contact.id, updated.email, emailCapture.delivery);
-      }
-      if (updated.email && emailCapture.notifyUrl) {
-        void notifyLeadWebhook(emailCapture.notifyUrl, {
-          email: updated.email,
-          automationId: automation.id,
-          automationName: automation.name,
-          capturedAt: atIso,
-          fields: updated.fields ?? {},
-        });
+      if (updated.email) {
+        await queueOrDeliverLead(
+          repository,
+          mapping,
+          automation.id,
+          automation.name,
+          contact.id,
+          updated.email,
+          atIso,
+          {
+            delivery: emailCapture.delivery,
+            notifyUrl: emailCapture.notifyUrl,
+            fields: updated.fields ?? {},
+          },
+        );
       }
       await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
       void notifyWorkspaceManagers(
@@ -932,23 +929,19 @@ export async function processNormalizedEvent(
               atIso,
             );
           } else {
-            if (automation.definition.emailCapture?.delivery) {
-              await deliverLeadEmail(
-                mapping,
-                automation.name,
-                `${automation.id}:${senderId}`,
-                capturedEmail,
-                automation.definition.emailCapture.delivery,
-              );
-            }
-            if (automation.definition.emailCapture?.notifyUrl) {
-              void notifyLeadWebhook(automation.definition.emailCapture.notifyUrl, {
-                email: capturedEmail,
-                automationId: automation.id,
-                automationName: automation.name,
-                capturedAt: new Date().toISOString(),
-              });
-            }
+            await queueOrDeliverLead(
+              repository,
+              mapping,
+              automation.id,
+              automation.name,
+              `${automation.id}:${senderId}`,
+              capturedEmail,
+              atIso,
+              {
+                delivery: automation.definition.emailCapture?.delivery,
+                notifyUrl: automation.definition.emailCapture?.notifyUrl,
+              },
+            );
             await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
             void notifyWorkspaceManagers(
               mapping.workspaceId,

@@ -12,8 +12,9 @@ import { refreshExpiringInstagramTokens } from "./lib/meta/token-refresh";
 import { sweepStaleParticipants } from "./lib/automation/participant-retention";
 import { processDueSequences } from "./lib/automation/sequence-runner";
 import { processBroadcastSend, type BroadcastRunnerOptions } from "./lib/automation/broadcast-runner";
-import type { BroadcastSendJob } from "./lib/queue";
+import type { BroadcastSendJob, LeadDeliveryJob } from "./lib/queue";
 import { reconcileExpiredDeliveryClaims } from "./lib/automation/delivery-reconciliation";
+import { processLeadDelivery } from "./lib/automation/lead-delivery";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 
@@ -27,6 +28,17 @@ if (!env.redisUrl) {
   const worker = new Worker(
     WEBHOOK_QUEUE_NAME,
     async (job) => {
+      if (job.name === "lead-delivery") {
+        const result = await processLeadDelivery(
+          job.data as LeadDeliveryJob,
+          getRepository(),
+          { claimLeaseMs: env.dispatchLeaseMs },
+        );
+        if (result.status === "FAILED" && result.retryable) {
+          throw new Error(result.error);
+        }
+        return result;
+      }
       if (job.name === "broadcast-send") {
         const payload = job.data as BroadcastSendJob;
         const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;

@@ -15,6 +15,16 @@ export function createWebhookJobId(event: NormalizedEvent): string {
   return createHash("sha256").update(`${event.accountId}\0${event.id}`).digest("base64url");
 }
 
+export type LeadDeliveryJob = {
+  deliveryKey: string;
+  workspaceId: string;
+  kind: "LEAD_EMAIL" | "LEAD_WEBHOOK";
+};
+
+export function createLeadDeliveryJobId(deliveryKey: string): string {
+  return createHash("sha256").update(deliveryKey).digest("base64url");
+}
+
 const globalForQueue = globalThis as unknown as {
   replyconnectWebhookQueue?: Queue;
   replyconnectWebhookRedis?: Redis;
@@ -82,6 +92,19 @@ export async function enqueueWebhookEvents(events: NormalizedEvent[]): Promise<n
     ),
   );
   return events.length;
+}
+
+export async function enqueueLeadDelivery(job: LeadDeliveryJob): Promise<boolean> {
+  const queue = getWebhookQueue();
+  if (!queue) return false;
+  await queue.add("lead-delivery", job, {
+    jobId: createLeadDeliveryJobId(job.deliveryKey),
+    attempts: 3,
+    backoff: { type: "exponential", delay: 1_000 },
+    removeOnComplete: 1_000,
+    removeOnFail: 5_000,
+  });
+  return true;
 }
 // Broadcasts: one DM per contact, fanned out as staggered jobs (~1/second) so a
 // blast never hammers Meta's per-account messaging limits.
