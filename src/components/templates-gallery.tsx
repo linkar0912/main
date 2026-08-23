@@ -14,13 +14,14 @@ const cardIcons = {
   mail: Mail,
 } as const;
 
-/** Peach chat-bubble previews recreated with plain markup, one per template kind. */
+/** Dark chat-bubble mockups with a pinned caption bar, one per template kind. */
 function TemplateIllustration({ kind }: { kind: PremadeTemplate["illustration"] }) {
   if (kind === "follow") {
     return (
       <div className="template-illustration" aria-hidden="true">
         <span className="bubble bubble-follow-pill">follow</span>
         <span className="bubble">Hi there 👋 Thanks for following us!</span>
+        <span className="mockup-caption">Auto-DM · new follower</span>
       </div>
     );
   }
@@ -30,6 +31,7 @@ function TemplateIllustration({ kind }: { kind: PremadeTemplate["illustration"] 
         <span className="bubble">What are your prices?</span>
         <span className="bubble">What are your working hours?</span>
         <span className="bubble">Do you provide delivery?</span>
+        <span className="mockup-caption">Auto-reply · keyword match</span>
       </div>
     );
   }
@@ -41,6 +43,7 @@ function TemplateIllustration({ kind }: { kind: PremadeTemplate["illustration"] 
         </div>
         <span className="bubble">Thanks for mentioning us! 🧡</span>
         <span className="bubble">Take your gift</span>
+        <span className="mockup-caption">Auto-DM · story mention</span>
       </div>
     );
   }
@@ -50,6 +53,7 @@ function TemplateIllustration({ kind }: { kind: PremadeTemplate["illustration"] 
         <span className="bubble bubble-accent">Send me the guide 📬</span>
         <span className="bubble bubble-email-pill"><Mail size={13} strokeWidth={2} /> you@example.com</span>
         <span className="bubble">You’re in! ✅ Check your inbox.</span>
+        <span className="mockup-caption">Email capture · DM flow</span>
       </div>
     );
   }
@@ -59,6 +63,7 @@ function TemplateIllustration({ kind }: { kind: PremadeTemplate["illustration"] 
         <span className="bubble bubble-accent">I have a question 🙋</span>
         <span className="bubble">Talk to human</span>
         <span className="bubble">See our FAQs</span>
+        <span className="mockup-caption">Auto-reply · comment</span>
       </div>
     );
   }
@@ -71,6 +76,7 @@ function TemplateIllustration({ kind }: { kind: PremadeTemplate["illustration"] 
         <span className="menu-item"><span>Delivery 🛵</span></span>
         <span className="menu-item"><span>New in stock 📦</span></span>
       </div>
+      <span className="mockup-caption">Quick-reply menu</span>
     </div>
   );
 }

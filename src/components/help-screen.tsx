@@ -263,7 +263,7 @@ export function HelpScreen({ supportEmail }: { supportEmail: string }) {
           </div>
         </header>
 
-        <section className="help-hero" aria-label="Search help articles">
+        <section className="help-hero grid-texture" aria-label="Search help articles">
           <p className="help-kicker">Help centre</p>
           <h1>How can we help?</h1>
           <p className="help-lede">

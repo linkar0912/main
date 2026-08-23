@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { formatDateTime } from "@/src/lib/format-date";
 
 type DeliveryProblem = {
   kind: string;
@@ -36,8 +37,8 @@ export function DeliveryDiagnostics() {
     <section className="panel full-list-panel" aria-label="Delivery issues">
       <div className="list-intro">
         <div className="list-count"><AlertTriangle size={17} /><span>Delivery issues</span></div>
-        <span className="muted">Recent sends that need attention or are waiting for an automatic retry.</span>
       </div>
+      <p className="muted">Recent sends that need attention or are waiting for an automatic retry.</p>
       <ul className="broadcast-list">
         {problems.map((problem, index) => (
           <li key={`${problem.kind}:${problem.updatedAt}:${index}`}>
@@ -49,7 +50,7 @@ export function DeliveryDiagnostics() {
                 </em>
               </div>
               <p>{problem.lastError ?? "No provider detail was returned."}</p>
-              <small className="muted">Attempt {problem.attemptCount} · {new Date(problem.updatedAt).toLocaleString()}</small>
+              <small className="muted">Attempt {problem.attemptCount} · {formatDateTime(problem.updatedAt)}</small>
             </div>
           </li>
         ))}

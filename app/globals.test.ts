@@ -9,12 +9,12 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.sidebar\s*{[^}]*background:\s*var\(--surface-soft\)/);
   });
 
-  it("brands with signal blue interaction and the volt signature", () => {
-    expect(css).toMatch(/--accent:\s*#0a6cff/);
+  it("brands with magenta interaction and the volt signature", () => {
+    expect(css).toMatch(/--accent:\s*#fa0cf7/);
     expect(css).toMatch(/--volt:\s*#fff100/);
     // Legacy palettes must not leak back in: Meta blue, tailwind green, old DM
-    // Setu amber, and any literal pre-rebrand blue rgba.
-    expect(css).not.toMatch(/#0866ff|#1877f2|#22c55e|#15803d|#14532d|rgba\(217,\s*119,\s*6|rgba\(8,\s*102,\s*255/);
+    // Setu amber, and the pre-rebrand Signal Blue this system replaced.
+    expect(css).not.toMatch(/#0866ff|#1877f2|#22c55e|#15803d|#14532d|rgba\(217,\s*119,\s*6|rgba\(8,\s*102,\s*255|#0a6cff|#0857d6|rgba\(10,\s*108,\s*255/);
   });
 
   it("reserves red styling for errors and failed statuses", () => {

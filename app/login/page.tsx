@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <main className="auth-shell">
-      <section className="auth-hero" aria-hidden>
+      <section className="auth-hero grid-texture" aria-hidden>
         <div className="auth-hero-brand">
           <span className="brand-mark"><LinkarMark size={20} /></span>
           {PRODUCT_NAME}

@@ -30,6 +30,9 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   reactStrictMode: true,
+  // The floating dev-tools badge sits over the sidebar's bottom-left content
+  // (workspace chip, sign out) on every screen — move it out of the way.
+  devIndicators: { position: "bottom-right" },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

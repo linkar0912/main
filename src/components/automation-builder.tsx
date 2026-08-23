@@ -428,49 +428,50 @@ function AutomationBuilderV1({
           </div>
         </section>
 
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
         {usesTextTrigger && (
-          <section className="flow-step">
-            <div className="step-marker condition-marker">02</div>
-            <div className="step-content">
-              <div className="step-heading">
-                <div>
-                  <p className="eyebrow">Condition <em>optional</em></p>
-                  <h2>Keep the audience precise</h2>
+          <>
+            <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
+            <section className="flow-step">
+              <div className="step-marker condition-marker">02</div>
+              <div className="step-content">
+                <div className="step-heading">
+                  <div>
+                    <p className="eyebrow">Condition <em>optional</em></p>
+                    <h2>Keep the audience precise</h2>
+                  </div>
+                  <CircleHelp size={21} strokeWidth={1.7} />
                 </div>
-                <CircleHelp size={21} strokeWidth={1.7} />
-              </div>
-              <div className="field-grid">
-                <label className="field">
-                  <span>Only continue if</span>
-                  <span className="select-wrap">
-                    <select
-                      aria-label="Condition type"
-                      value={conditionType}
-                      onChange={(event) => setConditionType(event.target.value as "" | FlowCondition["type"])}
-                    >
-                      <option value="">No extra condition</option>
-                      <option value="contains_keyword">The text contains a keyword</option>
-                      <option value="media_is">The post is one of these IDs</option>
-                    </select>
-                    <ChevronDown size={16} />
-                  </span>
-                </label>
-                {conditionType !== "" && (
+                <div className="field-grid">
                   <label className="field">
-                    <span>{conditionType === "contains_keyword" ? "Condition keywords" : "Post IDs"}</span>
-                    <input
-                      aria-label="Condition value"
-                      value={conditionValue}
-                      onChange={(event) => setConditionValue(event.target.value)}
-                      placeholder="Separate values with commas"
-                    />
+                    <span>Only continue if</span>
+                    <span className="select-wrap">
+                      <select
+                        aria-label="Condition type"
+                        value={conditionType}
+                        onChange={(event) => setConditionType(event.target.value as "" | FlowCondition["type"])}
+                      >
+                        <option value="">No extra condition</option>
+                        <option value="contains_keyword">The text contains a keyword</option>
+                        <option value="media_is">The post is one of these IDs</option>
+                      </select>
+                      <ChevronDown size={16} />
+                    </span>
                   </label>
-                )}
+                  {conditionType !== "" && (
+                    <label className="field">
+                      <span>{conditionType === "contains_keyword" ? "Condition keywords" : "Post IDs"}</span>
+                      <input
+                        aria-label="Condition value"
+                        value={conditionValue}
+                        onChange={(event) => setConditionValue(event.target.value)}
+                        placeholder="Separate values with commas"
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </>
         )}
 
         <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
@@ -556,10 +557,10 @@ function AutomationBuilderV1({
           </div>
         </section>
 
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
         {triggerType !== "comment" && (
-          <section className="flow-step">
+          <>
+            <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
+            <section className="flow-step">
             <div className="step-marker action-marker">{usesTextTrigger ? "04" : "03"}</div>
             <div className="step-content">
               <div className="step-heading">
@@ -721,7 +722,8 @@ function AutomationBuilderV1({
                 </>
               )}
             </div>
-          </section>
+            </section>
+          </>
         )}
 
         <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
@@ -1357,7 +1359,7 @@ function AutomationBuilderV2({
         <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
 
         <section className="flow-step review-step">
-          <div className="step-marker trigger-marker">07</div>
+          <div className="step-marker trigger-marker">08</div>
           <div className="step-content">
             <div className="step-heading">
               <div>

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { LinkarMark } from "./linkar-mark";
+import { Skeleton } from "./skeleton";
 
 /** Workspace destinations in the sidebar. */
 const workspaceNavigation = [
@@ -31,9 +32,6 @@ const accountNavigation = [
   { href: "/profile", label: "My Profile", icon: UserRound },
   { href: "/help", label: "Help", icon: CircleHelp },
 ];
-
-/** Free-plan contact ceiling shown in the usage meter. */
-const FREE_CONTACT_LIMIT = 25;
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -76,7 +74,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<AccountIdentity["role"] | "">("");
   const [plan, setPlan] = useState("free");
-  const [contactCount, setContactCount] = useState<number | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -94,10 +91,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         setRole(payload?.data?.role ?? "");
         setPlan(payload?.data?.plan ?? "free");
       })
-      .catch(() => undefined);
-    fetch("/api/contacts?limit=1")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { count: number } } | null) => setContactCount(payload?.data?.count ?? 0))
       .catch(() => undefined);
   }, []);
 
@@ -136,8 +129,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [drawerOpen]);
-
-  const usedPercent = Math.min(100, Math.round(((contactCount ?? 0) / FREE_CONTACT_LIMIT) * 100));
 
   return (
     <AccountIdentityContext.Provider value={{ email, role, plan }}>
@@ -181,14 +172,18 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
 
-        <Link className="workspace-chip" href="/profile" title="Open my profile" onClick={closeDrawer}>
-          <span className="avatar" aria-hidden>{initialsOf(email)}</span>
-          <span className="workspace-id">
-            <strong>{displayRole(role)}</strong>
-            <small>{email || `${PRODUCT_NAME} workspace`}</small>
-          </span>
-          <span className="plan-tag">{plan}</span>
-        </Link>
+        {role === "" ? (
+          <Skeleton style={{ height: 52, borderRadius: 12 }} />
+        ) : (
+          <Link className="workspace-chip" href="/profile" title="Open my profile" onClick={closeDrawer}>
+            <span className="avatar" aria-hidden>{initialsOf(email)}</span>
+            <span className="workspace-id">
+              <strong>{displayRole(role)}</strong>
+              <small>{email || `${PRODUCT_NAME} workspace`}</small>
+            </span>
+            <span className="plan-tag">{plan}</span>
+          </Link>
+        )}
 
         <nav className="sidebar-nav" aria-label="Workspace sections">
           {workspaceNavigation.map(({ href, label, icon: Icon }) => (
@@ -223,24 +218,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </nav>
 
         <span className="sidebar-spacer" />
-
-        <div className="usage-card">
-          <span className="usage-head">
-            <strong>Contacts</strong>
-            <small>{contactCount === null ? "—" : `${contactCount}/${FREE_CONTACT_LIMIT}`}</small>
-          </span>
-          <span
-            className="usage-track"
-            role="progressbar"
-            aria-label="Free contacts limit"
-            aria-valuenow={contactCount ?? 0}
-            aria-valuemin={0}
-            aria-valuemax={FREE_CONTACT_LIMIT}
-          >
-            <span className="usage-fill" style={{ width: `${usedPercent}%` }} />
-          </span>
-          <small className="usage-note">Captured emails on the free plan. Upgrade for unlimited contacts.</small>
-        </div>
 
         <form action="/api/auth/logout" method="post">
           <button className="signout-button" type="submit">

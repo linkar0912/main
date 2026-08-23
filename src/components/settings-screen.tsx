@@ -7,6 +7,7 @@ import { AppShell } from "./app-shell";
 import { StatusBadge } from "./status-badge";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { formatDate } from "@/src/lib/format-date";
 
 type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string };
 type ConnectionHealth = {
@@ -205,7 +206,7 @@ export function SettingsScreen() {
                 <span className="connection-avatar">@{connection.username.slice(0, 2).toUpperCase()}</span>
                 <div className="connection-copy">
                   <strong>@{connection.username}</strong>
-                  <small>Connected {new Date(connection.connectedAt).toLocaleDateString()} · ID {connection.igUserId}</small>
+                  <small>Connected {formatDate(connection.connectedAt)} · ID {connection.igUserId}</small>
                 </div>
                 <StatusBadge status={connection.status} />
                 <button
@@ -318,7 +319,7 @@ export function SettingsScreen() {
                   ))}
                   {team.invitations.map((invitation) => (
                     <li key={invitation.id}>
-                      <span className="team-who"><strong>{invitation.email}</strong><small>{invitation.role} · invitation expires {new Date(invitation.expiresAt).toLocaleDateString()}</small></span>
+                      <span className="team-who"><strong>{invitation.email}</strong><small>{invitation.role} · invitation expires {formatDate(invitation.expiresAt)}</small></span>
                       <button className="text-link" type="button" onClick={() => void revokeInvitation(invitation.id)}>Revoke</button>
                     </li>
                   ))}

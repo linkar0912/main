@@ -7,6 +7,7 @@ import { AppShell } from "./app-shell";
 import { AutomationList, useAutomations } from "./automation-list";
 import { AutomationSectionNav } from "./automation-section-nav";
 import { DeliveryDiagnostics } from "./delivery-diagnostics";
+import { formatDate } from "@/src/lib/format-date";
 
 type CapturedContact = {
   id: string;
@@ -56,7 +57,7 @@ function CapturedEmailsPanel() {
           {contacts.map((contact) => (
             <li key={contact.id}>
               <span className="captured-email-address">{contact.email}</span>
-              <time dateTime={contact.capturedAt}>{new Date(contact.capturedAt).toLocaleDateString()}</time>
+              <time dateTime={contact.capturedAt}>{formatDate(contact.capturedAt)}</time>
             </li>
           ))}
         </ul>
@@ -132,8 +133,8 @@ function BroadcastsPanel() {
     <section className="panel full-list-panel" data-testid="broadcasts">
       <div className="list-intro">
         <div className="list-count"><Megaphone size={17} /><span>Broadcasts</span></div>
-        <span className="muted">One-off DMs to a segment — paced ~1/second, STOP contacts skipped.</span>
       </div>
+      <p className="muted">One-off DMs to a segment — paced ~1/second, STOP contacts skipped.</p>
       {error && <p className="form-error" role="alert">{error}</p>}
       <form onSubmit={send} className="broadcast-form">
         <div className="field-grid">

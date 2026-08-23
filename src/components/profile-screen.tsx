@@ -17,6 +17,7 @@ import { StatusBadge } from "./status-badge";
 import { InstagramGlyph } from "./instagram-glyph";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { formatDate } from "@/src/lib/format-date";
 
 type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string };
 
@@ -124,7 +125,7 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
           </div>
         )}
 
-        <section className="profile-hero" aria-label="Profile summary">
+        <section className="profile-hero grid-texture" aria-label="Profile summary">
           <div className="profile-avatar-wrap">
             <span className="avatar avatar-large" aria-hidden>{initialsOf(email)}</span>
             <span className="profile-avatar-badge">Free</span>
@@ -134,7 +135,7 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
             <small>{email}</small>
             <span className="profile-meta-line">
               {PRODUCT_NAME} workspace {roleLabel(role).toLowerCase()}
-              {memberSince ? ` · joined ${new Date(memberSince).toLocaleDateString()}` : ""}
+              {memberSince ? ` · joined ${formatDate(memberSince)}` : ""}
             </span>
           </div>
           <div className="profile-badges">

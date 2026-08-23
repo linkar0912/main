@@ -3,6 +3,7 @@
 import { ExternalLink, Radio } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AutomationParticipantRecord, ParticipantState } from "@/src/lib/repository";
+import { formatDateTime } from "@/src/lib/format-date";
 
 export type ParticipantActivitySummary = Pick<
   AutomationParticipantRecord,
@@ -53,7 +54,7 @@ function FunnelSummary({ summary }: { summary: ParticipantFunnelSummary }) {
 function formatTimestamp(value?: string): string {
   if (!value) return "not yet";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "not yet" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "not yet" : formatDateTime(date);
 }
 
 function participantStateLabel(state: ParticipantState): string {
