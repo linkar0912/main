@@ -870,6 +870,7 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .usage-bar { background: var(--surface-sunk); border-radius: 99px; height: 8px; overflow: hidden; }
 .usage-bar > span { background: var(--ink); border-radius: 99px; display: block; height: 100%; min-width: 4px; transition: width .5s var(--ease-out); }
 .usage-note { font-size: .75rem; margin: 0; }
+.export-note { font-size: .72rem; margin: 9px 0 0; }
 
 @media (min-width: 1141px) {
   .activity-side { position: sticky; top: 24px; }

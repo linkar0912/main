@@ -3,11 +3,8 @@
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 
-type MediaPerformance = { mediaId: string; matched: number; delivered: number; clicked: number };
-
 type InsightsPayload = {
   usage?: { participantsThisMonth: number; monthlyLimit: number | null };
-  mediaPerformance?: MediaPerformance[];
 };
 
 export function InsightsPanel({ automationId }: { automationId?: string }) {
@@ -41,7 +38,6 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
     );
   }
 
-  const posts = insights.mediaPerformance ?? [];
   const usage = insights.usage;
   const usageLimit = usage?.monthlyLimit ?? null;
   const usagePercent =
@@ -75,33 +71,16 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
         </section>
       )}
 
-      <section className="panel insights-panel side-panel" aria-label="Top posts">
+      <section className="panel side-panel" aria-label="Campaign export">
         <div className="panel-heading">
-          <div><p className="eyebrow">Per-post performance</p><h2>Top posts</h2></div>
-          <a className="button button-secondary button-small" href={`/api/insights/export${query}`} download>
-            <Download size={14} /> Export CSV
-          </a>
+          <div><p className="eyebrow">Raw data</p><h2>Export</h2></div>
         </div>
-        {posts.length === 0 ? (
-          <p className="muted">No participant activity yet - performance appears after the first matched comment.</p>
-        ) : (
-          <table className="insights-table">
-            <thead>
-              <tr><th scope="col">Post</th><th scope="col">Matched</th><th scope="col">Delivered</th><th scope="col">Clicked</th></tr>
-            </thead>
-            <tbody>
-              {posts.map((post) => (
-                <tr key={post.mediaId}>
-                  <td className="media-id-cell">{post.mediaId}</td>
-                  <td>{post.matched}</td>
-                  <td>{post.delivered}</td>
-                  <td>{post.clicked}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <a className="button button-secondary button-small" href={`/api/insights/export${query}`} download>
+          <Download size={14} /> Export CSV
+        </a>
+        <p className="muted export-note">Every matched comment, delivery, and click for this campaign.</p>
       </section>
     </div>
   );
 }
+
