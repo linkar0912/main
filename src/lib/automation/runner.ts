@@ -8,7 +8,11 @@ import type { MetaConnection, MetaMessage } from "../meta/types";
 import { notifyWorkspaceManagers } from "../notifications";
 import { sendEmail } from "../mailer";
 import { logger } from "../logger";
-import { checkDailySendLimit } from "./send-limits";
+import {
+  releaseDailySendSlots,
+  reserveDailySendSlots,
+  type SendLimitReservation,
+} from "./send-limits";
 import {
   processCampaignEvent,
   processExistingCampaignParticipant,
@@ -63,6 +67,14 @@ async function sendAction(
 }
 
 const DEFAULT_DELIVERY_CLAIM_LEASE_MS = 30_000;
+const DAILY_LIMIT_ERROR = "daily_send_limit_reached";
+
+class DailySendLimitError extends Error {
+  constructor() {
+    super(DAILY_LIMIT_ERROR);
+    this.name = "DailySendLimitError";
+  }
+}
 
 async function executeActionDelivery(
   repository: AutomationRepository,
@@ -75,23 +87,55 @@ async function executeActionDelivery(
     kind: "CLASSIC_ACTION" | "EMAIL_CAPTURE";
     action: ExecutionAction;
     claimLeaseMs: number;
+    dailySendLimit?: number;
   },
   client: AutomationRunnerClient,
   connection: MetaConnection,
 ): Promise<DeliveryExecutionResult> {
-  return executeOutboundDelivery({
-    deliveryKey: request.deliveryKey,
-    workspaceId: request.workspaceId,
-    automationId: request.automationId,
-    instagramAccountId: request.instagramAccountId,
-    recipientId: request.recipientId,
-    kind: request.kind,
-    payload: { ...request.action },
-    claimLeaseMs: request.claimLeaseMs,
-    repository,
-  }, async (payload) => ({
-    id: await sendAction(client, connection, payload as ExecutionAction),
-  }));
+  const existing = await repository.getOutboundDelivery(request.deliveryKey);
+  const needsProviderAttempt = !existing
+    || existing.state === "PENDING"
+    || (existing.state === "FAILED" && existing.retryable);
+  let reservation: SendLimitReservation | undefined;
+  if (needsProviderAttempt) {
+    reservation = await reserveDailySendSlots({
+      repository,
+      automationId: request.automationId,
+      limit: request.dailySendLimit,
+    }, 1);
+    if (!reservation.allowed) {
+      return { status: "FAILED", retryable: false, error: DAILY_LIMIT_ERROR };
+    }
+  }
+
+  try {
+    const result = await executeOutboundDelivery({
+      deliveryKey: request.deliveryKey,
+      workspaceId: request.workspaceId,
+      automationId: request.automationId,
+      instagramAccountId: request.instagramAccountId,
+      recipientId: request.recipientId,
+      kind: request.kind,
+      payload: { ...request.action },
+      claimLeaseMs: request.claimLeaseMs,
+      repository,
+    }, async (payload) => ({
+      id: await sendAction(client, connection, payload as ExecutionAction),
+    }));
+    if (
+      reservation
+      && (result.status === "FAILED" || result.status === "BUSY"
+        || (result.status === "SENT" && result.reused))
+    ) {
+      await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation);
+    }
+    return result;
+  } catch (error) {
+    if (reservation) {
+      await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation);
+    }
+    throw error;
+  }
 }
 
 function requireSentDelivery(
@@ -99,6 +143,9 @@ function requireSentDelivery(
   finalAttempt: boolean | undefined,
 ): string | undefined {
   if (result.status === "SENT") return result.providerMessageId;
+  if (result.status === "FAILED" && result.error === DAILY_LIMIT_ERROR) {
+    throw new DailySendLimitError();
+  }
   if (result.status === "BUSY") {
     throw new MetaApiError("Outbound delivery is already in progress", 503, true);
   }
@@ -369,29 +416,6 @@ async function processEmailCaptureReply(
   let followUpDelivered = false;
   try {
     const candidate = extractEmailAddress(event.text);
-    const dailyLimit = await checkDailySendLimit(automation.definition, {
-      workspaceId: mapping.workspaceId,
-      automationId: automation.id,
-    });
-    if (!dailyLimit.allowed) {
-      await repository.completeExecution(mapping.workspaceId, dedupeKey, {
-        status: "SKIPPED",
-        reason: dailyLimit.reason,
-      });
-      // When an address arrived we still store it — only the confirmation DM waits.
-      if (candidate) {
-        await repository.captureContactEmail(
-          mapping.workspaceId,
-          event.accountId,
-          senderId,
-          candidate,
-          new Date(event.timestamp).toISOString(),
-        );
-        return { matched: 1, sent: 0, skipped: 1, failed: 0 };
-      }
-      return { matched: 0, sent: 0, skipped: 1, failed: 0 };
-    }
-
     const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
 
     if (candidate) {
@@ -417,6 +441,7 @@ async function processEmailCaptureReply(
           kind: "EMAIL_CAPTURE",
           action: { type: "send_text", recipientId: senderId, text: fieldQueue[0].question },
           claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+          dailySendLimit: automation.definition.dailySendLimit,
         }, options.client, connection);
         const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
         followUpDelivered = true;
@@ -446,6 +471,7 @@ async function processEmailCaptureReply(
         kind: "EMAIL_CAPTURE",
         action: { type: "send_text", recipientId: senderId, text: emailCapture.confirmationText },
         claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+        dailySendLimit: automation.definition.dailySendLimit,
       }, options.client, connection);
       const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
       followUpDelivered = true;
@@ -499,6 +525,7 @@ async function processEmailCaptureReply(
         text: emailCapture.retryText ?? emailCapture.promptText,
       },
       claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+      dailySendLimit: automation.definition.dailySendLimit,
     }, options.client, connection);
     const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
     followUpDelivered = true;
@@ -514,6 +541,13 @@ async function processEmailCaptureReply(
     });
     return { matched: 1, sent: 1, skipped: 0, failed: 0 };
   } catch (error) {
+    if (error instanceof DailySendLimitError) {
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+        status: "SKIPPED",
+        reason: DAILY_LIMIT_ERROR,
+      });
+      return { matched: 1, sent: 0, skipped: 1, failed: 0 };
+    }
     if (followUpDelivered) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
       throw error;
@@ -582,15 +616,6 @@ async function processFieldAnswer(
     const answer = event.text.trim().slice(0, 200);
     const atIso = new Date().toISOString();
 
-    const dailyLimit = await checkDailySendLimit(automation.definition, {
-      workspaceId: mapping.workspaceId,
-      automationId: automation.id,
-    });
-    if (!dailyLimit.allowed) {
-      await repository.completeExecution(mapping.workspaceId, dedupeKey, { status: "SKIPPED", reason: dailyLimit.reason });
-      return { matched: 1, sent: 0, skipped: 1, failed: 0 };
-    }
-
     if (!options.client || !options.tokenEncryptionKey) {
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SKIPPED",
@@ -614,6 +639,7 @@ async function processFieldAnswer(
       kind: "EMAIL_CAPTURE",
       action: { type: "send_text", recipientId: senderId, text: outgoing },
       claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+      dailySendLimit: automation.definition.dailySendLimit,
     }, options.client, connection);
     const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
     followUpDelivered = true;
@@ -661,6 +687,13 @@ async function processFieldAnswer(
     });
     return { matched: 1, sent: 1, skipped: 0, failed: 0 };
   } catch (error) {
+    if (error instanceof DailySendLimitError) {
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+        status: "SKIPPED",
+        reason: DAILY_LIMIT_ERROR,
+      });
+      return { matched: 1, sent: 0, skipped: 1, failed: 0 };
+    }
     if (followUpDelivered) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
       throw error;
@@ -795,29 +828,6 @@ export async function processNormalizedEvent(
       continue;
     }
 
-    const dailyLimit = await checkDailySendLimit(automation.definition, {
-      workspaceId: mapping.workspaceId,
-      automationId: automation.id,
-    });
-    if (!dailyLimit.allowed) {
-      void notifyWorkspaceManagers(
-        mapping.workspaceId,
-        `limit:daily:${automation.id}:${new Date().toISOString().slice(0, 10)}`,
-        `Automation paused: daily send limit reached`,
-        `Your automation hit its daily send cap (${dailyLimit.reason}). It will resume automatically tomorrow, or raise the cap in the builder.`,
-      ).catch(() => undefined);
-      await repository.recordExecution({
-        workspaceId: mapping.workspaceId,
-        automationId: automation.id,
-        externalEventId: event.id,
-        dedupeKey,
-        status: "SKIPPED",
-        reason: dailyLimit.reason,
-      });
-      result.skipped += 1;
-      continue;
-    }
-
     if (!options.tokenEncryptionKey) {
       await repository.recordExecution({
         workspaceId: mapping.workspaceId,
@@ -887,6 +897,7 @@ export async function processNormalizedEvent(
           kind: "CLASSIC_ACTION",
           action,
           claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+          dailySendLimit: automation.definition.dailySendLimit,
         }, options.client, connection);
         providerMessageId = requireSentDelivery(delivery, options.finalAttempt) ?? providerMessageId;
       }
@@ -956,6 +967,14 @@ export async function processNormalizedEvent(
       });
       result.sent += 1;
     } catch (error) {
+      if (error instanceof DailySendLimitError) {
+        await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+          status: "SKIPPED",
+          reason: DAILY_LIMIT_ERROR,
+        });
+        result.skipped += 1;
+        continue;
+      }
       if (allActionsDelivered) {
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
         throw error;

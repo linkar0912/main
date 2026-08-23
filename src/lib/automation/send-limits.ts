@@ -1,36 +1,53 @@
-import { getRepository } from "../repository-provider";
+import type { AutomationRepository } from "../repository";
 
 export type SendLimitContext = {
-    workspaceId: string;
-    automationId: string;
-    now?: Date;
+  automationId: string;
+  repository: AutomationRepository;
+  limit?: number;
+  now?: Date;
 };
 
-export type SendLimitDecision =
-    | { allowed: true }
-    | { allowed: false; reason: string };
+export type SendLimitReservation =
+  | { allowed: true; utcDate: string; amount: number }
+  | { allowed: false; reason: "daily_limit" };
 
-// Per-automation daily cap: bounds blast radius when a trigger misfires
-// (e.g. a keyword that matches every comment) and keeps volume inside what
-// Meta's messaging quality signals tolerate.
-export async function checkDailySendLimit(
-    definition: { dailySendLimit?: number },
-    ctx: SendLimitContext,
-): Promise<SendLimitDecision> {
-    if (!definition.dailySendLimit || definition.dailySendLimit <= 0) return { allowed: true };
-    const now = ctx.now ?? new Date();
-    const since = new Date(now);
-    since.setUTCHours(0, 0, 0, 0);
-    const sentToday = await getRepository().countExecutionsSentSince(ctx.automationId, since.toISOString());
-    if (sentToday >= definition.dailySendLimit) {
-        return { allowed: false, reason: `daily_send_limit_reached:${sentToday}/${definition.dailySendLimit}` };
-    }
-    return { allowed: true };
+function utcDate(now: Date): string {
+  return now.toISOString().slice(0, 10);
 }
 
+export async function reserveDailySendSlots(
+  context: SendLimitContext,
+  amount: number,
+): Promise<SendLimitReservation> {
+  const date = utcDate(context.now ?? new Date());
+  if (!context.limit || context.limit <= 0) {
+    return { allowed: true, utcDate: date, amount: 0 };
+  }
+  const allowed = await context.repository.claimAutomationSendSlots(
+    context.automationId,
+    date,
+    amount,
+    context.limit,
+  );
+  return allowed
+    ? { allowed: true, utcDate: date, amount }
+    : { allowed: false, reason: "daily_limit" };
+}
+
+export async function releaseDailySendSlots(
+  context: Pick<SendLimitContext, "automationId" | "repository">,
+  reservation: SendLimitReservation,
+): Promise<void> {
+  if (!reservation.allowed || reservation.amount === 0) return;
+  await context.repository.releaseAutomationSendSlots(
+    context.automationId,
+    reservation.utcDate,
+    reservation.amount,
+  );
+}
 
 // Template variables available in reply texts: {username}, {keyword}.
 // Unknown placeholders are left untouched so typos never corrupt a reply.
 export function renderTemplate(text: string, variables: Record<string, string | undefined>): string {
-    return text.replace(/\{(\w+)\}/g, (match, key: string) => variables[key] ?? match);
+  return text.replace(/\{(\w+)\}/g, (match, key: string) => variables[key] ?? match);
 }

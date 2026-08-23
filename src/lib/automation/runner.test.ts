@@ -171,6 +171,54 @@ describe("automation runner", () => {
       .toEqual(["first", "second", "second"]);
   });
 
+  it("caps concurrent classic events by outbound message count", async () => {
+    const key = randomBytes(32).toString("hex");
+    const limitedFlow: FlowDefinition = {
+      version: 1,
+      trigger: { type: "message", match: "any", keywords: [] },
+      conditions: [],
+      actions: [
+        { type: "send_text", text: "first" },
+        { type: "send_text", text: "second" },
+      ],
+      dailySendLimit: 3,
+    };
+    const repository = createMemoryRepository([{
+      id: "automation_limited",
+      workspaceId: "workspace_a",
+      name: "Limited multi action",
+      status: "ACTIVE",
+      version: 1,
+      definition: limitedFlow,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(1).toISOString(),
+    }]);
+    await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", key),
+      status: "CONNECTED",
+    });
+    const sendDirectMessage = vi.fn().mockResolvedValue({ message_id: "sent" });
+    const client = createRunnerClient({ sendDirectMessage });
+    const message = (id: string) => ({
+      id,
+      accountId: "ig_1",
+      type: "message.received" as const,
+      text: "hello",
+      recipientId: `person_${id}`,
+      timestamp: 1,
+    });
+
+    await Promise.all([
+      processNormalizedEvent(message("a"), repository, { client, tokenEncryptionKey: key }),
+      processNormalizedEvent(message("b"), repository, { client, tokenEncryptionKey: key }),
+    ]);
+
+    expect(sendDirectMessage).toHaveBeenCalledTimes(3);
+  });
+
   it("records a retryable delivery failure only on the final queue attempt", async () => {
     const key = randomBytes(32).toString("hex");
     const repository = createMemoryRepository([{ id: "automation_final", workspaceId: "workspace_a", name: "Final attempt", status: "ACTIVE", version: 1, definition: flow, createdAt: new Date(1).toISOString(), updatedAt: new Date(1).toISOString() }]);

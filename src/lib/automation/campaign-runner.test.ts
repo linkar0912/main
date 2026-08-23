@@ -16,6 +16,7 @@ import {
   type CampaignRunnerClient,
   type CampaignRunnerOptions,
 } from "./campaign-runner";
+import { deliveryKeys } from "./outbound-delivery";
 
 const NOW = Date.parse("2026-08-21T10:00:00.000Z");
 const TOKEN_KEY = randomBytes(32).toString("hex");
@@ -182,6 +183,73 @@ describe("follow-gated campaign runner", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("records campaign provider calls in the shared outbound ledger", async () => {
+    const harness = await createHarness();
+
+    await processCampaignEvent(
+      commentEvent,
+      automation,
+      harness.mapping,
+      harness.repository,
+      harness.options,
+    );
+    const participant = await readParticipant(harness.repository);
+
+    expect(await harness.repository.getOutboundDelivery(
+      deliveryKeys.campaignAction(participant.id, "opening_reply"),
+    )).toMatchObject({
+      state: "SENT",
+      kind: "CAMPAIGN_ACTION",
+      providerMessageId: "opening_message_1",
+    });
+  });
+
+  it("counts campaign limits by outbound message rather than participant events", async () => {
+    const limitedAutomation: AutomationRecord = {
+      ...automation,
+      id: "automation_campaign_limited",
+      definition: { ...definition, publicReplies: [], dailySendLimit: 1 },
+    };
+    const repository = createMemoryRepository([limitedAutomation]);
+    await repository.upsertConnection({
+      workspaceId: limitedAutomation.workspaceId,
+      igUserId: commentEvent.accountId,
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", TOKEN_KEY),
+      status: "CONNECTED",
+    });
+    const mapping = await repository.findWorkspaceByInstagramAccount(commentEvent.accountId);
+    if (!mapping) throw new Error("test connection mapping was not created");
+    const client = createClient();
+    const options: CampaignRunnerOptions = {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+      interactionSecret: INTERACTION_SECRET,
+    };
+
+    await processCampaignEvent(commentEvent, limitedAutomation, mapping, repository, options);
+    const opening = vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2];
+    if (typeof opening === "string" || !opening?.quickReply) throw new Error("opening payload missing");
+    await processPendingCampaignInteraction(
+      interactionEvent(opening.quickReply.payload, NOW + 1_000),
+      mapping,
+      repository,
+      options,
+    );
+
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(client.sendDirectMessage).not.toHaveBeenCalled();
+    const [participant] = await repository.listParticipants(
+      limitedAutomation.workspaceId,
+      limitedAutomation.id,
+      1,
+    );
+    expect(participant).toMatchObject({
+      finalDeliveryStatus: "SKIPPED",
+      finalDeliveryError: "daily_send_limit_reached",
+    });
   });
 
   it("creates one participant and records independent public and opening delivery results", async () => {

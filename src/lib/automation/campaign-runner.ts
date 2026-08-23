@@ -5,7 +5,6 @@ import type { FlowDefinitionV2, MediaSnapshot, NormalizedEvent } from "./types";
 import { withinSchedule } from "./types";
 import { getServerEnv } from "../env";
 import { MetaApiError, type MetaClient } from "../meta/client";
-import { notifyWorkspaceManagers } from "../notifications";
 import type { MetaConnection, MetaMedia, MetaMessage, MetaSendResult } from "../meta/types";
 import type {
   AutomationParticipantRecord,
@@ -17,7 +16,8 @@ import type {
 } from "../repository";
 import type { ParticipantPatch } from "../repository";
 import { unsealSecret } from "../security/secrets";
-import { checkDailySendLimit, renderTemplate } from "./send-limits";
+import { releaseDailySendSlots, renderTemplate, reserveDailySendSlots } from "./send-limits";
+import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
 
 const RECHECK_COOLDOWN_MS = 10_000;
 const MAX_RECHECKS = 10;
@@ -282,10 +282,6 @@ function isKnownNotSentRetryable(error: unknown): error is MetaApiError {
   return error instanceof MetaApiError && error.status > 0 && error.retryable;
 }
 
-function isAmbiguousProviderOutcome(error: unknown): boolean {
-  return !(error instanceof MetaApiError) || error.status === 0;
-}
-
 function looksLikeCampaignInteractionPayload(value: string): boolean {
   const separator = value.indexOf(".");
   if (separator <= 0) return false;
@@ -468,9 +464,11 @@ type DeliveryContext = {
 type GuardedDeliverySpec = {
   action: string;
   externalEventId: string;
+  payload: Record<string, unknown>;
+  dailySendLimit?: number;
   allowedStates: ParticipantState[];
   /** Sends via Meta; throws on provider-side rejection or missing identifiers. */
-  send: () => Promise<{ messageId?: string; recipientId?: string }>;
+  send: (payload: Record<string, unknown>) => Promise<{ messageId?: string; recipientId?: string }>;
   /** Patch applied when a previous attempt already recorded SENT for this action. */
   onRecordedSent: (execution: ExecutionRecord) => ParticipantPatch;
   /** When non-null, a recorded SENT execution missing identifiers is treated as a failure. */
@@ -479,6 +477,7 @@ type GuardedDeliverySpec = {
   onSuccess: (ids: { messageId?: string; recipientId?: string }) => ParticipantPatch;
   /** Patch applied when the action terminally fails (recorded or fresh). */
   onFailure: (reason: string) => ParticipantPatch;
+  onLimit?: (reason: string) => ParticipantPatch;
   /** Patch applied before rethrowing a retryable error for BullMQ to redeliver. */
   onRetryablePending?: () => ParticipantPatch;
   /**
@@ -534,48 +533,73 @@ async function guardedDelivery(
       return failed ?? currentParticipant(participant, repository);
     }
 
-    // prepared.kind === "send": this worker owns the dispatch lease.
-    let sentIds: { messageId?: string; recipientId?: string };
-    try {
-      const response = await spec.send();
-      sentIds = response;
-      const completed = await completeOwnedAction(
-        participant,
+    // prepared.kind === "send": this worker owns the compatibility dispatch lease;
+    // the shared ledger is authoritative for whether Meta may be called.
+    const deliveryKey = deliveryKeys.campaignAction(participant.id, spec.action);
+    const ledgerBefore = await repository.getOutboundDelivery(deliveryKey);
+    const needsProviderAttempt = !ledgerBefore
+      || ledgerBefore.state === "PENDING"
+      || (ledgerBefore.state === "FAILED" && ledgerBefore.retryable);
+    const reservation = needsProviderAttempt
+      ? await reserveDailySendSlots({
         repository,
-        spec.action,
-        prepared.dispatchOwner,
-        "SENT",
-        response.messageId,
-        undefined,
-        response.recipientId,
+        automationId: participant.automationId,
+        limit: spec.dailySendLimit,
+      }, 1)
+      : undefined;
+    if (reservation && !reservation.allowed) {
+      await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+      const reason = "daily_send_limit_reached";
+      const limited = await repository.transitionParticipant(
+        participant.id,
+        spec.allowedStates,
+        spec.onLimit?.(reason) ?? spec.onFailure(reason),
       );
-      if (!completed) {
-        if (await getActionExecution(participant, repository, spec.action)) continue;
-        const patch = spec.onOwnershipLost();
-        if (!patch) return currentParticipant(participant, repository);
-        const failed = await repository.transitionParticipant(participant.id, spec.allowedStates, patch);
-        return failed ?? currentParticipant(participant, repository);
-      }
-    } catch (error) {
-      if (isKnownNotSentRetryable(error) && !ctx.finalAttempt) {
-        const released = await releaseOwnedAction(
-          participant,
-          repository,
-          spec.action,
-          prepared.dispatchOwner,
-        );
-        if (!released) {
-          if (await getActionExecution(participant, repository, spec.action)) continue;
-          return currentParticipant(participant, repository);
-        }
-        if (spec.onRetryablePending) {
-          await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
-        }
-        throw error;
-      }
+      return limited ?? currentParticipant(participant, repository);
+    }
 
-      const reason = isAmbiguousProviderOutcome(error) ? spec.ambiguousReason : spec.failureReason;
-      const failedPersisted = await completeOwnedAction(
+    let sentIds: { messageId?: string; recipientId?: string } = {};
+    const delivery = await executeOutboundDelivery({
+      deliveryKey,
+      workspaceId: participant.workspaceId,
+      automationId: participant.automationId,
+      participantId: participant.id,
+      instagramAccountId: participant.instagramAccountId,
+      recipientId: participant.igScopedUserId,
+      kind: "CAMPAIGN_ACTION",
+      payload: spec.payload,
+      claimLeaseMs: ctx.dispatchLeaseMs,
+      repository,
+    }, async (payload) => {
+      sentIds = await spec.send(payload);
+      return { id: sentIds.messageId };
+    });
+
+    if (
+      reservation?.allowed
+      && (delivery.status === "FAILED" || delivery.status === "BUSY"
+        || (delivery.status === "SENT" && delivery.reused))
+    ) {
+      await releaseDailySendSlots(
+        { repository, automationId: participant.automationId },
+        reservation,
+      );
+    }
+
+    if (delivery.status === "BUSY") {
+      await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+      return currentParticipant(participant, repository);
+    }
+    if (delivery.status === "FAILED" && delivery.retryable && !ctx.finalAttempt) {
+      await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+      if (spec.onRetryablePending) {
+        await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
+      }
+      throw new MetaApiError(delivery.error, 503, true);
+    }
+    if (delivery.status === "FAILED" || delivery.status === "UNKNOWN") {
+      const reason = delivery.status === "UNKNOWN" ? spec.ambiguousReason : spec.failureReason;
+      await completeOwnedAction(
         participant,
         repository,
         spec.action,
@@ -584,8 +608,32 @@ async function guardedDelivery(
         undefined,
         reason,
       );
-      if (!failedPersisted && await getActionExecution(participant, repository, spec.action)) continue;
-      const failed = await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onFailure(reason));
+      const failed = await repository.transitionParticipant(
+        participant.id,
+        spec.allowedStates,
+        spec.onFailure(reason),
+      );
+      return failed ?? currentParticipant(participant, repository);
+    }
+
+    if (delivery.reused) {
+      sentIds = { messageId: delivery.providerMessageId };
+    }
+    const completed = await completeOwnedAction(
+      participant,
+      repository,
+      spec.action,
+      prepared.dispatchOwner,
+      "SENT",
+      sentIds.messageId,
+      undefined,
+      sentIds.recipientId,
+    );
+    if (!completed) {
+      if (await getActionExecution(participant, repository, spec.action)) continue;
+      const patch = spec.onOwnershipLost();
+      if (!patch) return currentParticipant(participant, repository);
+      const failed = await repository.transitionParticipant(participant.id, spec.allowedStates, patch);
       return failed ?? currentParticipant(participant, repository);
     }
 
@@ -622,9 +670,15 @@ async function deliverPublicReply(
     {
       action: "public_reply",
       externalEventId: participant.sourceCommentId,
+      payload: { commentId: participant.sourceCommentId, text },
+      dailySendLimit: definition.dailySendLimit,
       allowedStates: PARTICIPANT_ACTION_STATES,
-      send: async () => ({
-        messageId: (await ctx.client.replyToComment(ctx.connection, participant.sourceCommentId, text)).id,
+      send: async (payload) => ({
+        messageId: (await ctx.client.replyToComment(
+          ctx.connection,
+          String(payload.commentId),
+          String(payload.text),
+        )).id,
       }),
       onRecordedSent: (execution) => ({
         publicReplyStatus: "SENT",
@@ -639,6 +693,7 @@ async function deliverPublicReply(
         publicReplyError: undefined,
       }),
       onFailure: (reason) => ({ publicReplyStatus: "FAILED", publicReplyError: reason }),
+      onLimit: (reason) => ({ publicReplyStatus: "SKIPPED", publicReplyError: reason }),
       onRetryablePending: () => ({
         publicReplyStatus: "PENDING",
         publicReplyError: "Meta public reply temporarily failed",
@@ -659,44 +714,32 @@ async function deliverOpeningReply(
   definition: FlowDefinitionV2,
   ctx: DeliveryContext,
 ): Promise<AutomationParticipantRecord> {
-  const dailyLimit = await checkDailySendLimit(definition, participant);
-  if (!dailyLimit.allowed) {
-    void notifyWorkspaceManagers(
-      participant.workspaceId,
-      `limit:daily:${participant.automationId}:${new Date().toISOString().slice(0, 10)}`,
-      `Automation paused: daily send limit reached`,
-      `Your automation hit its daily send cap (${dailyLimit.reason}). It will resume automatically tomorrow, or raise the cap in the builder.`,
-    ).catch(() => undefined);
-    const skipped = await ctx.repository.transitionParticipant(
-      participant.id,
-      ["COMMENT_MATCHED"],
-      { openingStatus: "SKIPPED", openingError: dailyLimit.reason },
-    );
-    return skipped ?? participant;
-  }
   const openingText = renderTemplate(pickVariant(definition.openingMessage.text, definition.openingMessage.textVariants), {
     keyword: participant.matchedKeyword,
   });
+  const openingMessage = {
+    text: openingText,
+    quickReply: {
+      title: definition.openingMessage.optInButtonLabel,
+      payload: createInteractionPayload(
+        { participantId: participant.id, action: "opt_in" },
+        ctx.interactionSecret,
+      ),
+    },
+  };
   return guardedDelivery(
     participant,
     {
       action: "opening_reply",
       externalEventId: participant.sourceCommentId,
+      payload: { commentId: participant.sourceCommentId, message: openingMessage },
+      dailySendLimit: definition.dailySendLimit,
       allowedStates: ["COMMENT_MATCHED"],
-      send: async () => {
+      send: async (payload) => {
         const response = await ctx.client.sendPrivateReply(
           ctx.connection,
-          participant.sourceCommentId,
-          {
-            text: openingText,
-            quickReply: {
-              title: definition.openingMessage.optInButtonLabel,
-              payload: createInteractionPayload(
-                { participantId: participant.id, action: "opt_in" },
-                ctx.interactionSecret,
-              ),
-            },
-          },
+          String(payload.commentId),
+          payload.message as { text: string; quickReply: { title: string; payload: string } },
         );
         if (!response.message_id || !response.recipient_id) {
           throw new Error("Meta accepted the opening reply without delivery identifiers");
@@ -724,6 +767,7 @@ async function deliverOpeningReply(
         igScopedUserId: ids.recipientId,
       }),
       onFailure: (reason) => ({ state: "FAILED", openingStatus: "FAILED", openingError: reason }),
+      onLimit: (reason) => ({ openingStatus: "SKIPPED", openingError: reason }),
       onRetryablePending: () => ({
         openingStatus: "PENDING",
         openingError: "Meta opening reply temporarily failed",
@@ -756,25 +800,32 @@ async function promptForFollow(
     recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
   });
 
+  const followReply = {
+    title: definition.followGate.recheckButtonLabel,
+    payload: createInteractionPayload(
+      { participantId: participant.id, action: "recheck" },
+      ctx.interactionSecret,
+      event.timestamp,
+    ),
+  };
   return guardedDelivery(
     participant,
     {
       action: `follow_prompt:${event.id}`,
       externalEventId: event.id,
+      payload: {
+        recipientId: event.recipientId!,
+        text: definition.followGate.notFollowingMessage,
+        reply: followReply,
+      },
+      dailySendLimit: definition.dailySendLimit,
       allowedStates: [participant.state],
-      send: async () => {
+      send: async (payload) => {
         const response = await ctx.client.sendQuickReply(
           ctx.connection,
-          event.recipientId!,
-          definition.followGate.notFollowingMessage,
-          {
-            title: definition.followGate.recheckButtonLabel,
-            payload: createInteractionPayload(
-              { participantId: participant.id, action: "recheck" },
-              ctx.interactionSecret,
-              event.timestamp,
-            ),
-          },
+          String(payload.recipientId),
+          String(payload.text),
+          payload.reply as { title: string; payload: string },
         );
         if (!response.message_id) {
           throw new Error("Meta accepted the follow prompt without a delivery identifier");
@@ -784,6 +835,7 @@ async function promptForFollow(
       onRecordedSent: () => followRequiredPatch(),
       onSuccess: () => followRequiredPatch(),
       onFailure: (reason) => ({ state: "FAILED", finalDeliveryError: reason }),
+      onLimit: (reason) => ({ finalDeliveryStatus: "SKIPPED", finalDeliveryError: reason }),
       onRetryablePending: undefined,
       // The worker that wins the re-claim owns the follow-prompt outcome; no
       // terminal transition is forced here (matches historical behavior).
@@ -840,21 +892,6 @@ async function deliverFinalMessage(
   event: NormalizedEvent,
   ctx: DeliveryContext,
 ): Promise<AutomationParticipantRecord> {
-  const dailyLimit = await checkDailySendLimit(definition, verified);
-  if (!dailyLimit.allowed) {
-    void notifyWorkspaceManagers(
-      verified.workspaceId,
-      `limit:daily:${verified.automationId}:${new Date().toISOString().slice(0, 10)}`,
-      `Automation paused: daily send limit reached`,
-      `Your automation hit its daily send cap (${dailyLimit.reason}). It will resume automatically tomorrow, or raise the cap in the builder.`,
-    ).catch(() => undefined);
-    const skipped = await ctx.repository.transitionParticipant(
-      verified.id,
-      ["FOLLOW_VERIFIED"],
-      { finalDeliveryStatus: "SKIPPED", finalDeliveryError: dailyLimit.reason },
-    );
-    return skipped ?? verified;
-  }
   const deliveryText = renderTemplate(pickVariant(definition.delivery.text, definition.delivery.textVariants), {
     keyword: verified.matchedKeyword,
     post_link: verified.sourceMediaSnapshot?.permalink,
@@ -876,9 +913,15 @@ async function deliverFinalMessage(
     {
       action: "final_delivery",
       externalEventId: event.id,
+      payload: { recipientId: event.recipientId!, message },
+      dailySendLimit: definition.dailySendLimit,
       allowedStates: ["FOLLOW_VERIFIED"],
-      send: async () => {
-        const response = await ctx.client.sendDirectMessage(ctx.connection, event.recipientId!, message);
+      send: async (payload) => {
+        const response = await ctx.client.sendDirectMessage(
+          ctx.connection,
+          String(payload.recipientId),
+          payload.message as MetaMessage,
+        );
         if (!response.message_id) {
           throw new Error("Meta accepted the final delivery without a delivery identifier");
         }
@@ -905,6 +948,10 @@ async function deliverFinalMessage(
       onFailure: (reason) => ({
         state: "FAILED",
         finalDeliveryStatus: "FAILED",
+        finalDeliveryError: reason,
+      }),
+      onLimit: (reason) => ({
+        finalDeliveryStatus: "SKIPPED",
         finalDeliveryError: reason,
       }),
       onRetryablePending: () => ({
