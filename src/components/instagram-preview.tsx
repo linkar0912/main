@@ -1,16 +1,20 @@
 "use client";
 
 import {
+  BatteryFull,
   Bookmark,
   Camera,
   ChevronLeft,
+  Film,
   Heart,
   Image as ImageIcon,
   MessageCircle,
   Mic,
   Phone,
   Send,
+  Signal,
   Video,
+  Wifi,
 } from "lucide-react";
 import { PRODUCT_MARK } from "@/src/lib/branding";
 
@@ -20,7 +24,7 @@ export type DmBubble = {
   id: string;
   /** "bot" = Linkar's automated message, shown incoming (left, gray) like a real DM from
    * another account. "tap" = a quick-reply button attached to that message, shown as its
-   * own right-aligned colored pill — the same visual split Instagram itself uses. */
+   * own right-aligned colored pill, the same visual split Instagram itself uses. */
   from: "bot" | "tap";
   text?: string;
   button?: string;
@@ -29,28 +33,32 @@ export type DmBubble = {
 export type InstagramPreviewProps = {
   view: PreviewView;
   onViewChange: (view: PreviewView) => void;
-  /** Hidden entirely for DM-only triggers (message, referral, optin, first-contact) — there's no post involved. */
+  /** Hidden entirely for DM-only triggers (message, referral, optin, first-contact) - there's no post involved. */
   showPost?: boolean;
   /**
-   * Hidden for classic private-reply flows — Meta's "reply privately" action delivers a DM,
+   * Hidden for classic private-reply flows - Meta's "reply privately" action delivers a DM,
    * never a public comment, so there's no public reply to show under the post's comments.
    */
   showComments?: boolean;
   username: string;
+  profileId?: string;
   postCaption?: string;
+  postImageUrl?: string;
+  /** Reels render at their native 9:16 inside the post view; feed posts stay full-bleed. */
+  postIsReel?: boolean;
   triggerComment?: string;
   commentReply?: string;
   messages: DmBubble[];
 };
 
-function PostView({ username, caption }: { username: string; caption?: string }) {
+function PostView({ username, caption, postImageUrl, postIsReel }: { username: string; caption?: string; postImageUrl?: string; postIsReel?: boolean }) {
   return (
     <div className="ig-screen">
       <div className="ig-topbar">
         <ChevronLeft size={20} />
         <div className="ig-topbar-title">
           <strong>{username.toUpperCase()}</strong>
-          <span>Posts</span>
+          <span>{postIsReel ? "Reels" : "Posts"}</span>
         </div>
         <span />
       </div>
@@ -58,8 +66,15 @@ function PostView({ username, caption }: { username: string; caption?: string })
         <span className="ig-avatar" />
         <strong>{username}</strong>
       </div>
-      <div className="ig-post-media" aria-hidden="true">
-        <ImageIcon size={34} strokeWidth={1.3} />
+      <div className={`ig-post-media${postIsReel ? " is-reel" : ""}`} aria-hidden="true">
+        {postImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- Meta CDN thumbnail; next/image adds no value for one remote photo.
+          <img src={postImageUrl} alt="" />
+        ) : postIsReel ? (
+          <Film size={34} strokeWidth={1.3} />
+        ) : (
+          <ImageIcon size={34} strokeWidth={1.3} />
+        )}
       </div>
       <div className="ig-post-actions">
         <Heart size={22} strokeWidth={1.6} />
@@ -140,15 +155,18 @@ function DmView({ username, messages }: { username: string; messages: DmBubble[]
   );
 }
 
-/** A believable Instagram UI — post, comments, or DM — so the builder preview shows what a
- * person actually sees, not an abstract chat-bubble mockup. */
+/** A believable Instagram UI inside a phone shell - post, comments, or DM - so the builder
+ * preview shows what a person actually sees on their phone, not an abstract mockup. */
 export function InstagramPreview({
   view,
   onViewChange,
   showPost = true,
   showComments = true,
   username,
+  profileId,
   postCaption,
+  postImageUrl,
+  postIsReel,
   triggerComment,
   commentReply,
   messages,
@@ -156,10 +174,32 @@ export function InstagramPreview({
   return (
     <div className="ig-preview">
       <div className="ig-phone">
-        {view === "post" && <PostView username={username} caption={postCaption} />}
+        <div className="ig-statusbar" aria-hidden="true">
+          <span className="ig-statusbar-time">9:41</span>
+          <span className="ig-statusbar-island" />
+          <span className="ig-statusbar-icons">
+            <Signal size={13} strokeWidth={2.2} />
+            <Wifi size={13} strokeWidth={2.2} />
+            <BatteryFull size={16} strokeWidth={2} />
+          </span>
+        </div>
+        {view === "post" && (
+          <PostView
+            username={username}
+            caption={postCaption}
+            postImageUrl={postImageUrl}
+            postIsReel={postIsReel}
+          />
+        )}
         {view === "comments" && <CommentsView username={username} triggerComment={triggerComment} commentReply={commentReply} />}
         {view === "dm" && <DmView username={username} messages={messages} />}
+        <div className="ig-homebar" aria-hidden="true" />
       </div>
+      <p className="ig-profile-meta">
+        <span className="ig-profile-app">Instagram</span>
+        <span className="ig-profile-updated"><span className="ig-updated-dot" /> Updated</span>
+        <span className="ig-profile-id">@{username}{profileId ? ` - ID ${profileId}` : ""}</span>
+      </p>
       <div className="ig-preview-tabs" role="tablist" aria-label="Preview surface">
         {showPost && (
           <button type="button" role="tab" aria-selected={view === "post"} className={view === "post" ? "is-active" : ""} onClick={() => onViewChange("post")}>Post</button>

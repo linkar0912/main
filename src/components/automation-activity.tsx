@@ -223,10 +223,10 @@ function JourneyTrack({ participant }: { participant: ParticipantActivitySummary
 
 function ActivityRow({ participant }: { participant: ParticipantActivitySummary }) {
   const media = participant.sourceMediaSnapshot;
-  const publicReplyDetail = `${participant.publicReplyStatus}${participant.publicReplyError ? ` — ${participant.publicReplyError}` : ""}`;
-  const openingDetail = `${participant.openingStatus}${participant.openingError ? ` — ${participant.openingError}` : ""}`;
+  const publicReplyDetail = `${participant.publicReplyStatus}${participant.publicReplyError ? ` - ${participant.publicReplyError}` : ""}`;
+  const openingDetail = `${participant.openingStatus}${participant.openingError ? ` - ${participant.openingError}` : ""}`;
   const deliveryDetail = [
-    `${participant.finalDeliveryStatus}${participant.finalDeliveryError ? ` — ${participant.finalDeliveryError}` : ""}`,
+    `${participant.finalDeliveryStatus}${participant.finalDeliveryError ? ` - ${participant.finalDeliveryError}` : ""}`,
     participant.finalDeliveredAt ? `Delivered ${formatTimestamp(participant.finalDeliveredAt)}` : "",
   ]
     .filter(Boolean)

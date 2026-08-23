@@ -1,9 +1,9 @@
 /**
  * Guard for tenant-supplied URLs the *server* will call (lead webhooks).
  *
- * Without this a workspace member can point a webhook at the host's own network —
+ * Without this a workspace member can point a webhook at the host's own network -
  * cloud metadata (169.254.169.254), the compose-internal `postgres`/`valkey` hosts,
- * or the app's own API — and make the server issue POSTs there on their behalf.
+ * or the app's own API - and make the server issue POSTs there on their behalf.
  *
  * `isSafeOutboundUrl` performs the cheap syntax/literal-address check used while
  * saving definitions. `resolveSafeOutboundTarget` is the mandatory send-time

@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { getRepository } from "../repository-provider";
 import type { AuthTokenType } from "../repository";
 
-// Raw tokens are 32 random bytes, base64url — shown once in a link. Only the
+// Raw tokens are 32 random bytes, base64url - shown once in a link. Only the
 // SHA-256 hash is persisted, so a database leak cannot be replayed as a link.
 export function createRawToken(): string {
     return randomBytes(32).toString("base64url");

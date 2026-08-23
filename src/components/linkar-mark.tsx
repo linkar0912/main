@@ -1,8 +1,8 @@
 /**
- * Linkar brand mark — a rounded chat bubble carrying a lightning bolt:
+ * Linkar brand mark - a rounded chat bubble carrying a lightning bolt:
  * conversations that answer instantly. The bubble inherits currentColor so it
  * adapts to light and dark surfaces; the bolt is always Volt, the signature
- * accent. Brand spots only — use InstagramGlyph where the icon literally means
+ * accent. Brand spots only - use InstagramGlyph where the icon literally means
  * Instagram.
  */
 export function LinkarMark({ size = 20 }: { size?: number }) {

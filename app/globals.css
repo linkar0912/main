@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   Linkar design system — "Volt"
+   Linkar design system - "Volt"
    White canvas · warm bone structure · ink CTAs · Magenta interaction ·
    Volt yellow signature · motion built in
    ───────────────────────────────────────────────────────────────────────────── */
@@ -33,7 +33,7 @@
   --accent-pale-dark: #fbdcf7;
   --accent-vivid-dark: #ff5ff0;
 
-  /* Volt is the brand signature — highlights, stickers, moments of energy.
+  /* Volt is the brand signature - highlights, stickers, moments of energy.
      Always paired with ink; never used for body text on white. */
   --volt: #fff100;
   --volt-deep: #f7cd21;
@@ -491,7 +491,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 }
 
 /* ── Modals ────────────────────────────────────────────────────────────── */
-/* An overlay is a different UI role than a content card — it floats above
+/* An overlay is a different UI role than a content card - it floats above
    the page, so it keeps the depth/shadow the flat page content deliberately
    dropped. */
 .modal-scrim {
@@ -517,7 +517,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   max-width: 560px;
   width: 100%;
 }
-.modal-panel.is-wide { max-width: 900px; }
+.modal-panel.is-wide { max-width: 1140px; }
 .template-picker-head {
   align-items: center;
   border-bottom: 1px solid var(--line);
@@ -544,7 +544,8 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   outline: 0;
 }
 .template-picker-search input::placeholder { color: var(--subtle); }
-.template-picker-layout { display: flex; }
+.template-picker-layout { display: flex; flex: 1; min-height: 0; }
+.template-picker { display: flex; flex-direction: column; height: min(86vh, 820px); }
 .template-picker-categories {
   border-right: 1px solid var(--line);
   display: flex;
@@ -575,7 +576,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .template-picker-category.is-active { background: var(--accent-soft); color: var(--accent-hover); font-weight: 750; }
 .template-picker-count { color: var(--subtle); font-size: .74rem; font-weight: 700; margin-left: auto; }
 .template-picker-category.is-active .template-picker-count { color: var(--accent-hover); }
-.template-picker-content { flex: 1; max-height: 60vh; min-width: 0; overflow-y: auto; padding: var(--space-5) var(--space-6); }
+.template-picker-content { flex: 1; max-height: none; min-width: 0; overflow-y: auto; padding: var(--space-5) var(--space-6); }
 .template-picker-section-label {
   color: var(--subtle);
   font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace;
@@ -618,7 +619,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .home-greeting { align-items: center; margin-bottom: var(--space-7); }
 .home-greeting h1 { font-size: clamp(2.4rem, 4.2vw, 3.45rem); letter-spacing: -.055em; margin-bottom: 8px; }
 
-/* Flat by design: no box, no border, no shadow — sections are told apart by
+/* Flat by design: no box, no border, no shadow - sections are told apart by
    a heading and generous space, like a plain document, not a card grid. */
 .panel {
   animation: rise .5s var(--ease-out) both;
@@ -650,7 +651,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .metric-card small { color: var(--muted); font-size: .72rem; }
 
 /* Dashboard performance panel */
-/* Plain, monochrome stat row — numbers are the substance, not decoration.
+/* Plain, monochrome stat row - numbers are the substance, not decoration.
    Magenta is reserved for the delta pills' real up/down signal, nothing else. */
 .stat-row { border-top: 1px solid var(--line); display: grid; gap: var(--space-5); grid-template-columns: repeat(4, minmax(0, 1fr)); margin: var(--space-5) 0 var(--space-6); padding-top: var(--space-5); }
 .stat-label { color: var(--muted); font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace; font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
@@ -662,7 +663,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .chart-empty { align-items: center; color: var(--muted); display: flex; font-size: .85rem; height: 200px; justify-content: center; }
 .chart-legend { align-items: center; color: var(--muted); display: flex; font-size: .72rem; gap: var(--space-2); margin: var(--space-4) 0 0; }
 
-/* Setup checklist (Start here): a single connected rail, not equal-weight cards —
+/* Setup checklist (Start here): a single connected rail, not equal-weight cards -
    one step reads as "do this next," done steps recede, later steps stay quiet. */
 .setup-panel {
   margin-bottom: var(--space-7);
@@ -895,19 +896,15 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 }
 
 /* Builder */
-.builder-layout { align-items: start; display: grid; gap: var(--space-7, 32px); grid-template-columns: minmax(0, 1fr) 290px; }
+.builder-layout { align-items: start; display: grid; gap: var(--space-6); grid-template-columns: minmax(0, 1fr) 400px; }
 .builder-main { min-width: 0; }
 .builder-intro { align-items: flex-start; display: flex; justify-content: space-between; margin-bottom: var(--space-6); }
 .builder-intro h1 { margin-bottom: 9px; }
-.builder-version { border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: .66rem; font-weight: 750; padding: 6px 9px; }
 .builder-footer { align-items: center; border-top: 1px solid var(--line); display: flex; justify-content: space-between; margin-top: var(--space-5); padding-top: var(--space-4); }
 .builder-actions { display: flex; gap: 10px; }
-.builder-preview { background: #18181b; border-radius: var(--radius-lg); color: #f4f4f5; min-height: 475px; padding: var(--space-6); position: sticky; top: 24px; }
+.builder-preview { background: var(--ink); border-radius: var(--radius-lg); color: #f4f4f5; padding: var(--space-5); position: sticky; top: 24px; }
 .builder-preview .eyebrow { color: var(--accent-tint-dark); }
 .preview-line { background: var(--accent); border-radius: 2px; height: 2px; margin: var(--space-4) 0 var(--space-6); width: 41px; }
-.preview-note { align-items: flex-start; border-top: 1px solid rgba(255, 255, 255, .14); color: var(--accent-pale-dark); display: flex; font-size: .69rem; gap: 9px; line-height: 1.4; margin-top: var(--space-7, 32px); padding-top: var(--space-4); }
-.preview-note .signal-dot { margin-top: 5px; }
-.preview-disclaimer { color: var(--accent-tint-dark); font-weight: 500; text-transform: none; }
 .review-summary { display: grid; gap: 9px; list-style: none; margin: 0; padding: 0; }
 .review-summary li { border-top: 1px solid var(--line); color: var(--slate); font-size: .81rem; padding-top: 9px; }
 .review-summary li:first-child { border-top: 0; padding-top: 0; }
@@ -921,13 +918,29 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .ig-preview { display: flex; flex-direction: column; gap: var(--space-4); }
 .ig-phone {
   background: #000;
-  border: 1px solid rgba(255, 255, 255, .12);
-  border-radius: 22px;
+  border: 8px solid var(--ink-strong);
+  border-radius: 38px;
+  box-shadow: var(--shadow-pop);
   color: #f5f5f5;
-  height: 440px;
+  display: flex;
+  flex-direction: column;
+  height: 540px;
+  margin: 0 auto;
+  max-width: 320px;
   overflow: hidden;
+  width: 100%;
 }
-.ig-screen { display: flex; flex-direction: column; height: 100%; }
+.ig-statusbar { align-items: center; color: #f5f5f5; display: flex; flex: 0 0 auto; justify-content: space-between; padding: 12px 18px 6px; }
+.ig-statusbar-time { font-size: .68rem; font-weight: 750; letter-spacing: .02em; }
+.ig-statusbar-island { background: var(--ink-strong); border-radius: 999px; height: 18px; width: 72px; }
+.ig-statusbar-icons { display: inline-flex; gap: 4px; }
+.ig-homebar { background: rgba(245, 245, 245, .92); border-radius: 999px; flex: 0 0 auto; height: 4px; margin: 0 auto 8px; width: 112px; }
+.ig-profile-meta { align-items: center; color: var(--accent-pale-dark); display: flex; flex-wrap: wrap; font-size: .7rem; gap: 6px 14px; justify-content: center; margin: 0; }
+.ig-profile-app { color: #f5f5f5; font-weight: 800; letter-spacing: .03em; }
+.ig-profile-updated { align-items: center; color: var(--mint); display: inline-flex; font-weight: 750; gap: 5px; }
+.ig-updated-dot { background: #30d158; border-radius: 50%; display: inline-block; height: 6px; width: 6px; }
+.ig-profile-id { color: #8e8e8e; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace; font-size: .62rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ig-screen { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .ig-topbar {
   align-items: center;
   border-bottom: 1px solid rgba(255, 255, 255, .1);
@@ -940,12 +953,14 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .ig-topbar-title strong { font-size: .72rem; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ig-topbar-title span { color: #8e8e8e; font-size: .64rem; }
 .ig-spacer { flex: 1; }
-.ig-avatar { background: linear-gradient(135deg, var(--accent), var(--grape)); border-radius: 50%; display: inline-block; flex: 0 0 30px; height: 30px; width: 30px; }
+.ig-avatar { background: var(--accent); border-radius: 50%; display: inline-block; flex: 0 0 30px; height: 30px; width: 30px; }
 .ig-avatar-sm { flex-basis: 24px; height: 24px; width: 24px; }
 .ig-avatar-brand { align-items: center; background: var(--accent); color: var(--white); display: inline-flex; font-size: .58rem; font-weight: 800; justify-content: center; }
 .ig-post-header { align-items: center; display: flex; gap: 9px; padding: 10px 14px; }
 .ig-post-header strong { font-size: .74rem; }
-.ig-post-media { align-items: center; background: linear-gradient(160deg, #262626, #0d0d0d); color: #4a4a4a; display: flex; flex: 1; justify-content: center; }
+.ig-post-media { align-items: center; background: #0d0d0d; color: #4a4a4a; display: flex; flex: 1; justify-content: center; min-height: 0; overflow: hidden; }
+.ig-post-media img { height: 100%; object-fit: cover; width: 100%; }
+.ig-post-media.is-reel img { aspect-ratio: 9 / 16; width: auto; }
 .ig-post-actions { align-items: center; display: flex; gap: 14px; padding: 11px 14px 6px; }
 .ig-post-caption { color: #d0d0d0; font-size: .72rem; line-height: 1.5; padding: 4px 14px 14px; }
 .ig-post-caption strong { color: #f5f5f5; margin-right: 4px; }
@@ -1025,6 +1040,7 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .media-card:hover { border-color: var(--accent); }
 .media-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .18); }
 .media-thumb { aspect-ratio: 1; background: var(--surface-sunk); border-radius: 7px; display: block; overflow: hidden; position: relative; }
+.media-card.is-reel .media-thumb { aspect-ratio: 9 / 16; }
 .media-thumb img { display: block; height: 100%; object-fit: cover; width: 100%; }
 .media-thumb-fallback { align-items: center; color: var(--subtle); display: flex; height: 100%; justify-content: center; width: 100%; }
 .media-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -1227,7 +1243,7 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .legal-footer { color: var(--muted); font-size: .75rem; margin-top: var(--space-4); }
 .legal-footer a { color: var(--accent); font-weight: 700; }
 
-/* Auth screens (login / signup) — split hero + form */
+/* Auth screens (login / signup) - split hero + form */
 .auth-shell { align-items: stretch; animation: fade-in .35s ease both; display: flex; min-height: 100vh; }
 .auth-hero {
   background:

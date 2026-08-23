@@ -78,7 +78,7 @@ describe("owner authentication", () => {
   it("rejects every non-canonical trailing-character mutation of the signature", () => {
     // The final base64url character carries unused padding bits; mutating it can
     // decode to byte-identical signatures. Verification must compare the canonical
-    // encoding, so exactly zero of the 63 altered tokens may verify — regardless of
+    // encoding, so exactly zero of the 63 altered tokens may verify - regardless of
     // which character the real signature happens to end with.
     const secret = "session-secret-with-at-least-32-characters";
     const token = createSessionToken(

@@ -218,7 +218,7 @@ describe("MediaPicker", () => {
 
     render(<ControlledPicker initialIds={["media_page2"]} initialSnapshots={[unfetchedSnapshot]} />);
 
-    // The unfetched item never renders as a card (its page was never loaded) — only `reel` does.
+    // The unfetched item never renders as a card (its page was never loaded) - only `reel` does.
     await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(1));
     fireEvent.click(screen.getByText("Our newest Reel drop"));
 

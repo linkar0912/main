@@ -106,7 +106,7 @@ describe("sequences repository + scheduler", () => {
     expect(firstPass).toMatchObject({ sent: 1, failed: 0, cancelled: 0 });
     expect(client.sendDirectMessage.mock.calls[0][2].text).toBe("Day zero tip");
 
-    // Step two is 48h out — nothing due right now.
+    // Step two is 48h out - nothing due right now.
     const idlePass = await processDueSequenceSends(repository, client);
     expect(idlePass.sent).toBe(0);
 

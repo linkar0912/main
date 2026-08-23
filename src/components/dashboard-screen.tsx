@@ -19,7 +19,7 @@ import { StatusBadge } from "./status-badge";
 import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
 
-// Mirrors DailyCount in src/lib/repository.ts — the key is `day`, not `date`.
+// Mirrors DailyCount in src/lib/repository.ts - the key is `day`, not `date`.
 type DayPoint = { day: string; count: number };
 type InsightsPayload = {
   timeseries?: { participantsPerDay?: DayPoint[]; sentPerDay?: DayPoint[] };
@@ -79,7 +79,7 @@ function formatDayLabel(day: string | undefined): string {
 function VolumeChart({ sentPoints, reachedPoints }: { sentPoints: DayPoint[]; reachedPoints: DayPoint[] }) {
   const reachedByDay = new Map(reachedPoints.map((point) => [point.day, point.count]));
   const peak = Math.max(1, ...sentPoints.map((point) => point.count), ...reachedPoints.map((point) => point.count));
-  // Any day with real activity still reads as a bar, not a sliver — plain
+  // Any day with real activity still reads as a bar, not a sliver - plain
   // count/peak scaling flattens modest, evenly-spread real-world numbers.
   const heightOf = (count: number) => (count > 0 ? Math.max(10, Math.round((count / peak) * 100)) : 2);
 
@@ -92,7 +92,7 @@ function VolumeChart({ sentPoints, reachedPoints }: { sentPoints: DayPoint[]; re
             <div
               className="chart-column"
               key={point.day}
-              title={`${formatDayLabel(point.day)} — ${point.count} sent, ${reached} reached`}
+              title={`${formatDayLabel(point.day)} - ${point.count} sent, ${reached} reached`}
             >
               <div className="chart-bars is-lg">
                 <span className="chart-bar bar-participants" style={{ height: `${heightOf(reached)}%` }} />
@@ -126,7 +126,7 @@ function DashboardGreeting() {
         <p className="eyebrow">Home</p>
         <h1>Hello, {displayNameFromEmail(email)}!</h1>
         <p className="muted page-lede">
-          Welcome back — here’s how your replies performed over the last 14 days.
+          Welcome back - here’s how your replies performed over the last 14 days.
         </p>
       </div>
       <CreateAutomationButton className="button button-primary">

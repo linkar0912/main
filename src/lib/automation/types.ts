@@ -66,7 +66,7 @@ export type FlowEmailCapture = {
   retryText?: string;
   confirmationText: string;
   /**
-   * Optional fulfillment email sent to the lead the moment their address is stored —
+   * Optional fulfillment email sent to the lead the moment their address is stored -
    * deliver the promised guide/link instead of leaving them with a bare DM.
    */
   delivery?: EmailDelivery;
@@ -187,7 +187,7 @@ export type NormalizedEvent = {
 };
 
 /**
- * Runtime context the runner computes per event and hands to the pure evaluator —
+ * Runtime context the runner computes per event and hands to the pure evaluator -
  * currently just whether this sender has never been seen on this account before,
  * which `first_contact` triggers require.
  */

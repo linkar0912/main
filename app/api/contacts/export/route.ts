@@ -9,7 +9,7 @@ function csvCell(value: string | undefined): string {
   return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
-// GET /api/contacts/export — CSV of every captured lead for spreadsheets/CRMs.
+// GET /api/contacts/export - CSV of every captured lead for spreadsheets/CRMs.
 export async function GET(request: Request) {
   const session = getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

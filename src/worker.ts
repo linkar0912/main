@@ -140,7 +140,7 @@ if (!env.redisUrl) {
   DELIVERY_RECONCILIATION_INTERVAL_MS).unref();
 
   // Sequence scheduler: delivers drip steps that are due. Runs shortly after boot and
-  // then every 15 minutes — granular enough for hour-level step delays.
+  // then every 15 minutes - granular enough for hour-level step delays.
   const runSequenceSweep = async () => {
     const repository = getRepository();
     const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;

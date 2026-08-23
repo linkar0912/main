@@ -1383,7 +1383,7 @@ export async function processPendingCampaignInteraction(
     dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
   };
 
-  // Ungated campaigns deliver straight after the opt-in tap — no follower
+  // Ungated campaigns deliver straight after the opt-in tap - no follower
   // verification call to Meta and no FOLLOW_REQUIRED detour.
   if (definition.followGate.required === false && payload.action === "opt_in") {
     if (!await actionClaim(participant, repository, "direct_delivery:opt_in", event.id)) {

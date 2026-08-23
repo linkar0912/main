@@ -122,7 +122,7 @@ export type BroadcastEnqueueResult = {
   rejected: BroadcastRecipientKey[];
 };
 
-/** Whether background delivery is available at all — broadcasts depend on it. */
+/** Whether background delivery is available at all - broadcasts depend on it. */
 export function isQueueConfigured(): boolean {
   return Boolean(getServerEnv().redisUrl);
 }

@@ -16,7 +16,7 @@ export type SequenceRunnerClient = {
 export type SequenceRunnerOptions = {
   client?: SequenceRunnerClient;
   tokenEncryptionKey?: string;
-  /** Max sends per sweep — keeps the scheduler polite on shared hosts. */
+  /** Max sends per sweep - keeps the scheduler polite on shared hosts. */
   batchSize?: number;
   claimLeaseMs?: number;
 };
@@ -42,7 +42,7 @@ export async function processDueSequences(
   const due = await repository.listDueSequenceSends(new Date().toISOString(), options.batchSize ?? 25);
   if (due.length === 0) return result;
 
-  // Without Meta credentials there is nothing to deliver — leave everything as-is
+  // Without Meta credentials there is nothing to deliver - leave everything as-is
   // so a configured deployment picks the work up instead of failing it here.
   if (!options.client || !options.tokenEncryptionKey) {
     logger.warn("Sequence sweep skipped: Meta client is not configured");
@@ -50,7 +50,7 @@ export async function processDueSequences(
   }
 
   // A sweep spans every workspace with due steps, so the window must be resolved per
-  // workspace — reusing one tenant's window would either DM through another tenant's
+  // workspace - reusing one tenant's window would either DM through another tenant's
   // quiet hours or hold a tenant that has none. Cached for the length of the sweep.
   const windowCache = new Map<string, MessagingWindow | null>();
   const messagingWindowFor = async (workspaceId: string): Promise<MessagingWindow | null> => {

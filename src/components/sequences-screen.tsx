@@ -140,7 +140,7 @@ export function SequencesScreen() {
   async function toggleStatus(row: SequenceRow) {
     const status = row.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
     setPageError("");
-    // Only reflect the new status once the server has accepted it — otherwise a
+    // Only reflect the new status once the server has accepted it - otherwise a
     // rejected pause keeps running while the UI claims it stopped.
     try {
       const response = await fetch(`/api/sequences/${row.id}`, {
@@ -176,7 +176,7 @@ export function SequencesScreen() {
             <h1>Sequences</h1>
             <p className="muted page-lede">
               Timed follow-up campaigns. New email leads enroll automatically and get each step by
-              DM — STOP suppression respected everywhere.
+              DM - STOP suppression respected everywhere.
             </p>
           </div>
         </header>
@@ -203,7 +203,7 @@ export function SequencesScreen() {
                     <option key={automation.id} value={automation.id}>{automation.name}</option>
                   ))}
                 </select>
-                <small>Pick an email-capture flow — its new leads start this sequence automatically. People who reply STOP never enroll or continue.</small>
+                <small>Pick an email-capture flow - its new leads start this sequence automatically. People who reply STOP never enroll or continue.</small>
               </label>
 
               <p className="eyebrow field-spaced">Steps</p>
@@ -263,7 +263,7 @@ export function SequencesScreen() {
                 <Link className="text-link" href="/automations/sequences">Refresh</Link>
               </div>
               {!loading && !pageError && sequences.length === 0 && (
-                <p className="muted">No sequences yet — create one above and wire it to an email capture flow.</p>
+                <p className="muted">No sequences yet - create one above and wire it to an email capture flow.</p>
               )}
               {sequences.map((row) => (
                 <article className="automation-row" key={row.id}>

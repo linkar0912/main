@@ -24,7 +24,7 @@ export function resetNotificationDedupeForTests(): void {
 
 /**
  * Emails every OWNER/ADMIN in the workspace once per dedupe window for the
- * given key. Never throws — alerting must not break event processing.
+ * given key. Never throws - alerting must not break event processing.
  */
 export async function notifyWorkspaceManagers(
   workspaceId: string,

@@ -56,14 +56,14 @@ function roleLabel(role: MemberRole): string {
   return role.charAt(0) + role.slice(1).toLowerCase();
 }
 
-/** What the Instagram hero row says — read-only here; connect/disconnect lives on Settings. */
+/** What the Instagram hero row says - read-only here; connect/disconnect lives on Settings. */
 function connectionSummary(connections: Connection[]): { title: string; detail: string } {
   if (connections.length === 0) {
     return { title: "No Instagram account connected", detail: "Connect a professional account to start automating replies." };
   }
   if (connections.length === 1) {
     const [connection] = connections;
-    return { title: `@${connection.username}`, detail: `Connected ${formatDate(connection.connectedAt)} — manage or disconnect in Settings.` };
+    return { title: `@${connection.username}`, detail: `Connected ${formatDate(connection.connectedAt)} - manage or disconnect in Settings.` };
   }
   return { title: `${connections.length} accounts connected`, detail: "Manage each connection, or add another, in Settings." };
 }

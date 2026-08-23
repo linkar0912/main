@@ -129,7 +129,7 @@ describe("Meta message payloads", () => {
     expect(String(fetcher.mock.calls[1][0])).toContain("subscribed_fields=comments%2Cmessages");
   });
 
-  it("never fails the connection over a rejected subscription — it reports the gap instead", async () => {
+  it("never fails the connection over a rejected subscription - it reports the gap instead", async () => {
     const client = new MetaClient({
       apiVersion: "v25.0",
       fetcher: async () => new Response(JSON.stringify({ error: { message: "(#100) Invalid parameter", code: 100 } }), { status: 400 }),

@@ -37,8 +37,8 @@ const TOPICS: Topic[] = [
         q: "What is this app?",
         a: (
           <>
-            A workspace for Instagram DM automation. Rules watch signals on your account —
-            comments, story mentions, first-contact DMs — and reply with helpful messages in seconds.
+            A workspace for Instagram DM automation. Rules watch signals on your account -
+            comments, story mentions, first-contact DMs - and reply with helpful messages in seconds.
           </>
         ),
       },
@@ -81,8 +81,8 @@ const TOPICS: Topic[] = [
         q: "Why do I see “Some fields need a reconnect”?",
         a: (
           <>
-            Meta requires every listed field — comments, messages, quick-reply taps, opt-ins and
-            referrals — to be subscribed. If one drops, open Settings and reconnect; the app re-subscribes everything for you.
+            Meta requires every listed field - comments, messages, quick-reply taps, opt-ins and
+            referrals - to be subscribed. If one drops, open Settings and reconnect; the app re-subscribes everything for you.
           </>
         ),
       },
@@ -125,7 +125,7 @@ const TOPICS: Topic[] = [
         q: "Can I test before going live?",
         a: (
           <>
-            Yes — save the automation as a draft, then use the live preview in the builder and the
+            Yes - save the automation as a draft, then use the live preview in the builder and the
             Activity page to watch real executions before activating.
           </>
         ),
@@ -179,7 +179,7 @@ const TOPICS: Topic[] = [
         a: (
           <>
             Demo mode runs on sample data until the server has a database and Meta credentials.
-            Everything else works — you can build and preview, but nothing is sent to Instagram.
+            Everything else works - you can build and preview, but nothing is sent to Instagram.
           </>
         ),
       },
@@ -266,7 +266,7 @@ export function HelpScreen({ supportEmail }: { supportEmail: string }) {
           <div>
             <p className="eyebrow">Support</p>
             <h1>Help</h1>
-            <p className="muted page-lede">Guides and answers for every part of the workspace — searchable in one place.</p>
+            <p className="muted page-lede">Guides and answers for every part of the workspace - searchable in one place.</p>
           </div>
         </header>
 
@@ -291,7 +291,7 @@ export function HelpScreen({ supportEmail }: { supportEmail: string }) {
                 setQuery(event.target.value);
                 setActiveTopicId(null);
               }}
-              placeholder="Search guides — e.g. keywords, reconnect, quiet hours…"
+              placeholder="Search guides - e.g. keywords, reconnect, quiet hours…"
               aria-label="Search help articles"
             />
             <button type="submit" aria-label="Run search">

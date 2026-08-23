@@ -4,7 +4,7 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 
 export const runtime = "nodejs";
 
-// GET /api/insights/funnels — per-automation delivery outcomes over the trailing
+// GET /api/insights/funnels - per-automation delivery outcomes over the trailing
 // 7 days: how many events matched, how many DMs went out, and what failed.
 export async function GET(request: Request) {
   const session = await getValidatedSession(request);

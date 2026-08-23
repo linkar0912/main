@@ -11,7 +11,7 @@ const windowSchema = z.object({
   timezone: z.string().trim().min(1).max(64),
 });
 
-// GET /api/workspace/messaging — quiet-hours window (null when disabled).
+// GET /api/workspace/messaging - quiet-hours window (null when disabled).
 export async function GET(request: Request) {
   const session = getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   return NextResponse.json({ data: messagingWindow });
 }
 
-// PATCH /api/workspace/messaging — set or clear the window (body null clears).
+// PATCH /api/workspace/messaging - set or clear the window (body null clears).
 export async function PATCH(request: Request) {
   const session = getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

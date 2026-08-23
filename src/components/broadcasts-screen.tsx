@@ -16,7 +16,7 @@ type BroadcastRow = {
   skipped: number;
 };
 
-/** One-off DM blasts to a contact segment — its own tab, not a footnote on My Automations. */
+/** One-off DM blasts to a contact segment - its own tab, not a footnote on My Automations. */
 export function BroadcastsScreen() {
   const [broadcasts, setBroadcasts] = useState<BroadcastRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +74,7 @@ export function BroadcastsScreen() {
             <p className="eyebrow">Workspace / automation</p>
             <h1>Broadcasts</h1>
             <p className="muted page-lede">
-              One-off DMs to a contact segment — paced ~1/second, STOP contacts skipped automatically.
+              One-off DMs to a contact segment - paced ~1/second, STOP contacts skipped automatically.
             </p>
           </div>
         </header>
@@ -117,7 +117,7 @@ export function BroadcastsScreen() {
                 <div className="list-count"><Megaphone size={17} /><span>{loading ? "Loading" : `${broadcasts.length} ${broadcasts.length === 1 ? "broadcast" : "broadcasts"}`}</span></div>
               </div>
               {!loading && broadcasts.length === 0 ? (
-                <p className="muted">No broadcasts sent yet — compose one above.</p>
+                <p className="muted">No broadcasts sent yet - compose one above.</p>
               ) : (
                 <div className="automation-list">
                   {broadcasts.map((broadcast) => (

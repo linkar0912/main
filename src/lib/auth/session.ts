@@ -182,7 +182,7 @@ export async function validateSessionState(
 }
 
 // Full validation: signature + expiry (readSessionToken) plus server-side
-// revocation state — single-session denylist and per-user token version.
+// revocation state - single-session denylist and per-user token version.
 // Routes that mutate state should use this instead of getSessionFromRequest.
 export async function getValidatedSession(request: Request): Promise<AppSession | null> {
   const session = getSessionFromRequest(request);

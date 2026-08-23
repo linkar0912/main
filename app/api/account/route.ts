@@ -5,7 +5,7 @@ import { getRepository } from "@/src/lib/repository-provider";
 
 export const runtime = "nodejs";
 
-// GET /api/account — identity for the signed-in user (sidebar chip, profile).
+// GET /api/account - identity for the signed-in user (sidebar chip, profile).
 export async function GET(request: Request) {
     const session = await getValidatedSession(request);
     if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     });
 }
 
-// POST /api/account — form actions for the signed-in user:
+// POST /api/account - form actions for the signed-in user:
 //   action=change-password  (currentPassword, newPassword)
 //   action=logout-all       (invalidates every session via tokenVersion bump)
 export async function POST(request: Request) {

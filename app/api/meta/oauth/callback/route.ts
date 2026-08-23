@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
 
   // Meta redirects back WITHOUT a code when the person cancels or the app config
-  // blocks authorization — surface that distinctly instead of blaming the state cookie.
+  // blocks authorization - surface that distinctly instead of blaming the state cookie.
   if (!code) {
     const metaError = url.searchParams.get("error");
     if (metaError === "access_denied") {

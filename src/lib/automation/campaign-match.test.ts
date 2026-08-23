@@ -27,7 +27,7 @@ const campaignDefinition: FlowDefinitionV2 = {
     notFollowingMessage: "Follow this account, then tap below.",
     recheckButtonLabel: "I've followed",
   },
-  delivery: { text: "You're verified — here is your guide.", url: "https://example.com/guide" },
+  delivery: { text: "You're verified - here is your guide.", url: "https://example.com/guide" },
 };
 
 const commentEvent: NormalizedEvent = {

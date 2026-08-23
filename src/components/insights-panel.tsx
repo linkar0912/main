@@ -83,7 +83,7 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
           </a>
         </div>
         {posts.length === 0 ? (
-          <p className="muted">No participant activity yet — performance appears after the first matched comment.</p>
+          <p className="muted">No participant activity yet - performance appears after the first matched comment.</p>
         ) : (
           <table className="insights-table">
             <thead>

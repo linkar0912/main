@@ -11,7 +11,7 @@ import { createPrismaRepository, prisma } from "./prisma";
 // action finally succeeds) by including the field in a transitionParticipant patch with value
 // `undefined`. The memory repository clears it via a plain object spread, where `undefined`
 // overwrites the old value. Prisma's `update`/`updateMany`, however, treats an `undefined`
-// value in `data` as "don't touch this column" — so without translating it to `null`, a stale
+// value in `data` as "don't touch this column" - so without translating it to `null`, a stale
 // error message would survive forever in Postgres even after the underlying action succeeds.
 
 function fakeParticipantRecord(overrides: Record<string, unknown> = {}) {

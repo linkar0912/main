@@ -9,6 +9,7 @@ type FetchOverrides = {
   media?: unknown;
   createResponse?: unknown;
   patchResponse?: unknown;
+  connection?: unknown;
 };
 
 function stubFetch(overrides: FetchOverrides = {}) {
@@ -16,6 +17,9 @@ function stubFetch(overrides: FetchOverrides = {}) {
     const url = String(input);
     if (url.includes("/api/meta/media")) {
       return { ok: true, json: async () => overrides.media ?? { data: [], paging: {} } } as Response;
+    }
+    if (url.includes("/api/meta/connection")) {
+      return { ok: true, json: async () => overrides.connection ?? { data: [] } } as Response;
     }
     if (!init?.method || init.method === "POST") {
       return { ok: true, json: async () => overrides.createResponse ?? { data: { id: "automation_new" } } } as Response;
@@ -89,11 +93,11 @@ describe("AutomationBuilder", () => {
 
     render(<AutomationBuilder automationId="automation_1" initialDefinition={legacyDefinition} initialName="Legacy flow" />);
 
-    expect(screen.getByText("Flow v1")).toBeTruthy();
+    expect(screen.queryByText("Flow v1")).toBeNull();
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "PATCH").length).toBe(1));
     const request = findRequest(fetchMock, (url) => url === "/api/automations/automation_1");
     expect(request.method).toBe("PATCH");
     expect(JSON.parse(String(request.body))).toMatchObject({
@@ -125,7 +129,7 @@ describe("AutomationBuilder", () => {
     stubFetch();
     render(<AutomationBuilder />);
 
-    expect(screen.getByText("Flow v2")).toBeTruthy();
+    expect(screen.queryByText("Flow v2")).toBeNull();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((node) => node.textContent ?? "");
     const indexOf = (needle: RegExp) => headings.findIndex((text) => needle.test(text));
     const order = ["watch", "comment", "public reply", "opening", "follow", "deliver", "limits", "review"].map(
@@ -381,7 +385,29 @@ describe("AutomationBuilder", () => {
     expect(preview.textContent).toContain("Here is your link.");
 
     expect(fetchMock.mock.calls.length).toBe(callsBeforePreview);
-    expect(preview.textContent?.toLowerCase()).toContain("not sent to instagram");
+    expect(preview.textContent?.toLowerCase()).not.toContain("not sent to instagram");
+    expect(preview.textContent).toContain("Instagram");
+    expect(preview.textContent).toContain("Updated");
+  });
+
+  it("shows the connected account's handle, ID, and reel media in the phone preview", async () => {
+    const fetchMock = stubFetch({
+      connection: { data: [{ id: "conn_1", igUserId: "17841400000000001", username: "brand.acct", status: "CONNECTED", connectedAt: "2026-08-20T00:00:00.000Z" }] },
+      media: { data: [reel], paging: {} },
+    });
+    render(<AutomationBuilder />);
+
+    await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("checkbox"));
+
+    const preview = screen.getByLabelText(/test preview/i);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/meta/connection"))).toBe(true));
+    await waitFor(() => expect(preview.textContent).toContain("@brand.acct"));
+    expect(preview.textContent).toContain("ID 17841400000000001");
+    const postTab = within(preview).getByRole("tab", { name: "Post" });
+    fireEvent.click(postTab);
+    const reelImage = preview.querySelector<HTMLImageElement>(".ig-post-media.is-reel img");
+    expect(reelImage?.getAttribute("src")).toBe("https://cdn.example/media_1.jpg");
   });
 
   it("saves a draft with POST when there is no automation ID yet", async () => {
@@ -524,7 +550,7 @@ describe("AutomationBuilder", () => {
       followGate: { required: true, notFollowingMessage: "Please follow first.", recheckButtonLabel: "I followed" },
       delivery: { text: "Here is your link.", url: "https://example.com/prize" },
     };
-    // Only `reel` (a different, already-fetched item) is ever returned by the mocked API —
+    // Only `reel` (a different, already-fetched item) is ever returned by the mocked API -
     // `media_page2` is never re-fetched, simulating it living on a page this editor never loads.
     const fetchMock = stubFetch({ media: { data: [reel], paging: {} } });
 

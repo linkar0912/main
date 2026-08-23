@@ -17,7 +17,7 @@ const broadcastSchema = z.object({
   segment: z.enum(["all_contacts", "captured_email"]),
 });
 
-// GET /api/broadcasts — recent blasts with progress.
+// GET /api/broadcasts - recent blasts with progress.
 export async function GET(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   return NextResponse.json({ data: broadcasts });
 }
 
-// POST /api/broadcasts — compose + fan out a DM blast (staggered ~1/second).
+// POST /api/broadcasts - compose + fan out a DM blast (staggered ~1/second).
 export async function POST(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
     }
     await repository.reconcileBroadcastCounters(session.workspaceId, broadcast.id);
     return NextResponse.json(
-      { error: "Some recipients could not be queued. Delivery is partial — check the queue.", data: broadcast },
+      { error: "Some recipients could not be queued. Delivery is partial - check the queue.", data: broadcast },
       { status: 502 },
     );
   }

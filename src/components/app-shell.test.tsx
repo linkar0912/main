@@ -39,7 +39,7 @@ describe("AppShell", () => {
 
     expect(await screen.findByText("Member")).toBeTruthy();
     expect(screen.queryByText("Owner")).toBeNull();
-    // The identity chip is no longer a link — "My Profile" is the one way in.
+    // The identity chip is no longer a link - "My Profile" is the one way in.
     expect(screen.getByRole("link", { name: "My Profile" })).toBeTruthy();
     expect(screen.queryByTitle("Open my profile")).toBeNull();
   });

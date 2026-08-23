@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-// POST /api/automations/:id/duplicate — saves an exact copy as a DRAFT so variants
+// POST /api/automations/:id/duplicate - saves an exact copy as a DRAFT so variants
 // can be tuned without rebuilding from scratch.
 export async function POST(request: Request, context: RouteContext) {
   const session = await getValidatedSession(request);

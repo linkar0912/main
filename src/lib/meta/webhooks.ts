@@ -131,7 +131,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
         const messageId = stringValue(message.mid) ?? messagingEventId(accountId, timestamp, item);
         const storyAttachment = storyMentionAttachment(message);
         if (storyAttachment) {
-          // A story mention is its own trigger type — emit it instead of a plain
+          // A story mention is its own trigger type - emit it instead of a plain
           // message so story-mention flows own the reply and default responders
           // do not double-fire on the same notification.
           const payload = record(storyAttachment.payload);

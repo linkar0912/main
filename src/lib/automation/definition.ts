@@ -201,7 +201,7 @@ const flowV1Schema = z
       context.addIssue({
         code: "custom",
         path: ["emailCapture"],
-        message: "Comment triggers cannot collect emails — use a DM, story mention, or first-contact trigger",
+        message: "Comment triggers cannot collect emails - use a DM, story mention, or first-contact trigger",
       });
     }
   });

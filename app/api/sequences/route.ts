@@ -5,7 +5,7 @@ import { parseSequenceInput } from "@/src/lib/automation/sequence";
 
 export const runtime = "nodejs";
 
-// GET /api/sequences — every sequence plus live enrollment counts.
+// GET /api/sequences - every sequence plus live enrollment counts.
 export async function GET(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   });
 }
 
-// POST /api/sequences — create a sequence.
+// POST /api/sequences - create a sequence.
 export async function POST(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

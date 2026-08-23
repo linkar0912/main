@@ -20,11 +20,16 @@ export type MediaPickerProps = {
   onChange: (ids: string[], snapshots: MediaSnapshot[]) => void;
   /**
    * Snapshots already known for `selectedIds` before this picker instance has fetched
-   * anything — typically the previously saved `mediaSnapshots` when editing an existing
+   * anything - typically the previously saved `mediaSnapshots` when editing an existing
    * campaign. Without this, toggling one item while another selected item lives on a page
    * this picker hasn't fetched yet would silently drop that other item's snapshot.
    */
   initialSnapshots?: MediaSnapshot[];
+  /**
+   * Optional side channel reporting lightweight display data (thumbnail URL, product type)
+   * for every loaded media id. Used by the builder's phone preview; never persisted.
+   */
+  onIndexChange?: (index: Record<string, { thumbnailUrl?: string; isReel?: boolean }>) => void;
 };
 
 function mediaLabel(media: PickerMedia): string {
@@ -49,7 +54,7 @@ function toSnapshot(media: PickerMedia): MediaSnapshot {
   };
 }
 
-export function MediaPicker({ selectedIds, onChange, initialSnapshots = [] }: MediaPickerProps) {
+export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIndexChange }: MediaPickerProps) {
   const [items, setItems] = useState<PickerMedia[]>([]);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -92,6 +97,22 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [] }: Me
     };
     // Only reload on mount; selection changes must not re-fetch the list.
   }, []);
+
+  // Report display-only data (thumbnail URL, reel flag) upward for the phone preview.
+  const indexKey = items.map((media) => media.id).join("|");
+  useEffect(() => {
+    if (!onIndexChange) return;
+    const index: Record<string, { thumbnailUrl?: string; isReel?: boolean }> = {};
+    for (const [id, media] of itemsById.current) {
+      const thumbnailUrl = media.thumbnailUrl ?? media.mediaUrl;
+      if (!thumbnailUrl && media.mediaProductType !== "REELS") continue;
+      index[id] = {
+        ...(thumbnailUrl ? { thumbnailUrl } : {}),
+        ...(media.mediaProductType === "REELS" ? { isReel: true } : {}),
+      };
+    }
+    onIndexChange(index);
+  }, [indexKey, onIndexChange]);
 
   async function loadMore() {
     if (!cursor) return;
@@ -153,7 +174,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [] }: Me
               role="checkbox"
               aria-checked={selected}
               tabIndex={0}
-              className={`media-card ${selected ? "is-selected" : ""}`}
+              className={`media-card ${selected ? "is-selected" : ""} ${media.mediaProductType === "REELS" ? "is-reel" : ""}`}
               onClick={() => toggle(media.id)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {

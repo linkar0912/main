@@ -34,7 +34,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
   {
     id: "comment-link-dm",
     title: "Auto-DM links from comments",
-    description: "Someone comments your keyword on a post or Reel, and Linkar DMs them the link privately — no public reply, no manual copy-paste.",
+    description: "Someone comments your keyword on a post or Reel, and Linkar DMs them the link privately - no public reply, no manual copy-paste.",
     icon: "link",
     popular: true,
     setup: {
@@ -66,7 +66,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
           },
           {
             type: "send_button",
-            text: "Pricing, working hours, and delivery details — all in one place.",
+            text: "Pricing, working hours, and delivery details - all in one place.",
             buttonLabel: "See pricing & FAQs",
             url: "https://example.com/faqs",
           },
@@ -89,13 +89,13 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
         actions: [
           {
             type: "send_text",
-            text: "Awesome — here’s your free guide! 📬 Drop your email address in the chat and I’ll send it straight over.",
+            text: "Awesome - here’s your free guide! 📬 Drop your email address in the chat and I’ll send it straight over.",
           },
         ],
         emailCapture: {
           promptText: "What’s the best email address to send it to?",
           retryText: "Hmm, that doesn’t look like an email address. Mind typing it again? (e.g. you@example.com)",
-          confirmationText: "You’re in! ✅ Check your inbox — the guide is on its way. Talk soon!",
+          confirmationText: "You’re in! ✅ Check your inbox - the guide is on its way. Talk soon!",
           delivery: {
             subject: "Your guide, as promised 🎁",
             message: "Thanks for subscribing! Here’s the guide you asked about on Instagram.",
@@ -109,7 +109,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
   {
     id: "welcome-new-followers",
     title: "Say hi to new followers",
-    description: "A one-time welcome DM for every new person who starts their first conversation with you. Meta’s API never exposes follows directly, so Linkar greets each first-time contact exactly once — no repeats, ever.",
+    description: "A one-time welcome DM for every new person who starts their first conversation with you. Meta’s API never exposes follows directly, so Linkar greets each first-time contact exactly once - no repeats, ever.",
     icon: "user-plus",
     setup: {
       name: "Welcome new contacts",
@@ -120,7 +120,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
         actions: [
           {
             type: "send_text",
-            text: "Hi there 👋 Thanks for reaching out! I’m here whenever you need prices, hours, or anything else — just say the word.",
+            text: "Hi there 👋 Thanks for reaching out! I’m here whenever you need prices, hours, or anything else - just say the word.",
           },
         ],
       },
@@ -163,7 +163,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
         actions: [
           {
             type: "send_text",
-            text: "Hi! 👋 Thanks for your message — we’ve got it and a human will reply soon. In a hurry? Text PRICE, HOURS or DELIVERY for an instant answer.",
+            text: "Hi! 👋 Thanks for your message - we’ve got it and a human will reply soon. In a hurry? Text PRICE, HOURS or DELIVERY for an instant answer.",
           },
         ],
       },
@@ -172,7 +172,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
   {
     id: "main-menu",
     title: "Main Menu",
-    description: "Give followers a reliable way to find information anytime. When they text MENU they get an automated reply with tappable options — no digging through the profile needed.",
+    description: "Give followers a reliable way to find information anytime. When they text MENU they get an automated reply with tappable options - no digging through the profile needed.",
     icon: "menu",
     setup: {
       name: "Main menu",
@@ -204,7 +204,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
   {
     id: "comment-catch-all",
     title: "Respond to every comment",
-    description: "Every comment on your posts and Reels gets an instant private reply — perfect for launches and high-volume moments when you can’t keep up manually.",
+    description: "Every comment on your posts and Reels gets an instant private reply - perfect for launches and high-volume moments when you can’t keep up manually.",
     icon: "megaphone",
     setup: {
       name: "Respond to every comment",
@@ -219,7 +219,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
   {
     id: "referral-welcome",
     title: "Ad referral welcome",
-    description: "Greet people the moment they tap through from an Instagram ad or referral link — the first message they get, warm and on-brand instead of silence.",
+    description: "Greet people the moment they tap through from an Instagram ad or referral link - the first message they get, warm and on-brand instead of silence.",
     icon: "user-check",
     setup: {
       name: "Ad referral welcome",
@@ -230,7 +230,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
         actions: [
           {
             type: "send_text",
-            text: "Hey! 👋 Thanks for tapping through — you’re in the right place. What can I help you find today?",
+            text: "Hey! 👋 Thanks for tapping through - you’re in the right place. What can I help you find today?",
           },
         ],
       },
@@ -239,7 +239,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
   {
     id: "optin-confirmation",
     title: "One-tap opt-in confirmation",
-    description: "Confirm instantly when someone taps your opt-in button, so they know it worked — with a link to what they just signed up for.",
+    description: "Confirm instantly when someone taps your opt-in button, so they know it worked - with a link to what they just signed up for.",
     icon: "check",
     setup: {
       name: "Opt-in confirmation",
@@ -261,7 +261,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
   {
     id: "giveaway-entry",
     title: "Giveaway entry confirmation",
-    description: "Turn giveaway comments into confirmed entries — the moment someone DMs your keyword, they get an instant confirmation and a link to the rules.",
+    description: "Turn giveaway comments into confirmed entries - the moment someone DMs your keyword, they get an instant confirmation and a link to the rules.",
     icon: "gift",
     setup: {
       name: "Giveaway entry confirmation",
@@ -272,7 +272,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
         actions: [
           {
             type: "send_button",
-            text: "You’re entered! 🎉 Good luck — winners are announced in our Stories.",
+            text: "You’re entered! 🎉 Good luck - winners are announced in our Stories.",
             buttonLabel: "See the rules",
             url: "https://example.com/giveaway-rules",
           },
@@ -283,7 +283,7 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
   {
     id: "affiliate-link",
     title: "Affiliate link delivery",
-    description: "Your keyword triggers an instant DM with your shoppable or affiliate link — no manual copy-paste, no missed sales while you sleep.",
+    description: "Your keyword triggers an instant DM with your shoppable or affiliate link - no manual copy-paste, no missed sales while you sleep.",
     icon: "shopping-bag",
     setup: {
       name: "Affiliate link delivery",

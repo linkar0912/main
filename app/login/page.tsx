@@ -18,7 +18,7 @@ type LoginPageProps = {
 const HERO_POINTS = [
   { icon: Zap, text: "Auto-reply to comments and DMs in seconds, around the clock." },
   { icon: MessageCircleReply, text: "Follow-gated campaigns that turn comments into qualified leads." },
-  { icon: ShieldCheck, text: "Built on Meta's official APIs — no scraping, no gray areas." },
+  { icon: ShieldCheck, text: "Built on Meta's official APIs - no scraping, no gray areas." },
 ];
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -59,7 +59,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <div className="login-brand"><span className="brand-mark"><LinkarMark size={20} /></span><strong>{PRODUCT_NAME}</strong></div>
           <p className="eyebrow">Welcome back</p>
           <h1>Sign in.</h1>
-          <p className="muted">Good to see you again — your flows missed you.</p>
+          <p className="muted">Good to see you again - your flows missed you.</p>
           {error && <p className="form-error" role="alert">{error}</p>}
           <form action="/api/auth/login" method="post" className="login-form">
             <input type="hidden" name="next" value={nextPath} />

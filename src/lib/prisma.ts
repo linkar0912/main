@@ -375,8 +375,8 @@ function mapBroadcastRow(record: {
 // in a transitionParticipant patch (e.g. once a retried action succeeds). Prisma's `update`
 // treats `undefined` as "leave this column untouched" (not "set to null"), unlike the memory
 // repository's plain object spread, which does clear it. Map `undefined` to `null` for exactly
-// these fields — and only when the caller explicitly included the key (clearing intent) rather
-// than omitted it (leave-untouched intent) — so both repositories share the same clear semantics.
+// these fields - and only when the caller explicitly included the key (clearing intent) rather
+// than omitted it (leave-untouched intent) - so both repositories share the same clear semantics.
 const CLEARABLE_PARTICIPANT_ERROR_FIELDS = [
   "publicReplyError",
   "openingError",
@@ -1356,7 +1356,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         });
         return { created: true, record: mapContact(created) };
       } catch (error) {
-        // Lost a create race with a concurrent webhook delivery for the same sender —
+        // Lost a create race with a concurrent webhook delivery for the same sender -
         // the sender exists, so this is not their first contact.
         if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
         const record = await client.automationContact.findUniqueOrThrow({

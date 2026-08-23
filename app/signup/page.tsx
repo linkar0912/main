@@ -47,7 +47,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                     <p>
                         {invite
                             ? "Accept the invitation by signing up with the invited email address."
-                            : "One account, one Instagram, automations live today — no code, no scrapers."}
+                            : "One account, one Instagram, automations live today - no code, no scrapers."}
                     </p>
                 </div>
                 <ul className="auth-points">
@@ -69,7 +69,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                     <p className="muted">
                         {invite
                             ? "Sign up with the invited email to join the workspace."
-                            : "Start free — upgrade when your audience grows."}
+                            : "Start free - upgrade when your audience grows."}
                     </p>
                     {error && <p className="form-error" role="alert">{error}</p>}
                     <form action="/api/auth/signup" method="post" className="login-form">

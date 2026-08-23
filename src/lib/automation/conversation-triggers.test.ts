@@ -42,7 +42,7 @@ function captureFlow(): FlowDefinitionV1 {
     actions: [{ type: "send_text", text: "Here comes the guide!" }],
     emailCapture: {
       promptText: "What is your email?",
-      retryText: "That is not an email — try again.",
+      retryText: "That is not an email - try again.",
       confirmationText: "You are in! ✅",
       delivery: {
         subject: "Your guide, as promised",

@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   let retryableFailure = false;
   if (events.length > 0 && enqueued === 0) {
     // No Redis queue configured (demo/self-hosted without REDIS_URL): fall back to
-    // processing inline. Process sequentially — each event can make several Meta API
+    // processing inline. Process sequentially - each event can make several Meta API
     // calls, and fanning out concurrently risks blowing past Meta's webhook timeout,
     // which triggers redeliveries. The response stays minimal so internal delivery
     // details never leak to the caller.

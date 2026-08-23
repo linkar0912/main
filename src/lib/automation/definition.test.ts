@@ -27,7 +27,7 @@ const campaign = {
     recheckButtonLabel: "I've followed",
   },
   delivery: {
-    text: "You're verified — here is your guide.",
+    text: "You're verified - here is your guide.",
     url: "https://example.com/guide",
     buttonLabel: "Open guide",
   },

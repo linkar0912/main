@@ -51,7 +51,7 @@ function CapturedEmailsPanel() {
         )}
       </div>
       {contacts.length === 0 ? (
-        <p className="muted">No emails yet. Turn on an email collector — the Email Capture template is a good start.</p>
+        <p className="muted">No emails yet. Turn on an email collector - the Email Capture template is a good start.</p>
       ) : (
         <ul className="captured-emails">
           {contacts.map((contact) => (

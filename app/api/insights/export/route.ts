@@ -21,7 +21,7 @@ function csvCell(value: string | undefined): string {
     return `"${safe.replace(/"/g, '""')}"`;
 }
 
-// GET /api/insights/export — CSV of this workspace's participants for spreadsheets.
+// GET /api/insights/export - CSV of this workspace's participants for spreadsheets.
 export async function GET(request: Request) {
     const session = await getValidatedSession(request);
     if (!session) return new Response("Unauthorized", { status: 401 });

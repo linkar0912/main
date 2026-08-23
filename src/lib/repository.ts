@@ -609,7 +609,7 @@ export interface AutomationRepository {
   // Workspace messaging quiet hours (null when disabled).
   getMessagingWindow(workspaceId: string): Promise<MessagingWindow | null>;
   setMessagingWindow(workspaceId: string, window: MessagingWindow | null): Promise<void>;
-  /** Recipients for a broadcast segment — suppressed contacts and DM-less rows excluded. */
+  /** Recipients for a broadcast segment - suppressed contacts and DM-less rows excluded. */
   listBroadcastRecipients(
     workspaceId: string,
     segment: BroadcastSegment,

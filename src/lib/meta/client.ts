@@ -45,7 +45,7 @@ const CORE_WEBHOOK_FIELDS = ["comments", "messages"] as const;
 const EXTENDED_WEBHOOK_FIELDS = [...CORE_WEBHOOK_FIELDS, "messaging_postbacks", "messaging_optins", "messaging_referral"] as const;
 
 export type WebhookSubscriptionResult = {
-  /** Fields Meta confirmed subscribed (best effort — empty when nothing stuck). */
+  /** Fields Meta confirmed subscribed (best effort - empty when nothing stuck). */
   fields: string[];
   /** The set originally requested, for diagnosing degraded results. */
   requested: string[];

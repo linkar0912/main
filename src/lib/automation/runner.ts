@@ -201,7 +201,7 @@ export function extractEmailAddress(text: string): string | undefined {
 }
 
 /**
- * Exact-match opt-out commands (case-insensitive). Deliberately conservative —
+ * Exact-match opt-out commands (case-insensitive). Deliberately conservative -
  * "stop" inside a longer sentence is a normal message, not an opt-out.
  */
 const OPT_OUT_COMMANDS = new Set(["stop", "unsubscribe", "optout", "opt-out", "remove me", "stop messaging"]);
@@ -210,7 +210,7 @@ export function isOptOutCommand(text: string): boolean {
   return OPT_OUT_COMMANDS.has(text.trim().toLowerCase());
 }
 
-const OPT_OUT_CONFIRMATION = "Got it — you won't receive any more automated messages from us. 🙏";
+const OPT_OUT_CONFIRMATION = "Got it - you won't receive any more automated messages from us. 🙏";
 
 /**
  * Builds the fulfillment email for a freshly captured lead. The link (if any) is
@@ -226,7 +226,7 @@ function buildLeadDeliveryEmail(
   }
   lines.push(
     "",
-    `—\nYou're receiving this because you messaged our Instagram and requested it. To stop automated messages, reply STOP to our DM.`,
+    `-\nYou're receiving this because you messaged our Instagram and requested it. To stop automated messages, reply STOP to our DM.`,
   );
   return { to, subject: delivery.subject, body: lines.join("\n") };
 }
@@ -351,7 +351,7 @@ async function processOptOut(
   if (!wantsOut) return null;
 
   const existing = await repository.getContact(mapping.workspaceId, event.accountId, event.recipientId);
-  if (existing?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 }; // already opted out — stay silent
+  if (existing?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 }; // already opted out - stay silent
 
   // First-ever interaction may be the opt-out itself; make sure a row exists.
   await repository.touchContact(mapping.workspaceId, event.accountId, event.recipientId, new Date(event.timestamp).toISOString());
@@ -366,7 +366,7 @@ async function processOptOut(
         text: OPT_OUT_CONFIRMATION,
       });
     } catch (error) {
-      // Suppression itself already persisted — never undo an opt-out over a failed send.
+      // Suppression itself already persisted - never undo an opt-out over a failed send.
       logger.error("Opt-out confirmation DM failed", {
         accountId: event.accountId,
         error: error instanceof Error ? error.message : String(error),
@@ -380,7 +380,7 @@ async function processOptOut(
 /**
  * Intercepts DMs from people who are mid email capture: validates their reply, stores
  * the address, and confirms (or asks again within a small retry budget). Returns a
- * result when the event was fully handled by the capture flow — the normal automation
+ * result when the event was fully handled by the capture flow - the normal automation
  * loop must not also fire on the same message.
  */
 async function processEmailCaptureReply(
@@ -410,7 +410,7 @@ async function processEmailCaptureReply(
     || automation.definition.version !== 1
     || !automation.definition.emailCapture
   ) {
-    // The flow was deleted, paused, or its collector removed mid-conversation —
+    // The flow was deleted, paused, or its collector removed mid-conversation -
     // stop asking instead of leaving the person stuck in a prompt loop.
     await repository.clearContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId);
     return null;
@@ -579,8 +579,8 @@ async function processEmailCaptureReply(
 }
 
 /**
- * Handles one conversational-field answer: stores it, asks the next question, and —
- * after the final answer — fires confirmation DM, fulfillment email, lead webhook,
+ * Handles one conversational-field answer: stores it, asks the next question, and -
+ * after the final answer - fires confirmation DM, fulfillment email, lead webhook,
  * sequence enrollment, and the owner notification. The lead is complete only here.
  */
 async function processFieldAnswer(
@@ -758,7 +758,7 @@ export async function processNormalizedEvent(
     if (captured) return captured;
   }
 
-  // Contact registry touch — powers once-only first_contact greetings and email
+  // Contact registry touch - powers once-only first_contact greetings and email
   // collection. Maintained only when an active classic flow actually needs it, so
   // casual workspaces don't accumulate sender records they never use.
   let evaluationContext: EvaluationContext = {};
@@ -869,7 +869,7 @@ export async function processNormalizedEvent(
 
     // Email-collection follow-up: append the prompt (or, when the triggering message
     // already contains an address, the confirmation) after this flow's own actions.
-    // Comment flows are excluded — they may only send a single private reply.
+    // Comment flows are excluded - they may only send a single private reply.
     let actionsToSend: ExecutionAction[] = evaluation.actions;
     let captureOutcome: "prompt" | "instant" | null = null;
     const senderId = event.recipientId;
@@ -933,13 +933,13 @@ export async function processNormalizedEvent(
           );
           const fieldQueue = automation.definition.emailCapture?.fields ?? [];
           if (fieldQueue.length > 0) {
-            // Conversational form in progress — confirmation + fulfillment + enrollment
+            // Conversational form in progress - confirmation + fulfillment + enrollment
             // fire after the last answer (processFieldAnswer).
             //
             // The whole queue is stored, including the question just asked above as
             // `followUpText`, because processFieldAnswer treats queue[0] as the
             // outstanding question. Dropping it here filed the reply under the *next*
-            // field's id and skipped that field — and with a single field it left an
+            // field's id and skipped that field - and with a single field it left an
             // empty queue that abandoned the lead as `field_queue_empty`.
             await repository.beginContactFieldCollection(
               mapping.workspaceId,

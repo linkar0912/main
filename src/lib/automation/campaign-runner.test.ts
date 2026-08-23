@@ -41,7 +41,7 @@ const definition: FlowDefinitionV2 = {
     match: "keyword",
     keywords: ["guide"],
   },
-  publicReplies: ["Sent — check your messages", "It is on its way"],
+  publicReplies: ["Sent - check your messages", "It is on its way"],
   openingMessage: { text: "Would you like the guide?", optInButtonLabel: "Get the guide" },
   followGate: {
     required: true,

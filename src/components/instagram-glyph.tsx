@@ -6,7 +6,7 @@ import { useId } from "react";
  * rather than filled so it inherits currentColor like every other icon.
  *
  * Pass `brand` where Instagram itself is the subject (a connect button, the
- * connection status card) — it strokes the mark in Instagram's real gradient
+ * connection status card) - it strokes the mark in Instagram's real gradient
  * instead of currentColor, so it reads as recognizably Instagram rather than
  * "some pink icon." Everywhere else (inline text mentions, dense lists)
  * currentColor keeps it quiet.

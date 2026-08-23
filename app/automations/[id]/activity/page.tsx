@@ -15,7 +15,7 @@ export default async function AutomationActivityPage({ params }: { params: Promi
             <p className="eyebrow">Workspace / Automations / Campaign activity</p>
             <h1>Campaign activity</h1>
             <p className="muted page-lede">
-              Every person who hit your trigger — where they are in the journey, what was delivered,
+              Every person who hit your trigger - where they are in the journey, what was delivered,
               and how the campaign converts.
             </p>
           </div>

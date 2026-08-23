@@ -2,7 +2,7 @@ import type { MessagingWindow } from "./repository";
 
 /**
  * Quiet-hours helpers. Instagram does not expose a contact's timezone, so the window
- * is evaluated in the workspace timezone — good enough to avoid 3 a.m. blasts.
+ * is evaluated in the workspace timezone - good enough to avoid 3 a.m. blasts.
  */
 
 // Constructing an Intl.DateTimeFormat is comparatively expensive and msUntilQuietEnd
@@ -61,7 +61,7 @@ export function msUntilQuietEnd(now: Date, window: MessagingWindow): number {
  * Narrows the three nullable quiet-hours columns into a window.
  *
  * Hour 0 is a legitimate boundary (a "00:00 -> 08:00" window is ordinary), so every
- * column is compared against null/undefined explicitly — a truthiness check would
+ * column is compared against null/undefined explicitly - a truthiness check would
  * silently discard midnight and disable quiet hours for that workspace.
  */
 export function toMessagingWindow(

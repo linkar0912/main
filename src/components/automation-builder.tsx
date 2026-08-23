@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   Check,
@@ -28,6 +28,26 @@ type AutomationBuilderProps = {
   onSaved?: (automation: unknown) => void;
 };
 
+/** The workspace's first connected Instagram account, so the phone preview shows the real
+ * handle and account ID instead of a placeholder. Degrades to null when nothing is connected. */
+function useConnectedInstagram(): { username: string; igUserId: string } | null {
+  const [connection, setConnection] = useState<{ username: string; igUserId: string } | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/meta/connection")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { username?: string; igUserId?: string }[] } | null) => {
+        const first = payload?.data?.[0];
+        if (active && first?.username) setConnection({ username: first.username, igUserId: first.igUserId ?? "" });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  return connection;
+}
+
 const QUICK_REPLY_LABEL_MAX_LENGTH = 20;
 const MAX_PUBLIC_REPLIES = 5;
 
@@ -45,7 +65,7 @@ function parseCommaSeparated(value: string): string[] {
 /**
  * Parses a comma-separated keyword field and drops case-insensitive duplicates, keeping the
  * first occurrence. The server normalizes keywords the same way (trim + lowercase) and rejects
- * the whole request with a raw Zod error if duplicates remain after normalization — deduping
+ * the whole request with a raw Zod error if duplicates remain after normalization - deduping
  * here client-side avoids surfacing that confusing error for something like "Guide, guide".
  */
 function parseKeywords(value: string): string[] {
@@ -65,7 +85,7 @@ const defaultDefinitionV1: FlowDefinitionV1 = {
   version: 1,
   trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
   conditions: [],
-  actions: [{ type: "private_reply", text: "Thanks for asking — I’ll send that over now." }],
+  actions: [{ type: "private_reply", text: "Thanks for asking - I’ll send that over now." }],
 };
 
 type ClassicTriggerType = FlowDefinitionV1["trigger"]["type"];
@@ -164,6 +184,7 @@ function AutomationBuilderV1({
   const [error, setError] = useState("");
   const [activeStep, setActiveStep] = useState(0);
   const [previewView, setPreviewView] = useState<PreviewView>(initialDefinition.trigger.type === "comment" ? "post" : "dm");
+  const connection = useConnectedInstagram();
 
   const usesTextTrigger = triggerType === "comment" || triggerType === "message";
   const allowedActionTypes = classicActionOptions(triggerType);
@@ -383,7 +404,6 @@ function AutomationBuilderV1({
             <h1>{automationId ? "Tune this automation" : "Build a reply flow"}</h1>
             <p className="muted">Choose one clear trigger, add a guardrail if you need it, then pick the reply.</p>
           </div>
-          <div className="builder-version">Flow v1</div>
         </div>
 
         <label className="field field-wide">
@@ -672,7 +692,7 @@ function AutomationBuilderV1({
                       maxLength={500}
                       placeholder="You’re in! ✅ Check your inbox."
                     />
-                    <small>Captured emails appear on your My Automations page — export them as CSV any time.</small>
+                    <small>Captured emails appear on your My Automations page - export them as CSV any time.</small>
                   </label>
 
                   <label className="field checkbox-field field-spaced">
@@ -773,7 +793,7 @@ function AutomationBuilderV1({
                           <Plus size={15} /> Add question
                         </button>
                       )}
-                  <small>Asked after their email — answers are stored on the lead and included in the lead webhook.</small>
+                  <small>Asked after their email - answers are stored on the lead and included in the lead webhook.</small>
                 </>
               )}
             </div>
@@ -825,7 +845,7 @@ function AutomationBuilderV1({
                 />
               </label>
             </div>
-            <p className="muted">Events outside the window are ignored — perfect for launches and limited offers.</p>
+            <p className="muted">Events outside the window are ignored - perfect for launches and limited offers.</p>
           </div>
         </section>
         </div>
@@ -882,20 +902,17 @@ function AutomationBuilderV1({
       </div>
 
       <aside className="builder-preview" aria-label="Test preview">
-        <p className="eyebrow">Test preview <span className="preview-disclaimer">— not sent to Instagram</span></p>
+        <p className="eyebrow">Test preview</p>
         <div className="preview-line" />
         <InstagramPreview
           view={previewView}
           onViewChange={setPreviewView}
           showPost={triggerType === "comment"}
           showComments={false}
-          username="yourbrand"
+          username={connection?.username ?? "yourbrand"}
+          profileId={connection?.igUserId || undefined}
           messages={dmMessages}
         />
-        <div className="preview-note">
-          <span className="signal-dot" />
-          <span>Preview only — nothing here is sent to Instagram.</span>
-        </div>
       </aside>
     </form>
   );
@@ -962,6 +979,12 @@ function AutomationBuilderV2({
   const [error, setError] = useState("");
   const [activeStep, setActiveStep] = useState(0);
   const [previewView, setPreviewView] = useState<PreviewView>("post");
+  const connection = useConnectedInstagram();
+  const [mediaIndex, setMediaIndex] = useState<Record<string, { thumbnailUrl?: string; isReel?: boolean }>>({});
+  const onMediaIndexChange = useCallback(
+    (index: Record<string, { thumbnailUrl?: string; isReel?: boolean }>) => setMediaIndex(index),
+    [],
+  );
 
   function changeSource(value: MediaSource) {
     setSource(value);
@@ -1128,9 +1151,8 @@ function AutomationBuilderV2({
           <div>
             <p className="eyebrow">Guided builder</p>
             <h1>{savedAutomationId ? "Tune this campaign" : "Build a follow-gated Reel campaign"}</h1>
-            <p className="muted">A public reply, a DM opt-in, a follow check, and a verified link — every step explicit.</p>
+            <p className="muted">A public reply, a DM opt-in, a follow check, and a verified link: every step explicit.</p>
           </div>
-          <div className="builder-version">Flow v2</div>
         </div>
 
         <label className="field field-wide">
@@ -1185,6 +1207,7 @@ function AutomationBuilderV2({
                   <MediaPicker
                     selectedIds={mediaIds}
                     initialSnapshots={mediaSnapshots}
+                    onIndexChange={onMediaIndexChange}
                     onChange={(ids, snapshots) => {
                       setMediaIds(ids);
                       setMediaSnapshots(snapshots);
@@ -1318,7 +1341,7 @@ function AutomationBuilderV2({
                   value={openingVariants}
                   onChange={(event) => setOpeningVariants(event.target.value)}
                   rows={3}
-                  placeholder={"One variation per line — one is picked per person at random"}
+                  placeholder={"One variation per line - one is picked per person at random"}
                 />
                 <small>Variations keep the same opt-in button and rotate per participant.</small>
               </label>
@@ -1343,7 +1366,7 @@ function AutomationBuilderV2({
                   checked={followGateRequired}
                   onChange={(event) => setFollowGateRequired(event.target.checked)}
                 />
-                <span>{followGateRequired ? "On — verify they follow you before delivering" : "Off — deliver right after the opt-in tap"}</span>
+                <span>{followGateRequired ? "On - verify they follow you before delivering" : "Off - deliver right after the opt-in tap"}</span>
               </label>
               {followGateRequired && (
                 <FollowGateFields
@@ -1394,7 +1417,7 @@ function AutomationBuilderV2({
                   <small>HTTPS required. http://localhost is permitted while developing.</small>
                   {looksLikeTwoLinksPastedTogether(deliveryUrl) && (
                     <p className="form-warning" role="status">
-                      <AlertTriangle size={14} /> This looks like two links pasted together — double check it before saving.
+                      <AlertTriangle size={14} /> This looks like two links pasted together - double check it before saving.
                     </p>
                   )}
                 </label>
@@ -1416,7 +1439,7 @@ function AutomationBuilderV2({
                   value={deliveryVariants}
                   onChange={(event) => setDeliveryVariants(event.target.value)}
                   rows={3}
-                  placeholder={"One variation per line — one is picked per person at random"}
+                  placeholder={"One variation per line - one is picked per person at random"}
                 />
               </label>
             </div>
@@ -1467,7 +1490,7 @@ function AutomationBuilderV2({
                   />
                 </label>
               </div>
-              <p className="muted">Comments outside the window are ignored — perfect for launches and limited drops.</p>
+              <p className="muted">Comments outside the window are ignored - perfect for launches and limited drops.</p>
             </div>
           </section>
         </div>
@@ -1493,7 +1516,7 @@ function AutomationBuilderV2({
                     <li>Recheck button reads “{recheckButtonLabel || "add a label"}”</li>
                   </>
                 ) : (
-                  <li>Follow gate is off — the link goes out right after the opt-in tap</li>
+                  <li>Follow gate is off - the link goes out right after the opt-in tap</li>
                 )}
                 <li>
                   Verified followers land on{" "}
@@ -1556,21 +1579,20 @@ function AutomationBuilderV2({
       </div>
 
       <aside className="builder-preview" aria-label="Test preview">
-        <p className="eyebrow">Test preview <span className="preview-disclaimer">— not sent to Instagram</span></p>
+        <p className="eyebrow">Test preview</p>
         <div className="preview-line" />
         <InstagramPreview
           view={previewView}
           onViewChange={setPreviewView}
-          username="yourbrand"
+          username={connection?.username ?? "yourbrand"}
+          profileId={connection?.igUserId || undefined}
           postCaption={mediaSnapshots[0]?.caption}
+          postImageUrl={mediaSnapshots[0] ? mediaIndex[mediaSnapshots[0].id]?.thumbnailUrl : undefined}
+          postIsReel={mediaSnapshots[0]?.mediaProductType === "REELS"}
           triggerComment={match === "keyword" ? (keywordList[0] ? `“${keywordList[0]}”` : undefined) : "any comment"}
           commentReply={nonEmptyReplies[0]}
           messages={dmMessages}
         />
-        <div className="preview-note">
-          <span className="signal-dot" />
-          <span>Preview only — nothing here is sent to Instagram.</span>
-        </div>
       </aside>
     </div>
   );

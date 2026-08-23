@@ -9,7 +9,7 @@ type NewAutomationPageProps = {
 };
 
 // The template picker modal (opened from every "New automation" button) is the
-// only place that chooses a type or template now — landing here bare defaults
+// only place that chooses a type or template now - landing here bare defaults
 // straight to a blank classic builder instead of a second chooser page.
 export default async function NewAutomationPage({ searchParams }: NewAutomationPageProps) {
   const { type, template: templateId } = await searchParams;
@@ -24,7 +24,7 @@ export default async function NewAutomationPage({ searchParams }: NewAutomationP
         </Link>
         {template && setup && (
           <p className="template-prefill-note muted">
-            Started from the “{template.title.split(":")[0]}” recipe — tweak anything before saving.
+            Started from the “{template.title.split(":")[0]}” recipe - tweak anything before saving.
           </p>
         )}
         <AutomationBuilder

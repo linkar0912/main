@@ -57,7 +57,7 @@ function Tile({ item, onSelect }: { item: PickerItem; onSelect: () => void }) {
 }
 
 /**
- * The single entry point for starting a new automation — templates, the
+ * The single entry point for starting a new automation - templates, the
  * follow-gated campaign quick-start, and a blank builder, all in one place.
  * Replaces the old separate /automations/templates page and /automations/new
  * type chooser: nothing to browse to, just pick and go.

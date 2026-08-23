@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 const PARTICIPANT_ID_PATTERN = /^[a-zA-Z0-9_-]{8,64}$/;
 
 /**
- * GET /api/t/<participantId> — public click-tracking redirect. Delivery DMs
+ * GET /api/t/<participantId> - public click-tracking redirect. Delivery DMs
  * link here instead of the target URL; the first tap records `deliveryClickedAt`
  * and every tap forwards to the automation's real delivery link. The
  * participant id doubles as the capability token (unguessable random id).

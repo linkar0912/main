@@ -85,7 +85,7 @@ describe("conversational fields when the email arrives up front", () => {
     const client = runnerClient();
 
     await processNormalizedEvent(
-      messageEvent({ text: "guide please — me@example.com" }),
+      messageEvent({ text: "guide please - me@example.com" }),
       repository,
       { client, tokenEncryptionKey: TOKEN_KEY },
     );
@@ -105,7 +105,7 @@ describe("conversational fields when the email arrives up front", () => {
     const client = runnerClient();
 
     await processNormalizedEvent(
-      messageEvent({ text: "guide please — solo@example.com" }),
+      messageEvent({ text: "guide please - solo@example.com" }),
       repository,
       { client, tokenEncryptionKey: TOKEN_KEY },
     );
@@ -125,7 +125,7 @@ describe("conversational fields when the email arrives up front", () => {
     const client = runnerClient();
 
     await processNormalizedEvent(
-      messageEvent({ text: "guide please — blank@example.com" }),
+      messageEvent({ text: "guide please - blank@example.com" }),
       repository,
       { client, tokenEncryptionKey: TOKEN_KEY },
     );
@@ -146,7 +146,7 @@ describe("conversational fields when the email arrives up front", () => {
     ]));
     const client = runnerClient();
     await processNormalizedEvent(
-      messageEvent({ id: "field_resume_0", text: "guide — lead@example.com" }),
+      messageEvent({ id: "field_resume_0", text: "guide - lead@example.com" }),
       repository,
       { client, tokenEncryptionKey: TOKEN_KEY },
     );
@@ -229,7 +229,7 @@ describe("conversational fields when the email arrives up front", () => {
     ]));
     const client = runnerClient();
     await processNormalizedEvent(
-      messageEvent({ id: "answer_resume_0", text: "guide — lead@example.com" }),
+      messageEvent({ id: "answer_resume_0", text: "guide - lead@example.com" }),
       repository,
       { client, tokenEncryptionKey: TOKEN_KEY },
     );
