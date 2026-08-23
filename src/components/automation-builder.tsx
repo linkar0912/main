@@ -672,7 +672,9 @@ function AutomationBuilderV1({
                         </label>
                       </div>
                       <p className="muted">Sent from your workspace support address the moment their email is stored.</p>
-                      <label className="field">
+                    </>
+                  )}
+                  <label className="field">
                         <span>Lead webhook URL <em>optional</em></span>
                         <input
                           aria-label="Lead webhook URL"
@@ -715,9 +717,7 @@ function AutomationBuilderV1({
                           <Plus size={15} /> Add question
                         </button>
                       )}
-                      <small>Asked after their email — answers are stored on the lead and included in the lead webhook.</small>
-                    </>
-                  )}
+                  <small>Asked after their email — answers are stored on the lead and included in the lead webhook.</small>
                 </>
               )}
             </div>

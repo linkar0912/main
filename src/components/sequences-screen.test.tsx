@@ -46,4 +46,22 @@ describe("SequencesScreen", () => {
       expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({ sourceAutomationId: null });
     });
   });
+
+  it("shows the sequence API error instead of a false empty state", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/sequences") {
+        return new Response(JSON.stringify({ error: "Sequence service unavailable" }), { status: 503 });
+      }
+      if (String(input) === "/api/automations") {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      throw new Error(`Unhandled fetch: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SequencesScreen />);
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Sequence service unavailable");
+    expect(screen.queryByText(/No sequences yet/i)).toBeNull();
+  });
 });

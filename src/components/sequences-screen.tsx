@@ -38,19 +38,26 @@ export function SequencesScreen() {
   }, []);
 
   async function refresh() {
+    setPageError("");
     try {
       const [sequenceResponse, automationResponse] = await Promise.all([
-        fetch("/api/sequences").then((r) => r.json()),
-        fetch("/api/automations").then((r) => r.json()),
+        fetch("/api/sequences"),
+        fetch("/api/automations"),
       ]);
-      setSequences(sequenceResponse.data ?? []);
+      const [sequencePayload, automationPayload] = await Promise.all([
+        sequenceResponse.json().catch(() => ({})) as Promise<{ data?: SequenceRow[]; error?: string }>,
+        automationResponse.json().catch(() => ({})) as Promise<{ data?: { id: string; name: string; version: number }[]; error?: string }>,
+      ]);
+      if (!sequenceResponse.ok) throw new Error(sequencePayload.error ?? "Could not load sequences.");
+      if (!automationResponse.ok) throw new Error(automationPayload.error ?? "Could not load automations.");
+      setSequences(sequencePayload.data ?? []);
       setAutomations(
-        ((automationResponse.data ?? []) as { id: string; name: string; version: number }[])
+        (automationPayload.data ?? [])
           .filter((automation) => automation.version === 1)
           .map(({ id, name }) => ({ id, name })),
       );
-    } catch {
-      setPageError("Could not load sequences.");
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Could not load sequences.");
     } finally {
       setLoading(false);
     }
@@ -177,6 +184,7 @@ export function SequencesScreen() {
         <div className="section-layout">
           <AutomationSectionNav active="sequences" />
           <div className="section-content">
+            {pageError && <p className="form-error" role="alert">{pageError}</p>}
             <form className="panel full-list-panel" onSubmit={save}>
               <div className="list-intro">
                 <div className="list-count"><ListOrdered size={17} /><span>{editingId ? "Edit sequence" : "New sequence"}</span></div>
@@ -254,7 +262,7 @@ export function SequencesScreen() {
                 <div className="list-count"><ListOrdered size={17} /><span>{loading ? "Loading" : `${sequences.length} ${sequences.length === 1 ? "sequence" : "sequences"}`}</span></div>
                 <Link className="text-link" href="/automations/sequences">Refresh</Link>
               </div>
-              {!loading && sequences.length === 0 && (
+              {!loading && !pageError && sequences.length === 0 && (
                 <p className="muted">No sequences yet — create one above and wire it to an email capture flow.</p>
               )}
               {sequences.map((row) => (

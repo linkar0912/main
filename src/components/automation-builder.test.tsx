@@ -91,6 +91,26 @@ describe("AutomationBuilder", () => {
     });
   });
 
+  it("shows lead webhook and custom-question controls without fulfillment email", () => {
+    stubFetch();
+    const definition: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "message", match: "any", keywords: [] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Welcome" }],
+      emailCapture: {
+        promptText: "What is your email?",
+        confirmationText: "Saved",
+      },
+    };
+
+    render(<AutomationBuilder initialDefinition={definition} />);
+
+    expect(screen.getByLabelText("Lead webhook URL")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add question" })).toBeTruthy();
+    expect(screen.queryByLabelText("Delivery email subject")).toBeNull();
+  });
+
   it("defaults new automations to the version 2 campaign builder with sections in order", () => {
     stubFetch();
     render(<AutomationBuilder />);
