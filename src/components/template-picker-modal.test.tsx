@@ -24,6 +24,8 @@ describe("TemplatePickerModal", () => {
     expect(screen.getByText(/Email Capture/)).toBeTruthy();
     expect(screen.getByText("Default Reply", { selector: "strong" })).toBeTruthy();
     expect(screen.getByText(/Main Menu/)).toBeTruthy();
+    // Template tiles carry no icons anymore.
+    expect(document.querySelector(".template-picker-tile-icon")).toBeNull();
   });
 
   it("narrows to matching templates as you search", () => {

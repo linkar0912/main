@@ -6,37 +6,16 @@ import { useRouter } from "next/navigation";
 import {
   AtSign,
   CheckCircle2,
-  Clapperboard,
-  Gift,
   LayoutGrid,
   Link2,
-  Mail,
   MessageCircle,
   MessageSquare,
   Plus,
-  Reply,
   Search,
-  ShoppingBag,
-  UserCheck,
   UserPlus,
   X,
 } from "lucide-react";
 import { basicAutomationTemplates, triggerLabel, type PremadeTemplate, type TemplateTriggerType } from "@/src/lib/automation/templates";
-
-const TEMPLATE_ICONS = {
-  "user-plus": UserPlus,
-  message: MessageCircle,
-  "at-sign": AtSign,
-  reply: Reply,
-  menu: LayoutGrid,
-  mail: Mail,
-  link: Link2,
-  megaphone: MessageSquare,
-  "user-check": UserCheck,
-  check: CheckCircle2,
-  gift: Gift,
-  "shopping-bag": ShoppingBag,
-} as const;
 
 const CATEGORY_ICONS: Record<TemplateTriggerType, typeof MessageCircle> = {
   comment: MessageSquare,
@@ -54,7 +33,6 @@ type PickerItem = {
   id: string;
   title: string;
   description: string;
-  icon: typeof MessageCircle;
   category: TemplateTriggerType;
   popular?: boolean;
   featured?: boolean;
@@ -66,10 +44,8 @@ function matchesQuery(haystack: string, query: string): boolean {
 }
 
 function Tile({ item, onSelect }: { item: PickerItem; onSelect: () => void }) {
-  const Icon = item.icon;
   return (
     <button type="button" className="template-picker-tile" onClick={onSelect}>
-      <span className="template-picker-tile-icon"><Icon size={18} strokeWidth={1.8} /></span>
       <strong>{item.title}</strong>
       <p>{item.description}</p>
       <span className="template-picker-tile-meta">
@@ -115,7 +91,6 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
       id: "campaign-follow-gate",
       title: "Follow-gated Reel campaign",
       description: "Comment keyword → public reply → DM opt-in → follow check → deliver your link.",
-      icon: Clapperboard,
       category: "comment",
       popular: true,
       featured: true,
@@ -125,7 +100,6 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
       id: template.id,
       title: template.title,
       description: template.description,
-      icon: TEMPLATE_ICONS[template.icon],
       category: template.setup.definition.trigger.type,
       popular: template.popular,
       href: `/automations/new?type=classic&template=${template.id}`,

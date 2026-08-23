@@ -230,6 +230,18 @@ export class MetaClient {
     return { id, username: data.username };
   }
 
+  /** Best-effort avatar lookup for a connected professional account; null when Meta declines. */
+  async getProfilePictureUrl(connection: MetaConnection): Promise<string | null> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}`);
+    url.searchParams.set("fields", "profile_picture_url");
+    try {
+      const data = await this.request(url, connection.accessToken);
+      return typeof data.profile_picture_url === "string" && data.profile_picture_url ? data.profile_picture_url : null;
+    } catch {
+      return null;
+    }
+  }
+
   private async request(url: URL, accessToken: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
     let response: Response;
     try {

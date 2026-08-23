@@ -360,7 +360,6 @@ h3 { font-size: .98rem; font-weight: 700; margin-bottom: var(--space-2); }
   background: transparent;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  cursor: pointer;
   display: flex;
   gap: 10px;
   margin-bottom: var(--space-3);
@@ -369,7 +368,6 @@ h3 { font-size: .98rem; font-weight: 700; margin-bottom: var(--space-2); }
   transition: background var(--speed), border-color var(--speed);
   width: 100%;
 }
-a.workspace-chip:hover, button.workspace-chip:hover { background: var(--hover-wash); }
 .avatar {
   align-items: center;
   background: var(--ink);
@@ -601,16 +599,6 @@ a.workspace-chip:hover, button.workspace-chip:hover { background: var(--hover-wa
   transition: border-color var(--speed), transform var(--speed);
 }
 .template-picker-tile:hover { border-color: var(--accent); transform: translateY(-1px); }
-.template-picker-tile-icon {
-  align-items: center;
-  background: var(--accent-soft);
-  border-radius: 9px;
-  color: var(--accent-hover);
-  display: flex;
-  height: 34px;
-  justify-content: center;
-  width: 34px;
-}
 .template-picker-tile strong { font-size: .88rem; }
 .template-picker-tile p { color: var(--muted); flex: 1; font-size: .78rem; line-height: 1.45; margin: 0; }
 .template-picker-tile-meta { align-items: center; color: var(--subtle); display: flex; font-size: .68rem; font-weight: 700; gap: 8px; letter-spacing: .03em; text-transform: uppercase; }
@@ -1067,6 +1055,7 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .connection-row .button { margin-left: auto; }
 .settings-hero { align-items: center; display: flex; gap: var(--space-4); margin-bottom: var(--space-4); }
 .settings-icon { align-items: center; background: var(--accent-soft); border-radius: 11px; color: var(--accent-hover); display: flex; flex: 0 0 48px; height: 48px; justify-content: center; width: 48px; }
+.settings-avatar { border-radius: 11px; flex: 0 0 48px; height: 48px; object-fit: cover; width: 48px; }
 .settings-copy { flex: 1; min-width: 0; }
 .settings-copy .eyebrow { margin-bottom: 5px; }
 .settings-copy h2 { margin-bottom: 4px; }

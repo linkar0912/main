@@ -36,6 +36,19 @@ describe("AppShell", () => {
 
     expect(await screen.findByText("Member")).toBeTruthy();
     expect(screen.queryByText("Owner")).toBeNull();
+    // The identity chip is no longer a link — "My Profile" is the one way in.
+    expect(screen.getByRole("link", { name: "My Profile" })).toBeTruthy();
+    expect(screen.queryByTitle("Open my profile")).toBeNull();
+  });
+
+  it("renders only the Linkar wordmark in the sidebar, without the logo mark", async () => {
+    stubShellFetch();
+
+    render(<AppShell><main>Workspace</main></AppShell>);
+
+    await screen.findByText("Member");
+    expect(document.querySelector(".sidebar-brand .brand-mark")).toBeNull();
+    expect(screen.getAllByText("Linkar").length).toBeGreaterThan(0);
   });
 
   it("closes the mobile drawer with Escape and restores page scrolling", async () => {

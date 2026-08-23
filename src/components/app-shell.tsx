@@ -15,7 +15,6 @@ import {
   Workflow,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
-import { LinkarMark } from "./linkar-mark";
 import { Skeleton } from "./skeleton";
 
 /** Workspace destinations in the sidebar. */
@@ -145,9 +144,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           <Menu size={20} />
         </button>
         <Link className="brand" href="/" aria-label={`${PRODUCT_NAME} overview`}>
-          <span className="brand-mark" aria-hidden>
-            <LinkarMark size={19} />
-          </span>
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
       </header>
@@ -166,23 +162,20 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         tabIndex={-1}
       >
         <Link className="sidebar-brand" href="/">
-          <span className="brand-mark" aria-hidden>
-            <LinkarMark size={21} />
-          </span>
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
 
         {role === "" ? (
           <Skeleton style={{ height: 52, borderRadius: 12 }} />
         ) : (
-          <Link className="workspace-chip" href="/profile" title="Open my profile" onClick={closeDrawer}>
+          <div className="workspace-chip">
             <span className="avatar" aria-hidden>{initialsOf(email)}</span>
             <span className="workspace-id">
               <strong>{displayRole(role)}</strong>
               <small>{email || `${PRODUCT_NAME} workspace`}</small>
             </span>
             <span className="plan-tag">{plan}</span>
-          </Link>
+          </div>
         )}
 
         <nav className="sidebar-nav" aria-label="Workspace sections">

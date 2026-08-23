@@ -16,7 +16,14 @@ import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
 
-type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string };
+type Connection = {
+  id: string;
+  igUserId: string;
+  username: string;
+  status: ConnectionStatus;
+  connectedAt: string;
+  profilePictureUrl?: string | null;
+};
 
 type ProfileScreenProps = {
   email: string;
@@ -136,7 +143,16 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
         </section>
 
         <section className="settings-hero panel" aria-label="Connected Instagram">
-          <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
+          {connections.length === 1 && connections[0].profilePictureUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value for one remote avatar.
+            <img
+              className="settings-avatar"
+              src={connections[0].profilePictureUrl}
+              alt={connections[0].username ? `@${connections[0].username} profile picture` : "Instagram profile picture"}
+            />
+          ) : (
+            <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
+          )}
           <div className="settings-copy">
             <p className="eyebrow">Connection</p>
             <h2>{connectionTitle}</h2>

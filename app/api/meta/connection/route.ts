@@ -10,16 +10,42 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const session = getSessionFromRequest(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const env = getServerEnv();
   const connections = await getRepository().listConnections(session.workspaceId);
-  return Response.json({
-    data: connections.map(({ id, igUserId, username, status, connectedAt }) => ({
+  // The avatar is fetched live from Meta for each connection; any failure degrades
+  // to null so the UI can fall back to the Instagram glyph.
+  const data = await Promise.all(
+    connections.map(async ({ id, igUserId, username, status, connectedAt, accessTokenEncrypted }) => ({
       id,
       igUserId,
       username,
       status,
       connectedAt,
+      profilePictureUrl: await loadProfilePictureUrl(env, igUserId, accessTokenEncrypted),
     })),
-  });
+  );
+  return Response.json({ data });
+}
+
+async function loadProfilePictureUrl(
+  env: ReturnType<typeof getServerEnv>,
+  igUserId: string,
+  sealedAccessToken: string,
+): Promise<string | null> {
+  if (!env.metaTokenEncryptionKey) return null;
+  try {
+    const client = new MetaClient({ apiVersion: env.metaApiVersion });
+    return await client.getProfilePictureUrl({
+      igUserId,
+      accessToken: unsealSecret(sealedAccessToken, env.metaTokenEncryptionKey),
+    });
+  } catch (error) {
+    logger.warn("Could not load the connected account's profile picture", {
+      igUserId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 export async function DELETE(request: Request) {
