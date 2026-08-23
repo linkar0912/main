@@ -45,15 +45,15 @@ enum ContactState {
 }
 
 model User {
-  id               String    @id
-  email            String    @unique
-  passwordHash     String
-  emailVerifiedAt  DateTime?
+  id              String    @id
+  email           String    @unique
+  passwordHash    String
+  emailVerifiedAt DateTime?
   // Bumped to invalidate every outstanding session for this user at once.
-  tokenVersion     Int       @default(0)
-  createdAt        DateTime  @default(now())
+  tokenVersion    Int       @default(0)
+  createdAt       DateTime  @default(now())
 
-  authTokens       AuthToken[]
+  authTokens AuthToken[]
 }
 
 // Single-use, expiring tokens for password reset and email verification.
@@ -81,39 +81,40 @@ model RevokedSession {
 }
 
 model WorkspaceInvitation {
-  id             String    @id
-  workspaceId    String
-  email          String
-  role           String // ADMIN | MEMBER
-  tokenHash      String    @unique
+  id              String    @id
+  workspaceId     String
+  email           String
+  role            String // ADMIN | MEMBER
+  tokenHash       String    @unique
   invitedByUserId String
-  expiresAt      DateTime
-  acceptedAt     DateTime?
-  revokedAt      DateTime?
-  createdAt      DateTime  @default(now())
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
 
   @@unique([workspaceId, email])
   @@index([email])
 }
 
 model Workspace {
-  id            String                  @id
-  name          String
-  slug          String                  @unique
-  createdAt     DateTime                @default(now())
+  id                 String                  @id
+  name               String
+  slug               String                  @unique
+  createdAt          DateTime                @default(now())
   // Optional messaging quiet hours (workspace-local time). Null = always-on.
-  quietStartHour Int?
-  quietEndHour   Int?
-  timezone       String?
-  members       WorkspaceMember[]
-  connections   InstagramConnection[]
-  automations   Automation[]
-  participants  AutomationParticipant[]
-  executions    AutomationExecution[]
-  webhookEvents WebhookEvent[]
-  contacts      AutomationContact[]
-  sequences     AutomationSequence[]
-  broadcasts    Broadcast[]
+  quietStartHour     Int?
+  quietEndHour       Int?
+  timezone           String?
+  members            WorkspaceMember[]
+  connections        InstagramConnection[]
+  automations        Automation[]
+  participants       AutomationParticipant[]
+  executions         AutomationExecution[]
+  webhookEvents      WebhookEvent[]
+  contacts           AutomationContact[]
+  sequences          AutomationSequence[]
+  broadcasts         Broadcast[]
+  outboundDeliveries OutboundDelivery[]
 }
 
 model WorkspaceMember {
@@ -144,19 +145,20 @@ model InstagramConnection {
 }
 
 model Automation {
-  id           String                  @id
-  workspaceId  String
-  name         String
-  status       AutomationStatus        @default(DRAFT)
-  version      Int                     @default(1)
-  definition   Json
-  activatedAt  DateTime?
-  boundMediaId String?
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
-  workspace    Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  executions   AutomationExecution[]
-  participants AutomationParticipant[]
+  id                String                       @id
+  workspaceId       String
+  name              String
+  status            AutomationStatus             @default(DRAFT)
+  version           Int                          @default(1)
+  definition        Json
+  activatedAt       DateTime?
+  boundMediaId      String?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  workspace         Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executions        AutomationExecution[]
+  participants      AutomationParticipant[]
+  dailySendCounters AutomationDailySendCounter[]
 
   @@index([workspaceId, status])
 }
@@ -205,22 +207,22 @@ model AutomationParticipant {
 // Powers once-only first-contact greetings (first_contact triggers) and stores emails
 // captured by DM email-capture flows.
 model AutomationContact {
-  id                   String       @id
+  id                   String               @id
   workspaceId          String
   instagramAccountId   String
   igScopedUserId       String
   email                String?
-  state                ContactState @default(NONE)
+  state                ContactState         @default(NONE)
   awaitingAutomationId String?
   awaitingSince        DateTime?
-  attempts             Int          @default(0)
+  attempts             Int                  @default(0)
   fields               Json?
   awaitingFields       Json?
   suppressedAt         DateTime?
-  lastSeenAt           DateTime     @default(now())
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-  workspace            Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lastSeenAt           DateTime             @default(now())
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  workspace            Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   enrollments          SequenceEnrollment[]
 
   @@unique([workspaceId, instagramAccountId, igScopedUserId])
@@ -230,19 +232,19 @@ model AutomationContact {
 
 // A timed drip campaign: ordered steps, each sent to enrolled contacts after a delay.
 model AutomationSequence {
-  id                 String    @id
+  id                 String               @id
   workspaceId        String
   name               String
-  status             String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED
-  steps              Json      // SequenceStep[]
+  status             String               @default("DRAFT") // DRAFT | ACTIVE | PAUSED
+  steps              Json // SequenceStep[]
   sourceAutomationId String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  workspace          Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   enrollments        SequenceEnrollment[]
 
-  @@index([workspaceId, status])
   @@unique([id, workspaceId])
+  @@index([workspaceId, status])
 }
 
 // Per-contact progress through a sequence.
@@ -303,6 +305,46 @@ model AutomationExecution {
 
   @@unique([workspaceId, dedupeKey])
   @@index([workspaceId, createdAt])
+}
+
+model OutboundDelivery {
+  id                   String    @id
+  deliveryKey          String    @unique
+  workspaceId          String
+  kind                 String
+  recipientId          String?
+  instagramAccountId   String?
+  automationId         String?
+  participantId        String?
+  sequenceEnrollmentId String?
+  broadcastId          String?
+  payload              Json
+  state                String    @default("PENDING")
+  retryable            Boolean   @default(false)
+  resultCode           String?
+  claimOwner           String?
+  claimExpiresAt       DateTime?
+  attemptCount         Int       @default(0)
+  providerMessageId    String?
+  lastError            String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  sentAt               DateTime?
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([state, claimExpiresAt])
+  @@index([workspaceId, kind, createdAt])
+  @@index([broadcastId, state])
+}
+
+model AutomationDailySendCounter {
+  automationId String
+  utcDate      DateTime   @db.Date
+  reserved     Int        @default(0)
+  updatedAt    DateTime   @updatedAt
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@id([automationId, utcDate])
 }
 
 model WebhookEvent {

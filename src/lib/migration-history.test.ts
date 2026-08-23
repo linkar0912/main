@@ -81,4 +81,26 @@ describe("migration history", () => {
 
     expect(duplicates).toEqual([]);
   });
+
+  it("never creates the same index twice", () => {
+    const owners = new Map<string, string>();
+    const duplicates: string[] = [];
+
+    for (const { migration, sql } of statements) {
+      const created = /^CREATE\s+(?:UNIQUE\s+)?INDEX\s+"([^"]+)"/i.exec(sql);
+      if (!created) continue;
+
+      const owner = owners.get(created[1]);
+      if (owner) {
+        duplicates.push(
+          `"${created[1]}" created by ${owner} and again by ${migration}`,
+        );
+        continue;
+      }
+
+      owners.set(created[1], migration);
+    }
+
+    expect(duplicates).toEqual([]);
+  });
 });

@@ -4,6 +4,27 @@ export type AutomationStatus = "DRAFT" | "ACTIVE" | "PAUSED";
 export type ConnectionStatus = "CONNECTED" | "DISCONNECTED" | "EXPIRED";
 export type ExecutionStatus = "PROCESSING" | "SENT" | "SKIPPED" | "FAILED";
 export type ExecutionDispatchStatus = "CLAIMED" | "DISPATCHING";
+export type OutboundDeliveryState =
+  | "PENDING"
+  | "CLAIMED"
+  | "SENT"
+  | "FAILED"
+  | "UNKNOWN";
+export type OutboundDeliveryResultCode =
+  | "DELIVERED"
+  | "PROVIDER_REJECTED"
+  | "RETRYABLE_REJECTION"
+  | "SUPPRESSED"
+  | "WINDOW_CLOSED"
+  | "AMBIGUOUS";
+export type OutboundDeliveryKind =
+  | "CLASSIC_ACTION"
+  | "EMAIL_CAPTURE"
+  | "CAMPAIGN_ACTION"
+  | "SEQUENCE_STEP"
+  | "BROADCAST_RECIPIENT"
+  | "LEAD_EMAIL"
+  | "LEAD_WEBHOOK";
 export type ParticipantState =
   | "COMMENT_MATCHED" | "OPENING_SENT" | "OPTED_IN" | "FOLLOW_REQUIRED"
   | "FOLLOW_VERIFIED" | "LINK_SENT" | "EXPIRED" | "FAILED";
@@ -89,6 +110,58 @@ export type ExecutionRecord = {
   providerMessageId?: string;
   providerRecipientId?: string;
   createdAt: string;
+};
+
+export type OutboundDeliveryRecord = {
+  id: string;
+  deliveryKey: string;
+  workspaceId: string;
+  kind: OutboundDeliveryKind;
+  recipientId?: string;
+  instagramAccountId?: string;
+  automationId?: string;
+  participantId?: string;
+  sequenceEnrollmentId?: string;
+  broadcastId?: string;
+  payload: Record<string, unknown>;
+  state: OutboundDeliveryState;
+  retryable: boolean;
+  resultCode?: OutboundDeliveryResultCode;
+  claimOwner?: string;
+  claimExpiresAt?: string;
+  attemptCount: number;
+  providerMessageId?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+  sentAt?: string;
+};
+
+export type EnsureOutboundDeliveryInput = Omit<
+  OutboundDeliveryRecord,
+  | "id"
+  | "state"
+  | "retryable"
+  | "resultCode"
+  | "claimOwner"
+  | "claimExpiresAt"
+  | "attemptCount"
+  | "providerMessageId"
+  | "lastError"
+  | "createdAt"
+  | "updatedAt"
+  | "sentAt"
+>;
+
+export type OutboundDeliveryClaimResult =
+  | { claimed: true; record: OutboundDeliveryRecord }
+  | { claimed: false; record: OutboundDeliveryRecord };
+
+export type AutomationDailySendCounterRecord = {
+  automationId: string;
+  utcDate: string;
+  reserved: number;
+  updatedAt: string;
 };
 
 export type CreateAutomationInput = {
@@ -382,6 +455,50 @@ export interface AutomationRepository {
   releaseExecutionClaim(workspaceId: string, dedupeKey: string): Promise<void>;
   releaseOwnedExecutionClaim(workspaceId: string, dedupeKey: string, dispatchOwner: string): Promise<boolean>;
   hasExecution(workspaceId: string, dedupeKey: string): Promise<boolean>;
+  ensureOutboundDelivery(input: EnsureOutboundDeliveryInput): Promise<OutboundDeliveryRecord>;
+  getOutboundDelivery(deliveryKey: string): Promise<OutboundDeliveryRecord | null>;
+  claimOutboundDelivery(
+    deliveryKey: string,
+    owner: string,
+    leaseUntil: string,
+  ): Promise<OutboundDeliveryClaimResult>;
+  completeOutboundDelivery(
+    deliveryKey: string,
+    owner: string,
+    providerMessageId: string | undefined,
+    sentAt: string,
+  ): Promise<boolean>;
+  failOutboundDelivery(
+    deliveryKey: string,
+    owner: string,
+    error: string,
+    retryable: boolean,
+    resultCode:
+      | "PROVIDER_REJECTED"
+      | "RETRYABLE_REJECTION"
+      | "SUPPRESSED"
+      | "WINDOW_CLOSED",
+  ): Promise<boolean>;
+  markOutboundDeliveryUnknown(
+    deliveryKey: string,
+    owner: string | undefined,
+    error: string,
+  ): Promise<boolean>;
+  listExpiredDeliveryClaims(
+    nowIso: string,
+    limit: number,
+  ): Promise<OutboundDeliveryRecord[]>;
+  claimAutomationSendSlots(
+    automationId: string,
+    utcDate: string,
+    amount: number,
+    limit: number,
+  ): Promise<boolean>;
+  releaseAutomationSendSlots(
+    automationId: string,
+    utcDate: string,
+    amount: number,
+  ): Promise<void>;
   createParticipant(input: CreateParticipantInput): Promise<{ created: boolean; record: AutomationParticipantRecord }>;
   getParticipant(workspaceId: string, instagramAccountId: string, id: string): Promise<AutomationParticipantRecord | null>;
   findParticipantBySource(workspaceId: string, instagramAccountId: string, sourceCommentId: string): Promise<AutomationParticipantRecord | null>;
