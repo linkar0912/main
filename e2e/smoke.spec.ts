@@ -14,10 +14,18 @@ test.describe("unauthenticated visitor", () => {
   });
 });
 
-test("owner can sign out", async ({ page }) => {
+test("owner can sign out", async ({ browser }) => {
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
+  await page.goto("/signup");
+  await page.getByLabel("Email").fill(`signout-${Date.now()}@example.com`);
+  await page.getByLabel("Password").fill("replyconnect-e2e-password");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/automations$/);
   await page.goto("/");
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
+  await context.close();
 });
 
 test("member can sign up and sign back in", async ({ page }) => {
@@ -153,6 +161,60 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   const row = page.getByRole("article").filter({ hasText: automationName });
   await expect(row).toBeVisible();
   await expect(row.getByRole("link", { name: /activity/i })).toBeVisible();
+});
+
+test("sequence load failures are visible", async ({ page }) => {
+  await page.route("**/api/sequences", (route) => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "Sequence service unavailable" }),
+  }));
+
+  await page.goto("/automations/sequences");
+
+  await expect(page.locator(".form-error")).toContainText("Sequence service unavailable");
+  await expect(page.getByText(/No sequences yet/)).toHaveCount(0);
+});
+
+test("sequence source links can be cleared explicitly", async ({ page }) => {
+  let patchBody: unknown;
+  const sequence = {
+    id: "sequence_1",
+    name: "Lead nurture",
+    status: "DRAFT",
+    steps: [{ id: "step_1", delayHours: 0, text: "Welcome" }],
+    sourceAutomationId: "automation_1",
+    enrolledCount: 0,
+  };
+  await page.route("**/api/sequences", (route) => route.fulfill({ json: { data: [sequence] } }));
+  await page.route("**/api/automations", (route) => route.fulfill({
+    json: { data: [{ id: "automation_1", name: "Email capture", version: 1 }] },
+  }));
+  await page.route("**/api/sequences/sequence_1", async (route) => {
+    patchBody = route.request().postDataJSON();
+    await route.fulfill({ json: { data: { ...sequence, sourceAutomationId: undefined } } });
+  });
+
+  await page.goto("/automations/sequences");
+  await page.getByRole("button", { name: "Edit Lead nurture" }).click();
+  await page.getByLabel("Enroll leads captured by").selectOption("");
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect.poll(() => patchBody).toMatchObject({ sourceAutomationId: null });
+});
+
+test("activity export stays scoped to the selected automation", async ({ page }) => {
+  await page.route("**/api/automations/automation_1/activity", (route) => route.fulfill({
+    json: { data: [], summary: { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 } },
+  }));
+  await page.route("**/api/insights?automationId=automation_1", (route) => route.fulfill({
+    json: { timeseries: { days: 14, participantsPerDay: [], sentPerDay: [] }, mediaPerformance: [] },
+  }));
+
+  await page.goto("/automations/automation_1/activity");
+
+  await expect(page.getByRole("link", { name: /export csv/i }))
+    .toHaveAttribute("href", "/api/insights/export?automationId=automation_1");
 });
 
 test("Facebook review pages are reachable", async ({ page }) => {

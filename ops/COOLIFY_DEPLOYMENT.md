@@ -255,6 +255,11 @@ the P3009 lock-out took the site down until an operator intervened.
 - Adding a `UNIQUE` index to a populated table fails if duplicates exist, and
   that failure wedges the one-shot exactly like a duplicate column. Check for
   duplicates in the same release, before the index is created.
+- For `20260823180000_instagram_account_ownership`, run
+  `pnpm preflight:instagram-ownership` against the production `DATABASE_URL`
+  before recreating the service. Any reported account ID is a hard stop: back
+  up the database and resolve ownership with the workspace owner; never merge,
+  reassign, or delete duplicate rows automatically.
 - Test against a real PostgreSQL 17 before merging, applying the migration to a
   database already at the previous revision — not only to an empty one. A fresh
   database applies the whole history in order and hides ordering bugs.
