@@ -54,17 +54,39 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
   const sentByDay = new Map(sentPerDay.map((entry) => [entry.day, entry.count]));
   const posts = insights.mediaPerformance ?? [];
   const usage = insights.usage;
+  const usageLimit = usage?.monthlyLimit ?? null;
+  const usagePercent =
+    usage && usageLimit ? Math.min(100, Math.round((usage.participantsThisMonth / usageLimit) * 100)) : null;
 
   return (
-    <div className="insights-stack">
+    <div className="insights-stack side-stack">
       {usage && (
-        <p className="muted">
-          {usage.participantsThisMonth} participant{usage.participantsThisMonth === 1 ? "" : "s"} this month
-          {usage.monthlyLimit ? ` of ${usage.monthlyLimit}` : ""} on the current plan.
-        </p>
+        <section className="panel side-panel" aria-label="Plan usage">
+          <div className="panel-heading">
+            <div><p className="eyebrow">Plan usage</p><h2>This month</h2></div>
+          </div>
+          <div className="usage-meter">
+            {usagePercent !== null && usageLimit !== null && (
+              <div
+                className="usage-bar"
+                role="progressbar"
+                aria-label="Participants used this month"
+                aria-valuenow={usage.participantsThisMonth}
+                aria-valuemin={0}
+                aria-valuemax={usageLimit}
+              >
+                <span style={{ width: `${Math.max(usagePercent, usage.participantsThisMonth > 0 ? 4 : 0)}%` }} />
+              </div>
+            )}
+            <p className="muted usage-note">
+              {usage.participantsThisMonth} participant{usage.participantsThisMonth === 1 ? "" : "s"} this month
+              {usage.monthlyLimit ? ` of ${usage.monthlyLimit}` : ""} on the current plan.
+            </p>
+          </div>
+        </section>
       )}
 
-      <section className="panel insights-panel" aria-label="Last 14 days">
+      <section className="panel insights-panel side-panel" aria-label="Last 14 days">
         <div className="panel-heading">
           <div><p className="eyebrow">Last 14 days</p><h2>Participants & deliveries</h2></div>
         </div>
@@ -88,11 +110,11 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
         </p>
       </section>
 
-      <section className="panel insights-panel" aria-label="Top posts">
+      <section className="panel insights-panel side-panel" aria-label="Top posts">
         <div className="panel-heading">
           <div><p className="eyebrow">Per-post performance</p><h2>Top posts</h2></div>
-          <a className="button button-secondary" href={`/api/insights/export${query}`} download>
-            <Download size={15} /> Export CSV
+          <a className="button button-secondary button-small" href={`/api/insights/export${query}`} download>
+            <Download size={14} /> Export CSV
           </a>
         </div>
         {posts.length === 0 ? (
