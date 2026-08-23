@@ -94,34 +94,48 @@ export type BroadcastSendJob = {
   igScopedUserId: string;
 };
 
+export type BroadcastRecipientKey = Pick<BroadcastSendJob, "igAccountId" | "igScopedUserId">;
+export type BroadcastEnqueueResult = {
+  accepted: BroadcastRecipientKey[];
+  rejected: BroadcastRecipientKey[];
+};
+
 /** Whether background delivery is available at all — broadcasts depend on it. */
 export function isQueueConfigured(): boolean {
   return Boolean(getServerEnv().redisUrl);
 }
 
-export async function enqueueBroadcastSends(jobs: BroadcastSendJob[], baseDelayMs = 0): Promise<number> {
+export async function enqueueBroadcastSends(
+  jobs: BroadcastSendJob[],
+  baseDelayMs = 0,
+): Promise<BroadcastEnqueueResult> {
   const queue = getWebhookQueue();
-  if (!queue) return 0;
-  let enqueued = 0;
-  await Promise.all(
+  const recipientKey = (job: BroadcastSendJob): BroadcastRecipientKey => ({
+    igAccountId: job.igAccountId,
+    igScopedUserId: job.igScopedUserId,
+  });
+  if (!queue) return { accepted: [], rejected: jobs.map(recipientKey) };
+  const results = await Promise.allSettled(
     jobs.map((job, index) =>
-      queue
-        .add(
-          "broadcast-send",
-          job,
-          {
-            jobId: `broadcast:${job.broadcastId}:${job.igScopedUserId}`,
-            delay: baseDelayMs + Math.min(index, 600) * 1_000,
-            attempts: 2,
-            backoff: { type: "fixed", delay: 5_000 },
-            removeOnComplete: 500,
-            removeOnFail: 1_000,
-          },
-        )
-        .then(() => {
-          enqueued += 1;
-        }),
+      queue.add(
+        "broadcast-send",
+        job,
+        {
+          jobId: `broadcast:${job.broadcastId}:${job.igAccountId}:${job.igScopedUserId}`,
+          delay: baseDelayMs + Math.min(index, 600) * 1_000,
+          attempts: 2,
+          backoff: { type: "fixed", delay: 5_000 },
+          removeOnComplete: 500,
+          removeOnFail: 1_000,
+        },
+      ),
     ),
   );
-  return enqueued;
+  const accepted: BroadcastRecipientKey[] = [];
+  const rejected: BroadcastRecipientKey[] = [];
+  results.forEach((result, index) => {
+    const key = recipientKey(jobs[index]);
+    (result.status === "fulfilled" ? accepted : rejected).push(key);
+  });
+  return { accepted, rejected };
 }

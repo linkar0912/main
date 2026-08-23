@@ -74,11 +74,11 @@ export async function POST(request: Request) {
     igScopedUserId: recipient.igScopedUserId,
   }));
 
-  const enqueued = await enqueueBroadcastSends(jobs, quietHoldMs).catch(() => 0);
-  if (enqueued < jobs.length) {
+  const enqueueResult = await enqueueBroadcastSends(jobs, quietHoldMs);
+  if (enqueueResult.rejected.length > 0) {
     // The queue was reachable a moment ago but some jobs did not land. Account for the
     // shortfall so the broadcast can still finalize instead of hanging at RUNNING.
-    await repository.incrementBroadcastCounters(broadcast.id, { failed: jobs.length - enqueued });
+    await repository.incrementBroadcastCounters(broadcast.id, { failed: enqueueResult.rejected.length });
     await repository.finalizeBroadcastIfDone(session.workspaceId, broadcast.id);
     return NextResponse.json(
       { error: "Some recipients could not be queued. Delivery is partial — check the queue.", data: broadcast },
