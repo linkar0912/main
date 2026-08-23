@@ -115,13 +115,27 @@ or `valkey`.
 
 1. **Merge to `main`.** CI runs lint, typecheck, and the unit suite; the
    container workflow publishes `ghcr.io/tejastelkar/replyconnect:main`.
-2. **Wait for both workflows to go green.** Deploying before the image is
+2. **Run `pnpm deploy:coolify`.** This is the preferred path — it mechanizes
+   the rest of this section: confirms the build for the current commit is
+   green, refuses to proceed on an unreviewed migration (add
+   `-- --migrations-backed-up` once §6 is done), calls the restart endpoint,
+   polls until `web` is `running:healthy`, and verifies `/api/health` plus the
+   shipped CSS asset from outside the container. It records the deployed SHA
+   in `.coolify-deploy-state.json` (gitignored, local-machine only) so the
+   next run can diff migrations against it. Needs `COOLIFY_API_TOKEN`,
+   `COOLIFY_HOST`, `COOLIFY_PORT`, `COOLIFY_SERVICE_UUID`, and
+   `PUBLIC_APP_DOMAIN` in `.env.local`, and `gh` authenticated.
+
+   The steps below are what that script does — use them directly only if the
+   script itself is unavailable or its output needs cross-checking by hand.
+
+3. **Wait for both workflows to go green.** Deploying before the image is
    published just redeploys the previous build.
    ```bash
    gh run list --workflow="Build production container" --limit 1
    ```
-3. **Back up PostgreSQL** if the release contains a migration (§6).
-4. **Deploy.** Press Deploy in Coolify, or call the restart endpoint:
+4. **Back up PostgreSQL** if the release contains a migration (§6).
+5. **Deploy.** Press Deploy in Coolify, or call the restart endpoint:
    ```bash
    curl -X POST -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
      "$COOLIFY_HOST/api/v1/services/$SERVICE_UUID/restart"
@@ -140,7 +154,7 @@ or `valkey`.
      | grep -oE '/_next/static/[a-z0-9/_-]+\.css' | head -1)
    curl -sk "https://<linkar-domain>$CSS" | grep -c icon-rail   # 0 = old build
    ```
-5. **Watch it settle.** A rollout takes roughly 60–90 seconds and takes the
+6. **Watch it settle.** A rollout takes roughly 60–90 seconds and takes the
    *whole stack* down in the middle — a brief window where `postgres` and
    `valkey` also read as exited is normal, not an outage.
    ```bash
