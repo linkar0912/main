@@ -373,7 +373,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
   return (
     <div className="activity-list">
       {campaign && (
-        <div className="campaign-context grid-texture">
+        <div className="campaign-context">
           <div className="context-id">
             <span className="context-icon" aria-hidden="true"><Workflow size={17} /></span>
             <div className="context-name">
