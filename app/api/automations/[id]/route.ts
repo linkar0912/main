@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateFlowDefinition } from "@/src/lib/automation/definition";
 import { getRepository } from "@/src/lib/repository-provider";
-import { getSessionFromRequest } from "@/src/lib/auth/session";
+import { getSessionFromRequest, getValidatedSession } from "@/src/lib/auth/session";
 import type { AutomationStatus, UpdateAutomationInput } from "@/src/lib/repository";
 
 export const runtime = "nodejs";
@@ -18,7 +18,7 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
   const body = (await request.json()) as { name?: unknown; status?: unknown; definition?: unknown };
@@ -66,7 +66,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
   const deleted = await getRepository().deleteAutomation(session.workspaceId, id);

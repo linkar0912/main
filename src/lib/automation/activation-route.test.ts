@@ -3,16 +3,20 @@ import { createMemoryRepository } from "@/src/lib/memory-repository";
 import type { AutomationRepository } from "@/src/lib/repository";
 
 let repository: AutomationRepository;
+const sessionState = vi.hoisted(() => ({
+  validated: { userId: "user_owner", workspaceId: "workspace_a" } as { userId: string; workspaceId: string } | null,
+}));
 
 vi.mock("@/src/lib/auth/session", () => ({
   getSessionFromRequest: () => ({ email: "owner@example.com", workspaceId: "workspace_a" }),
+  getValidatedSession: () => Promise.resolve(sessionState.validated),
 }));
 
 vi.mock("@/src/lib/repository-provider", () => ({
   getRepository: () => repository,
 }));
 
-const { PATCH } = await import("@/app/api/automations/[id]/route");
+const { DELETE, PATCH } = await import("@/app/api/automations/[id]/route");
 
 const campaignDefinition = {
   version: 2 as const,
@@ -53,6 +57,18 @@ async function patchDefinition(automationId: string, definition: unknown, status
 describe("PATCH /api/automations/[id] activation", () => {
   beforeEach(() => {
     repository = createMemoryRepository();
+    sessionState.validated = { userId: "user_owner", workspaceId: "workspace_a" };
+  });
+
+  it("rejects a revoked session before updating an automation", async () => {
+    const automation = await repository.createAutomation("workspace_a", { name: "Protected", definition: campaignDefinition });
+    sessionState.validated = null;
+
+    const response = await activate(automation.id);
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
+    await expect(repository.getAutomation("workspace_a", automation.id)).resolves.toMatchObject({ status: "DRAFT" });
   });
 
   it("timestamps and unbinds a non-active next-media automation when it becomes active", async () => {
@@ -154,5 +170,26 @@ describe("PATCH /api/automations/[id] activation", () => {
     expect(body.data.status).toBe("PAUSED");
     expect(body.data.activatedAt).toBe("2026-08-21T09:00:00.000Z");
     expect(body.data.boundMediaId).toBe("media_won");
+  });
+});
+
+describe("DELETE /api/automations/[id]", () => {
+  beforeEach(() => {
+    repository = createMemoryRepository();
+    sessionState.validated = { userId: "user_owner", workspaceId: "workspace_a" };
+  });
+
+  it("rejects a revoked session before deleting an automation", async () => {
+    const automation = await repository.createAutomation("workspace_a", { name: "Protected", definition: campaignDefinition });
+    sessionState.validated = null;
+
+    const response = await DELETE(
+      new Request(`http://localhost/api/automations/${automation.id}`, { method: "DELETE" }),
+      { params: Promise.resolve({ id: automation.id }) },
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
+    await expect(repository.getAutomation("workspace_a", automation.id)).resolves.toMatchObject({ id: automation.id });
   });
 });

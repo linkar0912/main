@@ -168,9 +168,13 @@ export function AutomationList({
             <button
               className="icon-button"
               type="button"
+              disabled={pendingId === automation.id}
               aria-label={`${automation.status === "ACTIVE" ? "Pause" : "Activate"} ${automation.name}`}
               title={automation.status === "ACTIVE" ? "Pause automation" : "Activate automation"}
-              onClick={() => void onStatusChange(automation.id, automation.status === "ACTIVE" ? "PAUSED" : "ACTIVE")}
+              onClick={() => void runAction(
+                automation.id,
+                () => onStatusChange(automation.id, automation.status === "ACTIVE" ? "PAUSED" : "ACTIVE"),
+              )}
             >
               {automation.status === "ACTIVE" ? <Pause size={16} /> : <Play size={16} />}
             </button>

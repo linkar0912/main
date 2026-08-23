@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { AutomationList } from "./automation-list";
 import type { AutomationRecord } from "@/src/lib/repository";
@@ -70,5 +70,19 @@ describe("AutomationList activity link", () => {
     );
 
     expect(screen.getByLabelText(/view activity for/i)).toBeTruthy();
+  });
+
+  it("shows an actionable error when activation fails", async () => {
+    render(
+      <AutomationList
+        automations={[v1Automation({ status: "PAUSED" })]}
+        loading={false}
+        onStatusChange={async () => { throw new Error("Instagram must be connected before activation."); }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Activate Legacy DM automation" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Instagram must be connected before activation.");
   });
 });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
-import { getSessionFromRequest } from "@/src/lib/auth/session";
+import { getValidatedSession } from "@/src/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 // POST /api/automations/:id/duplicate — saves an exact copy as a DRAFT so variants
 // can be tuned without rebuilding from scratch.
 export async function POST(request: Request, context: RouteContext) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
 
