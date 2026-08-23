@@ -6,7 +6,7 @@ import {
   Zap,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
-import { InstagramGlyph } from "@/src/components/instagram-glyph";
+import { LinkarMark } from "@/src/components/linkar-mark";
 import { safeNextPath } from "@/src/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
         <main className="auth-shell">
             <section className="auth-hero" aria-hidden>
                 <div className="auth-hero-brand">
-                    <span className="brand-mark"><InstagramGlyph size={17} /></span>
+                    <span className="brand-mark"><LinkarMark size={20} /></span>
                     {PRODUCT_NAME}
                 </div>
                 <div className="auth-hero-copy">
@@ -63,7 +63,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 
             <section className="auth-main">
                 <div className="login-card">
-                    <div className="login-brand"><span className="brand-mark"><InstagramGlyph size={17} /></span><strong>{PRODUCT_NAME}</strong></div>
+                    <div className="login-brand"><span className="brand-mark"><LinkarMark size={20} /></span><strong>{PRODUCT_NAME}</strong></div>
                     <p className="eyebrow">{invite ? "Team invitation" : "Get started"}</p>
                     <h1>{invite ? "Almost there." : "Create your account."}</h1>
                     <p className="muted">

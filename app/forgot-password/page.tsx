@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { KeyRound } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
-import { InstagramGlyph } from "@/src/components/instagram-glyph";
+import { LinkarMark } from "@/src/components/linkar-mark";
 
 export const metadata = { title: `Forgot password · ${PRODUCT_NAME}` };
 
@@ -15,7 +15,7 @@ export default async function ForgotPasswordPage({
         <main className="auth-shell">
             <section className="auth-hero" aria-hidden>
                 <div className="auth-hero-brand">
-                    <span className="brand-mark"><InstagramGlyph size={17} /></span>
+                    <span className="brand-mark"><LinkarMark size={20} /></span>
                     {PRODUCT_NAME}
                 </div>
                 <div className="auth-hero-copy">
@@ -26,7 +26,7 @@ export default async function ForgotPasswordPage({
             </section>
             <section className="auth-main">
                 <div className="login-card">
-                    <div className="login-brand"><span className="brand-mark"><InstagramGlyph size={17} /></span><strong>{PRODUCT_NAME}</strong></div>
+                    <div className="login-brand"><span className="brand-mark"><LinkarMark size={20} /></span><strong>{PRODUCT_NAME}</strong></div>
                     <p className="eyebrow">Account recovery</p>
                     <h1>Reset your password</h1>
                     {params.sent ? (

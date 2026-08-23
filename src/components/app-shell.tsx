@@ -15,7 +15,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
-import { InstagramGlyph } from "./instagram-glyph";
+import { LinkarMark } from "./linkar-mark";
 
 /** Workspace destinations in the sidebar. */
 const workspaceNavigation = [
@@ -155,7 +155,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </button>
         <Link className="brand" href="/" aria-label={`${PRODUCT_NAME} overview`}>
           <span className="brand-mark" aria-hidden>
-            <InstagramGlyph size={17} />
+            <LinkarMark size={19} />
           </span>
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
@@ -176,7 +176,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
       >
         <Link className="sidebar-brand" href="/">
           <span className="brand-mark" aria-hidden>
-            <InstagramGlyph size={18} />
+            <LinkarMark size={21} />
           </span>
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>

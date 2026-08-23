@@ -5,8 +5,8 @@ import {
   ShieldCheck,
   Zap,
 } from "lucide-react";
-import { PRODUCT_NAME } from "@/src/lib/branding";
-import { InstagramGlyph } from "@/src/components/instagram-glyph";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/src/lib/branding";
+import { LinkarMark } from "@/src/components/linkar-mark";
 import { safeNextPath } from "@/src/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +36,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="auth-shell">
       <section className="auth-hero" aria-hidden>
         <div className="auth-hero-brand">
-          <span className="brand-mark"><InstagramGlyph size={17} /></span>
+          <span className="brand-mark"><LinkarMark size={20} /></span>
           {PRODUCT_NAME}
         </div>
         <div className="auth-hero-copy">
@@ -51,12 +51,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </li>
           ))}
         </ul>
-        <p className="auth-hero-foot">Instagram automation, made clear.</p>
+        <p className="auth-hero-foot">{PRODUCT_TAGLINE}</p>
       </section>
 
       <section className="auth-main">
         <div className="login-card">
-          <div className="login-brand"><span className="brand-mark"><InstagramGlyph size={17} /></span><strong>{PRODUCT_NAME}</strong></div>
+          <div className="login-brand"><span className="brand-mark"><LinkarMark size={20} /></span><strong>{PRODUCT_NAME}</strong></div>
           <p className="eyebrow">Welcome back</p>
           <h1>Sign in.</h1>
           <p className="muted">Good to see you again — your flows missed you.</p>

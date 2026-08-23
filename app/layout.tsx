@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
+import { Bricolage_Grotesque, JetBrains_Mono, Manrope } from "next/font/google";
 import "./globals.css";
+
+/* Brand type system — display carries headlines, sans carries the UI,
+   mono carries IDs and handles. Self-hosted by next/font. */
+const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display" });
+const sans = Manrope({ subsets: ["latin"], variable: "--font-sans" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Linkar — Instagram automation, made clear",
@@ -8,8 +15,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );
 }
+
