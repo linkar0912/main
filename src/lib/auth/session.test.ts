@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createSessionToken,
   hashPassword,
@@ -133,5 +133,19 @@ describe("owner authentication", () => {
 
     expect(await validateSessionState(session, revokedRepository)).toBeNull();
     expect(await validateSessionState(session, bumpedRepository)).toBeNull();
+  });
+
+  it.each([
+    { userId: "user_owner", workspaceId: "workspace_owner", ver: 2 },
+    { userId: "user_owner", workspaceId: "workspace_owner", sid: "session_1" },
+  ])("rejects a legacy session missing revocation claims", async (session) => {
+    const repository = {
+      isSessionRevoked: vi.fn(async () => false),
+      getUserTokenVersion: vi.fn(async () => 2),
+    };
+
+    expect(await validateSessionState(session, repository)).toBeNull();
+    expect(repository.isSessionRevoked).not.toHaveBeenCalled();
+    expect(repository.getUserTokenVersion).not.toHaveBeenCalled();
   });
 });

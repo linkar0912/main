@@ -3,14 +3,15 @@ import type { AutomationParticipantRecord } from "@/src/lib/repository";
 import { computeFunnelSummary } from "./route";
 
 const mocks = vi.hoisted(() => ({
-  getSessionFromRequest: vi.fn(),
+  getValidatedSession: vi.fn(),
   getRepository: vi.fn(),
   getAutomation: vi.fn(),
   listParticipants: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
-  getSessionFromRequest: mocks.getSessionFromRequest,
+  getSessionFromRequest: () => ({ email: "owner@example.com", workspaceId: "workspace_a" }),
+  getValidatedSession: mocks.getValidatedSession,
 }));
 
 vi.mock("@/src/lib/repository-provider", () => ({
@@ -83,11 +84,11 @@ describe("computeFunnelSummary", () => {
 
 describe("GET /api/automations/[id]/activity", () => {
   beforeEach(() => {
-    mocks.getSessionFromRequest.mockReset();
+    mocks.getValidatedSession.mockReset();
     mocks.getRepository.mockReset();
     mocks.getAutomation.mockReset();
     mocks.listParticipants.mockReset();
-    mocks.getSessionFromRequest.mockReturnValue({ email: "owner@example.com", workspaceId: "workspace_a" });
+    mocks.getValidatedSession.mockResolvedValue({ email: "owner@example.com", workspaceId: "workspace_a" });
     mocks.getRepository.mockReturnValue({
       getAutomation: mocks.getAutomation,
       listParticipants: mocks.listParticipants,
@@ -101,7 +102,7 @@ describe("GET /api/automations/[id]/activity", () => {
   }
 
   it("returns 401 when there is no owner session", async () => {
-    mocks.getSessionFromRequest.mockReturnValue(null);
+    mocks.getValidatedSession.mockResolvedValue(null);
 
     const response = await call();
 

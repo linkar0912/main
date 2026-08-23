@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
-import { getSessionFromRequest } from "@/src/lib/auth/session";
+import { getValidatedSession } from "@/src/lib/auth/session";
 import { enqueueBroadcastSends, isQueueConfigured, type BroadcastSendJob } from "@/src/lib/queue";
 import { isQuietNow, msUntilQuietEnd } from "@/src/lib/messaging-window";
 import { z } from "zod";
@@ -17,7 +17,7 @@ const broadcastSchema = z.object({
 
 // GET /api/broadcasts — recent blasts with progress.
 export async function GET(request: Request) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const broadcasts = await getRepository().listBroadcasts(session.workspaceId, 20);
   return NextResponse.json({ data: broadcasts });
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
 // POST /api/broadcasts — compose + fan out a DM blast (staggered ~1/second).
 export async function POST(request: Request) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let input: z.infer<typeof broadcastSchema>;

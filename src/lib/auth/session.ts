@@ -174,10 +174,10 @@ export async function validateSessionState(
   session: AppSession | null,
   repository: SessionStateRepository,
 ): Promise<AppSession | null> {
-  if (!session?.sid) return session;
+  if (!session?.sid || session.ver === undefined) return null;
   if (await repository.isSessionRevoked(session.sid)) return null;
   const currentVersion = await repository.getUserTokenVersion(session.userId);
-  if (currentVersion === null || (session.ver !== undefined && session.ver !== currentVersion)) return null;
+  if (currentVersion === null || session.ver !== currentVersion) return null;
   return session;
 }
 

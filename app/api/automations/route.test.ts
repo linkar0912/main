@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   getSessionFromRequest: vi.fn(),
   getValidatedSession: vi.fn(),
   createAutomation: vi.fn(),
+  listAutomations: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
@@ -12,16 +13,17 @@ vi.mock("@/src/lib/auth/session", () => ({
 }));
 
 vi.mock("@/src/lib/repository-provider", () => ({
-  getRepository: () => ({ createAutomation: mocks.createAutomation }),
+  getRepository: () => ({ createAutomation: mocks.createAutomation, listAutomations: mocks.listAutomations }),
 }));
 
-const { POST } = await import("./route");
+const { GET, POST } = await import("./route");
 
 describe("POST /api/automations", () => {
   beforeEach(() => {
     mocks.getSessionFromRequest.mockReset().mockReturnValue({ userId: "user_1", workspaceId: "workspace_1" });
     mocks.getValidatedSession.mockReset().mockResolvedValue(null);
     mocks.createAutomation.mockReset();
+    mocks.listAutomations.mockReset().mockResolvedValue([]);
   });
 
   it("rejects a revoked session before creating an automation", async () => {
@@ -34,5 +36,12 @@ describe("POST /api/automations", () => {
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
     expect(mocks.createAutomation).not.toHaveBeenCalled();
+  });
+
+  it("rejects a revoked session before listing automations", async () => {
+    const response = await GET(new Request("http://localhost/api/automations"));
+
+    expect(response.status).toBe(401);
+    expect(mocks.listAutomations).not.toHaveBeenCalled();
   });
 });

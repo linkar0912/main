@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
-import { getSessionFromRequest } from "@/src/lib/auth/session";
+import { getValidatedSession } from "@/src/lib/auth/session";
 import { sequencePatchSchema } from "@/src/lib/automation/sequence";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
   try {
@@ -26,7 +26,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
   const deleted = await getRepository().deleteSequence(session.workspaceId, id);

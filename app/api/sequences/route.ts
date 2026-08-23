@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
-import { getSessionFromRequest } from "@/src/lib/auth/session";
+import { getValidatedSession } from "@/src/lib/auth/session";
 import { parseSequenceInput } from "@/src/lib/automation/sequence";
 
 export const runtime = "nodejs";
 
 // GET /api/sequences — every sequence plus live enrollment counts.
 export async function GET(request: Request) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const repository = getRepository();
   const [sequences, counts] = await Promise.all([
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
 // POST /api/sequences — create a sequence.
 export async function POST(request: Request) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const input = parseSequenceInput(await request.json());
