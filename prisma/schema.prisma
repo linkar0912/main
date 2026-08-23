@@ -224,6 +224,7 @@ model AutomationContact {
   enrollments          SequenceEnrollment[]
 
   @@unique([workspaceId, instagramAccountId, igScopedUserId])
+  @@unique([id, workspaceId])
   @@index([workspaceId, state])
 }
 
@@ -241,6 +242,7 @@ model AutomationSequence {
   enrollments        SequenceEnrollment[]
 
   @@index([workspaceId, status])
+  @@unique([id, workspaceId])
 }
 
 // Per-contact progress through a sequence.
@@ -254,8 +256,8 @@ model SequenceEnrollment {
   state            String             @default("ACTIVE") // ACTIVE | COMPLETED | CANCELLED
   enrolledAt       DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
-  sequence         AutomationSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
-  contact          AutomationContact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  sequence         AutomationSequence @relation(fields: [sequenceId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contact          AutomationContact  @relation(fields: [contactId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
 
   @@unique([sequenceId, contactId])
   @@index([state, nextSendAt])

@@ -102,3 +102,25 @@ describe("mapParticipantPatch (via transitionParticipant)", () => {
     expect(data.publicReplyError).toBe("Meta public reply temporarily failed");
   });
 });
+
+describe("sequence enrollment tenancy", () => {
+  it("does not create an enrollment unless sequence and contact match the requested workspace", async () => {
+    const sequenceFindFirst = vi.fn().mockResolvedValue(null);
+    const contactFindFirst = vi.fn().mockResolvedValue({ id: "contact_1", workspaceId: "workspace_a" });
+    const enrollmentCreate = vi.fn().mockResolvedValue({ id: "enrollment_1" });
+    const client = {
+      automationSequence: { findFirst: sequenceFindFirst },
+      automationContact: { findFirst: contactFindFirst },
+      sequenceEnrollment: { findUnique: vi.fn().mockResolvedValue(null), create: enrollmentCreate },
+    } as unknown as typeof prisma;
+    const repository = createPrismaRepository(client);
+
+    await expect(repository.enrollContactInSequence(
+      "workspace_a", "sequence_from_b", "contact_1", 0, "2026-08-23T00:00:00.000Z",
+    )).resolves.toEqual({ created: false });
+
+    expect(sequenceFindFirst).toHaveBeenCalledWith({ where: { id: "sequence_from_b", workspaceId: "workspace_a" } });
+    expect(contactFindFirst).toHaveBeenCalledWith({ where: { id: "contact_1", workspaceId: "workspace_a" } });
+    expect(enrollmentCreate).not.toHaveBeenCalled();
+  });
+});

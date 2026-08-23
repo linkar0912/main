@@ -946,13 +946,10 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
         ...(patch.status !== undefined ? { status: patch.status satisfies SequenceStatus } : {}),
         ...(patch.steps !== undefined ? { steps: copy(patch.steps) } : {}),
-        ...(patch.sourceAutomationId !== undefined
-          ? patch.sourceAutomationId
-            ? { sourceAutomationId: patch.sourceAutomationId }
-            : {}
-          : {}),
         updatedAt: now(),
       };
+      if (patch.sourceAutomationId === null) delete updated.sourceAutomationId;
+      else if (patch.sourceAutomationId !== undefined) updated.sourceAutomationId = patch.sourceAutomationId;
       sequences.set(id, updated);
       return copy(updated);
     },
@@ -998,6 +995,9 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     },
 
     async enrollContactInSequence(workspaceId, sequenceId, contactId, firstDelayHours, nowIso) {
+      const sequence = sequences.get(sequenceId);
+      const contact = contacts.get(contactId);
+      if (sequence?.workspaceId !== workspaceId || contact?.workspaceId !== workspaceId) return { created: false };
       const pairKey = `${sequenceId}:${contactId}`;
       const existingId = enrollmentIdsByPair.get(pairKey);
       if (existingId) return { created: false };

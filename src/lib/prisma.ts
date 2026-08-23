@@ -1347,6 +1347,11 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async enrollContactInSequence(workspaceId, sequenceId, contactId, firstDelayHours, nowIso) {
+      const [sequence, contact] = await Promise.all([
+        client.automationSequence.findFirst({ where: { id: sequenceId, workspaceId } }),
+        client.automationContact.findFirst({ where: { id: contactId, workspaceId } }),
+      ]);
+      if (!sequence || !contact) return { created: false };
       const existing = await client.sequenceEnrollment.findUnique({
         where: { sequenceId_contactId: { sequenceId, contactId } },
       });

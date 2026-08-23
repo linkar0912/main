@@ -166,6 +166,10 @@ export type AutomationSequenceRecord = {
   updatedAt: string;
 };
 
+export type AutomationSequencePatch = Partial<Pick<AutomationSequenceRecord, "name" | "status" | "steps">> & {
+  sourceAutomationId?: string | null;
+};
+
 export type EnrollmentState = "ACTIVE" | "COMPLETED" | "CANCELLED";
 
 export type SequenceEnrollmentRecord = {
@@ -432,7 +436,7 @@ export interface AutomationRepository {
   updateSequence(
     workspaceId: string,
     id: string,
-    patch: Partial<Pick<AutomationSequenceRecord, "name" | "status" | "steps" | "sourceAutomationId">>,
+    patch: AutomationSequencePatch,
   ): Promise<AutomationSequenceRecord | null>;
   deleteSequence(workspaceId: string, id: string): Promise<boolean>;
   listSequences(workspaceId: string): Promise<AutomationSequenceRecord[]>;

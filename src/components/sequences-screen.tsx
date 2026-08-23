@@ -96,7 +96,11 @@ export function SequencesScreen() {
     const payload = {
       name: name.trim(),
       status: editingId ? sequences.find((row) => row.id === editingId)?.status ?? "DRAFT" : "DRAFT",
-      ...(sourceAutomationId ? { sourceAutomationId } : {}),
+      ...(editingId
+        ? { sourceAutomationId: sourceAutomationId || null }
+        : sourceAutomationId
+          ? { sourceAutomationId }
+          : {}),
       steps: steps.map((step) => ({
         id: step.id,
         delayHours: Math.max(0, Math.round(Number(step.delayHours) || 0)),
@@ -294,4 +298,3 @@ export function SequencesScreen() {
     </AppShell>
   );
 }
-

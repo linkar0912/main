@@ -3,6 +3,7 @@ import { processDueSequences } from "./sequence-runner";
 import { processBroadcastSend } from "./broadcast-runner";
 import { createMemoryRepository } from "../memory-repository";
 import { sealSecret } from "../security/secrets";
+import { sequencePatchSchema } from "./sequence";
 
 const TOKEN_KEY = "a".repeat(64);
 
@@ -43,6 +44,41 @@ function dmClient() {
 }
 
 describe("sequences repository + scheduler", () => {
+  it("accepts an explicit null source and removes the stored source", async () => {
+    expect(sequencePatchSchema.parse({ sourceAutomationId: null })).toEqual({ sourceAutomationId: null });
+    const repository = await seed();
+    const sequence = await repository.createSequence("workspace_a", {
+      name: "Unlinkable",
+      status: "DRAFT",
+      sourceAutomationId: "automation_1",
+      steps: [{ id: "s1", delayHours: 0, text: "Hello" }],
+    });
+
+    await repository.updateSequence("workspace_a", sequence.id, { sourceAutomationId: null });
+
+    const updated = await repository.getSequence("workspace_a", sequence.id);
+    expect(updated?.id).toBe(sequence.id);
+    expect(updated?.sourceAutomationId).toBeUndefined();
+  });
+
+  it("rejects sequence enrollment when either referenced record belongs to another workspace", async () => {
+    const repository = await seed();
+    await repository.touchContact("workspace_b", "ig_2", "lead_2", new Date().toISOString());
+    const contactA = (await repository.getContact("workspace_a", "ig_1", "lead_1"))!;
+    const contactB = (await repository.getContact("workspace_b", "ig_2", "lead_2"))!;
+    const sequenceA = await repository.createSequence("workspace_a", {
+      name: "A", status: "ACTIVE", steps: [{ id: "a", delayHours: 0, text: "A" }],
+    });
+    const sequenceB = await repository.createSequence("workspace_b", {
+      name: "B", status: "ACTIVE", steps: [{ id: "b", delayHours: 0, text: "B" }],
+    });
+
+    await expect(repository.enrollContactInSequence("workspace_a", sequenceB.id, contactA.id, 0, new Date().toISOString()))
+      .resolves.toEqual({ created: false });
+    await expect(repository.enrollContactInSequence("workspace_a", sequenceA.id, contactB.id, 0, new Date().toISOString()))
+      .resolves.toEqual({ created: false });
+  });
+
   it("enrolls once per contact, delivers due steps, advances then completes", async () => {
     const repository = await seed();
     const contact = (await repository.getContact("workspace_a", "ig_1", "lead_1"))!;

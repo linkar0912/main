@@ -30,7 +30,7 @@ export const sequencePatchSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     status: z.enum(["DRAFT", "ACTIVE", "PAUSED"]).optional(),
-    sourceAutomationId: z.string().trim().min(1).optional(),
+    sourceAutomationId: z.string().trim().min(1).nullable().optional(),
     steps: z.array(stepSchema).min(1).max(10).optional(),
   })
   .superRefine((patch, context) => {
