@@ -78,6 +78,24 @@ describe("validateFlowDefinition", () => {
     })).toThrow();
   });
 
+  it("requires message keyword triggers to contain keywords", () => {
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: [] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Hello" }],
+    })).toThrow("Keyword triggers need at least one keyword");
+  });
+
+  it("rejects keywords on any-message triggers", () => {
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "any", keywords: ["hello"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Hello" }],
+    })).toThrow("Any-message triggers cannot include keywords");
+  });
+
   it("accepts and normalizes a version 2 campaign", () => {
     expect(validateFlowDefinition(campaign)).toMatchObject({
       version: 2,
@@ -178,6 +196,18 @@ describe("validateFlowDefinition", () => {
 
   it("accepts a version 2 campaign with zero public replies", () => {
     expect(validateFlowDefinition({ ...campaign, publicReplies: [] })).toMatchObject({ publicReplies: [] });
+  });
+
+  it("requires follow-gate prompt and recheck copy when the gate is enabled", () => {
+    expect(() => validateFlowDefinition({
+      ...campaign,
+      followGate: { required: true, recheckButtonLabel: "I've followed" },
+    })).toThrow("Follow-gated campaigns need a not-following message");
+
+    expect(() => validateFlowDefinition({
+      ...campaign,
+      followGate: { required: true, notFollowingMessage: "Follow this account" },
+    })).toThrow("Follow-gated campaigns need a recheck button label");
   });
 
   it("requires an HTTPS version 2 delivery URL outside development", () => {

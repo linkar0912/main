@@ -15,9 +15,15 @@ export async function POST(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const body = (await request.json()) as { name?: unknown; definition?: unknown };
+    let body: { name?: unknown; definition?: unknown };
+    try {
+      body = (await request.json()) as { name?: unknown; definition?: unknown };
+    } catch {
+      return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
+    }
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    if (name.length > 120) return NextResponse.json({ error: "Name must be 120 characters or fewer" }, { status: 400 });
     const definition = validateFlowDefinition(body.definition);
     const automation = await getRepository().createAutomation(session.workspaceId, { name, definition });
     return NextResponse.json({ data: automation }, { status: 201 });

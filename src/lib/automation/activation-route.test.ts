@@ -71,6 +71,33 @@ describe("PATCH /api/automations/[id] activation", () => {
     await expect(repository.getAutomation("workspace_a", automation.id)).resolves.toMatchObject({ status: "DRAFT" });
   });
 
+  it("returns a structured 400 response for malformed JSON", async () => {
+    const automation = await repository.createAutomation("workspace_a", { name: "Protected", definition: campaignDefinition });
+
+    const response = await PATCH(
+      new Request(`http://localhost/api/automations/${automation.id}`, { method: "PATCH", body: "{" }),
+      { params: Promise.resolve({ id: automation.id }) },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Request body must be valid JSON" });
+  });
+
+  it("rejects an updated name longer than 120 trimmed characters", async () => {
+    const automation = await repository.createAutomation("workspace_a", { name: "Protected", definition: campaignDefinition });
+
+    const response = await PATCH(
+      new Request(`http://localhost/api/automations/${automation.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: `  ${"a".repeat(121)}  ` }),
+      }),
+      { params: Promise.resolve({ id: automation.id }) },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(repository.getAutomation("workspace_a", automation.id)).resolves.toMatchObject({ name: "Protected" });
+  });
+
   it("timestamps and unbinds a non-active next-media automation when it becomes active", async () => {
     const automation = await repository.createAutomation("workspace_a", { name: "Next Reel", definition: campaignDefinition });
     await repository.updateAutomation("workspace_a", automation.id, {

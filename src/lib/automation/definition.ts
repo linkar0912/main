@@ -139,7 +139,7 @@ const flowV1Schema = z
     emailCapture: emailCaptureSchema.optional(),
   })
   .superRefine((flow, context) => {
-    if (flow.trigger.type === "comment") {
+    if (flow.trigger.type === "comment" || flow.trigger.type === "message") {
       if (flow.trigger.match === "keyword" && flow.trigger.keywords.length === 0) {
         context.addIssue({
           code: "custom",
@@ -152,10 +152,14 @@ const flowV1Schema = z
         context.addIssue({
           code: "custom",
           path: ["trigger", "keywords"],
-          message: "Any-comment triggers cannot include keywords",
+          message: flow.trigger.type === "comment"
+            ? "Any-comment triggers cannot include keywords"
+            : "Any-message triggers cannot include keywords",
         });
       }
+    }
 
+    if (flow.trigger.type === "comment") {
       if (flow.actions.some((item) => item.type !== "private_reply")) {
         context.addIssue({
           code: "custom",
@@ -316,6 +320,22 @@ const flowV2Schema = z
         code: "custom",
         path: ["trigger", "keywords"],
         message: "Any-comment triggers cannot include keywords",
+      });
+    }
+
+    if (flow.followGate.required && !flow.followGate.notFollowingMessage) {
+      context.addIssue({
+        code: "custom",
+        path: ["followGate", "notFollowingMessage"],
+        message: "Follow-gated campaigns need a not-following message",
+      });
+    }
+
+    if (flow.followGate.required && !flow.followGate.recheckButtonLabel) {
+      context.addIssue({
+        code: "custom",
+        path: ["followGate", "recheckButtonLabel"],
+        message: "Follow-gated campaigns need a recheck button label",
       });
     }
   });

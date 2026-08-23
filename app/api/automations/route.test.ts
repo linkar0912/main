@@ -44,4 +44,24 @@ describe("POST /api/automations", () => {
     expect(response.status).toBe(401);
     expect(mocks.listAutomations).not.toHaveBeenCalled();
   });
+
+  it("rejects automation names longer than 120 trimmed characters", async () => {
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    const response = await POST(new Request("http://localhost/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: `  ${"a".repeat(121)}  `,
+        definition: {
+          version: 1,
+          trigger: { type: "message", match: "any", keywords: [] },
+          conditions: [],
+          actions: [{ type: "send_text", text: "Hello" }],
+        },
+      }),
+    }));
+
+    expect(response.status).toBe(400);
+    expect(mocks.createAutomation).not.toHaveBeenCalled();
+  });
 });

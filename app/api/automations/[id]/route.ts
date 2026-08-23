@@ -21,10 +21,20 @@ export async function PATCH(request: Request, context: RouteContext) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
-  const body = (await request.json()) as { name?: unknown; status?: unknown; definition?: unknown };
+  let body: { name?: unknown; status?: unknown; definition?: unknown };
+  try {
+    body = (await request.json()) as { name?: unknown; status?: unknown; definition?: unknown };
+  } catch {
+    return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
+  }
   const patch: UpdateAutomationInput = {};
 
-  if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim();
+  if (body.name !== undefined) {
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
+    if (name.length > 120) return NextResponse.json({ error: "Name must be 120 characters or fewer" }, { status: 400 });
+    patch.name = name;
+  }
   if (body.status === "DRAFT" || body.status === "ACTIVE" || body.status === "PAUSED") patch.status = body.status;
   if (body.definition !== undefined) {
     try {
