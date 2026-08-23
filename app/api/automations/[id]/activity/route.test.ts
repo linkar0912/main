@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getRepository: vi.fn(),
   getAutomation: vi.fn(),
   listParticipants: vi.fn(),
+  countParticipantFunnel: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
@@ -88,13 +89,16 @@ describe("GET /api/automations/[id]/activity", () => {
     mocks.getRepository.mockReset();
     mocks.getAutomation.mockReset();
     mocks.listParticipants.mockReset();
+    mocks.countParticipantFunnel.mockReset();
     mocks.getValidatedSession.mockResolvedValue({ email: "owner@example.com", workspaceId: "workspace_a" });
     mocks.getRepository.mockReturnValue({
       getAutomation: mocks.getAutomation,
       listParticipants: mocks.listParticipants,
+      countParticipantFunnel: mocks.countParticipantFunnel,
     });
     mocks.getAutomation.mockResolvedValue({ id: "automation_1", workspaceId: "workspace_a" });
     mocks.listParticipants.mockResolvedValue([]);
+    mocks.countParticipantFunnel.mockResolvedValue({ commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 });
   });
 
   function call(id = "automation_1") {
@@ -120,6 +124,7 @@ describe("GET /api/automations/[id]/activity", () => {
     await expect(response.json()).resolves.toEqual({ error: "Automation not found" });
     expect(mocks.getAutomation).toHaveBeenCalledWith("workspace_a", "automation_from_other_workspace");
     expect(mocks.listParticipants).not.toHaveBeenCalled();
+    expect(mocks.countParticipantFunnel).not.toHaveBeenCalled();
   });
 
   it("returns newest-first participant summaries without token fields or raw identifiers", async () => {
@@ -138,6 +143,7 @@ describe("GET /api/automations/[id]/activity", () => {
     });
     // Repository already returns newest-first; the route must preserve that order.
     mocks.listParticipants.mockResolvedValue([newer, older]);
+    mocks.countParticipantFunnel.mockResolvedValue({ commented: 20_001, openingSent: 15_000, optedIn: 12_000, followed: 8_000, linkSent: 6_000 });
 
     const response = await call();
     const body = await response.json();
@@ -168,9 +174,10 @@ describe("GET /api/automations/[id]/activity", () => {
           finalDeliveryStatus: "SKIPPED",
         },
       ],
-      summary: { commented: 2, openingSent: 2, optedIn: 2, followed: 1, linkSent: 1 },
+      summary: { commented: 20_001, openingSent: 15_000, optedIn: 12_000, followed: 8_000, linkSent: 6_000 },
     });
-    expect(mocks.listParticipants).toHaveBeenCalledWith("workspace_a", "automation_1", 10_000);
+    expect(mocks.countParticipantFunnel).toHaveBeenCalledWith("workspace_a", "automation_1");
+    expect(mocks.listParticipants).toHaveBeenCalledTimes(1);
 
     const raw = JSON.stringify(body);
     expect(raw).not.toContain("must-not-escape");

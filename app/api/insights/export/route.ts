@@ -26,7 +26,12 @@ export async function GET(request: Request) {
     const session = await getValidatedSession(request);
     if (!session) return new Response("Unauthorized", { status: 401 });
 
-    const rows = await getRepository().listRecentParticipants(session.workspaceId, 5_000);
+    const repository = getRepository();
+    const automationId = new URL(request.url).searchParams.get("automationId") || undefined;
+    if (automationId && !await repository.getAutomation(session.workspaceId, automationId)) {
+        return new Response("Automation not found", { status: 404 });
+    }
+    const rows = await repository.listRecentParticipants(session.workspaceId, 5_000, automationId);
     const lines = [CSV_HEADER.join(",")];
     for (const participant of rows) {
         lines.push([

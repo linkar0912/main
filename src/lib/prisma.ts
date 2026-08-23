@@ -603,44 +603,44 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       });
     },
 
-    async countParticipantsPerDay(workspaceId, days) {
+    async countParticipantsPerDay(workspaceId, days, automationId) {
       const since = new Date();
       since.setUTCHours(0, 0, 0, 0);
       since.setUTCDate(since.getUTCDate() - (days - 1));
       const rows = await client.automationParticipant.findMany({
-        where: { workspaceId, createdAt: { gte: since } },
+        where: { workspaceId, ...(automationId ? { automationId } : {}), createdAt: { gte: since } },
         select: { createdAt: true },
       });
       return bucketCountsByDay(rows.map((row) => row.createdAt.toISOString()), days);
     },
 
-    async countExecutionsSentPerDay(workspaceId, days) {
+    async countExecutionsSentPerDay(workspaceId, days, automationId) {
       const since = new Date();
       since.setUTCHours(0, 0, 0, 0);
       since.setUTCDate(since.getUTCDate() - (days - 1));
       const rows = await client.automationExecution.findMany({
-        where: { workspaceId, status: "SENT", createdAt: { gte: since } },
+        where: { workspaceId, ...(automationId ? { automationId } : {}), status: "SENT", createdAt: { gte: since } },
         select: { createdAt: true },
       });
       return bucketCountsByDay(rows.map((row) => row.createdAt.toISOString()), days);
     },
 
-    async countParticipantsByMedia(workspaceId) {
+    async countParticipantsByMedia(workspaceId, automationId) {
       // Three filtered group-bys are clearer and more portable than one raw query.
       const [matchedRows, deliveredRows, clickedRows] = await Promise.all([
         client.automationParticipant.groupBy({
           by: ["sourceMediaId"],
-          where: { workspaceId },
+          where: { workspaceId, ...(automationId ? { automationId } : {}) },
           _count: { _all: true },
         }),
         client.automationParticipant.groupBy({
           by: ["sourceMediaId"],
-          where: { workspaceId, state: "LINK_SENT" },
+          where: { workspaceId, ...(automationId ? { automationId } : {}), state: "LINK_SENT" },
           _count: { _all: true },
         }).catch(() => [] as { sourceMediaId: string; _count: { _all: number } }[]),
         client.automationParticipant.groupBy({
           by: ["sourceMediaId"],
-          where: { workspaceId, NOT: { deliveryClickedAt: null } },
+          where: { workspaceId, ...(automationId ? { automationId } : {}), NOT: { deliveryClickedAt: null } },
           _count: { _all: true },
         }).catch(() => [] as { sourceMediaId: string; _count: { _all: number } }[]),
       ]);
@@ -652,6 +652,26 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         delivered: delivered.get(group.sourceMediaId) ?? 0,
         clicked: clicked.get(group.sourceMediaId) ?? 0,
       }));
+    },
+
+    async countParticipantFunnel(workspaceId, automationId) {
+      const rows = await client.automationParticipant.groupBy({
+        by: ["state", "openingStatus", "followStatus", "finalDeliveryStatus"],
+        where: { workspaceId, automationId },
+        _count: { _all: true },
+      });
+      const result = { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 };
+      const optedInStates = new Set(["OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED", "LINK_SENT"]);
+      const followedStates = new Set(["FOLLOW_VERIFIED", "LINK_SENT"]);
+      for (const row of rows) {
+        const count = row._count._all;
+        result.commented += count;
+        if (row.openingStatus === "SENT") result.openingSent += count;
+        if (optedInStates.has(row.state)) result.optedIn += count;
+        if (row.followStatus === true || followedStates.has(row.state)) result.followed += count;
+        if (row.finalDeliveryStatus === "SENT") result.linkSent += count;
+      }
+      return result;
     },
 
     async getParticipantById(id) {
@@ -1014,9 +1034,9 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapParticipant);
     },
 
-    async listRecentParticipants(workspaceId, limit) {
+    async listRecentParticipants(workspaceId, limit, automationId) {
       const records = await client.automationParticipant.findMany({
-        where: { workspaceId },
+        where: { workspaceId, ...(automationId ? { automationId } : {}) },
         orderBy: [{ createdAt: "desc" }, { id: "asc" }],
         take: limit,
       });

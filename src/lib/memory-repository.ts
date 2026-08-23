@@ -261,24 +261,24 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       ).length;
     },
 
-    async countParticipantsPerDay(workspaceId, days) {
+    async countParticipantsPerDay(workspaceId, days, automationId) {
       const timestamps = [...participants.values()]
-        .filter((participant) => participant.workspaceId === workspaceId)
+        .filter((participant) => participant.workspaceId === workspaceId && (!automationId || participant.automationId === automationId))
         .map((participant) => participant.createdAt);
       return bucketCountsByDay(timestamps, days);
     },
 
-    async countExecutionsSentPerDay(workspaceId, days) {
+    async countExecutionsSentPerDay(workspaceId, days, automationId) {
       const timestamps = [...executions.values()]
-        .filter((execution) => execution.workspaceId === workspaceId && execution.status === "SENT")
+        .filter((execution) => execution.workspaceId === workspaceId && execution.status === "SENT" && (!automationId || execution.automationId === automationId))
         .map((execution) => execution.createdAt);
       return bucketCountsByDay(timestamps, days);
     },
 
-    async countParticipantsByMedia(workspaceId) {
+    async countParticipantsByMedia(workspaceId, automationId) {
       const byMedia = new Map<string, { matched: number; delivered: number; clicked: number }>();
       for (const participant of participants.values()) {
-        if (participant.workspaceId !== workspaceId) continue;
+        if (participant.workspaceId !== workspaceId || (automationId && participant.automationId !== automationId)) continue;
         const entry = byMedia.get(participant.sourceMediaId) ?? { matched: 0, delivered: 0, clicked: 0 };
         entry.matched += 1;
         if (participant.state === "LINK_SENT") entry.delivered += 1;
@@ -286,6 +286,21 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         byMedia.set(participant.sourceMediaId, entry);
       }
       return [...byMedia.entries()].map(([mediaId, counts]) => ({ mediaId, ...counts }));
+    },
+
+    async countParticipantFunnel(workspaceId, automationId) {
+      const result = { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 };
+      const optedInStates = new Set(["OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED", "LINK_SENT"]);
+      const followedStates = new Set(["FOLLOW_VERIFIED", "LINK_SENT"]);
+      for (const participant of participants.values()) {
+        if (participant.workspaceId !== workspaceId || participant.automationId !== automationId) continue;
+        result.commented += 1;
+        if (participant.openingStatus === "SENT") result.openingSent += 1;
+        if (optedInStates.has(participant.state)) result.optedIn += 1;
+        if (participant.followStatus === true || followedStates.has(participant.state)) result.followed += 1;
+        if (participant.finalDeliveryStatus === "SENT") result.linkSent += 1;
+      }
+      return result;
     },
 
     async getParticipantById(id) {
@@ -655,10 +670,10 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       );
     },
 
-    async listRecentParticipants(workspaceId, limit) {
+    async listRecentParticipants(workspaceId, limit, automationId) {
       return copy(
         [...participants.values()]
-          .filter((participant) => participant.workspaceId === workspaceId)
+          .filter((participant) => participant.workspaceId === workspaceId && (!automationId || participant.automationId === automationId))
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
           .slice(0, limit),
       );

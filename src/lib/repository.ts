@@ -291,6 +291,14 @@ export type InvitationRecord = {
 
 export type CreateInvitationInput = Omit<InvitationRecord, "id" | "acceptedAt" | "revokedAt" | "createdAt">;
 
+export type ParticipantFunnelCounts = {
+  commented: number;
+  openingSent: number;
+  optedIn: number;
+  followed: number;
+  linkSent: number;
+};
+
 export interface AutomationRepository {
   ensureWorkspace(workspaceId: string, ownerEmail: string): Promise<void>;
   createUser(input: CreateUserInput): Promise<{ created: boolean; record: UserRecord }>;
@@ -319,14 +327,15 @@ export interface AutomationRepository {
   countExecutionsSentSince(automationId: string, sinceIso: string): Promise<number>;
   countParticipantsCreatedSince(workspaceId: string, sinceIso: string): Promise<number>;
   // Analytics helpers (UTC day buckets over the trailing window).
-  countParticipantsPerDay(workspaceId: string, days: number): Promise<DailyCount[]>;
+  countParticipantsPerDay(workspaceId: string, days: number, automationId?: string): Promise<DailyCount[]>;
   /** Per-automation execution outcome tallies since the given instant (funnels). */
   countExecutionsByStatusPerAutomation(
     workspaceId: string,
     sinceIso: string,
   ): Promise<{ automationId: string; sent: number; failed: number; skipped: number }[]>;
-  countExecutionsSentPerDay(workspaceId: string, days: number): Promise<DailyCount[]>;
-  countParticipantsByMedia(workspaceId: string): Promise<MediaPerformance[]>;
+  countExecutionsSentPerDay(workspaceId: string, days: number, automationId?: string): Promise<DailyCount[]>;
+  countParticipantsByMedia(workspaceId: string, automationId?: string): Promise<MediaPerformance[]>;
+  countParticipantFunnel(workspaceId: string, automationId: string): Promise<ParticipantFunnelCounts>;
   // Click tracking for delivered links.
   getParticipantById(id: string): Promise<AutomationParticipantRecord | null>;
   markDeliveryClicked(id: string, atIso: string): Promise<boolean>;
@@ -371,7 +380,7 @@ export interface AutomationRepository {
   transitionParticipant(id: string, expectedStates: ParticipantState[], patch: ParticipantPatch): Promise<AutomationParticipantRecord | null>;
   bindNextMedia(workspaceId: string, automationId: string, mediaId: string, publishedAt: string): Promise<boolean>;
   listParticipants(workspaceId: string, automationId: string, limit: number): Promise<AutomationParticipantRecord[]>;
-  listRecentParticipants(workspaceId: string, limit: number): Promise<AutomationParticipantRecord[]>;
+  listRecentParticipants(workspaceId: string, limit: number, automationId?: string): Promise<AutomationParticipantRecord[]>;
   expireParticipantsByInstagramAccount(igAccountId: string, reason: string): Promise<number>;
   deleteParticipantsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
   expireStaleParticipants(now: string, reason: string): Promise<number>;

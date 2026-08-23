@@ -20,10 +20,10 @@ function dayLabel(day: string): string {
 export function InsightsPanel({ automationId }: { automationId?: string }) {
   const [insights, setInsights] = useState<InsightsPayload | null>(null);
   const [error, setError] = useState("");
+  const query = automationId ? `?automationId=${encodeURIComponent(automationId)}` : "";
 
   useEffect(() => {
     let active = true;
-    const query = automationId ? `?automationId=${encodeURIComponent(automationId)}` : "";
     fetch(`/api/insights${query}`)
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as InsightsPayload & { error?: string };
@@ -91,7 +91,7 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
       <section className="panel insights-panel" aria-label="Top posts">
         <div className="panel-heading">
           <div><p className="eyebrow">Per-post performance</p><h2>Top posts</h2></div>
-          <a className="button button-secondary" href="/api/insights/export" download>
+          <a className="button button-secondary" href={`/api/insights/export${query}`} download>
             <Download size={15} /> Export CSV
           </a>
         </div>

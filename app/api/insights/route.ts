@@ -15,11 +15,14 @@ export async function GET(request: Request) {
 
     const repository = getRepository();
     const automationId = new URL(request.url).searchParams.get("automationId") ?? undefined;
+    if (automationId && !await repository.getAutomation(session.workspaceId, automationId)) {
+        return NextResponse.json({ error: "Automation not found" }, { status: 404 });
+    }
     const [funnel, participantsPerDay, sentPerDay, mediaPerformance] = await Promise.all([
         repository.countParticipantsByState(session.workspaceId, automationId || undefined),
-        repository.countParticipantsPerDay(session.workspaceId, TIMESERIES_DAYS),
-        repository.countExecutionsSentPerDay(session.workspaceId, TIMESERIES_DAYS),
-        repository.countParticipantsByMedia(session.workspaceId),
+        repository.countParticipantsPerDay(session.workspaceId, TIMESERIES_DAYS, automationId),
+        repository.countExecutionsSentPerDay(session.workspaceId, TIMESERIES_DAYS, automationId),
+        repository.countParticipantsByMedia(session.workspaceId, automationId),
     ]);
 
     return NextResponse.json({

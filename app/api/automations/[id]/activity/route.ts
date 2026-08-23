@@ -6,7 +6,6 @@ import type { AutomationParticipantRecord } from "@/src/lib/repository";
 export const runtime = "nodejs";
 
 const PARTICIPANT_ACTIVITY_LIMIT = 100;
-const PARTICIPANT_SUMMARY_LIMIT = 10_000;
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -91,12 +90,12 @@ export async function GET(request: Request, context: RouteContext) {
   const automation = await repository.getAutomation(session.workspaceId, id);
   if (!automation) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
 
-  const [participants, allParticipants] = await Promise.all([
+  const [participants, summary] = await Promise.all([
     repository.listParticipants(session.workspaceId, id, PARTICIPANT_ACTIVITY_LIMIT),
-    repository.listParticipants(session.workspaceId, id, PARTICIPANT_SUMMARY_LIMIT),
+    repository.countParticipantFunnel(session.workspaceId, id),
   ]);
   return NextResponse.json({
     data: participants.map(toActivitySummary),
-    summary: computeFunnelSummary(allParticipants),
+    summary,
   });
 }

@@ -376,6 +376,48 @@ describe("memory repository", () => {
     expect(participants.every((participant) => participant.workspaceId === "workspace_a" && participant.automationId === "automation_1")).toBe(true);
   });
 
+  it("scopes recent participants, media performance, and funnel aggregation to one automation", async () => {
+    const repository = createMemoryRepository();
+    await repository.createParticipant({
+      ...participantInput,
+      state: "LINK_SENT",
+      openingStatus: "SENT",
+      followStatus: true,
+      finalDeliveryStatus: "SENT",
+      deliveryClickedAt: "2026-08-23T10:00:00.000Z",
+    });
+    await repository.createParticipant({
+      ...participantInput,
+      sourceCommentId: "comment_2",
+      sourceMediaId: "media_2",
+      state: "FOLLOW_REQUIRED",
+      openingStatus: "SENT",
+      followStatus: false,
+    });
+    await repository.createParticipant({
+      ...participantInput,
+      automationId: "automation_2",
+      sourceCommentId: "comment_3",
+      sourceMediaId: "media_other",
+      state: "LINK_SENT",
+      openingStatus: "SENT",
+      followStatus: true,
+      finalDeliveryStatus: "SENT",
+    });
+
+    expect((await repository.listRecentParticipants("workspace_a", 10, "automation_1")).map((row) => row.automationId))
+      .toEqual(["automation_1", "automation_1"]);
+    expect((await repository.countParticipantsByMedia("workspace_a", "automation_1")).map((row) => row.mediaId).sort())
+      .toEqual(["media_1", "media_2"]);
+    expect(await repository.countParticipantFunnel("workspace_a", "automation_1")).toEqual({
+      commented: 2,
+      openingSent: 2,
+      optedIn: 2,
+      followed: 1,
+      linkSent: 1,
+    });
+  });
+
   it("binds exactly one post published after next-media activation", async () => {
     const repository = createMemoryRepository();
     const automation = await repository.createAutomation("workspace_a", { name: "Next Reel", definition: campaignDefinition });
