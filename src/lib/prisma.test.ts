@@ -124,3 +124,101 @@ describe("sequence enrollment tenancy", () => {
     expect(enrollmentCreate).not.toHaveBeenCalled();
   });
 });
+
+function fakeOutboundDeliveryRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "delivery_1",
+    deliveryKey: "automation:automation_1:event:comment_1:action:0",
+    workspaceId: "workspace_a",
+    kind: "CLASSIC_ACTION",
+    recipientId: "scoped_user_1",
+    instagramAccountId: "ig_123",
+    automationId: "automation_1",
+    participantId: null,
+    sequenceEnrollmentId: null,
+    broadcastId: null,
+    payload: { text: "Original message" },
+    state: "PENDING",
+    retryable: false,
+    resultCode: null,
+    claimOwner: null,
+    claimExpiresAt: null,
+    attemptCount: 0,
+    providerMessageId: null,
+    lastError: null,
+    createdAt: new Date("2026-08-23T10:00:00.000Z"),
+    updatedAt: new Date("2026-08-23T10:00:00.000Z"),
+    sentAt: null,
+    ...overrides,
+  };
+}
+
+describe("Prisma outbound delivery ledger", () => {
+  it("claims only pending or retryable failed records", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const findUniqueOrThrow = vi.fn().mockResolvedValue(fakeOutboundDeliveryRecord({
+      state: "CLAIMED",
+      claimOwner: "worker_a",
+      claimExpiresAt: new Date("2026-08-23T10:05:00.000Z"),
+      attemptCount: 1,
+    }));
+    const client = {
+      outboundDelivery: { updateMany, findUniqueOrThrow },
+    } as unknown as typeof prisma;
+    const repository = createPrismaRepository(client);
+
+    await expect(repository.claimOutboundDelivery(
+      "automation:automation_1:event:comment_1:action:0",
+      "worker_a",
+      "2026-08-23T10:05:00.000Z",
+    )).resolves.toMatchObject({ claimed: true, record: { state: "CLAIMED", attemptCount: 1 } });
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        deliveryKey: "automation:automation_1:event:comment_1:action:0",
+        OR: [{ state: "PENDING" }, { state: "FAILED", retryable: true }],
+      },
+      data: {
+        state: "CLAIMED",
+        retryable: false,
+        claimOwner: "worker_a",
+        claimExpiresAt: new Date("2026-08-23T10:05:00.000Z"),
+        attemptCount: { increment: 1 },
+      },
+    });
+  });
+
+  it("uses an atomic SQL reservation and returns whether a slot was claimed", async () => {
+    const queryRaw = vi.fn().mockResolvedValue([{ reserved: 2 }]);
+    const client = { $queryRaw: queryRaw } as unknown as typeof prisma;
+    const repository = createPrismaRepository(client);
+
+    await expect(repository.claimAutomationSendSlots(
+      "automation_1",
+      "2026-08-23",
+      2,
+      3,
+    )).resolves.toBe(true);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects invalid quota requests before touching PostgreSQL", async () => {
+    const queryRaw = vi.fn();
+    const client = { $queryRaw: queryRaw } as unknown as typeof prisma;
+    const repository = createPrismaRepository(client);
+
+    await expect(repository.claimAutomationSendSlots(
+      "automation_1",
+      "2026-08-23",
+      0,
+      3,
+    )).rejects.toThrow("amount must be a positive integer");
+    await expect(repository.claimAutomationSendSlots(
+      "automation_1",
+      "not-a-date",
+      1,
+      3,
+    )).rejects.toThrow("utcDate must use YYYY-MM-DD");
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+});

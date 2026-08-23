@@ -34,6 +34,8 @@ import type {
   BroadcastRecord,
   BroadcastSegment,
   MessagingWindow,
+  EnsureOutboundDeliveryInput,
+  OutboundDeliveryRecord,
 } from "./repository";
 import { InstagramAccountOwnershipError } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
@@ -62,10 +64,35 @@ function copy<T>(value: T): T {
   return structuredClone(value);
 }
 
+function validatePositiveInteger(value: number, name: string): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+}
+
+function validateUtcDate(utcDate: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(utcDate)) {
+    throw new Error("utcDate must use YYYY-MM-DD");
+  }
+  const parsed = new Date(`${utcDate}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== utcDate) {
+    throw new Error("utcDate must use YYYY-MM-DD");
+  }
+}
+
+function validateQuotaRequest(utcDate: string, amount: number, limit: number): void {
+  validateUtcDate(utcDate);
+  validatePositiveInteger(amount, "amount");
+  validatePositiveInteger(limit, "limit");
+  if (limit < amount) throw new Error("limit must be greater than or equal to amount");
+}
+
 export function createMemoryRepository(seed: AutomationRecord[] = []): AutomationRepository {
   const automations = new Map(seed.map((automation) => [automation.id, copy(automation)]));
   const connections = new Map<string, InstagramConnectionRecord>();
   const executions = new Map<string, ExecutionRecord>();
+  const outboundDeliveries = new Map<string, OutboundDeliveryRecord>();
+  const automationDailySendCounters = new Map<string, number>();
   const deletionRequests = new Map<string, DataDeletionRequestRecord>();
   const participants = new Map<string, AutomationParticipantRecord>();
   const participantIdsBySource = new Map<string, string>();
@@ -619,6 +646,129 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return [...executions.values()].some(
         (record) => record.workspaceId === workspaceId && record.dedupeKey === dedupeKey,
       );
+    },
+
+    async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
+      const existing = outboundDeliveries.get(input.deliveryKey);
+      if (existing) return copy(existing);
+      const timestamp = now();
+      const record: OutboundDeliveryRecord = {
+        ...copy(input),
+        id: createId("delivery"),
+        state: "PENDING",
+        retryable: false,
+        attemptCount: 0,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      outboundDeliveries.set(record.deliveryKey, record);
+      return copy(record);
+    },
+
+    async getOutboundDelivery(deliveryKey) {
+      const record = outboundDeliveries.get(deliveryKey);
+      return record ? copy(record) : null;
+    },
+
+    async claimOutboundDelivery(deliveryKey, owner, leaseUntil) {
+      const record = outboundDeliveries.get(deliveryKey);
+      if (!record) throw new Error("Outbound delivery not found");
+      if (record.state !== "PENDING" && !(record.state === "FAILED" && record.retryable)) {
+        return { claimed: false, record: copy(record) };
+      }
+      const claimed: OutboundDeliveryRecord = {
+        ...record,
+        state: "CLAIMED",
+        retryable: false,
+        resultCode: undefined,
+        claimOwner: owner,
+        claimExpiresAt: leaseUntil,
+        attemptCount: record.attemptCount + 1,
+        lastError: undefined,
+        updatedAt: now(),
+      };
+      outboundDeliveries.set(deliveryKey, claimed);
+      return { claimed: true, record: copy(claimed) };
+    },
+
+    async completeOutboundDelivery(deliveryKey, owner, providerMessageId, sentAt) {
+      const record = outboundDeliveries.get(deliveryKey);
+      if (record?.state !== "CLAIMED" || record.claimOwner !== owner) return false;
+      outboundDeliveries.set(deliveryKey, {
+        ...record,
+        state: "SENT",
+        retryable: false,
+        resultCode: "DELIVERED",
+        claimOwner: undefined,
+        claimExpiresAt: undefined,
+        providerMessageId,
+        lastError: undefined,
+        sentAt,
+        updatedAt: now(),
+      });
+      return true;
+    },
+
+    async failOutboundDelivery(deliveryKey, owner, error, retryable, resultCode) {
+      const record = outboundDeliveries.get(deliveryKey);
+      if (record?.state !== "CLAIMED" || record.claimOwner !== owner) return false;
+      outboundDeliveries.set(deliveryKey, {
+        ...record,
+        state: "FAILED",
+        retryable,
+        resultCode,
+        claimOwner: undefined,
+        claimExpiresAt: undefined,
+        lastError: error,
+        updatedAt: now(),
+      });
+      return true;
+    },
+
+    async markOutboundDeliveryUnknown(deliveryKey, owner, error) {
+      const record = outboundDeliveries.get(deliveryKey);
+      if (record?.state !== "CLAIMED" || (owner !== undefined && record.claimOwner !== owner)) {
+        return false;
+      }
+      outboundDeliveries.set(deliveryKey, {
+        ...record,
+        state: "UNKNOWN",
+        retryable: false,
+        resultCode: "AMBIGUOUS",
+        claimOwner: undefined,
+        claimExpiresAt: undefined,
+        lastError: error,
+        updatedAt: now(),
+      });
+      return true;
+    },
+
+    async listExpiredDeliveryClaims(nowIso, limit) {
+      return copy([...outboundDeliveries.values()]
+        .filter((record) =>
+          record.state === "CLAIMED"
+          && record.claimExpiresAt !== undefined
+          && record.claimExpiresAt <= nowIso)
+        .sort((left, right) =>
+          (left.claimExpiresAt ?? "").localeCompare(right.claimExpiresAt ?? ""))
+        .slice(0, Math.max(0, limit)));
+    },
+
+    async claimAutomationSendSlots(automationId, utcDate, amount, limit) {
+      validateQuotaRequest(utcDate, amount, limit);
+      const key = `${automationId}:${utcDate}`;
+      const reserved = automationDailySendCounters.get(key) ?? 0;
+      if (reserved + amount > limit) return false;
+      automationDailySendCounters.set(key, reserved + amount);
+      return true;
+    },
+
+    async releaseAutomationSendSlots(automationId, utcDate, amount) {
+      validatePositiveInteger(amount, "amount");
+      validateUtcDate(utcDate);
+      const key = `${automationId}:${utcDate}`;
+      const reserved = automationDailySendCounters.get(key) ?? 0;
+      automationDailySendCounters.set(key, Math.max(0, reserved - amount));
     },
 
     async createParticipant(input: CreateParticipantInput) {

@@ -40,6 +40,16 @@ const participantInput = {
   matchedKeyword: "guide",
 };
 
+const outboundDeliveryInput = {
+  deliveryKey: "automation:automation_1:event:comment_1:action:0",
+  workspaceId: "workspace_a",
+  kind: "CLASSIC_ACTION" as const,
+  recipientId: "scoped_user_1",
+  instagramAccountId: "ig_123",
+  automationId: "automation_1",
+  payload: { text: "Original message" },
+};
+
 describe("memory repository", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -274,6 +284,108 @@ describe("memory repository", () => {
       claim.dispatchOwner,
     )).toBe(true);
     expect(await repository.getExecution(claim.workspaceId, claim.dedupeKey)).toBeNull();
+  });
+
+  it("preserves the first outbound payload and permits only one claim owner", async () => {
+    const repository = createMemoryRepository();
+    const ensured = await repository.ensureOutboundDelivery(outboundDeliveryInput);
+    const duplicate = await repository.ensureOutboundDelivery({
+      ...outboundDeliveryInput,
+      payload: { text: "Edited message" },
+    });
+
+    expect(duplicate.id).toBe(ensured.id);
+    expect(duplicate.payload).toEqual({ text: "Original message" });
+
+    const lease = "2026-08-23T10:05:00.000Z";
+    const [first, second] = await Promise.all([
+      repository.claimOutboundDelivery(outboundDeliveryInput.deliveryKey, "worker_a", lease),
+      repository.claimOutboundDelivery(outboundDeliveryInput.deliveryKey, "worker_b", lease),
+    ]);
+
+    expect([first.claimed, second.claimed].filter(Boolean)).toHaveLength(1);
+    expect((first.claimed ? first : second).record).toMatchObject({
+      state: "CLAIMED",
+      attemptCount: 1,
+    });
+  });
+
+  it("enforces owner-checked outbound terminal transitions", async () => {
+    const repository = createMemoryRepository();
+    await repository.ensureOutboundDelivery(outboundDeliveryInput);
+    await repository.claimOutboundDelivery(
+      outboundDeliveryInput.deliveryKey,
+      "worker_a",
+      "2026-08-23T10:05:00.000Z",
+    );
+
+    expect(await repository.completeOutboundDelivery(
+      outboundDeliveryInput.deliveryKey,
+      "worker_b",
+      "provider_wrong",
+      "2026-08-23T10:01:00.000Z",
+    )).toBe(false);
+    expect(await repository.completeOutboundDelivery(
+      outboundDeliveryInput.deliveryKey,
+      "worker_a",
+      "provider_1",
+      "2026-08-23T10:01:00.000Z",
+    )).toBe(true);
+    await expect(repository.claimOutboundDelivery(
+      outboundDeliveryInput.deliveryKey,
+      "worker_c",
+      "2026-08-23T10:10:00.000Z",
+    )).resolves.toMatchObject({ claimed: false, record: { state: "SENT" } });
+  });
+
+  it("reclaims only retryable failures and never automatically reclaims UNKNOWN", async () => {
+    const repository = createMemoryRepository();
+    await repository.ensureOutboundDelivery(outboundDeliveryInput);
+    await repository.claimOutboundDelivery(
+      outboundDeliveryInput.deliveryKey,
+      "worker_a",
+      "2026-08-23T10:05:00.000Z",
+    );
+    expect(await repository.failOutboundDelivery(
+      outboundDeliveryInput.deliveryKey,
+      "worker_a",
+      "Meta throttled the request",
+      true,
+      "RETRYABLE_REJECTION",
+    )).toBe(true);
+    await expect(repository.claimOutboundDelivery(
+      outboundDeliveryInput.deliveryKey,
+      "worker_b",
+      "2026-08-23T10:10:00.000Z",
+    )).resolves.toMatchObject({ claimed: true, record: { attemptCount: 2 } });
+
+    expect(await repository.markOutboundDeliveryUnknown(
+      outboundDeliveryInput.deliveryKey,
+      "worker_b",
+      "Provider result was ambiguous",
+    )).toBe(true);
+    await expect(repository.claimOutboundDelivery(
+      outboundDeliveryInput.deliveryKey,
+      "worker_c",
+      "2026-08-23T10:15:00.000Z",
+    )).resolves.toMatchObject({ claimed: false, record: { state: "UNKNOWN" } });
+  });
+
+  it("lists expired outbound claims without reclaiming them", async () => {
+    const repository = createMemoryRepository();
+    await repository.ensureOutboundDelivery(outboundDeliveryInput);
+    await repository.claimOutboundDelivery(
+      outboundDeliveryInput.deliveryKey,
+      "worker_a",
+      "2026-08-23T10:05:00.000Z",
+    );
+
+    expect(await repository.listExpiredDeliveryClaims(
+      "2026-08-23T10:05:00.000Z",
+      10,
+    )).toMatchObject([{ deliveryKey: outboundDeliveryInput.deliveryKey, state: "CLAIMED" }]);
+    expect((await repository.getOutboundDelivery(outboundDeliveryInput.deliveryKey))?.state)
+      .toBe("CLAIMED");
   });
 
   it("deduplicates a source comment across matching automations", async () => {

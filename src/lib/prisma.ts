@@ -30,6 +30,8 @@ import type {
   DueSequenceSend,
   BroadcastRecord,
   MessagingWindow,
+  EnsureOutboundDeliveryInput,
+  OutboundDeliveryRecord,
 } from "./repository";
 import { InstagramAccountOwnershipError } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
@@ -152,6 +154,79 @@ function mapExecution(record: {
     providerRecipientId: record.providerRecipientId ?? undefined,
     createdAt: record.createdAt.toISOString(),
   };
+}
+
+function mapOutboundDelivery(record: {
+  id: string;
+  deliveryKey: string;
+  workspaceId: string;
+  kind: string;
+  recipientId: string | null;
+  instagramAccountId: string | null;
+  automationId: string | null;
+  participantId: string | null;
+  sequenceEnrollmentId: string | null;
+  broadcastId: string | null;
+  payload: unknown;
+  state: string;
+  retryable: boolean;
+  resultCode: string | null;
+  claimOwner: string | null;
+  claimExpiresAt: Date | null;
+  attemptCount: number;
+  providerMessageId: string | null;
+  lastError: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  sentAt: Date | null;
+}): OutboundDeliveryRecord {
+  return {
+    id: record.id,
+    deliveryKey: record.deliveryKey,
+    workspaceId: record.workspaceId,
+    kind: record.kind as OutboundDeliveryRecord["kind"],
+    recipientId: record.recipientId ?? undefined,
+    instagramAccountId: record.instagramAccountId ?? undefined,
+    automationId: record.automationId ?? undefined,
+    participantId: record.participantId ?? undefined,
+    sequenceEnrollmentId: record.sequenceEnrollmentId ?? undefined,
+    broadcastId: record.broadcastId ?? undefined,
+    payload: record.payload as Record<string, unknown>,
+    state: record.state as OutboundDeliveryRecord["state"],
+    retryable: record.retryable,
+    resultCode: record.resultCode as OutboundDeliveryRecord["resultCode"],
+    claimOwner: record.claimOwner ?? undefined,
+    claimExpiresAt: record.claimExpiresAt?.toISOString(),
+    attemptCount: record.attemptCount,
+    providerMessageId: record.providerMessageId ?? undefined,
+    lastError: record.lastError ?? undefined,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    sentAt: record.sentAt?.toISOString(),
+  };
+}
+
+function validatePositiveInteger(value: number, name: string): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+}
+
+function validateUtcDate(utcDate: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(utcDate)) {
+    throw new Error("utcDate must use YYYY-MM-DD");
+  }
+  const parsed = new Date(`${utcDate}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== utcDate) {
+    throw new Error("utcDate must use YYYY-MM-DD");
+  }
+}
+
+function validateQuotaRequest(utcDate: string, amount: number, limit: number): void {
+  validateUtcDate(utcDate);
+  validatePositiveInteger(amount, "amount");
+  validatePositiveInteger(limit, "limit");
+  if (limit < amount) throw new Error("limit must be greater than or equal to amount");
 }
 
 function mapParticipant(record: {
@@ -964,6 +1039,140 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async hasExecution(workspaceId, dedupeKey) {
       return Boolean(await client.automationExecution.findFirst({ where: { workspaceId, dedupeKey }, select: { id: true } }));
+    },
+
+    async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
+      const existing = await client.outboundDelivery.findUnique({
+        where: { deliveryKey: input.deliveryKey },
+      });
+      if (existing) return mapOutboundDelivery(existing);
+      try {
+        const record = await client.outboundDelivery.create({
+          data: {
+            id: createId("delivery"),
+            ...input,
+            payload: input.payload as Prisma.InputJsonValue,
+          },
+        });
+        return mapOutboundDelivery(record);
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+          throw error;
+        }
+        const winner = await client.outboundDelivery.findUniqueOrThrow({
+          where: { deliveryKey: input.deliveryKey },
+        });
+        return mapOutboundDelivery(winner);
+      }
+    },
+
+    async getOutboundDelivery(deliveryKey) {
+      const record = await client.outboundDelivery.findUnique({ where: { deliveryKey } });
+      return record ? mapOutboundDelivery(record) : null;
+    },
+
+    async claimOutboundDelivery(deliveryKey, owner, leaseUntil) {
+      const updated = await client.outboundDelivery.updateMany({
+        where: {
+          deliveryKey,
+          OR: [{ state: "PENDING" }, { state: "FAILED", retryable: true }],
+        },
+        data: {
+          state: "CLAIMED",
+          retryable: false,
+          claimOwner: owner,
+          claimExpiresAt: new Date(leaseUntil),
+          attemptCount: { increment: 1 },
+        },
+      });
+      const record = await client.outboundDelivery.findUniqueOrThrow({ where: { deliveryKey } });
+      return { claimed: updated.count === 1, record: mapOutboundDelivery(record) };
+    },
+
+    async completeOutboundDelivery(deliveryKey, owner, providerMessageId, sentAt) {
+      const updated = await client.outboundDelivery.updateMany({
+        where: { deliveryKey, state: "CLAIMED", claimOwner: owner },
+        data: {
+          state: "SENT",
+          retryable: false,
+          resultCode: "DELIVERED",
+          claimOwner: null,
+          claimExpiresAt: null,
+          providerMessageId: providerMessageId ?? null,
+          lastError: null,
+          sentAt: new Date(sentAt),
+        },
+      });
+      return updated.count === 1;
+    },
+
+    async failOutboundDelivery(deliveryKey, owner, error, retryable, resultCode) {
+      const updated = await client.outboundDelivery.updateMany({
+        where: { deliveryKey, state: "CLAIMED", claimOwner: owner },
+        data: {
+          state: "FAILED",
+          retryable,
+          resultCode,
+          claimOwner: null,
+          claimExpiresAt: null,
+          lastError: error,
+        },
+      });
+      return updated.count === 1;
+    },
+
+    async markOutboundDeliveryUnknown(deliveryKey, owner, error) {
+      const updated = await client.outboundDelivery.updateMany({
+        where: {
+          deliveryKey,
+          state: "CLAIMED",
+          ...(owner === undefined ? {} : { claimOwner: owner }),
+        },
+        data: {
+          state: "UNKNOWN",
+          retryable: false,
+          resultCode: "AMBIGUOUS",
+          claimOwner: null,
+          claimExpiresAt: null,
+          lastError: error,
+        },
+      });
+      return updated.count === 1;
+    },
+
+    async listExpiredDeliveryClaims(nowIso, limit) {
+      const records = await client.outboundDelivery.findMany({
+        where: { state: "CLAIMED", claimExpiresAt: { lte: new Date(nowIso) } },
+        orderBy: { claimExpiresAt: "asc" },
+        take: Math.max(0, limit),
+      });
+      return records.map(mapOutboundDelivery);
+    },
+
+    async claimAutomationSendSlots(automationId, utcDate, amount, limit) {
+      validateQuotaRequest(utcDate, amount, limit);
+      const rows = await client.$queryRaw<Array<{ reserved: number }>>`
+        INSERT INTO "AutomationDailySendCounter" ("automationId", "utcDate", "reserved", "updatedAt")
+        VALUES (${automationId}, ${utcDate}::date, ${amount}, NOW())
+        ON CONFLICT ("automationId", "utcDate") DO UPDATE
+        SET "reserved" = "AutomationDailySendCounter"."reserved" + EXCLUDED."reserved",
+            "updatedAt" = NOW()
+        WHERE "AutomationDailySendCounter"."reserved" + EXCLUDED."reserved" <= ${limit}
+        RETURNING "reserved"
+      `;
+      return rows.length === 1;
+    },
+
+    async releaseAutomationSendSlots(automationId, utcDate, amount) {
+      validateUtcDate(utcDate);
+      validatePositiveInteger(amount, "amount");
+      await client.$executeRaw`
+        UPDATE "AutomationDailySendCounter"
+        SET "reserved" = GREATEST(0, "reserved" - ${amount}),
+            "updatedAt" = NOW()
+        WHERE "automationId" = ${automationId}
+          AND "utcDate" = ${utcDate}::date
+      `;
     },
 
     async createParticipant(input: CreateParticipantInput) {
