@@ -4,8 +4,10 @@ test.describe("unauthenticated visitor", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test("workspace requires authentication", async ({ page, request }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/login\?next=%2F$/);
+    for (const path of ["/", "/profile", "/help"]) {
+      await page.goto(path);
+      await expect(page).toHaveURL(new RegExp(`/login\\?next=${encodeURIComponent(path)}$`));
+    }
 
     const response = await request.get("/api/automations");
     expect(response.status()).toBe(401);
@@ -32,15 +34,15 @@ test("member can sign up and sign back in", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("replyconnect-e2e-password");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
 });
 
 test("dashboard and automation list are reachable", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Linkar", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  await expect(page.locator(".sidebar-brand")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Performance over time" })).toBeVisible();
-  await page.getByRole("link", { name: "My automations" }).first().click();
+  await page.getByRole("link", { name: "Automations", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Automations" })).toBeVisible();
 });
 

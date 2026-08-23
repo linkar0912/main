@@ -86,7 +86,18 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
 
   return {
     async ensureWorkspace(workspaceId, ownerEmail) {
-      if (ownerEmail) memberWorkspacesByEmail.set(ownerEmail.toLowerCase(), workspaceId);
+      if (!ownerEmail) return;
+      const email = ownerEmail.toLowerCase();
+      memberWorkspacesByEmail.set(email, workspaceId);
+      const key = `${workspaceId}:${email}`;
+      if (!membersByEmail.has(key)) {
+        membersByEmail.set(key, {
+          id: createId("member"),
+          workspaceId,
+          email,
+          role: "OWNER",
+        });
+      }
     },
 
     async createUser(input: CreateUserInput) {

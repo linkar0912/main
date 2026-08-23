@@ -35,8 +35,6 @@ export function SettingsScreen() {
   const [health, setHealth] = useState<ConnectionHealth | null>(null);
   const [mode, setMode] = useState<"demo" | "configured">("demo");
   const [metaState] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("meta") ?? "");
-  const [accountSaved] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("accountSaved") ?? "");
-  const [accountError] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("accountError") ?? "");
   const [disconnectingId, setDisconnectingId] = useState("");
   const [disconnectError, setDisconnectError] = useState("");
   const [team, setTeam] = useState<TeamOverview | null>(null);
@@ -259,20 +257,15 @@ export function SettingsScreen() {
 
         <div className="settings-grid">
           <section className="panel settings-panel" aria-label="Account security">
-            <div className="panel-heading"><div><p className="eyebrow">Account</p><h2>Sign-in & security</h2></div><LockKeyhole size={21} /></div>
-            {accountSaved === "password" && <p className="form-success" role="status">Password updated.</p>}
-            {accountError && <p className="form-error" role="alert">{accountError === "current" ? "That current password is incorrect." : accountError === "password" ? "The new password must be at least 12 characters." : "That action is not available."}</p>}
-            <form action="/api/account" method="post" className="account-form">
-              <input type="hidden" name="action" value="change-password" />
-              <label className="field"><span>Current password</span><input name="currentPassword" type="password" autoComplete="current-password" required /></label>
-              <label className="field"><span>New password</span><input name="newPassword" type="password" autoComplete="new-password" minLength={12} required /></label>
-              <p className="muted">At least 12 characters. Your other devices stay signed in.</p>
-              <button className="button button-secondary" type="submit">Update password</button>
-            </form>
-            <form action="/api/account" method="post">
-              <input type="hidden" name="action" value="logout-all" />
-              <button className="button button-secondary" type="submit">Sign out all devices</button>
-            </form>
+            <div className="settings-hero">
+              <span className="settings-icon"><LockKeyhole size={20} /></span>
+              <div className="settings-copy">
+                <p className="eyebrow">Account</p>
+                <h2>Sign-in & security</h2>
+                <p>Password, devices and identity now live in your profile.</p>
+              </div>
+              <Link className="button button-secondary settings-action" href="/profile">Open my profile</Link>
+            </div>
           </section>
 
           <section className="panel settings-panel" aria-label="Messaging hours">

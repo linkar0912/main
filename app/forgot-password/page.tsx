@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { KeyRound } from "lucide-react";
+import { PRODUCT_NAME } from "@/src/lib/branding";
+import { InstagramGlyph } from "@/src/components/instagram-glyph";
 
-export const metadata = { title: "Forgot password · Linkar" };
+export const metadata = { title: `Forgot password · ${PRODUCT_NAME}` };
 
 export default async function ForgotPasswordPage({
     searchParams,
@@ -9,22 +12,38 @@ export default async function ForgotPasswordPage({
 }) {
     const params = await searchParams;
     return (
-        <main className="auth-page">
-            <h1>Reset your password</h1>
-            {params.sent ? (
-                <p role="status">
-                    If an account exists for that email, a reset link is on its way. The link expires in one hour.
-                </p>
-            ) : (
-                <form method="post" action="/api/auth/forgot-password">
-                    <label htmlFor="email">Email</label>
-                    <input id="email" name="email" type="email" required autoComplete="email" />
-                    <button type="submit">Send reset link</button>
-                </form>
-            )}
-            <p>
-                Remembered it? <Link href="/login">Back to login</Link>
-            </p>
+        <main className="auth-shell">
+            <section className="auth-hero" aria-hidden>
+                <div className="auth-hero-brand">
+                    <span className="brand-mark"><InstagramGlyph size={17} /></span>
+                    {PRODUCT_NAME}
+                </div>
+                <div className="auth-hero-copy">
+                    <h1>Locked out? It happens.</h1>
+                    <p>Request a reset link and you are back in your control room within minutes.</p>
+                </div>
+                <p className="auth-hero-foot">Reset links expire after one hour.</p>
+            </section>
+            <section className="auth-main">
+                <div className="login-card">
+                    <div className="login-brand"><span className="brand-mark"><InstagramGlyph size={17} /></span><strong>{PRODUCT_NAME}</strong></div>
+                    <p className="eyebrow">Account recovery</p>
+                    <h1>Reset your password</h1>
+                    {params.sent ? (
+                        <p role="status">
+                            If an account exists for that email, a reset link is on its way. The link expires in one hour.
+                        </p>
+                    ) : (
+                        <form method="post" action="/api/auth/forgot-password" className="login-form">
+                            <label className="field" htmlFor="email"><span>Email</span>
+                                <input id="email" name="email" type="email" required autoComplete="email" />
+                            </label>
+                            <button className="button button-primary" type="submit"><KeyRound size={15} /> Send reset link</button>
+                        </form>
+                    )}
+                    <p className="muted">Remembered it? <Link href="/login">Back to login</Link></p>
+                </div>
+            </section>
         </main>
     );
 }

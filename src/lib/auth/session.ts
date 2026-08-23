@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { getServerEnv } from "../env";
 import { createId } from "../id";
 import { getRepository } from "../repository-provider";
+import type { AutomationRepository } from "../repository";
 
 // Async scrypt keeps the Node event loop free while hashing (~50–100ms of CPU work);
 // the login/signup routes serve other requests concurrently.
@@ -166,17 +167,26 @@ export function getSessionFromRequest(request: Request): AppSession | null {
   );
 }
 
+type SessionStateRepository = Pick<AutomationRepository, "isSessionRevoked" | "getUserTokenVersion">;
+
+/** Validate a parsed session against server-side logout and token-version state. */
+export async function validateSessionState(
+  session: AppSession | null,
+  repository: SessionStateRepository,
+): Promise<AppSession | null> {
+  if (!session?.sid) return session;
+  if (await repository.isSessionRevoked(session.sid)) return null;
+  const currentVersion = await repository.getUserTokenVersion(session.userId);
+  if (currentVersion === null || (session.ver !== undefined && session.ver !== currentVersion)) return null;
+  return session;
+}
+
 // Full validation: signature + expiry (readSessionToken) plus server-side
 // revocation state — single-session denylist and per-user token version.
 // Routes that mutate state should use this instead of getSessionFromRequest.
 export async function getValidatedSession(request: Request): Promise<AppSession | null> {
   const session = getSessionFromRequest(request);
-  if (!session?.sid) return session;
-  const repository = getRepository();
-  if (await repository.isSessionRevoked(session.sid)) return null;
-  const currentVersion = await repository.getUserTokenVersion(session.userId);
-  if (currentVersion === null || (session.ver !== undefined && session.ver !== currentVersion)) return null;
-  return session;
+  return validateSessionState(session, getRepository());
 }
 
 export function safeNextPath(value: string | null | undefined): string {

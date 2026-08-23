@@ -7,6 +7,7 @@ import {
   safeNextPath,
   createLoginAttemptLimiter,
   sessionCookieName,
+  validateSessionState,
 } from "./session";
 
 describe("owner authentication", () => {
@@ -117,5 +118,20 @@ describe("owner authentication", () => {
     limiter.recordFailure("203.0.113.10", startedAt);
     expect(limiter.isAllowed("203.0.113.10", startedAt)).toBe(false);
     expect(limiter.isAllowed("203.0.113.10", new Date(startedAt.getTime() + 60_001))).toBe(true);
+  });
+
+  it("rejects a signed session after it is revoked or its user token version changes", async () => {
+    const session = { userId: "user_owner", workspaceId: "workspace_owner", sid: "session_1", ver: 2 };
+    const revokedRepository = {
+      isSessionRevoked: async () => true,
+      getUserTokenVersion: async () => 2,
+    };
+    const bumpedRepository = {
+      isSessionRevoked: async () => false,
+      getUserTokenVersion: async () => 3,
+    };
+
+    expect(await validateSessionState(session, revokedRepository)).toBeNull();
+    expect(await validateSessionState(session, bumpedRepository)).toBeNull();
   });
 });

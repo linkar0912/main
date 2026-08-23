@@ -3,8 +3,16 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, Plus, Workflow, Zap } from "lucide-react";
-import { AppShell } from "./app-shell";
+import {
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  CheckCircle2,
+  Plus,
+  Workflow,
+  Zap,
+} from "lucide-react";
+import { AppShell, useAccountIdentity } from "./app-shell";
 import { useAutomations } from "./automation-list";
 import type { AutomationRecord } from "@/src/lib/repository";
 
@@ -45,6 +53,10 @@ function flowTriggerLabel(automation: AutomationRecord): string {
   if (trigger?.type === "first_contact") return "Active · first-contact welcome";
   if (trigger?.type === "story_mention") return "Active · story mentions";
   return "Active · comment replies";
+}
+
+function automationStatusLabel(status: AutomationRecord["status"]): string {
+  return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
 function DeltaPill({ delta }: { delta?: Delta | null }) {
@@ -103,11 +115,110 @@ function VitalsChart({ points }: { points: DayPoint[] }) {
 
 const FLOW_TONES = ["flow-a", "flow-b", "flow-c"] as const;
 
+function displayNameFromEmail(email: string): string {
+  const handle = email.split("@")[0] ?? "";
+  const words = handle.replace(/[^a-zA-Z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "there";
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+function DashboardGreeting() {
+  const { email } = useAccountIdentity();
+  return (
+    <header className="page-header home-greeting">
+      <div>
+        <p className="eyebrow">Home</p>
+        <h1>Hello, {displayNameFromEmail(email)}!</h1>
+        <p className="muted page-lede">
+          Welcome back — here’s how your replies performed over the last 14 days.
+        </p>
+      </div>
+      <Link className="button button-primary" href="/automations/new">
+        <Plus size={17} /> Create automation
+      </Link>
+    </header>
+  );
+}
+
+/** ManyChat-style first-steps checklist, derived from real workspace state. */
+function OnboardingGuide({ automations, hasConnection, loading }: { automations: AutomationRecord[]; hasConnection: boolean | null; loading: boolean }) {
+  if (hasConnection === null || loading) return null;
+  const steps = [
+    {
+      key: "connect",
+      done: hasConnection === true,
+      title: "Connect your Instagram account",
+      hint: "Link a professional account so replies can be sent.",
+      href: "/settings",
+      icon: Zap,
+    },
+    {
+      key: "create",
+      done: automations.length > 0,
+      title: "Create your first automation",
+      hint: "Start from a template or build one from scratch.",
+      href: "/automations/new",
+      icon: Plus,
+    },
+    {
+      key: "activate",
+      done: automations.some((automation) => automation.status === "ACTIVE"),
+      title: "Activate it and go live",
+      hint: "Active flows reply to real comments and DMs instantly.",
+      href: "/automations",
+      icon: Workflow,
+    },
+  ];
+  const completed = steps.filter((step) => step.done).length;
+  const percent = Math.round((completed / steps.length) * 100);
+  if (completed === steps.length) return null;
+
+  return (
+    <section className="onboarding-panel" aria-label="First steps">
+      <div className="onboarding-head">
+        <div>
+          <h2>Start here</h2>
+          <p>Three quick steps to get your first useful reply live.</p>
+        </div>
+        <div className="onboarding-progress">
+          <strong>{completed}/{steps.length} complete</strong>
+          <span className="onboarding-track">
+            <span className="onboarding-fill" style={{ width: `${percent}%` }} />
+          </span>
+        </div>
+      </div>
+      <ul className="onboarding-steps" data-stagger>
+        {steps.map((step) => {
+          const Icon = step.icon;
+          return (
+          <li key={step.key}>
+            <Link className={`onboarding-step ${step.done ? "is-done" : ""}`} href={step.href}>
+              <span className="onboarding-icon">
+                <Icon size={18} />
+              </span>
+              <span className="onboarding-copy">
+                <strong>{step.title}</strong>
+                <small>{step.hint}</small>
+              </span>
+              <span className="onboarding-status">
+                {step.done ? <><CheckCircle2 size={13} /> Complete</> : <>Quick setup</>}
+              </span>
+              <ArrowRight className="onboarding-arrow" size={15} />
+            </Link>
+          </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export function DashboardScreen() {
   const { automations, loading } = useAutomations();
   const [demoMode, setDemoMode] = useState(false);
   const [capturedCount, setCapturedCount] = useState<number | null>(null);
   const [insights, setInsights] = useState<InsightsPayload | null>(null);
+  const [hasConnection, setHasConnection] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetch("/api/health")
@@ -124,20 +235,13 @@ export function DashboardScreen() {
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: InsightsPayload | null) => setInsights(payload))
       .catch(() => undefined);
+    fetch("/api/meta/connection")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: unknown[] } | null) => setHasConnection((payload?.data?.length ?? 0) > 0))
+      .catch(() => undefined);
   }, []);
 
   const activeCount = automations.filter((a) => a.status === "ACTIVE").length;
-
-  useEffect(() => {
-    void fetch("/api/health")
-      .then((response) => response.json())
-      .then((health: { mode?: string }) => setDemoMode(health.mode === "demo"))
-      .catch(() => setDemoMode(false));
-    void fetch("/api/contacts")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { count: number } } | null) => setCapturedCount(payload?.data?.count ?? 0))
-      .catch(() => undefined);
-  }, []);
 
   const sentPerDay = insights?.timeseries?.sentPerDay ?? [];
   const participantsPerDay = insights?.timeseries?.participantsPerDay ?? [];
@@ -156,19 +260,6 @@ export function DashboardScreen() {
   return (
     <AppShell>
       <div className="page-wrap">
-        <header className="page-header">
-          <div>
-            <p className="eyebrow">Overview</p>
-            <h1>Dashboard</h1>
-            <p className="muted page-lede">
-              Welcome back — here’s how your replies performed over the last 14 days.
-            </p>
-          </div>
-          <Link className="button button-primary" href="/automations/new">
-            <Plus size={17} /> Create automation
-          </Link>
-        </header>
-
         {demoMode ? (
           <div className="demo-banner">
             <span className="signal-dot" />
@@ -179,6 +270,10 @@ export function DashboardScreen() {
             </div>
           </div>
         ) : null}
+
+        <DashboardGreeting />
+
+        <OnboardingGuide automations={automations} hasConnection={hasConnection} loading={loading} />
 
         <section className="panel perf-panel" aria-label="Performance over time">
           <div className="panel-heading">
@@ -255,20 +350,20 @@ export function DashboardScreen() {
             ) : (
               <ul className="flow-list">
                 {flowRows.map((automation, index) => {
-                  const paused = automation.status !== "ACTIVE";
+                  const inactive = automation.status !== "ACTIVE";
                   const tone = FLOW_TONES[index % FLOW_TONES.length];
                   return (
                     <li key={automation.id}>
                       <Link
-                        className={`flow-chip ${tone} ${paused ? "is-paused" : ""}`}
+                        className={`flow-chip ${tone} ${inactive ? "is-paused" : ""}`}
                         href={`/automations/${automation.id}/edit`}
                       >
                         <span className="flow-chip-icon">
-                          {paused ? <Workflow size={16} /> : <Zap size={16} />}
+                          {inactive ? <Workflow size={16} /> : <Zap size={16} />}
                         </span>
                         <span className="flow-meta">
                           <strong>{automation.name}</strong>
-                          <small>{paused ? "Paused" : flowTriggerLabel(automation)}</small>
+                          <small>{inactive ? automationStatusLabel(automation.status) : flowTriggerLabel(automation)}</small>
                         </span>
                       </Link>
                     </li>

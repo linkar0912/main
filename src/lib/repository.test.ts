@@ -45,6 +45,17 @@ describe("memory repository", () => {
     vi.useRealTimers();
   });
 
+  it("creates an owner membership when provisioning a workspace", async () => {
+    const repository = createMemoryRepository();
+
+    await repository.ensureWorkspace("workspace_a", "owner@example.com");
+
+    expect(await repository.getMemberRole("workspace_a", "owner@example.com")).toBe("OWNER");
+    expect(await repository.listMembers("workspace_a")).toMatchObject([
+      { workspaceId: "workspace_a", email: "owner@example.com", role: "OWNER" },
+    ]);
+  });
+
   it("lists automations newest-updated first with a deterministic ID tie-breaker", async () => {
     const base = {
       workspaceId: "workspace_a",
