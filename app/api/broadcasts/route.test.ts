@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => ({
   getMessagingWindow: vi.fn(),
   incrementBroadcastCounters: vi.fn(),
   finalizeBroadcastIfDone: vi.fn(),
+  ensureOutboundDelivery: vi.fn(),
+  claimOutboundDelivery: vi.fn(),
+  failOutboundDelivery: vi.fn(),
+  reconcileBroadcastCounters: vi.fn(),
   enqueueBroadcastSends: vi.fn(),
 }));
 
@@ -24,6 +28,10 @@ vi.mock("@/src/lib/repository-provider", () => ({
     getMessagingWindow: mocks.getMessagingWindow,
     incrementBroadcastCounters: mocks.incrementBroadcastCounters,
     finalizeBroadcastIfDone: mocks.finalizeBroadcastIfDone,
+    ensureOutboundDelivery: mocks.ensureOutboundDelivery,
+    claimOutboundDelivery: mocks.claimOutboundDelivery,
+    failOutboundDelivery: mocks.failOutboundDelivery,
+    reconcileBroadcastCounters: mocks.reconcileBroadcastCounters,
   }),
 }));
 vi.mock("@/src/lib/queue", () => ({
@@ -43,6 +51,10 @@ describe("/api/broadcasts session validation", () => {
     mocks.getMessagingWindow.mockReset().mockResolvedValue(null);
     mocks.incrementBroadcastCounters.mockReset();
     mocks.finalizeBroadcastIfDone.mockReset();
+    mocks.ensureOutboundDelivery.mockReset().mockImplementation(async (input) => ({ ...input, id: input.deliveryKey, state: "PENDING" }));
+    mocks.claimOutboundDelivery.mockReset().mockResolvedValue({ claimed: true, record: { state: "CLAIMED" } });
+    mocks.failOutboundDelivery.mockReset().mockResolvedValue(true);
+    mocks.reconcileBroadcastCounters.mockReset().mockResolvedValue({ total: 2, sent: 0, failed: 1, skipped: 0, pending: 1 });
     mocks.enqueueBroadcastSends.mockReset();
   });
 
@@ -84,7 +96,9 @@ describe("/api/broadcasts session validation", () => {
     }));
 
     expect(response.status).toBe(502);
-    expect(mocks.incrementBroadcastCounters).toHaveBeenCalledWith("broadcast_1", { failed: 1 });
-    expect(mocks.finalizeBroadcastIfDone).toHaveBeenCalledWith("workspace_1", "broadcast_1");
+    expect(mocks.ensureOutboundDelivery).toHaveBeenCalledTimes(2);
+    expect(mocks.failOutboundDelivery).toHaveBeenCalledTimes(1);
+    expect(mocks.reconcileBroadcastCounters).toHaveBeenCalledWith("workspace_1", "broadcast_1");
+    expect(mocks.incrementBroadcastCounters).not.toHaveBeenCalled();
   });
 });

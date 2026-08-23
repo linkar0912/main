@@ -34,6 +34,7 @@ if (!env.redisUrl) {
           client,
           tokenEncryptionKey: env.metaTokenEncryptionKey,
           finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
+          claimLeaseMs: env.dispatchLeaseMs,
         };
         return processBroadcastSend(payload, getRepository(), options);
       }

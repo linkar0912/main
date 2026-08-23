@@ -684,4 +684,41 @@ describe("memory repository", () => {
       vi.useRealTimers();
     }
   });
+
+  it("derives broadcast counters from recipient delivery states", async () => {
+    const repository = createMemoryRepository();
+    const broadcast = await repository.createBroadcast("workspace_a", {
+      name: "News",
+      text: "Hello",
+      segment: "all_contacts",
+      total: 4,
+    });
+    const deliveries = ["sent", "failed", "skipped", "pending"].map((recipient) => ({
+      deliveryKey: `broadcast:${broadcast.id}:ig_1:${recipient}`,
+      workspaceId: "workspace_a",
+      broadcastId: broadcast.id,
+      instagramAccountId: "ig_1",
+      recipientId: recipient,
+      kind: "BROADCAST_RECIPIENT" as const,
+      payload: { type: "text", text: "Hello" },
+    }));
+    for (const delivery of deliveries) await repository.ensureOutboundDelivery(delivery);
+
+    await repository.claimOutboundDelivery(deliveries[0].deliveryKey, "sent_owner", "2026-08-23T10:05:00.000Z");
+    await repository.completeOutboundDelivery(deliveries[0].deliveryKey, "sent_owner", "provider_1", "2026-08-23T10:01:00.000Z");
+    await repository.claimOutboundDelivery(deliveries[1].deliveryKey, "failed_owner", "2026-08-23T10:05:00.000Z");
+    await repository.failOutboundDelivery(deliveries[1].deliveryKey, "failed_owner", "rejected", false, "PROVIDER_REJECTED");
+    await repository.claimOutboundDelivery(deliveries[2].deliveryKey, "skipped_owner", "2026-08-23T10:05:00.000Z");
+    await repository.failOutboundDelivery(deliveries[2].deliveryKey, "skipped_owner", "suppressed", false, "SUPPRESSED");
+
+    await expect(repository.reconcileBroadcastCounters("workspace_a", broadcast.id))
+      .resolves.toEqual({ total: 4, sent: 1, failed: 1, skipped: 1, pending: 1 });
+    expect(await repository.getBroadcast("workspace_a", broadcast.id)).toMatchObject({
+      status: "RUNNING",
+      total: 4,
+      sent: 1,
+      failed: 1,
+      skipped: 1,
+    });
+  });
 });

@@ -1310,6 +1310,37 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       broadcasts.set(id, { ...broadcast, status: "COMPLETED", completedAt: now() });
     },
 
+    async reconcileBroadcastCounters(workspaceId, broadcastId) {
+      const rows = [...outboundDeliveries.values()].filter((delivery) =>
+        delivery.workspaceId === workspaceId && delivery.broadcastId === broadcastId);
+      const counters = { total: rows.length, sent: 0, failed: 0, skipped: 0, pending: 0 };
+      for (const delivery of rows) {
+        if (delivery.state === "SENT" || delivery.resultCode === "DELIVERED") {
+          counters.sent += 1;
+        } else if (delivery.resultCode === "SUPPRESSED" || delivery.resultCode === "WINDOW_CLOSED") {
+          counters.skipped += 1;
+        } else if (delivery.state === "FAILED" && !delivery.retryable) {
+          counters.failed += 1;
+        } else {
+          counters.pending += 1;
+        }
+      }
+      const broadcast = broadcasts.get(broadcastId);
+      if (broadcast?.workspaceId === workspaceId) {
+        const completed = counters.pending === 0;
+        broadcasts.set(broadcastId, {
+          ...broadcast,
+          total: counters.total,
+          sent: counters.sent,
+          failed: counters.failed,
+          skipped: counters.skipped,
+          status: completed ? "COMPLETED" : "RUNNING",
+          completedAt: completed ? (broadcast.completedAt ?? now()) : undefined,
+        });
+      }
+      return counters;
+    },
+
     async getMessagingWindow(workspaceId) {
       return copy(messagingWindows.get(workspaceId) ?? null);
     },

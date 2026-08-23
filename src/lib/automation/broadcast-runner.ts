@@ -1,66 +1,122 @@
-import type { AutomationRepository } from "../repository";
+import type { AutomationRepository, OutboundDeliveryResultCode } from "../repository";
 import { unsealSecret } from "../security/secrets";
 import type { MetaConnection } from "../meta/types";
 import { MetaApiError } from "../meta/client";
 import { logger } from "../logger";
 import type { BroadcastSendJob } from "../queue";
+import { executeOutboundDelivery } from "./outbound-delivery";
 
 export type BroadcastRunnerOptions = {
-  client?: { sendDirectMessage: (connection: MetaConnection, recipientId: string, message: { type: "text"; text: string }) => Promise<unknown> };
+  client?: {
+    sendDirectMessage: (
+      connection: MetaConnection,
+      recipientId: string,
+      message: { type: "text"; text: string },
+    ) => Promise<unknown>;
+  };
   tokenEncryptionKey?: string;
   finalAttempt?: boolean;
+  claimLeaseMs?: number;
 };
 
-/**
- * Delivers one broadcast DM. Suppressed contacts are skipped (counted, not messaged);
- * retryable Meta failures throw so BullMQ retries the job; the final attempt records
- * the failure permanently. Counters are incremented atomically and completion is
- * finalized once every recipient has been accounted for.
- */
+async function markKnownBroadcastOutcome(
+  repository: AutomationRepository,
+  job: BroadcastSendJob,
+  error: string,
+  resultCode: Extract<
+    OutboundDeliveryResultCode,
+    "SUPPRESSED" | "WINDOW_CLOSED" | "PROVIDER_REJECTED"
+  >,
+): Promise<void> {
+  const owner = `broadcast_guard:${job.deliveryKey}`;
+  const claim = await repository.claimOutboundDelivery(
+    job.deliveryKey,
+    owner,
+    new Date(Date.now() + 30_000).toISOString(),
+  );
+  if (claim.claimed) {
+    await repository.failOutboundDelivery(
+      job.deliveryKey,
+      owner,
+      error,
+      false,
+      resultCode,
+    );
+  }
+}
+
+/** Delivers one broadcast recipient through its pre-created ledger row. */
 export async function processBroadcastSend(
-  payload: BroadcastSendJob,
+  job: BroadcastSendJob,
   repository: AutomationRepository,
   options: BroadcastRunnerOptions,
 ): Promise<void> {
-  const contact = await repository.getContact(payload.workspaceId, payload.igAccountId, payload.igScopedUserId);
+  const persisted = await repository.getOutboundDelivery(job.deliveryKey);
+  if (!persisted || persisted.broadcastId !== job.broadcastId || persisted.workspaceId !== job.workspaceId) {
+    throw new Error("Broadcast delivery record is missing or does not match the job");
+  }
 
+  const contact = await repository.getContact(job.workspaceId, job.igAccountId, job.igScopedUserId);
   if (!contact || contact.suppressedAt) {
-    await repository.incrementBroadcastCounters(payload.broadcastId, { skipped: 1 });
-    await repository.finalizeBroadcastIfDone(payload.workspaceId, payload.broadcastId);
+    await markKnownBroadcastOutcome(repository, job, "Recipient is suppressed", "SUPPRESSED");
+    await repository.reconcileBroadcastCounters(job.workspaceId, job.broadcastId);
     return;
   }
 
-  const mapping = await repository.findWorkspaceByInstagramAccount(payload.igAccountId);
-  if (!mapping || mapping.workspaceId !== payload.workspaceId) {
-    await repository.incrementBroadcastCounters(payload.broadcastId, { failed: 1 });
-    await repository.finalizeBroadcastIfDone(payload.workspaceId, payload.broadcastId);
+  const mapping = await repository.findWorkspaceByInstagramAccount(job.igAccountId);
+  if (!mapping || mapping.workspaceId !== job.workspaceId) {
+    await markKnownBroadcastOutcome(
+      repository,
+      job,
+      "Instagram account mapping is unavailable",
+      "PROVIDER_REJECTED",
+    );
+    await repository.reconcileBroadcastCounters(job.workspaceId, job.broadcastId);
     return;
   }
 
   if (!options.client || !options.tokenEncryptionKey) {
-    // No Meta transport configured — count as skipped so the broadcast still completes.
-    await repository.incrementBroadcastCounters(payload.broadcastId, { skipped: 1 });
-    await repository.finalizeBroadcastIfDone(payload.workspaceId, payload.broadcastId);
+    await markKnownBroadcastOutcome(repository, job, "Meta delivery is disabled", "SUPPRESSED");
+    await repository.reconcileBroadcastCounters(job.workspaceId, job.broadcastId);
     return;
   }
 
-  try {
-    const connection: MetaConnection = {
-      igUserId: mapping.connection.igUserId,
-      accessToken: unsealSecret(mapping.connection.accessTokenEncrypted, options.tokenEncryptionKey),
-    };
-    await options.client.sendDirectMessage(connection, payload.igScopedUserId, { type: "text", text: payload.text });
-    await repository.incrementBroadcastCounters(payload.broadcastId, { sent: 1 });
-    await repository.finalizeBroadcastIfDone(payload.workspaceId, payload.broadcastId);
-  } catch (error) {
-    if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
-      throw error; // BullMQ retries with backoff
-    }
-    logger.error("Broadcast DM failed", {
-      broadcastId: payload.broadcastId,
-      error: error instanceof Error ? error.message : String(error),
+  const connection: MetaConnection = {
+    igUserId: mapping.connection.igUserId,
+    accessToken: unsealSecret(mapping.connection.accessTokenEncrypted, options.tokenEncryptionKey),
+  };
+  const delivery = await executeOutboundDelivery({
+    deliveryKey: persisted.deliveryKey,
+    workspaceId: persisted.workspaceId,
+    broadcastId: persisted.broadcastId,
+    instagramAccountId: persisted.instagramAccountId,
+    recipientId: persisted.recipientId,
+    kind: "BROADCAST_RECIPIENT",
+    payload: persisted.payload,
+    claimLeaseMs: options.claimLeaseMs ?? 30_000,
+    repository,
+  }, async (payload) => {
+    const response = await options.client!.sendDirectMessage(
+      connection,
+      job.igScopedUserId,
+      payload as { type: "text"; text: string },
+    );
+    const messageId = typeof response === "object" && response !== null
+      && "message_id" in response && typeof response.message_id === "string"
+      ? response.message_id
+      : undefined;
+    return { id: messageId };
+  });
+
+  await repository.reconcileBroadcastCounters(job.workspaceId, job.broadcastId);
+
+  if (delivery.status === "FAILED" && delivery.retryable && !options.finalAttempt) {
+    throw new MetaApiError(delivery.error, 503, true);
+  }
+  if (delivery.status === "FAILED" || delivery.status === "UNKNOWN") {
+    logger.warn("Broadcast recipient delivery did not complete", {
+      broadcastId: job.broadcastId,
+      status: delivery.status,
     });
-    await repository.incrementBroadcastCounters(payload.broadcastId, { failed: 1 });
-    await repository.finalizeBroadcastIfDone(payload.workspaceId, payload.broadcastId);
   }
 }

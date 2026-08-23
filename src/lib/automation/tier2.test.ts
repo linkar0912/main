@@ -201,8 +201,18 @@ describe("broadcasts", () => {
 
     const client = dmClient();
     for (const recipient of [{ ig: "lead_1" }, { ig: "lead_2" }]) {
+      const deliveryKey = `broadcast:${broadcast.id}:ig_1:${recipient.ig}`;
+      await repository.ensureOutboundDelivery({
+        deliveryKey,
+        workspaceId: "workspace_a",
+        broadcastId: broadcast.id,
+        instagramAccountId: "ig_1",
+        recipientId: recipient.ig,
+        kind: "BROADCAST_RECIPIENT",
+        payload: { type: "text", text: "Big news!" },
+      });
       await processBroadcastSend(
-        { broadcastId: broadcast.id, workspaceId: "workspace_a", broadcastName: "Blast", text: "Big news!", igAccountId: "ig_1", igScopedUserId: recipient.ig },
+        { deliveryKey, broadcastId: broadcast.id, workspaceId: "workspace_a", igAccountId: "ig_1", igScopedUserId: recipient.ig },
         repository,
         { client, tokenEncryptionKey: TOKEN_KEY },
       );

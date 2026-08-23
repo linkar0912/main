@@ -4,6 +4,8 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 import { enqueueBroadcastSends, isQueueConfigured, type BroadcastSendJob } from "@/src/lib/queue";
 import { isQuietNow, msUntilQuietEnd } from "@/src/lib/messaging-window";
 import { z } from "zod";
+import { deliveryKeys } from "@/src/lib/automation/outbound-delivery";
+import { createId } from "@/src/lib/id";
 
 export const runtime = "nodejs";
 
@@ -59,27 +61,63 @@ export async function POST(request: Request) {
     return NextResponse.json({ data: broadcast }, { status: 201 });
   }
 
+  const deliveries = await Promise.all(recipients.map((recipient) =>
+    repository.ensureOutboundDelivery({
+      deliveryKey: deliveryKeys.broadcastRecipient(
+        broadcast.id,
+        recipient.instagramAccountId,
+        recipient.igScopedUserId,
+      ),
+      workspaceId: session.workspaceId,
+      broadcastId: broadcast.id,
+      instagramAccountId: recipient.instagramAccountId,
+      recipientId: recipient.igScopedUserId,
+      kind: "BROADCAST_RECIPIENT",
+      payload: { type: "text", text: input.text },
+    })));
+
   const messagingWindow = await repository.getMessagingWindow(session.workspaceId).catch(() => null);
   const now = new Date();
   const quietHoldMs = messagingWindow && isQuietNow(now, messagingWindow)
     ? msUntilQuietEnd(now, messagingWindow)
     : 0;
 
-  const jobs: BroadcastSendJob[] = recipients.map((recipient) => ({
+  const jobs: BroadcastSendJob[] = recipients.map((recipient, index) => ({
+    deliveryKey: deliveries[index].deliveryKey,
     broadcastId: broadcast.id,
     workspaceId: session.workspaceId,
-    broadcastName: broadcast.name,
-    text: input.text,
     igAccountId: recipient.instagramAccountId,
     igScopedUserId: recipient.igScopedUserId,
   }));
 
   const enqueueResult = await enqueueBroadcastSends(jobs, quietHoldMs);
   if (enqueueResult.rejected.length > 0) {
-    // The queue was reachable a moment ago but some jobs did not land. Account for the
-    // shortfall so the broadcast can still finalize instead of hanging at RUNNING.
-    await repository.incrementBroadcastCounters(broadcast.id, { failed: enqueueResult.rejected.length });
-    await repository.finalizeBroadcastIfDone(session.workspaceId, broadcast.id);
+    const deliveryKeyByRecipient = new Map(jobs.map((job) => [
+      `${job.igAccountId}:${job.igScopedUserId}`,
+      job.deliveryKey,
+    ]));
+    for (const recipient of enqueueResult.rejected) {
+      const deliveryKey = deliveryKeyByRecipient.get(
+        `${recipient.igAccountId}:${recipient.igScopedUserId}`,
+      );
+      if (!deliveryKey) continue;
+      const owner = createId("broadcast_enqueue_failure");
+      const claim = await repository.claimOutboundDelivery(
+        deliveryKey,
+        owner,
+        new Date(Date.now() + 30_000).toISOString(),
+      );
+      if (claim.claimed) {
+        await repository.failOutboundDelivery(
+          deliveryKey,
+          owner,
+          "Broadcast recipient could not be queued",
+          false,
+          "PROVIDER_REJECTED",
+        );
+      }
+    }
+    await repository.reconcileBroadcastCounters(session.workspaceId, broadcast.id);
     return NextResponse.json(
       { error: "Some recipients could not be queued. Delivery is partial — check the queue.", data: broadcast },
       { status: 502 },

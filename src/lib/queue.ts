@@ -86,10 +86,9 @@ export async function enqueueWebhookEvents(events: NormalizedEvent[]): Promise<n
 // Broadcasts: one DM per contact, fanned out as staggered jobs (~1/second) so a
 // blast never hammers Meta's per-account messaging limits.
 export type BroadcastSendJob = {
+  deliveryKey: string;
   broadcastId: string;
   workspaceId: string;
-  broadcastName: string;
-  text: string;
   igAccountId: string;
   igScopedUserId: string;
 };

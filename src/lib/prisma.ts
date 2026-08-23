@@ -1715,6 +1715,43 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       await client.broadcast.update({ where: { id: broadcast.id }, data: { status: "COMPLETED", completedAt: new Date() } });
     },
 
+    async reconcileBroadcastCounters(workspaceId, broadcastId) {
+      return client.$transaction(async (transaction) => {
+        const groups = await transaction.outboundDelivery.groupBy({
+          by: ["state", "resultCode"],
+          where: { workspaceId, broadcastId },
+          _count: { _all: true },
+        });
+        const counters = { total: 0, sent: 0, failed: 0, skipped: 0, pending: 0 };
+        for (const group of groups) {
+          const count = group._count._all;
+          counters.total += count;
+          if (group.state === "SENT" || group.resultCode === "DELIVERED") {
+            counters.sent += count;
+          } else if (group.resultCode === "SUPPRESSED" || group.resultCode === "WINDOW_CLOSED") {
+            counters.skipped += count;
+          } else if (group.state === "FAILED" && group.resultCode !== "RETRYABLE_REJECTION") {
+            counters.failed += count;
+          } else {
+            counters.pending += count;
+          }
+        }
+        const completed = counters.pending === 0;
+        await transaction.broadcast.updateMany({
+          where: { id: broadcastId, workspaceId },
+          data: {
+            total: counters.total,
+            sent: counters.sent,
+            failed: counters.failed,
+            skipped: counters.skipped,
+            status: completed ? "COMPLETED" : "RUNNING",
+            completedAt: completed ? new Date() : null,
+          },
+        });
+        return counters;
+      });
+    },
+
     async getMessagingWindow(workspaceId) {
       const row = await client.workspace.findUnique({
         where: { id: workspaceId },

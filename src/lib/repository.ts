@@ -598,6 +598,10 @@ export interface AutomationRepository {
   listBroadcasts(workspaceId: string, limit: number): Promise<BroadcastRecord[]>;
   incrementBroadcastCounters(id: string, delta: { sent?: number; failed?: number; skipped?: number }): Promise<void>;
   finalizeBroadcastIfDone(workspaceId: string, id: string): Promise<void>;
+  reconcileBroadcastCounters(
+    workspaceId: string,
+    broadcastId: string,
+  ): Promise<{ total: number; sent: number; failed: number; skipped: number; pending: number }>;
   // Workspace messaging quiet hours (null when disabled).
   getMessagingWindow(workspaceId: string): Promise<MessagingWindow | null>;
   setMessagingWindow(workspaceId: string, window: MessagingWindow | null): Promise<void>;

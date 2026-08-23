@@ -19,18 +19,16 @@ const { enqueueBroadcastSends } = await import("./queue");
 
 const jobs = [
   {
+    deliveryKey: "broadcast:broadcast_1:ig_account_a:recipient_1",
     broadcastId: "broadcast_1",
     workspaceId: "workspace_1",
-    broadcastName: "News",
-    text: "Hello",
     igAccountId: "ig_account_a",
     igScopedUserId: "recipient_1",
   },
   {
+    deliveryKey: "broadcast:broadcast_1:ig_account_b:recipient_1",
     broadcastId: "broadcast_1",
     workspaceId: "workspace_1",
-    broadcastName: "News",
-    text: "Hello",
     igAccountId: "ig_account_b",
     igScopedUserId: "recipient_1",
   },
