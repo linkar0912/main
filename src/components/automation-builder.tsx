@@ -3,11 +3,8 @@
 import { useState, type FormEvent } from "react";
 import {
   AlertTriangle,
-  ArrowRight,
   Check,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleHelp,
   Film,
   Link2,
@@ -20,9 +17,9 @@ import {
   UserCheck,
 } from "lucide-react";
 import type { FlowAction, FlowCondition, FlowDefinition, FlowDefinitionV1, FlowDefinitionV2, MediaSnapshot } from "@/src/lib/automation/types";
-import { PRODUCT_MARK } from "@/src/lib/branding";
 import { MediaPicker } from "./media-picker";
 import { FollowGateFields } from "./follow-gate-fields";
+import { InstagramPreview, type DmBubble, type PreviewView } from "./instagram-preview";
 
 type AutomationBuilderProps = {
   automationId?: string;
@@ -165,9 +162,42 @@ function AutomationBuilderV1({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [activeStep, setActiveStep] = useState(0);
+  const [previewView, setPreviewView] = useState<PreviewView>(initialDefinition.trigger.type === "comment" ? "post" : "dm");
 
   const usesTextTrigger = triggerType === "comment" || triggerType === "message";
   const allowedActionTypes = classicActionOptions(triggerType);
+  const hasEmailStep = triggerType !== "comment";
+
+  const wizardSteps = [
+    "trigger",
+    ...(usesTextTrigger ? ["condition"] : []),
+    "action",
+    ...(hasEmailStep ? ["email"] : []),
+    "guardrails",
+    "review",
+  ] as const;
+  const wizardLabels: Record<string, string> = {
+    trigger: "Trigger",
+    condition: "Condition",
+    action: actions.length > 1 ? "Actions" : "Action",
+    email: "Email collector",
+    guardrails: "Guardrails",
+    review: "Review",
+  };
+  const clampedStep = Math.min(activeStep, wizardSteps.length - 1);
+  const stepIndex = (key: string) => wizardSteps.indexOf(key as (typeof wizardSteps)[number]);
+
+  function previewViewForStep(key: string): PreviewView {
+    if (triggerType !== "comment") return "dm";
+    return key === "trigger" || key === "condition" ? "post" : "dm";
+  }
+
+  function goToStep(next: number) {
+    const clamped = Math.max(0, Math.min(wizardSteps.length - 1, next));
+    setActiveStep(clamped);
+    setPreviewView(previewViewForStep(wizardSteps[clamped]));
+  }
 
   function updateAction(index: number, patch: Partial<FlowAction>) {
     setActions((current) => current.map((action, actionIndex) => {
@@ -189,6 +219,8 @@ function AutomationBuilderV1({
 
   function changeTriggerType(value: ClassicTriggerType) {
     setTriggerType(value);
+    setActiveStep(0);
+    setPreviewView(value === "comment" ? "post" : "dm");
     if (value === "comment") {
       setActions((current) => (current.every((action) => action.type === "private_reply") ? current : [newClassicAction("private_reply")]));
       setTriggerMatch((current) => current);
@@ -333,6 +365,15 @@ function AutomationBuilderV1({
     }
   }
 
+  const dmMessages: DmBubble[] = actions.flatMap((action, index) => {
+    const bubbles: DmBubble[] = [];
+    if (action.text.trim()) bubbles.push({ id: `action-${index}`, from: "bot", text: action.text });
+    if (action.type === "send_button" && action.buttonLabel.trim()) {
+      bubbles.push({ id: `action-${index}-button`, from: "tap", button: action.buttonLabel });
+    }
+    return bubbles;
+  });
+
   return (
     <form className="builder-layout" onSubmit={save}>
       <div className="builder-main">
@@ -356,6 +397,21 @@ function AutomationBuilderV1({
           />
         </label>
 
+        <nav className="wizard-progress" aria-label="Builder steps">
+          {wizardSteps.map((key, index) => (
+            <button
+              type="button"
+              key={key}
+              className={`wizard-progress-step${index === clampedStep ? " is-active" : ""}${index < clampedStep ? " is-done" : ""}`}
+              onClick={() => goToStep(index)}
+            >
+              <span className="wizard-progress-index">{index < clampedStep ? <Check size={12} /> : index + 1}</span>
+              <span className="wizard-progress-label">{wizardLabels[key]}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className={`wizard-step${clampedStep === stepIndex("trigger") ? "" : " is-hidden"}`}>
         <section className="flow-step">
           <div className="step-marker trigger-marker">01</div>
           <div className="step-content">
@@ -427,10 +483,10 @@ function AutomationBuilderV1({
             )}
           </div>
         </section>
+        </div>
 
         {usesTextTrigger && (
-          <>
-            <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
+          <div className={`wizard-step${clampedStep === stepIndex("condition") ? "" : " is-hidden"}`}>
             <section className="flow-step">
               <div className="step-marker condition-marker">02</div>
               <div className="step-content">
@@ -471,11 +527,10 @@ function AutomationBuilderV1({
                 </div>
               </div>
             </section>
-          </>
+          </div>
         )}
 
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
+        <div className={`wizard-step${clampedStep === stepIndex("action") ? "" : " is-hidden"}`}>
         <section className="flow-step">
           <div className="step-marker action-marker">{usesTextTrigger ? "03" : "02"}</div>
           <div className="step-content">
@@ -556,10 +611,10 @@ function AutomationBuilderV1({
             )}
           </div>
         </section>
+        </div>
 
         {triggerType !== "comment" && (
-          <>
-            <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
+          <div className={`wizard-step${clampedStep === stepIndex("email") ? "" : " is-hidden"}`}>
             <section className="flow-step">
             <div className="step-marker action-marker">{usesTextTrigger ? "04" : "03"}</div>
             <div className="step-content">
@@ -723,11 +778,10 @@ function AutomationBuilderV1({
               )}
             </div>
             </section>
-          </>
+          </div>
         )}
 
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
+        <div className={`wizard-step${clampedStep === stepIndex("guardrails") ? "" : " is-hidden"}`}>
         <section className="flow-step">
           <div className="step-marker guard-marker">{usesTextTrigger ? "05" : "04"}</div>
           <div className="step-content">
@@ -774,45 +828,73 @@ function AutomationBuilderV1({
             <p className="muted">Events outside the window are ignored — perfect for launches and limited offers.</p>
           </div>
         </section>
+        </div>
+
+        <div className={`wizard-step${clampedStep === stepIndex("review") ? "" : " is-hidden"}`}>
+        <section className="flow-step review-step">
+          <div className="step-marker trigger-marker">{String(wizardSteps.length).padStart(2, "0")}</div>
+          <div className="step-content">
+            <div className="step-heading">
+              <div>
+                <p className="eyebrow">Review</p>
+                <h2>Review before you save</h2>
+              </div>
+              <Check size={21} strokeWidth={1.7} />
+            </div>
+            <ul className="review-summary" data-testid="review-summary">
+              <li>
+                Triggered by {triggerType === "comment" ? "a comment" : triggerType === "message" ? "a DM" : triggerType === "referral" ? "a referral link tap" : triggerType === "optin" ? "an opt-in tap" : triggerType === "first_contact" ? "first contact" : "a story mention"}
+                {usesTextTrigger ? (triggerMatch === "keyword" ? ` containing “${parseKeywords(keywords).join("”, “") || "add a keyword"}”` : " (any text)") : ""}
+              </li>
+              <li>{actions.length} message{actions.length === 1 ? "" : "s"} ready to send</li>
+              {triggerType !== "comment" && emailCaptureEnabled && <li>Collects the person’s email after the flow runs</li>}
+              {dailyLimit && <li>Daily send limit: {dailyLimit}</li>}
+              {(scheduleStart || scheduleEnd) && (
+                <li>Active {scheduleStart ? `from ${scheduleStart}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${scheduleEnd}` : ""}</li>
+              )}
+            </ul>
+          </div>
+        </section>
+        </div>
 
         <div className="builder-footer">
           <div>
             {error && <p className="form-error" role="alert">{error}</p>}
             {saved && <p className="form-success" role="status"><Check size={15} /> Saved to your workspace.</p>}
           </div>
-          <button className="button button-primary" type="submit" disabled={saving}>
-            {saving ? "Saving…" : automationId ? "Save changes" : "Save automation"}
-          </button>
+          <div className="builder-actions">
+            {clampedStep > 0 && (
+              <button type="button" className="button button-secondary" onClick={() => goToStep(clampedStep - 1)}>
+                Back
+              </button>
+            )}
+            {clampedStep < wizardSteps.length - 1 ? (
+              <button type="button" className="button button-primary" onClick={() => goToStep(clampedStep + 1)}>
+                Next
+              </button>
+            ) : (
+              <button className="button button-primary" type="submit" disabled={saving}>
+                {saving ? "Saving…" : automationId ? "Save changes" : "Save automation"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <aside className="builder-preview">
-        <p className="eyebrow">Signal preview</p>
+      <aside className="builder-preview" aria-label="Test preview">
+        <p className="eyebrow">Test preview <span className="preview-disclaimer">— not sent to Instagram</span></p>
         <div className="preview-line" />
-        <p className="preview-kicker">
-          {triggerType === "comment" ? "A person comments" : triggerType === "message" ? "A person DMs you" : triggerType === "referral" ? "Someone taps your referral link" : "Someone taps the opt-in button"}
-        </p>
-        <div className="preview-message">
-          <span className="preview-avatar">P</span>
-          <div>
-            <strong>{usesTextTrigger ? (triggerMatch === "keyword" ? `“${parseKeywords(keywords)[0] ?? "your keyword"}”` : "any message") : "Tap"}</strong>
-            <small>{triggerType === "comment" ? "on your Instagram post" : triggerType === "message" ? "in Instagram DMs" : "in Instagram DMs"}</small>
-          </div>
-        </div>
-        <div className="preview-arrow"><ArrowRight size={18} /></div>
-        <p className="preview-kicker">Linkar sends</p>
-        {actions.map((action, index) => (
-          <div className="preview-message preview-response" key={index}>
-            <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
-            <div>
-              <strong>{action.text || "Your exact reply appears here"}</strong>
-              {"url" in action && action.url ? <small>{action.url}</small> : null}
-            </div>
-          </div>
-        ))}
+        <InstagramPreview
+          view={previewView}
+          onViewChange={setPreviewView}
+          showPost={triggerType === "comment"}
+          showComments={false}
+          username="yourbrand"
+          messages={dmMessages}
+        />
         <div className="preview-note">
           <span className="signal-dot" />
-          <span>Every reply follows your saved rule.</span>
+          <span>Preview only — nothing here is sent to Instagram.</span>
         </div>
       </aside>
     </form>
@@ -830,7 +912,8 @@ const defaultDefinitionV2: FlowDefinitionV2 = {
   delivery: { text: "", url: "", buttonLabel: "" },
 };
 
-const PREVIEW_STEPS = ["Comment", "Opening message", "Not following", "Delivery"] as const;
+const WIZARD_STEPS = ["Content", "Comment & reply", "Opening DM", "Delivery", "Guardrails", "Review"] as const;
+const STEP_PREVIEW_VIEW: PreviewView[] = ["post", "comments", "dm", "dm", "dm", "dm"];
 
 function isLocalDeliveryUrl(url: URL): boolean {
   return url.protocol === "http:" && url.hostname === "localhost";
@@ -874,10 +957,11 @@ function AutomationBuilderV2({
   const [deliveryText, setDeliveryText] = useState(initialDefinition.delivery.text);
   const [deliveryUrl, setDeliveryUrl] = useState(initialDefinition.delivery.url);
   const [deliveryButtonLabel, setDeliveryButtonLabel] = useState(initialDefinition.delivery.buttonLabel ?? "");
-  const [previewStep, setPreviewStep] = useState(0);
   const [pendingIntent, setPendingIntent] = useState<"draft" | "activate" | null>(null);
   const [savedIntent, setSavedIntent] = useState<"draft" | "activate" | null>(null);
   const [error, setError] = useState("");
+  const [activeStep, setActiveStep] = useState(0);
+  const [previewView, setPreviewView] = useState<PreviewView>("post");
 
   function changeSource(value: MediaSource) {
     setSource(value);
@@ -1017,6 +1101,26 @@ function AutomationBuilderV2({
         ? "all of your posts"
         : "the next post you publish";
 
+  function goToStep(next: number) {
+    const clamped = Math.max(0, Math.min(WIZARD_STEPS.length - 1, next));
+    setActiveStep(clamped);
+    setPreviewView(STEP_PREVIEW_VIEW[clamped]);
+  }
+
+  const dmMessages: DmBubble[] = [];
+  if (openingText.trim()) {
+    dmMessages.push({ id: "opening", from: "bot", text: openingText });
+    dmMessages.push({ id: "opt-in", from: "tap", button: optInButtonLabel.trim() || "Get it" });
+  }
+  if (followGateRequired && notFollowingMessage.trim()) {
+    dmMessages.push({ id: "not-following", from: "bot", text: notFollowingMessage });
+    dmMessages.push({ id: "recheck", from: "tap", button: recheckButtonLabel.trim() || "I followed" });
+  }
+  if (deliveryText.trim()) {
+    dmMessages.push({ id: "delivery", from: "bot", text: deliveryText });
+    if (deliveryButtonLabel.trim()) dmMessages.push({ id: "delivery-button", from: "tap", button: deliveryButtonLabel });
+  }
+
   return (
     <div className="builder-layout">
       <div className="builder-main">
@@ -1040,361 +1144,373 @@ function AutomationBuilderV2({
           />
         </label>
 
-        <section className="flow-step">
-          <div className="step-marker trigger-marker">01</div>
-          <div className="step-content">
-            <div className="step-heading">
-              <div>
-                <p className="eyebrow">Content</p>
-                <h2>Which posts should Linkar watch?</h2>
-              </div>
-              <Film size={21} strokeWidth={1.7} />
-            </div>
-            <label className="field">
-              <span>Trigger source</span>
-              <span className="select-wrap">
-                <select aria-label="Trigger source" value={source} onChange={(event) => changeSource(event.target.value as MediaSource)}>
-                  <option value="specific_media">Specific posts or Reels</option>
-                  <option value="all_media">All of my posts</option>
-                  <option value="next_media">The next post I publish</option>
-                </select>
-                <ChevronDown size={16} />
-              </span>
-            </label>
-            {source === "specific_media" && (
-              <div className="field-spaced">
-                <MediaPicker
-                  selectedIds={mediaIds}
-                  initialSnapshots={mediaSnapshots}
-                  onChange={(ids, snapshots) => {
-                    setMediaIds(ids);
-                    setMediaSnapshots(snapshots);
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </section>
-
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
-        <section className="flow-step">
-          <div className="step-marker condition-marker">02</div>
-          <div className="step-content">
-            <div className="step-heading">
-              <div>
-                <p className="eyebrow">Trigger</p>
-                <h2>What comment starts this campaign?</h2>
-              </div>
-              <MessageCircle size={21} strokeWidth={1.7} />
-            </div>
-            <label className="field">
-              <span>Match mode</span>
-              <span className="select-wrap">
-                <select aria-label="Match mode" value={match} onChange={(event) => setMatch(event.target.value as "keyword" | "any")}>
-                  <option value="keyword">A keyword</option>
-                  <option value="any">Any comment</option>
-                </select>
-                <ChevronDown size={16} />
-              </span>
-            </label>
-            {match === "keyword" && (
-              <label className="field field-spaced">
-                <span>Keywords</span>
-                <input
-                  aria-label="Keywords"
-                  value={keywords}
-                  onChange={(event) => setKeywords(event.target.value)}
-                  placeholder="drop, giveaway, price"
-                />
-                <small>Separate multiple phrases with commas. Matching is case-insensitive.</small>
-              </label>
-            )}
-          </div>
-        </section>
-
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
-        <section className="flow-step">
-          <div className="step-marker action-marker">03</div>
-          <div className="step-content">
-            <div className="step-heading">
-              <div>
-                <p className="eyebrow">Public reply <em>up to 5 variations</em></p>
-                <h2>What public reply should Linkar post?</h2>
-              </div>
-              <Send size={21} strokeWidth={1.7} />
-            </div>
-            {publicReplies.map((reply, index) => (
-              <div className="field field-spaced public-reply-row" key={index}>
-                <span>Variation {index + 1}</span>
-                <div className="public-reply-input">
-                  <textarea
-                    aria-label={`Public reply variation ${index + 1}`}
-                    value={reply}
-                    onChange={(event) => updateReply(index, event.target.value)}
-                    rows={2}
-                    maxLength={1_000}
-                    placeholder="Write the exact public comment to post"
-                  />
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`Remove variation ${index + 1}`}
-                    onClick={() => removeReply(index)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
+        <nav className="wizard-progress" aria-label="Builder steps">
+          {WIZARD_STEPS.map((label, index) => (
             <button
               type="button"
-              className="button button-secondary field-spaced"
-              onClick={addReply}
-              disabled={publicReplies.length >= MAX_PUBLIC_REPLIES}
+              key={label}
+              className={`wizard-progress-step${index === activeStep ? " is-active" : ""}${index < activeStep ? " is-done" : ""}`}
+              onClick={() => goToStep(index)}
             >
-              <Plus size={15} /> Add variation
+              <span className="wizard-progress-index">{index < activeStep ? <Check size={12} /> : index + 1}</span>
+              <span className="wizard-progress-label">{label}</span>
             </button>
-            <small>Linkar rotates between variations so the same public comment doesn’t repeat.</small>
-          </div>
-        </section>
+          ))}
+        </nav>
 
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
-        <section className="flow-step">
-          <div className="step-marker trigger-marker">04</div>
-          <div className="step-content">
-            <div className="step-heading">
-              <div>
-                <p className="eyebrow">Opening DM</p>
-                <h2>Send an opening message that asks for consent</h2>
+        <div className={`wizard-step${activeStep === 0 ? "" : " is-hidden"}`}>
+          <section className="flow-step">
+            <div className="step-marker trigger-marker">01</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Content</p>
+                  <h2>Which posts should Linkar watch?</h2>
+                </div>
+                <Film size={21} strokeWidth={1.7} />
               </div>
-              <UserCheck size={21} strokeWidth={1.7} />
-            </div>
-            <label className="field">
-              <span>Opening message text</span>
-              <textarea
-                aria-label="Opening message text"
-                value={openingText}
-                onChange={(event) => setOpeningText(event.target.value)}
-                rows={3}
-                maxLength={1_000}
-                placeholder="Explain what they’ll get and invite them to tap the button below"
-              />
-            </label>
-            <label className="field field-spaced">
-              <span>Opt-in button label</span>
-              <input
-                aria-label="Opt-in button label"
-                value={optInButtonLabel}
-                onChange={(event) => setOptInButtonLabel(event.target.value)}
-                maxLength={QUICK_REPLY_LABEL_MAX_LENGTH}
-                placeholder="Get it"
-              />
-              <small>{optInButtonLabel.length}/{QUICK_REPLY_LABEL_MAX_LENGTH} characters</small>
-            </label>
-            <label className="field field-spaced">
-              <span>Opening copy variations <em>optional</em></span>
-              <textarea
-                aria-label="Opening copy variations"
-                value={openingVariants}
-                onChange={(event) => setOpeningVariants(event.target.value)}
-                rows={3}
-                placeholder={"One variation per line — one is picked per person at random"}
-              />
-              <small>Variations keep the same opt-in button and rotate per participant.</small>
-            </label>
-          </div>
-        </section>
-
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
-        <section className="flow-step">
-          <div className="step-marker condition-marker">05</div>
-          <div className="step-content">
-            <div className="step-heading">
-              <div>
-                <p className="eyebrow">Follow gate</p>
-                <h2>Require a follow before the link unlocks</h2>
-              </div>
-              <ShieldCheck size={21} strokeWidth={1.7} />
-            </div>
-            <label className="field field-spaced gate-toggle">
-              <input
-                type="checkbox"
-                role="switch"
-                aria-label="Follow gate enabled"
-                checked={followGateRequired}
-                onChange={(event) => setFollowGateRequired(event.target.checked)}
-              />
-              <span>{followGateRequired ? "On — verify they follow you before delivering" : "Off — deliver right after the opt-in tap"}</span>
-            </label>
-            {followGateRequired && (
-              <FollowGateFields
-                notFollowingMessage={notFollowingMessage}
-                onNotFollowingMessageChange={setNotFollowingMessage}
-                recheckButtonLabel={recheckButtonLabel}
-                onRecheckButtonLabelChange={setRecheckButtonLabel}
-              />
-            )}
-          </div>
-        </section>
-
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
-        <section className="flow-step">
-          <div className="step-marker action-marker">06</div>
-          <div className="step-content">
-            <div className="step-heading">
-              <div>
-                <p className="eyebrow">Delivery</p>
-                <h2>What do you deliver once someone is verified?</h2>
-              </div>
-              <Link2 size={21} strokeWidth={1.7} />
-            </div>
-            <label className="field">
-              <span>Delivery message</span>
-              <textarea
-                aria-label="Delivery message"
-                value={deliveryText}
-                onChange={(event) => setDeliveryText(event.target.value)}
-                rows={2}
-                maxLength={1_000}
-                placeholder="The exact message sent once someone is verified"
-              />
-            </label>
-            <div className="field-grid field-spaced">
               <label className="field">
-                <span>Delivery link</span>
-                <div className="input-with-icon">
-                  <Link2 size={16} />
-                  <input
-                    aria-label="Delivery link"
-                    value={deliveryUrl}
-                    onChange={(event) => setDeliveryUrl(event.target.value)}
-                    placeholder="https://your-site.com/prize"
+                <span>Trigger source</span>
+                <span className="select-wrap">
+                  <select aria-label="Trigger source" value={source} onChange={(event) => changeSource(event.target.value as MediaSource)}>
+                    <option value="specific_media">Specific posts or Reels</option>
+                    <option value="all_media">All of my posts</option>
+                    <option value="next_media">The next post I publish</option>
+                  </select>
+                  <ChevronDown size={16} />
+                </span>
+              </label>
+              {source === "specific_media" && (
+                <div className="field-spaced">
+                  <MediaPicker
+                    selectedIds={mediaIds}
+                    initialSnapshots={mediaSnapshots}
+                    onChange={(ids, snapshots) => {
+                      setMediaIds(ids);
+                      setMediaSnapshots(snapshots);
+                    }}
                   />
                 </div>
-                <small>HTTPS required. http://localhost is permitted while developing.</small>
-                {looksLikeTwoLinksPastedTogether(deliveryUrl) && (
-                  <p className="form-warning" role="status">
-                    <AlertTriangle size={14} /> This looks like two links pasted together — double check it before saving.
-                  </p>
-                )}
-              </label>
-              <label className="field">
-                <span>Delivery button label <em>optional</em></span>
-                <input
-                  aria-label="Delivery button label"
-                  value={deliveryButtonLabel}
-                  onChange={(event) => setDeliveryButtonLabel(event.target.value)}
-                  maxLength={80}
-                  placeholder="Open link"
-                />
-              </label>
-            </div>
-            <label className="field field-spaced">
-              <span>Delivery copy variations <em>optional</em></span>
-              <textarea
-                aria-label="Delivery copy variations"
-                value={deliveryVariants}
-                onChange={(event) => setDeliveryVariants(event.target.value)}
-                rows={3}
-                placeholder={"One variation per line — one is picked per person at random"}
-              />
-            </label>
-          </div>
-        </section>
-
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
-        <section className="flow-step">
-          <div className="step-marker guard-marker">07</div>
-          <div className="step-content">
-            <div className="step-heading">
-              <div>
-                <p className="eyebrow">Guardrails <em>optional</em></p>
-                <h2>Set limits and timing</h2>
-              </div>
-              <ShieldCheck size={21} strokeWidth={1.7} />
-            </div>
-            <label className="field">
-              <span>Daily send limit</span>
-              <input
-                aria-label="Campaign daily send limit"
-                type="number"
-                min={1}
-                max={1000}
-                value={campaignDailyLimit}
-                onChange={(event) => setCampaignDailyLimit(event.target.value)}
-                placeholder="No limit"
-              />
-              <small>Pauses new deliveries for the rest of the day when the cap is reached.</small>
-            </label>
-            <div className="field-grid field-spaced">
-              <label className="field">
-                <span>Active from <em>optional</em></span>
-                <input
-                  aria-label="Campaign schedule start"
-                  type="datetime-local"
-                  value={scheduleStart}
-                  onChange={(event) => setScheduleStart(event.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Active until <em>optional</em></span>
-                <input
-                  aria-label="Campaign schedule end"
-                  type="datetime-local"
-                  value={scheduleEnd}
-                  onChange={(event) => setScheduleEnd(event.target.value)}
-                />
-              </label>
-            </div>
-            <p className="muted">Comments outside the window are ignored — perfect for launches and limited drops.</p>
-          </div>
-        </section>
-
-        <div className="flow-connector" aria-hidden="true"><ArrowRight size={17} /></div>
-
-        <section className="flow-step review-step">
-          <div className="step-marker trigger-marker">08</div>
-          <div className="step-content">
-            <div className="step-heading">
-              <div>
-                <p className="eyebrow">Review</p>
-                <h2>Review before you save</h2>
-              </div>
-              <Check size={21} strokeWidth={1.7} />
-            </div>
-            <ul className="review-summary" data-testid="review-summary">
-              <li>Watching {sourceSummary}</li>
-              <li>Triggered by {match === "keyword" ? (keywordList.length ? `a comment containing “${keywordList.join("”, “")}”` : "a keyword (add one below)") : "any comment"}</li>
-              <li>{nonEmptyReplies.length || "No"} public reply variation{nonEmptyReplies.length === 1 ? "" : "s"} ready</li>
-              {followGateRequired ? (
-                <>
-                  <li>Opening DM asks for a follow before delivering anything</li>
-                  <li>Recheck button reads “{recheckButtonLabel || "add a label"}”</li>
-                </>
-              ) : (
-                <li>Follow gate is off — the link goes out right after the opt-in tap</li>
               )}
-              <li>
-                Verified followers land on{" "}
-                {deliveryUrl ? (
-                  <a href={deliveryUrl} target="_blank" rel="noreferrer" className="text-link">{deliveryUrl}</a>
+            </div>
+          </section>
+        </div>
+
+        <div className={`wizard-step${activeStep === 1 ? "" : " is-hidden"}`}>
+          <section className="flow-step">
+            <div className="step-marker condition-marker">02</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Trigger</p>
+                  <h2>What comment starts this campaign?</h2>
+                </div>
+                <MessageCircle size={21} strokeWidth={1.7} />
+              </div>
+              <label className="field">
+                <span>Match mode</span>
+                <span className="select-wrap">
+                  <select aria-label="Match mode" value={match} onChange={(event) => setMatch(event.target.value as "keyword" | "any")}>
+                    <option value="keyword">A keyword</option>
+                    <option value="any">Any comment</option>
+                  </select>
+                  <ChevronDown size={16} />
+                </span>
+              </label>
+              {match === "keyword" && (
+                <label className="field field-spaced">
+                  <span>Keywords</span>
+                  <input
+                    aria-label="Keywords"
+                    value={keywords}
+                    onChange={(event) => setKeywords(event.target.value)}
+                    placeholder="drop, giveaway, price"
+                  />
+                  <small>Separate multiple phrases with commas. Matching is case-insensitive.</small>
+                </label>
+              )}
+            </div>
+          </section>
+
+          <section className="flow-step">
+            <div className="step-marker action-marker">02</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Public reply <em>up to 5 variations</em></p>
+                  <h2>What public reply should Linkar post?</h2>
+                </div>
+                <Send size={21} strokeWidth={1.7} />
+              </div>
+              {publicReplies.map((reply, index) => (
+                <div className="field field-spaced public-reply-row" key={index}>
+                  <span>Variation {index + 1}</span>
+                  <div className="public-reply-input">
+                    <textarea
+                      aria-label={`Public reply variation ${index + 1}`}
+                      value={reply}
+                      onChange={(event) => updateReply(index, event.target.value)}
+                      rows={2}
+                      maxLength={1_000}
+                      placeholder="Write the exact public comment to post"
+                    />
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`Remove variation ${index + 1}`}
+                      onClick={() => removeReply(index)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="button button-secondary field-spaced"
+                onClick={addReply}
+                disabled={publicReplies.length >= MAX_PUBLIC_REPLIES}
+              >
+                <Plus size={15} /> Add variation
+              </button>
+              <small>Linkar rotates between variations so the same public comment doesn’t repeat.</small>
+            </div>
+          </section>
+        </div>
+
+        <div className={`wizard-step${activeStep === 2 ? "" : " is-hidden"}`}>
+          <section className="flow-step">
+            <div className="step-marker trigger-marker">03</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Opening DM</p>
+                  <h2>Send an opening message that asks for consent</h2>
+                </div>
+                <UserCheck size={21} strokeWidth={1.7} />
+              </div>
+              <label className="field">
+                <span>Opening message text</span>
+                <textarea
+                  aria-label="Opening message text"
+                  value={openingText}
+                  onChange={(event) => setOpeningText(event.target.value)}
+                  rows={3}
+                  maxLength={1_000}
+                  placeholder="Explain what they’ll get and invite them to tap the button below"
+                />
+              </label>
+              <label className="field field-spaced">
+                <span>Opt-in button label</span>
+                <input
+                  aria-label="Opt-in button label"
+                  value={optInButtonLabel}
+                  onChange={(event) => setOptInButtonLabel(event.target.value)}
+                  maxLength={QUICK_REPLY_LABEL_MAX_LENGTH}
+                  placeholder="Get it"
+                />
+                <small>{optInButtonLabel.length}/{QUICK_REPLY_LABEL_MAX_LENGTH} characters</small>
+              </label>
+              <label className="field field-spaced">
+                <span>Opening copy variations <em>optional</em></span>
+                <textarea
+                  aria-label="Opening copy variations"
+                  value={openingVariants}
+                  onChange={(event) => setOpeningVariants(event.target.value)}
+                  rows={3}
+                  placeholder={"One variation per line — one is picked per person at random"}
+                />
+                <small>Variations keep the same opt-in button and rotate per participant.</small>
+              </label>
+            </div>
+          </section>
+
+          <section className="flow-step">
+            <div className="step-marker condition-marker">03</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Follow gate</p>
+                  <h2>Require a follow before the link unlocks</h2>
+                </div>
+                <ShieldCheck size={21} strokeWidth={1.7} />
+              </div>
+              <label className="field field-spaced gate-toggle">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label="Follow gate enabled"
+                  checked={followGateRequired}
+                  onChange={(event) => setFollowGateRequired(event.target.checked)}
+                />
+                <span>{followGateRequired ? "On — verify they follow you before delivering" : "Off — deliver right after the opt-in tap"}</span>
+              </label>
+              {followGateRequired && (
+                <FollowGateFields
+                  notFollowingMessage={notFollowingMessage}
+                  onNotFollowingMessageChange={setNotFollowingMessage}
+                  recheckButtonLabel={recheckButtonLabel}
+                  onRecheckButtonLabelChange={setRecheckButtonLabel}
+                />
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div className={`wizard-step${activeStep === 3 ? "" : " is-hidden"}`}>
+          <section className="flow-step">
+            <div className="step-marker action-marker">04</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Delivery</p>
+                  <h2>What do you deliver once someone is verified?</h2>
+                </div>
+                <Link2 size={21} strokeWidth={1.7} />
+              </div>
+              <label className="field">
+                <span>Delivery message</span>
+                <textarea
+                  aria-label="Delivery message"
+                  value={deliveryText}
+                  onChange={(event) => setDeliveryText(event.target.value)}
+                  rows={2}
+                  maxLength={1_000}
+                  placeholder="The exact message sent once someone is verified"
+                />
+              </label>
+              <div className="field-grid field-spaced">
+                <label className="field">
+                  <span>Delivery link</span>
+                  <div className="input-with-icon">
+                    <Link2 size={16} />
+                    <input
+                      aria-label="Delivery link"
+                      value={deliveryUrl}
+                      onChange={(event) => setDeliveryUrl(event.target.value)}
+                      placeholder="https://your-site.com/prize"
+                    />
+                  </div>
+                  <small>HTTPS required. http://localhost is permitted while developing.</small>
+                  {looksLikeTwoLinksPastedTogether(deliveryUrl) && (
+                    <p className="form-warning" role="status">
+                      <AlertTriangle size={14} /> This looks like two links pasted together — double check it before saving.
+                    </p>
+                  )}
+                </label>
+                <label className="field">
+                  <span>Delivery button label <em>optional</em></span>
+                  <input
+                    aria-label="Delivery button label"
+                    value={deliveryButtonLabel}
+                    onChange={(event) => setDeliveryButtonLabel(event.target.value)}
+                    maxLength={80}
+                    placeholder="Open link"
+                  />
+                </label>
+              </div>
+              <label className="field field-spaced">
+                <span>Delivery copy variations <em>optional</em></span>
+                <textarea
+                  aria-label="Delivery copy variations"
+                  value={deliveryVariants}
+                  onChange={(event) => setDeliveryVariants(event.target.value)}
+                  rows={3}
+                  placeholder={"One variation per line — one is picked per person at random"}
+                />
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <div className={`wizard-step${activeStep === 4 ? "" : " is-hidden"}`}>
+          <section className="flow-step">
+            <div className="step-marker guard-marker">05</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Guardrails <em>optional</em></p>
+                  <h2>Set limits and timing</h2>
+                </div>
+                <ShieldCheck size={21} strokeWidth={1.7} />
+              </div>
+              <label className="field">
+                <span>Daily send limit</span>
+                <input
+                  aria-label="Campaign daily send limit"
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={campaignDailyLimit}
+                  onChange={(event) => setCampaignDailyLimit(event.target.value)}
+                  placeholder="No limit"
+                />
+                <small>Pauses new deliveries for the rest of the day when the cap is reached.</small>
+              </label>
+              <div className="field-grid field-spaced">
+                <label className="field">
+                  <span>Active from <em>optional</em></span>
+                  <input
+                    aria-label="Campaign schedule start"
+                    type="datetime-local"
+                    value={scheduleStart}
+                    onChange={(event) => setScheduleStart(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Active until <em>optional</em></span>
+                  <input
+                    aria-label="Campaign schedule end"
+                    type="datetime-local"
+                    value={scheduleEnd}
+                    onChange={(event) => setScheduleEnd(event.target.value)}
+                  />
+                </label>
+              </div>
+              <p className="muted">Comments outside the window are ignored — perfect for launches and limited drops.</p>
+            </div>
+          </section>
+        </div>
+
+        <div className={`wizard-step${activeStep === 5 ? "" : " is-hidden"}`}>
+          <section className="flow-step review-step">
+            <div className="step-marker trigger-marker">06</div>
+            <div className="step-content">
+              <div className="step-heading">
+                <div>
+                  <p className="eyebrow">Review</p>
+                  <h2>Review before you save</h2>
+                </div>
+                <Check size={21} strokeWidth={1.7} />
+              </div>
+              <ul className="review-summary" data-testid="review-summary">
+                <li>Watching {sourceSummary}</li>
+                <li>Triggered by {match === "keyword" ? (keywordList.length ? `a comment containing “${keywordList.join("”, “")}”` : "a keyword (add one below)") : "any comment"}</li>
+                <li>{nonEmptyReplies.length || "No"} public reply variation{nonEmptyReplies.length === 1 ? "" : "s"} ready</li>
+                {followGateRequired ? (
+                  <>
+                    <li>Opening DM asks for a follow before delivering anything</li>
+                    <li>Recheck button reads “{recheckButtonLabel || "add a label"}”</li>
+                  </>
                 ) : (
-                  "no link yet"
+                  <li>Follow gate is off — the link goes out right after the opt-in tap</li>
                 )}
-              </li>
-              {campaignDailyLimit && <li>Daily send limit: {campaignDailyLimit}</li>}
-              {(scheduleStart || scheduleEnd) && (
-                <li>Active {scheduleStart ? `from ${scheduleStart}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${scheduleEnd}` : ""}</li>
-              )}
-            </ul>
-          </div>
-        </section>
+                <li>
+                  Verified followers land on{" "}
+                  {deliveryUrl ? (
+                    <a href={deliveryUrl} target="_blank" rel="noreferrer" className="text-link">{deliveryUrl}</a>
+                  ) : (
+                    "no link yet"
+                  )}
+                </li>
+                {campaignDailyLimit && <li>Daily send limit: {campaignDailyLimit}</li>}
+                {(scheduleStart || scheduleEnd) && (
+                  <li>Active {scheduleStart ? `from ${scheduleStart}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${scheduleEnd}` : ""}</li>
+                )}
+              </ul>
+            </div>
+          </section>
+        </div>
 
         <div className="builder-footer">
           <div>
@@ -1406,22 +1522,35 @@ function AutomationBuilderV2({
             )}
           </div>
           <div className="builder-actions">
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={() => void save("draft")}
-              disabled={pendingIntent !== null}
-            >
-              {pendingIntent === "draft" ? "Saving…" : "Save draft"}
-            </button>
-            <button
-              type="button"
-              className="button button-primary"
-              onClick={() => void save("activate")}
-              disabled={pendingIntent !== null}
-            >
-              {pendingIntent === "activate" ? "Activating…" : "Save & activate"}
-            </button>
+            {activeStep > 0 && (
+              <button type="button" className="button button-secondary" onClick={() => goToStep(activeStep - 1)}>
+                Back
+              </button>
+            )}
+            {activeStep < WIZARD_STEPS.length - 1 ? (
+              <button type="button" className="button button-primary" onClick={() => goToStep(activeStep + 1)}>
+                Next
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  onClick={() => void save("draft")}
+                  disabled={pendingIntent !== null}
+                >
+                  {pendingIntent === "draft" ? "Saving…" : "Save draft"}
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => void save("activate")}
+                  disabled={pendingIntent !== null}
+                >
+                  {pendingIntent === "activate" ? "Activating…" : "Save & activate"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1429,88 +1558,15 @@ function AutomationBuilderV2({
       <aside className="builder-preview" aria-label="Test preview">
         <p className="eyebrow">Test preview <span className="preview-disclaimer">— not sent to Instagram</span></p>
         <div className="preview-line" />
-        <div className="preview-steps-nav">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Previous preview step"
-            onClick={() => setPreviewStep((step) => Math.max(0, step - 1))}
-            disabled={previewStep === 0}
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <span className="preview-step-label">{PREVIEW_STEPS[previewStep]}</span>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Next preview step"
-            onClick={() => setPreviewStep((step) => Math.min(PREVIEW_STEPS.length - 1, step + 1))}
-            disabled={previewStep === PREVIEW_STEPS.length - 1}
-          >
-            <ChevronRight size={15} />
-          </button>
-        </div>
-
-        {previewStep === 0 && (
-          <div className="message-step-preview">
-            <p className="preview-kicker">A person comments</p>
-            <div className="preview-message">
-              <span className="preview-avatar">P</span>
-              <div>
-                <strong>{match === "keyword" ? `“${keywordList[0] ?? "your keyword"}”` : "any comment"}</strong>
-                <small>on your post</small>
-              </div>
-            </div>
-            <div className="preview-arrow"><ArrowRight size={18} /></div>
-            <p className="preview-kicker">Linkar replies publicly</p>
-            <div className="preview-message preview-response">
-              <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
-              <div><strong>{nonEmptyReplies[0] || "Add a public reply variation"}</strong></div>
-            </div>
-          </div>
-        )}
-
-        {previewStep === 1 && (
-          <div className="message-step-preview">
-            <p className="preview-kicker">Linkar DMs them</p>
-            <div className="preview-message preview-response">
-              <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
-              <div>
-                <strong>{openingText || "Add your opening message"}</strong>
-                <small>Button: {optInButtonLabel || "add a label"}</small>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {previewStep === 2 && (
-          <div className="message-step-preview">
-            <p className="preview-kicker">If they haven’t followed yet</p>
-            <div className="preview-message preview-response">
-              <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
-              <div>
-                <strong>{notFollowingMessage || "Add your not-following prompt"}</strong>
-                <small>Button: {recheckButtonLabel || "add a label"}</small>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {previewStep === 3 && (
-          <div className="message-step-preview">
-            <p className="preview-kicker">Once they’re verified</p>
-            <div className="preview-message preview-response">
-              <span className="preview-avatar preview-avatar-brand">{PRODUCT_MARK}</span>
-              <div>
-                <strong>{deliveryText || "Add your delivery message"}</strong>
-                {deliveryUrl && (
-                  <a href={deliveryUrl} target="_blank" rel="noreferrer"><small>{deliveryUrl}</small></a>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
+        <InstagramPreview
+          view={previewView}
+          onViewChange={setPreviewView}
+          username="yourbrand"
+          postCaption={mediaSnapshots[0]?.caption}
+          triggerComment={match === "keyword" ? (keywordList[0] ? `“${keywordList[0]}”` : undefined) : "any comment"}
+          commentReply={nonEmptyReplies[0]}
+          messages={dmMessages}
+        />
         <div className="preview-note">
           <span className="signal-dot" />
           <span>Preview only — nothing here is sent to Instagram.</span>

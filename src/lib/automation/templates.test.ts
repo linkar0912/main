@@ -61,4 +61,27 @@ describe("premade automation templates", () => {
     expect(getTemplateById("conversation-starters")?.setup).toBeDefined();
     expect(getTemplateById("does-not-exist")).toBeUndefined();
   });
+
+  it("private-replies to comments instead of DMing, since that's the actual Meta action for a comment trigger", () => {
+    for (const id of ["comment-link-dm", "comment-catch-all"]) {
+      const template = getTemplateById(id)!;
+      expect(template.setup!.definition.trigger.type).toBe("comment");
+      expect(template.setup!.definition.actions.every((action) => action.type === "private_reply")).toBe(true);
+    }
+  });
+
+  it("fires the ad-referral recipe on the referral trigger, with no keyword fields it doesn't need", () => {
+    const referral = getTemplateById("referral-welcome")!;
+    expect(referral.setup!.definition.trigger).toEqual({ type: "referral" });
+  });
+
+  it("fires the opt-in recipe on the optin trigger", () => {
+    const optin = getTemplateById("optin-confirmation")!;
+    expect(optin.setup!.definition.trigger).toEqual({ type: "optin" });
+  });
+
+  it("covers every trigger type the engine supports across the recipe set", () => {
+    const covered = new Set(basicAutomationTemplates.map((template) => template.setup!.definition.trigger.type));
+    expect(covered).toEqual(new Set(["comment", "message", "referral", "optin", "first_contact", "story_mention"]));
+  });
 });

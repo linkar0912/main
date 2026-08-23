@@ -8,9 +8,9 @@ import {
   LayoutDashboard,
   ListOrdered,
   LogOut,
+  Megaphone,
   Menu,
   Settings,
-  Sparkles,
   UserRound,
   Workflow,
 } from "lucide-react";
@@ -22,8 +22,8 @@ import { Skeleton } from "./skeleton";
 const workspaceNavigation = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/automations", label: "Automations", icon: Workflow },
-  { href: "/automations/templates", label: "Templates", icon: Sparkles },
   { href: "/automations/sequences", label: "Sequences", icon: ListOrdered },
+  { href: "/automations/broadcasts", label: "Broadcasts", icon: Megaphone },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -35,7 +35,7 @@ const accountNavigation = [
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
-  // /automations must not light up while /automations/sequences is open.
+  // /automations must not light up while /automations/sequences or /automations/broadcasts is open.
   if (href === "/automations") {
     return pathname === "/automations" || pathname.startsWith("/automations/new")
       || /^\/automations\/[^/]+\/(edit|activity)$/.test(pathname);

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Activity, ArrowUpRight, Copy, Pause, Pencil, Play, Trash2, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
+import { CreateAutomationButton } from "./create-automation-button";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
 
@@ -128,7 +129,7 @@ export function AutomationList({
         <span className="empty-icon"><Workflow size={22} /></span>
         <h3>Your first automation starts here.</h3>
         <p>Turn one clear customer signal into one useful reply.</p>
-        <Link className="button button-secondary" href="/automations/new">Create automation</Link>
+        <CreateAutomationButton className="button button-secondary">Create automation</CreateAutomationButton>
       </div>
     );
   }

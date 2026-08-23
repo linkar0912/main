@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
-  BadgeCheck,
   BookOpen,
   CircleHelp,
   CreditCard,
   ExternalLink,
-
+  LayoutGrid,
   LifeBuoy,
   Mail,
   Search,
@@ -98,9 +97,6 @@ const TOPICS: Topic[] = [
       },
     ],
   },
-];
-
-const TOPICS_B: Topic[] = [
   {
     id: "automations",
     title: "Building automations",
@@ -226,31 +222,42 @@ const TOPICS_B: Topic[] = [
   },
 ];
 
-const ALL_TOPICS = [...TOPICS, ...TOPICS_B];
-
 function topicMetadataMatchesQuery(topic: Topic, query: string): boolean {
-  if (!query) return true;
   const haystack = [topic.title, topic.blurb].join(" ").toLowerCase();
   return haystack.includes(query.toLowerCase());
 }
 
 export function HelpScreen({ supportEmail }: { supportEmail: string }) {
   const [query, setQuery] = useState("");
+  const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
   const [openArticle, setOpenArticle] = useState<string | null>(null);
 
-  const visibleTopics = useMemo(
-    () => ALL_TOPICS
-      .map((topic) => ({
-        ...topic,
-        articles: topic.articles.filter((article) =>
-          !query || topicMetadataMatchesQuery(topic, query) || article.q.toLowerCase().includes(query.toLowerCase())
-        ),
-      }))
-      .filter((topic) => topic.articles.length > 0),
-    [query],
-  );
+  function selectTopic(id: string | null) {
+    setActiveTopicId(id);
+    setQuery("");
+    setOpenArticle(null);
+  }
 
-  const totalArticles = ALL_TOPICS.reduce((sum, topic) => sum + topic.articles.length, 0);
+  const searching = query.trim().length > 0;
+
+  const visibleTopics = useMemo(() => {
+    if (searching) {
+      return TOPICS
+        .map((topic) => ({
+          ...topic,
+          articles: topic.articles.filter((article) =>
+            topicMetadataMatchesQuery(topic, query) || article.q.toLowerCase().includes(query.toLowerCase())
+          ),
+        }))
+        .filter((topic) => topic.articles.length > 0);
+    }
+    if (activeTopicId) return TOPICS.filter((topic) => topic.id === activeTopicId);
+    return TOPICS;
+  }, [query, searching, activeTopicId]);
+
+  const showGroupLabels = searching || activeTopicId === null;
+  const activeTopic = TOPICS.find((topic) => topic.id === activeTopicId) ?? null;
+  const totalArticles = TOPICS.reduce((sum, topic) => sum + topic.articles.length, 0);
 
   return (
     <AppShell>
@@ -267,7 +274,7 @@ export function HelpScreen({ supportEmail }: { supportEmail: string }) {
           <p className="help-kicker">Help centre</p>
           <h1>How can we help?</h1>
           <p className="help-lede">
-            Browse {totalArticles} short guides across {ALL_TOPICS.length} topics. Everything is written for
+            Browse {totalArticles} short guides across {TOPICS.length} topics. Everything is written for
             creators, not engineers.
           </p>
           <form
@@ -280,7 +287,10 @@ export function HelpScreen({ supportEmail }: { supportEmail: string }) {
             <input
               type="search"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setActiveTopicId(null);
+              }}
               placeholder="Search guides — e.g. keywords, reconnect, quiet hours…"
               aria-label="Search help articles"
             />
@@ -290,96 +300,91 @@ export function HelpScreen({ supportEmail }: { supportEmail: string }) {
           </form>
         </section>
 
-        <div className="help-grid" data-stagger>
-          {visibleTopics.map(({ id, title, blurb, icon: Icon, articles }) => (
+        <div className="section-layout">
+          <nav className="section-nav" aria-label="Help topics">
             <button
-              className="help-topic-card"
-              key={id}
               type="button"
-              onClick={() => {
-                setQuery("");
-                setOpenArticle(`${id}:0`);
-                requestAnimationFrame(() => {
-                  document.getElementById(`topic-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-                });
-              }}
+              className={`section-nav-link ${!searching && activeTopicId === null ? "is-active" : ""}`}
+              onClick={() => selectTopic(null)}
             >
-              <span className="help-icon"><Icon size={18} strokeWidth={1.9} /></span>
-              <h2>{title}</h2>
-              <p>{blurb}</p>
-              <span className="text-link">{articles.length} guide{articles.length === 1 ? "" : "s"}</span>
+              <LayoutGrid size={18} strokeWidth={1.8} />
+              <span>All topics</span>
+              <span className="section-nav-count">{totalArticles}</span>
             </button>
-          ))}
-          {visibleTopics.length === 0 && (
-            <div className="faq-empty">
-              No guides match “{query}”. Try a different word, or email us below.
-            </div>
-          )}
-        </div>
+            {TOPICS.map(({ id, title, icon: Icon, articles }) => (
+              <button
+                key={id}
+                type="button"
+                className={`section-nav-link ${!searching && activeTopicId === id ? "is-active" : ""}`}
+                onClick={() => selectTopic(id)}
+              >
+                <Icon size={18} strokeWidth={1.8} />
+                <span>{title}</span>
+                <span className="section-nav-count">{articles.length}</span>
+              </button>
+            ))}
+          </nav>
 
-        <div className="faq-list" data-stagger>
-          {visibleTopics.map(({ id, title, articles }) => (
-            <section key={id} id={`topic-${id}`} aria-label={title} style={{ display: "contents" }}>
-              <p className="sidebar-label">{title}</p>
-              {articles.map((article, index) => {
-                const key = `${id}:${index}`;
-                const open = openArticle === key;
-                return (
-                  <div className={`faq-item ${open ? "is-open" : ""}`} key={key}>
-                    <button
-                      className="faq-question"
-                      type="button"
-                      aria-expanded={open}
-                      onClick={() => setOpenArticle(open ? null : key)}
-                    >
-                      {article.q}
-                      <CircleHelp className="faq-chevron" size={16} />
-                    </button>
-                    {open && (
-                      <div className="faq-answer">
-                        {article.a}
-                      </div>
-                    )}
+          <div className="section-content">
+            <div className="help-content-head">
+              <h2>{searching ? `Results for “${query}”` : activeTopic ? activeTopic.title : "All topics"}</h2>
+              {!searching && activeTopic && <p className="muted">{activeTopic.blurb}</p>}
+            </div>
+
+            {visibleTopics.length === 0 ? (
+              <p className="faq-empty">No guides match “{query}”. Try a different word, or email us below.</p>
+            ) : (
+              <div className="faq-list">
+                {visibleTopics.map((topic) => (
+                  <div key={topic.id} style={{ display: "contents" }}>
+                    {showGroupLabels && <p className="sidebar-label">{topic.title}</p>}
+                    {topic.articles.map((article, index) => {
+                      const key = `${topic.id}:${index}`;
+                      const open = openArticle === key;
+                      return (
+                        <div className={`faq-item ${open ? "is-open" : ""}`} key={key}>
+                          <button
+                            className="faq-question"
+                            type="button"
+                            aria-expanded={open}
+                            onClick={() => setOpenArticle(open ? null : key)}
+                          >
+                            {article.q}
+                            <CircleHelp className="faq-chevron" size={16} />
+                          </button>
+                          {open && <div className="faq-answer">{article.a}</div>}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            )}
+
+            <section className="panel help-contact-card" aria-label="Contact support">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">Still stuck?</p>
+                  <h2>Talk to a human</h2>
+                </div>
+                <LifeBuoy size={21} />
+              </div>
+              <p className="muted">
+                Email us with your workspace name, the automation name, and roughly when it happened.
+                Never include passwords or access tokens.
+              </p>
+              <a className="button button-primary" href={`mailto:${supportEmail}`}>
+                <Mail size={16} /> {supportEmail}
+              </a>
             </section>
-          ))}
-        </div>
 
-        <div className="help-side">
-          <section className="panel help-contact-card" aria-label="Contact support">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Still stuck?</p>
-                <h2>Talk to a human</h2>
-              </div>
-              <LifeBuoy size={21} />
-            </div>
-            <p className="muted">
-              Email us with your workspace name, the automation name, and roughly when it happened.
-              Never include passwords or access tokens.
-            </p>
-            <a className="button button-primary" href={`mailto:${supportEmail}`}>
-              <Mail size={16} /> {supportEmail}
-            </a>
-          </section>
-
-          <section className="panel" aria-label="Policies">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Fine print</p>
-                <h2>Policies & data</h2>
-              </div>
-              <BadgeCheck size={21} />
-            </div>
-            <ul className="kv-list">
-              <li><span className="kv-label">Privacy policy</span><Link className="text-link" href="/privacy">View <ExternalLink size={12} /></Link></li>
-              <li><span className="kv-label">Terms of service</span><Link className="text-link" href="/terms">View <ExternalLink size={12} /></Link></li>
-              <li><span className="kv-label">Data deletion</span><Link className="text-link" href="/data-deletion">Request removal <ExternalLink size={12} /></Link></li>
-              <li><span className="kv-label">Public support page</span><Link className="text-link" href="/support">Open <ExternalLink size={12} /></Link></li>
-            </ul>
-          </section>
+            <nav className="profile-footer-links" aria-label="Policies">
+              <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
+              <Link href="/terms">Terms of service <ExternalLink size={12} /></Link>
+              <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
+              <Link href="/support">Public support page <ExternalLink size={12} /></Link>
+            </nav>
+          </div>
         </div>
       </div>
     </AppShell>

@@ -8,12 +8,9 @@ import {
   KeyRound,
   Link2,
   LogOut,
-  Mail,
   ShieldCheck,
-  UserRound,
 } from "lucide-react";
 import { AppShell } from "./app-shell";
-import { StatusBadge } from "./status-badge";
 import { InstagramGlyph } from "./instagram-glyph";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
@@ -52,10 +49,20 @@ function roleLabel(role: MemberRole): string {
   return role.charAt(0) + role.slice(1).toLowerCase();
 }
 
+/** What the Instagram hero row says — read-only here; connect/disconnect lives on Settings. */
+function connectionSummary(connections: Connection[]): { title: string; detail: string } {
+  if (connections.length === 0) {
+    return { title: "No Instagram account connected", detail: "Connect a professional account to start automating replies." };
+  }
+  if (connections.length === 1) {
+    const [connection] = connections;
+    return { title: `@${connection.username}`, detail: `Connected ${formatDate(connection.connectedAt)} — manage or disconnect in Settings.` };
+  }
+  return { title: `${connections.length} accounts connected`, detail: "Manage each connection, or add another, in Settings." };
+}
+
 export function ProfileScreen({ email, memberSince, emailVerified, role }: ProfileScreenProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [disconnectingId, setDisconnectingId] = useState("");
-  const [disconnectError, setDisconnectError] = useState("");
   const [saved, setSaved] = useState(() => {
     if (typeof window === "undefined") return false;
     return new URLSearchParams(window.location.search).get("accountSaved") === "password";
@@ -83,24 +90,7 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
       .catch(() => undefined);
   }, []);
 
-  async function disconnect(id: string) {
-    if (disconnectingId) return;
-    setDisconnectingId(id);
-    setDisconnectError("");
-    try {
-      const response = await fetch("/api/meta/connection", {
-        method: "DELETE",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!response.ok) throw new Error("Could not disconnect Instagram");
-      setConnections((current) => current.filter((connection) => connection.id !== id));
-    } catch (error) {
-      setDisconnectError(error instanceof Error ? error.message : "Could not disconnect Instagram");
-    } finally {
-      setDisconnectingId("");
-    }
-  }
+  const { title: connectionTitle, detail: connectionDetail } = connectionSummary(connections);
 
   return (
     <AppShell>
@@ -109,7 +99,7 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
           <div>
             <p className="eyebrow">Account</p>
             <h1>My Profile</h1>
-            <p className="muted page-lede">Your identity, security settings, and connected Instagram account in one place.</p>
+            <p className="muted page-lede">Your identity, security, and connected Instagram account in one place.</p>
           </div>
         </header>
 
@@ -145,136 +135,57 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
           </div>
         </section>
 
-        <div className="profile-grid">
-          <section className="panel profile-panel" aria-label="Account details">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Account</p>
-                <h2>Details</h2>
-              </div>
-              <UserRound size={21} />
-            </div>
-            <ul className="kv-list">
-              <li>
-                <span className="kv-label"><Mail size={12} /> Email</span>
-                <span className="kv-value">{email || "—"}</span>
-              </li>
-              <li>
-                <span className="kv-label">Role</span>
-                <span className="kv-value">{roleLabel(role)}</span>
-              </li>
-              <li>
-                <span className="kv-label">Plan</span>
-                <span className="kv-value">Free</span>
-              </li>
-            </ul>
-          </section>
+        <section className="settings-hero panel" aria-label="Connected Instagram">
+          <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
+          <div className="settings-copy">
+            <p className="eyebrow">Connection</p>
+            <h2>{connectionTitle}</h2>
+            <p>{connectionDetail}</p>
+          </div>
+          <div className="settings-action">
+            <Link className={`button ${connections.length === 0 ? "button-primary" : "button-secondary"}`} href="/settings">
+              <Link2 size={16} /> {connections.length === 0 ? "Connect Instagram" : "Manage in Settings"}
+            </Link>
+          </div>
+        </section>
 
-          <section className="panel profile-panel" aria-label="Connected Instagram">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Connections</p>
-                <h2>Instagram account</h2>
-              </div>
-              <InstagramGlyph size={21} />
+        <section className="panel" aria-label="Security">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Security</p>
+              <h2>Password & devices</h2>
             </div>
-            {disconnectError && <p className="form-error" role="alert">{disconnectError}</p>}
-            {connections.length === 0 ? (
-              <>
-                <p className="muted">No Instagram account is connected yet. Connect one to start automating replies.</p>
-                <div className="profile-actions">
-                  <Link className="button button-primary" href="/settings">
-                    <Link2 size={16} /> Connect Instagram
-                  </Link>
-                </div>
-              </>
-            ) : (
-              <>
-                <ul className="kv-list">
-                  {connections.map((connection) => (
-                    <li key={connection.id}>
-                      <span className="kv-label">@{connection.username}</span>
-                      <span className="kv-value"><StatusBadge status={connection.status} /></span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="profile-actions">
-                  <Link className="button button-secondary" href="/settings">Manage connection</Link>
-                  {connections.map((connection) => (
-                    <button
-                      className="button button-secondary"
-                      key={connection.id}
-                      type="button"
-                      disabled={disconnectingId === connection.id}
-                      onClick={() => void disconnect(connection.id)}
-                    >
-                      {disconnectingId === connection.id ? "Disconnecting…" : `Disconnect @${connection.username}`}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </section>
+            <ShieldCheck size={21} />
+          </div>
+          <form action="/api/account" method="post" className="account-form">
+            <input type="hidden" name="action" value="change-password" />
+            <label className="field">
+              <span>Current password</span>
+              <input name="currentPassword" type="password" autoComplete="current-password" required />
+            </label>
+            <label className="field">
+              <span>New password</span>
+              <input name="newPassword" type="password" autoComplete="new-password" minLength={12} required />
+            </label>
+            <p className="muted">At least 12 characters. Your other devices stay signed in.</p>
+            <button className="button button-secondary" type="submit">
+              <KeyRound size={15} /> Update password
+            </button>
+          </form>
+          <form action="/api/account" method="post">
+            <input type="hidden" name="action" value="logout-all" />
+            <button className="button button-secondary" type="submit">
+              <LogOut size={15} /> Sign out of all devices
+            </button>
+          </form>
+        </section>
 
-          <section className="panel profile-panel" aria-label="Security">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Security</p>
-                <h2>Password & devices</h2>
-              </div>
-              <ShieldCheck size={21} />
-            </div>
-            <form action="/api/account" method="post" className="account-form">
-              <input type="hidden" name="action" value="change-password" />
-              <label className="field">
-                <span>Current password</span>
-                <input name="currentPassword" type="password" autoComplete="current-password" required />
-              </label>
-              <label className="field">
-                <span>New password</span>
-                <input name="newPassword" type="password" autoComplete="new-password" minLength={12} required />
-              </label>
-              <p className="muted">At least 12 characters. Your other devices stay signed in.</p>
-              <button className="button button-secondary" type="submit">
-                <KeyRound size={15} /> Update password
-              </button>
-            </form>
-            <form action="/api/account" method="post">
-              <input type="hidden" name="action" value="logout-all" />
-              <button className="button button-secondary" type="submit">
-                <LogOut size={15} /> Sign out of all devices
-              </button>
-            </form>
-          </section>
-
-          <section className="panel profile-panel" aria-label="Related pages">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Workspace</p>
-                <h2>Related pages</h2>
-              </div>
-              <ExternalLink size={21} />
-            </div>
-            <ul className="kv-list">
-              <li>
-                <span className="kv-label">Team & invitations</span>
-                <Link className="text-link" href="/settings">Open settings</Link>
-              </li>
-              <li>
-                <span className="kv-label">Help centre</span>
-                <Link className="text-link" href="/help">Browse guides</Link>
-              </li>
-              <li>
-                <span className="kv-label">Privacy policy</span>
-                <Link className="text-link" href="/privacy">View <ExternalLink size={12} /></Link>
-              </li>
-              <li>
-                <span className="kv-label">Data deletion</span>
-                <Link className="text-link" href="/data-deletion">View <ExternalLink size={12} /></Link>
-              </li>
-            </ul>
-          </section>
-        </div>
+        <nav className="profile-footer-links" aria-label="Related pages">
+          <Link href="/settings">Team & invitations</Link>
+          <Link href="/help">Help centre</Link>
+          <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
+          <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
+        </nav>
       </div>
     </AppShell>
   );

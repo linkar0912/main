@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { AppShell, useAccountIdentity } from "./app-shell";
 import { useAutomations } from "./automation-list";
+import { CreateAutomationButton } from "./create-automation-button";
+import { StatusBadge } from "./status-badge";
+import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
 
 // Mirrors DailyCount in src/lib/repository.ts — the key is `day`, not `date`.
@@ -47,18 +50,6 @@ function NeutralPill({ children }: { children: ReactNode }) {
   return <span className="delta-pill">{children}</span>;
 }
 
-function flowTriggerLabel(automation: AutomationRecord): string {
-  const trigger = automation.definition.trigger as { type?: string } | undefined;
-  if (trigger?.type === "message") return "Active · DM keywords";
-  if (trigger?.type === "first_contact") return "Active · first-contact welcome";
-  if (trigger?.type === "story_mention") return "Active · story mentions";
-  return "Active · comment replies";
-}
-
-function automationStatusLabel(status: AutomationRecord["status"]): string {
-  return status.charAt(0) + status.slice(1).toLowerCase();
-}
-
 function DeltaPill({ delta }: { delta?: Delta | null }) {
   if (!delta) return null;
   if (delta.dir === "flat") return <NeutralPill>{delta.label}</NeutralPill>;
@@ -70,50 +61,55 @@ function DeltaPill({ delta }: { delta?: Delta | null }) {
   );
 }
 
+function flowTriggerLabel(automation: AutomationRecord): string {
+  const trigger = automation.definition.trigger as { type?: string } | undefined;
+  if (trigger?.type === "message") return "DM keywords";
+  if (trigger?.type === "first_contact") return "First-contact welcome";
+  if (trigger?.type === "story_mention") return "Story mentions";
+  return "Comment replies";
+}
+
 function formatDayLabel(day: string | undefined): string {
   if (!day) return "";
   const dayOfMonth = Number(day.slice(-2));
   return Number.isFinite(dayOfMonth) ? String(dayOfMonth) : day.slice(-2);
 }
 
-function VitalsChart({ points }: { points: DayPoint[] }) {
-  const max = Math.max(1, ...points.map((point) => point.count));
-  const total = sumPoints(points);
-  const avg = points.length ? total / points.length : 0;
-  const avgPct = Math.max(2, Math.min(96, Math.round((avg / max) * 100)));
+/** Two-series bar chart, matching the pattern already used on the Insights page. */
+function VolumeChart({ sentPoints, reachedPoints }: { sentPoints: DayPoint[]; reachedPoints: DayPoint[] }) {
+  const reachedByDay = new Map(reachedPoints.map((point) => [point.day, point.count]));
+  const peak = Math.max(1, ...sentPoints.map((point) => point.count), ...reachedPoints.map((point) => point.count));
+  // Any day with real activity still reads as a bar, not a sliver — plain
+  // count/peak scaling flattens modest, evenly-spread real-world numbers.
+  const heightOf = (count: number) => (count > 0 ? Math.max(10, Math.round((count / peak) * 100)) : 2);
+
   return (
     <>
-      <div className="vitals-plot">
-        {points.map((point) => (
-          <div
-            key={point.day}
-            className="vitals-col"
-            title={`${formatDayLabel(point.day)} — ${point.count} sent`}
-          >
+      <div className="insights-chart" role="img" aria-label="Daily replies sent and people reached for the last 14 days">
+        {sentPoints.map((point) => {
+          const reached = reachedByDay.get(point.day) ?? 0;
+          return (
             <div
-              className="vitals-bar"
-              style={{ height: `${Math.max(3, Math.round(((point.count ?? 0) / max) * 100))}%` }}
-            />
-          </div>
-        ))}
-        {total > 0 && (
-          <div className="vitals-avg" style={{ bottom: `${avgPct}%` }} aria-hidden>
-            <span>daily avg</span>
-          </div>
-        )}
+              className="chart-column"
+              key={point.day}
+              title={`${formatDayLabel(point.day)} — ${point.count} sent, ${reached} reached`}
+            >
+              <div className="chart-bars is-lg">
+                <span className="chart-bar bar-participants" style={{ height: `${heightOf(reached)}%` }} />
+                <span className="chart-bar bar-sent" style={{ height: `${heightOf(point.count)}%` }} />
+              </div>
+              <small>{formatDayLabel(point.day)}</small>
+            </div>
+          );
+        })}
       </div>
-      <div className="vitals-xrow">
-        {points.map((point) => (
-          <span key={`x-${point.day}`} className="vitals-x">
-            {formatDayLabel(point.day)}
-          </span>
-        ))}
-      </div>
+      <p className="chart-legend">
+        <span className="legend-swatch swatch-sent" /> Replies sent
+        <span className="legend-swatch swatch-participants" /> People reached
+      </p>
     </>
   );
 }
-
-const FLOW_TONES = ["flow-a", "flow-b", "flow-c"] as const;
 
 function displayNameFromEmail(email: string): string {
   const handle = email.split("@")[0] ?? "";
@@ -133,15 +129,19 @@ function DashboardGreeting() {
           Welcome back — here’s how your replies performed over the last 14 days.
         </p>
       </div>
-      <Link className="button button-primary" href="/automations/new">
+      <CreateAutomationButton className="button button-primary">
         <Plus size={17} /> Create automation
-      </Link>
+      </CreateAutomationButton>
     </header>
   );
 }
 
-/** ManyChat-style first-steps checklist, derived from real workspace state. */
-function OnboardingGuide({ automations, hasConnection, loading }: { automations: AutomationRecord[]; hasConnection: boolean | null; loading: boolean }) {
+/**
+ * A single connected rail instead of three equal-weight cards: done steps
+ * recede, the next one is the only thing visually asking for attention.
+ */
+function SetupChecklist({ automations, hasConnection, loading }: { automations: AutomationRecord[]; hasConnection: boolean | null; loading: boolean }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   if (hasConnection === null || loading) return null;
   const steps = [
     {
@@ -150,15 +150,13 @@ function OnboardingGuide({ automations, hasConnection, loading }: { automations:
       title: "Connect your Instagram account",
       hint: "Link a professional account so replies can be sent.",
       href: "/settings",
-      icon: Zap,
     },
     {
       key: "create",
       done: automations.length > 0,
       title: "Create your first automation",
       hint: "Start from a template or build one from scratch.",
-      href: "/automations/new",
-      icon: Plus,
+      href: null,
     },
     {
       key: "activate",
@@ -166,49 +164,54 @@ function OnboardingGuide({ automations, hasConnection, loading }: { automations:
       title: "Activate it and go live",
       hint: "Active flows reply to real comments and DMs instantly.",
       href: "/automations",
-      icon: Workflow,
     },
   ];
   const completed = steps.filter((step) => step.done).length;
-  const percent = Math.round((completed / steps.length) * 100);
   if (completed === steps.length) return null;
+  const nextIndex = steps.findIndex((step) => !step.done);
 
   return (
-    <section className="onboarding-panel" aria-label="First steps">
-      <div className="onboarding-head">
+    <section className="setup-panel" aria-label="First steps">
+      <div className="setup-head">
         <div>
           <h2>Start here</h2>
           <p>Three quick steps to get your first useful reply live.</p>
         </div>
-        <div className="onboarding-progress">
-          <strong>{completed}/{steps.length} complete</strong>
-          <span className="onboarding-track">
-            <span className="onboarding-fill" style={{ width: `${percent}%` }} />
-          </span>
-        </div>
+        <span className="setup-count">{completed}/{steps.length} done</span>
       </div>
-      <ul className="onboarding-steps" data-stagger>
-        {steps.map((step) => {
-          const Icon = step.icon;
-          return (
-          <li key={step.key}>
-            <Link className={`onboarding-step ${step.done ? "is-done" : ""}`} href={step.href}>
-              <span className="onboarding-icon">
-                <Icon size={18} />
-              </span>
-              <span className="onboarding-copy">
+      <div className="setup-rail">
+        {steps.map((step, index) => {
+          const isNext = index === nextIndex;
+          const rowClassName = `setup-row ${step.done ? "is-done" : ""} ${isNext ? "is-next" : ""}`;
+          const content = (
+            <>
+              <span className="setup-node">{step.done ? <CheckCircle2 size={17} /> : index + 1}</span>
+              <span className="setup-copy">
                 <strong>{step.title}</strong>
                 <small>{step.hint}</small>
               </span>
-              <span className="onboarding-status">
-                {step.done ? <><CheckCircle2 size={13} /> Complete</> : <>Quick setup</>}
-              </span>
-              <ArrowRight className="onboarding-arrow" size={15} />
+              {step.done ? (
+                <span className="setup-done-tag"><CheckCircle2 size={13} /> Done</span>
+              ) : (
+                <span className="setup-cta">{isNext ? "Do this now" : "Quick setup"} <ArrowRight size={13} /></span>
+              )}
+            </>
+          );
+          if (step.href === null) {
+            return (
+              <button key={step.key} type="button" className={rowClassName} onClick={() => setPickerOpen(true)}>
+                {content}
+              </button>
+            );
+          }
+          return (
+            <Link key={step.key} className={rowClassName} href={step.href}>
+              {content}
             </Link>
-          </li>
           );
         })}
-      </ul>
+      </div>
+      {pickerOpen && <TemplatePickerModal onClose={() => setPickerOpen(false)} />}
     </section>
   );
 }
@@ -273,106 +276,83 @@ export function DashboardScreen() {
 
         <DashboardGreeting />
 
-        <OnboardingGuide automations={automations} hasConnection={hasConnection} loading={loading} />
+        <SetupChecklist automations={automations} hasConnection={hasConnection} loading={loading} />
 
-        <section className="panel perf-panel" aria-label="Performance over time">
+        <section className="panel chart-panel" aria-label="Performance over time">
           <div className="panel-heading">
-            <h2>Performance over time</h2>
-            <p className="perf-range">Last 14 days</p>
+            <div>
+              <p className="eyebrow">Performance · Last 14 days</p>
+              <h2>Reply volume</h2>
+            </div>
           </div>
-
-          <div className="perf-strip">
-            <div className="perf-cell">
-              <span className="perf-label">Replies sent</span>
-              <span className="perf-row">
-                <strong className="perf-value">{sentTotal.toLocaleString()}</strong>
+          <div className="stat-row">
+            <div className="stat-block">
+              <span className="stat-label">Replies sent</span>
+              <span className="stat-value-row">
+                <strong>{sentTotal.toLocaleString()}</strong>
                 <DeltaPill delta={sentDelta} />
               </span>
             </div>
-            <div className="perf-cell">
-              <span className="perf-label">People reached</span>
-              <span className="perf-row">
-                <strong className="perf-value">{reachedTotal.toLocaleString()}</strong>
+            <div className="stat-block">
+              <span className="stat-label">People reached</span>
+              <span className="stat-value-row">
+                <strong>{reachedTotal.toLocaleString()}</strong>
                 <DeltaPill delta={reachedDelta} />
               </span>
             </div>
-            <div className="perf-cell">
-              <span className="perf-label">Emails captured</span>
-              <span className="perf-row">
-                <strong className="perf-value">
-                  {(capturedCount ?? 0).toLocaleString()}
-                </strong>
+            <div className="stat-block">
+              <span className="stat-label">Emails captured</span>
+              <span className="stat-value-row">
+                <strong>{(capturedCount ?? 0).toLocaleString()}</strong>
                 <NeutralPill>all time</NeutralPill>
               </span>
             </div>
-            <div className="perf-cell">
-              <span className="perf-label">Active flows</span>
-              <span className="perf-row">
-                <strong className="perf-value">{activeCount}</strong>
+            <div className="stat-block">
+              <span className="stat-label">Active flows</span>
+              <span className="stat-value-row">
+                <strong>{activeCount}</strong>
                 <NeutralPill>{automations.length} total</NeutralPill>
               </span>
             </div>
           </div>
+          <VolumeChart sentPoints={sentPerDay} reachedPoints={participantsPerDay} />
         </section>
 
-        <div className="dashboard-grid">
-          <section className="panel chart-panel" aria-label="Reply volume">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Volume</p>
-                <h2>Reply volume</h2>
-              </div>
-              <div className="chart-legend">
-                <span><i data-tone="forest" /> Replies sent</span>
-              </div>
+        <section className="panel automations-panel" aria-label="Your automations">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">At a glance</p>
+              <h2>Your automations</h2>
             </div>
-            <VitalsChart points={sentPerDay} />
-          </section>
-
-          <aside className="panel flows-panel" aria-label="Your automations">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">At a glance</p>
-                <h2>Your automations</h2>
-              </div>
-              <Link className="text-link" href="/automations">
-                Manage all <ArrowUpRight size={13} />
-              </Link>
+            <Link className="text-link" href="/automations">
+              Manage all <ArrowUpRight size={13} />
+            </Link>
+          </div>
+          {flowRows.length === 0 ? (
+            <div className="empty-state">
+              <span className="empty-icon"><Workflow size={20} /></span>
+              <h3>No automations yet</h3>
+              <p>Create your first reply flow to start answering comments and DMs automatically.</p>
+              <CreateAutomationButton className="button button-primary">
+                <Plus size={15} /> New automation
+              </CreateAutomationButton>
             </div>
-            {flowRows.length === 0 ? (
-              <div className="flows-empty">
-                <Workflow size={20} />
-                <p>No automations yet. Create your first reply flow.</p>
-                <Link className="button button-secondary" href="/automations/new">
-                  <Plus size={15} /> New automation
+          ) : (
+            <div className="automation-list">
+              {flowRows.map((automation) => (
+                <Link className="automation-row" key={automation.id} href={`/automations/${automation.id}/edit`}>
+                  <span className="automation-icon">
+                    {automation.status === "ACTIVE" ? <Zap size={19} strokeWidth={1.7} /> : <Workflow size={19} strokeWidth={1.7} />}
+                  </span>
+                  <span className="automation-copy">
+                    <span className="automation-title"><strong>{automation.name}</strong><StatusBadge status={automation.status} /></span>
+                    <p>{flowTriggerLabel(automation)}</p>
+                  </span>
                 </Link>
-              </div>
-            ) : (
-              <ul className="flow-list">
-                {flowRows.map((automation, index) => {
-                  const inactive = automation.status !== "ACTIVE";
-                  const tone = FLOW_TONES[index % FLOW_TONES.length];
-                  return (
-                    <li key={automation.id}>
-                      <Link
-                        className={`flow-chip ${tone} ${inactive ? "is-paused" : ""}`}
-                        href={`/automations/${automation.id}/edit`}
-                      >
-                        <span className="flow-chip-icon">
-                          {inactive ? <Workflow size={16} /> : <Zap size={16} />}
-                        </span>
-                        <span className="flow-meta">
-                          <strong>{automation.name}</strong>
-                          <small>{inactive ? automationStatusLabel(automation.status) : flowTriggerLabel(automation)}</small>
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </aside>
-        </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </AppShell>
   );

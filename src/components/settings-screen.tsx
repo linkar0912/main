@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Camera, Check, Clock, ExternalLink, LockKeyhole, ShieldCheck, UserPlus, Users, X } from "lucide-react";
+import { AlertTriangle, Check, Clock, ExternalLink, LockKeyhole, ShieldCheck, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
+import { InstagramGlyph } from "./instagram-glyph";
 import { StatusBadge } from "./status-badge";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
@@ -195,7 +196,7 @@ export function SettingsScreen() {
         {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status"><span>{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}</span><p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
 
         <section className="settings-hero panel">
-          <div className="settings-icon"><Camera size={25} /></div>
+          <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
           <div className="settings-copy"><p className="eyebrow">Instagram connections</p><h2>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h2><p>{connections.length > 0 ? "Connected accounts receive comment and DM webhooks for this workspace." : "Connect a professional Instagram account to enable delivery."}</p></div>
           <div className="settings-action"><a className="button button-primary" href="/api/meta/oauth/start">{connections.length > 0 ? "Connect another account" : "Connect Instagram"} <ExternalLink size={15} /></a></div>
         </section>

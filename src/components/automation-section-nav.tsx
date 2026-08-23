@@ -1,23 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { ListOrdered, Workflow, Zap } from "lucide-react";
+import { ListOrdered, Megaphone, Workflow } from "lucide-react";
 
-/** Left-hand sub-navigation shared by My Automations, Basic and Sequences. */
-export function AutomationSectionNav({ active }: { active: "my" | "basic" | "sequences" }) {
+/** Left-hand sub-navigation shared by My Automations, Sequences and Broadcasts. */
+export function AutomationSectionNav({ active }: { active: "my" | "sequences" | "broadcasts" }) {
   return (
     <nav className="section-nav" aria-label="Automation sections">
       <Link className={`section-nav-link ${active === "my" ? "is-active" : ""}`} href="/automations">
         <Workflow size={18} strokeWidth={1.8} />
         <span>My Automations</span>
       </Link>
-      <Link className={`section-nav-link ${active === "basic" ? "is-active" : ""}`} href="/automations/templates">
-        <Zap size={18} strokeWidth={1.8} />
-        <span>Basic</span>
-      </Link>
       <Link className={`section-nav-link ${active === "sequences" ? "is-active" : ""}`} href="/automations/sequences">
         <ListOrdered size={18} strokeWidth={1.8} />
         <span>Sequences</span>
+      </Link>
+      <Link className={`section-nav-link ${active === "broadcasts" ? "is-active" : ""}`} href="/automations/broadcasts">
+        <Megaphone size={18} strokeWidth={1.8} />
+        <span>Broadcasts</span>
       </Link>
     </nav>
   );

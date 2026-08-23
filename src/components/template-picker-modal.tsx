@@ -1,0 +1,222 @@
+"use client";
+
+import { useEffect, useId, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
+import {
+  AtSign,
+  CheckCircle2,
+  Clapperboard,
+  Gift,
+  LayoutGrid,
+  Link2,
+  Mail,
+  MessageCircle,
+  MessageSquare,
+  Plus,
+  Reply,
+  Search,
+  ShoppingBag,
+  UserCheck,
+  UserPlus,
+  X,
+} from "lucide-react";
+import { basicAutomationTemplates, triggerLabel, type PremadeTemplate, type TemplateTriggerType } from "@/src/lib/automation/templates";
+
+const TEMPLATE_ICONS = {
+  "user-plus": UserPlus,
+  message: MessageCircle,
+  "at-sign": AtSign,
+  reply: Reply,
+  menu: LayoutGrid,
+  mail: Mail,
+  link: Link2,
+  megaphone: MessageSquare,
+  "user-check": UserCheck,
+  check: CheckCircle2,
+  gift: Gift,
+  "shopping-bag": ShoppingBag,
+} as const;
+
+const CATEGORY_ICONS: Record<TemplateTriggerType, typeof MessageCircle> = {
+  comment: MessageSquare,
+  message: MessageCircle,
+  story_mention: AtSign,
+  first_contact: UserPlus,
+  referral: Link2,
+  optin: CheckCircle2,
+};
+
+// Order categories the way a person thinks about them, not alphabetically.
+const CATEGORY_ORDER: TemplateTriggerType[] = ["comment", "message", "story_mention", "first_contact", "referral", "optin"];
+
+type PickerItem = {
+  id: string;
+  title: string;
+  description: string;
+  icon: typeof MessageCircle;
+  category: TemplateTriggerType;
+  popular?: boolean;
+  featured?: boolean;
+  href: string;
+};
+
+function matchesQuery(haystack: string, query: string): boolean {
+  return haystack.toLowerCase().includes(query.trim().toLowerCase());
+}
+
+function Tile({ item, onSelect }: { item: PickerItem; onSelect: () => void }) {
+  const Icon = item.icon;
+  return (
+    <button type="button" className="template-picker-tile" onClick={onSelect}>
+      <span className="template-picker-tile-icon"><Icon size={18} strokeWidth={1.8} /></span>
+      <strong>{item.title}</strong>
+      <p>{item.description}</p>
+      <span className="template-picker-tile-meta">
+        <span>{item.featured ? "Quick automation" : triggerLabel(item.category)}</span>
+        {item.popular && <span className="template-picker-badge">Popular</span>}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * The single entry point for starting a new automation — templates, the
+ * follow-gated campaign quick-start, and a blank builder, all in one place.
+ * Replaces the old separate /automations/templates page and /automations/new
+ * type chooser: nothing to browse to, just pick and go.
+ */
+export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<TemplateTriggerType | null>(null);
+  const headingId = useId();
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  function go(href: string) {
+    onClose();
+    router.push(href);
+  }
+
+  const items: PickerItem[] = useMemo(() => {
+    const campaign: PickerItem = {
+      id: "campaign-follow-gate",
+      title: "Follow-gated Reel campaign",
+      description: "Comment keyword → public reply → DM opt-in → follow check → deliver your link.",
+      icon: Clapperboard,
+      category: "comment",
+      popular: true,
+      featured: true,
+      href: "/automations/new?type=campaign",
+    };
+    const recipes: PickerItem[] = basicAutomationTemplates.map((template: PremadeTemplate) => ({
+      id: template.id,
+      title: template.title,
+      description: template.description,
+      icon: TEMPLATE_ICONS[template.icon],
+      category: template.setup.definition.trigger.type,
+      popular: template.popular,
+      href: `/automations/new?type=classic&template=${template.id}`,
+    }));
+    return [campaign, ...recipes];
+  }, []);
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<TemplateTriggerType, number>();
+    for (const item of items) counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
+    return counts;
+  }, [items]);
+
+  const visible = items.filter((item) => {
+    if (category && item.category !== category) return false;
+    if (!query.trim()) return true;
+    return matchesQuery(item.title, query) || matchesQuery(item.description, query);
+  });
+  const popular = visible.filter((item) => item.popular);
+  const rest = visible.filter((item) => !item.popular);
+
+  return createPortal(
+    <div className="modal-scrim" onMouseDown={onClose}>
+      <div className="modal-panel is-wide template-picker" role="dialog" aria-modal="true" aria-labelledby={headingId} onMouseDown={(event) => event.stopPropagation()}>
+        <header className="template-picker-head">
+          <h2 id={headingId}>Templates</h2>
+          <div className="template-picker-head-actions">
+            <button type="button" className="button button-secondary button-small" onClick={() => go("/automations/new?type=classic")}>
+              <Plus size={14} /> Start from scratch
+            </button>
+            <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
+              <X size={18} />
+            </button>
+          </div>
+        </header>
+
+        <div className="template-picker-search">
+          <Search size={16} />
+          <input
+            autoFocus
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search templates…"
+            aria-label="Search templates"
+          />
+        </div>
+
+        <div className="template-picker-layout">
+          <nav className="template-picker-categories" aria-label="Template categories">
+            <button type="button" className={`template-picker-category ${category === null ? "is-active" : ""}`} onClick={() => setCategory(null)}>
+              <LayoutGrid size={16} strokeWidth={1.8} />
+              <span>All templates</span>
+              <span className="template-picker-count">{items.length}</span>
+            </button>
+            {CATEGORY_ORDER.filter((type) => categoryCounts.has(type)).map((type) => {
+              const Icon = CATEGORY_ICONS[type];
+              return (
+                <button key={type} type="button" className={`template-picker-category ${category === type ? "is-active" : ""}`} onClick={() => setCategory(type)}>
+                  <Icon size={16} strokeWidth={1.8} />
+                  <span>{triggerLabel(type)}</span>
+                  <span className="template-picker-count">{categoryCounts.get(type)}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="template-picker-content">
+            {visible.length === 0 && <p className="muted">No templates match “{query}”.</p>}
+
+            {popular.length > 0 && (
+              <>
+                <p className="template-picker-section-label">Recommended</p>
+                <div className="template-picker-grid">
+                  {popular.map((item) => <Tile key={item.id} item={item} onSelect={() => go(item.href)} />)}
+                </div>
+              </>
+            )}
+
+            {rest.length > 0 && (
+              <>
+                <p className="template-picker-section-label">More templates</p>
+                <div className="template-picker-grid">
+                  {rest.map((item) => <Tile key={item.id} item={item} onSelect={() => go(item.href)} />)}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
