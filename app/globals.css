@@ -856,7 +856,7 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
   border-top: 1px solid var(--line);
   display: flex;
   gap: var(--space-4);
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-top: var(--space-5);
   padding-top: var(--space-4);
 }

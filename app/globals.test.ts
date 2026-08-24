@@ -47,6 +47,7 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.profile-main\s*>\s*\.panel,\s*\.profile-side\s*>\s*\.panel\s*{[^}]*margin-bottom:\s*0/);
     expect(css).toMatch(/\.settings-grid\s*>\s*\.panel\s*{[^}]*margin-bottom:\s*0/);
     expect(css).toMatch(/\.field-support\s*{[^}]*display:\s*flex[^}]*flex-direction:\s*column/);
+    expect(css).toMatch(/\.sequence-form-actions\s*{[^}]*justify-content:\s*flex-end/);
   });
 
   it("contains mobile rows and preserves readable actions", () => {
