@@ -74,6 +74,17 @@ export function buildDirectMessagePayload(recipientId: string, message: MetaMess
   if (message.type === "text") {
     return { recipient: { id: recipientId }, message: { text: message.text } };
   }
+  if (message.type === "image") {
+    return {
+      recipient: { id: recipientId },
+      message: {
+        attachment: {
+          type: "image",
+          payload: { url: message.imageUrl, is_reusable: true },
+        },
+      },
+    };
+  }
   return {
     recipient: { id: recipientId },
     message: {

@@ -1,4 +1,4 @@
-import { matchesTrigger } from "./match";
+import { matchesTrigger, findMatchedKeyword } from "./match";
 import type { EvaluationContext, EvaluationResult, ExecutionAction, FlowDefinitionV1, NormalizedEvent } from "./types";
 import { withinSchedule } from "./types";
 
@@ -18,6 +18,11 @@ export function evaluateFlow(
   if (flow.trigger.type === "comment" && flow.actions.some((action) => action.type !== "private_reply")) {
     return { status: "skipped", reason: "comment triggers support only a private reply", actions: [] };
   }
+
+  const matchedKeyword =
+    (flow.trigger.type === "comment" || flow.trigger.type === "message") && flow.trigger.match === "keyword"
+      ? findMatchedKeyword(event.text, flow.trigger.keywords)
+      : undefined;
 
   const actions: ExecutionAction[] = [];
   let privateReplyAdded = false;
@@ -42,6 +47,13 @@ export function evaluateFlow(
       actions.push({ type: "send_text", recipientId: event.recipientId, text: action.text });
     } else if (action.type === "send_link") {
       actions.push({ type: "send_link", recipientId: event.recipientId, text: action.text, url: action.url });
+    } else if (action.type === "send_image") {
+      // Meta's image attachment carries no caption field, so an optional caption
+      // expands into its own text message right after the image.
+      actions.push({ type: "send_image", recipientId: event.recipientId, imageUrl: action.imageUrl });
+      if (action.caption) {
+        actions.push({ type: "send_text", recipientId: event.recipientId, text: action.caption });
+      }
     } else {
       actions.push({
         type: "send_button",
@@ -53,5 +65,5 @@ export function evaluateFlow(
     }
   }
 
-  return { status: "matched", actions };
+  return { status: "matched", actions, ...(matchedKeyword ? { matchedKeyword } : {}) };
 }

@@ -101,6 +101,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
         commentId,
         mediaId: stringValue(media?.id) ?? stringValue(value.media_id),
         recipientId: stringValue(from?.id),
+        ...(stringValue(from?.username) ? { senderUsername: stringValue(from?.username) } : {}),
         timestamp: numberValue(value.created_time, entryTime),
       });
     }

@@ -45,7 +45,31 @@ export type FlowAction =
   | { type: "private_reply"; text: string }
   | { type: "send_text"; text: string }
   | { type: "send_link"; text: string; url: string }
-  | { type: "send_button"; text: string; buttonLabel: string; url: string };
+  | { type: "send_button"; text: string; buttonLabel: string; url: string }
+  | { type: "send_image"; imageUrl: string; caption?: string };
+
+/**
+ * Personalization tokens available in every outbound text (replies, buttons,
+ * captions, prompts, follow-ups): {username} → the commenter's handle when the
+ * webhook provides one, otherwise "there"; {keyword} → the trigger keyword that
+ * matched (keyword flows only); {media} → a friendly label for the post that
+ * received the comment. Unknown tokens are left untouched so a typo never
+ * corrupts a live reply.
+ */
+export const PERSONALIZATION_TOKENS = ["{username}", "{keyword}", "{media}"] as const;
+
+/**
+ * A timed nudge scheduled after the flow's own messages: "Still interested?"
+ * 24 hours later. Delivery is skipped when the person opted out or Meta's
+ * 24-hour messaging window has closed.
+ */
+export type FlowFollowUp = {
+  /** Minutes to wait after the flow's messages went out (1 minute .. 7 days). */
+  delayMinutes: number;
+  text: string;
+  buttonLabel?: string;
+  url?: string;
+};
 
 /** Optional activation window; both bounds are optional ISO datetimes. */
 export type FlowSchedule = {
@@ -77,11 +101,28 @@ export type FlowEmailCapture = {
   notifyUrl?: string;
   /** Extra questions asked after the email (conversational form). Answers are stored on the contact. */
   fields?: EmailCaptureField[];
+  /**
+   * Sent when an answer hits a field's `exitKeywords` - ends the question queue
+   * early without failing the lead. Falls back to `confirmationText`.
+   */
+  exitText?: string;
 };
 
 export type EmailCaptureField = {
   id: string;
   question: string;
+  /**
+   * Validation applied to the answer before it is stored: "text" accepts
+   * anything, "email" requires an address, "phone" requires a phone number,
+   * "number" requires digits. Defaults to "text".
+   */
+  kind?: "text" | "email" | "phone" | "number";
+  /**
+   * When the reply contains any of these keywords (case-insensitive), the rest
+   * of the question queue is skipped and `emailCapture.exitText` is sent
+   * instead - the polite way out of "Do you have a team?" → "no".
+   */
+  exitKeywords?: string[];
 };
 
 /** Fulfillment email configuration for a captured lead. */
@@ -118,6 +159,12 @@ export type FlowDefinitionV1 = {
   schedule?: FlowSchedule;
   /** Optional DM email-collection follow-up, executed by the runner. */
   emailCapture?: FlowEmailCapture;
+  /**
+   * Timed nudges sent after the flow's own messages (DM-side triggers only).
+   * Each is skipped when the person opted out or the 24-hour messaging window
+   * closed before delivery.
+   */
+  followUps?: FlowFollowUp[];
 };
 
 export type MediaSnapshot = {
@@ -182,6 +229,8 @@ export type NormalizedEvent = {
   commentId?: string;
   mediaId?: string;
   recipientId?: string;
+  /** Comment author handle from the webhook payload, for {username} personalization. */
+  senderUsername?: string;
   interactionPayload?: string;
   timestamp: number;
 };
@@ -205,8 +254,9 @@ export type ExecutionAction =
     text: string;
     buttonLabel: string;
     url: string;
-  };
+  }
+  | { type: "send_image"; recipientId: string; imageUrl: string; caption?: string };
 
 export type EvaluationResult =
-  | { status: "matched"; actions: ExecutionAction[] }
+  | { status: "matched"; actions: ExecutionAction[]; matchedKeyword?: string }
   | { status: "skipped"; reason: string; actions: [] };

@@ -24,7 +24,8 @@ export type OutboundDeliveryKind =
   | "SEQUENCE_STEP"
   | "BROADCAST_RECIPIENT"
   | "LEAD_EMAIL"
-  | "LEAD_WEBHOOK";
+  | "LEAD_WEBHOOK"
+  | "FLOW_FOLLOWUP";
 export type ParticipantState =
   | "COMMENT_MATCHED" | "OPENING_SENT" | "OPTED_IN" | "FOLLOW_REQUIRED"
   | "FOLLOW_VERIFIED" | "LINK_SENT" | "EXPIRED" | "FAILED";
@@ -208,7 +209,7 @@ export type AutomationContactRecord = {
   /** Answers collected by conversational field questions, keyed by field id. */
   fields?: Record<string, string>;
   /** Remaining questions while state is AWAITING_FIELD. */
-  awaitingFields?: { id: string; question: string }[];
+  awaitingFields?: { id: string; question: string; kind?: "text" | "email" | "phone" | "number"; exitKeywords?: string[] }[];
   /** Set when the person opted out (STOP/unsubscribe); every automated send is skipped. */
   suppressedAt?: string;
   lastSeenAt: string;
@@ -278,7 +279,20 @@ export type DueSequenceSend = {
 /** Optional do-not-disturb window, evaluated in the workspace timezone. */
 export type MessagingWindow = { startHour: number; endHour: number; timezone: string };
 
-export type BroadcastSegment = "all_contacts" | "captured_email";
+export type BroadcastSegment =
+  | "all_contacts"
+  | "captured_email"
+  // Win-back: contacts Meta's 24h window has almost certainly closed on. Delivery
+  // attempts will mostly be skipped unless the person messaged again recently -
+  // these segments exist so owners can see and prune the inactive tail.
+  | "inactive_7d"
+  | "inactive_30d";
+
+/** Cutoff instant for a win-back segment: contacts last seen before it qualify. */
+export function broadcastSegmentCutoff(segment: BroadcastSegment, now: Date): Date | null {
+  const days = segment === "inactive_7d" ? 7 : segment === "inactive_30d" ? 30 : 0;
+  return days === 0 ? null : new Date(now.getTime() - days * 24 * 60 * 60 * 1_000);
+}
 export type BroadcastStatus = "PENDING" | "RUNNING" | "COMPLETED";
 
 export type BroadcastRecord = {

@@ -43,6 +43,8 @@ export const deliveryKeys = {
     channel: "email" | "webhook",
     stage: string,
   ) => `lead:${contactId}:automation:${automationId}:${channel}:${stage}`,
+  followUp: (automationId: string, eventId: string, index: number) =>
+    `automation:${automationId}:event:${eventId}:followup:${index}`,
 };
 
 export function classifyProviderFailure(error: unknown): ProviderFailureClass {

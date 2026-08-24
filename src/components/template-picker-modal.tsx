@@ -40,6 +40,13 @@ const TEMPLATE_EXAMPLES: Record<string, string> = {
   "optin-confirmation": "Opt-in tap → “Done! Here is what you asked for.”",
   "giveaway-entry": "DM “enter” → “You are in. Here are the rules.”",
   "affiliate-link": "Comment your code word → affiliate link by DM",
+  "lead-magnet-comment": "Comment “GUIDE” → private reply with your free PDF link",
+  "price-list-responder": "DM “price” → product photo + prices → catalog button",
+  "course-faq-booking": "DM “course” → program details → book-a-call button",
+  "event-registration": "DM “webinar” → collects name, email, phone → confirms seat",
+  "influencer-collab-intake": "DM “collab” → collects email, niche, platform → alerts team",
+  "giveaway-comment-entry": "Comment “ENTER” → private reply: “You’re in!”",
+  "offer-followup": "DM “offer” → deal link → next day: “Still interested?”",
 };
 
 const CAMPAIGN_EXAMPLE = "Comment “drop” → public reply → DM opt-in → follow check → link";

@@ -23,6 +23,7 @@ describe("evaluateFlow", () => {
 
     expect(evaluateFlow(flow, commentEvent)).toEqual({
       status: "matched",
+      matchedKeyword: "guide",
       actions: [{ type: "private_reply", commentId: "comment_1", text: "Here is the guide" }],
     });
   });
@@ -61,6 +62,7 @@ describe("evaluateFlow", () => {
 
     expect(evaluateFlow(flow, event)).toEqual({
       status: "matched",
+      matchedKeyword: "price",
       actions: [
         {
           type: "send_link",

@@ -10,6 +10,13 @@ function containsKeyword(text: string, keywords: string[]): boolean {
   return keywords.some((keyword) => candidate.includes(normalizedText(keyword)));
 }
 
+/** The first keyword that appears in `text` (normalized), for {keyword} personalization. */
+export function findMatchedKeyword(text: string | undefined, keywords: string[]): string | undefined {
+  if (!text) return undefined;
+  const candidate = normalizedText(text);
+  return keywords.find((keyword) => candidate.includes(normalizedText(keyword)));
+}
+
 function matchesConditions(conditions: FlowCondition[], event: NormalizedEvent): boolean {
   return conditions.every((condition) => {
     if (condition.type === "contains_keyword") {

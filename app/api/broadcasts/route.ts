@@ -14,7 +14,7 @@ const MAX_BROADCAST_RECIPIENTS = 500;
 const broadcastSchema = z.object({
   name: z.string().trim().min(1).max(120),
   text: z.string().trim().min(1).max(1_000),
-  segment: z.enum(["all_contacts", "captured_email"]),
+  segment: z.enum(["all_contacts", "captured_email", "inactive_7d", "inactive_30d"]),
   // Optional ISO timestamp. When in the future, jobs are enqueued with a matching
   // BullMQ delay instead of fanning out immediately (quiet hours still apply).
   scheduleStart: z.string().datetime({ offset: true }).optional(),

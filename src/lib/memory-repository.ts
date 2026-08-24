@@ -37,7 +37,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "./repository";
-import { InstagramAccountOwnershipError } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 
 function now(): string {
@@ -1358,9 +1358,11 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {
+      const cutoff = broadcastSegmentCutoff(segment, new Date());
       return [...contacts.values()]
         .filter((contact) => {
           if (contact.workspaceId !== workspaceId || contact.suppressedAt) return false;
+          if (cutoff && contact.lastSeenAt >= cutoff.toISOString()) return false;
           if (segment === "captured_email") return contact.state === "CAPTURED" && Boolean(contact.email);
           return true;
         })

@@ -21,7 +21,12 @@ export type MetaButtonMessage = {
   url: string;
 };
 
-export type MetaMessage = MetaTextMessage | MetaLinkMessage | MetaButtonMessage;
+export type MetaImageMessage = {
+  type: "image";
+  imageUrl: string;
+};
+
+export type MetaMessage = MetaTextMessage | MetaLinkMessage | MetaButtonMessage | MetaImageMessage;
 
 export type MetaTokenResult = {
   accessToken: string;

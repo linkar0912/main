@@ -15,6 +15,8 @@ import { processBroadcastSend, type BroadcastRunnerOptions } from "./lib/automat
 import type { BroadcastSendJob, LeadDeliveryJob } from "./lib/queue";
 import { reconcileExpiredDeliveryClaims } from "./lib/automation/delivery-reconciliation";
 import { processLeadDelivery } from "./lib/automation/lead-delivery";
+import { processFlowFollowUp, type FlowFollowUpRunnerOptions } from "./lib/automation/followup-runner";
+import type { FlowFollowUpJob } from "./lib/queue";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 
@@ -49,6 +51,17 @@ if (!env.redisUrl) {
           claimLeaseMs: env.dispatchLeaseMs,
         };
         return processBroadcastSend(payload, getRepository(), options);
+      }
+      if (job.name === "flow-followup") {
+        const payload = job.data as FlowFollowUpJob;
+        const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+        const options: FlowFollowUpRunnerOptions = {
+          client,
+          tokenEncryptionKey: env.metaTokenEncryptionKey,
+          finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
+          claimLeaseMs: env.dispatchLeaseMs,
+        };
+        return processFlowFollowUp(payload, getRepository(), options);
       }
 
       const event = job.data as NormalizedEvent;

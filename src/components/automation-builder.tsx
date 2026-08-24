@@ -97,6 +97,7 @@ function classicActionOptions(trigger: ClassicTriggerType): { value: FlowAction[
   }
   return [
     { value: "send_text", label: "Send a DM", description: "Send a plain text message" },
+    { value: "send_image", label: "Send an image", description: "Send a photo with a caption" },
     { value: "send_link", label: "Send a link", description: "Deliver a link in a DM" },
     { value: "send_button", label: "Send a button", description: "Deliver a tappable link" },
   ];
@@ -105,6 +106,7 @@ function classicActionOptions(trigger: ClassicTriggerType): { value: FlowAction[
 function newClassicAction(type: FlowAction["type"]): FlowAction {
   if (type === "private_reply") return { type, text: "" };
   if (type === "send_text") return { type, text: "" };
+  if (type === "send_image") return { type, imageUrl: "", caption: "" };
   if (type === "send_link") return { type, text: "", url: "" };
   return { type, text: "", buttonLabel: "Open link", url: "" };
 }
@@ -173,8 +175,28 @@ function AutomationBuilderV1({
   const [deliveryLinkUrl, setDeliveryLinkUrl] = useState(initialDefinition.emailCapture?.delivery?.linkUrl ?? "");
   const [deliveryLinkLabel, setDeliveryLinkLabel] = useState(initialDefinition.emailCapture?.delivery?.linkLabel ?? "");
   const [notifyUrl, setNotifyUrl] = useState(initialDefinition.emailCapture?.notifyUrl ?? "");
-  const [captureFields, setCaptureFields] = useState<{ id: string; question: string }[]>(
-    () => (initialDefinition.emailCapture?.fields ?? []).map((field, index) => ({ id: field.id || `field-${index + 1}`, question: field.question })),
+  const [exitText, setExitText] = useState(initialDefinition.emailCapture?.exitText ?? "");
+  type BuilderField = {
+    id: string;
+    question: string;
+    kind: "text" | "email" | "phone" | "number";
+    exitKeywords: string;
+  };
+  const [captureFields, setCaptureFields] = useState<BuilderField[]>(() =>
+    (initialDefinition.emailCapture?.fields ?? []).map((field, index) => ({
+      id: field.id || `field-${index + 1}`,
+      question: field.question,
+      kind: field.kind ?? "text",
+      exitKeywords: commaSeparated(field.exitKeywords ?? []),
+    })),
+  );
+  const [followUps, setFollowUps] = useState<{ delayMinutes: string; text: string; buttonLabel: string; url: string }[]>(
+    () => (initialDefinition.followUps ?? []).map((followUp) => ({
+      delayMinutes: String(followUp.delayMinutes),
+      text: followUp.text,
+      buttonLabel: followUp.buttonLabel ?? "",
+      url: followUp.url ?? "",
+    })),
   );
   const [scheduleStart, setScheduleStart] = useState(isoToLocalInput(initialDefinition.schedule?.startsAt));
   const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
@@ -215,6 +237,29 @@ function AutomationBuilderV1({
   const usesTextTrigger = triggerType === "comment" || triggerType === "message";
   const allowedActionTypes = classicActionOptions(triggerType);
   const hasEmailStep = triggerType !== "comment";
+
+  // Keyword ideas from the workspace's own automations plus proven staples -
+  // fetched once so the chips never flicker while typing.
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  useEffect(() => {
+    if (!usesTextTrigger) return;
+    let active = true;
+    fetch("/api/automations/suggest-keywords")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: string[] } | null) => {
+        if (active && Array.isArray(payload?.data)) setSuggestions(payload!.data);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [usesTextTrigger]);
+
+  function addSuggestedKeyword(keyword: string) {
+    const current = parseKeywords(keywords);
+    if (current.some((existing) => existing.toLowerCase() === keyword.toLowerCase())) return;
+    setKeywords(commaSeparated([...current, keyword]));
+  }
 
   const wizardSteps = [
     "trigger",
@@ -258,9 +303,17 @@ function AutomationBuilderV1({
       if (actionIndex !== index) return action;
       const previous = action;
       if (type === previous.type) return previous;
-      if (type === "send_link") return { type, text: previous.text, url: "" };
-      if (type === "send_button") return { type, text: previous.text, url: "", buttonLabel: "Open link" };
-      return { type, text: previous.text };
+      if (type === "send_image") {
+        return {
+          type,
+          imageUrl: "url" in previous ? previous.url : "",
+          caption: "text" in previous ? previous.text : "",
+        };
+      }
+      const carriedText = "text" in previous && typeof previous.text === "string" ? previous.text : "";
+      if (type === "send_link") return { type, text: carriedText, url: "" };
+      if (type === "send_button") return { type, text: carriedText, url: "", buttonLabel: "Open link" };
+      return { type, text: carriedText };
     }));
   }
 
@@ -278,7 +331,10 @@ function AutomationBuilderV1({
         : [newClassicAction("send_text")]);
     }
     // Comment flows cannot collect emails (they may only send a single private reply).
-    if (value === "comment") setEmailCaptureEnabled(false);
+    if (value === "comment") {
+      setEmailCaptureEnabled(false);
+      setFollowUps([]);
+    }
   }
 
   function buildDefinition(): FlowDefinitionV1 {
@@ -317,7 +373,15 @@ function AutomationBuilderV1({
       version: 1,
       trigger,
       conditions,
-      actions: actions.map((action) => ({ ...action, text: action.text.trim() })),
+      actions: actions.map((action) =>
+        action.type === "send_image"
+          ? {
+              type: action.type,
+              imageUrl: action.imageUrl.trim(),
+              ...(action.caption?.trim() ? { caption: action.caption.trim() } : {}),
+            }
+          : { ...action, text: action.text.trim() },
+      ),
       ...(Number.isFinite(parsedLimit) && parsedLimit > 0 ? { dailySendLimit: parsedLimit } : {}),
       ...(startsAt || endsAt ? { schedule } : {}),
       ...(emailCaptureEnabled && triggerType !== "comment" && emailPrompt.trim() && emailConfirmation.trim()
@@ -343,12 +407,35 @@ function AutomationBuilderV1({
                 ? {
                     fields: captureFields
                       .filter((field) => field.question.trim())
-                      .map((field, index) => ({ id: field.id || `field-${index + 1}`, question: field.question.trim() })),
+                      .map((field, index) => ({
+                        id: field.id || `field-${index + 1}`,
+                        question: field.question.trim(),
+                        ...(field.kind !== "text" ? { kind: field.kind } : {}),
+                        ...(parseKeywords(field.exitKeywords).length > 0
+                          ? { exitKeywords: parseKeywords(field.exitKeywords) }
+                          : {}),
+                      })),
                   }
                 : {}),
+              ...(exitText.trim() ? { exitText: exitText.trim() } : {}),
             },
           }
         : {}),
+      ...(!usesTextTrigger
+        ? {}
+        : followUps.length > 0
+          ? {
+              followUps: followUps
+                .filter((followUp) => followUp.text.trim())
+                .map((followUp) => ({
+                  delayMinutes: Math.max(1, Math.min(10_080, Number.parseInt(followUp.delayMinutes, 10) || 60)),
+                  text: followUp.text.trim(),
+                  ...(followUp.buttonLabel.trim() && followUp.url.trim()
+                    ? { buttonLabel: followUp.buttonLabel.trim(), url: followUp.url.trim() }
+                    : {}),
+                })),
+            }
+          : {}),
     };
   }
 
@@ -378,12 +465,20 @@ function AutomationBuilderV1({
       setError("The start must come before the end of the schedule.");
       return;
     }
-    if (actions.some((action) => !action.text.trim())) {
+    if (actions.some((action) => action.type !== "send_image" && !action.text.trim())) {
       setError("Every message needs text.");
+      return;
+    }
+    if (actions.some((action) => action.type === "send_image" && !action.imageUrl.trim())) {
+      setError("Image actions need a public image URL.");
       return;
     }
     if (actions.some((action) => (action.type === "send_link" || action.type === "send_button") && !action.url.trim())) {
       setError("Link actions need a URL.");
+      return;
+    }
+    if (followUps.some((followUp) => followUp.text.trim() && followUp.buttonLabel.trim() && !followUp.url.trim())) {
+      setError("A follow-up button needs its link URL.");
       return;
     }
     if (emailCaptureEnabled && triggerType !== "comment" && (!emailPrompt.trim() || !emailConfirmation.trim())) {
@@ -414,7 +509,11 @@ function AutomationBuilderV1({
 
   const dmMessages: DmBubble[] = actions.flatMap((action, index) => {
     const bubbles: DmBubble[] = [];
-    if (action.text.trim()) bubbles.push({ id: `action-${index}`, from: "bot", text: action.text });
+    if (action.type === "send_image" && action.imageUrl.trim()) {
+      bubbles.push({ id: `action-${index}`, from: "bot", imageUrl: action.imageUrl });
+    } else if (action.type !== "send_image" && action.text.trim()) {
+      bubbles.push({ id: `action-${index}`, from: "bot", text: action.text });
+    }
     if (action.type === "send_button" && action.buttonLabel.trim()) {
       bubbles.push({ id: `action-${index}-button`, from: "tap", button: action.buttonLabel });
     }
@@ -517,6 +616,20 @@ function AutomationBuilderV1({
                   placeholder="guide, price, link"
                 />
                 <small>Separate multiple phrases with commas. Matching is case-insensitive.</small>
+                {suggestions.length > 0 && (
+                  <span className="keyword-suggestions" data-testid="keyword-suggestions">
+                    {suggestions.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        className="keyword-chip"
+                        onClick={() => addSuggestedKeyword(suggestion)}
+                      >
+                        + {suggestion}
+                      </button>
+                    ))}
+                  </span>
+                )}
               </label>
             )}
             {triggerType === "comment" && (
@@ -619,17 +732,50 @@ function AutomationBuilderV1({
                     </button>
                   )}
                 </div>
-                <label className="field">
-                  <span>{actions.length > 1 ? `Step ${index + 1} message` : "Message text"}</span>
-                  <textarea
-                    aria-label={actions.length > 1 ? `Step ${index + 1} message` : "Message text"}
-                    value={action.text}
-                    onChange={(event) => updateAction(index, { text: event.target.value })}
-                    rows={3}
-                    placeholder="Write the exact message to send"
-                    maxLength={1_000}
-                  />
-                </label>
+                {action.type !== "send_image" && (
+                  <label className="field">
+                    <span>{actions.length > 1 ? `Step ${index + 1} message` : "Message text"}</span>
+                    <textarea
+                      aria-label={actions.length > 1 ? `Step ${index + 1} message` : "Message text"}
+                      value={action.text}
+                      onChange={(event) => updateAction(index, { text: event.target.value })}
+                      rows={3}
+                      placeholder="Write the exact message to send"
+                      maxLength={1_000}
+                    />
+                    <small>
+                      Personalize with <code>{"{username}"}</code> <code>{"{keyword}"}</code> <code>{"{media}"}</code> - they fill in per person.
+                    </small>
+                  </label>
+                )}
+                {action.type === "send_image" && (
+                  <>
+                    <label className="field field-spaced">
+                      <span>Image URL</span>
+                      <div className="input-with-icon">
+                        <Link2 size={16} />
+                        <input
+                          aria-label={actions.length > 1 ? `Step ${index + 1} image URL` : "Image URL"}
+                          value={action.imageUrl}
+                          onChange={(event) => updateAction(index, { imageUrl: event.target.value } as Partial<FlowAction>)}
+                          placeholder="https://your-cdn.com/photo.jpg"
+                        />
+                      </div>
+                      <small>Public https link to the photo Meta should deliver.</small>
+                    </label>
+                    <label className="field">
+                      <span>Caption <em>optional</em></span>
+                      <textarea
+                        aria-label={actions.length > 1 ? `Step ${index + 1} caption` : "Image caption"}
+                        value={action.caption ?? ""}
+                        onChange={(event) => updateAction(index, { caption: event.target.value } as Partial<FlowAction>)}
+                        rows={2}
+                        maxLength={1_000}
+                        placeholder="Sent as a text message right after the photo"
+                      />
+                    </label>
+                  </>
+                )}
                 {(action.type === "send_link" || action.type === "send_button") && (
                   <div className="field-grid field-spaced">
                     <label className="field">
@@ -657,6 +803,92 @@ function AutomationBuilderV1({
             )}
             {!usesTextTrigger && actions.length > 1 && (
               <p className="muted">Messages are sent in order, one after another.</p>
+            )}
+            {triggerType !== "comment" && (
+              <>
+                <p className="eyebrow field-spaced">Follow-up nudges <em>optional · up to 2</em></p>
+                <p className="muted">
+                  Schedule a timed nudge - “Still interested?” a day later. Skipped automatically if the
+                  person opted out or Meta’s 24-hour reply window closed.
+                </p>
+                {followUps.map((followUp, index) => (
+                  <div className="classic-action" key={index}>
+                    <div className="classic-action-head">
+                      <span className="classic-action-index">Nudge {index + 1}</span>
+                      <button
+                        className="icon-button"
+                        type="button"
+                        aria-label={`Remove nudge ${index + 1}`}
+                        onClick={() => setFollowUps((current) => current.filter((_, i) => i !== index))}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                    <div className="field-grid field-spaced">
+                      <label className="field">
+                        <span>Wait before sending (minutes)</span>
+                        <input
+                          aria-label={`Nudge ${index + 1} delay in minutes`}
+                          type="number"
+                          min={1}
+                          max={10_080}
+                          value={followUp.delayMinutes}
+                          onChange={(event) =>
+                            setFollowUps((current) => current.map((f, i) => (i === index ? { ...f, delayMinutes: event.target.value } : f)))}
+                          placeholder="1440 = one day"
+                        />
+                      </label>
+                    </div>
+                    <label className="field">
+                      <span>Nudge message</span>
+                      <textarea
+                        aria-label={`Nudge ${index + 1} message`}
+                        value={followUp.text}
+                        onChange={(event) =>
+                          setFollowUps((current) => current.map((f, i) => (i === index ? { ...f, text: event.target.value } : f)))}
+                        rows={2}
+                        maxLength={1_000}
+                        placeholder="Still interested? 👋 Your offer expires tonight."
+                      />
+                      <small>
+                        Personalize with <code>{"{username}"}</code> <code>{"{keyword}"}</code> <code>{"{media}"}</code>.
+                      </small>
+                    </label>
+                    <div className="field-grid field-spaced">
+                      <label className="field">
+                        <span>Button label <em>optional</em></span>
+                        <input
+                          aria-label={`Nudge ${index + 1} button label`}
+                          value={followUp.buttonLabel}
+                          onChange={(event) =>
+                            setFollowUps((current) => current.map((f, i) => (i === index ? { ...f, buttonLabel: event.target.value } : f)))}
+                          maxLength={80}
+                          placeholder="Claim the offer"
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Nudge link URL</span>
+                        <input
+                          aria-label={`Nudge ${index + 1} link URL`}
+                          value={followUp.url}
+                          onChange={(event) =>
+                            setFollowUps((current) => current.map((f, i) => (i === index ? { ...f, url: event.target.value } : f)))}
+                          placeholder="https://your-site.com/offer"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+                {followUps.length < 2 && (
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    onClick={() => setFollowUps((current) => [...current, { delayMinutes: "1440", text: "", buttonLabel: "", url: "" }])}
+                  >
+                    <Plus size={15} /> Add a follow-up nudge
+                  </button>
+                )}
+              </>
             )}
           </div>
         </section>
@@ -811,16 +1043,59 @@ function AutomationBuilderV1({
                               <Trash2 size={14} />
                             </button>
                           </div>
+                          <div className="field-grid capture-field-options">
+                            <label className="field">
+                              <span>Answer type</span>
+                              <span className="select-wrap">
+                                <select
+                                  aria-label={`Question ${index + 1} answer type`}
+                                  value={field.kind}
+                                  onChange={(event) =>
+                                    setCaptureFields((current) => current.map((f, i) => (i === index ? { ...f, kind: event.target.value as BuilderField["kind"] } : f)))}
+                                >
+                                  <option value="text">Anything</option>
+                                  <option value="email">Email address</option>
+                                  <option value="phone">Phone number</option>
+                                  <option value="number">Number</option>
+                                </select>
+                                <ChevronDown size={16} />
+                              </span>
+                            </label>
+                            <label className="field">
+                              <span>Stop words <em>optional</em></span>
+                              <input
+                                aria-label={`Question ${index + 1} stop words`}
+                                value={field.exitKeywords}
+                                onChange={(event) =>
+                                  setCaptureFields((current) => current.map((f, i) => (i === index ? { ...f, exitKeywords: event.target.value } : f)))}
+                                placeholder="no, not now - ends the questions"
+                              />
+                            </label>
+                          </div>
                         </div>
                       ))}
                       {captureFields.length < 5 && (
                         <button
                           type="button"
                           className="button button-secondary field-spaced"
-                          onClick={() => setCaptureFields((current) => [...current, { id: `field-${Date.now()}`, question: "" }])}
+                          onClick={() => setCaptureFields((current) => [...current, { id: `field-${Date.now()}`, question: "", kind: "text", exitKeywords: "" }])}
                         >
                           <Plus size={15} /> Add question
                         </button>
+                      )}
+                      {captureFields.some((field) => parseKeywords(field.exitKeywords).length > 0) && (
+                        <label className="field field-spaced">
+                          <span>Stop-words message</span>
+                          <textarea
+                            aria-label="Stop-words message"
+                            value={exitText}
+                            onChange={(event) => setExitText(event.target.value)}
+                            rows={2}
+                            maxLength={500}
+                            placeholder="Sent when someone answers with a stop word - e.g. “No problem!”"
+                          />
+                          <small>Their remaining questions are skipped and the lead keeps what was already collected.</small>
+                        </label>
                       )}
                   <small>Asked after their email - answers are stored on the lead and included in the lead webhook.</small>
                 </>
@@ -897,6 +1172,9 @@ function AutomationBuilderV1({
               </li>
               <li>{actions.length} message{actions.length === 1 ? "" : "s"} ready to send</li>
               {triggerType !== "comment" && emailCaptureEnabled && <li>Collects the person’s email after the flow runs</li>}
+              {followUps.filter((followUp) => followUp.text.trim()).length > 0 && (
+                <li>{followUps.filter((followUp) => followUp.text.trim()).length} follow-up nudge{followUps.filter((followUp) => followUp.text.trim()).length === 1 ? "" : "s"} scheduled after the flow</li>
+              )}
               {dailyLimit && <li>Daily send limit: {dailyLimit}</li>}
               {(scheduleStart || scheduleEnd) && (
                 <li>Active {scheduleStart ? `from ${scheduleStart}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${scheduleEnd}` : ""}</li>

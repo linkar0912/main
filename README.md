@@ -7,14 +7,20 @@ Linkar is an India-first Instagram automation MVP for deterministic comment and 
 - Dashboard with demo mode and automation status controls.
 - Guided builder for comment/DM keyword or any-message triggers.
 - Optional keyword/media conditions.
-- One private text reply (including optional URLs) for comment triggers; text, link, and button replies for genuine inbound DMs.
+- One private text reply (including optional URLs) for comment triggers; text, link, button, and image-card replies for genuine inbound DMs.
+- Personalization tokens ({username}, {keyword}, {media}) in every outbound text.
+- Timed follow-up nudges (up to two per DM flow) that respect opt-outs and Meta's 24-hour messaging window.
+- Conversational lead forms: typed answers (email/phone/number validation), up to five questions, stop-word early exits.
+- Smart keyword suggestions in the builder, drawn from the workspace's own automations plus proven staples.
+- Win-back broadcast segments (quiet 7+ / 30+ days).
+- Seven new India-first recipes: lead magnet, price-list responder, course FAQ, event registration, collab intake, giveaway entries, and offer follow-up.
 - Current Instagram Business Login callback handling, webhook verification, inbound-only event normalization, BullMQ worker retries, and atomic execution claims.
 - A visual follow-gated Reel/post campaign builder: a matched comment triggers a public reply and a private opening message with an opt-in prompt, then Meta's own follower relationship gates a single private link delivery — with a participant activity view for diagnostics.
 - AES-256-GCM encryption for stored Instagram access tokens.
 - Public privacy, terms, data deletion, and support pages for Meta App Review.
 - Local demo mode when `DATABASE_URL` and `REDIS_URL` are omitted.
 
-Out of scope: AI, unsolicited DMs sent purely because someone followed the account, scraping, bulk cold messaging, WhatsApp, publishing, insights, billing, and team invitations.
+Out of scope: AI, unsolicited DMs sent purely because someone followed the account, scraping, bulk cold messaging, WhatsApp, publishing, billing.
 
 ## Local demo (no database or worker)
 

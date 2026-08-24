@@ -215,4 +215,93 @@ describe("validateFlowDefinition", () => {
       validateFlowDefinition({ ...campaign, delivery: { ...campaign.delivery, url: "http://example.com/guide" } }),
     ).toThrow();
   });
+
+  it("accepts an image action with a caption and strips nothing from the URL", () => {
+    const flow = validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["price"] },
+      conditions: [],
+      actions: [{ type: "send_image", imageUrl: "https://example.com/prices.jpg", caption: "Latest prices 🏷️" }],
+    });
+    expect(flow.version).toBe(1);
+    if (flow.version !== 1) return;
+    expect(flow.actions[0]).toEqual({
+      type: "send_image",
+      imageUrl: "https://example.com/prices.jpg",
+      caption: "Latest prices 🏷️",
+    });
+  });
+
+  it("rejects image actions on comment triggers and with private image URLs", () => {
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "comment", match: "any", keywords: [], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "send_image", imageUrl: "https://example.com/x.jpg" }],
+    })).toThrow("Comment triggers support only a private reply");
+  });
+
+  it("accepts follow-ups on DM triggers with button+url pairing", () => {
+    const flow = validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["offer"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Offer inside" }],
+      followUps: [
+        { delayMinutes: 1440, text: "Still interested?", buttonLabel: "Claim", url: "https://example.com/offer" },
+        { delayMinutes: 60, text: "Last call!" },
+      ],
+    });
+    if (flow.version !== 1 || !flow.followUps) return;
+    expect(flow.followUps).toHaveLength(2);
+    expect(flow.followUps[0].buttonLabel).toBe("Claim");
+  });
+
+  it("rejects follow-ups on comment triggers, without URLs under buttons, or beyond bounds", () => {
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "comment", match: "any", keywords: [], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Hi" }],
+      followUps: [{ delayMinutes: 60, text: "Nudge" }],
+    })).toThrow("Comment triggers cannot schedule follow-ups");
+
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["offer"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Offer" }],
+      followUps: [{ delayMinutes: 60, text: "Nudge", buttonLabel: "No URL" }],
+    })).toThrow();
+
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["offer"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Offer" }],
+      followUps: [{ delayMinutes: 0, text: "Too soon" }],
+    })).toThrow();
+  });
+
+  it("accepts typed capture fields with exit keywords and exit text", () => {
+    const flow = validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["webinar"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Let's register you" }],
+      emailCapture: {
+        promptText: "Your email?",
+        confirmationText: "Confirmed!",
+        exitText: "No worries!",
+        fields: [
+          { id: "phone", question: "Phone number?", kind: "phone", exitKeywords: ["no", "skip"] },
+          { id: "team", question: "Team size?", kind: "number" },
+        ],
+      },
+    });
+    if (flow.version !== 1 || !flow.emailCapture?.fields) return;
+    expect(flow.emailCapture.fields[0].kind).toBe("phone");
+    expect(flow.emailCapture.fields[0].exitKeywords).toEqual(["no", "skip"]);
+    expect(flow.emailCapture.exitText).toBe("No worries!");
+  });
 });

@@ -33,7 +33,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "./repository";
-import { InstagramAccountOwnershipError } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { toMessagingWindow } from "./messaging-window";
 
@@ -1779,10 +1779,12 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {
+      const cutoff = broadcastSegmentCutoff(segment, new Date());
       const records = await client.automationContact.findMany({
         where: {
           workspaceId,
           suppressedAt: null,
+          ...(cutoff ? { lastSeenAt: { lt: cutoff } } : {}),
           ...(segment === "captured_email" ? { state: "CAPTURED", email: { not: null } } : {}),
         },
         orderBy: [{ createdAt: "desc" }, { id: "asc" }],

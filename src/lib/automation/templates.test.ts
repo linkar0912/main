@@ -16,7 +16,11 @@ describe("premade automation templates", () => {
       expect(normalized.version).toBe(1);
       if (normalized.version === 1) {
         expect(normalized.actions.length).toBeGreaterThanOrEqual(1);
-        expect(normalized.actions.every((action) => action.text.trim().length > 0)).toBe(true);
+        // Every action carries something deliverable: copy, or an image URL.
+        expect(
+          normalized.actions.every((action) =>
+            action.type === "send_image" ? action.imageUrl.trim().length > 0 : action.text.trim().length > 0),
+        ).toBe(true);
       }
       expect(setup!.name.trim().length).toBeGreaterThan(0);
     }
@@ -83,5 +87,40 @@ describe("premade automation templates", () => {
   it("covers every trigger type the engine supports across the recipe set", () => {
     const covered = new Set(basicAutomationTemplates.map((template) => template.setup!.definition.trigger.type));
     expect(covered).toEqual(new Set(["comment", "message", "referral", "optin", "first_contact", "story_mention"]));
+  });
+
+  it("ships the India-first D2C and creator recipes", () => {
+    for (const id of [
+      "lead-magnet-comment",
+      "price-list-responder",
+      "course-faq-booking",
+      "event-registration",
+      "influencer-collab-intake",
+      "giveaway-comment-entry",
+      "offer-followup",
+    ]) {
+      expect(getTemplateById(id), `${id} is missing`).toBeDefined();
+    }
+  });
+
+  it("builds the price-list responder on an image card with a caption", () => {
+    const priceList = getTemplateById("price-list-responder")!;
+    const firstAction = priceList.setup!.definition.actions[0];
+    expect(firstAction.type).toBe("send_image");
+    expect(firstAction.type === "send_image" && Boolean(firstAction.caption)).toBe(true);
+  });
+
+  it("collects typed fields in the collab and event intakes", () => {
+    const collab = getTemplateById("influencer-collab-intake")!;
+    expect(collab.setup!.definition.emailCapture?.fields?.map((field) => field.id)).toEqual(["niche", "handle"]);
+    expect(collab.setup!.definition.emailCapture?.notifyUrl).toBeDefined();
+
+    const event = getTemplateById("event-registration")!;
+    expect(event.setup!.definition.emailCapture?.fields?.some((field) => field.kind === "phone")).toBe(true);
+  });
+
+  it("schedules a follow-up nudge in the offer recipe", () => {
+    const offer = getTemplateById("offer-followup")!;
+    expect(offer.setup!.definition.followUps?.[0]?.delayMinutes).toBe(24 * 60);
   });
 });

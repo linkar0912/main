@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { FlowDefinition, FlowDefinitionV1, FlowDefinitionV2, FlowSchedule } from "./types";
 import { isSafeOutboundUrl } from "../security/outbound-url";
-
 const keyword = z.string().trim().min(1);
 const link = z
   .string()
@@ -93,10 +92,14 @@ const emailCaptureSchema = z.object({
       z.object({
         id: z.string().trim().min(1).max(40),
         question: z.string().trim().min(1).max(300),
+        kind: z.enum(["text", "email", "phone", "number"]).optional(),
+        exitKeywords: z.array(keyword).max(10).optional(),
       }),
     )
     .max(5)
     .optional(),
+  // Polite early exit when an answer hits a field's exit keywords.
+  exitText: z.string().trim().min(1).max(500).optional(),
 })
 .superRefine((capture, context) => {
   if (capture.fields && new Set(capture.fields.map((field) => field.id)).size !== capture.fields.length) {
@@ -119,7 +122,33 @@ const action = z.discriminatedUnion("type", [
     buttonLabel: z.string().trim().min(1).max(80),
     url: link,
   }),
+  z.object({
+    type: z.literal("send_image"),
+    // Meta fetches the image server-side, so the URL must be publicly reachable.
+    imageUrl: link.refine(isSafeOutboundUrl, "Image URL must be a public http(s) address"),
+    caption: z.string().trim().min(1).max(1_000).optional(),
+  }),
 ]);
+
+// Timed nudges after a DM flow fires. Comment flows are excluded - a private
+// reply alone does not open Meta's 24-hour messaging window, so scheduling a
+// later nudge there would mostly fail at send time.
+const followUpText = z.string().trim().min(1).max(1_000);
+const followUpsSchema = z
+  .array(
+    z.object({
+      delayMinutes: z.number().int().min(1).max(10_080),
+      text: followUpText,
+      buttonLabel: z.string().trim().min(1).max(80).optional(),
+      url: link.optional(),
+    })
+      .refine(
+        (followUp) => !followUp.buttonLabel || Boolean(followUp.url),
+        { path: ["buttonLabel"], message: "A button label needs a URL" },
+      ),
+  )
+  .max(2)
+  .optional();
 
 const flowV1Schema = z
   .object({
@@ -137,6 +166,7 @@ const flowV1Schema = z
     dailySendLimit: z.number().int().min(1).max(1_000).optional(),
     schedule: scheduleSchema.optional(),
     emailCapture: emailCaptureSchema.optional(),
+    followUps: followUpsSchema,
   })
   .superRefine((flow, context) => {
     if (flow.trigger.type === "comment" || flow.trigger.type === "message") {
@@ -202,6 +232,16 @@ const flowV1Schema = z
         code: "custom",
         path: ["emailCapture"],
         message: "Comment triggers cannot collect emails - use a DM, story mention, or first-contact trigger",
+      });
+    }
+
+    // A private reply does not open Meta's 24-hour messaging window, so a later
+    // nudge would almost always be rejected - keep follow-ups on DM-side triggers.
+    if (flow.trigger.type === "comment" && flow.followUps && flow.followUps.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["followUps"],
+        message: "Comment triggers cannot schedule follow-ups - use a DM, story mention, or first-contact trigger",
       });
     }
   });
@@ -376,9 +416,27 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
         ? { type: item.type, keywords: normalizeKeywords(item.keywords) }
         : { type: item.type, mediaIds: item.mediaIds.map((mediaId) => mediaId.trim()).filter(Boolean) },
     ),
-    actions: parsed.actions.map((item) => ({ ...item, text: item.text.trim() })),
+    actions: parsed.actions.map((item) =>
+      item.type === "send_image"
+        ? {
+            type: item.type,
+            imageUrl: item.imageUrl,
+            ...(item.caption ? { caption: item.caption.trim() } : {}),
+          }
+        : { ...item, text: item.text.trim() },
+    ),
     ...(parsed.dailySendLimit ? { dailySendLimit: parsed.dailySendLimit } : {}),
     ...(parsed.schedule ? { schedule: normalizeSchedule(parsed.schedule) } : {}),
+    ...(parsed.followUps && parsed.followUps.length > 0
+      ? {
+          followUps: parsed.followUps.map((followUp) => ({
+            delayMinutes: followUp.delayMinutes,
+            text: followUp.text.trim(),
+            ...(followUp.buttonLabel?.trim() ? { buttonLabel: followUp.buttonLabel.trim() } : {}),
+            ...(followUp.url?.trim() ? { url: followUp.url.trim() } : {}),
+          })),
+        }
+      : {}),
     ...(parsed.emailCapture
       ? {
           emailCapture: {
@@ -409,9 +467,14 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
                   fields: parsed.emailCapture.fields.map((field) => ({
                     id: field.id.trim(),
                     question: field.question.trim(),
+                    ...(field.kind ? { kind: field.kind } : {}),
+                    ...(field.exitKeywords && field.exitKeywords.length > 0
+                      ? { exitKeywords: field.exitKeywords.map((value) => value.trim().toLowerCase()).filter(Boolean) }
+                      : {}),
                   })),
                 }
               : {}),
+            ...(parsed.emailCapture.exitText?.trim() ? { exitText: parsed.emailCapture.exitText.trim() } : {}),
           },
         }
       : {}),

@@ -28,6 +28,7 @@ export type DmBubble = {
   from: "bot" | "tap";
   text?: string;
   button?: string;
+  imageUrl?: string;
 };
 
 export type InstagramPreviewProps = {
@@ -140,6 +141,11 @@ function DmView({ username, messages }: { username: string; messages: DmBubble[]
         {messages.map((bubble) =>
           bubble.button ? (
             <div className={`ig-dm-button ${bubble.from === "tap" ? "is-tap" : "is-bot"}`} key={bubble.id}>{bubble.button}</div>
+          ) : bubble.imageUrl ? (
+            <div className={`ig-dm-image ${bubble.from === "tap" ? "is-tap" : "is-bot"}`} key={bubble.id}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- preview-only thumbnail of the configured image URL */}
+              <img src={bubble.imageUrl} alt="" />
+            </div>
           ) : (
             <div className={`ig-dm-bubble ${bubble.from === "tap" ? "is-tap" : "is-bot"}`} key={bubble.id}>{bubble.text}</div>
           ),

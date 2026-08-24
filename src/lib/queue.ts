@@ -106,6 +106,43 @@ export async function enqueueLeadDelivery(job: LeadDeliveryJob): Promise<boolean
   });
   return true;
 }
+
+// Flow follow-ups: a delayed nudge ("Still interested?") scheduled after a DM
+// flow's own messages. The rendered copy travels in the job so a later
+// definition edit cannot silently rewrite what was already promised.
+export type FlowFollowUpJob = {
+  deliveryKey: string;
+  workspaceId: string;
+  automationId: string;
+  instagramAccountId: string;
+  recipientId: string;
+  delayMinutes: number;
+  message:
+    | { type: "text"; text: string }
+    | { type: "button"; text: string; buttonLabel: string; url: string };
+};
+
+export function createFlowFollowUpJobId(deliveryKey: string): string {
+  return createHash("sha256").update(`followup\0${deliveryKey}`).digest("base64url");
+}
+
+export async function enqueueFlowFollowUps(jobs: FlowFollowUpJob[]): Promise<number> {
+  const queue = getWebhookQueue();
+  if (!queue) return 0;
+  await Promise.all(
+    jobs.map((job) =>
+      queue.add("flow-followup", job, {
+        jobId: createFlowFollowUpJobId(job.deliveryKey),
+        delay: Math.max(0, Math.min(job.delayMinutes, 10_080)) * 60_000,
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: 1_000,
+        removeOnFail: 5_000,
+      }),
+    ),
+  );
+  return jobs.length;
+}
 // Broadcasts: one DM per contact, fanned out as staggered jobs (~1/second) so a
 // blast never hammers Meta's per-account messaging limits.
 export type BroadcastSendJob = {

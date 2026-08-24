@@ -302,6 +302,198 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
       },
     },
   },
+  {
+    id: "lead-magnet-comment",
+    title: "Lead magnet from comments",
+    description: "Viewers comment GUIDE on your post and instantly get the promised PDF, checklist, or resource link by private reply - zero manual sending.",
+    icon: "gift",
+    popular: true,
+    setup: {
+      name: "Lead magnet from comments",
+      definition: {
+        version: 1,
+        trigger: { type: "comment", match: "keyword", keywords: ["guide", "pdf", "free"], mediaIds: [] },
+        conditions: [],
+        actions: [
+          {
+            type: "private_reply",
+            text: "Here’s your free guide 🎁 https://example.com/guide - enjoy, and ping me anytime with questions!",
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: "price-list-responder",
+    title: "Price list responder",
+    description: "The classic D2C move: anyone who DMs “price” or “rates” gets your product photo with prices and a tappable catalog - instantly, at 2am included.",
+    icon: "shopping-bag",
+    popular: true,
+    setup: {
+      name: "Price list responder",
+      definition: {
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: ["price", "rates", "cost"] },
+        conditions: [],
+        actions: [
+          {
+            type: "send_image",
+            imageUrl: "https://example.com/images/price-list.jpg",
+            caption: "Our latest price list 🏷️ Handmade, small-batch, ships across India.",
+          },
+          {
+            type: "send_button",
+            text: "Want the full catalog with all variants?",
+            buttonLabel: "Open catalog",
+            url: "https://example.com/catalog",
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: "course-faq-booking",
+    title: "Course & coaching FAQ",
+    description: "Answer “what’s the fee / how do I join” style DMs with your program details and a booking link for discovery calls - so warm leads never go cold.",
+    icon: "menu",
+    setup: {
+      name: "Course & coaching FAQ",
+      definition: {
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: ["course", "cohort", "enroll", "join", "fee"] },
+        conditions: [],
+        actions: [
+          {
+            type: "send_text",
+            text: "Thanks for asking about the program! 📚 Next cohort starts soon - 4 weeks live, recordings included.",
+          },
+          {
+            type: "send_button",
+            text: "Grab a free 15-minute discovery call and we’ll see if it’s a fit.",
+            buttonLabel: "Book a call",
+            url: "https://example.com/book",
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: "event-registration",
+    title: "Event & webinar registration",
+    description: "DM your event keyword and Linkar collects their name, email, and phone in chat, confirms the seat, and files the lead - ready for reminders.",
+    icon: "mail",
+    setup: {
+      name: "Event & webinar registration",
+      definition: {
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: ["webinar", "event", "register"] },
+        conditions: [],
+        actions: [
+          {
+            type: "send_text",
+            text: "You’re in the queue for our next live session! 🎟️ Let me grab your details for the confirmation.",
+          },
+        ],
+        emailCapture: {
+          promptText: "What email should your seat confirmation go to?",
+          retryText: "Hmm, that email doesn’t look right - mind typing it again?",
+          confirmationText: "Seat confirmed! ✅ Calendar invite and joining link are on their way.",
+          exitText: "No problem - the invite stays open if you change your mind!",
+          fields: [
+            { id: "name", question: "And what’s your name?", kind: "text" },
+            { id: "phone", question: "Best phone number for a reminder an hour before we go live?", kind: "phone" },
+          ],
+          delivery: {
+            subject: "Your seat is confirmed 🎟️",
+            message: "Thanks for registering! Your joining link is below - we start sharp.",
+            linkUrl: "https://example.com/join",
+            linkLabel: "Joining link",
+          },
+        },
+      },
+    },
+  },
+  {
+    id: "influencer-collab-intake",
+    title: "Influencer collab intake",
+    description: "Brands and creators DM “collab” and get a tidy intake: niche, handle, and email captured in chat - no lost opportunities buried in the request folder.",
+    icon: "at-sign",
+    setup: {
+      name: "Influencer collab intake",
+      definition: {
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: ["collab", "partnership", "sponsor"] },
+        conditions: [],
+        actions: [
+          {
+            type: "send_text",
+            text: "Love it - let’s talk collabs! 🤝 A few quick questions and our partnerships team follows up within a day.",
+          },
+        ],
+        emailCapture: {
+          promptText: "First, what email should we reach you at?",
+          retryText: "That doesn’t look like an email - could you type it once more?",
+          confirmationText: "Perfect - you’re all set! Our team will be in touch very soon. 🧡",
+          exitText: "All good! Drop “collab” anytime if things change.",
+          fields: [
+            { id: "niche", question: "What’s your content niche?", kind: "text" },
+            { id: "handle", question: "Which platform do you create on most?", kind: "text" },
+          ],
+          notifyUrl: "https://hooks.zapier.com/hooks/catch/example/collabs",
+        },
+      },
+    },
+  },
+  {
+    id: "giveaway-comment-entry",
+    title: "Giveaway comment entry",
+    description: "Turn giveaway comments into confirmed entries - commenting ENTER gets an instant private reply with the rules, so nobody wonders if they’re counted.",
+    icon: "gift",
+    setup: {
+      name: "Giveaway comment entry",
+      definition: {
+        version: 1,
+        trigger: { type: "comment", match: "keyword", keywords: ["enter", "win", "me"], mediaIds: [] },
+        conditions: [],
+        actions: [
+          {
+            type: "private_reply",
+            text: "You’re entered! 🎉 Winners are announced in our Stories next week - keep an eye out!",
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: "offer-followup",
+    title: "Offer with follow-up nudge",
+    description: "Send your offer DM, then automatically nudge “Still interested?” a day later if they haven’t replied - scheduled follow-ups recover drifting leads.",
+    icon: "megaphone",
+    setup: {
+      name: "Offer with follow-up nudge",
+      definition: {
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: ["offer", "deal", "discount"] },
+        conditions: [],
+        actions: [
+          {
+            type: "send_button",
+            text: "Here’s this week’s offer - 20% off everything until Sunday! 🏷️",
+            buttonLabel: "Claim the offer",
+            url: "https://example.com/offer",
+          },
+        ],
+        followUps: [
+          {
+            delayMinutes: 24 * 60,
+            text: "Quick nudge 👋 Your 20% off code expires tonight - still want in?",
+            buttonLabel: "Use my code",
+            url: "https://example.com/offer",
+          },
+        ],
+      },
+    },
+  },
 ];
 
 export function getTemplateById(id: string): PremadeTemplate | undefined {

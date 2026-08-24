@@ -33,6 +33,7 @@ describe("normalizeWebhook", () => {
         commentId: "comment_1",
         mediaId: "media_1",
         recipientId: "person_1",
+        senderUsername: "creator",
         timestamp: 1710000000,
       },
     ]);
@@ -293,6 +294,7 @@ describe("normalizeWebhook", () => {
         commentId: "comment_other",
         mediaId: "media_1",
         recipientId: "person_1",
+        senderUsername: "customer",
         timestamp: 1710000000,
       },
     ]);

@@ -7,10 +7,11 @@ import type { MetaConnection, MetaMessage } from "../meta/types";
 import { notifyWorkspaceManagers } from "../notifications";
 import type { OutboundEmail } from "../mailer";
 import { logger } from "../logger";
-import { enqueueLeadDelivery, type LeadDeliveryJob } from "../queue";
+import { enqueueLeadDelivery, enqueueFlowFollowUps, type FlowFollowUpJob, type LeadDeliveryJob } from "../queue";
 import {
   releaseDailySendSlots,
   reserveDailySendSlots,
+  renderTemplate,
   type SendLimitReservation,
 } from "./send-limits";
 import {
@@ -83,9 +84,45 @@ async function sendAction(
       ? { type: "text", text: action.text }
       : action.type === "send_link"
         ? { type: "link", text: action.text, url: action.url }
-        : { type: "button", text: action.text, buttonLabel: action.buttonLabel, url: action.url };
+        : action.type === "send_image"
+          ? { type: "image", imageUrl: action.imageUrl }
+          : { type: "button", text: action.text, buttonLabel: action.buttonLabel, url: action.url };
 
   return (await client.sendDirectMessage(connection, action.recipientId, message)).message_id;
+}
+
+/**
+ * Personalization variables for one inbound event. {username} comes from the
+ * comment webhook when Meta provides it; DM-side events have no handle, so it
+ * degrades to "there". {keyword} is only set for keyword triggers that matched,
+ * and {media} only when the event carries a post - undefined variables leave
+ * their token untouched rather than sending a broken sentence.
+ */
+function buildTemplateVars(event: NormalizedEvent, matchedKeyword?: string): Record<string, string | undefined> {
+  return {
+    username: event.senderUsername ?? "there",
+    ...(matchedKeyword ? { keyword: matchedKeyword } : {}),
+    ...(event.mediaId ? { media: "your post" } : {}),
+  };
+}
+
+/** Renders personalization tokens across every text field of an outgoing action. */
+function personalizeAction(action: ExecutionAction, vars: Record<string, string | undefined>): ExecutionAction {
+  switch (action.type) {
+    case "private_reply":
+    case "send_text":
+      return { ...action, text: renderTemplate(action.text, vars) };
+    case "send_link":
+      return { ...action, text: renderTemplate(action.text, vars) };
+    case "send_button":
+      return {
+        ...action,
+        text: renderTemplate(action.text, vars),
+        buttonLabel: renderTemplate(action.buttonLabel, vars),
+      };
+    case "send_image":
+      return action;
+  }
 }
 
 const DEFAULT_DELIVERY_CLAIM_LEASE_MS = 30_000;
@@ -198,6 +235,36 @@ export function extractEmailAddress(text: string): string | undefined {
   const match = text.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0];
   if (!match || !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(match)) return undefined;
   return match.toLowerCase();
+}
+
+/**
+ * Pragmatic phone shape for conversational forms: keeps a leading + and digits,
+ * tolerating spaces/dashes. 7-15 digits covers local Indian numbers through E.164.
+ */
+export function extractPhoneNumber(text: string): string | undefined {
+  const trimmed = text.trim();
+  const digits = trimmed.replace(/[^\d]/g, "");
+  if (digits.length < 7 || digits.length > 15) return undefined;
+  return trimmed.startsWith("+") ? `+${digits}` : digits;
+}
+
+/** Validates one typed capture-field answer; returns the stored form or undefined when invalid. */
+export function validateFieldAnswer(
+  answer: string,
+  kind: "text" | "email" | "phone" | "number" | undefined,
+): string | undefined {
+  switch (kind) {
+    case "email":
+      return extractEmailAddress(answer);
+    case "phone":
+      return extractPhoneNumber(answer);
+    case "number":
+      return /^\d{1,15}(\.\d{1,4})?$/.test(answer.trim()) ? answer.trim() : undefined;
+    default:
+      // Plain-text questions accept anything - even a blank reply is stored
+      // rather than bounced, so an accidental Enter never traps the person.
+      return answer.trim();
+  }
 }
 
 /**
@@ -432,6 +499,7 @@ async function processEmailCaptureReply(
   try {
     const candidate = extractEmailAddress(event.text);
     const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+    const vars = buildTemplateVars(event);
 
     if (candidate) {
       await repository.captureContactEmail(
@@ -454,7 +522,7 @@ async function processEmailCaptureReply(
           instagramAccountId: event.accountId,
           recipientId: senderId,
           kind: "EMAIL_CAPTURE",
-          action: { type: "send_text", recipientId: senderId, text: fieldQueue[0].question },
+          action: { type: "send_text", recipientId: senderId, text: renderTemplate(fieldQueue[0].question, vars) },
           claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
           dailySendLimit: automation.definition.dailySendLimit,
         }, options.client, connection);
@@ -483,8 +551,8 @@ async function processEmailCaptureReply(
         automationId: automation.id,
         instagramAccountId: event.accountId,
         recipientId: senderId,
-        kind: "EMAIL_CAPTURE",
-        action: { type: "send_text", recipientId: senderId, text: emailCapture.confirmationText },
+          kind: "EMAIL_CAPTURE",
+          action: { type: "send_text", recipientId: senderId, text: renderTemplate(emailCapture.confirmationText, vars) },
         claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
         dailySendLimit: automation.definition.dailySendLimit,
       }, options.client, connection);
@@ -536,7 +604,7 @@ async function processEmailCaptureReply(
       action: {
         type: "send_text",
         recipientId: senderId,
-        text: emailCapture.retryText ?? emailCapture.promptText,
+        text: renderTemplate(emailCapture.retryText ?? emailCapture.promptText, vars),
       },
       claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
       dailySendLimit: automation.definition.dailySendLimit,
@@ -619,7 +687,7 @@ async function processFieldAnswer(
   let followUpDelivered = false;
   try {
     const queue = contact.awaitingFields ?? [];
-    const current = queue[0];
+    const current: (typeof queue)[number] | undefined = queue[0];
     const rest = queue.slice(1);
     if (!current) {
       await repository.clearContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId);
@@ -629,6 +697,7 @@ async function processFieldAnswer(
 
     const answer = event.text.trim().slice(0, 200);
     const atIso = new Date().toISOString();
+    const vars = buildTemplateVars(event);
 
     if (!options.client || !options.tokenEncryptionKey) {
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
@@ -638,13 +707,63 @@ async function processFieldAnswer(
       return { matched: 1, sent: 0, skipped: 1, failed: 0 };
     }
 
+    // Typed answers are validated before anything is stored or asked next; an
+    // invalid reply re-asks the same question within the shared retry budget.
+    const validated = validateFieldAnswer(answer, current.kind);
+    if (validated === undefined) {
+      const nextAttempt = contact.attempts + 1;
+      if (nextAttempt > MAX_EMAIL_CAPTURE_RETRIES) {
+        await repository.clearContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId);
+        await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+          status: "SKIPPED",
+          reason: `field_gave_up:${current.id}`,
+        });
+        return { matched: 0, sent: 0, skipped: 1, failed: 0 };
+      }
+      const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
+      const delivery = await executeActionDelivery(repository, {
+        deliveryKey: deliveryKeys.emailCapture(automation.id, event.id, `field-retry:${current.id}:${nextAttempt}`),
+        workspaceId: mapping.workspaceId,
+        automationId: automation.id,
+        instagramAccountId: event.accountId,
+        recipientId: senderId,
+        kind: "EMAIL_CAPTURE",
+        action: { type: "send_text", recipientId: senderId, text: renderTemplate(current.question, vars) },
+        claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+        dailySendLimit: automation.definition.dailySendLimit,
+      }, options.client, connection);
+      const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
+      followUpDelivered = true;
+      const attempts = await repository.bumpContactEmailAttempt(
+        mapping.workspaceId,
+        event.accountId,
+        senderId,
+      );
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+        status: "SENT",
+        reason: `field_retry:${current.id}:${attempts}`,
+        providerMessageId,
+      });
+      return { matched: 1, sent: 1, skipped: 0, failed: 0 };
+    }
+
+    // An answer containing an exit keyword ("no thanks") politely ends the
+    // question queue early - the lead keeps whatever was already collected.
+    const exitHit = (current.exitKeywords ?? []).some(
+      (keyword) => answer.toLowerCase().includes(keyword.toLowerCase()),
+    );
+    const remainingAfter = exitHit ? [] : rest;
     const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
-    const outgoing = rest.length > 0 ? rest[0].question : emailCapture.confirmationText;
+    const outgoing = exitHit
+      ? renderTemplate(emailCapture.exitText ?? emailCapture.confirmationText, vars)
+      : remainingAfter.length > 0
+        ? renderTemplate(remainingAfter[0].question, vars)
+        : renderTemplate(emailCapture.confirmationText, vars);
     const delivery = await executeActionDelivery(repository, {
       deliveryKey: deliveryKeys.emailCapture(
         automation.id,
         event.id,
-        `field:${current.id}:${rest.length > 0 ? `question:${rest[0].id}` : "confirmation"}`,
+        `field:${current.id}:${exitHit ? "exit" : remainingAfter.length > 0 ? `question:${remainingAfter[0].id}` : "confirmation"}`,
       ),
       workspaceId: mapping.workspaceId,
       automationId: automation.id,
@@ -665,8 +784,8 @@ async function processFieldAnswer(
       event.accountId,
       senderId,
       current.id,
-      answer,
-      rest,
+      validated,
+      remainingAfter,
       atIso,
     );
 
@@ -765,7 +884,9 @@ export async function processNormalizedEvent(
   const needsContactTracking = automations.some(
     (automation) =>
       automation.definition.version === 1
-      && (automation.definition.trigger.type === "first_contact" || Boolean(automation.definition.emailCapture)),
+      && (automation.definition.trigger.type === "first_contact"
+        || Boolean(automation.definition.emailCapture)
+        || Boolean(automation.definition.followUps?.length)),
   );
   if (needsContactTracking && event.recipientId && CONTACT_TOUCH_EVENT_TYPES.includes(event.type)) {
     const touch = await repository.touchContact(
@@ -870,7 +991,8 @@ export async function processNormalizedEvent(
     // Email-collection follow-up: append the prompt (or, when the triggering message
     // already contains an address, the confirmation) after this flow's own actions.
     // Comment flows are excluded - they may only send a single private reply.
-    let actionsToSend: ExecutionAction[] = evaluation.actions;
+    const templateVars = buildTemplateVars(event, evaluation.matchedKeyword);
+    let actionsToSend: ExecutionAction[] = evaluation.actions.map((action) => personalizeAction(action, templateVars));
     let captureOutcome: "prompt" | "instant" | null = null;
     const senderId = event.recipientId;
     if (
@@ -888,14 +1010,18 @@ export async function processNormalizedEvent(
             automation.definition.emailCapture.fields?.[0]?.question
             ?? automation.definition.emailCapture.confirmationText;
           actionsToSend = [
-            ...evaluation.actions,
-            { type: "send_text", recipientId: senderId, text: followUpText },
+            ...actionsToSend,
+            { type: "send_text", recipientId: senderId, text: renderTemplate(followUpText, templateVars) },
           ];
         } else {
           captureOutcome = "prompt";
           actionsToSend = [
-            ...evaluation.actions,
-            { type: "send_text", recipientId: senderId, text: automation.definition.emailCapture.promptText },
+            ...actionsToSend,
+            {
+              type: "send_text",
+              recipientId: senderId,
+              text: renderTemplate(automation.definition.emailCapture.promptText, templateVars),
+            },
           ];
         }
       }
@@ -974,6 +1100,31 @@ export async function processNormalizedEvent(
         } else {
           await repository.setContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId, automation.id, atIso);
         }
+      }
+      // Scheduled nudges: rendered now (tokens baked in), delivered later by the
+      // worker, which re-checks opt-outs and the 24-hour window. Enqueued before
+      // the execution is completed so a queue hiccup retries the whole event -
+      // ledger rows and deterministic job IDs make every step idempotent.
+      const followUps = automation.definition.version === 1 ? automation.definition.followUps ?? [] : [];
+      if (followUps.length > 0 && senderId && automation.definition.trigger.type !== "comment") {
+        const followUpJobs: FlowFollowUpJob[] = followUps.map((followUp, index) => ({
+          deliveryKey: deliveryKeys.followUp(automation.id, event.id, index),
+          workspaceId: mapping.workspaceId,
+          automationId: automation.id,
+          instagramAccountId: event.accountId,
+          recipientId: senderId,
+          delayMinutes: followUp.delayMinutes,
+          message:
+            followUp.buttonLabel && followUp.url
+              ? {
+                  type: "button" as const,
+                  text: renderTemplate(followUp.text, templateVars),
+                  buttonLabel: renderTemplate(followUp.buttonLabel!, templateVars),
+                  url: followUp.url!,
+                }
+              : { type: "text" as const, text: renderTemplate(followUp.text, templateVars) },
+        }));
+        await enqueueFlowFollowUps(followUpJobs);
       }
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SENT",

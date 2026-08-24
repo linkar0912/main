@@ -983,6 +983,10 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .ig-dm-button { border-radius: 999px; font-size: .72rem; font-weight: 700; padding: 9px 16px; }
 .ig-dm-button.is-bot { align-self: flex-start; background: #262626; }
 .ig-dm-button.is-tap { align-self: flex-end; background: var(--grape); color: var(--white); }
+.ig-dm-image { border-radius: 14px; overflow: hidden; max-width: 78%; }
+/* min-height keeps the bubble visible while an image loads or when the URL is
+   unreachable - a collapsed zero-height bubble reads as a broken preview. */
+.ig-dm-image img { background: #262626; display: block; height: auto; max-height: 180px; min-height: 110px; object-fit: cover; width: 100%; }
 .ig-dm-composer { align-items: center; border-top: 1px solid rgba(255, 255, 255, .1); display: flex; flex: 0 0 auto; gap: 12px; padding: 11px 14px; }
 .ig-dm-composer .muted { color: #8e8e8e; flex: 1; font-size: .72rem; }
 .ig-preview-tabs { display: flex; gap: 6px; }
@@ -1028,6 +1032,10 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .step-heading .eyebrow { margin-bottom: 7px; }
 .classic-action { border: 1px solid var(--line); border-radius: var(--radius-sm); display: grid; gap: var(--space-3); padding: 14px; }
 .classic-action + .classic-action { margin-top: var(--space-3); }
+.keyword-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.keyword-chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; color: var(--muted); cursor: pointer; font-size: .78rem; padding: 4px 11px; transition: border-color .15s, color .15s; }
+.keyword-chip:hover { border-color: var(--accent); color: var(--text); }
+.capture-field-options { align-items: start; }
 .classic-action-head { align-items: center; display: flex; gap: 10px; justify-content: space-between; }
 .classic-action-index { color: var(--muted); font-size: .68rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
 .gate-toggle { align-items: center; display: flex; flex-direction: row; font-weight: 750; gap: 10px; }
