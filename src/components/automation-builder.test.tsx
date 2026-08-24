@@ -2,7 +2,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AutomationBuilder } from "./automation-builder";
-import { PRODUCT_MARK } from "@/src/lib/branding";
 import type { FlowDefinitionV1, FlowDefinitionV2 } from "@/src/lib/automation/types";
 
 type FetchOverrides = {
@@ -73,13 +72,17 @@ describe("AutomationBuilder", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows the Linkar brand mark in the preview", () => {
+  it("renders the reply avatar in the preview comments", () => {
     stubFetch();
     render(<AutomationBuilder />);
 
     const preview = screen.getByLabelText(/test preview/i);
     fireEvent.click(within(preview).getByRole("tab", { name: "Comments" }));
-    expect(screen.getByText(PRODUCT_MARK, { selector: ".ig-avatar-brand" })).toBeTruthy();
+    // The business reply carries an avatar (photo when connected, default otherwise);
+    // the other commenter always gets Instagram's no-photo default.
+    const avatars = preview.querySelectorAll(".ig-avatar");
+    expect(avatars.length).toBeGreaterThanOrEqual(2);
+    expect(preview.querySelector(".ig-comment-nested .ig-avatar")).toBeTruthy();
   });
 
   it("keeps editing version 1 definitions on the legacy single-reply form", async () => {

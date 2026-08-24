@@ -174,7 +174,7 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
     <section className="setup-panel" aria-label="First steps">
       <div className="setup-head">
         <div>
-          <h2>Start here</h2>
+          <h2>Your next best moves</h2>
           <p>Three quick steps to get your first useful reply live.</p>
         </div>
         <span className="setup-count">{completed}/{steps.length} done</span>
@@ -222,6 +222,7 @@ export function DashboardScreen() {
   const [capturedCount, setCapturedCount] = useState<number | null>(null);
   const [insights, setInsights] = useState<InsightsPayload | null>(null);
   const [hasConnection, setHasConnection] = useState<boolean | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/health")
@@ -275,6 +276,36 @@ export function DashboardScreen() {
         ) : null}
 
         <DashboardGreeting />
+
+        <section aria-label="Start here">
+          <div className="quickstart-head">
+            <h2>Start here</h2>
+            <button className="text-link" type="button" onClick={() => setPickerOpen(true)}>
+              Explore all templates <ArrowUpRight size={13} />
+            </button>
+          </div>
+          <div className="quickstart-grid">
+            <Link className="quickstart-card" href="/automations/new?type=classic&template=comment-link-dm">
+              <strong>Auto-DM links from comments</strong>
+              <span className="quickstart-card-meta">
+                <span><Zap size={13} /> Quick Automation</span>
+                <span className="quickstart-badge">Popular</span>
+              </span>
+            </Link>
+            <Link className="quickstart-card" href="/automations/new?type=classic&template=story-mention-reply">
+              <strong>Turn story mentions into DMs</strong>
+              <span className="quickstart-card-meta">
+                <span><Zap size={13} /> Quick Automation</span>
+              </span>
+            </Link>
+            <Link className="quickstart-card" href="/automations/new?type=classic&template=default-reply">
+              <strong>Respond to all your DMs</strong>
+              <span className="quickstart-card-meta">
+                <span><Zap size={13} /> Quick Automation</span>
+              </span>
+            </Link>
+          </div>
+        </section>
 
         <SetupChecklist automations={automations} hasConnection={hasConnection} loading={loading} />
 
@@ -353,6 +384,7 @@ export function DashboardScreen() {
             </div>
           )}
         </section>
+        {pickerOpen && <TemplatePickerModal onClose={() => setPickerOpen(false)} />}
       </div>
     </AppShell>
   );

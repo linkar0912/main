@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   CircleHelp,
   LayoutDashboard,
@@ -10,7 +10,9 @@ import {
   LogOut,
   Megaphone,
   Menu,
+  Moon,
   Settings,
+  Sun,
   UserRound,
   Workflow,
 } from "lucide-react";
@@ -40,6 +42,31 @@ function isActive(pathname: string, href: string): boolean {
       || /^\/automations\/[^/]+\/(edit|activity)$/.test(pathname);
   }
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** The current theme lives on <html data-theme>, applied pre-paint by the inline
+ * script in the root layout. The store observes that attribute so every mounted
+ * shell stays in sync without duplicating state. */
+function subscribeToTheme(callback: () => void) {
+  const observer = new MutationObserver(callback);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => observer.disconnect();
+}
+function getThemeSnapshot(): "dark" | "light" {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+function getThemeServerSnapshot(): "dark" | "light" {
+  return "light";
+}
+
+function setStoredTheme(theme: "dark" | "light") {
+  if (theme === "dark") document.documentElement.dataset.theme = "dark";
+  else delete document.documentElement.dataset.theme;
+  try {
+    localStorage.setItem("linkar-theme", theme);
+  } catch {
+    // Private-mode storage failures just mean the choice does not persist.
+  }
 }
 
 export type AccountIdentity = { email: string; plan: string; role: "OWNER" | "ADMIN" | "MEMBER" };
@@ -74,6 +101,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [role, setRole] = useState<AccountIdentity["role"] | "">("");
   const [plan, setPlan] = useState("free");
   const [igAvatarUrl, setIgAvatarUrl] = useState("");
+  const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, getThemeServerSnapshot);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -218,6 +246,16 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </nav>
 
         <span className="sidebar-spacer" />
+
+        <button
+          className="theme-toggle"
+          type="button"
+          onClick={() => setStoredTheme(theme === "dark" ? "light" : "dark")}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? <Sun size={17} strokeWidth={1.9} /> : <Moon size={17} strokeWidth={1.9} />}
+          {theme === "dark" ? "Light mode" : "Dark mode"}
+        </button>
 
         <form action="/api/auth/logout" method="post">
           <button className="signout-button" type="submit">

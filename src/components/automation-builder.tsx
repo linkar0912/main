@@ -29,16 +29,22 @@ type AutomationBuilderProps = {
 };
 
 /** The workspace's first connected Instagram account, so the phone preview shows the real
- * handle and account ID instead of a placeholder. Degrades to null when nothing is connected. */
-function useConnectedInstagram(): { username: string; igUserId: string } | null {
-  const [connection, setConnection] = useState<{ username: string; igUserId: string } | null>(null);
+ * handle, account ID and profile photo instead of placeholders. Degrades to null when nothing is connected. */
+function useConnectedInstagram(): { username: string; igUserId: string; avatarUrl?: string } | null {
+  const [connection, setConnection] = useState<{ username: string; igUserId: string; avatarUrl?: string } | null>(null);
   useEffect(() => {
     let active = true;
     fetch("/api/meta/connection")
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { username?: string; igUserId?: string }[] } | null) => {
+      .then((payload: { data?: { username?: string; igUserId?: string; profilePictureUrl?: string | null }[] } | null) => {
         const first = payload?.data?.[0];
-        if (active && first?.username) setConnection({ username: first.username, igUserId: first.igUserId ?? "" });
+        if (active && first?.username) {
+          setConnection({
+            username: first.username,
+            igUserId: first.igUserId ?? "",
+            ...(first.profilePictureUrl ? { avatarUrl: first.profilePictureUrl } : {}),
+          });
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -1217,6 +1223,7 @@ function AutomationBuilderV1({
           showPost={triggerType === "comment"}
           showComments={false}
           username={connection?.username ?? "yourbrand"}
+          avatarUrl={connection?.avatarUrl}
           profileId={connection?.igUserId || undefined}
           postImageUrl={previewThumb?.thumbnailUrl}
           postIsReel={previewThumb?.isReel}
@@ -1894,6 +1901,7 @@ function AutomationBuilderV2({
           view={previewView}
           onViewChange={setPreviewView}
           username={connection?.username ?? "yourbrand"}
+          avatarUrl={connection?.avatarUrl}
           profileId={connection?.igUserId || undefined}
           postCaption={mediaSnapshots[0]?.caption}
           postImageUrl={mediaSnapshots[0] ? mediaIndex[mediaSnapshots[0].id]?.thumbnailUrl : undefined}

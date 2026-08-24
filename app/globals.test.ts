@@ -4,9 +4,12 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(new URL("./globals.css", import.meta.url), "utf8").toLowerCase();
 
 describe("workspace palette contract", () => {
-  it("keeps the content canvas white and the sidebar bone", () => {
-    expect(css).toMatch(/\.main-content\s*{[^}]*background:\s*var\(--white\)/);
-    expect(css).toMatch(/\.sidebar\s*{[^}]*background:\s*var\(--surface-soft\)/);
+  it("keeps the content canvas and sidebar on the shared panel surface", () => {
+    expect(css).toMatch(/\.main-content\s*{[^}]*background:\s*var\(--panel\)/);
+    expect(css).toMatch(/\.sidebar\s*{[^}]*background:\s*var\(--panel\)/);
+    // The panel token stays white in light mode and flips to graphite in dark mode.
+    expect(css).toMatch(/--panel:\s*#ffffff/);
+    expect(css).toMatch(/\[data-theme="dark"\]\s*{[^}]*--panel:\s*#17181e/);
   });
 
   it("brands with magenta interaction and the volt signature", () => {

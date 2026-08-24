@@ -16,7 +16,6 @@ import {
   Video,
   Wifi,
 } from "lucide-react";
-import { PRODUCT_MARK } from "@/src/lib/branding";
 
 export type PreviewView = "post" | "comments" | "dm";
 
@@ -43,6 +42,8 @@ export type InstagramPreviewProps = {
   showComments?: boolean;
   username: string;
   profileId?: string;
+  /** The connected account's real profile photo; every "someone else" stays a default no-DP avatar. */
+  avatarUrl?: string;
   postCaption?: string;
   postImageUrl?: string;
   /** Reels render at their native 9:16 inside the post view; feed posts stay full-bleed. */
@@ -52,7 +53,33 @@ export type InstagramPreviewProps = {
   messages: DmBubble[];
 };
 
-function PostView({ username, caption, postImageUrl, postIsReel }: { username: string; caption?: string; postImageUrl?: string; postIsReel?: boolean }) {
+/** Instagram's default no-photo avatar: a quiet circle with a person silhouette. */
+function DefaultAvatar({ small = false }: { small?: boolean }) {
+  return (
+    <span className={`ig-avatar ig-avatar-default${small ? " ig-avatar-sm" : ""}`} aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="8.2" r="4.2" />
+        <path d="M12 13.6c-4.6 0-8.4 2.5-8.4 5.6 0 .5.4.8.9.8h15c.5 0 .9-.3.9-.8 0-3.1-3.8-5.6-8.4-5.6z" />
+      </svg>
+    </span>
+  );
+}
+
+function AccountAvatar({ avatarUrl, small = false }: { avatarUrl?: string; small?: boolean }) {
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- Meta CDN profile photo; next/image adds no value for one remote avatar.
+      <img
+        className={`ig-avatar ig-avatar-photo${small ? " ig-avatar-sm" : ""}`}
+        src={avatarUrl}
+        alt=""
+      />
+    );
+  }
+  return <DefaultAvatar small={small} />;
+}
+
+function PostView({ username, avatarUrl, caption, postImageUrl, postIsReel }: { username: string; avatarUrl?: string; caption?: string; postImageUrl?: string; postIsReel?: boolean }) {
   return (
     <div className="ig-screen">
       <div className="ig-topbar">
@@ -64,7 +91,7 @@ function PostView({ username, caption, postImageUrl, postIsReel }: { username: s
         <span />
       </div>
       <div className="ig-post-header">
-        <span className="ig-avatar" />
+        <AccountAvatar avatarUrl={avatarUrl} />
         <strong>{username}</strong>
       </div>
       <div className={`ig-post-media${postIsReel ? " is-reel" : ""}`} aria-hidden="true">
@@ -89,7 +116,7 @@ function PostView({ username, caption, postImageUrl, postIsReel }: { username: s
   );
 }
 
-function CommentsView({ username, triggerComment, commentReply }: { username: string; triggerComment?: string; commentReply?: string }) {
+function CommentsView({ username, avatarUrl, triggerComment, commentReply }: { username: string; avatarUrl?: string; triggerComment?: string; commentReply?: string }) {
   return (
     <div className="ig-screen ig-screen-comments">
       <div className="ig-topbar">
@@ -99,7 +126,8 @@ function CommentsView({ username, triggerComment, commentReply }: { username: st
       </div>
       <div className="ig-comment-list">
         <div className="ig-comment">
-          <span className="ig-avatar ig-avatar-sm" />
+          {/* Someone else commenting: Instagram's default no-photo avatar. */}
+          <DefaultAvatar small />
           <div className="ig-comment-body">
             <strong>someone <span className="ig-comment-time">2m</span></strong>
             <p>{triggerComment || "your keyword"}</p>
@@ -108,7 +136,7 @@ function CommentsView({ username, triggerComment, commentReply }: { username: st
           <Heart size={13} strokeWidth={1.8} />
         </div>
         <div className="ig-comment ig-comment-nested">
-          <span className="ig-avatar ig-avatar-sm ig-avatar-brand">{PRODUCT_MARK}</span>
+          <AccountAvatar avatarUrl={avatarUrl} small />
           <div className="ig-comment-body">
             <strong>{username} <span className="ig-comment-time">now</span></strong>
             <p>{commentReply || "Your public reply appears here"}</p>
@@ -118,19 +146,19 @@ function CommentsView({ username, triggerComment, commentReply }: { username: st
         </div>
       </div>
       <div className="ig-comment-input">
-        <span className="ig-avatar ig-avatar-sm" />
+        <DefaultAvatar small />
         <span className="muted">Add a comment…</span>
       </div>
     </div>
   );
 }
 
-function DmView({ username, messages }: { username: string; messages: DmBubble[] }) {
+function DmView({ username, avatarUrl, messages }: { username: string; avatarUrl?: string; messages: DmBubble[] }) {
   return (
     <div className="ig-screen ig-screen-dm">
       <div className="ig-topbar">
         <ChevronLeft size={20} />
-        <span className="ig-avatar ig-avatar-sm" />
+        <AccountAvatar avatarUrl={avatarUrl} small />
         <div className="ig-topbar-title"><strong>{username}</strong></div>
         <span className="ig-spacer" />
         <Phone size={17} strokeWidth={1.8} />
@@ -170,6 +198,7 @@ export function InstagramPreview({
   showComments = true,
   username,
   profileId,
+  avatarUrl,
   postCaption,
   postImageUrl,
   postIsReel,
@@ -192,13 +221,14 @@ export function InstagramPreview({
         {view === "post" && (
           <PostView
             username={username}
+            avatarUrl={avatarUrl}
             caption={postCaption}
             postImageUrl={postImageUrl}
             postIsReel={postIsReel}
           />
         )}
-        {view === "comments" && <CommentsView username={username} triggerComment={triggerComment} commentReply={commentReply} />}
-        {view === "dm" && <DmView username={username} messages={messages} />}
+        {view === "comments" && <CommentsView username={username} avatarUrl={avatarUrl} triggerComment={triggerComment} commentReply={commentReply} />}
+        {view === "dm" && <DmView username={username} avatarUrl={avatarUrl} messages={messages} />}
         <div className="ig-homebar" aria-hidden="true" />
       </div>
       <p className="ig-profile-meta">
