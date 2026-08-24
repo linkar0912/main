@@ -94,7 +94,7 @@ async function nextUntil(page: import("@playwright/test").Page, saveName: string
   for (;;) {
     const save = page.getByRole("button", { name: saveName });
     if (await save.isVisible().catch(() => false)) return;
-    const next = page.getByRole("button", { name: "Next" });
+    const next = page.getByRole("button", { name: "Next", exact: true });
     if (await next.isVisible().catch(() => false)) {
       await next.click();
     }
@@ -110,8 +110,8 @@ test("classic builder creates a keyword autoresponder", async ({ page }) => {
   await page.getByLabel("Trigger source").selectOption("message");
   await page.getByLabel("Keywords").fill("price");
   // Action step: Trigger → Condition → Action.
-  await page.getByRole("button", { name: "Next" }).click();
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByLabel("Message text").fill("Here is the pricing you asked for.");
   await nextUntil(page, "Save automation");
   await page.getByRole("button", { name: "Save automation" }).click();
@@ -197,19 +197,19 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   // Content step: pick the mocked Reel.
   await page.getByRole("checkbox", { name: /test reel/i }).click();
   // Comment & reply step.
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByLabel("Keywords").fill("guide");
   // Opening DM step.
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByLabel("Opening message text").fill("Reply guide! Tap below and I will send it over.");
   await page.getByLabel("Not-following prompt").fill("Follow us first, then tap I followed to unlock this.");
   // Delivery step.
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByLabel("Delivery message").fill("You are verified — here is your guide.");
   await page.getByLabel("Delivery link").fill("https://example.com/guide");
   // Guardrails, then Review.
-  await page.getByRole("button", { name: "Next" }).click();
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
 
   // Review the follow gate before saving: the gate is enabled by default and
   // the review step summarizes it explicitly.

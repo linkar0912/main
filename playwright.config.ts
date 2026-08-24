@@ -4,7 +4,9 @@ const STORAGE_STATE = ".playwright/auth.json";
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  // Tests inside a spec share one authenticated workspace and must remain
+  // ordered; separate spec files can still run across the worker pool.
+  fullyParallel: false,
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:3000",

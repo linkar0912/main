@@ -34,7 +34,7 @@ test("price-list recipe prefills an image card reply", async ({ page }) => {
 /** Clicks Next once and gives React a beat to swap the wizard step, so back-to-back
  * advances never double-fire on the same step. */
 async function advance(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.waitForTimeout(150);
 }
 
