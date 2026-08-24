@@ -39,7 +39,7 @@ describe("ProfileScreen", () => {
       />,
     );
 
-    const summary = screen.getByLabelText("Profile summary");
+    const summary = screen.getByLabelText("Account summary");
     expect(within(summary).getByText("Member")).toBeTruthy();
     expect(within(summary).queryByText("Owner")).toBeNull();
   });
@@ -85,6 +85,7 @@ describe("ProfileScreen", () => {
 
     const avatar = await screen.findByRole("img", { name: /@brand\.acct profile picture/i });
     expect(avatar.getAttribute("src")).toBe("https://cdn.instagram.com/dp.jpg");
+    expect(avatar.className).toContain("avatar-connection");
   });
 
   it("falls back to the glyph when Meta provides no profile picture", async () => {
@@ -120,6 +121,8 @@ describe("ProfileScreen", () => {
     );
 
     expect(await screen.findByText(/@brand\.acct/)).toBeTruthy();
+    // The connection card falls back to a glyph avatar, never a broken image.
+    expect(document.querySelector(".avatar-connection")).toBeTruthy();
     expect(document.querySelector(".settings-avatar")).toBeNull();
   });
 });

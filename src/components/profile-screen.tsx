@@ -3,17 +3,19 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
+  ArrowUpRight,
   BadgeCheck,
+  CircleHelp,
   ExternalLink,
   KeyRound,
   Link2,
   LogOut,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { InstagramGlyph } from "./instagram-glyph";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
-import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
 
 type Connection = {
@@ -56,18 +58,6 @@ function roleLabel(role: MemberRole): string {
   return role.charAt(0) + role.slice(1).toLowerCase();
 }
 
-/** What the Instagram hero row says - read-only here; connect/disconnect lives on Settings. */
-function connectionSummary(connections: Connection[]): { title: string; detail: string } {
-  if (connections.length === 0) {
-    return { title: "No Instagram account connected", detail: "Connect a professional account to start automating replies." };
-  }
-  if (connections.length === 1) {
-    const [connection] = connections;
-    return { title: `@${connection.username}`, detail: `Connected ${formatDate(connection.connectedAt)} - manage or disconnect in Settings.` };
-  }
-  return { title: `${connections.length} accounts connected`, detail: "Manage each connection, or add another, in Settings." };
-}
-
 export function ProfileScreen({ email, memberSince, emailVerified, role }: ProfileScreenProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [saved, setSaved] = useState(() => {
@@ -97,11 +87,12 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
       .catch(() => undefined);
   }, []);
 
-  const { title: connectionTitle, detail: connectionDetail } = connectionSummary(connections);
+  const connection = connections[0];
+  const avatar = connection?.profilePictureUrl ?? undefined;
 
   return (
     <AppShell>
-      <div className="page-wrap narrow-wrap">
+      <div className="page-wrap">
         <header className="page-header">
           <div>
             <p className="eyebrow">Account</p>
@@ -122,86 +113,127 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
           </div>
         )}
 
-        <section className="profile-hero grid-texture" aria-label="Profile summary">
-          <div className="profile-avatar-wrap">
-            <span className="avatar avatar-large" aria-hidden>{initialsOf(email)}</span>
-            <span className="profile-avatar-badge">Free</span>
-          </div>
-          <div className="profile-id">
-            <strong>{displayNameFromEmail(email)}</strong>
-            <small>{email}</small>
-            <span className="profile-meta-line">
-              {PRODUCT_NAME} workspace {roleLabel(role).toLowerCase()}
-              {memberSince ? ` · joined ${formatDate(memberSince)}` : ""}
-            </span>
-          </div>
-          <div className="profile-badges">
-            <span className="profile-chip" data-tone="accent">{roleLabel(role)}</span>
-            <span className="profile-chip">Free plan</span>
-            <span className="profile-chip">{emailVerified ? "Email verified" : "Email unverified"}</span>
-          </div>
-        </section>
+        <div className="profile-layout">
+          <div className="profile-main">
+            <section className="panel" aria-label="Account summary">
+              <div className="account-summary">
+                {avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+                  <img className="avatar avatar-summary is-photo" src={avatar} alt="" />
+                ) : (
+                  <span className="avatar avatar-summary" aria-hidden>{initialsOf(email)}</span>
+                )}
+                <div className="account-summary-id">
+                  <strong>{displayNameFromEmail(email)}</strong>
+                  <small>{email}</small>
+                  <span className="account-summary-meta">
+                    {memberSince ? `Joined ${formatDate(memberSince)}` : "Workspace member"}
+                  </span>
+                </div>
+                <div className="account-summary-chips">
+                  <span className="profile-chip" data-tone="accent">{roleLabel(role)}</span>
+                  <span className="profile-chip">Free plan</span>
+                  <span className="profile-chip" data-tone={emailVerified ? "ok" : "warn"}>
+                    {emailVerified ? "Email verified" : "Email unverified"}
+                  </span>
+                </div>
+              </div>
+            </section>
 
-        <section className="settings-hero panel" aria-label="Connected Instagram">
-          {connections.length === 1 && connections[0].profilePictureUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value for one remote avatar.
-            <img
-              className="settings-avatar"
-              src={connections[0].profilePictureUrl}
-              alt={connections[0].username ? `@${connections[0].username} profile picture` : "Instagram profile picture"}
-            />
-          ) : (
-            <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
-          )}
-          <div className="settings-copy">
-            <p className="eyebrow">Connection</p>
-            <h2>{connectionTitle}</h2>
-            <p>{connectionDetail}</p>
+            <section className="panel" aria-label="Security">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">Security</p>
+                  <h2>Password &amp; devices</h2>
+                </div>
+                <ShieldCheck size={21} />
+              </div>
+              <form action="/api/account" method="post" className="account-form">
+                <input type="hidden" name="action" value="change-password" />
+                <div className="account-form-grid">
+                  <label className="field">
+                    <span>Current password</span>
+                    <input name="currentPassword" type="password" autoComplete="current-password" required />
+                  </label>
+                  <label className="field">
+                    <span>New password</span>
+                    <input name="newPassword" type="password" autoComplete="new-password" minLength={12} required />
+                  </label>
+                </div>
+                <p className="muted account-form-hint">
+                  At least 12 characters. Changing your password keeps your other devices signed in.
+                </p>
+                <button className="button button-secondary" type="submit">
+                  <KeyRound size={15} /> Update password
+                </button>
+              </form>
+              <div className="account-session-row">
+                <div>
+                  <strong>Sign out everywhere</strong>
+                  <p className="muted">Invalidates every session across all your devices - including this one.</p>
+                </div>
+                <form action="/api/account" method="post">
+                  <input type="hidden" name="action" value="logout-all" />
+                  <button className="button button-secondary" type="submit">
+                    <LogOut size={15} /> Sign out all
+                  </button>
+                </form>
+              </div>
+            </section>
           </div>
-          <div className="settings-action">
-            <Link className={`button ${connections.length === 0 ? "button-primary" : "button-secondary"}`} href="/settings">
-              <Link2 size={16} /> {connections.length === 0 ? "Connect Instagram" : "Manage in Settings"}
-            </Link>
-          </div>
-        </section>
 
-        <section className="panel" aria-label="Security">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Security</p>
-              <h2>Password & devices</h2>
-            </div>
-            <ShieldCheck size={21} />
-          </div>
-          <form action="/api/account" method="post" className="account-form">
-            <input type="hidden" name="action" value="change-password" />
-            <label className="field">
-              <span>Current password</span>
-              <input name="currentPassword" type="password" autoComplete="current-password" required />
-            </label>
-            <label className="field">
-              <span>New password</span>
-              <input name="newPassword" type="password" autoComplete="new-password" minLength={12} required />
-            </label>
-            <p className="muted">At least 12 characters. Your other devices stay signed in.</p>
-            <button className="button button-secondary" type="submit">
-              <KeyRound size={15} /> Update password
-            </button>
-          </form>
-          <form action="/api/account" method="post">
-            <input type="hidden" name="action" value="logout-all" />
-            <button className="button button-secondary" type="submit">
-              <LogOut size={15} /> Sign out of all devices
-            </button>
-          </form>
-        </section>
+          <aside className="profile-side">
+            <section className="side-panel" aria-label="Connected Instagram">
+              <div className="panel-heading">
+                <div><p className="eyebrow">Connection</p><h2>Instagram</h2></div>
+                <InstagramGlyph size={19} brand />
+              </div>
+              {connection ? (
+                <div className="connection-card">
+                  {connection.profilePictureUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
+                    <img
+                      className="avatar avatar-connection is-photo"
+                      src={connection.profilePictureUrl}
+                      alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
+                    />
+                  ) : (
+                    <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
+                  )}
+                  <div className="connection-card-id">
+                    <strong>@{connection.username}</strong>
+                    <span className="connection-status">
+                      <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
+                      {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
+                      {" · "}
+                      {formatDate(connection.connectedAt)}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="muted connection-empty">
+                  No Instagram account connected yet. Link a professional account to start automating replies.
+                </p>
+              )}
+              <Link className={`button ${connection ? "button-secondary" : "button-primary"} button-block`} href="/settings">
+                <Link2 size={15} /> {connection ? "Manage in Settings" : "Connect Instagram"}
+              </Link>
+            </section>
 
-        <nav className="profile-footer-links" aria-label="Related pages">
-          <Link href="/settings">Team & invitations</Link>
-          <Link href="/help">Help centre</Link>
-          <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
-          <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
-        </nav>
+            <section className="side-panel" aria-label="Related pages">
+              <div className="panel-heading">
+                <div><p className="eyebrow">Workspace</p><h2>Related</h2></div>
+                <Users size={19} strokeWidth={1.8} />
+              </div>
+              <nav className="related-links">
+                <Link href="/settings">Team &amp; invitations <ArrowUpRight size={13} /></Link>
+                <Link href="/help"><CircleHelp size={14} /> Help centre</Link>
+                <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
+                <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
+              </nav>
+            </section>
+          </aside>
+        </div>
       </div>
     </AppShell>
   );
