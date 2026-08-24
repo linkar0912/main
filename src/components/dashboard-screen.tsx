@@ -96,24 +96,26 @@ function VolumeChart({ sentPoints, reachedPoints }: { sentPoints: DayPoint[]; re
 
   return (
     <>
-      <div className="insights-chart" role="img" aria-label="Daily replies sent and people reached for the last 14 days">
-        {sentPoints.map((point) => {
-          const reached = reachedByDay.get(point.day) ?? 0;
-          const isEmpty = point.count === 0 && reached === 0;
-          return (
-            <div
-              className={isEmpty ? "chart-column is-empty" : "chart-column"}
-              key={point.day}
-              title={`${formatDayLabel(point.day)} - ${point.count} sent, ${reached} reached`}
-            >
-              <div className="chart-bars is-lg">
-                <span className="chart-bar bar-participants" style={{ height: `${heightOf(reached)}%` }} />
-                <span className="chart-bar bar-sent" style={{ height: `${heightOf(point.count)}%` }} />
+      <div className="chart-plot">
+        <div className="insights-chart" role="img" aria-label="Daily replies sent and people reached for the last 14 days">
+          {sentPoints.map((point) => {
+            const reached = reachedByDay.get(point.day) ?? 0;
+            const isEmpty = point.count === 0 && reached === 0;
+            return (
+              <div
+                className={isEmpty ? "chart-column is-empty" : "chart-column"}
+                key={point.day}
+                title={`${formatDayLabel(point.day)} - ${point.count} sent, ${reached} reached`}
+              >
+                <div className="chart-bars is-lg">
+                  <span className="chart-bar bar-participants" style={{ height: `${heightOf(reached)}%` }} />
+                  <span className="chart-bar bar-sent" style={{ height: `${heightOf(point.count)}%` }} />
+                </div>
+                <small>{formatDayLabel(point.day)}</small>
               </div>
-              <small>{formatDayLabel(point.day)}</small>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
       <p className="chart-legend">
         <span className="legend-swatch swatch-sent" /> Replies sent

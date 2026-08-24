@@ -1191,11 +1191,20 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .insights-stack { display: grid; gap: var(--space-4); margin-top: var(--space-5); }
 .chart-panel { min-width: 0; }
 .insights-panel > .panel-heading { align-items: center; display: flex; gap: var(--space-3); justify-content: space-between; }
-.insights-chart { display: flex; gap: 7px; }
+.chart-plot {
+  background:
+    linear-gradient(to top, var(--line) 1px, transparent 1px) 0 100% / 100% 25%,
+    var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+.insights-chart { align-items: end; display: flex; gap: 7px; min-height: 220px; }
 .chart-column { display: grid; flex: 1; gap: 6px; min-width: 0; text-align: center; }
 .chart-column small { color: var(--muted); font-size: .58rem; }
-.chart-bars { align-items: flex-end; background: var(--surface-soft); border-radius: var(--radius-sm); display: flex; gap: 2px; height: 96px; justify-content: center; padding: 5px 3px; transition: filter .15s ease; }
-.chart-bars.is-lg { border-radius: var(--radius-md); height: 220px; padding: var(--space-3) 5px; }
+.chart-bars { align-items: flex-end; background: transparent; border-radius: var(--radius-sm); display: flex; gap: 2px; height: 96px; justify-content: center; padding: 5px 3px; transition: filter .15s ease; }
+.chart-bars.is-lg { border-radius: var(--radius-md); height: 190px; padding: 0 3px; }
 .chart-column:hover .chart-bars { filter: brightness(1.06); }
 /* Days with no activity lose the full-height track - eleven empty gray blocks
    read as broken bars, not as "nothing happened". */

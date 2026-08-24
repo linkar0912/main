@@ -12,6 +12,23 @@ vi.mock("./automation-list", () => ({
 
 const { DashboardScreen } = await import("./dashboard-screen");
 
+function stubDashboardFetch() {
+  const sentPerDay = Array.from({ length: 14 }, (_, index) => ({
+    day: `2026-08-${String(index + 1).padStart(2, "0")}`,
+    count: index + 1,
+  }));
+  const participantsPerDay = sentPerDay.map((point) => ({ ...point, count: Math.max(1, point.count - 2) }));
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
+    if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [{}] }) } as Response;
+    if (url.includes("/api/contacts")) return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
+    if (url.includes("/api/health")) return { ok: true, json: async () => ({ mode: "configured" }) } as Response;
+    if (url.includes("/api/insights")) return { ok: true, json: async () => ({ timeseries: { sentPerDay, participantsPerDay } }) } as Response;
+    throw new Error(`Unexpected fetch to ${url}`);
+  }));
+}
+
 describe("DashboardScreen onboarding", () => {
   afterEach(() => {
     cleanup();
@@ -102,5 +119,21 @@ describe("DashboardScreen onboarding", () => {
 
     expect(await screen.findByText("Draft")).toBeTruthy();
     expect(screen.queryByText("Paused")).toBeNull();
+  });
+
+  it("renders activity as one continuous chart field", async () => {
+    stubDashboardFetch();
+    render(<DashboardScreen />);
+
+    const chart = await screen.findByRole("img", { name: /daily replies sent and people reached/i });
+    expect(chart.closest(".chart-plot")).toBeTruthy();
+    expect(chart.querySelectorAll(".chart-column")).toHaveLength(14);
+  });
+
+  it("marks the Popular recipe with the shared brand badge", async () => {
+    stubDashboardFetch();
+    render(<DashboardScreen />);
+
+    expect((await screen.findByText("Popular")).classList.contains("quickstart-badge")).toBe(true);
   });
 });
