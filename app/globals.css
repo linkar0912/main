@@ -275,11 +275,15 @@ h3 { font-size: .98rem; font-weight: 700; margin-bottom: var(--space-2); }
 
 .text-link, .row-link, .list-more, .back-link {
   align-items: center;
+  appearance: none;
+  background: none;
+  border: 0;
   color: var(--muted);
   display: inline-flex;
   font-size: .78rem;
   font-weight: 750;
   gap: 5px;
+  padding: 0;
   transition: color var(--speed);
 }
 .text-link:hover, .row-link:hover, .list-more:hover, .back-link:hover { color: var(--ink); }
@@ -674,7 +678,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .muted { color: var(--muted); }
 .header-actions { display: flex; gap: 10px; }
 .home-greeting { align-items: center; margin-bottom: var(--space-7); }
-.home-greeting h1 { font-size: clamp(2.4rem, 4.2vw, 3.45rem); letter-spacing: -.055em; margin-bottom: 8px; }
+.home-greeting h1 { font-size: clamp(2.1rem, 3.2vw, 2.9rem); letter-spacing: -.04em; margin-bottom: 8px; }
 
 /* Flat by design: no box, no border, no shadow - sections are told apart by
    a heading and generous space, like a plain document, not a card grid. */
@@ -1171,6 +1175,23 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .chart-bars { align-items: flex-end; background: var(--surface-soft); border-radius: var(--radius-sm); display: flex; gap: 2px; height: 96px; justify-content: center; padding: 5px 3px; transition: filter .15s ease; }
 .chart-bars.is-lg { border-radius: var(--radius-md); height: 220px; padding: var(--space-3) 5px; }
 .chart-column:hover .chart-bars { filter: brightness(1.06); }
+/* Days with no activity lose the full-height track - eleven empty gray blocks
+   read as broken bars, not as "nothing happened". */
+.chart-column.is-empty .chart-bars { background: transparent; }
+/* All-zero fortnight replaces the plot entirely. */
+.chart-empty {
+  align-items: center;
+  background: var(--surface-soft);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  display: flex;
+  font-size: .84rem;
+  height: 220px;
+  justify-content: center;
+  margin: 0;
+  padding: var(--space-5);
+  text-align: center;
+}
 .chart-bar { border-radius: 4px 4px 2px 2px; display: inline-block; min-height: 2px; transition: height .5s var(--ease-out); width: 42%; }
 .bar-participants, .swatch-participants { background: var(--grape); }
 .bar-sent, .swatch-sent { background: var(--accent); }
@@ -1498,7 +1519,7 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
   .list-intro { align-items: flex-start; flex-direction: column; gap: 5px; }
   .invite-form { align-items: stretch; flex-direction: column; }
   .account-summary-chips { margin-left: 0; }
-  .home-greeting h1 { font-size: 2.25rem; }
+  .home-greeting h1 { font-size: 2rem; }
   .setup-head { align-items: flex-start; flex-direction: column; gap: 6px; }
   .broadcast-form .field-grid { grid-template-columns: 1fr; }
   .help-search input { min-width: 0; }

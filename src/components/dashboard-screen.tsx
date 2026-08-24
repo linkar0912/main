@@ -82,15 +82,27 @@ function VolumeChart({ sentPoints, reachedPoints }: { sentPoints: DayPoint[]; re
   // Any day with real activity still reads as a bar, not a sliver - plain
   // count/peak scaling flattens modest, evenly-spread real-world numbers.
   const heightOf = (count: number) => (count > 0 ? Math.max(10, Math.round((count / peak) * 100)) : 2);
+  const hasActivity = sentPoints.some((point) => point.count > 0) || reachedPoints.some((point) => point.count > 0);
+
+  if (!hasActivity) {
+    // All-zero fortnight: an empty plot with 2px slivers at the bottom reads as
+    // broken, so swap the whole plot for a calm empty state.
+    return (
+      <p className="chart-empty">
+        No replies in the last 14 days yet - once your automations start sending, daily activity shows up here.
+      </p>
+    );
+  }
 
   return (
     <>
       <div className="insights-chart" role="img" aria-label="Daily replies sent and people reached for the last 14 days">
         {sentPoints.map((point) => {
           const reached = reachedByDay.get(point.day) ?? 0;
+          const isEmpty = point.count === 0 && reached === 0;
           return (
             <div
-              className="chart-column"
+              className={isEmpty ? "chart-column is-empty" : "chart-column"}
               key={point.day}
               title={`${formatDayLabel(point.day)} - ${point.count} sent, ${reached} reached`}
             >
