@@ -1,16 +1,16 @@
-name: replyconnect-production
+name: linkar-production
 
 services:
   web:
     build:
       context: .
       dockerfile: Dockerfile
-    image: replyconnect:production
+    image: linkar:production
     command: ["./node_modules/.bin/next", "start"]
     restart: unless-stopped
     environment: &application-environment
       NODE_ENV: production
-      APP_NAME: ${APP_NAME:-ReplyConnect}
+      APP_NAME: ${APP_NAME:-Linkar}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:?SUPPORT_EMAIL is required}
       SOURCE_COMMIT: ${SOURCE_COMMIT:-local-compose}
@@ -50,7 +50,7 @@ services:
       retries: 3
 
   worker:
-    image: replyconnect:production
+    image: linkar:production
     build:
       context: .
       dockerfile: Dockerfile
@@ -67,11 +67,11 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-replyconnect}
-      POSTGRES_USER: ${POSTGRES_USER:-replyconnect}
+      POSTGRES_DB: ${POSTGRES_DB:-linkar}
+      POSTGRES_USER: ${POSTGRES_USER:-linkar}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
-      - replyconnect-postgres:/var/lib/postgresql/data
+      - linkar-postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -96,7 +96,7 @@ services:
     environment:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}
     volumes:
-      - replyconnect-valkey:/data
+      - linkar-valkey:/data
     healthcheck:
       test: ["CMD-SHELL", "valkey-cli --no-auth-warning -a \"$$VALKEY_PASSWORD\" ping | grep -q PONG"]
       interval: 10s
@@ -104,5 +104,5 @@ services:
       retries: 10
 
 volumes:
-  replyconnect-postgres:
-  replyconnect-valkey:
+  linkar-postgres:
+  linkar-valkey:

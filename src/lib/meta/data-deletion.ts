@@ -33,7 +33,7 @@ export function isFreshDeletionRequest(payload: DeletionPayload, now = Date.now(
 }
 
 export function createDeletionConfirmationCode(): string {
-  return `replyconnect_delete_${randomBytes(12).toString("hex")}`;
+  return `linkar_delete_${randomBytes(12).toString("hex")}`;
 }
 
 export function createDeletionResponse(confirmationCode: string, statusUrl: string) {

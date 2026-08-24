@@ -17,7 +17,7 @@ export class LoginRateLimitStore {
 
   async isAllowed(key: string): Promise<boolean> {
     if (!this.redis) return this.fallback.isAllowed(key);
-    const count = Number(await this.redis.get(`replyconnect:login:${key}`) ?? "0");
+    const count = Number(await this.redis.get(`linkar:login:${key}`) ?? "0");
     return count < this.maxAttempts;
   }
 
@@ -26,14 +26,14 @@ export class LoginRateLimitStore {
     await this.redis.eval(
       "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('PEXPIRE',KEYS[1],ARGV[1]) end; return n",
       1,
-      `replyconnect:login:${key}`,
+      `linkar:login:${key}`,
       String(this.windowMs),
     );
   }
 
   async reset(key: string): Promise<void> {
     if (!this.redis) return this.fallback.reset(key);
-    await this.redis.del(`replyconnect:login:${key}`);
+    await this.redis.del(`linkar:login:${key}`);
   }
 }
 

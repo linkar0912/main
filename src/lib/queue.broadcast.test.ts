@@ -37,11 +37,11 @@ const jobs = [
 describe("broadcast queue fan-out", () => {
   beforeEach(() => {
     state.add.mockReset().mockResolvedValue({ id: "job" });
-    delete (globalThis as { replyconnectWebhookQueue?: unknown }).replyconnectWebhookQueue;
+    delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
   });
 
   afterEach(() => {
-    delete (globalThis as { replyconnectWebhookQueue?: unknown }).replyconnectWebhookQueue;
+    delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
   });
 
   it("includes the Instagram account in otherwise identical recipient job IDs", async () => {

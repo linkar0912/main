@@ -25,7 +25,7 @@ describe("getHealth", () => {
   });
 
   it("reports configured healthy dependencies", async () => {
-    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/replyconnect");
+    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
     vi.stubEnv("REDIS_URL", "redis://:secret@redis:6379");
     vi.stubEnv("SOURCE_COMMIT", "coolify-commit-marker");
 
@@ -46,7 +46,7 @@ describe("getHealth", () => {
   });
 
   it("reports degraded when only the database is configured", async () => {
-    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/replyconnect");
+    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
     vi.stubEnv("REDIS_URL", "");
     vi.stubEnv("SOURCE_COMMIT", "");
 
@@ -86,12 +86,12 @@ describe("getHealth", () => {
   });
 
   it("reports a safe degraded response when a configured dependency fails", async () => {
-    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/replyconnect");
+    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
     vi.stubEnv("REDIS_URL", "redis://:secret@redis:6379");
 
     const health = await getHealth({
       database: async () => {
-        throw new Error("postgresql://user:secret@database/replyconnect refused connection");
+        throw new Error("postgresql://user:secret@database/linkar refused connection");
       },
       redis: async () => undefined,
     });

@@ -23,7 +23,7 @@ describe("processDeauthorization", () => {
     await repository.upsertConnection({
       workspaceId: "workspace_1",
       igUserId: "ig_123",
-      username: "replyconnect_test",
+      username: "linkar_test",
       accessTokenEncrypted: "sealed-token",
       status: "CONNECTED",
     });
@@ -43,7 +43,7 @@ describe("processDeauthorization", () => {
     await repository.upsertConnection({
       workspaceId: "workspace_1",
       igUserId: "ig_123",
-      username: "replyconnect_test",
+      username: "linkar_test",
       accessTokenEncrypted: "sealed-token",
       status: "CONNECTED",
     });
@@ -63,7 +63,7 @@ describe("processDeauthorization", () => {
     await repository.upsertConnection({
       workspaceId: "workspace_1",
       igUserId: "ig_123",
-      username: "replyconnect_test",
+      username: "linkar_test",
       accessTokenEncrypted: "sealed-token",
       status: "CONNECTED",
     });

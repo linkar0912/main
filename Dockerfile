@@ -28,22 +28,22 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN groupadd --system --gid 1001 replyconnect \
-  && useradd --system --uid 1001 --gid replyconnect --create-home replyconnect
+RUN groupadd --system --gid 1001 linkar \
+  && useradd --system --uid 1001 --gid linkar --create-home linkar
 
-COPY --from=build --chown=replyconnect:replyconnect /app/package.json ./
-COPY --from=build --chown=replyconnect:replyconnect /app/node_modules ./node_modules
-COPY --from=build --chown=replyconnect:replyconnect /app/.next ./.next
-COPY --from=build --chown=replyconnect:replyconnect /app/public ./public
+COPY --from=build --chown=linkar:linkar /app/package.json ./
+COPY --from=build --chown=linkar:linkar /app/node_modules ./node_modules
+COPY --from=build --chown=linkar:linkar /app/.next ./.next
+COPY --from=build --chown=linkar:linkar /app/public ./public
 # The worker is bundled to plain JS at build time (pnpm build:worker), so the
 # runtime image needs neither the TypeScript sources nor a TS loader.
-COPY --from=build --chown=replyconnect:replyconnect /app/dist ./dist
-COPY --from=build --chown=replyconnect:replyconnect /app/prisma/schema.prisma ./prisma/schema.prisma
-COPY --from=build --chown=replyconnect:replyconnect /app/prisma/migrations ./prisma/migrations
-COPY --from=build --chown=replyconnect:replyconnect /app/next.config.ts ./
-COPY --from=build --chown=replyconnect:replyconnect /app/tsconfig.json ./
+COPY --from=build --chown=linkar:linkar /app/dist ./dist
+COPY --from=build --chown=linkar:linkar /app/prisma/schema.prisma ./prisma/schema.prisma
+COPY --from=build --chown=linkar:linkar /app/prisma/migrations ./prisma/migrations
+COPY --from=build --chown=linkar:linkar /app/next.config.ts ./
+COPY --from=build --chown=linkar:linkar /app/tsconfig.json ./
 
-USER replyconnect
+USER linkar
 
 EXPOSE 3000
 

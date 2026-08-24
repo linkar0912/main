@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-export const META_OAUTH_STATE_COOKIE = "replyconnect_meta_oauth_state";
+export const META_OAUTH_STATE_COOKIE = "linkar_meta_oauth_state";
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1_000;
 
 type OAuthStatePayload = {

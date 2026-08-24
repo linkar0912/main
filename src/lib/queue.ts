@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { getServerEnv } from "./env";
 import type { NormalizedEvent } from "./automation/types";
 
-export const WEBHOOK_QUEUE_NAME = "replyconnect-webhooks";
+export const WEBHOOK_QUEUE_NAME = "linkar-webhooks";
 
 // Scanning the whole queue at once (getJobs without bounds) loads every retained
 // job into memory; page through instead so data-deletion sweeps stay cheap even
@@ -26,19 +26,19 @@ export function createLeadDeliveryJobId(deliveryKey: string): string {
 }
 
 const globalForQueue = globalThis as unknown as {
-  replyconnectWebhookQueue?: Queue;
-  replyconnectWebhookRedis?: Redis;
+  linkarWebhookQueue?: Queue;
+  linkarWebhookRedis?: Redis;
 };
 
 function getWebhookQueue(): Queue | null {
   const redisUrl = getServerEnv().redisUrl;
   if (!redisUrl) return null;
-  if (globalForQueue.replyconnectWebhookQueue) return globalForQueue.replyconnectWebhookQueue;
+  if (globalForQueue.linkarWebhookQueue) return globalForQueue.linkarWebhookQueue;
 
   const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
   const queue = new Queue(WEBHOOK_QUEUE_NAME, { connection: redis });
-  globalForQueue.replyconnectWebhookRedis = redis;
-  globalForQueue.replyconnectWebhookQueue = queue;
+  globalForQueue.linkarWebhookRedis = redis;
+  globalForQueue.linkarWebhookQueue = queue;
   return queue;
 }
 

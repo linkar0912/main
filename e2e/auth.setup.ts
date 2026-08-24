@@ -10,7 +10,7 @@ setup("create the workspace owner", async ({ page }) => {
   const email = `owner-${Date.now()}@example.com`;
   await page.goto("/signup");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("replyconnect-e2e-password");
+  await page.getByLabel("Password").fill("linkar-e2e-password");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/automations$/);
 

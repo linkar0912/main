@@ -6,7 +6,7 @@ x-application-environment: &application-environment
   SUPPORT_EMAIL: ${SUPPORT_EMAIL:?SUPPORT_EMAIL is required}
   SOURCE_COMMIT: ${SOURCE_COMMIT:-main}
   AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:?AUTH_SESSION_SECRET is required}
-  DATABASE_URL: postgresql://${POSTGRES_USER:-replyconnect}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-replyconnect}?schema=public
+  DATABASE_URL: postgresql://${POSTGRES_USER:-linkar}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-linkar}?schema=public
   REDIS_URL: redis://:${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}@valkey:6379/0
   META_APP_ID: ${META_APP_ID:-}
   META_APP_SECRET: ${META_APP_SECRET:-}
@@ -22,7 +22,7 @@ x-application-environment: &application-environment
   LOG_LEVEL: ${LOG_LEVEL:-info}
 services:
   migrate:
-    image: ghcr.io/tejastelkar/replyconnect:${REPLYCONNECT_IMAGE_TAG:-main}
+    image: ghcr.io/linkar0912/main:${LINKAR_IMAGE_TAG:-main}
     pull_policy: always
     command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
     restart: "no"
@@ -37,7 +37,7 @@ services:
           cpus: "0.25"
           memory: 256M
   web:
-    image: ghcr.io/tejastelkar/replyconnect:${REPLYCONNECT_IMAGE_TAG:-main}
+    image: ghcr.io/linkar0912/main:${LINKAR_IMAGE_TAG:-main}
     pull_policy: always
     command: ["./node_modules/.bin/next", "start"]
     restart: unless-stopped
@@ -61,7 +61,7 @@ services:
           cpus: "0.35"
           memory: 384M
   worker:
-    image: ghcr.io/tejastelkar/replyconnect:${REPLYCONNECT_IMAGE_TAG:-main}
+    image: ghcr.io/linkar0912/main:${LINKAR_IMAGE_TAG:-main}
     pull_policy: always
     command: ["node", "dist/worker.js"]
     restart: unless-stopped
@@ -80,11 +80,11 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-replyconnect}
-      POSTGRES_USER: ${POSTGRES_USER:-replyconnect}
+      POSTGRES_DB: ${POSTGRES_DB:-linkar}
+      POSTGRES_USER: ${POSTGRES_USER:-linkar}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
-      - replyconnect-postgres:/var/lib/postgresql/data
+      - linkar-postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
@@ -102,7 +102,7 @@ services:
     environment:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}
     volumes:
-      - replyconnect-valkey:/data
+      - linkar-valkey:/data
     healthcheck:
       test: ["CMD-SHELL", "valkey-cli --no-auth-warning -a \"$$VALKEY_PASSWORD\" ping | grep -q PONG"]
       interval: 10s
@@ -114,5 +114,5 @@ services:
           cpus: "0.10"
           memory: 128M
 volumes:
-  replyconnect-postgres:
-  replyconnect-valkey:
+  linkar-postgres:
+  linkar-valkey:

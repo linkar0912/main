@@ -1,4 +1,4 @@
-// Deploys the current `main` HEAD to the Coolify ReplyConnect service, following the
+// Deploys the current `main` HEAD to the Coolify Linkar service, following the
 // procedure in ops/COOLIFY_DEPLOYMENT.md §4. Run this after pushing to main, once the
 // "Build production container" workflow has published the image.
 //
@@ -9,7 +9,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
 
-const REPO = "tejastelkar/replyconnect";
+const REPO = "linkar0912/main";
 const WORKFLOW = "Build production container";
 const STATE_FILE = ".coolify-deploy-state.json";
 const POLL_INTERVAL_MS = 10_000;

@@ -2,20 +2,20 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: replyconnect
-      POSTGRES_PASSWORD: replyconnect
-      POSTGRES_DB: replyconnect
+      POSTGRES_USER: linkar
+      POSTGRES_PASSWORD: linkar
+      POSTGRES_DB: linkar
     ports:
       - "5432:5432"
     volumes:
-      - replyconnect-postgres:/var/lib/postgresql/data
+      - linkar-postgres:/var/lib/postgresql/data
   valkey:
     image: valkey/valkey:9.1.1-alpine3.24
     ports:
       - "6379:6379"
     volumes:
-      - replyconnect-valkey:/data
+      - linkar-valkey:/data
 
 volumes:
-  replyconnect-postgres:
-  replyconnect-valkey:
+  linkar-postgres:
+  linkar-valkey:

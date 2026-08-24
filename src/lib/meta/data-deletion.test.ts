@@ -25,9 +25,9 @@ describe("Meta data deletion", () => {
   });
 
   it("builds the callback response Meta expects", () => {
-    expect(createDeletionResponse("replyconnect_delete_123", "https://replyconnect.example/data-deletion/status/replyconnect_delete_123")).toEqual({
-      url: "https://replyconnect.example/data-deletion/status/replyconnect_delete_123",
-      confirmation_code: "replyconnect_delete_123",
+    expect(createDeletionResponse("linkar_delete_123", "https://linkar.example/data-deletion/status/linkar_delete_123")).toEqual({
+      url: "https://linkar.example/data-deletion/status/linkar_delete_123",
+      confirmation_code: "linkar_delete_123",
     });
   });
 
@@ -80,7 +80,7 @@ describe("Meta data deletion", () => {
       sourceMediaSnapshot: mediaSnapshot("media_2"),
     });
 
-    await repository.beginInstagramDataDeletion("ig_123", "replyconnect_delete_1", "hash_1");
+    await repository.beginInstagramDataDeletion("ig_123", "linkar_delete_1", "hash_1");
 
     expect(await repository.getParticipant("workspace_1", "ig_123", affectedFirst.id)).toBeNull();
     expect(await repository.getParticipant("workspace_1", "ig_123", affectedSecond.id)).toBeNull();
@@ -118,7 +118,7 @@ describe("Meta data deletion", () => {
     await repository.touchContact("workspace_1", "ig_target", "target-person", "2026-08-23T09:00:00.000Z");
     await repository.touchContact("workspace_1", "ig_sibling", "sibling-person", "2026-08-23T09:00:00.000Z");
 
-    await repository.beginInstagramDataDeletion("ig_target", "replyconnect_delete_target", "hash_target");
+    await repository.beginInstagramDataDeletion("ig_target", "linkar_delete_target", "hash_target");
 
     expect(await repository.getParticipant("workspace_1", "ig_target", targetParticipant.id)).toBeNull();
     expect(await repository.getParticipant("workspace_1", "ig_sibling", siblingParticipant.id)).toMatchObject({ id: siblingParticipant.id });

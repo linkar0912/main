@@ -19,7 +19,7 @@ test("owner can sign out", async ({ browser }) => {
   const page = await context.newPage();
   await page.goto("/signup");
   await page.getByLabel("Email").fill(`signout-${Date.now()}@example.com`);
-  await page.getByLabel("Password").fill("replyconnect-e2e-password");
+  await page.getByLabel("Password").fill("linkar-e2e-password");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/automations$/);
   await page.goto("/");
@@ -32,7 +32,7 @@ test("member can sign up and sign back in", async ({ page }) => {
   const email = `member-${Date.now()}@example.com`;
   await page.goto("/signup");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("replyconnect-e2e-password");
+  await page.getByLabel("Password").fill("linkar-e2e-password");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/automations$/);
 
@@ -40,7 +40,7 @@ test("member can sign up and sign back in", async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/);
 
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("replyconnect-e2e-password");
+  await page.getByLabel("Password").fill("linkar-e2e-password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
 });

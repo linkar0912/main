@@ -18,11 +18,11 @@ const { deleteQueuedInstagramEvents } = await import("./queue");
 describe("Instagram queue deletion", () => {
   beforeEach(() => {
     state.getJobs.mockReset();
-    delete (globalThis as { replyconnectWebhookQueue?: unknown }).replyconnectWebhookQueue;
+    delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
   });
 
   afterEach(() => {
-    delete (globalThis as { replyconnectWebhookQueue?: unknown }).replyconnectWebhookQueue;
+    delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
   });
 
   it("removes both webhook and broadcast jobs belonging to the Instagram account", async () => {

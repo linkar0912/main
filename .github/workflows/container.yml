@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: replyconnect-container-main
+  group: linkar-container-main
   cancel-in-progress: true
 
 permissions:
@@ -44,7 +44,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/tejastelkar/replyconnect
+          images: ghcr.io/linkar0912/main
           tags: |
             type=raw,value=main
             type=sha,format=long

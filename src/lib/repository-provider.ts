@@ -4,15 +4,15 @@ import { createMemoryRepository } from "./memory-repository";
 import { createPrismaRepository } from "./prisma";
 import type { AutomationRepository } from "./repository";
 
-const globalForRepository = globalThis as unknown as { replyconnectRepository?: AutomationRepository };
+const globalForRepository = globalThis as unknown as { linkarRepository?: AutomationRepository };
 
 export function getRepository(): AutomationRepository {
-  if (globalForRepository.replyconnectRepository) return globalForRepository.replyconnectRepository;
+  if (globalForRepository.linkarRepository) return globalForRepository.linkarRepository;
   const env = getServerEnv();
-  globalForRepository.replyconnectRepository = env.databaseUrl
+  globalForRepository.linkarRepository = env.databaseUrl
     ? createPrismaRepository()
     : createDemoRepository() ?? createMemoryRepository();
-  return globalForRepository.replyconnectRepository;
+  return globalForRepository.linkarRepository;
 }
 
 export function isDemoMode(): boolean {

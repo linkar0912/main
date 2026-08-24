@@ -608,19 +608,19 @@ describe("memory repository", () => {
     await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_123", username: "creator", accessTokenEncrypted: "sealed-token", status: "CONNECTED" });
     await repository.recordExecution({ workspaceId: "workspace_a", automationId: automation.id, externalEventId: "comment_1", dedupeKey: "dedupe_1", status: "SENT" });
 
-    await repository.beginInstagramDataDeletion("ig_123", "replyconnect_delete_123", "signed-request-hash");
+    await repository.beginInstagramDataDeletion("ig_123", "linkar_delete_123", "signed-request-hash");
 
     expect(await repository.listAutomations("workspace_a")).toEqual([]);
     expect(await repository.listConnections("workspace_a")).toEqual([]);
     expect(await repository.hasExecution("workspace_a", "dedupe_1")).toBe(false);
-    expect(await repository.getDataDeletionRequest("replyconnect_delete_123")).toMatchObject({
-      confirmationCode: "replyconnect_delete_123",
+    expect(await repository.getDataDeletionRequest("linkar_delete_123")).toMatchObject({
+      confirmationCode: "linkar_delete_123",
       signedRequestHash: "signed-request-hash",
       status: "PENDING",
     });
-    await repository.completeDataDeletion("replyconnect_delete_123");
+    await repository.completeDataDeletion("linkar_delete_123");
     expect(await repository.findDataDeletionByRequestHash("signed-request-hash")).toMatchObject({
-      confirmationCode: "replyconnect_delete_123",
+      confirmationCode: "linkar_delete_123",
       status: "COMPLETED",
     });
   });

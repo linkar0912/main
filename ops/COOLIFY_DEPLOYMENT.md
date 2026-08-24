@@ -13,11 +13,11 @@ Cloudflare (public HTTPS)
       valkey    valkey:9.1.1-alpine3.24          (private, named volume)
 ```
 
-GitHub Actions builds and publishes `ghcr.io/tejastelkar/replyconnect:main` on
+GitHub Actions builds and publishes `ghcr.io/linkar0912/main:main` on
 every push to `main`. Coolify only pulls that image; it never runs a Next.js
 build on the production host. Create Linkar as its own Coolify project and do
 **not** enable *Connect to Predefined Network* — the resource-specific network
-and `replyconnect-*` volumes keep this stack separate from TrackParcel.
+and `linkar-*` volumes keep this stack separate from TrackParcel.
 
 The Compose file caps each container's CPU and memory. Those ceilings are
 deliberate for the shared single-vCPU host; do not remove them without moving
@@ -68,8 +68,8 @@ PostgreSQL and Valkey are defined inside the Compose file and are reachable
 only on the service's private network. They must have **no public ports and no
 FQDN**.
 
-Their data lives in the named volumes `replyconnect-postgres` and
-`replyconnect-valkey`. Deleting the Coolify service deletes those volumes and
+Their data lives in the named volumes `linkar-postgres` and
+`linkar-valkey`. Deleting the Coolify service deletes those volumes and
 every workspace, contact, and automation with them. There is no undo.
 
 Environment values Compose requires (`?` means the deploy fails fast if unset):
@@ -82,7 +82,7 @@ Environment values Compose requires (`?` means the deploy fails fast if unset):
 | `META_TOKEN_ENCRYPTION_KEY` | required |
 | `META_REDIRECT_URI`, `META_VERIFY_TOKEN` | required, must match Meta exactly |
 | `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL` | required |
-| `POSTGRES_USER`, `POSTGRES_DB` | default `replyconnect` |
+| `POSTGRES_USER`, `POSTGRES_DB` | default `linkar` |
 
 `DATABASE_URL` and `REDIS_URL` are assembled inside the Compose file from those
 values against the in-network hostnames `postgres` and `valkey`. Do not set
@@ -114,7 +114,7 @@ or `valkey`.
 ## 4. Normal release
 
 1. **Merge to `main`.** CI runs lint, typecheck, and the unit suite; the
-   container workflow publishes `ghcr.io/tejastelkar/replyconnect:main`.
+   container workflow publishes `ghcr.io/linkar0912/main:main`.
 2. **Run `pnpm deploy:coolify`.** This is the preferred path — it mechanizes
    the rest of this section: confirms the build for the current commit is
    green, refuses to proceed on an unreviewed migration (add
@@ -142,7 +142,7 @@ or `valkey`.
    ```
    **Do not rely on the deploy webhook for a release.** Against a stack that is
    already running, `GET $COOLIFY_DEPLOY_WEBHOOK_URL` answers
-   `"Service ReplyConnect started"` and then does nothing: no pull, no
+   `"Service Linkar started"` and then does nothing: no pull, no
    recreation, no new code. It only has an effect when the containers are
    absent, which is why it appears to work right after a Stop. The restart
    endpoint above performs a real down/up and honours `pull_policy: always`.
@@ -230,7 +230,7 @@ Or, from a one-off container of the release image:
 
 ```bash
 docker run --rm --network <service-network> -e DATABASE_URL='<url>' \
-  ghcr.io/tejastelkar/replyconnect:main \
+  ghcr.io/linkar0912/main:main \
   ./node_modules/.bin/prisma migrate resolve --rolled-back <failed_migration_name>
 ```
 
