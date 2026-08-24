@@ -622,7 +622,7 @@ function AutomationBuilderV1({
                       <button
                         key={suggestion}
                         type="button"
-                        className="keyword-chip"
+                        className="keyword-suggestion-chip"
                         onClick={() => addSuggestedKeyword(suggestion)}
                       >
                         + {suggestion}
