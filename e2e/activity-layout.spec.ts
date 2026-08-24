@@ -59,4 +59,16 @@ test("campaign activity keeps the main column constrained with long captions", a
   expect(layout.mainWidth).toBeLessThan(layout.sideX! - 24);
   expect(layout.funnelRight).toBeLessThan(layout.sideX!);
   expect(layout.bannerRight).toBeLessThan(layout.sideX!);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Campaign activity" })).toBeVisible();
+
+  const mobile = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    widestCaption: Math.max(...Array.from(document.querySelectorAll(".activity-caption")).map((element) => element.getBoundingClientRect().right)),
+  }));
+  expect(mobile.documentWidth).toBeLessThanOrEqual(mobile.viewport);
+  expect(mobile.widestCaption).toBeLessThanOrEqual(mobile.viewport);
 });
