@@ -27,5 +27,19 @@ describe("workspace palette contract", () => {
     expect(css).not.toMatch(/\.signout-button:hover\s*{[^}]*var\(--danger\)/);
     expect(css).not.toMatch(/\.delta-pill\[data-dir="down"\]\s*{[^}]*var\(--danger\)/);
   });
-});
 
+  it("uses the brand palette by semantic role", () => {
+    expect(css).toMatch(/\.quickstart-badge\s*{[^}]*background:\s*var\(--volt\)[^}]*color:\s*var\(--ink-strong\)/);
+    expect(css).toMatch(/\.bar-participants,\s*\.swatch-participants\s*{[^}]*background:\s*var\(--slate\)/);
+    expect(css).toMatch(/\.bar-sent,\s*\.swatch-sent\s*{[^}]*background:\s*var\(--accent\)/);
+    expect(css).toMatch(/\.condition-marker,\s*\.guard-marker\s*{[^}]*background:\s*var\(--surface-sunk\)[^}]*color:\s*var\(--slate\)/);
+    expect(css).not.toMatch(/\.quickstart-badge\s*{[^}]*var\(--flame\)/);
+    expect(css).not.toMatch(/\.bar-participants,\s*\.swatch-participants\s*{[^}]*var\(--grape\)/);
+  });
+
+  it("keeps fields and icon controls comfortably tappable", () => {
+    expect(css).toMatch(/\.field input,\s*\.field select,\s*\.field textarea\s*{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(/\.icon-button\s*{[^}]*height:\s*40px[^}]*width:\s*40px/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*600px\)\s*{[\s\S]*?\.icon-button\s*{[^}]*height:\s*44px[^}]*width:\s*44px/);
+  });
+});
