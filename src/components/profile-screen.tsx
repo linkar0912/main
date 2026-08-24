@@ -227,7 +227,7 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
               </div>
               <nav className="related-links">
                 <Link href="/settings">Team &amp; invitations <ArrowUpRight size={13} /></Link>
-                <Link href="/help"><CircleHelp size={14} /> Help centre</Link>
+                <Link href="/help">Help centre <CircleHelp size={13} /></Link>
                 <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
                 <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
               </nav>
