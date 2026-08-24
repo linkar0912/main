@@ -11,6 +11,23 @@ describe("SequencesScreen", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps creation controls in one sequence action group", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/sequences" || String(input) === "/api/automations") {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      throw new Error(`Unhandled fetch: ${String(input)}`);
+    }));
+
+    render(<SequencesScreen />);
+    await screen.findByText(/No sequences yet/i);
+
+    const actionGroup = document.querySelector(".sequence-form-actions");
+    expect(actionGroup).toBeTruthy();
+    expect(actionGroup?.textContent).toContain("Add step");
+    expect(actionGroup?.textContent).toContain("Create sequence");
+  });
+
   it("sends an explicit null when an existing source automation is cleared", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

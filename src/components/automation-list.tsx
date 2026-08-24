@@ -187,75 +187,75 @@ export function AutomationList({
             </p>
           </div>
           {!compact && (
-            <Link
-              className="icon-button"
-              href={`/automations/${automation.id}/edit`}
-              aria-label={`Edit ${automation.name}`}
-              title="Edit automation"
-            >
-              <Pencil size={16} />
-            </Link>
-          )}
-          {!compact && automation.definition.version === 2 && (
-            <Link
-              className="icon-button"
-              href={`/automations/${automation.id}/activity`}
-              aria-label={`View activity for ${automation.name}`}
-              title="View activity"
-            >
-              <Activity size={16} />
-            </Link>
-          )}
-          {!compact && (
-            <button
-              className="icon-button"
-              type="button"
-              disabled={pendingId === automation.id}
-              aria-label={`${automation.status === "ACTIVE" ? "Pause" : "Activate"} ${automation.name}`}
-              title={automation.status === "ACTIVE" ? "Pause automation" : "Activate automation"}
-              onClick={() => void runAction(
-                automation.id,
-                () => onStatusChange(automation.id, automation.status === "ACTIVE" ? "PAUSED" : "ACTIVE"),
-              )}
-            >
-              {automation.status === "ACTIVE" ? <Pause size={16} /> : <Play size={16} />}
-            </button>
-          )}
-          {!compact && onDuplicate && (
-            <button
-              className="icon-button"
-              type="button"
-              disabled={pendingId === automation.id}
-              aria-label={`Duplicate ${automation.name}`}
-              title="Duplicate automation"
-              onClick={() => void runAction(automation.id, () => onDuplicate(automation.id))}
-            >
-              <Copy size={16} />
-            </button>
-          )}
-          {!compact && onDelete && (
-            confirmDeleteId === automation.id ? (
-              <button
-                className="icon-button icon-danger"
-                type="button"
-                disabled={pendingId === automation.id}
-                aria-label={`Confirm delete ${automation.name}`}
-                title="Click again to permanently delete"
-                onClick={() => void runAction(automation.id, () => onDelete(automation.id))}
+            <div className="automation-actions" aria-label={`Actions for ${automation.name}`}>
+              <Link
+                className="icon-button"
+                href={`/automations/${automation.id}/edit`}
+                aria-label={`Edit ${automation.name}`}
+                title="Edit automation"
               >
-                <Trash2 size={16} />
-              </button>
-            ) : (
+                <Pencil size={16} />
+              </Link>
+              {automation.definition.version === 2 && (
+                <Link
+                  className="icon-button"
+                  href={`/automations/${automation.id}/activity`}
+                  aria-label={`View activity for ${automation.name}`}
+                  title="View activity"
+                >
+                  <Activity size={16} />
+                </Link>
+              )}
               <button
                 className="icon-button"
                 type="button"
-                aria-label={`Delete ${automation.name}`}
-                title="Delete automation"
-                onClick={() => setConfirmDeleteId(automation.id)}
+                disabled={pendingId === automation.id}
+                aria-label={`${automation.status === "ACTIVE" ? "Pause" : "Activate"} ${automation.name}`}
+                title={automation.status === "ACTIVE" ? "Pause automation" : "Activate automation"}
+                onClick={() => void runAction(
+                  automation.id,
+                  () => onStatusChange(automation.id, automation.status === "ACTIVE" ? "PAUSED" : "ACTIVE"),
+                )}
               >
-                <Trash2 size={16} />
+                {automation.status === "ACTIVE" ? <Pause size={16} /> : <Play size={16} />}
               </button>
-            )
+              {onDuplicate && (
+                <button
+                  className="icon-button"
+                  type="button"
+                  disabled={pendingId === automation.id}
+                  aria-label={`Duplicate ${automation.name}`}
+                  title="Duplicate automation"
+                  onClick={() => void runAction(automation.id, () => onDuplicate(automation.id))}
+                >
+                  <Copy size={16} />
+                </button>
+              )}
+              {onDelete && (
+                confirmDeleteId === automation.id ? (
+                  <button
+                    className="icon-button icon-danger"
+                    type="button"
+                    disabled={pendingId === automation.id}
+                    aria-label={`Confirm delete ${automation.name}`}
+                    title="Click again to permanently delete"
+                    onClick={() => void runAction(automation.id, () => onDelete(automation.id))}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                ) : (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Delete ${automation.name}`}
+                    title="Delete automation"
+                    onClick={() => setConfirmDeleteId(automation.id)}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )
+              )}
+            </div>
           )}
           {compact && <Link className="row-link" href="/automations"><ArrowUpRight size={17} /></Link>}
         </article>

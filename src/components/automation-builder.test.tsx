@@ -249,6 +249,16 @@ describe("AutomationBuilder", () => {
     expect(screen.getByRole("button", { name: /add variation/i })).toHaveProperty("disabled", true);
   });
 
+  it("groups variation controls with their supporting copy", () => {
+    stubFetch({ media: { data: [reel], paging: {} } });
+    render(<AutomationBuilder />);
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+
+    const helper = screen.getByText(/rotates between variations/i);
+    expect(helper.closest(".field-support")).toBeTruthy();
+    expect(helper.closest(".field-support")?.querySelector("button")?.textContent).toMatch(/add variation/i);
+  });
+
   it("captures opening consent copy and the opt-in button label without a final URL leaking into the definition text", async () => {
     const fetchMock = stubFetch({ media: { data: [reel], paging: {} } });
     render(<AutomationBuilder />);

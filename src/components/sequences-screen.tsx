@@ -94,6 +94,13 @@ export function SequencesScreen() {
     });
   }
 
+  function addStep() {
+    setSteps((current) => [
+      ...current,
+      { id: `step-${Date.now()}`, delayHours: 24, text: "" },
+    ]);
+  }
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
     setFormError("");
@@ -240,20 +247,21 @@ export function SequencesScreen() {
                   </label>
                 </div>
               ))}
-              <button
-                type="button"
-                className="button button-secondary"
-                disabled={steps.length >= 10}
-                onClick={() => setSteps((cur) => [...cur, { id: `step-${Date.now()}`, delayHours: 24, text: "" }])}
-              >
-                <Plus size={15} /> Add step
-              </button>
-
-              <div className="builder-footer">
-                <div>{editingId && <button type="button" className="text-link" onClick={resetForm}>Cancel editing</button>}</div>
-                <button className="button button-primary" type="submit" disabled={saving}>
-                  {saving ? "Saving…" : editingId ? "Save changes" : "Create sequence"}
+              <div className="sequence-form-actions">
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  disabled={steps.length >= 10}
+                  onClick={addStep}
+                >
+                  <Plus size={15} /> Add step
                 </button>
+                <div className="sequence-submit-actions">
+                  {editingId && <button type="button" className="text-link" onClick={resetForm}>Cancel editing</button>}
+                  <button className="button button-primary" type="submit" disabled={saving}>
+                    {saving ? "Saving…" : editingId ? "Save changes" : "Create sequence"}
+                  </button>
+                </div>
               </div>
             </form>
 

@@ -72,6 +72,23 @@ describe("AutomationList activity link", () => {
     expect(screen.getByLabelText(/view activity for/i)).toBeTruthy();
   });
 
+  it("keeps all management controls in one action group", () => {
+    render(
+      <AutomationList
+        automations={[v2Automation()]}
+        loading={false}
+        onStatusChange={async () => {}}
+        onDuplicate={async () => {}}
+        onDelete={async () => {}}
+      />,
+    );
+
+    const row = screen.getByRole("article");
+    const actions = row.querySelector(".automation-actions");
+    expect(actions).toBeTruthy();
+    expect(actions?.querySelectorAll("a, button")).toHaveLength(5);
+  });
+
   it("shows an actionable error when activation fails", async () => {
     render(
       <AutomationList

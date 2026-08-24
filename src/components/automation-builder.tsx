@@ -1654,15 +1654,17 @@ function AutomationBuilderV2({
                   </div>
                 </div>
               ))}
-              <button
-                type="button"
-                className="button button-secondary field-spaced"
-                onClick={addReply}
-                disabled={publicReplies.length >= MAX_PUBLIC_REPLIES}
-              >
-                <Plus size={15} /> Add variation
-              </button>
-              <small>Linkar rotates between variations so the same public comment doesn’t repeat.</small>
+              <div className="field-support field-spaced">
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  onClick={addReply}
+                  disabled={publicReplies.length >= MAX_PUBLIC_REPLIES}
+                >
+                  <Plus size={15} /> Add variation
+                </button>
+                <small>Linkar rotates between variations so the same public comment doesn’t repeat.</small>
+              </div>
             </div>
           </section>
         </div>
