@@ -531,6 +531,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   border-bottom: 1px solid var(--line);
   display: none;
   gap: var(--space-3);
+  min-height: 64px;
   padding: 10px var(--space-4);
   position: sticky;
   top: 0;
@@ -542,9 +543,9 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   border: 0;
   color: var(--ink);
   display: none;
-  height: 38px;
+  height: 44px;
   justify-content: center;
-  width: 38px;
+  width: 44px;
 }
 .scrim {
   animation: fade-in .2s ease both;
@@ -861,6 +862,7 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
   padding-top: var(--space-4);
 }
 .sequence-submit-actions { align-items: center; display: flex; gap: var(--space-4); }
+.sequence-submit-actions .text-link { justify-content: center; min-height: 44px; padding-inline: var(--space-3); }
 .sequence-status { background: var(--subtle); border-radius: 5px; color: var(--white); font-size: .58rem; font-style: normal; font-weight: 800; letter-spacing: .07em; margin-left: var(--space-2); padding: 3px 7px; text-transform: uppercase; }
 .sequence-status[data-status="ACTIVE"] { background: var(--accent); }
 .sequence-status[data-status="RUNNING"] { background: var(--accent); }
@@ -1516,6 +1518,7 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
   .metric-card strong { font-size: 1.9rem; }
   .builder-layout { grid-template-columns: 1fr; }
   .builder-preview { min-height: auto; position: static; }
+  .wizard-progress-label { display: inline; }
   .settings-grid { grid-template-columns: 1fr; }
   .settings-grid > *:nth-child(even) { border-left: 0; padding-left: 0; }
   .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1572,6 +1575,7 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
   .sequence-submit-actions { align-items: stretch; flex-direction: column; width: 100%; }
   .sequence-form-actions .button,
   .sequence-submit-actions .button { width: 100%; }
+  .sequence-submit-actions .text-link { width: 100%; }
   .wizard-progress { gap: 6px; margin-inline: -18px; padding-inline: 18px; }
   .wizard-progress-step { flex: 0 0 auto; min-height: 44px; padding: 8px 10px; }
   .wizard-progress-label { display: inline; }

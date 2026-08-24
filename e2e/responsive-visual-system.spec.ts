@@ -116,6 +116,15 @@ test("mobile automation controls wrap inside their row", async ({ page }) => {
   expect(actionBox!.x + actionBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
 });
 
+test("tablet navigation keeps a full-size menu target", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/");
+  const menu = await page.getByRole("button", { name: "Open navigation" }).boundingBox();
+  expect(menu).not.toBeNull();
+  expect(menu!.width).toBeGreaterThanOrEqual(44);
+  expect(menu!.height).toBeGreaterThanOrEqual(44);
+});
+
 test("profile sections use a compact vertical rhythm", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/profile");
@@ -127,10 +136,32 @@ test("profile sections use a compact vertical rhythm", async ({ page }) => {
   expect(second!.y - (first!.y + first!.height)).toBeLessThanOrEqual(24);
 });
 
-test("mobile builder progress keeps descriptive labels", async ({ page }) => {
+test("mobile and tablet builder progress keeps descriptive labels", async ({ page }) => {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/automations/new?type=classic");
+    await expect(page.locator(".wizard-progress-label").first()).toBeVisible();
+  }
+});
+
+test("mobile sequence edit actions remain comfortably tappable", async ({ page }) => {
+  await page.route("**/api/sequences", (route) => route.fulfill({
+    json: {
+      data: [{
+        id: "sequence_1",
+        name: "Nurture",
+        status: "DRAFT",
+        steps: [{ id: "step_1", delayHours: 0, text: "Hello" }],
+        enrolledCount: 0,
+      }],
+    },
+  }));
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/automations/new?type=classic");
-  await expect(page.locator(".wizard-progress-label").first()).toBeVisible();
+  await page.goto("/automations/sequences");
+  await page.getByRole("button", { name: "Edit Nurture" }).click();
+  const cancel = await page.getByRole("button", { name: "Cancel editing" }).boundingBox();
+  expect(cancel).not.toBeNull();
+  expect(cancel!.height).toBeGreaterThanOrEqual(44);
 });
 
 test("desktop chart fills the content field", async ({ page }) => {

@@ -40,6 +40,8 @@ describe("workspace palette contract", () => {
   it("keeps fields and icon controls comfortably tappable", () => {
     expect(css).toMatch(/\.field input,\s*\.field select,\s*\.field textarea\s*{[^}]*min-height:\s*44px/);
     expect(css).toMatch(/\.icon-button\s*{[^}]*height:\s*40px[^}]*width:\s*40px/);
+    expect(css).toMatch(/\.hamburger\s*{[^}]*height:\s*44px[^}]*width:\s*44px/);
+    expect(css).toMatch(/\.mobile-topbar\s*{[^}]*min-height:\s*64px/);
     expect(css).toMatch(/@media\s*\(max-width:\s*600px\)\s*{[\s\S]*?\.icon-button\s*{[^}]*height:\s*44px[^}]*width:\s*44px/);
   });
 
@@ -54,6 +56,8 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.settings-hero\s*{[^}]*align-items:\s*stretch[^}]*flex-direction:\s*column/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.automation-row\s*{[^}]*flex-wrap:\s*wrap/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.wizard-progress-label\s*{[^}]*display:\s*inline/);
+    expect(css).toMatch(/@media \(max-width:\s*820px\)[\s\S]*?\.wizard-progress-label\s*{[^}]*display:\s*inline/);
+    expect(css).toMatch(/\.sequence-submit-actions \.text-link\s*{[^}]*min-height:\s*44px/);
     expect(css).toMatch(/\.activity-media\s*{[^}]*max-width:\s*100%[^}]*width:\s*100%/);
   });
 });
