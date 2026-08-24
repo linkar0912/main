@@ -11,12 +11,15 @@ test("builder wraps the preview in a phone shell with status bar and updated bad
   await page.goto("/automations/new?type=campaign");
 
   const preview = page.getByLabel(/test preview/i);
+  await expect(preview.locator(".ig-device")).toBeVisible();
   await expect(preview.locator(".ig-phone")).toBeVisible();
+  await expect(preview.locator(".ig-device-button")).toHaveCount(3);
   await expect(preview.locator(".ig-statusbar")).toContainText("9:41");
   await expect(preview.getByText("Instagram")).toBeVisible();
   await expect(preview.getByText("Updated")).toBeVisible();
   // The disclaimer copy is gone for good.
   await expect(page.getByText(/not sent to instagram/i)).toHaveCount(0);
+  if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-premium-phone-preview.png", fullPage: true });
 });
 
 test("template picker tiles show example flows and search narrows them", async ({ page }) => {

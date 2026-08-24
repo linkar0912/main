@@ -20,6 +20,7 @@ import type { FlowAction, FlowCondition, FlowDefinition, FlowDefinitionV1, FlowD
 import { MediaPicker } from "./media-picker";
 import { FollowGateFields } from "./follow-gate-fields";
 import { InstagramPreview, type DmBubble, type PreviewView } from "./instagram-preview";
+import { getInstagramConnections } from "@/src/lib/client/workspace-data";
 
 type AutomationBuilderProps = {
   automationId?: string;
@@ -36,13 +37,12 @@ function useInstagramConnections(): ConnectionSummary[] {
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   useEffect(() => {
     let active = true;
-    fetch("/api/meta/connection")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { username?: string; igUserId?: string; profilePictureUrl?: string | null }[] } | null) => {
+    getInstagramConnections()
+      .then((data) => {
         if (!active) return;
         setConnections(
-          (payload?.data ?? [])
-            .filter((connection): connection is { username: string; igUserId?: string; profilePictureUrl?: string | null } => Boolean(connection.username))
+          data
+            .filter((connection) => Boolean(connection.username))
             .map((connection) => ({
               username: connection.username,
               igUserId: connection.igUserId ?? "",

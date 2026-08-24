@@ -18,6 +18,7 @@ import { CreateAutomationButton } from "./create-automation-button";
 import { StatusBadge } from "./status-badge";
 import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
+import { getInstagramConnections } from "@/src/lib/client/workspace-data";
 
 // Mirrors DailyCount in src/lib/repository.ts - the key is `day`, not `date`.
 type DayPoint = { day: string; count: number };
@@ -253,9 +254,8 @@ export function DashboardScreen() {
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: InsightsPayload | null) => setInsights(payload))
       .catch(() => undefined);
-    fetch("/api/meta/connection")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: unknown[] } | null) => setHasConnection((payload?.data?.length ?? 0) > 0))
+    getInstagramConnections()
+      .then((connections) => setHasConnection(connections.length > 0))
       .catch(() => undefined);
   }, []);
 

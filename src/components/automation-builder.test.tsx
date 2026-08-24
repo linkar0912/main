@@ -85,6 +85,17 @@ describe("AutomationBuilder", () => {
     expect(preview.querySelector(".ig-comment-nested .ig-avatar")).toBeTruthy();
   });
 
+  it("presents the preview inside a premium phone device shell", () => {
+    stubFetch();
+    render(<AutomationBuilder />);
+
+    const preview = screen.getByLabelText(/test preview/i);
+    expect(preview.querySelector(".ig-device")).toBeTruthy();
+    expect(preview.querySelector(".ig-statusbar-island")).toBeTruthy();
+    expect(preview.querySelectorAll(".ig-device-button")).toHaveLength(3);
+    expect(preview.querySelector(".ig-homebar")).toBeTruthy();
+  });
+
   it("keeps editing version 1 definitions on the legacy single-reply form", async () => {
     const legacyDefinition: FlowDefinitionV1 = {
       version: 1,

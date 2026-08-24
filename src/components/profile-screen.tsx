@@ -11,12 +11,14 @@ import {
   Link2,
   LogOut,
   ShieldCheck,
+  UserRound,
   Users,
 } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { InstagramGlyph } from "./instagram-glyph";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { formatDate } from "@/src/lib/format-date";
+import { getInstagramConnections } from "@/src/lib/client/workspace-data";
 
 type Connection = {
   id: string;
@@ -81,9 +83,8 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
   }, [saved]);
 
   useEffect(() => {
-    fetch("/api/meta/connection")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: Connection[] } | null) => setConnections(payload?.data ?? []))
+    getInstagramConnections()
+      .then((data) => setConnections(data))
       .catch(() => undefined);
   }, []);
 
@@ -92,7 +93,7 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
 
   return (
     <AppShell>
-      <div className="page-wrap">
+      <div className="page-wrap profile-wrap">
         <header className="page-header">
           <div>
             <p className="eyebrow">Account</p>
@@ -113,9 +114,12 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
           </div>
         )}
 
-        <div className="profile-layout">
-          <div className="profile-main">
-            <section className="panel" aria-label="Account summary">
+        <div className="profile-overview-grid">
+            <section className="panel profile-card profile-identity-card" aria-label="Account summary">
+              <div className="profile-card-heading">
+                <div><p className="eyebrow">Personal details</p><h2>Your account</h2></div>
+                <UserRound size={20} strokeWidth={1.8} />
+              </div>
               <div className="account-summary">
                 {avatar ? (
                   // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
@@ -140,14 +144,51 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
               </div>
             </section>
 
-            <section className="panel" aria-label="Security">
+            <section className="panel profile-card profile-connection-card" aria-label="Connected Instagram">
               <div className="panel-heading">
-                <div>
-                  <p className="eyebrow">Security</p>
-                  <h2>Password &amp; devices</h2>
+                <div><p className="eyebrow">Active channel</p><h2>Instagram</h2></div>
+                <InstagramGlyph size={19} brand />
+              </div>
+              {connection ? (
+                <div className="connection-card">
+                  {connection.profilePictureUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
+                    <img
+                      className="avatar avatar-connection is-photo"
+                      src={connection.profilePictureUrl}
+                      alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
+                    />
+                  ) : (
+                    <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
+                  )}
+                  <div className="connection-card-id">
+                    <strong>@{connection.username}</strong>
+                    <span className="connection-status">
+                      <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
+                      {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
+                      {" · "}
+                      {formatDate(connection.connectedAt)}
+                    </span>
+                  </div>
                 </div>
+              ) : (
+                <p className="muted connection-empty">
+                  No Instagram account connected yet. Link a professional account to start automating replies.
+                </p>
+              )}
+              <Link className={`button ${connection ? "button-secondary" : "button-primary"} button-block`} href="/settings">
+                <Link2 size={15} /> {connection ? "Manage connection" : "Connect Instagram"}
+              </Link>
+            </section>
+        </div>
+
+        <div className="profile-detail-grid">
+            <section className="panel profile-card profile-security-card" aria-label="Security">
+              <div className="panel-heading">
+                <div><p className="eyebrow">Security</p><h2>Password &amp; sessions</h2></div>
                 <ShieldCheck size={21} />
               </div>
+              <p className="muted profile-section-lede">Use a unique password and control every active session from one place.</p>
               <form action="/api/account" method="post" className="account-form">
                 <input type="hidden" name="action" value="change-password" />
                 <div className="account-form-grid">
@@ -180,49 +221,10 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
                 </form>
               </div>
             </section>
-          </div>
-
           <aside className="profile-side">
-            <section className="side-panel" aria-label="Connected Instagram">
+            <section className="panel profile-card" aria-label="Related pages">
               <div className="panel-heading">
-                <div><p className="eyebrow">Connection</p><h2>Instagram</h2></div>
-                <InstagramGlyph size={19} brand />
-              </div>
-              {connection ? (
-                <div className="connection-card">
-                  {connection.profilePictureUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
-                    <img
-                      className="avatar avatar-connection is-photo"
-                      src={connection.profilePictureUrl}
-                      alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
-                    />
-                  ) : (
-                    <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
-                  )}
-                  <div className="connection-card-id">
-                    <strong>@{connection.username}</strong>
-                    <span className="connection-status">
-                      <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
-                      {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
-                      {" · "}
-                      {formatDate(connection.connectedAt)}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <p className="muted connection-empty">
-                  No Instagram account connected yet. Link a professional account to start automating replies.
-                </p>
-              )}
-              <Link className={`button ${connection ? "button-secondary" : "button-primary"} button-block`} href="/settings">
-                <Link2 size={15} /> {connection ? "Manage in Settings" : "Connect Instagram"}
-              </Link>
-            </section>
-
-            <section className="side-panel" aria-label="Related pages">
-              <div className="panel-heading">
-                <div><p className="eyebrow">Workspace</p><h2>Related</h2></div>
+                <div><p className="eyebrow">Quick access</p><h2>Workspace links</h2></div>
                 <Users size={19} strokeWidth={1.8} />
               </div>
               <nav className="related-links">

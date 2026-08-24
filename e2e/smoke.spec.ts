@@ -51,7 +51,7 @@ test("dashboard and automation list are reachable", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
   await expect(page.getByLabel("Performance over time")).toBeVisible();
   await page.getByRole("link", { name: "Automations", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Your automations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Automations", exact: true })).toBeVisible();
 });
 
 test("automation delivery problems are visible without recipient payloads", async ({ page }) => {

@@ -9,6 +9,7 @@ import { StatusBadge } from "./status-badge";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
+import { clearWorkspaceDataCache, getInstagramConnections } from "@/src/lib/client/workspace-data";
 
 type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string; profilePictureUrl?: string | null };
 type ConnectionHealth = {
@@ -101,6 +102,7 @@ export function SettingsScreen() {
         body: JSON.stringify({ id }),
       });
       if (!response.ok) throw new Error("Could not disconnect Instagram");
+      clearWorkspaceDataCache("connections");
       setConnections((current) => current.filter((connection) => connection.id !== id));
     } catch (error) {
       setDisconnectError(error instanceof Error ? error.message : "Could not disconnect Instagram");
@@ -111,14 +113,13 @@ export function SettingsScreen() {
 
   useEffect(() => {
     void Promise.all([
-      fetch("/api/meta/connection"),
+      getInstagramConnections(),
       fetch("/api/health"),
       fetch("/api/meta/connection/health"),
-    ]).then(async ([connectionResponse, healthResponse, connectionHealthResponse]) => {
-      const connectionPayload = (await connectionResponse.json()) as { data?: Connection[] };
+    ]).then(async ([connectionData, healthResponse, connectionHealthResponse]) => {
       const healthPayload = (await healthResponse.json()) as { mode?: "demo" | "configured" };
       const connectionHealthPayload = (await connectionHealthResponse.json()) as { data?: ConnectionHealth[] };
-      setConnections(connectionPayload.data ?? []);
+      setConnections(connectionData);
       setMode(healthPayload.mode ?? "demo");
       setHealth(connectionHealthPayload.data?.[0] ?? null);
     }).catch(() => undefined);
@@ -190,12 +191,13 @@ export function SettingsScreen() {
 
   return (
     <AppShell>
-      <div className="page-wrap narrow-wrap">
-        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Connect your Instagram.</h1><p className="muted page-lede">{PRODUCT_NAME} uses Meta’s official Instagram APIs. You stay in control of the account and the rules.</p></div></header>
+      <div className="page-wrap settings-wrap">
+        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage Instagram connections, delivery defaults, team access, and account safeguards.</p></div></header>
 
         {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status"><span>{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}</span><p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
 
-        <section className="settings-hero panel">
+        <div className="settings-overview-grid">
+        <section className="settings-hero panel settings-card instagram-settings-card">
           {connections[0]?.profilePictureUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value here.
             <img
@@ -206,9 +208,8 @@ export function SettingsScreen() {
           ) : (
             <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
           )}
-          <div className="settings-copy"><p className="eyebrow">Instagram connections</p><h2>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h2><p>{connections.length > 0 ? "Connected accounts receive comment and DM webhooks for this workspace." : "Connect a professional Instagram account to enable delivery."}</p></div>
+          <div className="settings-copy"><p className="eyebrow">Instagram connections</p><h2>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h2><p>{connections.length > 0 ? "Your connected accounts can receive comment and DM webhooks." : `Connect a professional account to start delivering ${PRODUCT_NAME} automations.`}</p></div>
           <div className="settings-action"><a className="button button-primary" href="/api/meta/oauth/start">{connections.length > 0 ? "Connect another account" : "Connect Instagram"} <ExternalLink size={15} /></a></div>
-        </section>
         {connections.length > 0 && (
           <ul className="connection-list">
             {connections.map((connection) => (
@@ -241,9 +242,10 @@ export function SettingsScreen() {
           </ul>
         )}
         {disconnectError && <p className="form-error" role="alert">{disconnectError}</p>}
+        </section>
 
         {connections.length > 0 && health && (
-          <section className="panel settings-panel" aria-label="Webhook health">
+          <section className="panel settings-panel settings-card webhook-card" aria-label="Webhook health">
             <div className="panel-heading">
               <div><p className="eyebrow">Webhook health</p><h2>{health.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>
               {health.missingFields.length === 0 ? <ShieldCheck size={21} /> : <AlertTriangle size={21} />}
@@ -270,14 +272,15 @@ export function SettingsScreen() {
             )}
           </section>
         )}
-
-        <div className="settings-grid">
-          <section className="panel settings-panel"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Built for review</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> Replies follow saved rules, never scraping.</li></ul></section>
-          <section className="panel settings-panel"><div className="panel-heading"><div><p className="eyebrow">App mode</p><h2>{mode === "demo" ? "Demo mode" : "Connected mode"}</h2></div><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} /></div><p className="muted">{mode === "demo" ? "The workspace runs on sample data until DATABASE_URL and Meta credentials are configured." : "This workspace is configured for Meta-backed delivery."}</p><Link className="text-link" href="/support">Read setup support <ExternalLink size={15} /></Link></section>
         </div>
 
-        <div className="settings-grid">
-          <section className="panel settings-panel" aria-label="Account security">
+        <div className="settings-grid settings-trust-grid">
+          <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Protected by default</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> Replies follow saved rules, never scraping.</li></ul></section>
+          <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Environment</p><h2>{mode === "demo" ? "Demo mode" : "Connected mode"}</h2></div><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} /></div><p className="muted">{mode === "demo" ? "The workspace runs on sample data until DATABASE_URL and Meta credentials are configured." : "This workspace is configured for live Meta-backed delivery."}</p><Link className="text-link" href="/support">View setup guidance <ExternalLink size={15} /></Link></section>
+        </div>
+
+        <div className="settings-grid settings-management-grid">
+          <section className="panel settings-panel settings-card" aria-label="Account security">
             <div className="settings-hero">
               <span className="settings-icon"><LockKeyhole size={20} /></span>
               <div className="settings-copy">
@@ -289,7 +292,7 @@ export function SettingsScreen() {
             </div>
           </section>
 
-          <section className="panel settings-panel" aria-label="Messaging hours">
+          <section className="panel settings-panel settings-card" aria-label="Messaging hours">
             <div className="panel-heading"><div><p className="eyebrow">Delivery defaults</p><h2>Messaging quiet hours</h2></div><Clock size={21} /></div>
             <p className="muted">Sequences and broadcasts hold all DMs during this window (workspace time). Direct replies to a person’s own message are never delayed.</p>
             {quietError && <p className="form-error" role="alert">{quietError}</p>}
@@ -325,7 +328,7 @@ export function SettingsScreen() {
             </div>
           </section>
 
-          <section className="panel settings-panel" aria-label="Team">
+          <section className="panel settings-panel settings-card" aria-label="Team">
             <div className="panel-heading"><div><p className="eyebrow">Team</p><h2>Members & invitations</h2></div><Users size={21} /></div>
             {teamError && <p className="form-error" role="alert">{teamError}</p>}
             {teamManageable && team ? (
@@ -361,7 +364,7 @@ export function SettingsScreen() {
           </section>
         </div>
 
-        <section className="review-links panel"><div><p className="eyebrow">Submission surfaces</p><h2>Public pages your reviewers can open</h2></div><div className="review-link-grid"><Link href="/privacy">Privacy policy <ExternalLink size={14} /></Link><Link href="/terms">Terms of service <ExternalLink size={14} /></Link><Link href="/data-deletion">Data deletion <ExternalLink size={14} /></Link><Link href="/support">Support <ExternalLink size={14} /></Link></div></section>
+        <section className="review-links panel settings-card"><div><p className="eyebrow">Policies & support</p><h2>Public resources</h2></div><div className="review-link-grid"><Link href="/privacy">Privacy policy <ExternalLink size={14} /></Link><Link href="/terms">Terms of service <ExternalLink size={14} /></Link><Link href="/data-deletion">Data deletion <ExternalLink size={14} /></Link><Link href="/support">Support <ExternalLink size={14} /></Link></div></section>
       </div>
     </AppShell>
   );

@@ -17,6 +17,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { getWorkspaceBootstrap } from "@/src/lib/client/workspace-data";
 import { Skeleton } from "./skeleton";
 
 /** Workspace destinations in the sidebar. */
@@ -112,13 +113,12 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   };
 
   useEffect(() => {
-    fetch("/api/workspace/bootstrap")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { email?: string; role?: AccountIdentity["role"]; plan?: string; igAvatarUrl?: string | null } } | null) => {
-        setEmail(payload?.data?.email ?? "");
-        setRole(payload?.data?.role ?? "");
-        setPlan(payload?.data?.plan ?? "free");
-        setIgAvatarUrl(payload?.data?.igAvatarUrl ?? "");
+    getWorkspaceBootstrap()
+      .then((data) => {
+        setEmail(data.email ?? "");
+        setRole(data.role ?? "");
+        setPlan(data.plan ?? "free");
+        setIgAvatarUrl(data.igAvatarUrl ?? "");
       })
       .catch(() => undefined);
   }, []);

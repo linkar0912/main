@@ -3,7 +3,7 @@ import { getSessionFromRequest } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
 import { MetaClient } from "@/src/lib/meta/client";
-import { loadProfilePictureUrl } from "@/src/lib/meta/profile-picture";
+import { clearProfilePictureCache, loadProfilePictureUrl } from "@/src/lib/meta/profile-picture";
 import { unsealSecret } from "@/src/lib/security/secrets";
 
 export const runtime = "nodejs";
@@ -56,5 +56,6 @@ export async function DELETE(request: Request) {
   }
   await getRepository().expireParticipantsByInstagramAccount(connection.igUserId, "Instagram account disconnected");
   await getRepository().deleteConnection(session.workspaceId, connection.id);
+  clearProfilePictureCache(connection.igUserId);
   return Response.json({ disconnected: true, remoteUnsubscribed });
 }

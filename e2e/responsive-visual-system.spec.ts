@@ -125,15 +125,33 @@ test("tablet navigation keeps a full-size menu target", async ({ page }) => {
   expect(menu!.height).toBeGreaterThanOrEqual(44);
 });
 
-test("profile sections use a compact vertical rhythm", async ({ page }) => {
+test("profile dashboard keeps cards aligned with a compact vertical rhythm", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/profile");
-  const panels = page.locator(".profile-main > .panel");
-  const first = await panels.nth(0).boundingBox();
-  const second = await panels.nth(1).boundingBox();
-  expect(first).not.toBeNull();
-  expect(second).not.toBeNull();
-  expect(second!.y - (first!.y + first!.height)).toBeLessThanOrEqual(24);
+  await page.waitForTimeout(600);
+  const identity = await page.getByLabel("Account summary").boundingBox();
+  const connection = await page.getByLabel("Connected Instagram").boundingBox();
+  const security = await page.getByLabel("Security").boundingBox();
+  expect(identity).not.toBeNull();
+  expect(connection).not.toBeNull();
+  expect(security).not.toBeNull();
+  expect(Math.abs(identity!.y - connection!.y)).toBeLessThanOrEqual(2);
+  expect(security!.y - (Math.max(identity!.y + identity!.height, connection!.y + connection!.height))).toBeLessThanOrEqual(24);
+  if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-profile-redesign.png", fullPage: true });
+});
+
+test("settings desktop overview is bounded and balanced", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/settings");
+  await page.waitForTimeout(600);
+  const connection = await page.locator(".instagram-settings-card").boundingBox();
+  const webhook = await page.getByLabel("Webhook health").boundingBox();
+  expect(connection).not.toBeNull();
+  expect(webhook).not.toBeNull();
+  expect(Math.abs(connection!.y - webhook!.y)).toBeLessThanOrEqual(2);
+  expect(connection!.width).toBeGreaterThan(webhook!.width);
+  expect(connection!.width + webhook!.width).toBeGreaterThan(850);
+  if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-settings-redesign.png", fullPage: true });
 });
 
 test("mobile and tablet builder progress keeps descriptive labels", async ({ page }) => {

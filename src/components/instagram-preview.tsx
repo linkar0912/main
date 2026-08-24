@@ -208,28 +208,33 @@ export function InstagramPreview({
 }: InstagramPreviewProps) {
   return (
     <div className="ig-preview">
-      <div className="ig-phone">
-        <div className="ig-statusbar" aria-hidden="true">
-          <span className="ig-statusbar-time">9:41</span>
-          <span className="ig-statusbar-island" />
-          <span className="ig-statusbar-icons">
-            <Signal size={13} strokeWidth={2.2} />
-            <Wifi size={13} strokeWidth={2.2} />
-            <BatteryFull size={16} strokeWidth={2} />
-          </span>
+      <div className="ig-device">
+        <span className="ig-device-button ig-device-silent" aria-hidden="true" />
+        <span className="ig-device-button ig-device-volume" aria-hidden="true" />
+        <span className="ig-device-button ig-device-power" aria-hidden="true" />
+        <div className="ig-phone">
+          <div className="ig-statusbar" aria-hidden="true">
+            <span className="ig-statusbar-time">9:41</span>
+            <span className="ig-statusbar-island" />
+            <span className="ig-statusbar-icons">
+              <Signal size={13} strokeWidth={2.2} />
+              <Wifi size={13} strokeWidth={2.2} />
+              <BatteryFull size={16} strokeWidth={2} />
+            </span>
+          </div>
+          {view === "post" && (
+            <PostView
+              username={username}
+              avatarUrl={avatarUrl}
+              caption={postCaption}
+              postImageUrl={postImageUrl}
+              postIsReel={postIsReel}
+            />
+          )}
+          {view === "comments" && <CommentsView username={username} avatarUrl={avatarUrl} triggerComment={triggerComment} commentReply={commentReply} />}
+          {view === "dm" && <DmView username={username} avatarUrl={avatarUrl} messages={messages} />}
+          <div className="ig-homebar" aria-hidden="true" />
         </div>
-        {view === "post" && (
-          <PostView
-            username={username}
-            avatarUrl={avatarUrl}
-            caption={postCaption}
-            postImageUrl={postImageUrl}
-            postIsReel={postIsReel}
-          />
-        )}
-        {view === "comments" && <CommentsView username={username} avatarUrl={avatarUrl} triggerComment={triggerComment} commentReply={commentReply} />}
-        {view === "dm" && <DmView username={username} avatarUrl={avatarUrl} messages={messages} />}
-        <div className="ig-homebar" aria-hidden="true" />
       </div>
       <p className="ig-profile-meta">
         <span className="ig-profile-app">Instagram</span>

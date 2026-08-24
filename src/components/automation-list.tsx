@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { CreateAutomationButton } from "./create-automation-button";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
+import { getInstagramConnections } from "@/src/lib/client/workspace-data";
 
 async function requestAutomations(): Promise<AutomationRecord[]> {
   const response = await fetch("/api/automations");
@@ -91,12 +92,11 @@ function useConnectionUsernames(): Map<string, string> {
   const [usernames, setUsernames] = useState<Map<string, string>>(new Map());
   useEffect(() => {
     let active = true;
-    fetch("/api/meta/connection")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { igUserId?: string; username?: string }[] } | null) => {
+    getInstagramConnections()
+      .then((data) => {
         if (!active) return;
         setUsernames(new Map(
-          (payload?.data ?? [])
+          data
             .filter((connection) => connection.igUserId && connection.username)
             .map((connection) => [connection.igUserId!, connection.username!]),
         ));

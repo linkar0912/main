@@ -6,6 +6,7 @@ import { exchangeInstagramCode, InstagramPermissionError, MetaOAuthError } from 
 import { MetaClient, MetaApiError } from "@/src/lib/meta/client";
 import { META_OAUTH_STATE_COOKIE, readOAuthState } from "@/src/lib/meta/oauth-state";
 import { sealSecret } from "@/src/lib/security/secrets";
+import { clearProfilePictureCache } from "@/src/lib/meta/profile-picture";
 import { getRepository } from "@/src/lib/repository-provider";
 import { InstagramAccountOwnershipError } from "@/src/lib/repository";
 
@@ -90,6 +91,7 @@ export async function GET(request: Request) {
       tokenExpiresAt,
       status: "CONNECTED",
     });
+    clearProfilePictureCache(profile.id);
     const response = settingsRedirect(env, "connected");
     response.cookies.delete(META_OAUTH_STATE_COOKIE);
     return response;
