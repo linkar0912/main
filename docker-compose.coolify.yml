@@ -1,7 +1,7 @@
-name: replyconnect
+name: linkar
 x-application-environment: &application-environment
   NODE_ENV: production
-  APP_NAME: ${APP_NAME:-ReplyConnect}
+  APP_NAME: ${APP_NAME:-Linkar}
   NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
   SUPPORT_EMAIL: ${SUPPORT_EMAIL:?SUPPORT_EMAIL is required}
   SOURCE_COMMIT: ${SOURCE_COMMIT:-main}

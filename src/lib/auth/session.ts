@@ -18,8 +18,8 @@ const scrypt = promisify(scryptCallback) as (
   keylen: number,
 ) => Promise<Buffer>;
 
-export const SESSION_COOKIE = "replyconnect_session";
-const PRODUCTION_SESSION_COOKIE = "__Host-replyconnect_session";
+export const SESSION_COOKIE = "linkar_session";
+const PRODUCTION_SESSION_COOKIE = "__Host-linkar_session";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
 
 export type AppSession = {

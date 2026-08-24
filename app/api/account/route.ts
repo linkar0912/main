@@ -66,5 +66,5 @@ export async function POST(request: Request) {
 }
 
 function sessionCookieNameFor(env: ReturnType<typeof getServerEnv>): string {
-    return env.appUrl.startsWith("https://") ? "__Host-replyconnect_session" : "replyconnect_session";
+    return env.appUrl.startsWith("https://") ? "__Host-linkar_session" : "linkar_session";
 }

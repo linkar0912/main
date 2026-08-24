@@ -98,8 +98,8 @@ describe("owner authentication", () => {
   });
 
   it("uses a host-only secure cookie name in production", () => {
-    expect(sessionCookieName("https://reply.example.com")).toBe("__Host-replyconnect_session");
-    expect(sessionCookieName("http://localhost:3000")).toBe("replyconnect_session");
+    expect(sessionCookieName("https://reply.example.com")).toBe("__Host-linkar_session");
+    expect(sessionCookieName("http://localhost:3000")).toBe("linkar_session");
   });
 
   it("rejects external and backslash-based post-login redirects", () => {
