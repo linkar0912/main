@@ -147,6 +147,9 @@ model InstagramConnection {
 model Automation {
   id                String                       @id
   workspaceId       String
+  // Instagram account (igUserId) this automation is pinned to. Null = the
+  // automation answers events from every connected account in the workspace.
+  instagramAccountId String?
   name              String
   status            AutomationStatus             @default(DRAFT)
   version           Int                          @default(1)

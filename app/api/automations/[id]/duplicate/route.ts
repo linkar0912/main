@@ -23,6 +23,7 @@ export async function POST(request: Request, context: RouteContext) {
   const copy = await repository.createAutomation(session.workspaceId, {
     name,
     definition: original.definition,
+    ...(original.instagramAccountId ? { instagramAccountId: original.instagramAccountId } : {}),
   });
   return NextResponse.json({ data: copy }, { status: 201 });
 }

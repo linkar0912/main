@@ -25,33 +25,43 @@ type AutomationBuilderProps = {
   automationId?: string;
   initialName?: string;
   initialDefinition?: FlowDefinition;
+  initialInstagramAccountId?: string;
   onSaved?: (automation: unknown) => void;
 };
 
-/** The workspace's first connected Instagram account, so the phone preview shows the real
- * handle, account ID and profile photo instead of placeholders. Degrades to null when nothing is connected. */
-function useConnectedInstagram(): { username: string; igUserId: string; avatarUrl?: string } | null {
-  const [connection, setConnection] = useState<{ username: string; igUserId: string; avatarUrl?: string } | null>(null);
+type ConnectionSummary = { username: string; igUserId: string; avatarUrl?: string };
+
+/** Every Instagram account connected to this workspace, for the account picker and previews. */
+function useInstagramConnections(): ConnectionSummary[] {
+  const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   useEffect(() => {
     let active = true;
     fetch("/api/meta/connection")
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: { data?: { username?: string; igUserId?: string; profilePictureUrl?: string | null }[] } | null) => {
-        const first = payload?.data?.[0];
-        if (active && first?.username) {
-          setConnection({
-            username: first.username,
-            igUserId: first.igUserId ?? "",
-            ...(first.profilePictureUrl ? { avatarUrl: first.profilePictureUrl } : {}),
-          });
-        }
+        if (!active) return;
+        setConnections(
+          (payload?.data ?? [])
+            .filter((connection): connection is { username: string; igUserId?: string; profilePictureUrl?: string | null } => Boolean(connection.username))
+            .map((connection) => ({
+              username: connection.username,
+              igUserId: connection.igUserId ?? "",
+              ...(connection.profilePictureUrl ? { avatarUrl: connection.profilePictureUrl } : {}),
+            })),
+        );
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
   }, []);
-  return connection;
+  return connections;
+}
+
+/** The workspace's first connected Instagram account, so the phone preview shows the real
+ * handle, account ID and profile photo instead of placeholders. Degrades to null when nothing is connected. */
+function useConnectedInstagram(): ConnectionSummary | null {
+  return useInstagramConnections()[0] ?? null;
 }
 
 const QUICK_REPLY_LABEL_MAX_LENGTH = 20;
@@ -136,14 +146,17 @@ function AutomationBuilderV1({
   automationId,
   initialName = "",
   initialDefinition = defaultDefinitionV1,
+  initialInstagramAccountId = "",
   onSaved,
 }: {
   automationId?: string;
   initialName?: string;
   initialDefinition?: FlowDefinitionV1;
+  initialInstagramAccountId?: string;
   onSaved?: (automation: unknown) => void;
 }) {
   const [name, setName] = useState(initialName);
+  const [instagramAccountId, setInstagramAccountId] = useState(initialInstagramAccountId);
   const [triggerType, setTriggerType] = useState<ClassicTriggerType>(initialDefinition.trigger.type);
   const [triggerMatch, setTriggerMatch] = useState<"keyword" | "any">(
     initialDefinition.trigger.type === "comment" || initialDefinition.trigger.type === "message"
@@ -212,7 +225,8 @@ function AutomationBuilderV1({
   const [error, setError] = useState("");
   const [activeStep, setActiveStep] = useState(0);
   const [previewView, setPreviewView] = useState<PreviewView>(initialDefinition.trigger.type === "comment" ? "post" : "dm");
-  const connection = useConnectedInstagram();
+  const connections = useInstagramConnections();
+  const connection = connections[0] ?? null;
   // Classic flows reference media by pasted IDs; pull thumbnails so the phone
   // preview can render the real post. Display-only - never saved.
   const [mediaThumbs, setMediaThumbs] = useState<Record<string, { thumbnailUrl?: string; isReel?: boolean }>>({});
@@ -500,7 +514,7 @@ function AutomationBuilderV1({
       const response = await fetch(automationId ? `/api/automations/${automationId}` : "/api/automations", {
         method: automationId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, definition: buildDefinition() }),
+        body: JSON.stringify({ name, definition: buildDefinition(), instagramAccountId: instagramAccountId || null }),
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: unknown; error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Could not save this automation");
@@ -550,6 +564,22 @@ function AutomationBuilderV1({
             maxLength={120}
           />
         </label>
+
+        {connections.length > 1 && (
+          <label className="field field-wide">
+            <span>Instagram account</span>
+            <select
+              aria-label="Instagram account"
+              value={instagramAccountId}
+              onChange={(event) => setInstagramAccountId(event.target.value)}
+            >
+              <option value="">All connected accounts</option>
+              {connections.map((item) => (
+                <option key={item.igUserId || item.username} value={item.igUserId}>@{item.username}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <nav className="wizard-progress" aria-label="Builder steps">
           {wizardSteps.map((key, index) => (
@@ -1260,14 +1290,17 @@ function AutomationBuilderV2({
   automationId,
   initialName = "",
   initialDefinition = defaultDefinitionV2,
+  initialInstagramAccountId = "",
   onSaved,
 }: {
   automationId?: string;
   initialName?: string;
   initialDefinition?: FlowDefinitionV2;
+  initialInstagramAccountId?: string;
   onSaved?: (automation: unknown) => void;
 }) {
   const [name, setName] = useState(initialName);
+  const [instagramAccountId, setInstagramAccountId] = useState(initialInstagramAccountId);
   const [savedAutomationId, setSavedAutomationId] = useState(automationId);
   const [source, setSource] = useState<MediaSource>(initialDefinition.trigger.source);
   const [mediaIds, setMediaIds] = useState<string[]>(initialDefinition.trigger.mediaIds);
@@ -1295,7 +1328,8 @@ function AutomationBuilderV2({
   const [error, setError] = useState("");
   const [activeStep, setActiveStep] = useState(0);
   const [previewView, setPreviewView] = useState<PreviewView>("post");
-  const connection = useConnectedInstagram();
+  const connections = useInstagramConnections();
+  const connection = connections[0] ?? null;
   const [mediaIndex, setMediaIndex] = useState<Record<string, { thumbnailUrl?: string; isReel?: boolean }>>({});
   const onMediaIndexChange = useCallback(
     (index: Record<string, { thumbnailUrl?: string; isReel?: boolean }>) => setMediaIndex(index),
@@ -1403,7 +1437,7 @@ function AutomationBuilderV2({
       const response = await fetch(savedAutomationId ? `/api/automations/${savedAutomationId}` : "/api/automations", {
         method: savedAutomationId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, definition: buildDefinition() }),
+        body: JSON.stringify({ name, definition: buildDefinition(), instagramAccountId: instagramAccountId || null }),
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: { id: string }; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");
@@ -1481,6 +1515,22 @@ function AutomationBuilderV2({
             maxLength={120}
           />
         </label>
+
+        {connections.length > 1 && (
+          <label className="field field-wide">
+            <span>Instagram account</span>
+            <select
+              aria-label="Instagram account"
+              value={instagramAccountId}
+              onChange={(event) => setInstagramAccountId(event.target.value)}
+            >
+              <option value="">All connected accounts</option>
+              {connections.map((item) => (
+                <option key={item.igUserId || item.username} value={item.igUserId}>@{item.username}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <nav className="wizard-progress" aria-label="Builder steps">
           {WIZARD_STEPS.map((label, index) => (
@@ -1919,6 +1969,7 @@ export function AutomationBuilder({
   automationId,
   initialName,
   initialDefinition,
+  initialInstagramAccountId,
   onSaved,
   variant,
 }: AutomationBuilderProps & { variant?: "campaign" | "classic" }) {
@@ -1928,6 +1979,7 @@ export function AutomationBuilder({
         automationId={automationId}
         initialName={initialName}
         initialDefinition={initialDefinition}
+        initialInstagramAccountId={initialInstagramAccountId}
         onSaved={onSaved}
       />
     );
@@ -1937,6 +1989,7 @@ export function AutomationBuilder({
       <AutomationBuilderV1
         automationId={automationId}
         initialName={initialName}
+        initialInstagramAccountId={initialInstagramAccountId}
         onSaved={onSaved}
       />
     );
@@ -1946,6 +1999,7 @@ export function AutomationBuilder({
       automationId={automationId}
       initialName={initialName}
       initialDefinition={initialDefinition as FlowDefinitionV2 | undefined}
+      initialInstagramAccountId={initialInstagramAccountId}
       onSaved={onSaved}
     />
   );

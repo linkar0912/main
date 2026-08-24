@@ -108,6 +108,7 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 function mapAutomation(record: {
   id: string;
   workspaceId: string;
+  instagramAccountId: string | null;
   name: string;
   status: "DRAFT" | "ACTIVE" | "PAUSED";
   version: number;
@@ -122,6 +123,7 @@ function mapAutomation(record: {
     definition: record.definition as AutomationRecord["definition"],
     activatedAt: record.activatedAt?.toISOString(),
     boundMediaId: record.boundMediaId ?? undefined,
+    instagramAccountId: record.instagramAccountId ?? undefined,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -793,6 +795,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           name: input.name.trim(),
           definition: input.definition,
           version: input.definition.version,
+          instagramAccountId: input.instagramAccountId ?? null,
         },
       });
       return mapAutomation(record);
@@ -858,6 +861,13 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           select: { workspaceId: true },
         });
         const workspaceIds = [...new Set(connections.map((connection) => connection.workspaceId))];
+        // Automations pinned to the deleted account can never fire again; remove
+        // them even when sibling connections keep the workspace alive.
+        if (workspaceIds.length > 0) {
+          await transaction.automation.deleteMany({
+            where: { workspaceId: { in: workspaceIds }, instagramAccountId: igUserId },
+          });
+        }
         await transaction.automationContact.deleteMany({ where: { instagramAccountId: igUserId } });
         await transaction.automationParticipant.deleteMany({ where: { instagramAccountId: igUserId } });
         await transaction.instagramConnection.deleteMany({ where: { igUserId } });

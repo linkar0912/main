@@ -791,6 +791,12 @@ a.setup-row:hover .setup-cta, button.setup-row:hover .setup-cta { color: var(--i
 .automation-title { align-items: center; display: flex; gap: 9px; margin-bottom: 3px; }
 .automation-title strong { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .automation-copy p { color: var(--muted); font-size: .73rem; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.automation-account {
+  font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
 .row-divider { color: var(--subtle); padding: 0 4px; }
 .status-badge { border: 1px solid; border-radius: 99px; display: inline-flex; font-size: .62rem; font-weight: 800; letter-spacing: .03em; padding: 3px 8px; text-transform: capitalize; }
 .status-active, .status-connected { background: var(--green-soft); border-color: var(--green-line); color: var(--green); }

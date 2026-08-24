@@ -86,6 +86,27 @@ function actionSummary(automation: AutomationRecord): string {
   return "Send a button";
 }
 
+/** igUserId -> @username for every connected account, for the per-row account chips. */
+function useConnectionUsernames(): Map<string, string> {
+  const [usernames, setUsernames] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    let active = true;
+    fetch("/api/meta/connection")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { igUserId?: string; username?: string }[] } | null) => {
+        if (!active) return;
+        setUsernames(new Map(
+          (payload?.data ?? [])
+            .filter((connection) => connection.igUserId && connection.username)
+            .map((connection) => [connection.igUserId!, connection.username!]),
+        ));
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+  return usernames;
+}
+
 export function AutomationList({
   automations,
   loading,
@@ -105,6 +126,19 @@ export function AutomationList({
   const [pendingId, setPendingId] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState("");
   const [actionError, setActionError] = useState("");
+  const usernames = useConnectionUsernames();
+  // With a single connection the account chip adds nothing - every automation
+  // runs on that one account anyway. Show chips only for multi-account workspaces.
+  const showAccountChips = usernames.size > 1;
+
+  function accountChip(automation: AutomationRecord) {
+    if (!showAccountChips) return null;
+    return (
+      <span className="automation-account" title={automation.instagramAccountId ?? undefined}>
+        {automation.instagramAccountId ? `@${usernames.get(automation.instagramAccountId) ?? "account"}` : "All accounts"}
+      </span>
+    );
+  }
 
   async function runAction(id: string, action: () => Promise<void>) {
     if (pendingId) return;
@@ -143,7 +177,14 @@ export function AutomationList({
           <div className="automation-icon"><Workflow size={19} strokeWidth={1.7} /></div>
           <div className="automation-copy">
             <div className="automation-title"><strong>{automation.name}</strong><StatusBadge status={automation.status} /></div>
-            <p>{triggerSummary(automation)} <span className="row-divider">·</span> {actionSummary(automation)}</p>
+            <p>
+              {triggerSummary(automation)} <span className="row-divider">·</span> {actionSummary(automation)}
+              {showAccountChips && (
+                <>
+                  {" "}<span className="row-divider">·</span> {accountChip(automation)}
+                </>
+              )}
+            </p>
           </div>
           {!compact && (
             <Link

@@ -33,6 +33,8 @@ export type ParticipantState =
 export type AutomationRecord = {
   id: string;
   workspaceId: string;
+  /** igUserId this automation is pinned to; undefined = all connected accounts. */
+  instagramAccountId?: string;
   name: string;
   status: AutomationStatus;
   version: number;
@@ -168,10 +170,13 @@ export type AutomationDailySendCounterRecord = {
 export type CreateAutomationInput = {
   name: string;
   definition: FlowDefinition;
+  instagramAccountId?: string;
 };
 
 export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "status" | "definition" | "activatedAt">> & {
   boundMediaId?: string | null;
+  /** Pin/unpin the automation: a string pins it to that account, null unpins it. */
+  instagramAccountId?: string | null;
 };
 
 export type CreateParticipantInput = Pick<

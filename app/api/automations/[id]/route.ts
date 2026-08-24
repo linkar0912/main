@@ -8,6 +8,16 @@ export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+/** Same contract as POST /api/automations: undefined = untouched, null = unpin, string = pin. */
+async function resolveInstagramAccountId(workspaceId: string, value: unknown): Promise<string | undefined | null> {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (typeof value !== "string") return null;
+  const connections = await getRepository().listConnections(workspaceId);
+  const match = connections.find((connection) => connection.igUserId === value && connection.status === "CONNECTED");
+  return match ? match.igUserId : null;
+}
+
 export async function GET(request: Request, context: RouteContext) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,13 +31,19 @@ export async function PATCH(request: Request, context: RouteContext) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
-  let body: { name?: unknown; status?: unknown; definition?: unknown };
+  let body: { name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown };
   try {
-    body = (await request.json()) as { name?: unknown; status?: unknown; definition?: unknown };
+    body = (await request.json()) as { name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown };
   } catch {
     return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
   }
   const patch: UpdateAutomationInput = {};
+
+  const instagramAccountId = await resolveInstagramAccountId(session.workspaceId, body.instagramAccountId);
+  if (instagramAccountId === null && body.instagramAccountId !== undefined && body.instagramAccountId !== null && body.instagramAccountId !== "") {
+    return NextResponse.json({ error: "That Instagram account is not connected to this workspace" }, { status: 400 });
+  }
+  if (instagramAccountId !== undefined) patch.instagramAccountId = instagramAccountId;
 
   if (body.name !== undefined) {
     const name = typeof body.name === "string" ? body.name.trim() : "";

@@ -856,7 +856,11 @@ export async function processNormalizedEvent(
   if (!mapping) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
 
   const automations = (await repository.listAutomations(mapping.workspaceId)).filter(
-    (automation) => automation.status === "ACTIVE",
+    (automation) =>
+      automation.status === "ACTIVE"
+      // Account-scoped automations only answer events on their own account;
+      // unpinned automations keep answering for every connected account.
+      && (automation.instagramAccountId === undefined || automation.instagramAccountId === event.accountId),
   );
 
   // Opt-outs win over everything: a STOP-style reply permanently suppresses the

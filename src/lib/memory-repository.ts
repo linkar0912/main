@@ -372,6 +372,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         createdAt: timestamp,
         updatedAt: timestamp,
       };
+      if (input.instagramAccountId) automation.instagramAccountId = input.instagramAccountId;
       automations.set(automation.id, automation);
       return copy(automation);
     },
@@ -379,11 +380,12 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     async updateAutomation(workspaceId, id, patch: UpdateAutomationInput) {
       const current = automations.get(id);
       if (!current || current.workspaceId !== workspaceId) return null;
-      const { boundMediaId, ...rest } = patch;
+      const { boundMediaId, instagramAccountId, ...rest } = patch;
       const updated: AutomationRecord = {
         ...current,
         ...rest,
         ...(boundMediaId === undefined ? {} : { boundMediaId: boundMediaId ?? undefined }),
+        ...(instagramAccountId === undefined ? {} : { instagramAccountId: instagramAccountId ?? undefined }),
         name: patch.name?.trim() || current.name,
         definition: patch.definition ? copy(patch.definition) : current.definition,
         version: patch.definition?.version ?? current.version,
@@ -457,6 +459,11 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       }
       for (const [id, connection] of connections.entries()) {
         if (connection.igUserId === igUserId) connections.delete(id);
+      }
+      // Automations pinned to the deleted account can never fire again; remove
+      // them even when sibling connections keep the workspace alive.
+      for (const [id, automation] of automations.entries()) {
+        if (workspaceIds.has(automation.workspaceId) && automation.instagramAccountId === igUserId) automations.delete(id);
       }
       for (const workspaceId of workspaceIds) {
         const hasSiblingConnection = [...connections.values()].some((connection) => connection.workspaceId === workspaceId);
