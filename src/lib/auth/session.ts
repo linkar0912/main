@@ -18,7 +18,10 @@ const scrypt = promisify(scryptCallback) as (
   keylen: number,
 ) => Promise<Buffer>;
 
-export const SESSION_COOKIE = "linkar_session";
+// Cookie name module-private constants. The active cookie name is exposed
+// via `sessionCookieName(appUrl)` so call sites do not need to know which
+// variant is in use (plain vs. `__Host-` prefix for HTTPS).
+const SESSION_COOKIE = "linkar_session";
 const PRODUCTION_SESSION_COOKIE = "__Host-linkar_session";
 const SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
 

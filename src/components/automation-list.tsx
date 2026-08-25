@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ArrowUpRight, Copy, Pause, Pencil, Play, Trash2, Workflow } from "lucide-react";
+import { Activity, ArrowUpRight, Copy, History, Pause, Pencil, Play, Trash2, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CreateAutomationButton } from "./create-automation-button";
+import { AutomationVersionsModal } from "./automation-versions-modal";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
 import { getInstagramConnections } from "@/src/lib/client/workspace-data";
@@ -125,6 +126,7 @@ export function AutomationList({
 }) {
   const [pendingId, setPendingId] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState("");
+  const [historyForId, setHistoryForId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const usernames = useConnectionUsernames();
   // With a single connection the account chip adds nothing - every automation
@@ -209,6 +211,15 @@ export function AutomationList({
               <button
                 className="icon-button"
                 type="button"
+                aria-label={`View history for ${automation.name}`}
+                title="Version history"
+                onClick={() => setHistoryForId(automation.id)}
+              >
+                <History size={16} />
+              </button>
+              <button
+                className="icon-button"
+                type="button"
                 disabled={pendingId === automation.id}
                 aria-label={`${automation.status === "ACTIVE" ? "Pause" : "Activate"} ${automation.name}`}
                 title={automation.status === "ACTIVE" ? "Pause automation" : "Activate automation"}
@@ -261,6 +272,12 @@ export function AutomationList({
         </article>
       ))}
       {compact && automations.length > visible.length && <Link className="list-more" href="/automations">View all {automations.length} automations <ArrowUpRight size={15} /></Link>}
+      {historyForId && (
+        <AutomationVersionsModal
+          automationId={historyForId}
+          onClose={() => setHistoryForId(null)}
+        />
+      )}
     </div>
   );
 }

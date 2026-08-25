@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerEnv } from "@/src/lib/env";
-import { getValidatedSession, hashPassword, verifyPassword } from "@/src/lib/auth/session";
+import { getValidatedSession, hashPassword, sessionCookieName, verifyPassword } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 
 export const runtime = "nodejs";
@@ -58,13 +58,9 @@ export async function POST(request: Request) {
     if (action === "logout-all") {
         await repository.bumpUserTokenVersion(session.userId);
         const response = NextResponse.redirect(new URL("/login?loggedOut=all", env.appUrl), 303);
-        response.cookies.set({ name: sessionCookieNameFor(env), value: "", httpOnly: true, path: "/", maxAge: 0 });
+        response.cookies.set({ name: sessionCookieName(env.appUrl), value: "", httpOnly: true, path: "/", maxAge: 0 });
         return response;
     }
 
     return NextResponse.redirect(new URL("/profile?accountError=unknown", env.appUrl), 303);
-}
-
-function sessionCookieNameFor(env: ReturnType<typeof getServerEnv>): string {
-    return env.appUrl.startsWith("https://") ? "__Host-linkar_session" : "linkar_session";
 }

@@ -1754,3 +1754,52 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .warning-text { color: #a2701d; }
 .variant-list { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
 .variant-list li { align-items: center; display: flex; gap: var(--space-3); justify-content: space-between; }
+
+/* Visually-hidden text that remains available to assistive tech (filters, etc.). */
+.sr-only {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* Dashboard "Reply volume" stat block - card with label + value row. */
+.stat-block {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-4) var(--space-5);
+}
+
+/* DM-only Instagram preview screen - same flex layout as comments, soft background. */
+.ig-screen-dm {
+  background: var(--surface-soft);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Simulator result panel - container around the rendered outcome. */
+.simulator-result {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+}
+
+/* Retry button on a failed automation activity row - informational modifier
+   carried alongside .button; reserved for future emphasis (e.g. red icon). */
+.activity-retry {
+  align-items: center;
+  gap: 4px;
+}

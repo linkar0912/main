@@ -86,7 +86,7 @@ describe("AutomationList activity link", () => {
     const row = screen.getByRole("article");
     const actions = row.querySelector(".automation-actions");
     expect(actions).toBeTruthy();
-    expect(actions?.querySelectorAll("a, button")).toHaveLength(5);
+    expect(actions?.querySelectorAll("a, button")).toHaveLength(6);
   });
 
   it("shows an actionable error when activation fails", async () => {
