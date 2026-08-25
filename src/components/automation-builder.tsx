@@ -20,6 +20,7 @@ import type { FlowAction, FlowCondition, FlowDefinition, FlowDefinitionV1, FlowD
 import { MediaPicker } from "./media-picker";
 import { FollowGateFields } from "./follow-gate-fields";
 import { InstagramPreview, type DmBubble, type PreviewView } from "./instagram-preview";
+import { AutomationSimulator } from "./automation-simulator";
 import { getInstagramConnections } from "@/src/lib/client/workspace-data";
 
 type AutomationBuilderProps = {
@@ -116,6 +117,7 @@ function classicActionOptions(trigger: ClassicTriggerType): { value: FlowAction[
     { value: "send_image", label: "Send an image", description: "Send a photo with a caption" },
     { value: "send_link", label: "Send a link", description: "Deliver a link in a DM" },
     { value: "send_button", label: "Send a button", description: "Deliver a tappable link" },
+    { value: "quick_replies", label: "Quick replies", description: "A DM with tappable reply chips" },
   ];
 }
 
@@ -124,6 +126,7 @@ function newClassicAction(type: FlowAction["type"]): FlowAction {
   if (type === "send_text") return { type, text: "" };
   if (type === "send_image") return { type, imageUrl: "", caption: "" };
   if (type === "send_link") return { type, text: "", url: "" };
+  if (type === "quick_replies") return { type, text: "", replies: ["Yes", "Not now"] };
   return { type, text: "", buttonLabel: "Open link", url: "" };
 }
 
@@ -333,6 +336,7 @@ function AutomationBuilderV1({
       const carriedText = "text" in previous && typeof previous.text === "string" ? previous.text : "";
       if (type === "send_link") return { type, text: carriedText, url: "" };
       if (type === "send_button") return { type, text: carriedText, url: "", buttonLabel: "Open link" };
+      if (type === "quick_replies") return { type, text: carriedText, replies: ["Yes", "Not now"] };
       return { type, text: carriedText };
     }));
   }
@@ -495,6 +499,10 @@ function AutomationBuilderV1({
     }
     if (actions.some((action) => (action.type === "send_link" || action.type === "send_button") && !action.url.trim())) {
       setError("Link actions need a URL.");
+      return;
+    }
+    if (actions.some((action) => action.type === "quick_replies" && !action.replies.some((reply) => reply.trim()))) {
+      setError("Quick-reply actions need at least one reply chip.");
       return;
     }
     if (followUps.some((followUp) => followUp.text.trim() && followUp.buttonLabel.trim() && !followUp.url.trim())) {
@@ -824,6 +832,28 @@ function AutomationBuilderV1({
                         <input aria-label={actions.length > 1 ? `Step ${index + 1} button label` : "Button label"} value={action.buttonLabel} onChange={(event) => updateAction(index, { buttonLabel: event.target.value } as Partial<FlowAction>)} placeholder="Open guide" />
                       </label>
                     )}
+                  </div>
+                )}
+                {action.type === "quick_replies" && (
+                  <div className="field-grid field-spaced">
+                    {[0, 1, 2, 3].map((chipIndex) => (
+                      <label className="field" key={chipIndex}>
+                        <span>{actions.length > 1 ? `Step ${index + 1} reply chip ${chipIndex + 1}` : `Reply chip ${chipIndex + 1}`}{chipIndex > 1 ? " optional" : ""}</span>
+                        <input
+                          aria-label={actions.length > 1 ? `Step ${index + 1} reply chip ${chipIndex + 1}` : `Reply chip ${chipIndex + 1}`}
+                          value={action.replies[chipIndex] ?? ""}
+                          maxLength={20}
+                          placeholder={chipIndex === 0 ? "Sounds good" : chipIndex === 1 ? "Not now" : undefined}
+                          onChange={(event) => {
+                            const next = [...action.replies];
+                            while (next.length < 4) next.push("");
+                            next[chipIndex] = event.target.value;
+                            updateAction(index, { replies: next } as Partial<FlowAction>);
+                          }}
+                        />
+                      </label>
+                    ))}
+                    <p className="muted">Up to four chips, 20 characters each. Tapping a chip sends its text back as a message.</p>
                   </div>
                 )}
               </div>
@@ -1259,6 +1289,7 @@ function AutomationBuilderV1({
           postIsReel={previewThumb?.isReel}
           messages={dmMessages}
         />
+        <AutomationSimulator buildDefinition={buildDefinition} />
       </aside>
     </form>
   );
@@ -1962,6 +1993,7 @@ function AutomationBuilderV2({
           commentReply={nonEmptyReplies[0]}
           messages={dmMessages}
         />
+        <AutomationSimulator buildDefinition={buildDefinition} />
       </aside>
     </div>
   );

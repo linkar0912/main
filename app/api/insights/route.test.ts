@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   countExecutionsSentPerDay: vi.fn(),
   countParticipantsByMedia: vi.fn(),
   countParticipantsCreatedSince: vi.fn(),
+  countCapturedContacts: vi.fn(),
+  countSuppressedContacts: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidatedSession }));
@@ -19,6 +21,8 @@ vi.mock("@/src/lib/repository-provider", () => ({
     countExecutionsSentPerDay: mocks.countExecutionsSentPerDay,
     countParticipantsByMedia: mocks.countParticipantsByMedia,
     countParticipantsCreatedSince: mocks.countParticipantsCreatedSince,
+    countCapturedContacts: mocks.countCapturedContacts,
+    countSuppressedContacts: mocks.countSuppressedContacts,
   }),
 }));
 
@@ -33,6 +37,8 @@ describe("GET /api/insights", () => {
     mocks.countExecutionsSentPerDay.mockReset().mockResolvedValue([]);
     mocks.countParticipantsByMedia.mockReset().mockResolvedValue([]);
     mocks.countParticipantsCreatedSince.mockReset().mockResolvedValue(0);
+    mocks.countCapturedContacts.mockReset().mockResolvedValue(0);
+    mocks.countSuppressedContacts.mockReset().mockResolvedValue(0);
   });
 
   it("passes the selected automation to every analytics query", async () => {

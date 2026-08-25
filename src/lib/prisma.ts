@@ -22,6 +22,10 @@ import type {
   InvitationRecord,
   AutomationContactRecord,
   CapturedContactSummary,
+  ContactTimelineEntry,
+  VariantPerformance,
+  WebhookEventRecord,
+  RecordWebhookEventInput,
   AutomationSequenceRecord,
   SequenceStep,
   SequenceEnrollmentRecord,
@@ -33,7 +37,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTACT_TAGS } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { toMessagingWindow } from "./messaging-window";
 
@@ -260,6 +264,7 @@ function mapParticipant(record: {
   deliveryClickedAt: Date | null;
   messagingWindowExpiresAt: Date | null;
   recheckCount: number;
+  variantLabel: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): AutomationParticipantRecord {
@@ -282,6 +287,7 @@ function mapParticipant(record: {
     finalDeliveryError: record.finalDeliveryError ?? undefined,
     deliveryClickedAt: record.deliveryClickedAt?.toISOString(),
     messagingWindowExpiresAt: record.messagingWindowExpiresAt?.toISOString(),
+    variantLabel: record.variantLabel ?? undefined,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -297,6 +303,8 @@ function mapContact(record: {
   awaitingAutomationId: string | null;
   awaitingSince: Date | null;
   attempts: number;
+  tags: string[];
+  score: number;
   suppressedAt: Date | null;
   lastSeenAt: Date;
   createdAt: Date;
@@ -312,6 +320,8 @@ function mapContact(record: {
     awaitingAutomationId: record.awaitingAutomationId ?? undefined,
     awaitingSince: record.awaitingSince?.toISOString(),
     attempts: record.attempts,
+    tags: record.tags,
+    score: record.score,
     fields: (record as unknown as { fields?: Record<string, string> | null }).fields ?? undefined,
     awaitingFields: (record as unknown as { awaitingFields?: { id: string; question: string }[] | null }).awaitingFields ?? undefined,
     suppressedAt: record.suppressedAt?.toISOString(),
@@ -763,7 +773,14 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: { id, deliveryClickedAt: null },
         data: { deliveryClickedAt: new Date(atIso) },
       });
-      return updated.count === 1;
+      if (updated.count !== 1) return false;
+      // Engagement hook: tag + score the contact when the click is attributable.
+      const participant = await client.automationParticipant.findUnique({ where: { id } });
+      if (participant?.igScopedUserId) {
+        await this.addContactTags(participant.workspaceId, participant.instagramAccountId, participant.igScopedUserId, ["clicked"]);
+        await this.bumpContactScore(participant.workspaceId, participant.instagramAccountId, participant.igScopedUserId, 5);
+      }
+      return true;
     },
 
     async findWorkspaceIdByMemberEmail(email) {
@@ -1419,6 +1436,8 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
             awaitingSince: null,
           }),
           attempts: 0,
+          tags: current.tags.includes("email_captured") ? undefined : { push: "email_captured" },
+          score: Math.min(current.score + 10, 9999),
           lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
         },
       });
@@ -1505,6 +1524,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           awaitingAutomationId: null,
           awaitingSince: null,
           awaitingFields: Prisma.DbNull,
+          tags: current.tags.includes("opted_out") ? undefined : { push: "opted_out" },
           lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
         },
       });
@@ -1533,6 +1553,179 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         instagramAccountId: record.instagramAccountId,
         capturedAt: record.updatedAt.toISOString(),
       }));
+    },
+
+    async countSuppressedContacts(workspaceId) {
+      return client.automationContact.count({ where: { workspaceId, suppressedAt: { not: null } } });
+    },
+
+    async getContactById(workspaceId, contactId) {
+      const record = await client.automationContact.findFirst({ where: { id: contactId, workspaceId } });
+      return record ? mapContact(record) : null;
+    },
+
+    async setContactTags(workspaceId, instagramAccountId, igScopedUserId, tags) {
+      const current = await client.automationContact.findUnique({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      if (!current) return null;
+      // Manual tags replace previous manual tags; automatic labels always survive.
+      const automatic = current.tags.filter((tag) => (AUTOMATIC_CONTACT_TAGS as readonly string[]).includes(tag));
+      const manual = [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))]
+        .filter((tag) => !(AUTOMATIC_CONTACT_TAGS as readonly string[]).includes(tag))
+        .slice(0, 20);
+      const updated = await client.automationContact.update({
+        where: { id: current.id },
+        data: { tags: [...automatic, ...manual] },
+      });
+      return mapContact(updated);
+    },
+
+    async addContactTags(workspaceId, instagramAccountId, igScopedUserId, tags) {
+      const current = await client.automationContact.findUnique({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      if (!current) return null;
+      const merged = [...new Set([...current.tags, ...tags.map((t) => t.trim().toLowerCase()).filter(Boolean)])].slice(0, 30);
+      if (merged.length === current.tags.length) return mapContact(current);
+      const updated = await client.automationContact.update({
+        where: { id: current.id },
+        data: { tags: merged },
+      });
+      return mapContact(updated);
+    },
+
+    async bumpContactScore(workspaceId, instagramAccountId, igScopedUserId, delta) {
+      const current = await client.automationContact.findUnique({
+        where: {
+          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+        },
+      });
+      if (!current) return -1;
+      const updated = await client.automationContact.update({
+        where: { id: current.id },
+        data: { score: Math.min(Math.max(current.score + delta, 0), 9999) },
+      });
+      return updated.score;
+    },
+
+    async getContactTimeline(workspaceId, contactId, limit): Promise<ContactTimelineEntry[]> {
+      const contact = await client.automationContact.findFirst({ where: { id: contactId, workspaceId } });
+      if (!contact) return [];
+      const [participants, enrollments] = await Promise.all([
+        client.automationParticipant.findMany({
+          where: {
+            workspaceId,
+            instagramAccountId: contact.instagramAccountId,
+            igScopedUserId: contact.igScopedUserId,
+          },
+          orderBy: [{ createdAt: "desc" }],
+          take: limit,
+          select: { id: true, state: true, matchedKeyword: true, createdAt: true },
+        }),
+        client.sequenceEnrollment.findMany({
+          where: { workspaceId, contactId: contact.id },
+          orderBy: [{ enrolledAt: "desc" }],
+          take: limit,
+          include: { sequence: { select: { name: true } } },
+        }),
+      ]);
+      const entries: ContactTimelineEntry[] = participants.map((participant) => ({
+        id: `participant:${participant.id}`,
+        kind: "interaction" as const,
+        at: participant.createdAt.toISOString(),
+        label: participant.state === "LINK_SENT" ? "Campaign delivery sent" : "Campaign interaction",
+        detail: participant.matchedKeyword ? `keyword "${participant.matchedKeyword}"` : participant.state,
+      }));
+      for (const enrollment of enrollments) {
+        entries.push({
+          id: `enrollment:${enrollment.id}`,
+          kind: "sequence",
+          at: enrollment.enrolledAt.toISOString(),
+          label: "Sequence enrollment",
+          detail: enrollment.sequence?.name ?? enrollment.sequenceId,
+        });
+      }
+      if (contact.email) {
+        entries.push({ id: "milestone:email", kind: "email_captured", at: contact.updatedAt.toISOString(), label: "Email captured", detail: contact.email });
+      }
+      if (contact.suppressedAt) {
+        entries.push({ id: "milestone:optout", kind: "opted_out", at: contact.suppressedAt.toISOString(), label: "Opted out" });
+      }
+      return entries.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+    },
+
+    async countParticipantsByVariant(workspaceId, automationId) {
+      const [rows, deliveredRows, clickedRows] = await Promise.all([
+        client.automationParticipant.groupBy({
+          by: ["variantLabel"],
+          where: { workspaceId, automationId },
+          _count: { _all: true },
+        }),
+        client.automationParticipant.groupBy({
+          by: ["variantLabel"],
+          where: { workspaceId, automationId, finalDeliveryStatus: "SENT" },
+          _count: { _all: true },
+        }),
+        client.automationParticipant.groupBy({
+          by: ["variantLabel"],
+          where: { workspaceId, automationId, deliveryClickedAt: { not: null } },
+          _count: { _all: true },
+        }),
+      ]);
+      const deliveredByVariant = new Map(deliveredRows.map((row) => [row.variantLabel ?? "A", row._count._all]));
+      const clickedByVariant = new Map(clickedRows.map((row) => [row.variantLabel ?? "A", row._count._all]));
+      return rows
+        .map((row) => ({
+          variant: row.variantLabel ?? "A",
+          participants: row._count._all,
+          delivered: deliveredByVariant.get(row.variantLabel ?? "A") ?? 0,
+          clicked: clickedByVariant.get(row.variantLabel ?? "A") ?? 0,
+        }))
+        .sort((a, b) => a.variant.localeCompare(b.variant));
+    },
+
+    async recordWebhookEvent(workspaceId, input) {
+      try {
+        await client.webhookEvent.create({
+          data: {
+            id: createId("wevent"),
+            workspaceId,
+            providerEventId: input.providerEventId,
+            eventType: input.eventType,
+            receivedAt: new Date(input.receivedAt),
+            payload: input.payload as Prisma.InputJsonValue,
+          },
+        });
+      } catch (error) {
+        // Unique (workspaceId, providerEventId) replays are expected and harmless.
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      }
+    },
+
+    async listRecentWebhookEvents(workspaceId, limit, eventType) {
+      const records = await client.webhookEvent.findMany({
+        where: { workspaceId, ...(eventType ? { eventType } : {}) },
+        orderBy: [{ receivedAt: "desc" }, { id: "asc" }],
+        take: limit,
+      });
+      return records.map((record) => ({
+        id: record.id,
+        providerEventId: record.providerEventId,
+        eventType: record.eventType,
+        receivedAt: record.receivedAt.toISOString(),
+        ...(record.processedAt ? { processedAt: record.processedAt.toISOString() } : {}),
+        payload: record.payload as Record<string, unknown>,
+      }));
+    },
+
+    async deleteOldWebhookEvents(before) {
+      const result = await client.webhookEvent.deleteMany({ where: { receivedAt: { lt: new Date(before) } } });
+      return result.count;
     },
 
     async deleteContactsByWorkspaceIds(workspaceIds) {

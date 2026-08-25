@@ -47,7 +47,18 @@ export type CampaignRunnerClient = Pick<
   | "sendDirectMessage"
   | "getUserFollowStatus"
   | "getMedia"
->;
+> & {
+  /**
+   * Optional multi-chip quick replies used by classic flow actions; campaigns
+   * never call it, so test stubs may omit it.
+   */
+  sendQuickReplies?(
+    connection: MetaConnection,
+    recipientId: string,
+    text: string,
+    replies: string[],
+  ): Promise<{ message_id?: string }>;
+};
 
 export type CampaignRunnerOptions = {
   client?: CampaignRunnerClient;
@@ -106,11 +117,14 @@ function metaConnection(
 /**
  * Picks one message variant per participant deterministically-ish: a random
  * draw spread across the configured variants. Falls back to the base text.
+ * The returned label ("A" for the base text, "B"/"C"... for variants) is
+ * persisted per participant so A/B performance can be reported later.
  */
-function pickVariant(text: string, variants: string[] | undefined): string {
+function pickVariant(text: string, variants: string[] | undefined): { text: string; label: string } {
   const options = [text, ...(variants ?? [])].filter((candidate) => candidate.trim().length > 0);
-  if (options.length <= 1) return text;
-  return options[Math.floor(Math.random() * options.length)];
+  if (options.length <= 1) return { text, label: "A" };
+  const index = Math.floor(Math.random() * options.length);
+  return { text: options[index], label: String.fromCharCode(65 + Math.min(index, 25)) };
 }
 
 /** Wraps the delivery link through the click-tracking redirect. */
@@ -714,7 +728,8 @@ async function deliverOpeningReply(
   definition: FlowDefinitionV2,
   ctx: DeliveryContext,
 ): Promise<AutomationParticipantRecord> {
-  const openingText = renderTemplate(pickVariant(definition.openingMessage.text, definition.openingMessage.textVariants), {
+  const pickedOpening = pickVariant(definition.openingMessage.text, definition.openingMessage.textVariants);
+  const openingText = renderTemplate(pickedOpening.text, {
     keyword: participant.matchedKeyword,
   });
   const openingMessage = {
@@ -753,6 +768,7 @@ async function deliverOpeningReply(
         openingSentAt: execution.createdAt,
         openingError: undefined,
         igScopedUserId: execution.providerRecipientId,
+        variantLabel: pickedOpening.label,
       }),
       validateRecordedExecution: (execution) =>
         !execution.providerMessageId || !execution.providerRecipientId
@@ -765,6 +781,7 @@ async function deliverOpeningReply(
         openingSentAt: new Date().toISOString(),
         openingError: undefined,
         igScopedUserId: ids.recipientId,
+        variantLabel: pickedOpening.label,
       }),
       onFailure: (reason) => ({ state: "FAILED", openingStatus: "FAILED", openingError: reason }),
       onLimit: (reason) => ({ openingStatus: "SKIPPED", openingError: reason }),
@@ -892,7 +909,7 @@ async function deliverFinalMessage(
   event: NormalizedEvent,
   ctx: DeliveryContext,
 ): Promise<AutomationParticipantRecord> {
-  const deliveryText = renderTemplate(pickVariant(definition.delivery.text, definition.delivery.textVariants), {
+  const deliveryText = renderTemplate(pickVariant(definition.delivery.text, definition.delivery.textVariants).text, {
     keyword: verified.matchedKeyword,
     post_link: verified.sourceMediaSnapshot?.permalink,
   });

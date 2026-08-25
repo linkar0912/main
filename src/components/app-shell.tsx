@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   CircleHelp,
+  Inbox,
   LayoutDashboard,
   ListOrdered,
   LogOut,
@@ -26,6 +27,7 @@ const workspaceNavigation = [
   { href: "/automations", label: "Automations", icon: Workflow },
   { href: "/automations/sequences", label: "Sequences", icon: ListOrdered },
   { href: "/automations/broadcasts", label: "Broadcasts", icon: Megaphone },
+  { href: "/activity", label: "Activity", icon: Inbox },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

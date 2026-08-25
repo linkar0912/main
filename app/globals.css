@@ -1729,3 +1729,28 @@ a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hove
 .activity-clicks svg { color: var(--accent); flex-shrink: 0; }
 .activity-truncated { background: var(--surface-soft); border-radius: var(--radius-sm); font-size: .72rem; margin: 0; padding: 9px 12px; }
 .template-example { background: var(--surface-soft); border-radius: 6px; color: var(--slate); font-size: .72rem; line-height: 1.4; padding: 6px 8px; }
+
+/* Activity inbox */
+.activity-list { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
+.activity-list li { background: var(--surface-soft); border-radius: var(--radius-sm); padding: 10px 14px; }
+.activity-row { align-items: baseline; display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; }
+.activity-label { font-weight: 650; }
+.activity-from { color: var(--accent); font-weight: 650; }
+.activity-summary { font-size: .8rem; margin: 2px 0 0; overflow-wrap: anywhere; }
+
+/* Contact tags + score + timeline */
+.contact-chips { align-items: center; display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.tag-chip { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 999px; font-size: .72rem; padding: 3px 10px; }
+.tag-chip-best { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: var(--accent); color: var(--accent); }
+.timeline-list { display: grid; gap: var(--space-2); list-style: none; margin: var(--space-3) 0 0; padding: 0; }
+.timeline-list li { background: var(--surface-soft); border-radius: var(--radius-sm); padding: 9px 13px; }
+.contact-link { padding: 0; text-align: left; }
+
+/* Simulator + A/B report */
+.simulator-panel { margin-top: var(--space-5); }
+.simulator-actions { display: grid; gap: 6px; list-style: none; margin: var(--space-2) 0 0; padding: 0; }
+.simulator-actions li { font-size: .8rem; }
+.simulator-actions code { background: var(--surface-soft); border-radius: 4px; font-size: .7rem; padding: 1px 5px; }
+.warning-text { color: #a2701d; }
+.variant-list { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
+.variant-list li { align-items: center; display: flex; gap: var(--space-3); justify-content: space-between; }

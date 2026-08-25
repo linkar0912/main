@@ -9,5 +9,8 @@ export async function sweepStaleParticipants(
   const expired = await repository.expireStaleParticipants(now.toISOString(), "Messaging window expired");
   const before = new Date(now.getTime() - PARTICIPANT_RETENTION_MS).toISOString();
   const deleted = await repository.deleteStaleTerminalParticipants(before);
+  // Webhook activity shares the same 90-day retention window as participants.
+  await repository.deleteOldWebhookEvents(before);
   return { expired, deleted };
 }
+

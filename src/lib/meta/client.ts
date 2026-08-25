@@ -151,6 +151,31 @@ export class MetaClient {
     });
   }
 
+  /**
+   * One DM carrying up to four tappable reply chips (Instagram allows up to 13;
+   * flows are capped lower for readability). Titles mirror Instagram's 20-char
+   * chip budget; payloads carry the full reply text.
+   */
+  async sendQuickReplies(
+    connection: MetaConnection,
+    recipientId: string,
+    text: string,
+    replies: string[],
+  ): Promise<MetaSendResult> {
+    return this.post(connection, {
+      recipient: { id: recipientId },
+      messaging_type: "RESPONSE",
+      message: {
+        text,
+        quick_replies: replies.slice(0, 4).map((reply) => ({
+          content_type: "text" as const,
+          title: reply.trim().slice(0, 20),
+          payload: reply.trim().slice(0, 1000),
+        })),
+      },
+    });
+  }
+
   async listMedia(connection: MetaConnection, after?: string): Promise<MetaMediaPage> {
     const url = new URL(`${this.baseUrl}/${this.apiVersion}/${connection.igUserId}/media`);
     url.searchParams.set("fields", MEDIA_FIELDS);

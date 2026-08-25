@@ -46,7 +46,9 @@ export type FlowAction =
   | { type: "send_text"; text: string }
   | { type: "send_link"; text: string; url: string }
   | { type: "send_button"; text: string; buttonLabel: string; url: string }
-  | { type: "send_image"; imageUrl: string; caption?: string };
+  | { type: "send_image"; imageUrl: string; caption?: string }
+  /** One DM carrying up to four tappable reply chips (Instagram quick replies). */
+  | { type: "quick_replies"; text: string; replies: string[] };
 
 /**
  * Personalization tokens available in every outbound text (replies, buttons,
@@ -255,7 +257,8 @@ export type ExecutionAction =
     buttonLabel: string;
     url: string;
   }
-  | { type: "send_image"; recipientId: string; imageUrl: string; caption?: string };
+  | { type: "send_image"; recipientId: string; imageUrl: string; caption?: string }
+  | { type: "quick_replies"; recipientId: string; text: string; replies: string[] };
 
 export type EvaluationResult =
   | { status: "matched"; actions: ExecutionAction[]; matchedKeyword?: string }

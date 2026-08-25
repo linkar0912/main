@@ -74,6 +74,8 @@ export type AutomationParticipantRecord = {
   messagingWindowExpiresAt?: string;
   recheckCount: number;
   deliveryClickedAt?: string;
+  /** A/B opening-message variant label recorded by campaign deliveries ("A", "B", ...). */
+  variantLabel?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -186,7 +188,7 @@ export type CreateParticipantInput = Pick<
 
 export type ParticipantPatch = Partial<Pick<
   AutomationParticipantRecord,
-  "igScopedUserId" | "matchedKeyword" | "state" | "publicReplyStatus" | "publicReplyProviderId" | "publicReplySentAt" | "publicReplyError" | "openingStatus" | "openingProviderId" | "openingSentAt" | "openingError" | "followStatus" | "followCheckedAt" | "followCheckError" | "finalDeliveryStatus" | "finalProviderId" | "finalDeliveredAt" | "finalDeliveryError" | "deliveryClickedAt" | "messagingWindowExpiresAt" | "recheckCount"
+  "igScopedUserId" | "matchedKeyword" | "state" | "publicReplyStatus" | "publicReplyProviderId" | "publicReplySentAt" | "publicReplyError" | "openingStatus" | "openingProviderId" | "openingSentAt" | "openingError" | "followStatus" | "followCheckedAt" | "followCheckError" | "finalDeliveryStatus" | "finalProviderId" | "finalDeliveredAt" | "finalDeliveryError" | "deliveryClickedAt" | "messagingWindowExpiresAt" | "recheckCount" | "variantLabel"
 >>;
 
 export type DailyCount = { day: string; count: number };
@@ -217,10 +219,17 @@ export type AutomationContactRecord = {
   awaitingFields?: { id: string; question: string; kind?: "text" | "email" | "phone" | "number"; exitKeywords?: string[] }[];
   /** Set when the person opted out (STOP/unsubscribe); every automated send is skipped. */
   suppressedAt?: string;
+  /** Manual + automatic labels ("email_captured", "opted_out", "clicked", ...). */
+  tags: string[];
+  /** Engagement score; the repository bumps it on notable interactions. */
+  score: number;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
 };
+
+/** Labels set automatically by the engine; manual tag editing never removes them. */
+export const AUTOMATIC_CONTACT_TAGS = ["email_captured", "opted_out", "clicked"] as const;
 
 /** Marks the sender as seen; `created` is true when this was their first interaction. */
 export type TouchContactResult = { created: boolean; record: AutomationContactRecord };
@@ -231,6 +240,40 @@ export type CapturedContactSummary = {
   instagramAccountId: string;
   automationId?: string;
   capturedAt: string;
+};
+
+/** One row in a contact's interaction timeline, newest first. */
+export type ContactTimelineEntry = {
+  id: string;
+  kind: "interaction" | "email_captured" | "opted_out" | "sequence";
+  at: string;
+  label: string;
+  detail?: string;
+};
+
+/** Per-variant A/B performance for one campaign. */
+export type VariantPerformance = {
+  variant: string;
+  participants: number;
+  delivered: number;
+  clicked: number;
+};
+
+/** Persisted webhook activity for the workspace inbox. */
+export type WebhookEventRecord = {
+  id: string;
+  providerEventId: string;
+  eventType: string;
+  receivedAt: string;
+  processedAt?: string;
+  payload: Record<string, unknown>;
+};
+
+export type RecordWebhookEventInput = {
+  providerEventId: string;
+  eventType: string;
+  receivedAt: string;
+  payload: Record<string, unknown>;
 };
 
 export type SequenceStep = {
@@ -530,6 +573,8 @@ export interface AutomationRepository {
   bindNextMedia(workspaceId: string, automationId: string, mediaId: string, publishedAt: string): Promise<boolean>;
   listParticipants(workspaceId: string, automationId: string, limit: number): Promise<AutomationParticipantRecord[]>;
   listRecentParticipants(workspaceId: string, limit: number, automationId?: string): Promise<AutomationParticipantRecord[]>;
+  /** A/B opening-variant performance for one campaign ("A" = base text). */
+  countParticipantsByVariant(workspaceId: string, automationId: string): Promise<VariantPerformance[]>;
   expireParticipantsByInstagramAccount(igAccountId: string, reason: string): Promise<number>;
   deleteParticipantsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
   expireStaleParticipants(now: string, reason: string): Promise<number>;
@@ -584,6 +629,27 @@ export interface AutomationRepository {
   ): Promise<AutomationContactRecord>;
   countCapturedContacts(workspaceId: string): Promise<number>;
   listCapturedContacts(workspaceId: string, limit: number): Promise<CapturedContactSummary[]>;
+  countSuppressedContacts(workspaceId: string): Promise<number>;
+  // Contact engagement: tags, score, and timeline.
+  getContactById(workspaceId: string, contactId: string): Promise<AutomationContactRecord | null>;
+  /** Replaces the manual tag set; automatic labels are preserved. */
+  setContactTags(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+    tags: string[],
+  ): Promise<AutomationContactRecord | null>;
+  /** Idempotently adds automatic labels; returns the updated record or null when unknown. */
+  addContactTags(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+    tags: string[],
+  ): Promise<AutomationContactRecord | null>;
+  /** Adds delta (clamped to >= 0, capped at 9999); returns the new score, or -1 when unknown. */
+  bumpContactScore(workspaceId: string, instagramAccountId: string, igScopedUserId: string, delta: number): Promise<number>;
+  /** Interaction timeline for one contact (participants + milestones), newest first. */
+  getContactTimeline(workspaceId: string, contactId: string, limit: number): Promise<ContactTimelineEntry[]>;
   deleteContactsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
   // Sequences (timed drip campaigns over DM).
   createSequence(
@@ -634,4 +700,9 @@ export interface AutomationRepository {
     segment: BroadcastSegment,
     limit: number,
   ): Promise<{ igScopedUserId: string; instagramAccountId: string }[]>;
+  // Webhook activity inbox (persisted summaries of every inbound event).
+  /** Idempotent per (workspaceId, providerEventId); never throws on duplicates. */
+  recordWebhookEvent(workspaceId: string, input: RecordWebhookEventInput): Promise<void>;
+  listRecentWebhookEvents(workspaceId: string, limit: number, eventType?: string): Promise<WebhookEventRecord[]>;
+  deleteOldWebhookEvents(before: string): Promise<number>;
 }

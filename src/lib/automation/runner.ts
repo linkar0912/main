@@ -79,6 +79,10 @@ async function sendAction(
     return (await client.sendPrivateReply(connection, action.commentId, action.text)).message_id;
   }
 
+  if (action.type === "quick_replies") {
+    return sendQuickRepliesAction(client, connection, action);
+  }
+
   const message: MetaMessage =
     action.type === "send_text"
       ? { type: "text", text: action.text }
@@ -89,6 +93,18 @@ async function sendAction(
           : { type: "button", text: action.text, buttonLabel: action.buttonLabel, url: action.url };
 
   return (await client.sendDirectMessage(connection, action.recipientId, message)).message_id;
+}
+
+/** Sends one DM carrying tappable quick-reply chips (up to four). */
+async function sendQuickRepliesAction(
+  client: AutomationRunnerClient,
+  connection: MetaConnection,
+  action: Extract<ExecutionAction, { type: "quick_replies" }>,
+): Promise<string | undefined> {
+  if (!client.sendQuickReplies) {
+    throw new Error("Meta client does not support quick replies");
+  }
+  return (await client.sendQuickReplies(connection, action.recipientId, action.text, action.replies)).message_id;
 }
 
 /**
@@ -122,6 +138,12 @@ function personalizeAction(action: ExecutionAction, vars: Record<string, string 
       };
     case "send_image":
       return action;
+    case "quick_replies":
+      return {
+        ...action,
+        text: renderTemplate(action.text, vars),
+        replies: action.replies.map((reply) => renderTemplate(reply, vars)),
+      };
   }
 }
 
@@ -854,6 +876,29 @@ export async function processNormalizedEvent(
 ): Promise<RunnerResult | CampaignRunnerResult> {
   const mapping = await repository.findWorkspaceByInstagramAccount(event.accountId);
   if (!mapping) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+
+  // Persist a compact summary for the workspace activity inbox. Idempotent per
+  // event id, and never allowed to break event processing.
+  try {
+    await repository.recordWebhookEvent(mapping.workspaceId, {
+      providerEventId: event.id,
+      eventType: event.type,
+      receivedAt: new Date().toISOString(),
+      payload: {
+        accountId: event.accountId,
+        ...(event.recipientId ? { recipientId: event.recipientId } : {}),
+        ...(event.senderUsername ? { senderUsername: event.senderUsername } : {}),
+        ...(event.mediaId ? { mediaId: event.mediaId } : {}),
+        ...(event.commentId ? { commentId: event.commentId } : {}),
+        text: (event.text ?? "").slice(0, 500),
+      },
+    });
+  } catch (error) {
+    logger.warn("Failed to persist webhook activity", {
+      eventId: event.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   const automations = (await repository.listAutomations(mapping.workspaceId)).filter(
     (automation) =>

@@ -6,6 +6,7 @@ import { AppShell } from "./app-shell";
 import { AutomationList, useAutomations } from "./automation-list";
 import { AutomationSectionNav } from "./automation-section-nav";
 import { CreateAutomationButton } from "./create-automation-button";
+import { ContactDetailModal } from "./contact-detail-modal";
 import { DeliveryDiagnostics } from "./delivery-diagnostics";
 import { formatDate } from "@/src/lib/format-date";
 
@@ -21,6 +22,7 @@ function CapturedEmailsPanel() {
   const [contacts, setContacts] = useState<CapturedContact[]>([]);
   const [count, setCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [openContactId, setOpenContactId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,12 +58,20 @@ function CapturedEmailsPanel() {
         <ul className="captured-emails">
           {contacts.map((contact) => (
             <li key={contact.id}>
-              <span className="captured-email-address">{contact.email}</span>
+              <button
+                className="text-link contact-link"
+                type="button"
+                onClick={() => setOpenContactId(contact.id)}
+                aria-label={`Open details for ${contact.email}`}
+              >
+                <span className="captured-email-address">{contact.email}</span>
+              </button>
               <time dateTime={contact.capturedAt}>{formatDate(contact.capturedAt)}</time>
             </li>
           ))}
         </ul>
       )}
+      {openContactId && <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} />}
     </section>
   );
 }

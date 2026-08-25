@@ -24,6 +24,10 @@ import type {
   AutomationContactRecord,
   CapturedContactSummary,
   TouchContactResult,
+  ContactTimelineEntry,
+  VariantPerformance,
+  WebhookEventRecord,
+  RecordWebhookEventInput,
   AutomationSequenceRecord,
   SequenceStep,
   SequenceStatus,
@@ -37,7 +41,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTACT_TAGS } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 
 function now(): string {
@@ -111,6 +115,8 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const authTokensByHash = new Map<string, AuthTokenRecord>();
   const revokedSessions = new Map<string, { userId: string; expiresAt: string }>();
   const invitationsById = new Map<string, InvitationRecord>();
+  // Keyed by `${workspaceId}:${providerEventId}` so replays stay idempotent.
+  const webhookEvents = new Map<string, WebhookEventRecord & { workspaceId: string }>();
 
   return {
     async ensureWorkspace(workspaceId, ownerEmail) {
@@ -340,6 +346,11 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       const record = participants.get(id);
       if (!record || record.deliveryClickedAt) return false;
       participants.set(id, { ...record, deliveryClickedAt: atIso, updatedAt: now() });
+      // Engagement hook: tag + score the contact when the click is attributable.
+      if (record.igScopedUserId) {
+        await this.addContactTags(record.workspaceId, record.instagramAccountId, record.igScopedUserId, ["clicked"]);
+        await this.bumpContactScore(record.workspaceId, record.instagramAccountId, record.igScopedUserId, 5);
+      }
       return true;
     },
 
@@ -956,6 +967,8 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         igScopedUserId,
         state: "NONE",
         attempts: 0,
+        tags: [],
+        score: 0,
         lastSeenAt: seenAt > timestamp ? seenAt : timestamp,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -1000,6 +1013,8 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
           awaitingSince: undefined,
         }),
         attempts: 0,
+        tags: current.tags.includes("email_captured") ? current.tags : [...current.tags, "email_captured"],
+        score: Math.min(current.score + 10, 9999),
         lastSeenAt: atIso > current.lastSeenAt ? atIso : current.lastSeenAt,
         updatedAt: now(),
       };
@@ -1074,6 +1089,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         awaitingAutomationId: undefined,
         awaitingSince: undefined,
         awaitingFields: undefined,
+        tags: current.tags.includes("opted_out") ? current.tags : [...current.tags, "opted_out"],
         lastSeenAt: atIso > current.lastSeenAt ? atIso : current.lastSeenAt,
         updatedAt: now(),
       };
@@ -1099,6 +1115,136 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
           instagramAccountId: contact.instagramAccountId,
           capturedAt: contact.updatedAt,
         }));
+    },
+
+    async countSuppressedContacts(workspaceId) {
+      return [...contacts.values()].filter((c) => c.workspaceId === workspaceId && Boolean(c.suppressedAt)).length;
+    },
+
+    async getContactById(workspaceId, contactId) {
+      const record = contacts.get(contactId);
+      return record && record.workspaceId === workspaceId ? copy(record) : null;
+    },
+
+    async setContactTags(workspaceId, instagramAccountId, igScopedUserId, tags) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) return null;
+      const current = contacts.get(id);
+      if (!current) return null;
+      // Manual tags replace previous manual tags; automatic labels always survive.
+      const automatic = current.tags.filter((tag) => (AUTOMATIC_CONTACT_TAGS as readonly string[]).includes(tag));
+      const manual = [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))]
+        .filter((tag) => !(AUTOMATIC_CONTACT_TAGS as readonly string[]).includes(tag))
+        .slice(0, 20);
+      const updated: AutomationContactRecord = { ...current, tags: [...automatic, ...manual], updatedAt: now() };
+      contacts.set(id, updated);
+      return copy(updated);
+    },
+
+    async addContactTags(workspaceId, instagramAccountId, igScopedUserId, tags) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) return null;
+      const current = contacts.get(id);
+      if (!current) return null;
+      const merged = [...new Set([...current.tags, ...tags.map((t) => t.trim().toLowerCase()).filter(Boolean)])];
+      if (merged.length === current.tags.length) return copy(current);
+      const updated: AutomationContactRecord = { ...current, tags: merged.slice(0, 30), updatedAt: now() };
+      contacts.set(id, updated);
+      return copy(updated);
+    },
+
+    async bumpContactScore(workspaceId, instagramAccountId, igScopedUserId, delta) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      if (!id) return -1;
+      const current = contacts.get(id);
+      if (!current) return -1;
+      const score = Math.min(Math.max(current.score + delta, 0), 9999);
+      const updated: AutomationContactRecord = { ...current, score, updatedAt: now() };
+      contacts.set(id, updated);
+      return score;
+    },
+
+    async getContactTimeline(workspaceId, contactId, limit): Promise<ContactTimelineEntry[]> {
+      const contact = contacts.get(contactId);
+      if (!contact || contact.workspaceId !== workspaceId) return [];
+      const entries: ContactTimelineEntry[] = [];
+      for (const participant of participants.values()) {
+        if (
+          participant.workspaceId !== workspaceId
+          || participant.instagramAccountId !== contact.instagramAccountId
+          || participant.igScopedUserId !== contact.igScopedUserId
+        ) continue;
+        entries.push({
+          id: `participant:${participant.id}`,
+          kind: "interaction",
+          at: participant.createdAt,
+          label: participant.state === "LINK_SENT" ? "Campaign delivery sent" : "Campaign interaction",
+          detail: participant.matchedKeyword ? `keyword "${participant.matchedKeyword}"` : participant.state,
+        });
+      }
+      for (const enrollment of enrollments.values()) {
+        if (enrollment.workspaceId !== workspaceId || enrollment.contactId !== contact.id) continue;
+        entries.push({
+          id: `enrollment:${enrollment.id}`,
+          kind: "sequence",
+          at: enrollment.enrolledAt,
+          label: "Sequence enrollment",
+          detail: sequences.get(enrollment.sequenceId)?.name ?? enrollment.sequenceId,
+        });
+      }
+      if (contact.email) {
+        entries.push({ id: "milestone:email", kind: "email_captured", at: contact.updatedAt, label: "Email captured", detail: contact.email });
+      }
+      if (contact.suppressedAt) {
+        entries.push({ id: "milestone:optout", kind: "opted_out", at: contact.suppressedAt, label: "Opted out" });
+      }
+      return entries.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+    },
+
+    async countParticipantsByVariant(workspaceId, automationId) {
+      const buckets = new Map<string, { participants: number; delivered: number; clicked: number }>();
+      for (const participant of participants.values()) {
+        if (participant.workspaceId !== workspaceId || participant.automationId !== automationId) continue;
+        const variant = participant.variantLabel ?? "A";
+        const bucket = buckets.get(variant) ?? { participants: 0, delivered: 0, clicked: 0 };
+        bucket.participants += 1;
+        if (participant.finalDeliveryStatus === "SENT") bucket.delivered += 1;
+        if (participant.deliveryClickedAt) bucket.clicked += 1;
+        buckets.set(variant, bucket);
+      }
+      return [...buckets.entries()].map(([variant, b]) => ({ variant, ...b })).sort((a, b) => a.variant.localeCompare(b.variant));
+    },
+
+    async recordWebhookEvent(workspaceId, input) {
+      const dedupeKey = `${workspaceId}:${input.providerEventId}`;
+      if (webhookEvents.has(dedupeKey)) return;
+      webhookEvents.set(dedupeKey, {
+        id: createId("wevent"),
+        workspaceId,
+        providerEventId: input.providerEventId,
+        eventType: input.eventType,
+        receivedAt: input.receivedAt,
+        payload: copy(input.payload),
+      });
+    },
+
+    async listRecentWebhookEvents(workspaceId, limit, eventType) {
+      return [...webhookEvents.values()]
+        .filter((event) => event.workspaceId === workspaceId && (!eventType || event.eventType === eventType))
+        .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+        .slice(0, limit)
+        .map(copy);
+    },
+
+    async deleteOldWebhookEvents(before) {
+      const beforeMs = Date.parse(before);
+      let count = 0;
+      for (const [key, event] of webhookEvents.entries()) {
+        if (Date.parse(event.receivedAt) >= beforeMs) continue;
+        webhookEvents.delete(key);
+        count += 1;
+      }
+      return count;
     },
 
     async deleteContactsByWorkspaceIds(workspaceIds) {

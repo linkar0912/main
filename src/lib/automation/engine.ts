@@ -54,6 +54,11 @@ export function evaluateFlow(
       if (action.caption) {
         actions.push({ type: "send_text", recipientId: event.recipientId, text: action.caption });
       }
+    } else if (action.type === "quick_replies") {
+      const replies = action.replies.map((reply) => reply.trim()).filter(Boolean).slice(0, 4);
+      if (replies.length > 0) {
+        actions.push({ type: "quick_replies", recipientId: event.recipientId, text: action.text, replies });
+      }
     } else {
       actions.push({
         type: "send_button",

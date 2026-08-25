@@ -80,7 +80,61 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
         </a>
         <p className="muted export-note">Every matched comment, delivery, and click for this campaign.</p>
       </section>
+
+      {automationId && <AbTestReport automationId={automationId} />}
     </div>
+  );
+}
+
+type VariantRow = {
+  variant: string;
+  participants: number;
+  delivered: number;
+  clicked: number;
+};
+
+/** A/B opening-variant performance; hidden until at least two variants exist. */
+function AbTestReport({ automationId }: { automationId: string }) {
+  const [variants, setVariants] = useState<VariantRow[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/insights/ab-tests?automationId=${encodeURIComponent(automationId)}`)
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as { data?: VariantRow[] };
+        if (!response.ok) throw new Error("Could not load A/B results");
+        if (active && payload.data && payload.data.length > 1) setVariants(payload.data);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [automationId]);
+
+  if (!variants) return null;
+  const best = [...variants].sort((a, b) =>
+    (b.delivered / Math.max(b.participants, 1)) - (a.delivered / Math.max(a.participants, 1)),
+  )[0];
+
+  return (
+    <section className="panel side-panel" aria-label="A/B test results">
+      <div className="panel-heading">
+        <div><p className="eyebrow">A/B test</p><h2>Opening message</h2></div>
+      </div>
+      <ul className="variant-list">
+        {variants.map((variant) => (
+          <li key={variant.variant}>
+            <span className={`tag-chip${variant.variant === best.variant ? " tag-chip-best" : ""}`}>Variant {variant.variant}</span>
+            <span className="muted">
+              {variant.participants} reached · {variant.delivered} delivered
+              {variant.participants > 0 ? ` (${Math.round((variant.delivered / variant.participants) * 100)}%)` : ""}
+              {variant.clicked > 0 ? ` · ${variant.clicked} clicks` : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="muted export-note">Variant {best.variant} is converting best so far.</p>
+    </section>
   );
 }
 

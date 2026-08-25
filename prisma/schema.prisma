@@ -193,6 +193,8 @@ model AutomationParticipant {
   finalDeliveredAt         DateTime?
   finalDeliveryError       String?
   deliveryClickedAt        DateTime?
+  // A/B variant label recorded when the campaign opening message went out.
+  variantLabel             String?
   messagingWindowExpiresAt DateTime?
   recheckCount             Int              @default(0)
   createdAt                DateTime         @default(now())
@@ -219,6 +221,10 @@ model AutomationContact {
   awaitingAutomationId String?
   awaitingSince        DateTime?
   attempts             Int                  @default(0)
+  // Manual + automatic labels ("email_captured", "opted_out", "clicked").
+  tags                 String[]             @default([])
+  // Engagement score bumped by the repository on notable interactions.
+  score                Int                  @default(0)
   fields               Json?
   awaitingFields       Json?
   suppressedAt         DateTime?

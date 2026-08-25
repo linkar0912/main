@@ -24,6 +24,8 @@ import { getInstagramConnections } from "@/src/lib/client/workspace-data";
 type DayPoint = { day: string; count: number };
 type InsightsPayload = {
   timeseries?: { participantsPerDay?: DayPoint[]; sentPerDay?: DayPoint[] };
+  capturedEmails?: number;
+  optedOut?: number;
 };
 
 type Delta = { dir: "up" | "down" | "flat"; label: string };
@@ -348,8 +350,15 @@ export function DashboardScreen() {
             <div className="stat-block">
               <span className="stat-label">Emails captured</span>
               <span className="stat-value-row">
-                <strong>{(capturedCount ?? 0).toLocaleString()}</strong>
+                <strong>{(capturedCount ?? insights?.capturedEmails ?? 0).toLocaleString()}</strong>
                 <NeutralPill>all time</NeutralPill>
+              </span>
+            </div>
+            <div className="stat-block">
+              <span className="stat-label">Opted out</span>
+              <span className="stat-value-row">
+                <strong>{(insights?.optedOut ?? 0).toLocaleString()}</strong>
+                <NeutralPill>respected</NeutralPill>
               </span>
             </div>
             <div className="stat-block">

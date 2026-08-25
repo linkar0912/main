@@ -36,11 +36,13 @@ export async function GET(request: Request) {
         return NextResponse.json({ usage });
     }
 
-    const [funnel, participantsPerDay, sentPerDay, mediaPerformance] = await Promise.all([
+    const [funnel, participantsPerDay, sentPerDay, mediaPerformance, capturedEmails, optedOut] = await Promise.all([
         repository.countParticipantsByState(session.workspaceId, automationId || undefined),
         repository.countParticipantsPerDay(session.workspaceId, TIMESERIES_DAYS, automationId),
         repository.countExecutionsSentPerDay(session.workspaceId, TIMESERIES_DAYS, automationId),
         repository.countParticipantsByMedia(session.workspaceId, automationId),
+        repository.countCapturedContacts(session.workspaceId),
+        repository.countSuppressedContacts(session.workspaceId),
     ]);
 
     return NextResponse.json({
@@ -49,6 +51,8 @@ export async function GET(request: Request) {
         mediaPerformance: mediaPerformance
             .sort((a, b) => b.matched - a.matched)
             .slice(0, 10),
+        capturedEmails,
+        optedOut,
         usage,
     });
 }
