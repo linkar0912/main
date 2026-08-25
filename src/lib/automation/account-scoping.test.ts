@@ -13,7 +13,7 @@ const TOKEN_KEY = "a".repeat(64);
 
 const dmFlow: FlowDefinitionV1 = {
   version: 1,
-  trigger: { type: "message", match: "any", keywords: [] },
+    trigger: { type: "message", match: "any", keywords: [] },
   conditions: [],
   actions: [{ type: "send_text", text: "Automated reply" }],
 };
@@ -27,7 +27,7 @@ async function seedTwoAccounts() {
       instagramAccountId: "ig_1",
       name: "Pinned to account one",
       status: "ACTIVE" as const,
-      version: 1,
+      version: 1, priority: 0,
       definition: dmFlow,
       createdAt: new Date(1).toISOString(),
       updatedAt: new Date(1).toISOString(),
@@ -37,7 +37,7 @@ async function seedTwoAccounts() {
       workspaceId: "workspace_a",
       name: "Runs on every account",
       status: "ACTIVE" as const,
-      version: 1,
+      version: 1, priority: 0,
       definition: dmFlow,
       createdAt: new Date(1).toISOString(),
       updatedAt: new Date(1).toISOString(),

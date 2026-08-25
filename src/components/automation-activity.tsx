@@ -16,35 +16,11 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { AutomationParticipantRecord, ParticipantState } from "@/src/lib/repository";
+import type { ParticipantState } from "@/src/lib/repository";
 import { formatDateTime } from "@/src/lib/format-date";
+import type { ParticipantActivitySummary, ParticipantFunnelSummary } from "@/src/lib/automation/activity-summary";
 
-export type ParticipantActivitySummary = Pick<
-  AutomationParticipantRecord,
-  | "id"
-  | "state"
-  | "sourceMediaSnapshot"
-  | "matchedKeyword"
-  | "state"
-  | "followStatus"
-  | "followCheckedAt"
-  | "publicReplyStatus"
-  | "publicReplyError"
-  | "openingStatus"
-  | "openingError"
-  | "finalDeliveryStatus"
-  | "finalDeliveryError"
-  | "finalDeliveredAt"
-  | "deliveryClickedAt"
->;
-
-export type ParticipantFunnelSummary = {
-  commented: number;
-  openingSent: number;
-  optedIn: number;
-  followed: number;
-  linkSent: number;
-};
+export type { ParticipantActivitySummary, ParticipantFunnelSummary };
 
 type CampaignContext = { id: string; name: string; status: string };
 

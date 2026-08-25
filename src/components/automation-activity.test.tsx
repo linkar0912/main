@@ -141,6 +141,7 @@ describe("AutomationActivity", () => {
     stubFetch([
       participant({ state: "LINK_SENT", followStatus: true, finalDeliveryStatus: "SENT" }),
       participant({
+        id: "participant_2",
         state: "FAILED",
         publicReplyStatus: "FAILED",
         publicReplyError: "Meta rate limit",
