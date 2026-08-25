@@ -15,6 +15,8 @@ import {
 import { AppShell, useAccountIdentity } from "./app-shell";
 import { useAutomations } from "./automation-list";
 import { CreateAutomationButton } from "./create-automation-button";
+import { FailurePanel } from "./failure-panel";
+import { TrackedLinksPanel } from "./tracked-links-panel";
 import { StatusBadge } from "./status-badge";
 import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
@@ -406,6 +408,19 @@ export function DashboardScreen() {
               ))}
             </div>
           )}
+        </section>
+        <section className="panel failure-panel" aria-label="Recent failures">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Health</p>
+              <h2>Recent failures</h2>
+              <p className="muted">The last 50 deliveries that Meta or our webhooks rejected.</p>
+            </div>
+          </div>
+          <FailurePanel />
+        </section>
+        <section className="card" aria-labelledby="tracked-links-heading">
+          <TrackedLinksPanel />
         </section>
         {pickerOpen && <TemplatePickerModal onClose={() => setPickerOpen(false)} />}
       </div>

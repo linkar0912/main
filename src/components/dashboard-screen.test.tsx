@@ -100,7 +100,7 @@ describe("DashboardScreen onboarding", () => {
       workspaceId: "workspace_1",
       name: "Story welcome",
       status: "DRAFT",
-      version: 1,
+      version: 1, priority: 0,
       definition: { version: 1, trigger: { type: "story_mention" }, conditions: [], actions: [] },
       createdAt: "2026-08-23T00:00:00.000Z",
       updatedAt: "2026-08-23T00:00:00.000Z",
