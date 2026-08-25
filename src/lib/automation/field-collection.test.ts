@@ -31,6 +31,7 @@ async function seed(definition: FlowDefinitionV1) {
       name: "Lead magnet",
       status: "ACTIVE" as const,
       version: 1,
+      priority: 0,
       definition,
       createdAt: new Date(1).toISOString(),
       updatedAt: new Date(1).toISOString(),

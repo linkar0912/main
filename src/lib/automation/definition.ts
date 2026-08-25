@@ -42,12 +42,21 @@ const commentTrigger = z.object({
   match: z.enum(["keyword", "any"]),
   keywords: z.array(keyword),
   mediaIds: z.array(z.string().trim()),
+  mode: z.enum(["any", "all", "exact", "regex", "contains"]).optional(),
+  // Each negative keyword is bounded to 80 chars; total list capped at 20 entries.
+  negativeKeywords: z.array(z.string().trim().max(80)).max(20).optional(),
+  // Reply override per media id; key capped to 120, value to 500 chars.
+  replyPerMedia: z
+    .record(z.string().trim().min(1).max(120), z.string().trim().min(1).max(500))
+    .optional(),
+  replyOncePerUser: z.boolean().optional(),
 });
 
 const messageTrigger = z.object({
   type: z.literal("message"),
   match: z.enum(["keyword", "any"]),
   keywords: z.array(keyword),
+  mode: z.enum(["any", "all", "exact", "regex", "contains"]).optional(),
 });
 
 const referralTrigger = z.object({ type: z.literal("referral") });

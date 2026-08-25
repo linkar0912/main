@@ -41,8 +41,22 @@ export type AutomationRecord = {
   definition: FlowDefinition;
   activatedAt?: string;
   boundMediaId?: string;
+  /** Higher priority automations are evaluated first. Default 0. */
+  priority: number;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Append-only snapshot of an automation's definition. */
+export type AutomationVersionRecord = {
+  id: string;
+  automationId: string;
+  workspaceId: string;
+  version: number;
+  name: string;
+  definition: FlowDefinition;
+  snapshotBy?: string;
+  snapshotAt: string;
 };
 
 export type AutomationParticipantRecord = {
@@ -76,6 +90,12 @@ export type AutomationParticipantRecord = {
   deliveryClickedAt?: string;
   /** A/B opening-message variant label recorded by campaign deliveries ("A", "B", ...). */
   variantLabel?: string;
+  /** When a teammate took over the conversation; the runner skips while set. */
+  pausedAt?: string;
+  /** Free-form reason captured by the teammate who paused the participant. */
+  pausedReason?: string;
+  /** Team-member id who paused the participant. */
+  pausedByUserId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -173,9 +193,10 @@ export type CreateAutomationInput = {
   name: string;
   definition: FlowDefinition;
   instagramAccountId?: string;
+  priority?: number;
 };
 
-export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "status" | "definition" | "activatedAt">> & {
+export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "status" | "definition" | "activatedAt" | "priority">> & {
   boundMediaId?: string | null;
   /** Pin/unpin the automation: a string pins it to that account, null unpins it. */
   instagramAccountId?: string | null;
@@ -201,6 +222,19 @@ export type MediaPerformance = { mediaId: string; matched: number; delivered: nu
  */
 export type ContactState = "NONE" | "AWAITING_EMAIL" | "AWAITING_FIELD" | "CAPTURED";
 
+/** Mini-CRM pipeline stage for a contact. */
+export type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
+
+export const LEAD_STATUSES: readonly LeadStatus[] = ["NEW", "ENGAGED", "QUALIFIED", "CUSTOMER"];
+
+/** Score delta applied when a contact's lead status advances. */
+export const LEAD_STATUS_SCORE_DELTA: Record<LeadStatus, number> = {
+  NEW: 0,
+  ENGAGED: 3,
+  QUALIFIED: 8,
+  CUSTOMER: 15,
+};
+
 export type AutomationContactRecord = {
   id: string;
   workspaceId: string;
@@ -223,6 +257,14 @@ export type AutomationContactRecord = {
   tags: string[];
   /** Engagement score; the repository bumps it on notable interactions. */
   score: number;
+  /** Mini-CRM pipeline stage. */
+  leadStatus: LeadStatus;
+  /** Team member currently responsible for this contact. Null = unassigned. */
+  assigneeUserId?: string;
+  /** Free-form internal notes. */
+  notes?: string;
+  /** Automation that first brought this contact into the workspace. */
+  sourceAutomationId?: string;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
@@ -230,6 +272,45 @@ export type AutomationContactRecord = {
 
 /** Labels set automatically by the engine; manual tag editing never removes them. */
 export const AUTOMATIC_CONTACT_TAGS = ["email_captured", "opted_out", "clicked"] as const;
+
+/** A branded short link, optionally with UTM params and a conversion callback. */
+export type TrackedLinkRecord = {
+  id: string;
+  workspaceId: string;
+  slug: string;
+  destination: string;
+  expiresAt?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmTerm?: string;
+  utmContent?: string;
+  conversionUrl?: string;
+  notes?: string;
+  createdByUserId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** One click on a tracked link. The raw IP is never stored. */
+export type TrackedLinkClickRecord = {
+  id: string;
+  linkId: string;
+  workspaceId: string;
+  ipHash: string;
+  userAgent?: string;
+  country?: string;
+  clickedAt: string;
+};
+
+/** Roll-up analytics for a single tracked link. */
+export type TrackedLinkStats = {
+  link: TrackedLinkRecord;
+  totalClicks: number;
+  uniqueClicks: number;
+  lastClickedAt?: string;
+  topCountries: { country: string; count: number }[];
+};
 
 /** Marks the sender as seen; `created` is true when this was their first interaction. */
 export type TouchContactResult = { created: boolean; record: AutomationContactRecord };
@@ -468,6 +549,12 @@ export interface AutomationRepository {
   acceptInvitation(id: string, now: string): Promise<InvitationRecord | null>;
   revokeInvitation(workspaceId: string, id: string): Promise<boolean>;
   countParticipantsByState(workspaceId: string, automationId?: string): Promise<Record<string, number>>;
+  /** Returns the number of participants for one sender on a single automation (for once-per-user). */
+  countParticipantsBySender(
+    automationId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+  ): Promise<number>;
   countExecutionsSentSince(automationId: string, sinceIso: string): Promise<number>;
   countParticipantsCreatedSince(workspaceId: string, sinceIso: string): Promise<number>;
   // Analytics helpers (UTC day buckets over the trailing window).
@@ -483,6 +570,24 @@ export interface AutomationRepository {
   // Click tracking for delivered links.
   getParticipantById(id: string): Promise<AutomationParticipantRecord | null>;
   markDeliveryClicked(id: string, atIso: string): Promise<boolean>;
+  /**
+   * Marks the participant as paused. The runner treats any participant whose
+   * `pausedAt` is non-null as "do not send automated messages". Idempotent.
+   */
+  pauseParticipant(id: string, reason: string, userId: string, atIso: string): Promise<AutomationParticipantRecord | null>;
+  /** Clears the pause flags so the runner resumes normal delivery. */
+  resumeParticipant(id: string, atIso: string): Promise<AutomationParticipantRecord | null>;
+  /** Pauses every active participant for one sender (used by the handoff action). */
+  pauseParticipantsBySender(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+    reason: string,
+    userId: string,
+    atIso: string,
+  ): Promise<number>;
+  /** Returns the most recent paused participants for SLA dashboards. */
+  listPausedParticipantsByWorkspace(workspaceId: string, limit: number): Promise<AutomationParticipantRecord[]>;
   findWorkspaceIdByMemberEmail(email: string): Promise<string | null>;
   listAutomations(workspaceId: string): Promise<AutomationRecord[]>;
   getAutomation(workspaceId: string, id: string): Promise<AutomationRecord | null>;
@@ -517,6 +622,8 @@ export interface AutomationRepository {
   releaseExecutionClaim(workspaceId: string, dedupeKey: string): Promise<void>;
   releaseOwnedExecutionClaim(workspaceId: string, dedupeKey: string, dispatchOwner: string): Promise<boolean>;
   hasExecution(workspaceId: string, dedupeKey: string): Promise<boolean>;
+  /** Lists the most recent FAILED outbound deliveries (newest first) for the dashboard. */
+  listRecentOutboundFailures(workspaceId: string, limit: number): Promise<OutboundDeliveryRecord[]>;
   ensureOutboundDelivery(input: EnsureOutboundDeliveryInput): Promise<OutboundDeliveryRecord>;
   getOutboundDelivery(deliveryKey: string): Promise<OutboundDeliveryRecord | null>;
   claimOutboundDelivery(
@@ -581,6 +688,29 @@ export interface AutomationRepository {
   deleteStaleTerminalParticipants(before: string): Promise<number>;
   /** Removes the automation and (by cascade) its participants/executions. */
   deleteAutomation(workspaceId: string, id: string): Promise<boolean>;
+  /**
+   * Snapshots the current state of an automation into the version history.
+   * Returns the new version record. No-op if the automation does not exist.
+   */
+  snapshotAutomation(
+    workspaceId: string,
+    id: string,
+    snapshotBy?: string,
+  ): Promise<AutomationVersionRecord | null>;
+  /** Lists version snapshots, newest first. */
+  listAutomationVersions(workspaceId: string, automationId: string, limit: number): Promise<AutomationVersionRecord[]>;
+  /** Returns one specific version, or null if not found. */
+  getAutomationVersion(workspaceId: string, automationId: string, versionId: string): Promise<AutomationVersionRecord | null>;
+  /**
+   * Restores the named version as the current definition. Bumps the automation
+   * version counter and snapshots the current state before overwriting.
+   */
+  restoreAutomationVersion(
+    workspaceId: string,
+    automationId: string,
+    versionId: string,
+    restoredBy?: string,
+  ): Promise<AutomationRecord | null>;
   // Contact registry (first-contact detection + DM email capture).
   touchContact(
     workspaceId: string,
@@ -650,7 +780,43 @@ export interface AutomationRepository {
   bumpContactScore(workspaceId: string, instagramAccountId: string, igScopedUserId: string, delta: number): Promise<number>;
   /** Interaction timeline for one contact (participants + milestones), newest first. */
   getContactTimeline(workspaceId: string, contactId: string, limit: number): Promise<ContactTimelineEntry[]>;
+  /**
+   * Partial update of the mini-CRM fields on a contact. Any field left undefined is
+   * untouched; passing `null` clears it. Unknown contact IDs return null. Status
+   * changes auto-bump the engagement score using {@link LEAD_STATUS_SCORE_DELTA}.
+   */
+  updateContactProfile(
+    workspaceId: string,
+    contactId: string,
+    patch: { leadStatus?: LeadStatus; assigneeUserId?: string | null; notes?: string | null; sourceAutomationId?: string | null },
+  ): Promise<AutomationContactRecord | null>;
+  /** Workspace-wide count of contacts grouped by lead status (for the dashboard). */
+  countContactsByLeadStatus(workspaceId: string): Promise<Record<LeadStatus, number>>;
+  /** Returns contacts matching an optional lead-status filter, newest first. */
+  listContactsByLeadStatus(
+    workspaceId: string,
+    options: { leadStatus?: LeadStatus; limit: number },
+  ): Promise<AutomationContactRecord[]>;
   deleteContactsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
+  // Tracked short links.
+  createTrackedLink(
+    workspaceId: string,
+    input: Omit<TrackedLinkRecord, "id" | "workspaceId" | "createdAt" | "updatedAt"> & { id?: string },
+  ): Promise<TrackedLinkRecord>;
+  getTrackedLinkBySlug(workspaceId: string, slug: string): Promise<TrackedLinkRecord | null>;
+  /**
+   * Public redirect lookup: returns the link without enforcing the workspace
+   * boundary, so the redirect route can serve any slug in the system.
+   */
+  getTrackedLinkBySlugPublic(slug: string): Promise<TrackedLinkRecord | null>;
+  listTrackedLinks(workspaceId: string, limit: number): Promise<TrackedLinkRecord[]>;
+  deleteTrackedLink(workspaceId: string, id: string): Promise<boolean>;
+  /** Records a single click. Returns the inserted row. */
+  recordTrackedLinkClick(
+    linkId: string,
+    input: { workspaceId: string; ipHash: string; userAgent?: string; country?: string },
+  ): Promise<TrackedLinkClickRecord>;
+  getTrackedLinkStats(workspaceId: string, id: string): Promise<TrackedLinkStats | null>;
   // Sequences (timed drip campaigns over DM).
   createSequence(
     workspaceId: string,

@@ -33,7 +33,7 @@ const sourceSnapshot = {
 
 const definition: FlowDefinitionV2 = {
   version: 2,
-  trigger: {
+    trigger: {
     type: "comment",
     source: "specific_media",
     mediaIds: [sourceSnapshot.id],
@@ -61,6 +61,7 @@ const automation: AutomationRecord = {
   name: "Follow-gated guide",
   status: "ACTIVE",
   version: 2,
+  priority: 0,
   definition,
   activatedAt: "2026-08-21T08:00:00.000Z",
   createdAt: "2026-08-21T08:00:00.000Z",

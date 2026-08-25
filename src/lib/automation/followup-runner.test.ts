@@ -34,7 +34,7 @@ async function seed(automationStatus: "ACTIVE" | "PAUSED" = "ACTIVE") {
       workspaceId: "workspace_a",
       name: "Offer",
       status: automationStatus,
-      version: 1,
+      version: 1, priority: 0,
       definition: followUpFlow as unknown as Parameters<never>[0],
       createdAt: new Date(1).toISOString(),
       updatedAt: new Date(1).toISOString(),

@@ -33,6 +33,7 @@ async function seed(definition: FlowDefinition) {
       name: "Personalized",
       status: "ACTIVE",
       version: definition.version,
+      priority: 0,
       definition,
       createdAt: new Date(1).toISOString(),
       updatedAt: new Date(1).toISOString(),

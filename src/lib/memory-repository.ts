@@ -3,6 +3,10 @@ import type {
   AutomationRecord,
   AutomationParticipantRecord,
   AutomationRepository,
+  AutomationVersionRecord,
+  TrackedLinkRecord,
+  TrackedLinkClickRecord,
+  TrackedLinkStats,
   CreateAutomationInput,
   CreateParticipantInput,
   ExecutionRecord,
@@ -23,6 +27,7 @@ import type {
   CreateInvitationInput,
   AutomationContactRecord,
   CapturedContactSummary,
+  LeadStatus,
   TouchContactResult,
   ContactTimelineEntry,
   VariantPerformance,
@@ -41,7 +46,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTACT_TAGS } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 
 function now(): string {
@@ -107,6 +112,12 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const enrollmentIdsByPair = new Map<string, string>();
   const broadcasts = new Map<string, BroadcastRecord>();
   const messagingWindows = new Map<string, MessagingWindow>();
+  // Keyed by automationId so we can answer "what is the next version number?" in O(1).
+  const automationVersions = new Map<string, AutomationVersionRecord[]>();
+  // Tracked short links: keyed by link id; clicks keyed by link id too.
+  const trackedLinks = new Map<string, TrackedLinkRecord>();
+  const trackedLinkSlugs = new Map<string, string>(); // `${workspaceId}:${slug}` -> link id
+  const trackedLinkClicks = new Map<string, TrackedLinkClickRecord[]>();
   const usersByEmail = new Map<string, UserRecord>();
   const usersById = new Map<string, UserRecord>();
   // email -> workspaceId, mirroring WorkspaceMember rows for login lookups.
@@ -283,6 +294,17 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return counts;
     },
 
+    async countParticipantsBySender(automationId, instagramAccountId, igScopedUserId) {
+      let count = 0;
+      for (const participant of participants.values()) {
+        if (participant.automationId !== automationId) continue;
+        if (participant.instagramAccountId !== instagramAccountId) continue;
+        if (participant.igScopedUserId !== igScopedUserId) continue;
+        count += 1;
+      }
+      return count;
+    },
+
     async countExecutionsSentSince(automationId, sinceIso) {
       return [...executions.values()].filter(
         (execution) => execution.automationId === automationId && execution.status === "SENT" && execution.createdAt >= sinceIso,
@@ -354,6 +376,64 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return true;
     },
 
+    async pauseParticipant(id, reason, userId, atIso) {
+      const record = participants.get(id);
+      if (!record) return null;
+      const updated: AutomationParticipantRecord = {
+        ...record,
+        pausedAt: atIso,
+        pausedReason: reason,
+        pausedByUserId: userId,
+        updatedAt: now(),
+      };
+      participants.set(id, updated);
+      return copy(updated);
+    },
+
+    async resumeParticipant(id, atIso) {
+      const record = participants.get(id);
+      if (!record || !record.pausedAt) return record ? copy(record) : null;
+      const updated: AutomationParticipantRecord = {
+        ...record,
+        pausedAt: undefined,
+        pausedReason: undefined,
+        pausedByUserId: undefined,
+        updatedAt: atIso,
+      };
+      participants.set(id, updated);
+      return copy(updated);
+    },
+
+    async pauseParticipantsBySender(workspaceId, instagramAccountId, igScopedUserId, reason, userId, atIso) {
+      let count = 0;
+      for (const [id, participant] of participants.entries()) {
+        if (
+          participant.workspaceId !== workspaceId
+          || participant.instagramAccountId !== instagramAccountId
+          || participant.igScopedUserId !== igScopedUserId
+        ) continue;
+        if (participant.pausedAt) continue;
+        participants.set(id, {
+          ...participant,
+          pausedAt: atIso,
+          pausedReason: reason,
+          pausedByUserId: userId,
+          updatedAt: now(),
+        });
+        count += 1;
+      }
+      return count;
+    },
+
+    async listPausedParticipantsByWorkspace(workspaceId, limit) {
+      return copy(
+        [...participants.values()]
+          .filter((participant) => participant.workspaceId === workspaceId && Boolean(participant.pausedAt))
+          .sort((a, b) => (b.pausedAt ?? "").localeCompare(a.pausedAt ?? ""))
+          .slice(0, limit),
+      );
+    },
+
     async findWorkspaceIdByMemberEmail(email) {
       return memberWorkspacesByEmail.get(email.toLowerCase()) ?? null;
     },
@@ -380,6 +460,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         status: "DRAFT",
         version: input.definition.version,
         definition: copy(input.definition),
+        priority: input.priority ?? 0,
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -663,6 +744,15 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     async hasExecution(workspaceId, dedupeKey) {
       return [...executions.values()].some(
         (record) => record.workspaceId === workspaceId && record.dedupeKey === dedupeKey,
+      );
+    },
+
+    async listRecentOutboundFailures(workspaceId, limit) {
+      return copy(
+        [...outboundDeliveries.values()]
+          .filter((record) => record.workspaceId === workspaceId && record.state === "FAILED")
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id))
+          .slice(0, limit),
       );
     },
 
@@ -969,6 +1059,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         attempts: 0,
         tags: [],
         score: 0,
+        leadStatus: "NEW",
         lastSeenAt: seenAt > timestamp ? seenAt : timestamp,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -1201,6 +1292,53 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return entries.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
     },
 
+    async updateContactProfile(workspaceId, contactId, patch) {
+      const current = contacts.get(contactId);
+      if (!current || current.workspaceId !== workspaceId) return null;
+      const updated: AutomationContactRecord = { ...current, updatedAt: now() };
+      if (patch.leadStatus && patch.leadStatus !== current.leadStatus) {
+        const delta = LEAD_STATUS_SCORE_DELTA[patch.leadStatus] - LEAD_STATUS_SCORE_DELTA[current.leadStatus];
+        updated.leadStatus = patch.leadStatus;
+        if (delta !== 0) {
+          updated.score = Math.min(Math.max(current.score + delta, 0), 9999);
+        }
+      }
+      if (patch.assigneeUserId !== undefined) {
+        updated.assigneeUserId = patch.assigneeUserId || undefined;
+      }
+      if (patch.notes !== undefined) {
+        const trimmed = patch.notes?.trim();
+        updated.notes = trimmed ? trimmed.slice(0, 4000) : undefined;
+      }
+      if (patch.sourceAutomationId !== undefined) {
+        updated.sourceAutomationId = patch.sourceAutomationId || undefined;
+      }
+      contacts.set(contactId, updated);
+      return copy(updated);
+    },
+
+    async countContactsByLeadStatus(workspaceId) {
+      const counts: Record<LeadStatus, number> = { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 };
+      for (const contact of contacts.values()) {
+        if (contact.workspaceId !== workspaceId) continue;
+        counts[contact.leadStatus] += 1;
+      }
+      return counts;
+    },
+
+    async listContactsByLeadStatus(workspaceId, options) {
+      const filtered = [...contacts.values()].filter((contact) => {
+        if (contact.workspaceId !== workspaceId) return false;
+        if (options.leadStatus && contact.leadStatus !== options.leadStatus) return false;
+        return true;
+      });
+      return copy(
+        filtered
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id))
+          .slice(0, options.limit),
+      );
+    },
+
     async countParticipantsByVariant(workspaceId, automationId) {
       const buckets = new Map<string, { participants: number; delivered: number; clicked: number }>();
       for (const participant of participants.values()) {
@@ -1272,7 +1410,62 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       for (const [executionId, execution] of [...executions.entries()]) {
         if (execution.automationId === id) executions.delete(executionId);
       }
+      automationVersions.delete(id);
       return true;
+    },
+
+    async snapshotAutomation(workspaceId, id, snapshotBy) {
+      const current = automations.get(id);
+      if (!current || current.workspaceId !== workspaceId) return null;
+      const existing = automationVersions.get(id) ?? [];
+      const nextNumber = existing.length === 0 ? 1 : Math.max(...existing.map((snapshot) => snapshot.version)) + 1;
+      const record: AutomationVersionRecord = {
+        id: createId("autover"),
+        automationId: id,
+        workspaceId,
+        version: nextNumber,
+        name: current.name,
+        definition: copy(current.definition),
+        ...(snapshotBy ? { snapshotBy } : {}),
+        snapshotAt: now(),
+      };
+      automationVersions.set(id, [...existing, record]);
+      return copy(record);
+    },
+
+    async listAutomationVersions(workspaceId, automationId, limit) {
+      const records = automationVersions.get(automationId) ?? [];
+      return copy(
+        records
+          .filter((record) => record.workspaceId === workspaceId)
+          .sort((a, b) => b.version - a.version)
+          .slice(0, limit),
+      );
+    },
+
+    async getAutomationVersion(workspaceId, automationId, versionId) {
+      const records = automationVersions.get(automationId) ?? [];
+      const record = records.find((candidate) => candidate.id === versionId && candidate.workspaceId === workspaceId);
+      return record ? copy(record) : null;
+    },
+
+    async restoreAutomationVersion(workspaceId, automationId, versionId, restoredBy) {
+      const current = automations.get(automationId);
+      if (!current || current.workspaceId !== workspaceId) return null;
+      const records = automationVersions.get(automationId) ?? [];
+      const target = records.find((record) => record.id === versionId && record.workspaceId === workspaceId);
+      if (!target) return null;
+      // Capture the pre-restore state so it stays in the history forever.
+      await this.snapshotAutomation(workspaceId, automationId, restoredBy ?? "restore");
+      const restored: AutomationRecord = {
+        ...current,
+        name: target.name,
+        definition: copy(target.definition),
+        version: Math.max(current.version, target.definition.version) + 1,
+        updatedAt: now(),
+      };
+      automations.set(automationId, restored);
+      return copy(restored);
     },
 
     async createSequence(workspaceId, input) {
@@ -1522,6 +1715,113 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
         .slice(0, limit)
         .map((contact) => ({ igScopedUserId: contact.igScopedUserId, instagramAccountId: contact.instagramAccountId }));
+    },
+
+    async createTrackedLink(workspaceId, input) {
+      const slugKey = `${workspaceId}:${input.slug}`;
+      if (trackedLinkSlugs.has(slugKey)) {
+        throw new Error(`Slug "${input.slug}" is already used in this workspace`);
+      }
+      const timestamp = now();
+      const record: TrackedLinkRecord = {
+        id: input.id ?? createId("tlink"),
+        workspaceId,
+        slug: input.slug,
+        destination: input.destination,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
+        ...(input.utmSource ? { utmSource: input.utmSource } : {}),
+        ...(input.utmMedium ? { utmMedium: input.utmMedium } : {}),
+        ...(input.utmCampaign ? { utmCampaign: input.utmCampaign } : {}),
+        ...(input.utmTerm ? { utmTerm: input.utmTerm } : {}),
+        ...(input.utmContent ? { utmContent: input.utmContent } : {}),
+        ...(input.conversionUrl ? { conversionUrl: input.conversionUrl } : {}),
+        ...(input.notes ? { notes: input.notes } : {}),
+        ...(input.createdByUserId ? { createdByUserId: input.createdByUserId } : {}),
+      };
+      trackedLinks.set(record.id, record);
+      trackedLinkSlugs.set(slugKey, record.id);
+      return copy(record);
+    },
+
+    async getTrackedLinkBySlug(workspaceId, slug) {
+      const id = trackedLinkSlugs.get(`${workspaceId}:${slug}`);
+      if (!id) return null;
+      const record = trackedLinks.get(id);
+      return record && record.workspaceId === workspaceId ? copy(record) : null;
+    },
+
+    async getTrackedLinkBySlugPublic(slug) {
+      for (const [linkId, record] of trackedLinks.entries()) {
+        if (record.slug === slug) {
+          void linkId;
+          return copy(record);
+        }
+      }
+      return null;
+    },
+
+    async listTrackedLinks(workspaceId, limit) {
+      return copy(
+        [...trackedLinks.values()]
+          .filter((record) => record.workspaceId === workspaceId)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
+          .slice(0, limit),
+      );
+    },
+
+    async deleteTrackedLink(workspaceId, id) {
+      const record = trackedLinks.get(id);
+      if (!record || record.workspaceId !== workspaceId) return false;
+      trackedLinks.delete(id);
+      trackedLinkSlugs.delete(`${workspaceId}:${record.slug}`);
+      trackedLinkClicks.delete(id);
+      return true;
+    },
+
+    async recordTrackedLinkClick(linkId, input) {
+      const timestamp = now();
+      const click: TrackedLinkClickRecord = {
+        id: createId("tlink_click"),
+        linkId,
+        workspaceId: input.workspaceId,
+        ipHash: input.ipHash,
+        ...(input.userAgent ? { userAgent: input.userAgent } : {}),
+        ...(input.country ? { country: input.country } : {}),
+        clickedAt: timestamp,
+      };
+      const list = trackedLinkClicks.get(linkId) ?? [];
+      list.push(click);
+      trackedLinkClicks.set(linkId, list);
+      return copy(click);
+    },
+
+    async getTrackedLinkStats(workspaceId, id) {
+      const record = trackedLinks.get(id);
+      if (!record || record.workspaceId !== workspaceId) return null;
+      const clicks = trackedLinkClicks.get(id) ?? [];
+      const totalClicks = clicks.length;
+      const uniqueIps = new Set(clicks.map((click) => click.ipHash));
+      const uniqueClicks = uniqueIps.size;
+      const lastClickedAt = clicks.length === 0 ? undefined : clicks.map((click) => click.clickedAt).sort().reverse()[0];
+      const countryCounts = new Map<string, number>();
+      for (const click of clicks) {
+        if (!click.country) continue;
+        countryCounts.set(click.country, (countryCounts.get(click.country) ?? 0) + 1);
+      }
+      const topCountries = [...countryCounts.entries()]
+        .map(([country, count]) => ({ country, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+      const stats: TrackedLinkStats = {
+        link: copy(record),
+        totalClicks,
+        uniqueClicks,
+        ...(lastClickedAt ? { lastClickedAt } : {}),
+        topCountries,
+      };
+      return stats;
     },
   };
 }

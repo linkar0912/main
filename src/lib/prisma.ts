@@ -3,6 +3,10 @@ import { createId } from "./id";
 import type {
   AutomationRecord,
   AutomationParticipantRecord,
+  AutomationVersionRecord,
+  TrackedLinkRecord,
+  TrackedLinkClickRecord,
+  TrackedLinkStats,
   AutomationRepository,
   CreateAutomationInput,
   CreateParticipantInput,
@@ -22,6 +26,7 @@ import type {
   InvitationRecord,
   AutomationContactRecord,
   CapturedContactSummary,
+  LeadStatus,
   ContactTimelineEntry,
   VariantPerformance,
   WebhookEventRecord,
@@ -37,7 +42,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTACT_TAGS } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { toMessagingWindow } from "./messaging-window";
 
@@ -119,6 +124,7 @@ function mapAutomation(record: {
   definition: unknown;
   activatedAt: Date | null;
   boundMediaId: string | null;
+  priority: number;
   createdAt: Date;
   updatedAt: Date;
 }): AutomationRecord {
@@ -128,6 +134,7 @@ function mapAutomation(record: {
     activatedAt: record.activatedAt?.toISOString(),
     boundMediaId: record.boundMediaId ?? undefined,
     instagramAccountId: record.instagramAccountId ?? undefined,
+    priority: record.priority,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -265,6 +272,9 @@ function mapParticipant(record: {
   messagingWindowExpiresAt: Date | null;
   recheckCount: number;
   variantLabel: string | null;
+  pausedAt: Date | null;
+  pausedReason: string | null;
+  pausedByUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): AutomationParticipantRecord {
@@ -288,6 +298,9 @@ function mapParticipant(record: {
     deliveryClickedAt: record.deliveryClickedAt?.toISOString(),
     messagingWindowExpiresAt: record.messagingWindowExpiresAt?.toISOString(),
     variantLabel: record.variantLabel ?? undefined,
+    pausedAt: record.pausedAt?.toISOString(),
+    pausedReason: record.pausedReason ?? undefined,
+    pausedByUserId: record.pausedByUserId ?? undefined,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -305,6 +318,10 @@ function mapContact(record: {
   attempts: number;
   tags: string[];
   score: number;
+  leadStatus: AutomationContactRecord["leadStatus"];
+  assigneeUserId: string | null;
+  notes: string | null;
+  sourceAutomationId: string | null;
   suppressedAt: Date | null;
   lastSeenAt: Date;
   createdAt: Date;
@@ -322,12 +339,38 @@ function mapContact(record: {
     attempts: record.attempts,
     tags: record.tags,
     score: record.score,
+    leadStatus: record.leadStatus,
+    assigneeUserId: record.assigneeUserId ?? undefined,
+    notes: record.notes ?? undefined,
+    sourceAutomationId: record.sourceAutomationId ?? undefined,
     fields: (record as unknown as { fields?: Record<string, string> | null }).fields ?? undefined,
     awaitingFields: (record as unknown as { awaitingFields?: { id: string; question: string }[] | null }).awaitingFields ?? undefined,
     suppressedAt: record.suppressedAt?.toISOString(),
     lastSeenAt: record.lastSeenAt.toISOString(),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapAutomationVersion(record: {
+  id: string;
+  automationId: string;
+  workspaceId: string;
+  version: number;
+  name: string;
+  definition: Prisma.JsonValue;
+  snapshotBy: string | null;
+  snapshotAt: Date;
+}): AutomationVersionRecord {
+  return {
+    id: record.id,
+    automationId: record.automationId,
+    workspaceId: record.workspaceId,
+    version: record.version,
+    name: record.name,
+    definition: record.definition as unknown as AutomationVersionRecord["definition"],
+    ...(record.snapshotBy ? { snapshotBy: record.snapshotBy } : {}),
+    snapshotAt: record.snapshotAt.toISOString(),
   };
 }
 
@@ -679,6 +722,12 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return Object.fromEntries(grouped.map((group) => [group.state, group._count._all]));
     },
 
+    async countParticipantsBySender(automationId, instagramAccountId, igScopedUserId) {
+      return client.automationParticipant.count({
+        where: { automationId, instagramAccountId, igScopedUserId },
+      });
+    },
+
     async countExecutionsSentSince(automationId, sinceIso) {
       return client.automationExecution.count({
         where: { automationId, status: "SENT", createdAt: { gte: new Date(sinceIso) } },
@@ -783,6 +832,39 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return true;
     },
 
+    async pauseParticipant(id, reason, userId, atIso) {
+      const updated = await client.automationParticipant.update({
+        where: { id },
+        data: { pausedAt: new Date(atIso), pausedReason: reason, pausedByUserId: userId },
+      });
+      return mapParticipant(updated);
+    },
+
+    async resumeParticipant(id, atIso) {
+      const updated = await client.automationParticipant.update({
+        where: { id },
+        data: { pausedAt: null, pausedReason: null, pausedByUserId: null, updatedAt: new Date(atIso) },
+      });
+      return mapParticipant(updated);
+    },
+
+    async pauseParticipantsBySender(workspaceId, instagramAccountId, igScopedUserId, reason, userId, atIso) {
+      const result = await client.automationParticipant.updateMany({
+        where: { workspaceId, instagramAccountId, igScopedUserId, pausedAt: null },
+        data: { pausedAt: new Date(atIso), pausedReason: reason, pausedByUserId: userId },
+      });
+      return result.count;
+    },
+
+    async listPausedParticipantsByWorkspace(workspaceId, limit) {
+      const records = await client.automationParticipant.findMany({
+        where: { workspaceId, pausedAt: { not: null } },
+        orderBy: [{ pausedAt: "desc" }, { id: "asc" }],
+        take: limit,
+      });
+      return records.map(mapParticipant);
+    },
+
     async findWorkspaceIdByMemberEmail(email) {
       const member = await client.workspaceMember.findFirst({
         where: { email: email.toLowerCase() },
@@ -813,6 +895,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           definition: input.definition,
           version: input.definition.version,
           instagramAccountId: input.instagramAccountId ?? null,
+          priority: input.priority ?? 0,
         },
       });
       return mapAutomation(record);
@@ -1066,6 +1149,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async hasExecution(workspaceId, dedupeKey) {
       return Boolean(await client.automationExecution.findFirst({ where: { workspaceId, dedupeKey }, select: { id: true } }));
+    },
+
+    async listRecentOutboundFailures(workspaceId, limit) {
+      const records = await client.outboundDelivery.findMany({
+        where: { workspaceId, state: "FAILED" },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: limit,
+      });
+      return records.map(mapOutboundDelivery);
     },
 
     async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
@@ -1659,6 +1751,53 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return entries.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
     },
 
+    async updateContactProfile(workspaceId, contactId, patch) {
+      const current = await client.automationContact.findFirst({ where: { id: contactId, workspaceId } });
+      if (!current) return null;
+      const data: Prisma.AutomationContactUncheckedUpdateInput = {};
+      let scoreDelta = 0;
+      if (patch.leadStatus && patch.leadStatus !== current.leadStatus) {
+        data.leadStatus = patch.leadStatus;
+        scoreDelta = LEAD_STATUS_SCORE_DELTA[patch.leadStatus] - LEAD_STATUS_SCORE_DELTA[current.leadStatus];
+      }
+      if (patch.assigneeUserId !== undefined) {
+        data.assigneeUserId = patch.assigneeUserId || null;
+      }
+      if (patch.notes !== undefined) {
+        const trimmed = patch.notes?.trim();
+        data.notes = trimmed ? trimmed.slice(0, 4000) : null;
+      }
+      if (patch.sourceAutomationId !== undefined) {
+        data.sourceAutomationId = patch.sourceAutomationId || null;
+      }
+      if (Object.keys(data).length === 0 && scoreDelta === 0) return mapContact(current);
+      if (scoreDelta !== 0) {
+        data.score = Math.min(Math.max(current.score + scoreDelta, 0), 9999);
+      }
+      const updated = await client.automationContact.update({ where: { id: current.id }, data });
+      return mapContact(updated);
+    },
+
+    async countContactsByLeadStatus(workspaceId) {
+      const rows = await client.automationContact.groupBy({
+        by: ["leadStatus"],
+        where: { workspaceId },
+        _count: { _all: true },
+      });
+      const counts: Record<LeadStatus, number> = { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 };
+      for (const row of rows) counts[row.leadStatus] = row._count._all;
+      return counts;
+    },
+
+    async listContactsByLeadStatus(workspaceId, options) {
+      const records = await client.automationContact.findMany({
+        where: { workspaceId, ...(options.leadStatus ? { leadStatus: options.leadStatus } : {}) },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: options.limit,
+      });
+      return records.map(mapContact);
+    },
+
     async countParticipantsByVariant(workspaceId, automationId) {
       const [rows, deliveredRows, clickedRows] = await Promise.all([
         client.automationParticipant.groupBy({
@@ -1737,6 +1876,81 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async deleteAutomation(workspaceId, id) {
       const result = await client.automation.deleteMany({ where: { workspaceId, id } });
       return result.count > 0;
+    },
+
+    async snapshotAutomation(workspaceId, id, snapshotBy) {
+      const current = await client.automation.findFirst({ where: { id, workspaceId } });
+      if (!current) return null;
+      const aggregate = await client.automationVersion.aggregate({
+        where: { automationId: id },
+        _max: { version: true },
+      });
+      const nextNumber = (aggregate._max.version ?? 0) + 1;
+      const created = await client.automationVersion.create({
+        data: {
+          id: createId("autover"),
+          automationId: id,
+          workspaceId,
+          version: nextNumber,
+          name: current.name,
+          definition: current.definition as Prisma.InputJsonValue,
+          ...(snapshotBy ? { snapshotBy } : {}),
+        },
+      });
+      return mapAutomationVersion(created);
+    },
+
+    async listAutomationVersions(workspaceId, automationId, limit) {
+      const records = await client.automationVersion.findMany({
+        where: { automationId, workspaceId },
+        orderBy: [{ version: "desc" }, { id: "asc" }],
+        take: limit,
+      });
+      return records.map(mapAutomationVersion);
+    },
+
+    async getAutomationVersion(workspaceId, automationId, versionId) {
+      const record = await client.automationVersion.findFirst({
+        where: { id: versionId, automationId, workspaceId },
+      });
+      return record ? mapAutomationVersion(record) : null;
+    },
+
+    async restoreAutomationVersion(workspaceId, automationId, versionId, restoredBy) {
+      const current = await client.automation.findFirst({ where: { id: automationId, workspaceId } });
+      if (!current) return null;
+      const target = await client.automationVersion.findFirst({
+        where: { id: versionId, automationId, workspaceId },
+      });
+      if (!target) return null;
+      // Capture the pre-restore state so the history remains append-only.
+      const aggregate = await client.automationVersion.aggregate({
+        where: { automationId },
+        _max: { version: true },
+      });
+      const nextNumber = (aggregate._max.version ?? 0) + 1;
+      await client.automationVersion.create({
+        data: {
+          id: createId("autover"),
+          automationId,
+          workspaceId,
+          version: nextNumber,
+          name: current.name,
+          definition: current.definition as Prisma.InputJsonValue,
+          snapshotBy: restoredBy ?? "restore",
+        },
+      });
+      const targetDefinition = target.definition as Prisma.InputJsonValue;
+      const targetVersionNumber = (target.definition as { version?: number }).version ?? 1;
+      const updated = await client.automation.update({
+        where: { id: automationId },
+        data: {
+          name: target.name,
+          definition: targetDefinition,
+          version: Math.max(current.version, targetVersionNumber) + 1,
+        },
+      });
+      return mapAutomation(updated);
     },
 
     async createSequence(workspaceId, input) {
@@ -1996,5 +2210,151 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       });
       return records;
     },
+
+    async createTrackedLink(workspaceId, input) {
+      const record = await client.trackedLink.create({
+        data: {
+          id: input.id ?? createId("tlink"),
+          workspaceId,
+          slug: input.slug,
+          destination: input.destination,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+          utmSource: input.utmSource ?? null,
+          utmMedium: input.utmMedium ?? null,
+          utmCampaign: input.utmCampaign ?? null,
+          utmTerm: input.utmTerm ?? null,
+          utmContent: input.utmContent ?? null,
+          conversionUrl: input.conversionUrl ?? null,
+          notes: input.notes ?? null,
+          createdByUserId: input.createdByUserId ?? null,
+        },
+      });
+      return mapTrackedLink(record);
+    },
+
+    async getTrackedLinkBySlug(workspaceId, slug) {
+      const record = await client.trackedLink.findUnique({ where: { workspaceId_slug: { workspaceId, slug } } });
+      return record ? mapTrackedLink(record) : null;
+    },
+
+    async getTrackedLinkBySlugPublic(slug) {
+      const record = await client.trackedLink.findFirst({ where: { slug } });
+      return record ? mapTrackedLink(record) : null;
+    },
+
+    async listTrackedLinks(workspaceId, limit) {
+      const records = await client.trackedLink.findMany({
+        where: { workspaceId },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        take: limit,
+      });
+      return records.map(mapTrackedLink);
+    },
+
+    async deleteTrackedLink(workspaceId, id) {
+      const result = await client.trackedLink.deleteMany({ where: { workspaceId, id } });
+      return result.count > 0;
+    },
+
+    async recordTrackedLinkClick(linkId, input) {
+      const record = await client.trackedLinkClick.create({
+        data: {
+          id: createId("tlink_click"),
+          linkId,
+          workspaceId: input.workspaceId,
+          ipHash: input.ipHash,
+          userAgent: input.userAgent ?? null,
+          country: input.country ?? null,
+        },
+      });
+      return mapTrackedLinkClick(record);
+    },
+
+    async getTrackedLinkStats(workspaceId, id) {
+      const link = await client.trackedLink.findFirst({ where: { id, workspaceId } });
+      if (!link) return null;
+      const [total, last, countryRows] = await Promise.all([
+        client.trackedLinkClick.count({ where: { linkId: id } }),
+        client.trackedLinkClick.findFirst({ where: { linkId: id }, orderBy: { clickedAt: "desc" } }),
+        client.trackedLinkClick.groupBy({
+          by: ["country"],
+          where: { linkId: id, country: { not: null } },
+          _count: { _all: true },
+        }),
+      ]);
+      // Unique clicks are deduplicated via the salted IP hash.
+      const uniqueRows = await client.trackedLinkClick.groupBy({
+        by: ["ipHash"],
+        where: { linkId: id },
+        _count: { _all: true },
+      });
+      const stats: TrackedLinkStats = {
+        link: mapTrackedLink(link),
+        totalClicks: total,
+        uniqueClicks: uniqueRows.length,
+        ...(last ? { lastClickedAt: last.clickedAt.toISOString() } : {}),
+        topCountries: countryRows
+          .map((row) => ({ country: row.country as string, count: row._count._all }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5),
+      };
+      return stats;
+    },
+  };
+}
+
+function mapTrackedLink(record: {
+  id: string;
+  workspaceId: string;
+  slug: string;
+  destination: string;
+  expiresAt: Date | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmTerm: string | null;
+  utmContent: string | null;
+  conversionUrl: string | null;
+  notes: string | null;
+  createdByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): TrackedLinkRecord {
+  return {
+    id: record.id,
+    workspaceId: record.workspaceId,
+    slug: record.slug,
+    destination: record.destination,
+    ...(record.expiresAt ? { expiresAt: record.expiresAt.toISOString() } : {}),
+    ...(record.utmSource ? { utmSource: record.utmSource } : {}),
+    ...(record.utmMedium ? { utmMedium: record.utmMedium } : {}),
+    ...(record.utmCampaign ? { utmCampaign: record.utmCampaign } : {}),
+    ...(record.utmTerm ? { utmTerm: record.utmTerm } : {}),
+    ...(record.utmContent ? { utmContent: record.utmContent } : {}),
+    ...(record.conversionUrl ? { conversionUrl: record.conversionUrl } : {}),
+    ...(record.notes ? { notes: record.notes } : {}),
+    ...(record.createdByUserId ? { createdByUserId: record.createdByUserId } : {}),
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mapTrackedLinkClick(record: {
+  id: string;
+  linkId: string;
+  workspaceId: string;
+  ipHash: string;
+  userAgent: string | null;
+  country: string | null;
+  clickedAt: Date;
+}): TrackedLinkClickRecord {
+  return {
+    id: record.id,
+    linkId: record.linkId,
+    workspaceId: record.workspaceId,
+    ipHash: record.ipHash,
+    ...(record.userAgent ? { userAgent: record.userAgent } : {}),
+    ...(record.country ? { country: record.country } : {}),
+    clickedAt: record.clickedAt.toISOString(),
   };
 }

@@ -900,13 +900,16 @@ export async function processNormalizedEvent(
     });
   }
 
-  const automations = (await repository.listAutomations(mapping.workspaceId)).filter(
-    (automation) =>
-      automation.status === "ACTIVE"
-      // Account-scoped automations only answer events on their own account;
-      // unpinned automations keep answering for every connected account.
-      && (automation.instagramAccountId === undefined || automation.instagramAccountId === event.accountId),
-  );
+  const automations = (await repository.listAutomations(mapping.workspaceId))
+    .filter(
+      (automation) =>
+        automation.status === "ACTIVE"
+        // Account-scoped automations only answer events on their own account;
+        // unpinned automations keep answering for every connected account.
+        && (automation.instagramAccountId === undefined || automation.instagramAccountId === event.accountId),
+    )
+    // Priority first so the most-specific flow wins when several match.
+    .sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
 
   // Opt-outs win over everything: a STOP-style reply permanently suppresses the
   // sender and is answered once. Suppressed senders are invisible to every engine
@@ -917,6 +920,14 @@ export async function processNormalizedEvent(
 
     const contact = await repository.getContact(mapping.workspaceId, event.accountId, event.recipientId);
     if (contact?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+    // Human handoff: if any active participant for this sender is paused, the
+    // runner stays silent. The teammate can resume from the contact modal.
+    const paused = await repository.listPausedParticipantsByWorkspace(mapping.workspaceId, 50);
+    const isPaused = paused.some((participant) => (
+      participant.instagramAccountId === event.accountId
+      && participant.igScopedUserId === event.recipientId
+    ));
+    if (isPaused) return { matched: 0, sent: 0, skipped: 1, failed: 0 };
   }
 
   // Email-capture conversations take precedence over everything else: a DM carrying
@@ -987,6 +998,32 @@ export async function processNormalizedEvent(
 
     const dedupeKey = `${automation.id}:${event.id}`;
     if (await repository.hasExecution(mapping.workspaceId, dedupeKey)) continue;
+
+    // "Reply once per person" short-circuit. The runner still writes a SKIPPED
+    // execution row so the activity inbox explains why nothing went out.
+    if (
+      automation.definition.trigger.type === "comment"
+      && automation.definition.trigger.replyOncePerUser
+      && event.recipientId
+    ) {
+      const prior = await repository.countParticipantsBySender(
+        automation.id,
+        event.accountId,
+        event.recipientId,
+      );
+      if (prior > 0) {
+        await repository.recordExecution({
+          workspaceId: mapping.workspaceId,
+          automationId: automation.id,
+          externalEventId: event.id,
+          dedupeKey,
+          status: "SKIPPED",
+          reason: "replyOncePerUser is set and this sender already triggered this flow",
+        });
+        result.skipped += 1;
+        continue;
+      }
+    }
 
     const evaluation = evaluateFlow(automation.definition, event, evaluationContext);
     if (evaluation.status === "skipped") {

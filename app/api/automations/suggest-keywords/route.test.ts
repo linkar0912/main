@@ -9,6 +9,7 @@ function automation(keywords: string[]): AutomationRecord {
     name: "Flow",
     status: "ACTIVE",
     version: 1,
+    priority: 0,
     definition: {
       version: 1,
       trigger: { type: "message", match: "keyword", keywords },

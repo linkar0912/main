@@ -72,6 +72,7 @@ describe("memory repository", () => {
       name: "Campaign",
       status: "ACTIVE" as const,
       version: 2,
+      priority: 0,
       definition,
       createdAt: "2026-08-21T08:00:00.000Z",
     };

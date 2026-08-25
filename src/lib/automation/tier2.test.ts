@@ -23,6 +23,7 @@ async function seed() {
       name: "Capture",
       status: "ACTIVE",
       version: 1,
+      priority: 0,
       definition: captureFlow as unknown as Parameters<never>[0],
       createdAt: new Date(1).toISOString(),
       updatedAt: new Date(1).toISOString(),

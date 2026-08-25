@@ -3,12 +3,30 @@ export type CommentTrigger = {
   match: "keyword" | "any";
   keywords: string[];
   mediaIds: string[];
+  /**
+   * Optional match mode for `keyword` triggers. `any` keeps a comment if it
+   * mentions any of the keywords, `all` requires every keyword, `exact`
+   * matches the whole comment text, `regex` treats each entry as a regex
+   * pattern, and `contains` is a substring check.
+   */
+  mode?: "any" | "all" | "exact" | "regex" | "contains";
+  /** Keywords that drop the comment even if the positive match passed. */
+  negativeKeywords?: string[];
+  /** Override the private reply per media id. */
+  replyPerMedia?: Record<string, string>;
+  /** When true, the same commenter only triggers the flow once. */
+  replyOncePerUser?: boolean;
 };
 
 export type MessageTrigger = {
   type: "message";
   match: "keyword" | "any";
   keywords: string[];
+  /**
+   * Match mode (same vocabulary as `CommentTrigger.mode`).
+   * Defaults to "any" when omitted.
+   */
+  mode?: "any" | "all" | "exact" | "regex" | "contains";
 };
 
 // Fires when someone taps a Meta referral link (messaging_referral webhook).

@@ -19,14 +19,14 @@ const TOKEN_KEY = "a".repeat(64);
 
 const welcomeFlow: FlowDefinitionV1 = {
   version: 1,
-  trigger: { type: "first_contact" },
+    trigger: { type: "first_contact" },
   conditions: [],
   actions: [{ type: "send_text", text: "Welcome aboard! 👋" }],
 };
 
 const storyFlow: FlowDefinitionV1 = {
   version: 1,
-  trigger: { type: "story_mention" },
+    trigger: { type: "story_mention" },
   conditions: [],
   actions: [
     { type: "send_text", text: "Thanks for the mention! 🧡" },
@@ -62,6 +62,7 @@ async function seed(definitions: FlowDefinitionV1[]) {
       name: `Automation ${index}`,
       status: "ACTIVE" as const,
       version: 1,
+      priority: 0,
       definition,
       createdAt: new Date(1).toISOString(),
       updatedAt: new Date(1).toISOString(),
@@ -394,7 +395,7 @@ describe("conversational fields", () => {
   function fieldsFlow(): FlowDefinitionV1 {
     return {
       version: 1,
-      trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+    trigger: { type: "message", match: "keyword", keywords: ["guide"] },
       conditions: [],
       actions: [{ type: "send_text", text: "Guide incoming!" }],
       emailCapture: {
@@ -441,7 +442,7 @@ describe("conversational fields", () => {
       const repository = await seed([
         {
           version: 1,
-          trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+    trigger: { type: "message", match: "keyword", keywords: ["guide"] },
           conditions: [],
           actions: [{ type: "send_text", text: "Guide!" }],
           emailCapture: {
@@ -472,7 +473,7 @@ describe("conversational fields", () => {
     expect(() =>
       validateFlowDefinition({
         version: 1,
-        trigger: { type: "message", match: "any", keywords: [] },
+    trigger: { type: "message", match: "any", keywords: [] },
         conditions: [],
         actions: [{ type: "send_text", text: "x" }],
         emailCapture: {
@@ -560,7 +561,7 @@ describe("lead fulfillment emails", () => {
       const repository = await seed([
         {
           version: 1,
-          trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+    trigger: { type: "message", match: "keyword", keywords: ["guide"] },
           conditions: [],
           actions: [{ type: "send_text", text: "Guide!" }],
           emailCapture: {
