@@ -37,11 +37,40 @@ enum ParticipantState {
   FAILED
 }
 
+// Append-only history of automation definitions. Every PATCH snapshots the
+// previous state, so a workspace can diff and restore any prior version.
+model AutomationVersion {
+  id            String   @id
+  automationId  String
+  workspaceId   String
+  // Monotonically increasing per-automation version number (1 = creation state).
+  version       Int
+  // Human-friendly snapshot of the automation name at the time of the snapshot.
+  name          String
+  // Full definition payload (FlowDefinition Json).
+  definition    Json
+  // Who/what produced the snapshot (user id when available; "system" for cron).
+  snapshotBy    String?
+  // When the snapshot was taken.
+  snapshotAt    DateTime @default(now())
+
+  @@unique([automationId, version])
+  @@index([automationId, snapshotAt])
+}
+
 enum ContactState {
   NONE
   AWAITING_EMAIL
   AWAITING_FIELD
   CAPTURED
+}
+
+// Pipeline stage for the mini-CRM. Defaults to NEW for fresh contacts.
+enum LeadStatus {
+  NEW
+  ENGAGED
+  QUALIFIED
+  CUSTOMER
 }
 
 model User {
@@ -115,6 +144,7 @@ model Workspace {
   sequences          AutomationSequence[]
   broadcasts         Broadcast[]
   outboundDeliveries OutboundDelivery[]
+  trackedLinks       TrackedLink[]
 }
 
 model WorkspaceMember {
@@ -156,6 +186,9 @@ model Automation {
   definition        Json
   activatedAt       DateTime?
   boundMediaId      String?
+  // Higher priority automations are evaluated first when multiple flows could
+  // match the same event. 0 (default) is fine for the common single-flow setup.
+  priority          Int                          @default(0)
   createdAt         DateTime                     @default(now())
   updatedAt         DateTime                     @updatedAt
   workspace         Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -164,6 +197,7 @@ model Automation {
   dailySendCounters AutomationDailySendCounter[]
 
   @@index([workspaceId, status])
+  @@index([workspaceId, priority])
 }
 
 model AutomationParticipant {
@@ -196,6 +230,11 @@ model AutomationParticipant {
   // A/B variant label recorded when the campaign opening message went out.
   variantLabel             String?
   messagingWindowExpiresAt DateTime?
+  // Set when a teammate takes over the conversation. The runner skips every
+  // automated send while `pausedAt` is non-null.
+  pausedAt                 DateTime?
+  pausedReason             String?
+  pausedByUserId           String?
   recheckCount             Int              @default(0)
   createdAt                DateTime         @default(now())
   updatedAt                DateTime         @updatedAt
@@ -206,6 +245,62 @@ model AutomationParticipant {
   @@index([instagramAccountId, igScopedUserId, state])
   @@index([workspaceId, automationId, updatedAt])
   @@index([messagingWindowExpiresAt])
+  @@index([pausedAt])
+}
+
+// Branded short links the workspace can drop into DMs. The destination URL is
+// stored untouched; UTM params are appended at click time so a single link
+// works across every campaign.
+model TrackedLink {
+  id                 String   @id
+  workspaceId        String
+  // The branded path (e.g. "/r/summer-sale"). Unique per workspace.
+  slug               String
+  // Final URL we redirect to. Validated as http(s) at write time.
+  destination        String
+  // Optional expiry. Past the deadline the redirect returns 410 Gone.
+  expiresAt          DateTime?
+  // UTM parameters appended as query strings. Stored separately so a single
+  // destination can be re-used across campaigns with different attribution.
+  utmSource          String?
+  utmMedium          String?
+  utmCampaign        String?
+  utmTerm            String?
+  utmContent         String?
+  // Optional webhook pinged on every click (used for conversion callbacks).
+  conversionUrl      String?
+  // Free-form context for the activity inbox. Limited to 240 chars in the API.
+  notes              String?
+  createdByUserId    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  clicks    TrackedLinkClick[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, createdAt])
+}
+
+// Per-click analytics. The ip hash is salted + truncated so we can compute
+// unique counts without ever storing the raw IP. Country + UA are best-effort
+// headers from the redirect request.
+model TrackedLinkClick {
+  id        String   @id
+  linkId    String
+  workspaceId String
+  // Hashed (sha256(salt + ip), first 16 hex chars). Never the raw IP.
+  ipHash    String
+  // User-Agent header (truncated to 240 chars). Helps spot bots.
+  userAgent String?
+  // Cloudflare/Vercel geo header. Optional.
+  country   String?
+  clickedAt DateTime @default(now())
+
+  link TrackedLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([linkId, clickedAt])
+  @@index([workspaceId, clickedAt])
 }
 
 // Workspace-wide registry of people who interacted with a connected Instagram account.
@@ -225,6 +320,14 @@ model AutomationContact {
   tags                 String[]             @default([])
   // Engagement score bumped by the repository on notable interactions.
   score                Int                  @default(0)
+  // Mini-CRM pipeline stage. Auto-defaults to NEW for every fresh contact.
+  leadStatus           LeadStatus           @default(NEW)
+  // Team member currently responsible for this contact. Null = unassigned.
+  assigneeUserId       String?
+  // Free-form internal notes. Max 4 000 characters; surface trimmed in the UI.
+  notes                String?
+  // Automation that first brought this contact into the workspace (source attribution).
+  sourceAutomationId   String?
   fields               Json?
   awaitingFields       Json?
   suppressedAt         DateTime?
