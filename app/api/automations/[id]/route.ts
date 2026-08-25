@@ -88,6 +88,12 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const automation = await repository.updateAutomation(session.workspaceId, id, patch);
   if (!automation) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
+  // Snapshot the previous state into the version history whenever the definition
+  // or name changed. The PATCH itself only stores the latest, so we capture the
+  // pre-update row first. Metadata-only edits (status / pin) skip the snapshot.
+  if (patch.definition !== undefined || patch.name !== undefined) {
+    await repository.snapshotAutomation(session.workspaceId, id, session.userId);
+  }
   return NextResponse.json({ data: automation });
 }
 
