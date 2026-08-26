@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   ArrowUpRight,
@@ -11,7 +12,6 @@ import {
   Link2,
   LogOut,
   ShieldCheck,
-  UserRound,
   Users,
 } from "lucide-react";
 import { AppShell } from "./app-shell";
@@ -60,27 +60,38 @@ function roleLabel(role: MemberRole): string {
   return role.charAt(0) + role.slice(1).toLowerCase();
 }
 
+function savedMessageFor(saved: string | null): string {
+  if (saved === "password") return "Password updated. Use it next time you sign in.";
+  if (saved === "verification-sent") return "Verification email sent - check your inbox.";
+  if (saved === "already-verified") return "Your email is already verified.";
+  return "";
+}
+
+function accountErrorFor(error: string | null): string {
+  if (error === "current") return "That current password is incorrect.";
+  if (error === "password") return "The new password must be at least 12 characters.";
+  if (error === "verify-rate-limited") return "Too many verification emails requested. Try again in a while.";
+  if (error === "unknown") return "That action is not available.";
+  return "";
+}
+
 export function ProfileScreen({ email, memberSince, emailVerified, role }: ProfileScreenProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [saved, setSaved] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("accountSaved") === "password";
-  });
-  const [accountError] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const error = new URLSearchParams(window.location.search).get("accountError");
-    if (error === "current") return "That current password is incorrect.";
-    if (error === "password") return "The new password must be at least 12 characters.";
-    if (error === "unknown") return "That action is not available.";
-    return "";
-  });
+  const [dismissed, setDismissed] = useState(false);
+  // The redirect from /api/account carries feedback in the query string.
+  // useSearchParams (rather than reading window.location during render) is
+  // Next's own hydration-safe way to read it - server and client agree on
+  // the value from the first render, no reconciliation needed.
+  const searchParams = useSearchParams();
+  const savedMessage = dismissed ? "" : savedMessageFor(searchParams.get("accountSaved"));
+  const accountError = accountErrorFor(searchParams.get("accountError"));
 
   // Auto-dismiss the success banner after a short pause.
   useEffect(() => {
-    if (!saved) return;
-    const timer = setTimeout(() => setSaved(false), 4000);
+    if (!savedMessage) return;
+    const timer = setTimeout(() => setDismissed(true), 4000);
     return () => clearTimeout(timer);
-  }, [saved]);
+  }, [savedMessage]);
 
   useEffect(() => {
     getInstagramConnections()
@@ -102,10 +113,10 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
           </div>
         </header>
 
-        {saved && (
+        {savedMessage && (
           <div className="notice-banner notice-success" role="status">
             <BadgeCheck size={17} />
-            <p>Password updated. Use it next time you sign in.</p>
+            <p>{savedMessage}</p>
           </div>
         )}
         {accountError && (
@@ -114,73 +125,79 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
           </div>
         )}
 
-        <div className="profile-overview-grid">
-            <section className="panel profile-card profile-identity-card" aria-label="Account summary">
-              <div className="profile-card-heading">
-                <div><p className="eyebrow">Personal details</p><h2>Your account</h2></div>
-                <UserRound size={20} strokeWidth={1.8} />
-              </div>
-              <div className="account-summary">
-                {avatar ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
-                  <img className="avatar avatar-summary is-photo" src={avatar} alt="" />
-                ) : (
-                  <span className="avatar avatar-summary" aria-hidden>{initialsOf(email)}</span>
-                )}
-                <div className="account-summary-id">
-                  <strong>{displayNameFromEmail(email)}</strong>
-                  <small>{email}</small>
-                  <span className="account-summary-meta">
-                    {memberSince ? `Joined ${formatDate(memberSince)}` : "Workspace member"}
-                  </span>
-                </div>
-                <div className="account-summary-chips">
-                  <span className="profile-chip" data-tone="accent">{roleLabel(role)}</span>
-                  <span className="profile-chip">Free plan</span>
-                  <span className="profile-chip" data-tone={emailVerified ? "ok" : "warn"}>
-                    {emailVerified ? "Email verified" : "Email unverified"}
-                  </span>
-                </div>
-              </div>
-            </section>
-
-            <section className="panel profile-card profile-connection-card" aria-label="Connected Instagram">
-              <div className="panel-heading">
-                <div><p className="eyebrow">Active channel</p><h2>Instagram</h2></div>
-                <InstagramGlyph size={19} brand />
-              </div>
-              {connection ? (
-                <div className="connection-card">
-                  {connection.profilePictureUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
-                    <img
-                      className="avatar avatar-connection is-photo"
-                      src={connection.profilePictureUrl}
-                      alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
-                    />
-                  ) : (
-                    <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
-                  )}
-                  <div className="connection-card-id">
-                    <strong>@{connection.username}</strong>
-                    <span className="connection-status">
-                      <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
-                      {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
-                      {" · "}
-                      {formatDate(connection.connectedAt)}
-                    </span>
-                  </div>
-                </div>
+        <section className="panel profile-card profile-hero" aria-label="Account summary">
+          <div className="profile-hero-main">
+            <div className="profile-hero-identity">
+              {avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+                <img className="avatar avatar-large is-photo" src={avatar} alt="" />
               ) : (
-                <p className="muted connection-empty">
-                  No Instagram account connected yet. Link a professional account to start automating replies.
-                </p>
+                <span className="avatar avatar-large" aria-hidden>{initialsOf(email)}</span>
               )}
-              <Link className={`button ${connection ? "button-secondary" : "button-primary"} button-block`} href="/settings">
-                <Link2 size={15} /> {connection ? "Manage connection" : "Connect Instagram"}
-              </Link>
-            </section>
-        </div>
+              <div className="account-summary-id">
+                <p className="eyebrow">Personal details</p>
+                <h2>{displayNameFromEmail(email)}</h2>
+                <small>{email}</small>
+                <span className="account-summary-meta">
+                  {memberSince ? `Joined ${formatDate(memberSince)}` : "Workspace member"}
+                </span>
+              </div>
+            </div>
+            <div className="account-summary-chips">
+              <span className="profile-chip" data-tone="accent">{roleLabel(role)}</span>
+              <span className="profile-chip">Free plan</span>
+              <span className="profile-chip" data-tone={emailVerified ? "ok" : "warn"}>
+                {emailVerified ? "Email verified" : "Email unverified"}
+              </span>
+            </div>
+            {!emailVerified && (
+              <form action="/api/account" method="post" className="account-verify-row">
+                <input type="hidden" name="action" value="resend-verification" />
+                <p className="muted">Confirm your email to keep full access to your workspace.</p>
+                <button className="button button-secondary" type="submit">
+                  Resend verification email
+                </button>
+              </form>
+            )}
+          </div>
+
+          <div className="profile-hero-channel">
+            <div className="panel-heading">
+              <div><p className="eyebrow">Active channel</p><h2>Instagram</h2></div>
+              <InstagramGlyph size={19} brand />
+            </div>
+            {connection ? (
+              <div className="connection-card">
+                {connection.profilePictureUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
+                  <img
+                    className="avatar avatar-connection is-photo"
+                    src={connection.profilePictureUrl}
+                    alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
+                  />
+                ) : (
+                  <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
+                )}
+                <div className="connection-card-id">
+                  <strong>@{connection.username}</strong>
+                  <span className="connection-status">
+                    <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
+                    {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
+                    {" · "}
+                    {formatDate(connection.connectedAt)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="muted connection-empty">
+                No Instagram account connected yet. Link a professional account to start automating replies.
+              </p>
+            )}
+            <Link className={`button ${connection ? "button-secondary" : "button-primary"} button-block`} href="/settings">
+              <Link2 size={15} /> {connection ? "Manage connection" : "Connect Instagram"}
+            </Link>
+          </div>
+        </section>
 
         <div className="profile-detail-grid">
             <section className="panel profile-card profile-security-card" aria-label="Security">

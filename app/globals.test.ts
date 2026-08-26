@@ -9,7 +9,7 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.sidebar\s*{[^}]*background:\s*var\(--panel\)/);
     // The panel token stays white in light mode and flips to graphite in dark mode.
     expect(css).toMatch(/--panel:\s*#ffffff/);
-    expect(css).toMatch(/\[data-theme="dark"\]\s*{[^}]*--panel:\s*#17181e/);
+    expect(css).toMatch(/\[data-theme="dark"\]\s*{[^}]*--panel:\s*#1c1d24/);
   });
 
   it("brands with magenta interaction and the volt signature", () => {

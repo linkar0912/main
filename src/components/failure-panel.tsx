@@ -2,6 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { humanizeProviderError } from "@/src/lib/format/provider-error";
 
 type Failure = {
   id: string;
@@ -101,7 +102,14 @@ export function FailurePanel() {
             </span>
             <time dateTime={failure.updatedAt}>{formatDate(failure.updatedAt)}</time>
           </div>
-          {failure.lastError && <p className="muted activity-summary">{failure.lastError}</p>}
+          {failure.lastError && (() => {
+            const humanized = humanizeProviderError(failure.lastError);
+            return (
+              <p className="muted activity-summary" title={humanized.translated ? humanized.raw : undefined}>
+                {humanized.text}
+              </p>
+            );
+          })()}
           {failure.recipientId && <p className="muted activity-summary">recipient {failure.recipientId}</p>}
         </li>
       ))}

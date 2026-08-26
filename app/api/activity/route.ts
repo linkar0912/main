@@ -38,7 +38,11 @@ export async function GET(request: Request) {
         label: EVENT_LABELS[event.eventType] ?? event.eventType,
         at: event.receivedAt,
         account: typeof payload.accountId === "string" ? payload.accountId : undefined,
-        from: username ? `@${username}` : typeof payload.recipientId === "string" ? payload.recipientId : undefined,
+        from: username
+          ? `@${username}`
+          : typeof payload.recipientId === "string"
+            ? `IG user ·${payload.recipientId.slice(-6)}`
+            : undefined,
         summary: text.length > 0 ? (text.length > 120 ? `${text.slice(0, 120)}…` : text) : undefined,
       };
     }),

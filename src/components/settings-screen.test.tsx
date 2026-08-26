@@ -2,7 +2,10 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/settings" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/settings",
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
 
 const { SettingsScreen } = await import("./settings-screen");
 

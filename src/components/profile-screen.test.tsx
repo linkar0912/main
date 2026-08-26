@@ -2,7 +2,10 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/profile" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/profile",
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
 
 const { ProfileScreen } = await import("./profile-screen");
 

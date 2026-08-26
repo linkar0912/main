@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { formatDateTime } from "@/src/lib/format-date";
+import { humanizeProviderError } from "@/src/lib/format/provider-error";
 
 type DeliveryProblem = {
   kind: string;
@@ -49,7 +50,12 @@ export function DeliveryDiagnostics() {
                   {problem.state === "UNKNOWN" ? "Needs review" : "Retry pending"}
                 </em>
               </div>
-              <p>{problem.lastError ?? "No provider detail was returned."}</p>
+              {problem.lastError ? (() => {
+                const humanized = humanizeProviderError(problem.lastError);
+                return <p title={humanized.translated ? humanized.raw : undefined}>{humanized.text}</p>;
+              })() : (
+                <p>No provider detail was returned.</p>
+              )}
               <small className="muted">Attempt {problem.attemptCount} · {formatDateTime(problem.updatedAt)}</small>
             </div>
           </li>

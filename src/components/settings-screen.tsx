@@ -1,7 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Check, Clock, ExternalLink, LockKeyhole, ShieldCheck, UserPlus, Users, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  ExternalLink,
+  FileText,
+  LockKeyhole,
+  Plug,
+  ShieldCheck,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
 import { InstagramGlyph } from "./instagram-glyph";
@@ -37,7 +50,10 @@ export function SettingsScreen() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [health, setHealth] = useState<ConnectionHealth | null>(null);
   const [mode, setMode] = useState<"demo" | "configured">("demo");
-  const [metaState] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("meta") ?? "");
+  // useSearchParams (not a window.location initializer) so the server and the
+  // first client render agree on this value - no hydration mismatch to fix up.
+  const metaState = useSearchParams().get("meta") ?? "";
+  const [section, setSection] = useState<"connections" | "delivery" | "team" | "policies">("connections");
   const [disconnectingId, setDisconnectingId] = useState("");
   const [disconnectError, setDisconnectError] = useState("");
   const [team, setTeam] = useState<TeamOverview | null>(null);
@@ -189,182 +205,207 @@ export function SettingsScreen() {
     error: "Meta could not finish the connection. Check the app settings and try again.",
   };
 
+  const sectionCounts = {
+    connections: connections.length,
+    team: (team?.members.length ?? 0) + (team?.invitations.length ?? 0),
+  };
+
   return (
     <AppShell>
       <div className="page-wrap settings-wrap">
         <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage Instagram connections, delivery defaults, team access, and account safeguards.</p></div></header>
 
-        {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status"><span>{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}</span><p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
+        {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}<p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
 
-        <div className="settings-overview-grid">
-        <section className="settings-hero panel settings-card instagram-settings-card">
-          {connections[0]?.profilePictureUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value here.
-            <img
-              className="settings-avatar"
-              src={connections[0].profilePictureUrl}
-              alt={connections[0].username ? `@${connections[0].username} profile picture` : "Instagram profile picture"}
-            />
-          ) : (
-            <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
-          )}
-          <div className="settings-copy"><p className="eyebrow">Instagram connections</p><h2>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h2><p>{connections.length > 0 ? "Your connected accounts can receive comment and DM webhooks." : `Connect a professional account to start delivering ${PRODUCT_NAME} automations.`}</p></div>
-          <div className="settings-action"><a className="button button-primary" href="/api/meta/oauth/start">{connections.length > 0 ? "Connect another account" : "Connect Instagram"} <ExternalLink size={15} /></a></div>
-        {connections.length > 0 && (
-          <ul className="connection-list">
-            {connections.map((connection) => (
-              <li className="panel connection-row" key={connection.id}>
-                {connection.profilePictureUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
-                  <img
-                    className="connection-avatar is-photo"
-                    src={connection.profilePictureUrl}
-                    alt={`@${connection.username} profile picture`}
-                  />
-                ) : (
-                  <span className="connection-avatar">@{connection.username.slice(0, 2).toUpperCase()}</span>
+        <div className="section-layout">
+          <nav className="section-nav" aria-label="Settings sections">
+            <button type="button" className={`section-nav-link ${section === "connections" ? "is-active" : ""}`} onClick={() => setSection("connections")}>
+              <Plug size={16} strokeWidth={1.9} /> Connections
+              <span className="section-nav-count">{sectionCounts.connections}</span>
+            </button>
+            <button type="button" className={`section-nav-link ${section === "delivery" ? "is-active" : ""}`} onClick={() => setSection("delivery")}>
+              <Clock size={16} strokeWidth={1.9} /> Delivery
+            </button>
+            <button type="button" className={`section-nav-link ${section === "team" ? "is-active" : ""}`} onClick={() => setSection("team")}>
+              <Users size={16} strokeWidth={1.9} /> Team
+              <span className="section-nav-count">{sectionCounts.team}</span>
+            </button>
+            <button type="button" className={`section-nav-link ${section === "policies" ? "is-active" : ""}`} onClick={() => setSection("policies")}>
+              <FileText size={16} strokeWidth={1.9} /> Policies
+            </button>
+            <Link className="section-nav-link settings-security-link" href="/profile">
+              <LockKeyhole size={16} strokeWidth={1.9} /> Security <ExternalLink size={13} />
+            </Link>
+          </nav>
+
+          <div className="section-content">
+            {section === "connections" && (
+              <div className="settings-overview-grid">
+                <section className="settings-hero panel settings-card instagram-settings-card">
+                  {connections[0]?.profilePictureUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value here.
+                    <img
+                      className="settings-avatar"
+                      src={connections[0].profilePictureUrl}
+                      alt={connections[0].username ? `@${connections[0].username} profile picture` : "Instagram profile picture"}
+                    />
+                  ) : (
+                    <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
+                  )}
+                  <div className="settings-copy"><p className="eyebrow">Instagram connections</p><h2>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h2><p>{connections.length > 0 ? "Your connected accounts can receive comment and DM webhooks." : `Connect a professional account to start delivering ${PRODUCT_NAME} automations.`}</p></div>
+                  <div className="settings-action"><a className="button button-primary" href="/api/meta/oauth/start">{connections.length > 0 ? "Connect another account" : "Connect Instagram"} <ExternalLink size={15} /></a></div>
+                  {connections.length > 0 && (
+                    <ul className="connection-list">
+                      {connections.map((connection) => (
+                        <li className="panel connection-row" key={connection.id}>
+                          {connection.profilePictureUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+                            <img
+                              className="connection-avatar is-photo"
+                              src={connection.profilePictureUrl}
+                              alt={`@${connection.username} profile picture`}
+                            />
+                          ) : (
+                            <span className="connection-avatar">@{connection.username.slice(0, 2).toUpperCase()}</span>
+                          )}
+                          <div className="connection-copy">
+                            <strong>@{connection.username}</strong>
+                            <small>Connected {formatDate(connection.connectedAt)} · ID {connection.igUserId}</small>
+                          </div>
+                          <StatusBadge status={connection.status} />
+                          <button
+                            className="button button-secondary"
+                            type="button"
+                            disabled={disconnectingId === connection.id}
+                            onClick={() => void disconnect(connection.id)}
+                          >
+                            {disconnectingId === connection.id ? "Disconnecting…" : "Disconnect"}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {disconnectError && <p className="form-error" role="alert">{disconnectError}</p>}
+                </section>
+
+                {connections.length > 0 && health && (
+                  <section className="panel settings-panel settings-card webhook-card" aria-label="Webhook health">
+                    <div className="panel-heading">
+                      <div><p className="eyebrow">Webhook health</p><h2>{health.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>
+                      {health.missingFields.length === 0 ? <ShieldCheck size={21} /> : <AlertTriangle size={21} />}
+                    </div>
+                    {health.checkError ? (
+                      <p className="muted">Could not check with Meta right now: {health.checkError}</p>
+                    ) : (
+                      <ul className="check-list">
+                        {health.requiredFields.map((field) => {
+                          const subscribed = !health.missingFields.includes(field);
+                          return (
+                            <li key={field}>
+                              {subscribed ? <Check size={16} /> : <X size={16} />}
+                              {WEBHOOK_FIELD_LABELS[field] ?? field}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    {(health.missingFields.length > 0 || health.checkError) && (
+                      <p className="muted">
+                        Reconnect Instagram to refresh the subscription. <a className="text-link" href="/api/meta/oauth/start">Reconnect <ExternalLink size={15} /></a>
+                      </p>
+                    )}
+                  </section>
                 )}
-                <div className="connection-copy">
-                  <strong>@{connection.username}</strong>
-                  <small>Connected {formatDate(connection.connectedAt)} · ID {connection.igUserId}</small>
-                </div>
-                <StatusBadge status={connection.status} />
-                <button
-                  className="button button-secondary"
-                  type="button"
-                  disabled={disconnectingId === connection.id}
-                  onClick={() => void disconnect(connection.id)}
-                >
-                  {disconnectingId === connection.id ? "Disconnecting…" : "Disconnect"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {disconnectError && <p className="form-error" role="alert">{disconnectError}</p>}
-        </section>
-
-        {connections.length > 0 && health && (
-          <section className="panel settings-panel settings-card webhook-card" aria-label="Webhook health">
-            <div className="panel-heading">
-              <div><p className="eyebrow">Webhook health</p><h2>{health.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>
-              {health.missingFields.length === 0 ? <ShieldCheck size={21} /> : <AlertTriangle size={21} />}
-            </div>
-            {health.checkError ? (
-              <p className="muted">Could not check with Meta right now: {health.checkError}</p>
-            ) : (
-              <ul className="check-list">
-                {health.requiredFields.map((field) => {
-                  const subscribed = !health.missingFields.includes(field);
-                  return (
-                    <li key={field}>
-                      {subscribed ? <Check size={16} /> : <X size={16} />}
-                      {WEBHOOK_FIELD_LABELS[field] ?? field}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {(health.missingFields.length > 0 || health.checkError) && (
-              <p className="muted">
-                Reconnect Instagram to refresh the subscription. <a className="text-link" href="/api/meta/oauth/start">Reconnect <ExternalLink size={15} /></a>
-              </p>
-            )}
-          </section>
-        )}
-        </div>
-
-        <div className="settings-grid settings-trust-grid">
-          <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Protected by default</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> Replies follow saved rules, never scraping.</li></ul></section>
-          <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Environment</p><h2>{mode === "demo" ? "Demo mode" : "Connected mode"}</h2></div><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} /></div><p className="muted">{mode === "demo" ? "The workspace runs on sample data until DATABASE_URL and Meta credentials are configured." : "This workspace is configured for live Meta-backed delivery."}</p><Link className="text-link" href="/support">View setup guidance <ExternalLink size={15} /></Link></section>
-        </div>
-
-        <div className="settings-grid settings-management-grid">
-          <section className="panel settings-panel settings-card" aria-label="Account security">
-            <div className="settings-hero">
-              <span className="settings-icon"><LockKeyhole size={20} /></span>
-              <div className="settings-copy">
-                <p className="eyebrow">Account</p>
-                <h2>Sign-in & security</h2>
-                <p>Password, devices and identity now live in your profile.</p>
-              </div>
-              <Link className="button button-secondary settings-action" href="/profile">Open my profile</Link>
-            </div>
-          </section>
-
-          <section className="panel settings-panel settings-card" aria-label="Messaging hours">
-            <div className="panel-heading"><div><p className="eyebrow">Delivery defaults</p><h2>Messaging quiet hours</h2></div><Clock size={21} /></div>
-            <p className="muted">Sequences and broadcasts hold all DMs during this window (workspace time). Direct replies to a person’s own message are never delayed.</p>
-            {quietError && <p className="form-error" role="alert">{quietError}</p>}
-            <label className="field checkbox-field">
-              <input type="checkbox" checked={quietEnabled} onChange={(event) => setQuietEnabled(event.target.checked)} />
-              <span>Hold automated DMs during quiet hours</span>
-            </label>
-            {quietEnabled && (
-              <div className="field-grid">
-                <label className="field">
-                  <span>Quiet from (hour)</span>
-                  <select value={String(quietStart)} onChange={(e) => setQuietStart(Number(e.target.value))}>
-                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Quiet until (hour)</span>
-                  <select value={String(quietEnd)} onChange={(e) => setQuietEnd(Number(e.target.value))}>
-                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Timezone</span>
-                  <input value={quietTz} onChange={(e) => setQuietTz(e.target.value)} placeholder="Europe/Berlin" />
-                </label>
               </div>
             )}
-            <div className="builder-footer">
-              <div>{quietSaved && <span className="form-success" role="status"><Check size={15} /> Saved.</span>}</div>
-              <button className="button button-secondary" type="button" disabled={quietBusy} onClick={() => void saveMessagingWindow(quietEnabled)}>
-                {quietBusy ? "Saving…" : "Save messaging hours"}
-              </button>
-            </div>
-          </section>
 
-          <section className="panel settings-panel settings-card" aria-label="Team">
-            <div className="panel-heading"><div><p className="eyebrow">Team</p><h2>Members & invitations</h2></div><Users size={21} /></div>
-            {teamError && <p className="form-error" role="alert">{teamError}</p>}
-            {teamManageable && team ? (
+            {section === "delivery" && (
               <>
-                <ul className="team-list">
-                  {team.members.map((member) => (
-                    <li key={member.email}>
-                      <span className="team-who"><strong>{member.email}</strong><small>{member.role}</small></span>
-                    </li>
-                  ))}
-                  {team.invitations.map((invitation) => (
-                    <li key={invitation.id}>
-                      <span className="team-who"><strong>{invitation.email}</strong><small>{invitation.role} · invitation expires {formatDate(invitation.expiresAt)}</small></span>
-                      <button className="text-link" type="button" onClick={() => void revokeInvitation(invitation.id)}>Revoke</button>
-                    </li>
-                  ))}
-                </ul>
-                <form className="invite-form" onSubmit={(event) => void sendInvitation(event)}>
-                  <label className="field"><span>Invite by email</span><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="teammate@example.com" required /></label>
-                  <label className="field"><span>Role</span>
-                    <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
-                      <option value="MEMBER">Member</option>
-                      <option value="ADMIN">Admin</option>
-                    </select>
+                <section className="panel settings-panel settings-card" aria-label="Messaging hours">
+                  <div className="panel-heading"><div><p className="eyebrow">Delivery defaults</p><h2>Messaging quiet hours</h2></div><Clock size={21} /></div>
+                  <p className="muted">Sequences and broadcasts hold all DMs during this window (workspace time). Direct replies to a person’s own message are never delayed.</p>
+                  {quietError && <p className="form-error" role="alert">{quietError}</p>}
+                  <label className="field checkbox-field">
+                    <input type="checkbox" checked={quietEnabled} onChange={(event) => setQuietEnabled(event.target.checked)} />
+                    <span>Hold automated DMs during quiet hours</span>
                   </label>
-                  <button className="button button-secondary" type="submit" disabled={inviteBusy}><UserPlus size={15} /> {inviteBusy ? "Inviting…" : "Invite"}</button>
-                </form>
-                <p className="muted">Invitations expire after 7 days and must be accepted with the invited email address.</p>
-              </>
-            ) : (
-              <p className="muted">Only workspace owners and admins can manage the team.</p>
-            )}
-          </section>
-        </div>
+                  {quietEnabled && (
+                    <div className="field-grid">
+                      <label className="field">
+                        <span>Quiet from (hour)</span>
+                        <select value={String(quietStart)} onChange={(e) => setQuietStart(Number(e.target.value))}>
+                          {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Quiet until (hour)</span>
+                        <select value={String(quietEnd)} onChange={(e) => setQuietEnd(Number(e.target.value))}>
+                          {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Timezone</span>
+                        <input value={quietTz} onChange={(e) => setQuietTz(e.target.value)} placeholder="Europe/Berlin" />
+                      </label>
+                    </div>
+                  )}
+                  <div className="builder-footer">
+                    <div>{quietSaved && <span className="form-success" role="status"><Check size={15} /> Saved.</span>}</div>
+                    <button className="button button-secondary" type="button" disabled={quietBusy} onClick={() => void saveMessagingWindow(quietEnabled)}>
+                      {quietBusy ? "Saving…" : "Save messaging hours"}
+                    </button>
+                  </div>
+                </section>
 
-        <section className="review-links panel settings-card"><div><p className="eyebrow">Policies & support</p><h2>Public resources</h2></div><div className="review-link-grid"><Link href="/privacy">Privacy policy <ExternalLink size={14} /></Link><Link href="/terms">Terms of service <ExternalLink size={14} /></Link><Link href="/data-deletion">Data deletion <ExternalLink size={14} /></Link><Link href="/support">Support <ExternalLink size={14} /></Link></div></section>
+                <div className="settings-grid settings-trust-grid">
+                  <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Protected by default</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> Replies follow saved rules, never scraping.</li></ul></section>
+                  <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Environment</p><h2>{mode === "demo" ? "Demo mode" : "Connected mode"}</h2></div><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} /></div><p className="muted">{mode === "demo" ? "The workspace runs on sample data until DATABASE_URL and Meta credentials are configured." : "This workspace is configured for live Meta-backed delivery."}</p><Link className="text-link" href="/support">View setup guidance <ExternalLink size={15} /></Link></section>
+                </div>
+              </>
+            )}
+
+            {section === "team" && (
+              <section className="panel settings-panel settings-card" aria-label="Team">
+                <div className="panel-heading"><div><p className="eyebrow">Team</p><h2>Members & invitations</h2></div><Users size={21} /></div>
+                {teamError && <p className="form-error" role="alert">{teamError}</p>}
+                {teamManageable && team ? (
+                  <>
+                    <ul className="team-list">
+                      {team.members.map((member) => (
+                        <li key={member.email}>
+                          <span className="team-who"><strong>{member.email}</strong><small>{member.role}</small></span>
+                        </li>
+                      ))}
+                      {team.invitations.map((invitation) => (
+                        <li key={invitation.id}>
+                          <span className="team-who"><strong>{invitation.email}</strong><small>{invitation.role} · invitation expires {formatDate(invitation.expiresAt)}</small></span>
+                          <button className="text-link" type="button" onClick={() => void revokeInvitation(invitation.id)}>Revoke</button>
+                        </li>
+                      ))}
+                    </ul>
+                    <form className="invite-form" onSubmit={(event) => void sendInvitation(event)}>
+                      <label className="field"><span>Invite by email</span><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="teammate@example.com" required /></label>
+                      <label className="field"><span>Role</span>
+                        <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
+                          <option value="MEMBER">Member</option>
+                          <option value="ADMIN">Admin</option>
+                        </select>
+                      </label>
+                      <button className="button button-secondary" type="submit" disabled={inviteBusy}><UserPlus size={15} /> {inviteBusy ? "Inviting…" : "Invite"}</button>
+                    </form>
+                    <p className="muted">Invitations expire after 7 days and must be accepted with the invited email address.</p>
+                  </>
+                ) : (
+                  <p className="muted">Only workspace owners and admins can manage the team.</p>
+                )}
+              </section>
+            )}
+
+            {section === "policies" && (
+              <section className="review-links panel settings-card"><div><p className="eyebrow">Policies & support</p><h2>Public resources</h2></div><div className="review-link-grid"><Link href="/privacy">Privacy policy <ExternalLink size={14} /></Link><Link href="/terms">Terms of service <ExternalLink size={14} /></Link><Link href="/data-deletion">Data deletion <ExternalLink size={14} /></Link><Link href="/support">Support <ExternalLink size={14} /></Link></div></section>
+            )}
+          </div>
+        </div>
       </div>
     </AppShell>
   );
