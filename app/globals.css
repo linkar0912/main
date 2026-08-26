@@ -1831,8 +1831,12 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .simulator-actions li { font-size: .8rem; }
 .simulator-actions code { background: var(--surface-soft); border-radius: 4px; font-size: .7rem; padding: 1px 5px; }
 .warning-text { color: #a2701d; }
-.variant-list { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
-.variant-list li { align-items: center; display: flex; gap: var(--space-3); justify-content: space-between; }
+/* Lives in the 340px activity sidebar, where "40 reached - 50 delivered
+   (125%) - 22 clicks" never fits beside the chip on one line - the old
+   single-row flex (space-between + center) left the chip stranded next to
+   whichever line the wrapped text happened to break onto. Stack instead. */
+.variant-list { display: grid; gap: var(--space-3); list-style: none; margin: 0; padding: 0; }
+.variant-list li { align-items: flex-start; display: flex; flex-direction: column; gap: 4px; }
 
 /* Visually-hidden text that remains available to assistive tech (filters, etc.). */
 .sr-only {
