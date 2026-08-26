@@ -20,9 +20,13 @@
   --canvas: #ffffff;
   /* Card/panel surface - white in light mode, raised graphite in dark mode. */
   --panel: #ffffff;
-  --surface-soft: #f7f6ef;
-  --surface-sunk: #eeece2;
-  --hover-wash: #f1efe6;
+  /* Neutral grays, not warm/cream - these three back nearly every hover and
+     soft-fill state across the app (nav links, buttons, rows, tabs), so a
+     warm tint here reads as an unintended yellow wash on interaction rather
+     than a deliberate accent. */
+  --surface-soft: #f5f5f4;
+  --surface-sunk: #eeeeec;
+  --hover-wash: #efefed;
 
   /* Magenta is the interactive accent: links, focus rings, active data. */
   --accent: #fa0cf7;
