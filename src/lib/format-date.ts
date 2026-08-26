@@ -20,3 +20,22 @@ export function formatDateTime(input: string | Date): string {
     minute: "2-digit",
   });
 }
+
+/**
+ * Compact "2h ago" style relative time. Only safe to call from code that
+ * renders exclusively on the client (e.g. after a client-side fetch) -
+ * `Date.now()` differs between server and client render passes, which
+ * would otherwise produce a hydration mismatch.
+ */
+export function formatRelativeTime(input: string | Date): string {
+  const date = typeof input === "string" ? new Date(input) : input;
+  const seconds = Math.round((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return formatDate(date);
+}

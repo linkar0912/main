@@ -924,16 +924,29 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .feed-count { font-size: .72rem; margin: 0; }
 .feed-empty { background: var(--panel); border: 1px dashed var(--line-strong); border-radius: var(--radius-md); color: var(--muted); padding: var(--space-6); text-align: center; }
 
+/* Campaign activity roster - participants are grouped by the post they came
+   from (one campaign is usually one or two Reels), so the caption renders
+   once per group instead of once per row: with 96 people on the same Reel,
+   repeating it 96 times was the loudest thing on the page and buried what
+   actually differs between rows (who, when, which A/B variant, how far along). */
+/* grid-template-columns is explicit (not just display:grid) because a grid
+   item's implicit min-width is auto, not 0 - without this, a row's min-content
+   (long unwrappable badge/journey-track content) forces the single column
+   wider than the page, pushing content out under the sticky sidebar. */
+.activity-groups { display: grid; gap: var(--space-7, 30px); grid-template-columns: minmax(0, 1fr); }
+.activity-group-head { align-items: baseline; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 6px 10px; margin-bottom: var(--space-3); min-width: 0; padding-bottom: 10px; }
+.activity-group-head .activity-caption { flex: 1 1 260px; margin: 0; }
+.activity-group-count { color: var(--subtle); flex-shrink: 0; font-size: .68rem; font-weight: 700; }
+.activity-roster { display: grid; gap: var(--space-3); grid-template-columns: minmax(0, 1fr); }
+
 .activity-row { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-5); transition: border-color var(--speed), box-shadow var(--speed); }
 .activity-row:hover { border-color: var(--line-strong); box-shadow: var(--shadow-card); }
-/* .activity-media used to be a flex sibling forced to width:100%, which starved
-   .activity-row-meta of room and made its two badges wrap onto separate lines
-   with slightly different right edges - fix is to let media actually share the
-   row, and keep the badge pair as one non-wrapping unit that drops as a whole
-   onto its own line when the row is narrow, instead of splitting mid-pair. */
 .activity-row-top { align-items: flex-start; display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; margin-bottom: var(--space-4); width: 100%; }
-.activity-media { flex: 1 1 260px; min-width: 0; }
 .activity-caption { color: var(--ink); font-size: .88rem; font-weight: 700; margin: 3px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-row-identity { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.participant-badge { align-items: center; background: var(--surface-sunk); border-radius: 99px; color: var(--slate); display: inline-flex; flex-shrink: 0; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace; font-size: .68rem; font-weight: 700; gap: 5px; padding: 4px 10px; }
+.participant-badge svg { color: var(--muted); }
+.activity-row-time { color: var(--subtle); flex-shrink: 0; font-size: .7rem; font-weight: 600; }
 .activity-row-meta { align-items: center; display: flex; flex-shrink: 0; flex-wrap: nowrap; gap: 8px; }
 .keyword-chip { align-items: center; background: var(--volt-soft); border: 1px solid var(--volt-deep); border-radius: 99px; color: var(--ink); display: inline-flex; flex-shrink: 0; font-size: .62rem; font-weight: 800; letter-spacing: .03em; padding: 3px 9px; white-space: nowrap; }
 .keyword-chip.is-any { background: var(--surface-soft); border-color: var(--line-strong); color: var(--muted); }

@@ -1,4 +1,4 @@
-import type { AutomationParticipantRecord } from "../repository";
+import type { AutomationParticipantRecord, ParticipantState } from "../repository";
 
 /**
  * Wire shape returned by GET /api/automations/[id]/activity for a single
@@ -24,6 +24,8 @@ export type ParticipantActivitySummary = Pick<
   | "finalDeliveryError"
   | "finalDeliveredAt"
   | "deliveryClickedAt"
+  | "variantLabel"
+  | "createdAt"
 >;
 
 /**
@@ -39,8 +41,17 @@ export type ParticipantFunnelSummary = {
   linkSent: number;
 };
 
-const OPTED_IN_OR_LATER = new Set(["OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED", "LINK_SENT"]);
-const FOLLOWED_STATES = new Set(["FOLLOW_VERIFIED", "LINK_SENT"]);
+// Funnel classification sets. These are the source of truth used by both the
+// in-memory `computeFunnelSummary` here and the Prisma `countParticipantFunnel`
+// query - sharing the constants keeps the two paths from drifting if a state
+// (e.g. CANCELLED) is ever added to the enum.
+export const OPTED_IN_OR_LATER_STATES = new Set<ParticipantState>([
+  "OPTED_IN",
+  "FOLLOW_REQUIRED",
+  "FOLLOW_VERIFIED",
+  "LINK_SENT",
+]);
+export const FOLLOWED_STATES = new Set<ParticipantState>(["FOLLOW_VERIFIED", "LINK_SENT"]);
 
 /**
  * Derive the funnel summary from a list of participants. Lives here (not
@@ -57,8 +68,8 @@ export function computeFunnelSummary(
   let linkSent = 0;
   for (const participant of participants) {
     if (participant.openingStatus === "SENT") openingSent += 1;
-    if (OPTED_IN_OR_LATER.has(participant.state)) optedIn += 1;
-    if (participant.followStatus === true || FOLLOWED_STATES.has(participant.state)) followed += 1;
+    if (OPTED_IN_OR_LATER_STATES.has(participant.state as ParticipantState)) optedIn += 1;
+    if (participant.followStatus === true || FOLLOWED_STATES.has(participant.state as ParticipantState)) followed += 1;
     if (participant.finalDeliveryStatus === "SENT") linkSent += 1;
   }
   return { commented: participants.length, openingSent, optedIn, followed, linkSent };

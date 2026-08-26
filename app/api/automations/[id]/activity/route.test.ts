@@ -163,6 +163,7 @@ describe("GET /api/automations/[id]/activity", () => {
           openingStatus: "SENT",
           finalDeliveryStatus: "SENT",
           finalDeliveredAt: "2026-08-21T09:10:00.000Z",
+          createdAt: newer.createdAt,
         },
         {
           id: "participant_older",
@@ -174,6 +175,7 @@ describe("GET /api/automations/[id]/activity", () => {
           publicReplyStatus: "SENT",
           openingStatus: "SENT",
           finalDeliveryStatus: "SKIPPED",
+          createdAt: older.createdAt,
         },
       ],
       summary: { commented: 20_001, openingSent: 15_000, optedIn: 12_000, followed: 8_000, linkSent: 6_000 },

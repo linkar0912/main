@@ -33,6 +33,8 @@ function toActivitySummary(participant: AutomationParticipantRecord): Participan
     finalDeliveryError,
     finalDeliveredAt,
     deliveryClickedAt,
+    variantLabel,
+    createdAt,
   } = participant;
   return {
     id,
@@ -49,6 +51,8 @@ function toActivitySummary(participant: AutomationParticipantRecord): Participan
     finalDeliveryError,
     finalDeliveredAt,
     deliveryClickedAt,
+    variantLabel,
+    createdAt,
   };
 }
 

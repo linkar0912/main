@@ -12,13 +12,19 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  UserRound,
   Workflow,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ParticipantState } from "@/src/lib/repository";
-import { formatDateTime } from "@/src/lib/format-date";
-import type { ParticipantActivitySummary, ParticipantFunnelSummary } from "@/src/lib/automation/activity-summary";
+import { formatDateTime, formatRelativeTime } from "@/src/lib/format-date";
+import {
+  FOLLOWED_STATES,
+  OPTED_IN_OR_LATER_STATES,
+  type ParticipantActivitySummary,
+  type ParticipantFunnelSummary,
+} from "@/src/lib/automation/activity-summary";
 
 export type { ParticipantActivitySummary, ParticipantFunnelSummary };
 
@@ -34,8 +40,6 @@ const FUNNEL_STAGES: { key: keyof ParticipantFunnelSummary; label: string }[] = 
 
 const JOURNEY_STEPS = ["Comment", "DM", "Opt-in", "Follow", "Link"] as const;
 
-const OPTED_IN_OR_LATER = new Set<ParticipantState>(["OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED", "LINK_SENT"]);
-const FOLLOWED_STATES = new Set<ParticipantState>(["FOLLOW_VERIFIED", "LINK_SENT"]);
 const IN_PROGRESS_STATES = new Set<ParticipantState>([
   "COMMENT_MATCHED",
   "OPENING_SENT",
@@ -95,7 +99,7 @@ function journeyStepStates(participant: ParticipantActivitySummary): JourneyStep
   const done = [
     true,
     participant.openingStatus === "SENT",
-    OPTED_IN_OR_LATER.has(participant.state),
+    OPTED_IN_OR_LATER_STATES.has(participant.state),
     participant.followStatus === true || FOLLOWED_STATES.has(participant.state),
     participant.finalDeliveryStatus === "SENT",
   ];
@@ -202,12 +206,31 @@ function JourneyTrack({ participant }: { participant: ParticipantActivitySummary
   );
 }
 
+function ParticipantIdentity({ participant, position }: { participant: ParticipantActivitySummary; position: number }) {
+  return (
+    <div className="activity-row-identity">
+      <span className="participant-badge">
+        <UserRound size={12} strokeWidth={2.2} />
+        Person {position}
+      </span>
+      {participant.variantLabel && <span className="tag-chip variant-chip">Variant {participant.variantLabel}</span>}
+      {participant.createdAt && (
+        <time className="activity-row-time" dateTime={participant.createdAt} title={formatDateTime(participant.createdAt)}>
+          {formatRelativeTime(participant.createdAt)}
+        </time>
+      )}
+    </div>
+  );
+}
+
 function ActivityRow({
   participant,
+  position,
   onRetry,
   retrying,
 }: {
   participant: ParticipantActivitySummary;
+  position: number;
   onRetry?: () => void;
   retrying?: boolean;
 }) {
@@ -223,10 +246,7 @@ function ActivityRow({
   return (
     <article className="activity-row">
       <header className="activity-row-top">
-        <div className="activity-media">
-          <span className="media-type-label">{media.mediaProductType ?? media.mediaType}</span>
-          <p className="activity-caption">{media.caption || "Untitled Reel"}</p>
-        </div>
+        <ParticipantIdentity participant={participant} position={position} />
         <div className="activity-row-meta">
           <span className={`keyword-chip${participant.matchedKeyword ? "" : " is-any"}`}>
             {participant.matchedKeyword ? `\u201C${participant.matchedKeyword}\u201D` : "Any comment"}
@@ -367,6 +387,30 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
     return { delivered: delivered.length, clicked: clicked.length, rate };
   }, [participants]);
 
+  // Everyone in a campaign usually commented on the same one or two Reels, so
+  // repeating that Reel's caption on every participant row (previously: once
+  // per row, up to 100 times) was the loudest thing on the page and drowned
+  // out what actually differs between people. Group by source post instead -
+  // the caption renders once per group, and each row can foreground who the
+  // person is (a short id, when they showed up, their A/B variant) rather
+  // than what they already told you at the top of the group.
+  const groups = useMemo(() => {
+    const order: string[] = [];
+    const byMedia = new Map<string, ParticipantActivitySummary[]>();
+    for (const p of filtered) {
+      const key = p.sourceMediaSnapshot.id;
+      if (!byMedia.has(key)) {
+        order.push(key);
+        byMedia.set(key, []);
+      }
+      byMedia.get(key)!.push(p);
+    }
+    return order.map((key) => {
+      const rows = byMedia.get(key)!;
+      return { key, media: rows[0].sourceMediaSnapshot, participants: rows };
+    });
+  }, [filtered]);
+
   if (error && !participants) return <p className="form-error" role="alert">{error}</p>;
 
   if (!participants) {
@@ -484,9 +528,30 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
       {filtered.length === 0 ? (
         <p className="muted feed-empty">No participants match this view. Try a different filter or search.</p>
       ) : (
-        filtered.map((participant) => (
-          <ActivityRow key={participant.id} participant={participant} onRetry={() => void retryParticipant(participant.id)} retrying={retryingId === participant.id} />
-        ))
+        <div className="activity-groups">
+          {groups.map((group) => (
+            <section className="activity-group" key={group.key} aria-label={group.media.caption || "Untitled Reel"}>
+              <header className="activity-group-head">
+                <span className="media-type-label">{group.media.mediaProductType ?? group.media.mediaType}</span>
+                <p className="activity-caption">{group.media.caption || "Untitled Reel"}</p>
+                <span className="activity-group-count">
+                  {group.participants.length} {group.participants.length === 1 ? "person" : "people"}
+                </span>
+              </header>
+              <div className="activity-roster">
+                {group.participants.map((participant, index) => (
+                  <ActivityRow
+                    key={participant.id}
+                    participant={participant}
+                    position={index + 1}
+                    onRetry={() => void retryParticipant(participant.id)}
+                    retrying={retryingId === participant.id}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       )}
     </div>
   );

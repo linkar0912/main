@@ -33,6 +33,8 @@ function participant(overrides: Partial<ParticipantActivitySummary> = {}): Parti
     finalDeliveryStatus: "SKIPPED",
     finalDeliveryError: undefined,
     finalDeliveredAt: undefined,
+    variantLabel: undefined,
+    createdAt: "2026-08-20T08:00:00.000Z",
     ...overrides,
   };
 }
