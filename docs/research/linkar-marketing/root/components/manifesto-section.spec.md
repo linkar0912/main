@@ -35,7 +35,7 @@ section#product[aria-labelledby="manifesto-title"][data-reveal]
 
 ## State transitions
 
-The section uses the shared intersection reveal with threshold `0.18`. H2 and body move from `translateY(56px)` and opacity `0` to rest/full opacity over `700ms cubic-bezier(.22,.61,.21,1)`, with the body delayed `80ms`. It reveals once and is then unobserved.
+The section uses the shared intersection reveal with threshold `0.18`. H2 and body move from `translateY(56px)` and opacity `0` to rest/full opacity over `700ms cubic-bezier(.43,.195,.02,1)`, the shared snap easing, with the body delayed `80ms`. It reveals once and is then unobserved.
 
 ## Assets
 
@@ -52,4 +52,3 @@ Render H2 and body at rest and full opacity, with no delay or vertical offset. T
 ## Test contract
 
 Assert heading hierarchy and exact copy, `#product` anchor, reveal data hook, no controls or external assets, and immediate visible state under reduced motion.
-

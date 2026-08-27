@@ -30,7 +30,7 @@ section#workflows[aria-labelledby="gallery-title"]
 │  ├─ h2#gallery-title
 │  └─ p
 └─ div
-   ├─ div[role="tablist"][aria-label="Workflow examples"] (desktop)
+   ├─ div[role="tablist"][aria-label="Workflow examples"][aria-orientation="vertical"] (desktop)
    │  └─ button[role="tab"][aria-selected][aria-controls] × 4
    ├─ div (desktop panel stage)
    │  └─ div[role="tabpanel"][aria-labelledby]
@@ -79,4 +79,3 @@ Keep click and keyboard selection. Replace panel motion and connector drawing wi
 ## Test contract
 
 Assert exact four workflows, first initial selection, click selection, tab roles/relationships, full arrow/Home/End behavior, mobile accordion relationships and one-open invariant, selected content under reduced motion, and locally rendered preview nodes.
-
