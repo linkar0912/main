@@ -1,0 +1,148 @@
+.section {
+  block-size: 104px;
+  overflow: hidden;
+  color: #050505;
+  background: #ffffff;
+  border-block: 1px solid rgb(5 5 5 / 12%);
+}
+
+.frame {
+  display: flex;
+  align-items: center;
+  min-block-size: inherit;
+  overflow: hidden;
+  padding-inline: 32px;
+}
+
+.track {
+  display: flex;
+  flex: none;
+  inline-size: max-content;
+  animation: rail-scroll 28s linear infinite;
+}
+
+.frame:hover .track,
+.frame:focus-within .track {
+  animation-play-state: paused;
+}
+
+.facts {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 64px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.facts::after {
+  flex: none;
+  inline-size: 8px;
+  block-size: 8px;
+  margin-inline: 28px;
+  content: "";
+  background: #fff100;
+  border-radius: 50%;
+}
+
+.facts li {
+  position: relative;
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.facts li + li::before {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: -36px;
+  inline-size: 8px;
+  block-size: 8px;
+  content: "";
+  background: #fff100;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes rail-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .section {
+    block-size: 96px;
+  }
+
+  .facts {
+    gap: 48px;
+  }
+
+  .facts li {
+    font-size: .78rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .section {
+    block-size: auto;
+    min-block-size: 88px;
+  }
+
+  .frame {
+    padding-inline: 20px;
+  }
+
+  .facts {
+    gap: 32px;
+  }
+
+  .facts li {
+    font-size: .72rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section {
+    block-size: auto;
+    min-block-size: 0;
+  }
+
+  .frame {
+    overflow: visible;
+    padding-block: 20px;
+  }
+
+  .track,
+  .frame:hover .track,
+  .frame:focus-within .track {
+    inline-size: 100%;
+    animation: none;
+  }
+
+  .facts {
+    flex: 1;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px 24px;
+  }
+
+  .facts[aria-hidden="true"] {
+    display: none;
+  }
+
+  .facts::after,
+  .facts li + li::before {
+    display: none;
+  }
+
+  .facts li {
+    white-space: normal;
+  }
+}
