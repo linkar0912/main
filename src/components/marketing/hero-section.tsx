@@ -19,7 +19,7 @@ const flowStates = [
 
 export function HeroSection() {
   return (
-    <section id="top" className={styles.hero} aria-labelledby="hero-title">
+    <section id="top" className={styles.hero} aria-labelledby="hero-title" data-motion="staged">
       <div className={styles.imageFrame} aria-hidden="true">
         <Image
           className={styles.image}
@@ -34,7 +34,6 @@ export function HeroSection() {
 
       <div className={styles.grid}>
         <div className={styles.copy}>
-          <p className={styles.eyebrow}>Linkar / reply flow</p>
           <h1 id="hero-title" className={styles.title}>
             <span className={styles.titleLine}>Turn attention into </span>
             <span className={styles.titleLine}>conversations that keep moving.</span>
@@ -43,10 +42,9 @@ export function HeroSection() {
             Set the trigger once. Linkar replies with context, follows up on time, and brings you back when a real person matters.
           </p>
           <div className={styles.actions}>
-            <a className={styles.primaryAction} href="/signup">
+            <a className={styles.primaryAction} href="/signup" data-motion-stage="action">
               <ButtonRoll label="Start building" />
             </a>
-            <a className={styles.secondaryAction} href="#product">See how it works</a>
           </div>
           <p className={styles.proof}>Clear rules. Useful replies. Your voice.</p>
         </div>

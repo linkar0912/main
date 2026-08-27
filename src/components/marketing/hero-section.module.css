@@ -46,22 +46,10 @@
   inline-size: min(42rem, 48vw);
 }
 
-.eyebrow,
 .flowLabel,
 .status,
-.secondaryAction,
 .proof {
   font-family: var(--font-mono, ui-monospace, monospace);
-}
-
-.eyebrow {
-  margin: 0 0 18px;
-  font-size: .6875rem;
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  opacity: .78;
-  animation: fade-up 700ms cubic-bezier(.22, .61, .21, 1) 80ms both;
 }
 
 .title {
@@ -130,22 +118,8 @@
   box-shadow: 0 0 0 5px #ffffff;
 }
 
-.secondaryAction {
-  color: #ffffff;
-  font-size: .8125rem;
-  font-weight: 700;
-  text-decoration-color: rgb(255 255 255 / 55%);
-  text-underline-offset: 4px;
-}
-
-.secondaryAction:hover,
-.secondaryAction:focus-visible {
-  color: #fff100;
-}
-
-.secondaryAction:focus-visible {
-  outline: 2px solid #fff100;
-  outline-offset: 4px;
+.hero[data-motion="staged"] .primaryAction[data-motion-stage="action"] :global([aria-hidden="true"]:first-child) {
+  animation: button-label-in 420ms cubic-bezier(.43, .195, .02, 1) 700ms both;
 }
 
 .proof {
@@ -260,6 +234,11 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes button-label-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
 @media (min-width: 768px) and (max-width: 1023px) {
   .hero {
     min-block-size: 900px;
@@ -345,7 +324,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .image,
-  .eyebrow,
   .titleLine,
   .body,
   .actions,
@@ -353,6 +331,10 @@
   .scene,
   .flowState {
     animation: none;
+  }
+
+  .hero[data-motion="staged"] .primaryAction[data-motion-stage="action"] :global([aria-hidden="true"]:first-child) {
+    transform: translateY(0);
   }
 
   .primaryAction {
