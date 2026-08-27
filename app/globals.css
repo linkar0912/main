@@ -950,10 +950,19 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .activity-row { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); transition: border-color var(--speed), box-shadow var(--speed); }
 .activity-row:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
 .activity-row-grid { padding: 11px var(--space-4); }
-.row-identity { align-items: center; display: flex; flex-wrap: wrap; gap: 7px; min-width: 0; }
-.participant-badge { align-items: center; background: var(--surface-sunk); border-radius: 99px; color: var(--slate); display: inline-flex; flex-shrink: 0; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace; font-size: .66rem; font-weight: 700; gap: 5px; padding: 4px 9px; }
+/* Deliberately stacked, not wrap-dependent: a badge + variant chip + relative
+   time never fit on one line at the table's real column width once a
+   campaign has A/B variants, and letting them wrap organically inflated
+   every such row to a different, inconsistent height while the other
+   single-line cells (trigger/journey/status/delivery) sat centered in the
+   extra space looking adrift. A fixed two-line block keeps every row the
+   same height regardless of content. */
+.row-identity { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.participant-badge { align-items: center; background: var(--surface-sunk); border-radius: 99px; color: var(--slate); display: inline-flex; flex-shrink: 0; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace; font-size: .66rem; font-weight: 700; gap: 5px; padding: 4px 9px; width: fit-content; }
 .participant-badge svg { color: var(--muted); }
-.row-time { color: var(--subtle); flex-shrink: 0; font-size: .68rem; font-weight: 600; }
+.row-identity-sub { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; }
+.row-identity-sub .variant-chip { font-size: .64rem; padding: 2px 8px; }
+.row-time { color: var(--subtle); flex-shrink: 0; font-size: .66rem; font-weight: 600; }
 .keyword-chip { align-items: center; background: var(--volt-soft); border: 1px solid var(--volt-deep); border-radius: 99px; color: var(--ink); display: inline-flex; flex-shrink: 0; font-size: .6rem; font-weight: 800; letter-spacing: .03em; max-width: 100%; overflow: hidden; padding: 3px 9px; text-overflow: ellipsis; white-space: nowrap; }
 .keyword-chip.is-any { background: var(--surface-soft); border-color: var(--line-strong); color: var(--muted); }
 

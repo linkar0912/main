@@ -224,11 +224,15 @@ function ParticipantIdentity({ participant, position }: { participant: Participa
         <UserRound size={12} strokeWidth={2.2} />
         Person {position}
       </span>
-      {participant.variantLabel && <span className="tag-chip variant-chip">Variant {participant.variantLabel}</span>}
-      {participant.createdAt && (
-        <time className="row-time" dateTime={participant.createdAt} title={formatDateTime(participant.createdAt)}>
-          {formatRelativeTime(participant.createdAt)}
-        </time>
+      {(participant.variantLabel || participant.createdAt) && (
+        <div className="row-identity-sub">
+          {participant.variantLabel && <span className="tag-chip variant-chip">Variant {participant.variantLabel}</span>}
+          {participant.createdAt && (
+            <time className="row-time" dateTime={participant.createdAt} title={formatDateTime(participant.createdAt)}>
+              {formatRelativeTime(participant.createdAt)}
+            </time>
+          )}
+        </div>
       )}
     </div>
   );
