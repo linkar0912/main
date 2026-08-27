@@ -101,7 +101,8 @@ export function MarketingHeader() {
 
   useEffect(() => {
     const closeOnTabletResize = () => {
-      if (window.innerWidth >= 768) {
+      if (window.innerWidth >= 768 && menuOpenRef.current) {
+        menuOpenRef.current = false;
         setMenuOpen(false);
         window.requestAnimationFrame(() => openerRef.current?.focus());
       }

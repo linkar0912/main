@@ -143,6 +143,19 @@ describe("MarketingHeader", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("leaves focus alone on a desktop resize when the menu is already closed", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+    const login = screen.getByRole("link", { name: "Login" });
+    login.focus();
+
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1_024 });
+    fireEvent.resize(window);
+    act(() => flushAnimationFrames());
+
+    expect(document.activeElement).toBe(login);
+  });
+
   it("closes the menu when a menu link is selected and clears scroll locking on unmount", () => {
     installBrowserControls();
     const view = render(<MarketingHeader />);
