@@ -14,7 +14,7 @@ export function PublicPage({
     <main className="legal-page">
       <div className="legal-top">
         <Link className="brand" href="/"><span className="brand-mark"><InstagramGlyph size={17} /></span><span>{PRODUCT_NAME}</span></Link>
-        <Link className="back-link" href="/"><ArrowLeft size={15} /> Back to app</Link>
+        <Link className="back-link" href="/dashboard"><ArrowLeft size={15} /> Back to app</Link>
       </div>
       <article className="legal-content">
         <p className="eyebrow">{PRODUCT_NAME} / public policy</p>

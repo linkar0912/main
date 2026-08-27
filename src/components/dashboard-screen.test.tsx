@@ -5,7 +5,7 @@ import type { AutomationRecord } from "@/src/lib/repository";
 
 const automationState = vi.hoisted(() => ({ loading: false, automations: [] as AutomationRecord[] }));
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
 vi.mock("./automation-list", () => ({
   useAutomations: () => ({ automations: automationState.automations, loading: automationState.loading }),
 }));

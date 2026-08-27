@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
 
 const { AppShell } = await import("./app-shell");
 
@@ -49,6 +49,7 @@ describe("AppShell", () => {
     await screen.findByText("Member");
     expect(document.querySelector(".sidebar-brand .brand-mark")).toBeNull();
     expect(screen.getAllByText("Linkar").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Linkar" }).getAttribute("href")).toBe("/dashboard");
   });
 
   it("shows the connected Instagram avatar on the identity card", async () => {

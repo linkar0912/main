@@ -202,7 +202,7 @@ export async function getValidatedSession(request: Request): Promise<AppSession 
 export function safeNextPath(value: string | null | undefined): string {
   return value?.startsWith("/") && !value.startsWith("//") && !/[\\\u0000-\u001f]/.test(value)
     ? value
-    : "/";
+    : "/dashboard";
 }
 
 export function sessionCookieName(appUrl: string): string {

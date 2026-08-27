@@ -33,7 +33,7 @@ export const config = {
   // authenticated page. New gated routes should be appended here - keep the
   // list aligned with the routes that render <AppShell> in app/.
   matcher: [
-    "/",
+    "/dashboard/:path*",
     "/activity/:path*",
     "/automations/:path*",
     "/settings/:path*",

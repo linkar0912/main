@@ -23,7 +23,7 @@ import { Skeleton } from "./skeleton";
 
 /** Workspace destinations in the sidebar. */
 const workspaceNavigation = [
-  { href: "/", label: "Home", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/automations", label: "Automations", icon: Workflow },
   { href: "/automations/sequences", label: "Sequences", icon: ListOrdered },
   { href: "/automations/broadcasts", label: "Broadcasts", icon: Megaphone },
@@ -205,7 +205,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         >
           <Menu size={20} />
         </button>
-        <Link className="brand" href="/" aria-label={`${PRODUCT_NAME} overview`}>
+        <Link className="brand" href="/dashboard" aria-label={`${PRODUCT_NAME} overview`}>
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
       </header>
@@ -223,7 +223,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         role={drawerOpen ? "dialog" : undefined}
         tabIndex={-1}
       >
-        <Link className="sidebar-brand" href="/">
+        <Link className="sidebar-brand" href="/dashboard">
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
 

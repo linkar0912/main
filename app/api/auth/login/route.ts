@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
-  const nextPath = safeNextPath(String(form.get("next") ?? "/"));
+  const nextPath = safeNextPath(String(form.get("next") ?? "/dashboard"));
 
   const limitKey = loginRateLimitKey(env.authSessionSecret, email || "-", address);
   if (!(await loginLimiter.isAllowed(limitKey))) {
