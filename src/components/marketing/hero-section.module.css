@@ -125,6 +125,12 @@
   animation: button-secondary-label-in 420ms cubic-bezier(.43, .195, .02, 1) 700ms;
 }
 
+.hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-secondary="entering"]:hover :global([aria-hidden="true"]:nth-child(2)),
+.hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-secondary="entering"]:focus-visible :global([aria-hidden="true"]:nth-child(2)) {
+  animation: none;
+  transform: translateY(0);
+}
+
 .proof {
   margin: 24px 0 0;
   font-size: .6875rem;
