@@ -103,6 +103,7 @@ export function MarketingHeader() {
     const closeOnTabletResize = () => {
       if (window.innerWidth >= 768) {
         setMenuOpen(false);
+        window.requestAnimationFrame(() => openerRef.current?.focus());
       }
     };
 

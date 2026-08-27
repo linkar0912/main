@@ -128,6 +128,21 @@ describe("MarketingHeader", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
+  it("returns focus to the opener when a tablet resize closes the menu", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+    const opener = screen.getByRole("button", { name: "Open menu" });
+    fireEvent.click(opener);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close menu" }));
+
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 768 });
+    fireEvent.resize(window);
+    act(() => flushAnimationFrames());
+
+    expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("closes the menu when a menu link is selected and clears scroll locking on unmount", () => {
     installBrowserControls();
     const view = render(<MarketingHeader />);
