@@ -1,0 +1,81 @@
+.reveal {
+  --reveal-delay: 0ms;
+
+  opacity: 1;
+  transform: none;
+}
+
+.reveal[data-enhanced="true"] {
+  transition:
+    opacity 700ms cubic-bezier(.22, .61, .21, 1) var(--reveal-delay),
+    transform 700ms cubic-bezier(.22, .61, .21, 1) var(--reveal-delay);
+  will-change: opacity, transform;
+}
+
+.reveal[data-enhanced="true"]:not([data-visible="true"]) {
+  opacity: 0;
+  transform: translateY(56px);
+}
+
+.reveal[data-visible="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.buttonRoll {
+  display: inline-grid;
+  block-size: 1lh;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.buttonRollCopy {
+  grid-area: 1 / 1;
+  transition: transform 420ms cubic-bezier(.43, .195, .02, 1);
+}
+
+.buttonRollCopy:first-child {
+  transform: translateY(0);
+}
+
+.buttonRollCopy:last-child {
+  transform: translateY(100%);
+}
+
+:global(a:hover) .buttonRollCopy:first-child,
+:global(a:focus-visible) .buttonRollCopy:first-child,
+:global(button:hover) .buttonRollCopy:first-child,
+:global(button:focus-visible) .buttonRollCopy:first-child {
+  transform: translateY(-100%);
+}
+
+:global(a:hover) .buttonRollCopy:last-child,
+:global(a:focus-visible) .buttonRollCopy:last-child,
+:global(button:hover) .buttonRollCopy:last-child,
+:global(button:focus-visible) .buttonRollCopy:last-child {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal[data-enhanced="true"],
+  .reveal[data-enhanced="true"]:not([data-visible="true"]) {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .buttonRollCopy {
+    transition: none;
+  }
+
+  .buttonRollCopy:first-child,
+  .buttonRollCopy:last-child {
+    transform: none;
+  }
+
+  .buttonRollCopy:last-child {
+    visibility: hidden;
+  }
+}
