@@ -80,6 +80,7 @@
 
   .buttonRollCopy {
     transition: none;
+    animation: none !important;
   }
 
   .buttonRollCopyPrimary,
@@ -88,6 +89,21 @@
   }
 
   .buttonRollCopySecondary {
+    visibility: hidden;
+  }
+
+  :global(a:hover) .buttonRollCopyPrimary,
+  :global(a:focus-visible) .buttonRollCopyPrimary,
+  :global(button:hover) .buttonRollCopyPrimary,
+  :global(button:focus-visible) .buttonRollCopyPrimary {
+    transform: translateY(0);
+  }
+
+  :global(a:hover) .buttonRollCopySecondary,
+  :global(a:focus-visible) .buttonRollCopySecondary,
+  :global(button:hover) .buttonRollCopySecondary,
+  :global(button:focus-visible) .buttonRollCopySecondary {
+    transform: none;
     visibility: hidden;
   }
 }
