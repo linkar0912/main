@@ -34,26 +34,38 @@
   transition: transform 420ms cubic-bezier(.43, .195, .02, 1);
 }
 
-.buttonRollCopy:first-child {
+.buttonRollCopyPrimary {
   transform: translateY(0);
 }
 
-.buttonRollCopy:last-child {
+.buttonRollCopySecondary {
   transform: translateY(100%);
 }
 
-:global(a:hover) .buttonRollCopy:first-child,
-:global(a:focus-visible) .buttonRollCopy:first-child,
-:global(button:hover) .buttonRollCopy:first-child,
-:global(button:focus-visible) .buttonRollCopy:first-child {
+:global(a:hover) .buttonRollCopyPrimary,
+:global(a:focus-visible) .buttonRollCopyPrimary,
+:global(button:hover) .buttonRollCopyPrimary,
+:global(button:focus-visible) .buttonRollCopyPrimary {
   transform: translateY(-100%);
 }
 
-:global(a:hover) .buttonRollCopy:last-child,
-:global(a:focus-visible) .buttonRollCopy:last-child,
-:global(button:hover) .buttonRollCopy:last-child,
-:global(button:focus-visible) .buttonRollCopy:last-child {
+:global(a:hover) .buttonRollCopySecondary,
+:global(a:focus-visible) .buttonRollCopySecondary,
+:global(button:hover) .buttonRollCopySecondary,
+:global(button:focus-visible) .buttonRollCopySecondary {
   transform: translateY(0);
+}
+
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -70,12 +82,12 @@
     transition: none;
   }
 
-  .buttonRollCopy:first-child,
-  .buttonRollCopy:last-child {
+  .buttonRollCopyPrimary,
+  .buttonRollCopySecondary {
     transform: none;
   }
 
-  .buttonRollCopy:last-child {
+  .buttonRollCopySecondary {
     visibility: hidden;
   }
 }

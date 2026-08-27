@@ -69,4 +69,25 @@ describe("Reveal", () => {
     const reveal = screen.getByText("Always readable").closest("[data-reveal]");
     expect(reveal?.getAttribute("data-enhanced")).toBeNull();
   });
+
+  it("renders the requested semantic wrapper and forwards standard attributes", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+
+    render(
+      <Reveal
+        as="section"
+        id="ready-section"
+        aria-label="Ready section"
+        data-tone="ink"
+      >
+        <p>Semantic content</p>
+      </Reveal>,
+    );
+
+    const region = screen.getByRole("region", { name: "Ready section" });
+    expect(region.tagName).toBe("SECTION");
+    expect(region.getAttribute("id")).toBe("ready-section");
+    expect(region.getAttribute("data-tone")).toBe("ink");
+    expect(region.hasAttribute("data-reveal")).toBe(true);
+  });
 });

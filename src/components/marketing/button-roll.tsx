@@ -6,13 +6,20 @@ type ButtonRollProps = {
 
 export function ButtonRoll({ label }: ButtonRollProps) {
   return (
-    <span className={styles.buttonRoll} aria-label={label}>
-      <span className={styles.buttonRollCopy} aria-hidden="true">
+    <span className={styles.buttonRoll}>
+      <span
+        className={`${styles.buttonRollCopy} ${styles.buttonRollCopyPrimary}`}
+        aria-hidden="true"
+      >
         {label}
       </span>
-      <span className={styles.buttonRollCopy} aria-hidden="true">
+      <span
+        className={`${styles.buttonRollCopy} ${styles.buttonRollCopySecondary}`}
+        aria-hidden="true"
+      >
         {label}
       </span>
+      <span className={styles.visuallyHidden}>{label}</span>
     </span>
   );
 }

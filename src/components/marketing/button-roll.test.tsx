@@ -4,14 +4,22 @@ import { describe, expect, it } from "vitest";
 import { ButtonRoll } from "./button-roll";
 
 describe("ButtonRoll", () => {
-  it("keeps one accessible label while rendering two visual copies", () => {
-    render(<ButtonRoll label="Get started" />);
+  it("names a real action while keeping two visual copies decorative", () => {
+    render(
+      <a href="/signup">
+        <ButtonRoll label="Get started" />
+      </a>,
+    );
 
-    const label = screen.getByLabelText("Get started");
-    const copies = screen.getAllByText("Get started");
+    const action = screen.getByRole("link", { name: "Get started" });
+    const animatedCopies = action.querySelectorAll('[aria-hidden="true"]');
+    const accessibleCopy = screen.getByText("Get started", {
+      selector: "span:not([aria-hidden])",
+    });
 
-    expect(label.getAttribute("aria-label")).toBe("Get started");
-    expect(copies).toHaveLength(2);
-    expect(copies.every((copy) => copy.getAttribute("aria-hidden") === "true")).toBe(true);
+    expect(action.getAttribute("href")).toBe("/signup");
+    expect(action.contains(accessibleCopy)).toBe(true);
+    expect(animatedCopies).toHaveLength(2);
+    expect(Array.from(animatedCopies).every((copy) => copy.textContent === "Get started")).toBe(true);
   });
 });

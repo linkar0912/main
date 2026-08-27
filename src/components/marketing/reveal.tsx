@@ -1,20 +1,34 @@
 "use client";
 
-import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  type ComponentPropsWithoutRef,
+  type CSSProperties,
+  type ElementType,
+} from "react";
 import styles from "./primitives.module.css";
 
-type RevealProps = {
-  children: ReactNode;
-  className?: string;
+type RevealTag = Extract<keyof React.JSX.IntrinsicElements, keyof HTMLElementTagNameMap>;
+
+type RevealProps<Tag extends RevealTag = "div"> = {
+  as?: Tag;
   delay?: number;
-};
+} & Omit<ComponentPropsWithoutRef<Tag>, "as">;
 
 type RevealStyle = CSSProperties & {
   "--reveal-delay"?: string;
 };
 
-export function Reveal({ children, className, delay }: RevealProps) {
-  const revealRef = useRef<HTMLDivElement>(null);
+export function Reveal<Tag extends RevealTag = "div">({
+  as,
+  children,
+  className,
+  delay,
+  style,
+  ...attributes
+}: RevealProps<Tag>) {
+  const revealRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const element = revealRef.current;
@@ -47,17 +61,20 @@ export function Reveal({ children, className, delay }: RevealProps) {
     return () => observer.disconnect();
   }, []);
 
-  const revealStyle: RevealStyle | undefined =
-    delay === undefined ? undefined : { "--reveal-delay": `${delay}ms` };
+  const revealStyle: RevealStyle | undefined = delay === undefined
+    ? style
+    : { ...style, "--reveal-delay": `${delay}ms` };
+  const Component = (as ?? "div") as ElementType;
 
   return (
-    <div
+    <Component
+      {...attributes}
       ref={revealRef}
       className={[styles.reveal, className].filter(Boolean).join(" ")}
       data-reveal=""
       style={revealStyle}
     >
       {children}
-    </div>
+    </Component>
   );
 }
