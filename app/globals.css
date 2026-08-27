@@ -993,7 +993,13 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .row-detail-toggle:hover { color: var(--slate); }
 .row-detail[open] .row-detail-toggle { color: var(--slate); }
 
-.activity-diagnostics { background: var(--surface-sunk); display: grid; gap: 1px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); overflow: hidden; }
+/* Always exactly 4 items (public reply / opening DM / follow check / final
+   delivery) - a fixed 2x2 grid, not auto-fit. auto-fit sizes columns from
+   the container width alone, with no idea the item count is fixed, so at
+   widths that fit 3 columns the 4th item wrapped alone onto its own row,
+   leaving two empty tracks that showed this element's own gray background
+   with no diagnostic panel on top of them. */
+.activity-diagnostics { background: var(--surface-sunk); display: grid; gap: 1px; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; }
 .diagnostic { background: var(--panel); padding: 10px 14px; }
 .diagnostic dt { align-items: center; color: var(--muted); display: flex; font-size: .63rem; font-weight: 800; gap: 5px; letter-spacing: .06em; margin-bottom: 3px; text-transform: uppercase; }
 .diagnostic dt svg { flex-shrink: 0; }
@@ -1031,6 +1037,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .activity-table-head { display: none; }
   .activity-row-grid { grid-template-columns: 1fr; }
   .row-actions { justify-content: flex-start; }
+}
+@media (max-width: 480px) {
+  .activity-diagnostics { grid-template-columns: 1fr; }
 }
 
 /* Builder */
