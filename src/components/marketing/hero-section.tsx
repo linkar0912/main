@@ -41,8 +41,14 @@ export function HeroSection() {
           <p className={styles.body}>
             Set the trigger once. Linkar replies with context, follows up on time, and brings you back when a real person matters.
           </p>
-          <div className={styles.actions}>
-            <a className={styles.primaryAction} href="/signup" data-motion-stage="action">
+          <div className={styles.actions} data-action-visibility="persistent" data-motion-reduced="final">
+            <a
+              className={styles.primaryAction}
+              href="/signup"
+              data-motion-stage="action"
+              data-roll-primary="native"
+              data-roll-secondary="entering"
+            >
               <ButtonRoll label="Start building" />
             </a>
           </div>

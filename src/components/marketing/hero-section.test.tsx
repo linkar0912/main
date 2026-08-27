@@ -45,7 +45,7 @@ describe("HeroSection", () => {
     expect(markup).toContain("Conversation moving");
   });
 
-  it("exposes the staged entrance contract while retaining an immediately named action", () => {
+  it("exposes an always-visible primary label and an independently staged secondary roll", () => {
     render(<HeroSection />);
 
     const hero = screen.getByRole("region", { name: "Turn attention into conversations that keep moving." });
@@ -53,6 +53,10 @@ describe("HeroSection", () => {
 
     expect(hero.getAttribute("data-motion")).toBe("staged");
     expect(action.getAttribute("data-motion-stage")).toBe("action");
+    expect(action.getAttribute("data-roll-primary")).toBe("native");
+    expect(action.getAttribute("data-roll-secondary")).toBe("entering");
+    expect(action.parentElement?.getAttribute("data-action-visibility")).toBe("persistent");
+    expect(action.parentElement?.getAttribute("data-motion-reduced")).toBe("final");
     expect(action.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
   });
 

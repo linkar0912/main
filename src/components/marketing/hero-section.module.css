@@ -87,7 +87,10 @@
   align-items: center;
   gap: 18px 24px;
   margin-block-start: 32px;
-  animation: fade-up 700ms cubic-bezier(.22, .61, .21, 1) 240ms both;
+}
+
+.actions[data-action-visibility="persistent"] {
+  animation: action-lift 700ms cubic-bezier(.22, .61, .21, 1) 240ms both;
 }
 
 .primaryAction {
@@ -118,8 +121,8 @@
   box-shadow: 0 0 0 5px #ffffff;
 }
 
-.hero[data-motion="staged"] .primaryAction[data-motion-stage="action"] :global([aria-hidden="true"]:first-child) {
-  animation: button-label-in 420ms cubic-bezier(.43, .195, .02, 1) 700ms both;
+.hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-secondary="entering"] :global([aria-hidden="true"]:nth-child(2)) {
+  animation: button-secondary-label-in 420ms cubic-bezier(.43, .195, .02, 1) 700ms;
 }
 
 .proof {
@@ -224,6 +227,11 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes action-lift {
+  from { transform: translateY(18px); }
+  to { transform: translateY(0); }
+}
+
 @keyframes scene-in {
   from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: translateY(0); }
@@ -234,7 +242,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes button-label-in {
+@keyframes button-secondary-label-in {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
 }
@@ -333,8 +341,20 @@
     animation: none;
   }
 
-  .hero[data-motion="staged"] .primaryAction[data-motion-stage="action"] :global([aria-hidden="true"]:first-child) {
+  .actions[data-action-visibility="persistent"][data-motion-reduced="final"] {
+    animation: none;
     transform: translateY(0);
+  }
+
+  .hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-primary="native"] :global([aria-hidden="true"]:first-child) {
+    animation: none;
+    transform: translateY(0);
+  }
+
+  .hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-secondary="entering"] :global([aria-hidden="true"]:nth-child(2)) {
+    animation: none;
+    transform: translateY(0);
+    visibility: hidden;
   }
 
   .primaryAction {
