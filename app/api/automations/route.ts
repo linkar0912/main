@@ -2,25 +2,9 @@ import { NextResponse } from "next/server";
 import { validateFlowDefinition } from "@/src/lib/automation/definition";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
+import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
 
 export const runtime = "nodejs";
-
-/**
- * Validates a client-supplied account pin. Returns undefined when the client did
- * not ask for a specific account, the igUserId when it is a CONNECTED connection
- * of this workspace, or null when the pin is invalid (unknown/disconnected/foreign).
- */
-async function resolveInstagramAccountId(
-  repository: ReturnType<typeof getRepository>,
-  workspaceId: string,
-  value: unknown,
-): Promise<string | undefined | null> {
-  if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string") return null;
-  const connections = await repository.listConnections(workspaceId);
-  const match = connections.find((connection) => connection.igUserId === value && connection.status === "CONNECTED");
-  return match ? match.igUserId : null;
-}
 
 export async function GET(request: Request) {
   const session = await getValidatedSession(request);
@@ -42,7 +26,12 @@ export async function POST(request: Request) {
     if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
     if (name.length > 120) return NextResponse.json({ error: "Name must be 120 characters or fewer" }, { status: 400 });
     const definition = validateFlowDefinition(body.definition);
-    const instagramAccountId = await resolveInstagramAccountId(getRepository(), session.workspaceId, body.instagramAccountId);
+    // On create, an explicit instagramAccountId of ""/null is treated the same
+    // as omitting the field (i.e. the create route does not allow pinning to
+    // nothing; the pin is only applied when the client sends a real value).
+    const instagramAccountId = body.instagramAccountId === undefined || body.instagramAccountId === null || body.instagramAccountId === ""
+      ? undefined
+      : await resolveInstagramAccountId(session.workspaceId, body.instagramAccountId);
     if (instagramAccountId === null) {
       return NextResponse.json({ error: "That Instagram account is not connected to this workspace" }, { status: 400 });
     }

@@ -28,7 +28,9 @@ function integerEnv(name: string, value: string | undefined, fallback: number): 
   if (value === undefined || value.trim() === "") return fallback;
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error(`${name} must be a non-negative integer`);
+    // Include the offending value so operators can spot the misconfiguration
+    // from the error log without re-deriving it from the environment dump.
+    throw new Error(`${name} must be a non-negative integer (got "${value}")`);
   }
   return parsed;
 }

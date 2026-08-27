@@ -18,7 +18,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
-import { getWorkspaceBootstrap } from "@/src/lib/client/workspace-data";
+import { getWorkspaceBootstrap, refreshWorkspaceBootstrap } from "@/src/lib/client/workspace-data";
 import { Skeleton } from "./skeleton";
 
 /** Workspace destinations in the sidebar. */
@@ -104,6 +104,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [role, setRole] = useState<AccountIdentity["role"] | "">("");
   const [plan, setPlan] = useState("free");
   const [igAvatarUrl, setIgAvatarUrl] = useState("");
+  const [identityError, setIdentityError] = useState("");
   const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, getThemeServerSnapshot);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -115,14 +116,43 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   };
 
   useEffect(() => {
+    let mounted = true;
     getWorkspaceBootstrap()
       .then((data) => {
+        if (!mounted) return;
         setEmail(data.email ?? "");
         setRole(data.role ?? "");
         setPlan(data.plan ?? "free");
         setIgAvatarUrl(data.igAvatarUrl ?? "");
+        setIdentityError("");
       })
-      .catch(() => undefined);
+      .catch((caught: unknown) => {
+        if (!mounted) return;
+        // Surface a recoverable error so the sidebar can show a retry instead
+        // of silently rendering the empty default identity forever.
+        setIdentityError(caught instanceof Error ? caught.message : "Could not load the workspace session");
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Refresh on focus + reconnect so role / plan / avatar updates from a
+  // sibling tab or a flaky network are picked up without a full reload.
+  useEffect(() => {
+    function onFocus() {
+      void refreshWorkspaceBootstrap()
+        .then((data) => {
+          setEmail(data.email ?? "");
+          setRole(data.role ?? "");
+          setPlan(data.plan ?? "free");
+          setIgAvatarUrl(data.igAvatarUrl ?? "");
+          setIdentityError("");
+        })
+        .catch(() => undefined);
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   useEffect(() => {

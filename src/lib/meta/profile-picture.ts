@@ -9,8 +9,30 @@ type LoadOptions = {
 };
 
 const PROFILE_PICTURE_TTL_MS = 15 * 60 * 1_000;
+// The cache is keyed on `${apiVersion}:${igUserId}` so an environment that flips
+// META_API_VERSION grows a fresh namespace. Cap the size so a long-lived process
+// with one-off igUserIds cannot grow the Map unbounded and DoS the worker.
+const PROFILE_PICTURE_CACHE_LIMIT = 5_000;
 type CachedPicture = { expiresAt: number; value?: string | null; pending?: Promise<string | null> };
 const profilePictureCache = new Map<string, CachedPicture>();
+
+function pruneExpired(now: number): void {
+  for (const [key, entry] of profilePictureCache) {
+    if (entry.expiresAt <= now) profilePictureCache.delete(key);
+  }
+}
+
+function trimToLimit(now: number): void {
+  pruneExpired(now);
+  // Map iteration is insertion-ordered, so once we've dropped expired entries
+  // the first key we encounter is the oldest live one - the right candidate
+  // for eviction when the cap is hit.
+  while (profilePictureCache.size > PROFILE_PICTURE_CACHE_LIMIT) {
+    const oldest = profilePictureCache.keys().next().value;
+    if (oldest === undefined) break;
+    profilePictureCache.delete(oldest);
+  }
+}
 
 export function clearProfilePictureCache(igUserId?: string): void {
   if (!igUserId) {
@@ -52,6 +74,7 @@ export async function loadProfilePictureUrl(
       return null;
     }
   })();
+  trimToLimit(Date.now());
   profilePictureCache.set(cacheKey, { expiresAt: Date.now() + PROFILE_PICTURE_TTL_MS, pending });
   const value = await pending;
   profilePictureCache.set(cacheKey, { expiresAt: Date.now() + PROFILE_PICTURE_TTL_MS, value });

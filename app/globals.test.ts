@@ -58,6 +58,6 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.wizard-progress-label\s*{[^}]*display:\s*inline/);
     expect(css).toMatch(/@media \(max-width:\s*820px\)[\s\S]*?\.wizard-progress-label\s*{[^}]*display:\s*inline/);
     expect(css).toMatch(/\.sequence-submit-actions \.text-link\s*{[^}]*min-height:\s*44px/);
-    expect(css).toMatch(/\.activity-row-identity\s*{[^}]*min-width:\s*0/);
+    expect(css).toMatch(/\.row-identity\s*{[^}]*min-width:\s*0/);
   });
 });

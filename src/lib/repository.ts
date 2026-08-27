@@ -47,7 +47,12 @@ export type AutomationRecord = {
   updatedAt: string;
 };
 
-/** Append-only snapshot of an automation's definition. */
+/** Append-only snapshot of an automation's full state. The activation-time
+ * fields (status, activatedAt, boundMediaId, priority, instagramAccountId) are
+ * stored so a `restoreAutomationVersion` round-trip is exact: otherwise a
+ * campaign restored from a pre-edit snapshot would silently lose its
+ * next-media binding and (with the publishedAt > activatedAt check) re-bind to
+ * the next-published post instead of the originally targeted one. */
 export type AutomationVersionRecord = {
   id: string;
   automationId: string;
@@ -55,6 +60,11 @@ export type AutomationVersionRecord = {
   version: number;
   name: string;
   definition: FlowDefinition;
+  status: AutomationStatus;
+  priority: number;
+  activatedAt?: string;
+  boundMediaId?: string;
+  instagramAccountId?: string;
   snapshotBy?: string;
   snapshotAt: string;
 };

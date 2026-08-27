@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createSessionToken,
+  getSessionFromRequest,
   hashPassword,
   readSessionToken,
   verifyPassword,
@@ -100,6 +101,33 @@ describe("owner authentication", () => {
   it("uses a host-only secure cookie name in production", () => {
     expect(sessionCookieName("https://reply.example.com")).toBe("__Host-linkar_session");
     expect(sessionCookieName("http://localhost:3000")).toBe("linkar_session");
+  });
+
+  it("reads the last duplicate cookie value per RFC 6265", () => {
+    // readCookie is module-private; exercise it through the public
+    // getSessionFromRequest entry point. The default test secret is the
+    // developer fallback used when AUTH_SESSION_SECRET is not set.
+    // Issue a token from a recent `now` so it isn't already expired.
+    const now = new Date();
+    const token = createSessionToken(
+      { userId: "user_owner", workspaceId: "workspace_owner" },
+      "dev-insecure-session-secret-change-me-32ch",
+      now,
+    );
+    const oldToken = createSessionToken(
+      { userId: "user_legacy", workspaceId: "workspace_legacy" },
+      "dev-insecure-session-secret-change-me-32ch",
+      now,
+    );
+
+    const header = `linkar_session=${oldToken}; linkar_session=${token}`;
+    const request = new Request("http://localhost/anything", { headers: { cookie: header } });
+
+    const session = getSessionFromRequest(request);
+    expect(session).toMatchObject({
+      userId: "user_owner",
+      workspaceId: "workspace_owner",
+    });
   });
 
   it("rejects external and backslash-based post-login redirects", () => {

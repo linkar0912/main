@@ -18,6 +18,13 @@ export async function POST(request: Request, context: RouteContext) {
   if (!original) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
 
   const trimmed = original.name.trim();
+  // Refuse to produce a duplicate with an empty name: the create endpoint would
+  // reject it with a 400 that surfaces here as a 500, leaving the caller with
+  // no actionable error. Match the create-time validation here so a whitespace-
+  // only original name fails fast.
+  if (!trimmed) {
+    return NextResponse.json({ error: "Cannot duplicate an automation with an empty name" }, { status: 400 });
+  }
   const suffix = " (copy)";
   const name = trimmed.length + suffix.length <= 120 ? `${trimmed}${suffix}` : `${trimmed.slice(0, 120 - suffix.length)}${suffix}`;
   const copy = await repository.createAutomation(session.workspaceId, {

@@ -37,22 +37,35 @@ enum ParticipantState {
   FAILED
 }
 
-// Append-only history of automation definitions. Every PATCH snapshots the
-// previous state, so a workspace can diff and restore any prior version.
+// Append-only history of automation state. Every PATCH snapshots the previous
+// state, so a workspace can diff and restore any prior version. Activation-time
+// fields (status, activatedAt, boundMediaId, priority, instagramAccountId) are
+// stored alongside the definition so a `restoreAutomationVersion` round-trip is
+// exact - otherwise a campaign restored from a pre-edit snapshot would silently
+// lose its next-media binding and (with the publishedAt > activatedAt check)
+// re-bind to the next-published post instead of the originally targeted one.
 model AutomationVersion {
-  id            String   @id
-  automationId  String
-  workspaceId   String
+  id                 String   @id
+  automationId       String
+  workspaceId        String
   // Monotonically increasing per-automation version number (1 = creation state).
-  version       Int
+  version            Int
   // Human-friendly snapshot of the automation name at the time of the snapshot.
-  name          String
+  name               String
   // Full definition payload (FlowDefinition Json).
-  definition    Json
+  definition         Json
+  // Activation-time fields captured at snapshot time. See the table comment for
+  // why these are persisted - a restore that drops any of them would break
+  // next-media re-binding or alter which events the flow answers.
+  status             AutomationStatus @default(DRAFT)
+  priority           Int              @default(0)
+  activatedAt        DateTime?
+  boundMediaId       String?
+  instagramAccountId String?
   // Who/what produced the snapshot (user id when available; "system" for cron).
-  snapshotBy    String?
+  snapshotBy         String?
   // When the snapshot was taken.
-  snapshotAt    DateTime @default(now())
+  snapshotAt         DateTime @default(now())
 
   @@unique([automationId, version])
   @@index([automationId, snapshotAt])

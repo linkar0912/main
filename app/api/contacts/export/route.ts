@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
-import { getSessionFromRequest } from "@/src/lib/auth/session";
+import { getValidatedSession } from "@/src/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -11,7 +11,7 @@ function csvCell(value: string | undefined): string {
 
 // GET /api/contacts/export - CSV of every captured lead for spreadsheets/CRMs.
 export async function GET(request: Request) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const rows = await getRepository().listCapturedContacts(session.workspaceId, 10_000);

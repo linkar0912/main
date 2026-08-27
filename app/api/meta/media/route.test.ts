@@ -3,7 +3,7 @@ import { MetaApiError } from "@/src/lib/meta/client";
 import type { MetaMedia } from "@/src/lib/meta/types";
 
 const mocks = vi.hoisted(() => ({
-  getSessionFromRequest: vi.fn(),
+  getValidatedSession: vi.fn(),
   getRepository: vi.fn(),
   getServerEnv: vi.fn(),
   listConnections: vi.fn(),
@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
-  getSessionFromRequest: mocks.getSessionFromRequest,
+  getValidatedSession: mocks.getValidatedSession,
 }));
 
 vi.mock("@/src/lib/repository-provider", () => ({
@@ -62,7 +62,7 @@ const media: MetaMedia = {
 
 describe("GET /api/meta/media", () => {
   beforeEach(() => {
-    mocks.getSessionFromRequest.mockReturnValue({ email: "owner@example.com", workspaceId: "workspace_a" });
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_a" });
     mocks.listConnections.mockReset();
     mocks.listConnections.mockResolvedValue([connectedAccount]);
     mocks.getRepository.mockReturnValue({ listConnections: mocks.listConnections });
@@ -73,7 +73,7 @@ describe("GET /api/meta/media", () => {
   });
 
   it("returns 401 when the owner session is missing", async () => {
-    mocks.getSessionFromRequest.mockReturnValue(null);
+    mocks.getValidatedSession.mockResolvedValue(null);
 
     const response = await GET(new Request("http://localhost/api/meta/media"));
 

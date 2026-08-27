@@ -77,6 +77,37 @@ describe("automation version history", () => {
     expect(midSnapshot).not.toBeNull();
   });
 
+  it("preserves activation-time state (status, priority, boundMediaId, activatedAt) across snapshot + restore", async () => {
+    const repository = createMemoryRepository();
+    const automation = await seed(repository);
+    // Activate, pin to a media id, and bump the priority so the snapshot is
+    // visibly different from a default-DRAFT state.
+    await repository.updateAutomation("workspace_versions", automation.id, {
+      status: "ACTIVE",
+      priority: 7,
+      activatedAt: "2026-08-21T10:00:00.000Z",
+      boundMediaId: "media_42",
+    });
+    const baseline = await repository.snapshotAutomation("workspace_versions", automation.id);
+    // Move forward and clear the binding so restore has something to bring back.
+    await repository.updateAutomation("workspace_versions", automation.id, {
+      status: "PAUSED",
+      priority: 0,
+      boundMediaId: undefined,
+      activatedAt: undefined,
+    });
+    const restored = await repository.restoreAutomationVersion(
+      "workspace_versions",
+      automation.id,
+      baseline!.id,
+    );
+    expect(restored).not.toBeNull();
+    expect(restored!.status).toBe("ACTIVE");
+    expect(restored!.priority).toBe(7);
+    expect(restored!.activatedAt).toBe("2026-08-21T10:00:00.000Z");
+    expect(restored!.boundMediaId).toBe("media_42");
+  });
+
   it("returns null when the version does not exist", async () => {
     const repository = createMemoryRepository();
     const automation = await seed(repository);

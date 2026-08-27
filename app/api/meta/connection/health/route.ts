@@ -1,5 +1,5 @@
 import { getRepository } from "@/src/lib/repository-provider";
-import { getSessionFromRequest } from "@/src/lib/auth/session";
+import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { MetaClient, MetaApiError } from "@/src/lib/meta/client";
 import { unsealSecret } from "@/src/lib/security/secrets";
@@ -21,7 +21,7 @@ export const OPTIONAL_WEBHOOK_FIELDS = [
 ] as const;
 
 export async function GET(request: Request) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const env = getServerEnv();

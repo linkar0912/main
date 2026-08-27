@@ -2,21 +2,12 @@ import { NextResponse } from "next/server";
 import { validateFlowDefinition } from "@/src/lib/automation/definition";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
-import type { AutomationStatus, UpdateAutomationInput } from "@/src/lib/repository";
+import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
+import type { UpdateAutomationInput } from "@/src/lib/repository";
 
 export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ id: string }> };
-
-/** Same contract as POST /api/automations: undefined = untouched, null = unpin, string = pin. */
-async function resolveInstagramAccountId(workspaceId: string, value: unknown): Promise<string | undefined | null> {
-  if (value === undefined) return undefined;
-  if (value === null || value === "") return null;
-  if (typeof value !== "string") return null;
-  const connections = await getRepository().listConnections(workspaceId);
-  const match = connections.find((connection) => connection.igUserId === value && connection.status === "CONNECTED");
-  return match ? match.igUserId : null;
-}
 
 export async function GET(request: Request, context: RouteContext) {
   const session = await getValidatedSession(request);
@@ -40,7 +31,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   const patch: UpdateAutomationInput = {};
 
   const instagramAccountId = await resolveInstagramAccountId(session.workspaceId, body.instagramAccountId);
-  if (instagramAccountId === null && body.instagramAccountId !== undefined && body.instagramAccountId !== null && body.instagramAccountId !== "") {
+  // resolveInstagramAccountId collapses the caller-supplied value into three
+  // buckets: undefined (untouched, do not write), null (unpin), or a real
+  // connected igUserId. A null result with a non-null/non-empty input means
+  // the caller asked to pin something that is not a CONNECTED connection of
+  // this workspace, which is the only user-facing error case worth
+  // distinguishing from a no-op unpin.
+  const askedToUnpin = body.instagramAccountId === null || body.instagramAccountId === "";
+  if (instagramAccountId === null && !askedToUnpin) {
     return NextResponse.json({ error: "That Instagram account is not connected to this workspace" }, { status: 400 });
   }
   if (instagramAccountId !== undefined) patch.instagramAccountId = instagramAccountId;

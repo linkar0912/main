@@ -12,6 +12,12 @@ export const WEBHOOK_QUEUE_NAME = "linkar-webhooks";
 const JOB_SCAN_PAGE_SIZE = 500;
 
 export function createWebhookJobId(event: NormalizedEvent): string {
+  // BullMQ deduplicates enqueues by jobId, so the id MUST be stable per
+  // unique (accountId, event.id). Both come from Meta and are part of the
+  // webhook signature: event.id is the Instagram comment/message id which
+  // is unique per Meta object, and accountId scopes the dedupe so the same
+  // id under a different account does not collide. The hash keeps the id
+  // length bounded for Redis key namespacing.
   return createHash("sha256").update(`${event.accountId}\0${event.id}`).digest("base64url");
 }
 

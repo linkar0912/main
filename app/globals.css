@@ -890,28 +890,24 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 /* Campaign activity */
 .activity-layout { align-items: start; display: grid; gap: var(--space-6); grid-template-columns: minmax(0, 1fr) 340px; }
 .activity-main, .activity-side { min-width: 0; }
-.activity-list { display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr); }
+.activity-list { display: grid; gap: var(--space-5); grid-template-columns: minmax(0, 1fr); }
 
-.campaign-context { align-items: center; background: var(--ink); border-radius: var(--radius-md); color: var(--white); display: flex; flex-wrap: wrap; gap: 12px 18px; justify-content: space-between; padding: var(--space-4) var(--space-5); }
-.context-id { align-items: center; display: flex; gap: 12px; min-width: 0; }
-.context-icon { align-items: center; background: rgba(var(--accent-rgb), .18); border: 1px solid rgba(var(--accent-rgb), .42); border-radius: 10px; color: var(--accent-tint-dark); display: inline-flex; flex-shrink: 0; height: 38px; justify-content: center; width: 38px; }
-.context-name { min-width: 0; }
-.context-name strong { display: block; font-size: .95rem; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.context-name small { color: rgba(255, 255, 255, .56); font-size: .62rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
-.context-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
-.context-edit { align-items: center; color: var(--accent-tint-dark); display: inline-flex; font-size: .74rem; font-weight: 750; gap: 5px; transition: color var(--speed); }
-.context-edit:hover { color: var(--white); }
+.campaign-strip { align-items: center; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px 16px; justify-content: space-between; padding-bottom: var(--space-4); }
+.campaign-strip-id { align-items: center; color: var(--muted); display: flex; gap: 9px; min-width: 0; }
+.campaign-strip-id svg { color: var(--subtle); flex-shrink: 0; }
+.campaign-strip-name { color: var(--ink); font-size: .92rem; font-weight: 750; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-strip-edit { align-items: center; color: var(--muted); display: inline-flex; font-size: .74rem; font-weight: 700; gap: 5px; transition: color var(--speed); }
+.campaign-strip-edit:hover { color: var(--ink); }
 
-.activity-funnel { display: grid; gap: var(--space-3); grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: var(--space-5); }
-.funnel-stage { min-width: 0; }
-.funnel-tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 8px; height: 100%; padding: var(--space-4); }
-.funnel-head { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; }
-.funnel-count { font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif; font-size: 1.6rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.funnel-strip { display: grid; gap: var(--space-3); grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.funnel-cell { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: var(--space-4); }
+.funnel-cell-head { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; }
+.funnel-cell-head strong { font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif; font-size: 1.5rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
 .funnel-conv { color: var(--leaf); font-size: .66rem; font-weight: 800; }
 .funnel-conv.is-low { color: var(--honey); }
-.funnel-label { color: var(--muted); font-size: .61rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.funnel-bar { background: var(--surface-sunk); border-radius: 99px; display: block; height: 4px; overflow: hidden; }
-.funnel-bar > span { background: var(--ink); border-radius: 99px; display: block; height: 100%; min-width: 2px; transition: width .5s var(--ease-out); }
+.funnel-cell-label { color: var(--muted); font-size: .61rem; font-weight: 800; letter-spacing: .04em; line-height: 1.35; min-height: 2.7em; text-transform: uppercase; }
+.funnel-cell-bar { background: var(--surface-sunk); border-radius: 99px; display: block; height: 4px; overflow: hidden; }
+.funnel-cell-bar > span { background: var(--ink); border-radius: 99px; display: block; height: 100%; min-width: 2px; transition: width .5s var(--ease-out); }
 
 .feed-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
 .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -928,51 +924,67 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .feed-count { font-size: .72rem; margin: 0; }
 .feed-empty { background: var(--panel); border: 1px dashed var(--line-strong); border-radius: var(--radius-md); color: var(--muted); padding: var(--space-6); text-align: center; }
 
-/* Campaign activity roster - participants are grouped by the post they came
-   from (one campaign is usually one or two Reels), so the caption renders
-   once per group instead of once per row: with 96 people on the same Reel,
-   repeating it 96 times was the loudest thing on the page and buried what
-   actually differs between rows (who, when, which A/B variant, how far along). */
-/* grid-template-columns is explicit (not just display:grid) because a grid
-   item's implicit min-width is auto, not 0 - without this, a row's min-content
-   (long unwrappable badge/journey-track content) forces the single column
-   wider than the page, pushing content out under the sticky sidebar. */
-.activity-groups { display: grid; gap: var(--space-7, 30px); grid-template-columns: minmax(0, 1fr); }
-.activity-group-head { align-items: baseline; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 6px 10px; margin-bottom: var(--space-3); min-width: 0; padding-bottom: 10px; }
-.activity-group-head .activity-caption { flex: 1 1 260px; margin: 0; }
-.activity-group-count { color: var(--subtle); flex-shrink: 0; font-size: .68rem; font-weight: 700; }
-.activity-roster { display: grid; gap: var(--space-3); grid-template-columns: minmax(0, 1fr); }
+/* Campaign activity roster - a dense, scannable table rather than a stack of
+   cards. Participants are grouped by the post they came from (one campaign
+   is usually one or two Reels), so the caption renders once per group
+   instead of once per row. Per-row delivery diagnostics live in a collapsed
+   <details> instead of an always-open block, so a full roster of 50+ people
+   reads as a table, not 50 open cards. */
+.activity-groups { display: grid; gap: var(--space-6); grid-template-columns: minmax(0, 1fr); }
 
-.activity-row { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-5); transition: border-color var(--speed), box-shadow var(--speed); }
-.activity-row:hover { border-color: var(--line-strong); box-shadow: var(--shadow-card); }
-.activity-row-top { align-items: flex-start; display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: space-between; margin-bottom: var(--space-4); width: 100%; }
-.activity-caption { color: var(--ink); font-size: .88rem; font-weight: 700; margin: 3px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.activity-row-identity { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
-.participant-badge { align-items: center; background: var(--surface-sunk); border-radius: 99px; color: var(--slate); display: inline-flex; flex-shrink: 0; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace; font-size: .68rem; font-weight: 700; gap: 5px; padding: 4px 10px; }
+/* grid-template-columns is explicit (not just display:grid) because a grid
+   item's implicit min-width is auto, not 0 - without this, unwrappable
+   content (badges, the journey track) forces columns wider than the page,
+   pushing content out under the sticky sidebar. Shared between the header
+   row and each data row so their columns stay aligned. */
+.activity-table-head, .activity-row-grid { align-items: center; display: grid; gap: var(--space-3); grid-template-columns: minmax(150px, 1.3fr) minmax(90px, .7fr) minmax(120px, .9fr) 116px 140px 76px; }
+.activity-table-head { color: var(--subtle); font-size: .64rem; font-weight: 800; letter-spacing: .07em; padding: 0 var(--space-4) var(--space-2); text-transform: uppercase; }
+.activity-table-head .col-actions { text-align: right; }
+
+.activity-group-head { align-items: baseline; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 6px 10px; margin-bottom: var(--space-2); min-width: 0; padding: var(--space-4) var(--space-1) 10px; }
+.activity-group-head .activity-caption { flex: 1 1 260px; margin: 0; }
+.activity-caption { color: var(--ink); font-size: .85rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-group-count { color: var(--subtle); flex-shrink: 0; font-size: .68rem; font-weight: 700; }
+.activity-roster { display: grid; gap: var(--space-2); grid-template-columns: minmax(0, 1fr); }
+
+.activity-row { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); transition: border-color var(--speed), box-shadow var(--speed); }
+.activity-row:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
+.activity-row-grid { padding: 11px var(--space-4); }
+.row-identity { align-items: center; display: flex; flex-wrap: wrap; gap: 7px; min-width: 0; }
+.participant-badge { align-items: center; background: var(--surface-sunk); border-radius: 99px; color: var(--slate); display: inline-flex; flex-shrink: 0; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace; font-size: .66rem; font-weight: 700; gap: 5px; padding: 4px 9px; }
 .participant-badge svg { color: var(--muted); }
-.activity-row-time { color: var(--subtle); flex-shrink: 0; font-size: .7rem; font-weight: 600; }
-.activity-row-meta { align-items: center; display: flex; flex-shrink: 0; flex-wrap: nowrap; gap: 8px; }
-.keyword-chip { align-items: center; background: var(--volt-soft); border: 1px solid var(--volt-deep); border-radius: 99px; color: var(--ink); display: inline-flex; flex-shrink: 0; font-size: .62rem; font-weight: 800; letter-spacing: .03em; padding: 3px 9px; white-space: nowrap; }
+.row-time { color: var(--subtle); flex-shrink: 0; font-size: .68rem; font-weight: 600; }
+.keyword-chip { align-items: center; background: var(--volt-soft); border: 1px solid var(--volt-deep); border-radius: 99px; color: var(--ink); display: inline-flex; flex-shrink: 0; font-size: .6rem; font-weight: 800; letter-spacing: .03em; max-width: 100%; overflow: hidden; padding: 3px 9px; text-overflow: ellipsis; white-space: nowrap; }
 .keyword-chip.is-any { background: var(--surface-soft); border-color: var(--line-strong); color: var(--muted); }
 
-.journey-steps { display: flex; list-style: none; margin: 0 0 var(--space-4); padding: 0; }
+.journey-steps { display: flex; list-style: none; margin: 0; padding: 0; }
 .journey-steps li { align-items: center; display: flex; flex: 1; min-width: 0; }
 .journey-steps li:last-child { flex: 0 0 auto; }
-.journey-step { align-items: center; display: flex; gap: 7px; }
-.journey-steps li:not(:last-child)::after { background: var(--line); border-radius: 2px; content: ""; display: block; flex: 1; height: 2px; margin: 0 10px 0 8px; min-width: 12px; }
-.journey-dot { background: var(--panel); border: 2px solid var(--line-strong); border-radius: 50%; flex-shrink: 0; height: 12px; width: 12px; }
-.journey-label { color: var(--subtle); font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.journey-step { align-items: center; display: flex; }
+.journey-steps li:not(:last-child)::after { background: var(--line); border-radius: 2px; content: ""; display: block; flex: 1; height: 2px; margin: 0 4px; min-width: 8px; }
+.journey-dot { background: var(--panel); border: 2px solid var(--line-strong); border-radius: 50%; flex-shrink: 0; height: 11px; width: 11px; }
 .journey-steps .is-done .journey-dot { background: var(--accent); border-color: var(--accent); }
 .journey-steps .is-done:not(:last-child)::after { background: var(--accent-line); }
-.journey-steps .is-done .journey-label { color: var(--slate); }
 .journey-steps .is-current .journey-dot { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.journey-steps .is-current .journey-label { color: var(--accent-hover); }
 .journey-steps .is-failed .journey-dot { background: var(--danger); border-color: var(--danger); }
-.journey-steps .is-failed .journey-label { color: var(--danger); }
 .journey-steps .is-expired .journey-dot { background: var(--honey); border-color: var(--honey); }
-.journey-steps .is-expired .journey-label { color: var(--honey); }
 
-.activity-diagnostics { background: var(--surface-sunk); border-radius: var(--radius-sm); display: grid; gap: 1px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 0 var(--space-4); overflow: hidden; }
+.delivery-cell { font-size: .74rem; font-weight: 650; }
+.delivery-cell.tone-ok { color: var(--leaf); }
+.delivery-cell.tone-bad { color: var(--danger); }
+.delivery-cell.tone-skip { color: var(--subtle); }
+.delivery-cell.tone-wait { color: var(--muted); }
+
+.row-actions { align-items: center; display: flex; gap: 4px; justify-content: flex-end; }
+
+.row-detail { border-top: 1px solid var(--line); }
+.row-detail[open] { border-top-color: var(--line-strong); }
+.row-detail-toggle { color: var(--subtle); cursor: pointer; font-size: .64rem; font-weight: 700; letter-spacing: .04em; list-style: none; padding: 8px var(--space-4); text-transform: uppercase; transition: color var(--speed); }
+.row-detail-toggle::-webkit-details-marker { display: none; }
+.row-detail-toggle:hover { color: var(--slate); }
+.row-detail[open] .row-detail-toggle { color: var(--slate); }
+
+.activity-diagnostics { background: var(--surface-sunk); display: grid; gap: 1px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); overflow: hidden; }
 .diagnostic { background: var(--panel); padding: 10px 14px; }
 .diagnostic dt { align-items: center; color: var(--muted); display: flex; font-size: .63rem; font-weight: 800; gap: 5px; letter-spacing: .06em; margin-bottom: 3px; text-transform: uppercase; }
 .diagnostic dt svg { flex-shrink: 0; }
@@ -982,8 +994,6 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .tone-bad dd { font-weight: 650; }
 .tone-wait dt { color: var(--subtle); }
 .tone-skip dt { color: var(--honey); }
-
-.activity-row-foot { border-top: 1px solid var(--line); display: flex; justify-content: flex-end; margin-top: var(--space-2); padding-top: var(--space-3); }
 
 /* Sidebar insights */
 .side-stack { margin-top: 0; }
@@ -999,7 +1009,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .activity-side { position: sticky; top: 24px; }
 }
 @media (max-width: 700px) {
-  .activity-funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .funnel-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 1140px) {
   .activity-layout { grid-template-columns: 1fr; }
@@ -1009,14 +1019,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .feed-tools { justify-content: space-between; }
   .feed-search { flex: 1; }
   .feed-search input { width: 100%; }
-}
-@media (max-width: 600px) {
-  .activity-row { padding: var(--space-4); }
-  .activity-row-top { flex-direction: column; }
-  .activity-row-meta { justify-content: flex-start; }
-  .journey-label { display: none; }
-  .journey-steps li:not(:last-child)::after { margin: 0 6px; }
-  .activity-diagnostics { grid-template-columns: 1fr; }
+  .activity-table-head { display: none; }
+  .activity-row-grid { grid-template-columns: 1fr; }
+  .row-actions { justify-content: flex-start; }
 }
 
 /* Builder */

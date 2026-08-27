@@ -1,5 +1,5 @@
 import { getRepository } from "@/src/lib/repository-provider";
-import { getSessionFromRequest } from "@/src/lib/auth/session";
+import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
 import { MetaClient } from "@/src/lib/meta/client";
@@ -9,7 +9,7 @@ import { unsealSecret } from "@/src/lib/security/secrets";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const env = getServerEnv();
   const connections = await getRepository().listConnections(session.workspaceId);
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
 
 export async function DELETE(request: Request) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const env = getServerEnv();
   if (!env.metaTokenEncryptionKey) return Response.json({ error: "Token encryption is not configured" }, { status: 503 });

@@ -3,6 +3,7 @@ import { createId } from "./id";
 import type {
   AutomationRecord,
   AutomationParticipantRecord,
+  AutomationStatus,
   AutomationVersionRecord,
   TrackedLinkRecord,
   TrackedLinkClickRecord,
@@ -45,6 +46,7 @@ import type {
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { toMessagingWindow } from "./messaging-window";
+import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
 
 function mapUser(record: {
   id: string;
@@ -359,6 +361,11 @@ function mapAutomationVersion(record: {
   version: number;
   name: string;
   definition: Prisma.JsonValue;
+  status: AutomationStatus;
+  priority: number;
+  activatedAt: Date | null;
+  boundMediaId: string | null;
+  instagramAccountId: string | null;
   snapshotBy: string | null;
   snapshotAt: Date;
 }): AutomationVersionRecord {
@@ -369,6 +376,11 @@ function mapAutomationVersion(record: {
     version: record.version,
     name: record.name,
     definition: record.definition as unknown as AutomationVersionRecord["definition"],
+    status: record.status,
+    priority: record.priority,
+    ...(record.activatedAt ? { activatedAt: record.activatedAt.toISOString() } : {}),
+    ...(record.boundMediaId ? { boundMediaId: record.boundMediaId } : {}),
+    ...(record.instagramAccountId ? { instagramAccountId: record.instagramAccountId } : {}),
     ...(record.snapshotBy ? { snapshotBy: record.snapshotBy } : {}),
     snapshotAt: record.snapshotAt.toISOString(),
   };
@@ -798,14 +810,16 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         _count: { _all: true },
       });
       const result = { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 };
-      const optedInStates = new Set(["OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED", "LINK_SENT"]);
-      const followedStates = new Set(["FOLLOW_VERIFIED", "LINK_SENT"]);
+      // Use the shared classification sets so the funnel numbers agree with
+      // the in-memory `computeFunnelSummary` (activity-summary.ts) - any new
+      // ParticipantState added to the enum will need to be added in both
+      // places at once, but only one place per file.
       for (const row of rows) {
         const count = row._count._all;
         result.commented += count;
         if (row.openingStatus === "SENT") result.openingSent += count;
-        if (optedInStates.has(row.state)) result.optedIn += count;
-        if (row.followStatus === true || followedStates.has(row.state)) result.followed += count;
+        if (OPTED_IN_OR_LATER_STATES.has(row.state as ParticipantState)) result.optedIn += count;
+        if (row.followStatus === true || FOLLOWED_STATES.has(row.state as ParticipantState)) result.followed += count;
         if (row.finalDeliveryStatus === "SENT") result.linkSent += count;
       }
       return result;
@@ -1013,17 +1027,28 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async upsertConnection(input) {
-      const owner = await client.instagramConnection.findUnique({ where: { igUserId: input.igUserId } });
-      if (owner && owner.workspaceId !== input.workspaceId) throw new InstagramAccountOwnershipError();
+      // Wrap the ownership check and the upsert in a single transaction so
+      // two concurrent calls from different workspaces cannot both pass the
+      // pre-check and then race on the unique key. The transaction's
+      // SERIALIZABLE-equivalent isolation (Prisma's default for $transaction
+      // callbacks) makes the check + write atomic.
       try {
-        const record = await client.instagramConnection.upsert({
-          where: { igUserId: input.igUserId },
-          create: { id: createId("connection"), ...input },
-          update: input,
+        return await client.$transaction(async (transaction) => {
+          const owner = await transaction.instagramConnection.findUnique({ where: { igUserId: input.igUserId } });
+          if (owner && owner.workspaceId !== input.workspaceId) throw new InstagramAccountOwnershipError();
+          const record = await transaction.instagramConnection.upsert({
+            where: { igUserId: input.igUserId },
+            create: { id: createId("connection"), ...input },
+            update: input,
+          });
+          return mapConnection(record);
         });
-        return mapConnection(record);
       } catch (error) {
+        if (error instanceof InstagramAccountOwnershipError) throw error;
         if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        // A concurrent transaction from another workspace won the unique-key
+        // race. Re-read and surface the same ownership error so the caller
+        // does not silently overwrite a foreign connection.
         const winner = await client.instagramConnection.findUnique({ where: { igUserId: input.igUserId } });
         if (winner?.workspaceId !== input.workspaceId) throw new InstagramAccountOwnershipError();
         if (!winner) throw error;
@@ -1032,8 +1057,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult> {
+      // Look up by (workspaceId, dedupeKey, externalEventId) first so a
+      // concurrent retry of the same event finds its own row instead of a
+      // stale leftover from an unrelated run that happens to share the key.
       const existing = await client.automationExecution.findFirst({
-        where: { workspaceId: input.workspaceId, dedupeKey: input.dedupeKey },
+        where: {
+          workspaceId: input.workspaceId,
+          dedupeKey: input.dedupeKey,
+          externalEventId: input.externalEventId,
+        },
       });
       if (existing) {
         return { created: false, record: mapExecution(existing) };
@@ -1045,9 +1077,18 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         return { created: true, record: mapExecution(record) };
       } catch (error) {
         if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-        const record = await client.automationExecution.findFirstOrThrow({
-          where: { workspaceId: input.workspaceId, dedupeKey: input.dedupeKey },
+        // Race: another writer committed between our precheck and our create.
+        // Re-read by the same three-tuple; if a row still doesn't match
+        // (the unique key collision is from a different externalEventId),
+        // surface the error so the caller can retry with the correct key.
+        const record = await client.automationExecution.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            dedupeKey: input.dedupeKey,
+            externalEventId: input.externalEventId,
+          },
         });
+        if (!record) throw error;
         return { created: false, record: mapExecution(record) };
       }
     },
@@ -1065,6 +1106,59 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async claimExecutionDispatch(input) {
+      // Two callers share a dedupeKey: `recordExecution` first writes a
+      // PROCESSING/CLAIMED row, then `claimExecutionDispatch` advances it
+      // to DISPATCHING.
+      //
+      // dispatchOwner must be unique across all rows (the worker that
+      // generates it treats it as a one-shot lease token). Reject reuse
+      // before attempting to claim so a token recycled by mistake cannot
+      // clobber an in-flight dispatch.
+      const ownerTaken = await client.automationExecution.findFirst({
+        where: { dispatchOwner: input.dispatchOwner },
+        select: { id: true },
+      });
+      if (ownerTaken) return false;
+
+      const dispatchStartedAt = new Date(input.dispatchStartedAt);
+      const dispatchLeaseExpiresAt = new Date(input.dispatchLeaseExpiresAt);
+      // The WHERE clause below encodes the entire claimability rule - a
+      // separate read-then-upsert (the previous approach) leaves a window
+      // between the read and the write where two concurrent callers can
+      // both observe an unclaimed row and then both unconditionally
+      // overwrite it via upsert's `update` branch, each getting back a
+      // RETURNING row that looks like a successful claim. A single
+      // `updateMany` with the claimability check inlined in `where` is
+      // atomic per row (Postgres serializes concurrent UPDATEs on the same
+      // row and re-evaluates WHERE against the committed state), so only
+      // one caller's statement can ever match and flip the row - mirrors
+      // the same compare-and-set pattern already used by
+      // completeOwnedExecution/failAbandonedExecution below.
+      const claimable = {
+        workspaceId: input.workspaceId,
+        dedupeKey: input.dedupeKey,
+        status: "PROCESSING" as const,
+        OR: [
+          { dispatchStatus: { not: "DISPATCHING" as const } },
+          { dispatchOwner: null },
+          { dispatchOwner: input.dispatchOwner },
+        ],
+      };
+      const claim = {
+        dispatchStatus: "DISPATCHING" as const,
+        dispatchOwner: input.dispatchOwner,
+        dispatchStartedAt,
+        dispatchLeaseExpiresAt,
+      };
+      const claimed = await client.automationExecution.updateMany({ where: claimable, data: claim });
+      if (claimed.count === 1) return true;
+
+      // No row matched: either recordExecution has not run yet for this key
+      // (first claim), or one exists but is not currently claimable (e.g.
+      // actively dispatched by a different owner - correctly leave it
+      // alone). Try to create; a collision means the row already existed,
+      // so re-run the same atomic conditional update to find out whether it
+      // was ours to take.
       try {
         await client.automationExecution.create({
           data: {
@@ -1072,14 +1166,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
             status: "PROCESSING",
             dispatchStatus: "DISPATCHING",
             ...input,
-            dispatchStartedAt: new Date(input.dispatchStartedAt),
-            dispatchLeaseExpiresAt: new Date(input.dispatchLeaseExpiresAt),
+            dispatchStartedAt,
+            dispatchLeaseExpiresAt,
           },
         });
         return true;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
-        throw error;
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        const retried = await client.automationExecution.updateMany({ where: claimable, data: claim });
+        return retried.count === 1;
       }
     },
 
@@ -1894,6 +1989,12 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           version: nextNumber,
           name: current.name,
           definition: current.definition as Prisma.InputJsonValue,
+          // Capture activation-time state so a restore is exact.
+          status: current.status,
+          priority: current.priority,
+          ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
+          ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
+          ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
           ...(snapshotBy ? { snapshotBy } : {}),
         },
       });
@@ -1937,17 +2038,32 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           version: nextNumber,
           name: current.name,
           definition: current.definition as Prisma.InputJsonValue,
+          status: current.status,
+          priority: current.priority,
+          ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
+          ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
+          ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
           snapshotBy: restoredBy ?? "restore",
         },
       });
       const targetDefinition = target.definition as Prisma.InputJsonValue;
       const targetVersionNumber = (target.definition as { version?: number }).version ?? 1;
+      // Restore the full state, not just name + definition. Without
+      // status/activatedAt/boundMediaId the restored automation would
+      // behave like a freshly-edited DRAFT and silently miss its
+      // next-media binding (the publishedAt > activatedAt resolver would
+      // pass against an old activatedAt or a missing boundMediaId).
       const updated = await client.automation.update({
         where: { id: automationId },
         data: {
           name: target.name,
           definition: targetDefinition,
           version: Math.max(current.version, targetVersionNumber) + 1,
+          status: target.status,
+          priority: target.priority,
+          ...(target.activatedAt ? { activatedAt: target.activatedAt } : { activatedAt: null }),
+          ...(target.boundMediaId ? { boundMediaId: target.boundMediaId } : { boundMediaId: null }),
+          ...(target.instagramAccountId ? { instagramAccountId: target.instagramAccountId } : { instagramAccountId: null }),
         },
       });
       return mapAutomation(updated);

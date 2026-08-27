@@ -223,7 +223,19 @@ function requireSentDelivery(
   result: DeliveryExecutionResult,
   finalAttempt: boolean | undefined,
 ): string | undefined {
-  if (result.status === "SENT") return result.providerMessageId;
+  if (result.status === "SENT") {
+    // SENT with no providerMessageId is unusual: the outbound ledger only
+    // returns a message id when Meta actually replied with one. Replays of
+    // a previously-sent delivery (SENT + reused) may not have a fresh id
+    // because the original send happened earlier. Surface this as a warning
+    // so an operator can correlate it with the deliverability metrics.
+    if (!result.providerMessageId) {
+      logger.warn("delivery SENT without a provider message id", {
+        reused: result.reused,
+      });
+    }
+    return result.providerMessageId;
+  }
   if (result.status === "FAILED" && result.error === DAILY_LIMIT_ERROR) {
     throw new DailySendLimitError();
   }
@@ -1135,53 +1147,65 @@ export async function processNormalizedEvent(
       if (captureOutcome && senderId) {
         const atIso = new Date().toISOString();
         if (captureOutcome === "instant") {
-          const capturedEmail = extractEmailAddress(event.text)!;
-          await repository.captureContactEmail(
-            mapping.workspaceId,
-            event.accountId,
-            senderId,
-            capturedEmail,
-            atIso,
-          );
-          const fieldQueue = automation.definition.emailCapture?.fields ?? [];
-          if (fieldQueue.length > 0) {
-            // Conversational form in progress - confirmation + fulfillment + enrollment
-            // fire after the last answer (processFieldAnswer).
-            //
-            // The whole queue is stored, including the question just asked above as
-            // `followUpText`, because processFieldAnswer treats queue[0] as the
-            // outstanding question. Dropping it here filed the reply under the *next*
-            // field's id and skipped that field - and with a single field it left an
-            // empty queue that abandoned the lead as `field_queue_empty`.
-            await repository.beginContactFieldCollection(
+          // Re-derive the address: extractEmailAddress returns undefined when
+          // the text did not contain a match, and the ! assertion would
+          // otherwise persist undefined as the lead's email.
+          const capturedEmail = extractEmailAddress(event.text);
+          if (!capturedEmail) {
+            // Defensive: captureOutcome === "instant" is only set when an
+            // email is found, but a parallel definition edit (or a race with
+            // an external text-mutating transform) could erase it. Fall back
+            // to the prompt path so the lead is at least surfaced for follow-up
+            // instead of stored as undefined.
+            captureOutcome = "prompt";
+          } else {
+            await repository.captureContactEmail(
               mapping.workspaceId,
               event.accountId,
               senderId,
-              fieldQueue,
-              automation.id,
-              atIso,
-            );
-          } else {
-            await queueOrDeliverLead(
-              repository,
-              mapping,
-              automation.id,
-              automation.name,
-              `${automation.id}:${senderId}`,
               capturedEmail,
               atIso,
-              {
-                delivery: automation.definition.emailCapture?.delivery,
-                notifyUrl: automation.definition.emailCapture?.notifyUrl,
-              },
             );
-            await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
-            void notifyWorkspaceManagers(
-              mapping.workspaceId,
-              `lead:email:${senderId}`,
-              "New email captured",
-              `An email was captured via your “${automation.name}” automation.`,
-            ).catch(() => undefined);
+            const fieldQueue = automation.definition.emailCapture?.fields ?? [];
+            if (fieldQueue.length > 0) {
+              // Conversational form in progress - confirmation + fulfillment + enrollment
+              // fire after the last answer (processFieldAnswer).
+              //
+              // The whole queue is stored, including the question just asked above as
+              // `followUpText`, because processFieldAnswer treats queue[0] as the
+              // outstanding question. Dropping it here filed the reply under the *next*
+              // field's id and skipped that field - and with a single field it left an
+              // empty queue that abandoned the lead as `field_queue_empty`.
+              await repository.beginContactFieldCollection(
+                mapping.workspaceId,
+                event.accountId,
+                senderId,
+                fieldQueue,
+                automation.id,
+                atIso,
+              );
+            } else {
+              await queueOrDeliverLead(
+                repository,
+                mapping,
+                automation.id,
+                automation.name,
+                `${automation.id}:${senderId}`,
+                capturedEmail,
+                atIso,
+                {
+                  delivery: automation.definition.emailCapture?.delivery,
+                  notifyUrl: automation.definition.emailCapture?.notifyUrl,
+                },
+              );
+              await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
+              void notifyWorkspaceManagers(
+                mapping.workspaceId,
+                `lead:email:${senderId}`,
+                "New email captured",
+                `An email was captured via your “${automation.name}” automation.`,
+              ).catch(() => undefined);
+            }
           }
         } else {
           await repository.setContactAwaitingEmail(mapping.workspaceId, event.accountId, senderId, automation.id, atIso);

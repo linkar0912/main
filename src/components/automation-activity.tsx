@@ -141,6 +141,19 @@ function followSummary(participant: ParticipantActivitySummary): string {
   return "Not checked yet";
 }
 
+function statusBadgeLabel(status: string): string {
+  return status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function deliveryLabel(participant: ParticipantActivitySummary): string {
+  if (participant.finalDeliveryStatus === "SENT") {
+    return participant.finalDeliveredAt ? `Delivered ${formatRelativeTime(participant.finalDeliveredAt)}` : "Delivered";
+  }
+  if (participant.finalDeliveryStatus === "FAILED") return "Failed";
+  if (["SKIPPED", "SUPPRESSED", "WINDOW_CLOSED"].includes(participant.finalDeliveryStatus)) return "Skipped";
+  return "Pending";
+}
+
 function ParticipantStateBadge({ state }: { state: ParticipantState }) {
   return <span className={`status-badge status-${state.toLowerCase()}`}>{participantStateLabel(state)}</span>;
 }
@@ -157,32 +170,30 @@ function Diagnostic({ label, tone, detail }: { label: string; tone: Tone; detail
   );
 }
 
-function FunnelSummary({ summary }: { summary: ParticipantFunnelSummary }) {
+function FunnelStrip({ summary }: { summary: ParticipantFunnelSummary }) {
   const total = Math.max(1, summary.commented);
   return (
-    <div className="activity-funnel" aria-label="Campaign funnel">
+    <div className="funnel-strip" aria-label="Campaign funnel">
       {FUNNEL_STAGES.map((stage, index) => {
         const count = summary[stage.key];
         const reach = Math.round((count / total) * 100);
         const previous = index > 0 ? summary[FUNNEL_STAGES[index - 1].key] : null;
         const conversion = previous && previous > 0 ? Math.round((count / previous) * 100) : null;
         return (
-          <div className="funnel-stage" key={stage.key}>
-            <div className="funnel-tile">
-              <div className="funnel-head">
-                <span className="funnel-count">{count}</span>
-                {conversion !== null && (
-                  <span
-                    className={`funnel-conv${conversion < 50 ? " is-low" : ""}`}
-                    title={`Converted from ${FUNNEL_STAGES[index - 1].label.toLowerCase()}`}
-                  >
-                    {conversion}%
-                  </span>
-                )}
-              </div>
-              <span className="funnel-label">{stage.label}</span>
-              <span className="funnel-bar"><span style={{ width: `${reach}%` }} /></span>
+          <div className="funnel-cell" key={stage.key}>
+            <div className="funnel-cell-head">
+              <strong>{count}</strong>
+              {conversion !== null && (
+                <span
+                  className={`funnel-conv${conversion < 50 ? " is-low" : ""}`}
+                  title={`Converted from ${FUNNEL_STAGES[index - 1].label.toLowerCase()}`}
+                >
+                  {conversion}%
+                </span>
+              )}
             </div>
+            <span className="funnel-cell-label">{stage.label}</span>
+            <span className="funnel-cell-bar"><span style={{ width: `${reach}%` }} /></span>
           </div>
         );
       })}
@@ -195,10 +206,10 @@ function JourneyTrack({ participant }: { participant: ParticipantActivitySummary
   return (
     <ol className="journey-steps" aria-label="Participant journey">
       {JOURNEY_STEPS.map((label, index) => (
-        <li key={label} className={`is-${states[index]}`}>
+        <li key={label} className={`is-${states[index]}`} title={label}>
           <span className="journey-step">
             <span className="journey-dot" aria-hidden="true" />
-            <span className="journey-label">{label}</span>
+            <span className="journey-label sr-only">{label}</span>
           </span>
         </li>
       ))}
@@ -208,14 +219,14 @@ function JourneyTrack({ participant }: { participant: ParticipantActivitySummary
 
 function ParticipantIdentity({ participant, position }: { participant: ParticipantActivitySummary; position: number }) {
   return (
-    <div className="activity-row-identity">
+    <div className="row-identity">
       <span className="participant-badge">
         <UserRound size={12} strokeWidth={2.2} />
         Person {position}
       </span>
       {participant.variantLabel && <span className="tag-chip variant-chip">Variant {participant.variantLabel}</span>}
       {participant.createdAt && (
-        <time className="activity-row-time" dateTime={participant.createdAt} title={formatDateTime(participant.createdAt)}>
+        <time className="row-time" dateTime={participant.createdAt} title={formatDateTime(participant.createdAt)}>
           {formatRelativeTime(participant.createdAt)}
         </time>
       )}
@@ -243,44 +254,60 @@ function ActivityRow({
   ]
     .filter(Boolean)
     .join(" · ");
+
   return (
     <article className="activity-row">
-      <header className="activity-row-top">
+      <div className="activity-row-grid">
         <ParticipantIdentity participant={participant} position={position} />
-        <div className="activity-row-meta">
-          <span className={`keyword-chip${participant.matchedKeyword ? "" : " is-any"}`}>
-            {participant.matchedKeyword ? `\u201C${participant.matchedKeyword}\u201D` : "Any comment"}
-          </span>
-          <ParticipantStateBadge state={participant.state} />
+        <span className={`keyword-chip${participant.matchedKeyword ? "" : " is-any"}`}>
+          {participant.matchedKeyword ? `“${participant.matchedKeyword}”` : "Any comment"}
+        </span>
+        <JourneyTrack participant={participant} />
+        <ParticipantStateBadge state={participant.state} />
+        <span className={`delivery-cell tone-${statusTone(participant.finalDeliveryStatus)}`}>
+          {deliveryLabel(participant)}
+        </span>
+        <div className="row-actions">
+          {participant.state === "FAILED" && onRetry && (
+            <button type="button" className="icon-button" onClick={onRetry} disabled={retrying} title="Retry delivery">
+              <RotateCcw size={14} className={retrying ? "is-spinning" : undefined} />
+              <span className="sr-only">{retrying ? "Retrying delivery" : "Retry delivery"}</span>
+            </button>
+          )}
+          <a className="icon-button" href={media.permalink} target="_blank" rel="noreferrer" title="View on Instagram">
+            <ExternalLink size={14} />
+            <span className="sr-only">View on Instagram</span>
+          </a>
         </div>
-      </header>
-      <JourneyTrack participant={participant} />
-      <dl className="activity-diagnostics">
-        <Diagnostic label="Public reply" tone={statusTone(participant.publicReplyStatus)} detail={publicReplyDetail} />
-        <Diagnostic label="Opening DM" tone={statusTone(participant.openingStatus)} detail={openingDetail} />
-        <Diagnostic
-          label="Follow check"
-          tone={participant.followStatus === true ? "ok" : "wait"}
-          detail={followSummary(participant)}
-        />
-        <Diagnostic label="Final delivery" tone={statusTone(participant.finalDeliveryStatus)} detail={deliveryDetail} />
-      </dl>
-      <footer className="activity-row-foot">
-        {participant.state === "FAILED" && onRetry && (
-          <button type="button" className="button button-secondary button-small activity-retry" onClick={onRetry} disabled={retrying}>
-            <RotateCcw size={13} /> {retrying ? "Retrying…" : "Retry delivery"}
-          </button>
-        )}
-        <a className="text-link" href={media.permalink} target="_blank" rel="noreferrer">
-          View on Instagram <ExternalLink size={13} />
-        </a>
-      </footer>
+      </div>
+      <details className="row-detail">
+        <summary className="row-detail-toggle">Delivery details</summary>
+        <dl className="activity-diagnostics">
+          <Diagnostic label="Public reply" tone={statusTone(participant.publicReplyStatus)} detail={publicReplyDetail} />
+          <Diagnostic label="Opening DM" tone={statusTone(participant.openingStatus)} detail={openingDetail} />
+          <Diagnostic
+            label="Follow check"
+            tone={participant.followStatus === true ? "ok" : "wait"}
+            detail={followSummary(participant)}
+          />
+          <Diagnostic label="Final delivery" tone={statusTone(participant.finalDeliveryStatus)} detail={deliveryDetail} />
+        </dl>
+      </details>
     </article>
   );
 }
 
-function statusBadgeLabel(status: string): string {
-  return status.charAt(0) + status.slice(1).toLowerCase();
+function ActivityTableHead() {
+  return (
+    <div className="activity-table-head">
+      <span>Participant</span>
+      <span>Trigger</span>
+      <span>Journey</span>
+      <span>Status</span>
+      <span>Delivery</span>
+      <span className="col-actions">Actions</span>
+    </div>
+  );
 }
 
 export function AutomationActivity({ automationId }: { automationId: string }) {
@@ -438,26 +465,21 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
   return (
     <div className="activity-list">
       {campaign && (
-        <div className="campaign-context">
-          <div className="context-id">
-            <span className="context-icon" aria-hidden="true"><Workflow size={17} /></span>
-            <div className="context-name">
-              <strong>{campaign.name}</strong>
-              <small>Campaign</small>
-            </div>
-          </div>
-          <div className="context-actions">
+        <div className="campaign-strip">
+          <div className="campaign-strip-id">
+            <Workflow size={15} aria-hidden="true" />
+            <span className="campaign-strip-name">{campaign.name}</span>
             <span className={`status-badge status-${campaign.status.toLowerCase()}`}>
               {statusBadgeLabel(campaign.status)}
             </span>
-            <Link className="context-edit" href={`/automations/${automationId}/edit`}>
-              <Pencil size={12} /> Edit campaign
-            </Link>
           </div>
+          <Link className="campaign-strip-edit" href={`/automations/${automationId}/edit`}>
+            <Pencil size={12} /> Edit campaign
+          </Link>
         </div>
       )}
 
-      {summary && <FunnelSummary summary={summary} />}
+      {summary && <FunnelStrip summary={summary} />}
 
       {summary && (
         <p className="activity-clicks" title="Click rate across the participants currently loaded">
@@ -529,6 +551,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
         <p className="muted feed-empty">No participants match this view. Try a different filter or search.</p>
       ) : (
         <div className="activity-groups">
+          <ActivityTableHead />
           {groups.map((group) => (
             <section className="activity-group" key={group.key} aria-label={group.media.caption || "Untitled Reel"}>
               <header className="activity-group-head">
@@ -556,9 +579,3 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
     </div>
   );
 }
-
-
-
-
-
-

@@ -9,8 +9,8 @@ import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
 import { getInstagramConnections } from "@/src/lib/client/workspace-data";
 
-async function requestAutomations(): Promise<AutomationRecord[]> {
-  const response = await fetch("/api/automations");
+async function requestAutomations(signal?: AbortSignal): Promise<AutomationRecord[]> {
+  const response = await fetch("/api/automations", { signal });
   const payload = (await response.json()) as { data?: AutomationRecord[] };
   if (!response.ok) throw new Error("Could not load automations");
   return payload.data ?? [];
@@ -22,8 +22,12 @@ export function useAutomations() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // AbortController + signal both cancel the in-flight fetch and gate the
+    // setters; the `mounted` flag covers the synchronous render path where
+    // the fetch is still in flight.
+    const controller = new AbortController();
     let mounted = true;
-    void requestAutomations()
+    void requestAutomations(controller.signal)
       .then((data) => {
         if (mounted) {
           setAutomations(data);
@@ -31,12 +35,16 @@ export function useAutomations() {
         }
       })
       .catch((caught: unknown) => {
+        if (controller.signal.aborted) return;
         if (mounted) setError(caught instanceof Error ? caught.message : "Could not load automations");
       })
       .finally(() => {
         if (mounted) setLoading(false);
       });
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
   }, []);
 
   async function reload() {

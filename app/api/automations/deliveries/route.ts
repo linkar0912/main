@@ -8,7 +8,11 @@ function safeError(value: string | undefined): string | undefined {
   if (!value) return undefined;
   return value
     .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/gi, "https://[credentials]@")
-    .replace(/(access[_-]?token|api[_-]?key|authorization|bearer)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+    // Match the secret name followed by a colon/equals and a value that looks
+    // like a token (long, mostly non-whitespace). The previous pattern matched
+    // any non-whitespace token, which corrupted messages like
+    // "Authorization header missing" into "Authorization=[redacted] header missing".
+    .replace(/(access[_-]?token|api[_-]?key|authorization|bearer)\s*[:=]\s*[A-Za-z0-9._~+/=-]{8,}/gi, "$1=[redacted]")
     .slice(0, 500);
 }
 

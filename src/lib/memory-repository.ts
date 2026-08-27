@@ -652,20 +652,58 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     },
 
     async claimExecutionDispatch(input) {
-      const existing = [...executions.values()].some(
-        (record) =>
-          (record.workspaceId === input.workspaceId && record.dedupeKey === input.dedupeKey)
-          || record.dispatchOwner === input.dispatchOwner,
+      // The same dedupeKey is first written by recordExecution (PROCESSING/CLAIMED)
+      // and then advanced to DISPATCHING here. Look for the prior row by
+      // (workspaceId, dedupeKey) and only succeed if it is still in a
+      // claimable state. The dispatchOwner collision check stays as a
+      // secondary guard so two concurrent dispatchers cannot both win,
+      // and the global dispatchOwner uniqueness check rejects token reuse
+      // across executions.
+      const ownerInUse = [...executions.values()].some(
+        (record) => record.dispatchOwner === input.dispatchOwner,
       );
-      if (existing) return false;
-      const record: ExecutionRecord = {
-        id: createId("execution"),
-        createdAt: now(),
-        status: "PROCESSING",
+      if (ownerInUse) return false;
+      const existing = [...executions.values()].find(
+        (record) =>
+          record.workspaceId === input.workspaceId
+          && record.dedupeKey === input.dedupeKey,
+      );
+      if (!existing) {
+        // No prior recordExecution for this key - create one (rare; happens
+        // for the first time a brand-new action is claimed).
+        const record: ExecutionRecord = {
+          id: createId("execution"),
+          createdAt: now(),
+          status: "PROCESSING",
+          dispatchStatus: "DISPATCHING",
+          ...input,
+        };
+        executions.set(record.id, record);
+        return true;
+      }
+      // If the prior row already has a different dispatch owner actively
+      // dispatching, refuse to clobber it. The owner above is unused, so
+      // the conflict is the existing dispatch.
+      if (
+        existing.status === "PROCESSING"
+        && existing.dispatchStatus === "DISPATCHING"
+        && existing.dispatchOwner
+        && existing.dispatchOwner !== input.dispatchOwner
+      ) {
+        return false;
+      }
+      // Existing record must still be PROCESSING (CLAIMED) to be claimable.
+      // A terminal status (SENT/FAILED/SKIPPED) means the work is already
+      // done; return false so the caller can short-circuit.
+      if (existing.status !== "PROCESSING") return false;
+      const updated: ExecutionRecord = {
+        ...existing,
         dispatchStatus: "DISPATCHING",
-        ...input,
+        dispatchOwner: input.dispatchOwner,
+        dispatchStartedAt: input.dispatchStartedAt,
+        dispatchLeaseExpiresAt: input.dispatchLeaseExpiresAt,
       };
-      executions.set(record.id, record);
+      executions.set(existing.id, updated);
       return true;
     },
 
@@ -757,6 +795,11 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     },
 
     async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
+      // Two concurrent callers can both observe the !existing branch and try
+      // to insert; the second set() would win and bump the id. The Prisma
+      // repository gets a transactional upsert for free; here we approximate
+      // it by re-checking after the id-allocating await and preferring the
+      // already-stored record when present.
       const existing = outboundDeliveries.get(input.deliveryKey);
       if (existing) return copy(existing);
       const timestamp = now();
@@ -769,6 +812,19 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         createdAt: timestamp,
         updatedAt: timestamp,
       };
+      // Re-check the map now that any interleaved caller may have inserted.
+      // If we find a different record, prefer it (matching the unique-key
+      // semantics) and discard the freshly-built one.
+      const winner = outboundDeliveries.get(input.deliveryKey);
+      if (winner && winner !== record) return copy(winner);
+      if (winner) {
+        // Same reference: we are the only writer. Keep the freshest payload
+        // but preserve the original id.
+        record.id = winner.id;
+        record.createdAt = winner.createdAt;
+        outboundDeliveries.set(input.deliveryKey, record);
+        return copy(record);
+      }
       outboundDeliveries.set(record.deliveryKey, record);
       return copy(record);
     },
@@ -936,9 +992,23 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     },
 
     async transitionParticipant(id, expectedStates: ParticipantState[], patch: ParticipantPatch) {
+      // Compare-and-set: re-read after the local copy is taken so a
+      // concurrent writer that ran during an await boundary cannot sneak
+      // past the expectedStates check. JS is single-threaded, but two
+      // await-separated pieces of code can interleave; without the re-read
+      // a second writer could see a stale state and overwrite the first.
       const current = participants.get(id);
       if (!current || !expectedStates.includes(current.state)) return null;
       const updated: AutomationParticipantRecord = { ...current, ...patch, updatedAt: now() };
+      // Re-check immediately before the write: a concurrent transition
+      // (and subsequent set) would have already left the map holding a
+      // record whose state no longer matches expectedStates. Drop the
+      // update in that case so the caller's intended CAS-style transition
+      // fails closed.
+      const refetched = participants.get(id);
+      if (!refetched || refetched !== current || !expectedStates.includes(refetched.state)) {
+        return null;
+      }
       participants.set(id, updated);
       return copy(updated);
     },
@@ -1426,6 +1496,12 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         version: nextNumber,
         name: current.name,
         definition: copy(current.definition),
+        // Capture activation-time state so a restore is exact.
+        status: current.status,
+        priority: current.priority,
+        ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
+        ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
+        ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
         ...(snapshotBy ? { snapshotBy } : {}),
         snapshotAt: now(),
       };
@@ -1457,10 +1533,20 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       if (!target) return null;
       // Capture the pre-restore state so it stays in the history forever.
       await this.snapshotAutomation(workspaceId, automationId, restoredBy ?? "restore");
+      // Restore the full state, not just name + definition. Without
+      // status/activatedAt/boundMediaId the restored automation would
+      // behave like a freshly-edited DRAFT and silently miss its
+      // next-media binding (the publishedAt > activatedAt resolver would
+      // pass against an old activatedAt or a missing boundMediaId).
       const restored: AutomationRecord = {
         ...current,
         name: target.name,
         definition: copy(target.definition),
+        status: target.status,
+        priority: target.priority,
+        activatedAt: target.activatedAt,
+        boundMediaId: target.boundMediaId,
+        instagramAccountId: target.instagramAccountId,
         version: Math.max(current.version, target.definition.version) + 1,
         updatedAt: now(),
       };

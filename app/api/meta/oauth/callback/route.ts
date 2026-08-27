@@ -67,9 +67,17 @@ export async function GET(request: Request) {
     try {
       profile = await client.getOwnProfile(bootstrapConnection);
     } catch (error) {
-      throw error instanceof MetaApiError
-        ? new MetaApiError(`Could not read the Instagram profile from Meta: ${error.message}`, error.status, error.retryable)
-        : error;
+      if (!(error instanceof MetaApiError)) throw error;
+      // MetaApiError(message, status, responseReceived, retryable). Preserve the
+      // responseReceived flag from the original error so downstream classifiers
+      // (e.g. classifyProviderFailure) can still tell HTTP-failure from
+      // transport-failure. The status-based default for retryable keeps the
+      // existing semantics.
+      throw new MetaApiError(
+        `Could not read the Instagram profile from Meta: ${error.message}`,
+        error.status,
+        error.responseReceived,
+      );
     }
     const connection = { igUserId: profile.id, accessToken: token.accessToken };
     // Best-effort: a rejected/degraded subscription must not undo a successful sign-in.

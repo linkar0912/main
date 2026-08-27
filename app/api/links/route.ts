@@ -25,6 +25,13 @@ function readUtmField(payload: Record<string, unknown>, key: UtmField): string |
 }
 
 function appendUtm(destination: string, link: { utmSource?: string; utmMedium?: string; utmCampaign?: string; utmTerm?: string; utmContent?: string }): string {
+  // Re-validate the destination before composing the final link. The destination
+  // was checked at create-time, but a future code path that lets the destination
+  // change without re-validating would otherwise bypass the safety check and let
+  // a non-public URL through with UTM params attached.
+  if (!isSafeOutboundUrl(destination)) {
+    throw new Error("Outbound destination is not publicly routable");
+  }
   const url = new URL(destination);
   const params = url.searchParams;
   if (link.utmSource) params.set("utm_source", link.utmSource);

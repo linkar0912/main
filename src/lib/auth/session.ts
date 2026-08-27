@@ -154,12 +154,19 @@ export function readSessionToken(token: string | undefined, secret: string, now 
 }
 
 function readCookie(cookieHeader: string | null, name: string): string | undefined {
-  return cookieHeader
-    ?.split(";")
-    .map((part) => part.trim().split("="))
-    .find(([key]) => key === name)
-    ?.slice(1)
-    .join("=");
+  if (!cookieHeader) return undefined;
+  // RFC 6265 §5.4 says "If multiple cookies with the same name are sent, the
+  // last one wins". Iterate in reverse so a misconfigured proxy that prepends
+  // a stale cookie cannot bypass the freshly-issued one.
+  const segments = cookieHeader.split(";");
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const trimmed = segments[index].trim();
+    const equals = trimmed.indexOf("=");
+    if (equals === -1) continue;
+    if (trimmed.slice(0, equals) !== name) continue;
+    return trimmed.slice(equals + 1);
+  }
+  return undefined;
 }
 
 export function getSessionFromRequest(request: Request): AppSession | null {

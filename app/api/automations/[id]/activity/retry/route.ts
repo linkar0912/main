@@ -73,6 +73,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   const env = getServerEnv();
   const enqueued = await enqueueWebhookEvents([event]);
+  let delivered = false;
   if (enqueued === 0) {
     // No Redis queue (self-hosted): process inline exactly like the Meta webhook does.
     const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
@@ -89,11 +90,19 @@ export async function POST(request: Request, context: RouteContext) {
       console.warn("Retry processing failed", error instanceof Error ? error.message : String(error));
     }
   }
+  // Re-read the participant after the runner has had a chance to advance it.
+  // The initial `updated` row was captured *before* processing and still has
+  // the PENDING status we just wrote, so reading it again is the only way to
+  // surface the real outcome.
+  if (enqueued === 0) {
+    const refreshed = await repository.getParticipantById(participant.id);
+    delivered = refreshed?.finalDeliveryStatus === "SENT";
+  }
 
   return NextResponse.json({
     data: {
       retried: true,
-      delivered: updated ? updated.finalDeliveryStatus !== "PENDING" : false,
+      delivered,
     },
   });
 }

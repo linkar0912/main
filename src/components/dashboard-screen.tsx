@@ -20,7 +20,7 @@ import { TrackedLinksPanel } from "./tracked-links-panel";
 import { StatusBadge } from "./status-badge";
 import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
-import { getInstagramConnections } from "@/src/lib/client/workspace-data";
+import { clearWorkspaceDataCache, getInstagramConnections } from "@/src/lib/client/workspace-data";
 
 // Mirrors DailyCount in src/lib/repository.ts - the key is `day`, not `date`.
 type DayPoint = { day: string; count: number };
@@ -32,16 +32,15 @@ type InsightsPayload = {
 
 type Delta = { dir: "up" | "down" | "flat"; label: string };
 
-function sumPoints(points?: DayPoint[]): number {
-  return (points ?? []).reduce((total, point) => total + (point.count ?? 0), 0);
+function sumPoints(points: DayPoint[]): number {
+  return points.reduce((total, point) => total + point.count, 0);
 }
 
-function halfWindowDelta(points?: DayPoint[]): Delta | null {
-  const days = points ?? [];
-  if (days.length < 4) return null;
-  const mid = Math.floor(days.length / 2);
-  const recent = sumPoints(days.slice(mid));
-  const previous = sumPoints(days.slice(0, mid));
+function halfWindowDelta(points: DayPoint[]): Delta | null {
+  if (points.length < 4) return null;
+  const mid = Math.floor(points.length / 2);
+  const recent = sumPoints(points.slice(mid));
+  const previous = sumPoints(points.slice(0, mid));
   if (recent > 0 && previous === 0) return { dir: "up", label: "new" };
   if (previous === 0 || recent + previous === 0) return null;
   const pct = Math.round(((recent - previous) / previous) * 100);
@@ -244,23 +243,37 @@ export function DashboardScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
-    fetch("/api/health")
-      .then((response) => response.json())
-      .then((health: { mode?: string }) => setDemoMode(health.mode === "demo"))
-      .catch(() => undefined);
-    fetch("/api/contacts")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { count: number } } | null) =>
-        setCapturedCount(payload?.data?.count ?? 0)
-      )
-      .catch(() => undefined);
-    fetch("/api/insights")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: InsightsPayload | null) => setInsights(payload))
-      .catch(() => undefined);
-    getInstagramConnections()
-      .then((connections) => setHasConnection(connections.length > 0))
-      .catch(() => undefined);
+    function refresh() {
+      fetch("/api/health")
+        .then((response) => response.json())
+        .then((health: { mode?: string }) => setDemoMode(health.mode === "demo"))
+        .catch(() => undefined);
+      fetch("/api/contacts")
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload: { data?: { count: number } } | null) =>
+          setCapturedCount(payload?.data?.count ?? 0)
+        )
+        .catch(() => undefined);
+      fetch("/api/insights")
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload: InsightsPayload | null) => setInsights(payload))
+        .catch(() => undefined);
+      // Force a fresh connection lookup so a disconnect performed in the
+      // settings tab (or another tab) is reflected on the dashboard as
+      // soon as it regains focus. Without the cache invalidation the
+      // shared in-memory cache would have served the stale "connected"
+      // snapshot from the previous load.
+      clearWorkspaceDataCache("connections");
+      getInstagramConnections()
+        .then((connections) => setHasConnection(connections.length > 0))
+        .catch(() => undefined);
+    }
+    refresh();
+    // The dashboard is the workspace overview; a stale "you are connected"
+    // banner after a settings-side disconnect is a real UX bug. Refetching
+    // on focus is the cheapest fix.
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, []);
 
   const activeCount = automations.filter((a) => a.status === "ACTIVE").length;

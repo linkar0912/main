@@ -1,4 +1,4 @@
-import { getSessionFromRequest } from "@/src/lib/auth/session";
+import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { MetaApiError, MetaClient } from "@/src/lib/meta/client";
 import type { MetaMedia } from "@/src/lib/meta/types";
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 const MAX_CURSOR_LENGTH = 500;
 
 export async function GET(request: Request) {
-  const session = getSessionFromRequest(request);
+  const session = await getValidatedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const env = getServerEnv();

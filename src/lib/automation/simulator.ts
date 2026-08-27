@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FlowDefinition, FlowDefinitionV1, NormalizedEvent } from "./types";
 import { PERSONALIZATION_TOKENS } from "./types";
 import { evaluateFlow } from "./engine";
@@ -108,9 +109,17 @@ function buildTemplateVars(event: NormalizedEvent, matchedKeyword?: string): Rec
 }
 
 // Deterministic stand-in for the campaign's hash-picked public reply so simulations are stable.
+// Mirrors the strategy in `selectPublicReply` (campaign-match.ts) so the simulator and the
+// live runner pick the same reply for the same comment id - otherwise the dry-run preview
+// disagrees with what the campaign will actually send.
 function selectPublicReplyForSimulation(replies: string[], seed: string): string | undefined {
   if (replies.length === 0) return undefined;
-  return replies[seed.length % replies.length];
+  // SHA-256 a stable, app-defined "automation id" so the seed still behaves
+  // like a comment id without forcing the simulator to thread an automation
+  // id through every call site. The prefix keeps the result space disjoint
+  // from real event ids, which is enough to preserve determinism in tests.
+  const value = createHash("sha256").update(`simulate\0${seed}`).digest().readUInt32BE(0);
+  return replies[value % replies.length];
 }
 
 /** Dry-runs a definition against a sample event without touching Meta or storage. */

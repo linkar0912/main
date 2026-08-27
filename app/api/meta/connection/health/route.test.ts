@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRepository } from "@/src/lib/memory-repository";
 
 const mocks = vi.hoisted(() => ({
-  getSessionFromRequest: vi.fn(),
+  getValidatedSession: vi.fn(),
   getServerEnv: vi.fn(),
   getSubscribedFields: vi.fn(),
   unsealSecret: vi.fn(),
@@ -16,7 +16,7 @@ class MockMetaApiError extends Error {
 }
 
 vi.mock("@/src/lib/auth/session", () => ({
-  getSessionFromRequest: mocks.getSessionFromRequest,
+  getValidatedSession: mocks.getValidatedSession,
 }));
 
 vi.mock("@/src/lib/env", () => ({
@@ -49,8 +49,8 @@ function healthRequest(): Request {
 describe("GET /api/meta/connection/health", () => {
   beforeEach(() => {
     repository = createMemoryRepository();
-    mocks.getSessionFromRequest.mockReset();
-    mocks.getSessionFromRequest.mockReturnValue({ email: "owner@example.com", workspaceId: "workspace_1" });
+    mocks.getValidatedSession.mockReset();
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
     mocks.getServerEnv.mockReset();
     mocks.getServerEnv.mockReturnValue({ metaApiVersion: "v25.0", metaTokenEncryptionKey: "encryption-key", metaAppId: "app_1" });
     mocks.unsealSecret.mockReset();
@@ -59,7 +59,7 @@ describe("GET /api/meta/connection/health", () => {
   });
 
   it("returns 401 when the owner session is missing", async () => {
-    mocks.getSessionFromRequest.mockReturnValue(null);
+    mocks.getValidatedSession.mockResolvedValue(null);
 
     const response = await GET(healthRequest());
 

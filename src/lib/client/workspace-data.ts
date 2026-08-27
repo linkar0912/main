@@ -60,6 +60,17 @@ export function getInstagramConnections(): Promise<InstagramConnectionSummary[]>
   return cachedRequest(connectionsCache, "/api/meta/connection");
 }
 
+/**
+ * Force a fresh fetch of the workspace bootstrap, bypassing the in-memory
+ * cache. Use after a role change, plan upgrade, or avatar update so the
+ * sidebar reflects server state without a full page reload.
+ */
+export function refreshWorkspaceBootstrap(): Promise<WorkspaceBootstrap> {
+  bootstrapCache.value = undefined;
+  bootstrapCache.pending = undefined;
+  return getWorkspaceBootstrap();
+}
+
 /** Clear after connection mutations; the no-argument form is also useful at a
  * session boundary and keeps isolated component tests deterministic. */
 export function clearWorkspaceDataCache(scope: "connections" | "all" = "all"): void {

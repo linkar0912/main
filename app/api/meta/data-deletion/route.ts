@@ -31,7 +31,18 @@ export async function POST(request: Request) {
   if (!existing && !isFreshDeletionRequest(payload)) return new Response("Expired signed request", { status: 403 });
 
   const confirmationCode = existing?.confirmationCode ?? createDeletionConfirmationCode();
-  if (!existing) await repository.beginInstagramDataDeletion(payload.user_id, confirmationCode, signedRequestHash);
+  if (!existing) {
+    try {
+      await repository.beginInstagramDataDeletion(payload.user_id, confirmationCode, signedRequestHash);
+    } catch (error) {
+      // Two concurrent POSTs for the same signed request can both pass the
+      // !existing check before either commits. The unique index on
+      // signedRequestHash is the source of truth: re-read and continue with
+      // the winner's confirmation code instead of failing the request.
+      const winner = await repository.findDataDeletionByRequestHash(signedRequestHash);
+      if (!winner) throw error;
+    }
+  }
   await deleteQueuedInstagramEvents(payload.user_id);
   await repository.completeDataDeletion(confirmationCode);
   const statusUrl = new URL(`/data-deletion/status/${encodeURIComponent(confirmationCode)}`, env.appUrl).toString();
