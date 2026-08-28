@@ -1,0 +1,207 @@
+.section {
+  --runway-progress: 0;
+  --runway-travel: 0px;
+  position: relative;
+  overflow: clip;
+  color: #050505;
+  background: #ffffff;
+  scroll-margin-top: 88px;
+}
+
+.header {
+  padding: 136px clamp(32px, 4.45vw, 72px) 64px;
+}
+
+.header h2 {
+  max-inline-size: 1080px;
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-weight: 850;
+  line-height: .9;
+  letter-spacing: -.07em;
+}
+
+.header p {
+  max-inline-size: 56ch;
+  margin: 32px 0 0;
+  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.viewport {
+  overflow: hidden;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+  padding: 0 clamp(32px, 4.45vw, 72px) 136px;
+  margin: 0;
+  list-style: none;
+}
+
+.track > li { min-inline-size: 0; }
+
+.card {
+  display: flex;
+  min-block-size: 520px;
+  height: 100%;
+  flex-direction: column;
+  padding: clamp(24px, 3vw, 40px);
+  overflow: hidden;
+  color: #050505;
+  background: #f7f6ef;
+  border: 1px solid rgb(5 5 5 / 14%);
+  border-radius: 32px;
+}
+
+.track > li:nth-child(even) .card { background: #ffffff; }
+
+.cardNumber,
+.preview figcaption,
+.previewStep {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.cardNumber {
+  margin: 0 0 auto;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+
+.card h3 {
+  max-inline-size: 12ch;
+  margin: 48px 0 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(2rem, 3vw, 3.25rem);
+  font-weight: 850;
+  line-height: .94;
+  letter-spacing: -.055em;
+}
+
+.cardBody {
+  max-inline-size: 34ch;
+  margin: 22px 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.preview {
+  position: relative;
+  display: grid;
+  min-block-size: 220px;
+  margin: auto 0 0;
+  padding-top: 36px;
+  align-content: end;
+}
+
+.previewSteps {
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.previewStep {
+  display: grid;
+  gap: 9px;
+  font-size: .59rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.previewNode {
+  inline-size: 15px;
+  block-size: 15px;
+  background: #ffffff;
+  border: 2px solid #050505;
+  border-radius: 50%;
+}
+
+.previewStep[data-step="1"] .previewNode { background: #fa0cf7; }
+.previewStep[data-step="2"] .previewNode { background: #fff100; }
+
+.connector {
+  position: absolute;
+  inset: 14px 0 41px;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.connector path {
+  stroke: #050505;
+  stroke-width: 2;
+  stroke-dasharray: 4 6;
+}
+
+.connector circle { fill: #fff100; }
+.connector circle:nth-of-type(2) { fill: #fa0cf7; }
+
+.preview figcaption {
+  margin-top: 20px;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .025em;
+}
+
+@media (min-width: 1024px) {
+  .section { min-block-size: 320vh; }
+
+  .viewport {
+    position: sticky;
+    top: 88px;
+    block-size: calc(100vh - 88px);
+  }
+
+  .track {
+    display: flex;
+    gap: 28px;
+    inline-size: max-content;
+    min-inline-size: 100%;
+    padding-block: 0;
+    transform: translateX(calc(var(--runway-progress) * var(--runway-travel)));
+    will-change: transform;
+  }
+
+  .track > li { flex: 0 0 min(38vw, 540px); }
+  .card { min-block-size: min(68vh, 640px); }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .section { padding: 112px 32px; }
+  .header { padding: 0 0 56px; }
+  .track { gap: 24px; padding: 0; }
+}
+
+@media (max-width: 767px) {
+  .section { padding: 88px 20px; }
+  .header { padding: 0 0 48px; }
+  .track { grid-template-columns: 1fr; gap: 20px; padding: 0; }
+  .card { min-block-size: 460px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewport { position: static; block-size: auto; }
+  .track {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    inline-size: auto;
+    transform: none;
+    will-change: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) and (max-width: 1023px) {
+  .track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) and (max-width: 767px) {
+  .track { grid-template-columns: 1fr; }
+}
