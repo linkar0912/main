@@ -8,6 +8,7 @@ export function ManifestoSection() {
       id="product"
       className={styles.section}
       aria-labelledby="manifesto-title"
+      data-reduced-motion-state="visible"
     >
       <div className={styles.frame}>
         <h2 id="manifesto-title" className={styles.title}>

@@ -19,6 +19,7 @@ describe("ManifestoSection", () => {
     expect(section.id).toBe("product");
     expect(section.getAttribute("aria-labelledby")).toBe("manifesto-title");
     expect(section.hasAttribute("data-reveal")).toBe(true);
+    expect(section.getAttribute("data-reduced-motion-state")).toBe("visible");
     expect(heading.id).toBe("manifesto-title");
     expect(screen.getByText(supportingLine)).toBeTruthy();
   });

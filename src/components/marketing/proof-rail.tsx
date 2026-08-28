@@ -10,7 +10,11 @@ const facts = [
 
 function FactList({ hidden = false }: { hidden?: boolean }) {
   return (
-    <ul className={styles.facts} aria-hidden={hidden || undefined}>
+    <ul
+      className={styles.facts}
+      aria-hidden={hidden || undefined}
+      data-reduced-motion-layout={hidden ? undefined : "wrap"}
+    >
       {facts.map((fact) => <li key={fact}>{fact}</li>)}
     </ul>
   );
@@ -20,7 +24,12 @@ export function ProofRail() {
   return (
     <section id="proof" className={styles.section} aria-label="Linkar product facts">
       <h2 className={sharedStyles.visuallyHidden}>Linkar product facts</h2>
-      <div className={styles.frame} data-ticker="continuous">
+      <div
+        className={styles.frame}
+        data-ticker="continuous"
+        data-pause-on-hover="true"
+        data-pause-on-focus="true"
+      >
         <div className={styles.track}>
           <FactList />
           <FactList hidden />

@@ -41,4 +41,16 @@ describe("ProofRail", () => {
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     expect(screen.queryByText(/customers|teams|people use|revenue|testimonial/i)).toBeNull();
   });
+
+  it("exposes pause hooks and the canonical reduced-motion wrapping contract", () => {
+    render(<ProofRail />);
+
+    const rail = screen.getByRole("region", { name: "Linkar product facts" });
+    const frame = rail.querySelector('[data-ticker="continuous"]');
+    const canonical = frame?.querySelector("ul:not([aria-hidden=\"true\"])");
+
+    expect(frame?.getAttribute("data-pause-on-hover")).toBe("true");
+    expect(frame?.getAttribute("data-pause-on-focus")).toBe("true");
+    expect(canonical?.getAttribute("data-reduced-motion-layout")).toBe("wrap");
+  });
 });
