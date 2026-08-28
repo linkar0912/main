@@ -7,20 +7,15 @@ import { AutomationStory } from "./automation-story";
 type MediaQueryListener = (event: MediaQueryListEvent) => void;
 
 function installMediaQueries({ desktop = true, reducedMotion = false } = {}) {
-  const listeners = new Map<string, Set<MediaQueryListener>>();
   const queries = new Map<string, MediaQueryList>();
-
   const matchMedia = vi.fn((query: string) => {
     const matches = query === "(min-width: 1024px)" ? desktop : reducedMotion;
-    const queryListeners = listeners.get(query) ?? new Set<MediaQueryListener>();
-    listeners.set(query, queryListeners);
-
     const mediaQuery = {
       matches,
       media: query,
       onchange: null,
-      addEventListener: vi.fn((_type: "change", listener: MediaQueryListener) => queryListeners.add(listener)),
-      removeEventListener: vi.fn((_type: "change", listener: MediaQueryListener) => queryListeners.delete(listener)),
+      addEventListener: vi.fn((_type: "change", _listener: MediaQueryListener) => undefined),
+      removeEventListener: vi.fn((_type: "change", _listener: MediaQueryListener) => undefined),
       addListener: vi.fn(),
       removeListener: vi.fn(),
       dispatchEvent: vi.fn(),
@@ -28,14 +23,54 @@ function installMediaQueries({ desktop = true, reducedMotion = false } = {}) {
     queries.set(query, mediaQuery);
     return mediaQuery;
   });
-
   vi.stubGlobal("matchMedia", matchMedia);
-  return { matchMedia, listeners, queries };
+  return { queries };
+}
+
+function installAnimationFrame() {
+  let nextId = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+    const id = nextId++;
+    callbacks.set(id, callback);
+    return id;
+  });
+  const cancelAnimationFrame = vi.fn((id: number) => callbacks.delete(id));
+  vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+  vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrame);
+
+  function flushFrame() {
+    const frame = callbacks.entries().next().value as [number, FrameRequestCallback] | undefined;
+    if (!frame) throw new Error("No animation frame is scheduled");
+    callbacks.delete(frame[0]);
+    act(() => frame[1](performance.now()));
+  }
+
+  return { requestAnimationFrame, cancelAnimationFrame, callbacks, flushFrame };
+}
+
+function storyRect(progress: number): DOMRect {
+  const height = 4000;
+  const activationLine = 1000 * 0.45;
+  const top = activationLine - progress * height;
+  return {
+    x: 0,
+    y: top,
+    top,
+    right: 1440,
+    bottom: top + height,
+    left: 0,
+    width: 1440,
+    height,
+    toJSON: () => ({}),
+  };
 }
 
 describe("AutomationStory", () => {
   beforeEach(() => {
     installMediaQueries();
+    installAnimationFrame();
+    vi.stubGlobal("innerHeight", 1000);
   });
 
   afterEach(() => {
@@ -44,160 +79,120 @@ describe("AutomationStory", () => {
     vi.unstubAllGlobals();
   });
 
-  it("server-renders the four Linkar chapters and complete flow in exact reading order", () => {
+  it("server-renders exact ordered Linkar chapters and one semantic scene summary", () => {
     const markup = renderToStaticMarkup(<AutomationStory />);
     render(<AutomationStory />);
-
-    const section = screen.getByRole("region", {
-      name: "One spark. A conversation that knows what comes next.",
-    });
+    const section = screen.getByRole("region", { name: "One spark. A conversation that knows what comes next." });
     expect(section.id).toBe("how-it-works");
     expect(section.getAttribute("data-active-scene")).toBe("comment");
     expect(section.getAttribute("data-active-index")).toBe("0");
-
-    expect(
-      screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent),
-    ).toEqual([
-      "Open the right door",
-      "Learn what matters",
-      "Return on time",
-      "Bring in a person",
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      "Open the right door", "Learn what matters", "Return on time", "Bring in a person",
     ]);
-    expect(
-      Array.from(section.querySelectorAll("[data-sequence]")).map((number) => number.textContent),
-    ).toEqual(["01", "02", "03", "04"]);
-
+    expect(Array.from(section.querySelectorAll("[data-sequence]")).map((number) => number.textContent)).toEqual(["01", "02", "03", "04"]);
+    expect(Array.from(section.querySelectorAll("[data-chapter-copy]")).map((copy) => copy.textContent)).toEqual([
+      "When the right comment arrives, Linkar sends a useful private reply in your voice.",
+      "Ask one focused question, save the answer, and shape the next message around it.",
+      "Schedule a thoughtful follow-up while the conversation is still open — no reminder list required.",
+      "When intent becomes valuable or nuanced, pause the flow and place the full context in your queue.",
+    ]);
     [
-      "GUIDE please",
-      "Keyword matched",
-      "The quick guide is ready. What would you like to improve first?",
-      "More replies or better leads?",
-      "Better leads",
-      "Goal saved",
-      "Now: guide sent",
-      "+ 18h: check in",
-      "Within window",
-      "Project details received",
-      "Automation paused",
-      "Ready for you",
+      "GUIDE please", "Keyword matched", "The quick guide is ready. What would you like to improve first?",
+      "More replies or better leads?", "Better leads", "Goal saved", "Now: guide sent",
+      "+ 18h: check in", "Within window", "Project details received", "Automation paused", "Ready for you",
     ].forEach((state) => expect(markup).toContain(state));
-
-    expect(screen.getByRole("figure", { name: "Four stages of a Linkar conversation" })).toBeTruthy();
+    expect(screen.getAllByRole("figure", { name: "Four stages of a Linkar conversation" })).toHaveLength(1);
+    expect(screen.getAllByRole("list")).toHaveLength(1);
     expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    expect(section.querySelectorAll('[aria-hidden="true"] [data-scene-body]')).toHaveLength(8);
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
     expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 
-  it("keeps every desktop scene mounted while the active chapter crossfades", () => {
+  it("keeps one stable desktop frame while four scene bodies crossfade", () => {
     render(<AutomationStory />);
-
     const stage = document.querySelector("[data-desktop-stage]");
-    expect(stage).not.toBeNull();
+    expect(stage?.querySelectorAll("[data-scene-frame]")).toHaveLength(1);
     expect(stage?.querySelectorAll("[data-scene]")).toHaveLength(4);
     expect(stage?.querySelector('[data-scene="comment"]')?.getAttribute("data-active")).toBe("true");
     expect(stage?.querySelector('[data-scene="qualify"]')?.getAttribute("data-active")).toBe("false");
+    stage?.querySelectorAll("[data-scene]").forEach((scene) => {
+      expect(scene.querySelectorAll('[data-current-action="true"]')).toHaveLength(1);
+    });
   });
 
-  it("uses one desktop observer at the 45% activation line and maps all chapter bands", () => {
-    let callback: IntersectionObserverCallback | undefined;
-    const observe = vi.fn();
-    const unobserve = vi.fn();
-    const disconnect = vi.fn();
-    const observer = { observe, unobserve, disconnect } as unknown as IntersectionObserver;
-    const IntersectionObserverMock = vi.fn(
-      function IntersectionObserverConstructor(
-        observerCallback: IntersectionObserverCallback,
-        options?: IntersectionObserverInit,
-      ) {
-        callback = observerCallback;
-        expect(options).toEqual({
-          root: null,
-          rootMargin: "-45% 0px -55% 0px",
-          threshold: 0,
-        });
-        return observer;
-      },
-    );
-    vi.stubGlobal("IntersectionObserver", IntersectionObserverMock);
-
+  it("maps exact progress bands using the 45% viewport activation line", () => {
+    const frames = installAnimationFrame();
     render(<AutomationStory />);
-    const section = screen.getByRole("region", {
-      name: "One spark. A conversation that knows what comes next.",
-    });
-    const chapters = Array.from(section.querySelectorAll<HTMLElement>("[data-chapter]"));
-
-    expect(IntersectionObserverMock).toHaveBeenCalledTimes(1);
-    expect(chapters).toHaveLength(4);
-    chapters.forEach((chapter) => expect(observe).toHaveBeenCalledWith(chapter));
-
-    chapters.forEach((chapter, index) => {
-      act(() => {
-        callback?.(
-          [{ isIntersecting: true, target: chapter } as unknown as IntersectionObserverEntry],
-          observer,
-        );
-      });
-      expect(section.getAttribute("data-active-index")).toBe(String(index));
-      expect(section.getAttribute("data-active-scene")).toBe(
-        ["comment", "qualify", "followup", "handoff"][index],
-      );
-    });
-
-    expect(unobserve).not.toHaveBeenCalled();
+    const section = screen.getByRole("region", { name: "One spark. A conversation that knows what comes next." });
+    const storyBody = section.querySelector<HTMLElement>("[data-story-body]");
+    expect(storyBody).not.toBeNull();
+    const cases: Array<[number, string, string]> = [
+      [0, "0", "comment"], [0.2499, "0", "comment"], [0.25, "1", "qualify"],
+      [0.4999, "1", "qualify"], [0.5, "2", "followup"], [0.7499, "2", "followup"],
+      [0.75, "3", "handoff"], [1, "3", "handoff"],
+    ];
+    for (const [progress, index, scene] of cases) {
+      vi.spyOn(storyBody!, "getBoundingClientRect").mockReturnValue(storyRect(progress));
+      window.dispatchEvent(new Event("scroll"));
+      frames.flushFrame();
+      expect(section.getAttribute("data-active-index")).toBe(index);
+      expect(section.getAttribute("data-active-scene")).toBe(scene);
+      expect(section.style.getPropertyValue("--story-index")).toBe(index);
+      expect(Number(section.style.getPropertyValue("--story-progress"))).toBeCloseTo(progress, 4);
+    }
   });
 
-  it("places each non-sticky scene immediately after its matching chapter copy in DOM order", () => {
+  it("coalesces passive scroll and resize work into one animation frame", () => {
+    const frames = installAnimationFrame();
+    const addEventListener = vi.spyOn(window, "addEventListener");
+    render(<AutomationStory />);
+    expect(addEventListener).toHaveBeenCalledWith("scroll", expect.any(Function), { passive: true });
+    expect(addEventListener).toHaveBeenCalledWith("resize", expect.any(Function), { passive: true });
+    expect(frames.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event("scroll"));
+    window.dispatchEvent(new Event("scroll"));
+    window.dispatchEvent(new Event("resize"));
+    expect(frames.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    frames.flushFrame();
+    window.dispatchEvent(new Event("resize"));
+    expect(frames.requestAnimationFrame).toHaveBeenCalledTimes(2);
+  });
+
+  it("places each tablet/mobile scene immediately after matching copy in document order", () => {
     installMediaQueries({ desktop: false });
     render(<AutomationStory />);
-
-    const chapters = Array.from(document.querySelectorAll<HTMLElement>("[data-chapter]"));
-    expect(chapters).toHaveLength(4);
-    chapters.forEach((chapter, index) => {
+    Array.from(document.querySelectorAll<HTMLElement>("[data-chapter]")).forEach((chapter, index) => {
       const copy = chapter.querySelector("[data-chapter-copy]");
       const scene = chapter.querySelector("[data-flow-scene]");
-      expect(copy).not.toBeNull();
-      expect(scene).not.toBeNull();
       expect(copy?.nextElementSibling).toBe(scene);
-      expect(scene?.getAttribute("data-flow-scene")).toBe(
-        ["comment", "qualify", "followup", "handoff"][index],
-      );
+      expect(scene?.getAttribute("data-flow-scene")).toBe(["comment", "qualify", "followup", "handoff"][index]);
     });
   });
 
-  it("does not register scroll tracking for reduced motion and presents the complete flow", () => {
+  it("renders the complete reduced-motion flow without registering scroll work", () => {
     installMediaQueries({ desktop: true, reducedMotion: true });
-    const IntersectionObserverMock = vi.fn();
-    vi.stubGlobal("IntersectionObserver", IntersectionObserverMock);
-
+    const addEventListener = vi.spyOn(window, "addEventListener");
+    const frames = installAnimationFrame();
     render(<AutomationStory />);
-
-    const section = screen.getByRole("region", {
-      name: "One spark. A conversation that knows what comes next.",
-    });
+    const section = screen.getByRole("region", { name: "One spark. A conversation that knows what comes next." });
     expect(section.getAttribute("data-motion")).toBe("reduced");
-    expect(IntersectionObserverMock).not.toHaveBeenCalled();
     expect(section.querySelectorAll("[data-flow-scene]")).toHaveLength(4);
     expect(within(section).getAllByRole("heading", { level: 3 })).toHaveLength(4);
+    expect(addEventListener).not.toHaveBeenCalledWith("scroll", expect.any(Function), expect.anything());
+    expect(addEventListener).not.toHaveBeenCalledWith("resize", expect.any(Function), expect.anything());
+    expect(frames.requestAnimationFrame).not.toHaveBeenCalled();
   });
 
-  it("unobserves every chapter, disconnects, and removes media listeners on cleanup", () => {
+  it("removes listeners, cancels pending work, and cleans media listeners", () => {
     const media = installMediaQueries();
-    const observe = vi.fn();
-    const unobserve = vi.fn();
-    const disconnect = vi.fn();
-    vi.stubGlobal(
-      "IntersectionObserver",
-      vi.fn(function IntersectionObserverConstructor() {
-        return { observe, unobserve, disconnect };
-      }),
-    );
-
+    const frames = installAnimationFrame();
+    const removeEventListener = vi.spyOn(window, "removeEventListener");
     const view = render(<AutomationStory />);
-    const chapters = Array.from(document.querySelectorAll<HTMLElement>("[data-chapter]"));
     view.unmount();
-
-    chapters.forEach((chapter) => expect(unobserve).toHaveBeenCalledWith(chapter));
-    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(removeEventListener).toHaveBeenCalledWith("scroll", expect.any(Function));
+    expect(removeEventListener).toHaveBeenCalledWith("resize", expect.any(Function));
+    expect(frames.cancelAnimationFrame).toHaveBeenCalledTimes(1);
     media.queries.forEach((query) => {
       expect(query.removeEventListener).toHaveBeenCalledWith("change", expect.any(Function));
     });

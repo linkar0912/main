@@ -58,7 +58,7 @@ function Status({ children, active = false }: { children: React.ReactNode; activ
 
 function CommentScene() {
   return (
-    <div className={styles.sceneBody}>
+    <div className={styles.sceneBody} data-scene-body="comment">
       <div className={styles.sceneTopline}>
         <span>Incoming comment</span>
         <Status active>Keyword matched</Status>
@@ -81,10 +81,10 @@ function CommentScene() {
 
 function QualifyScene() {
   return (
-    <div className={styles.sceneBody}>
+    <div className={styles.sceneBody} data-scene-body="qualify">
       <div className={styles.sceneTopline}>
         <span>Focused question</span>
-        <Status active>Waiting for answer</Status>
+        <Status>Waiting for answer</Status>
       </div>
       <div className={`${styles.card} ${styles.questionCard}`}>
         <span className={styles.cardLabel}>Question</span>
@@ -106,10 +106,10 @@ function QualifyScene() {
 
 function FollowupScene() {
   return (
-    <div className={styles.sceneBody}>
+    <div className={styles.sceneBody} data-scene-body="followup">
       <div className={styles.sceneTopline}>
         <span>Thoughtful follow-up</span>
-        <Status active>Within window</Status>
+        <Status>Within window</Status>
       </div>
       <div className={`${styles.card} ${styles.timelineCard}`}>
         <span className={styles.cardLabel}>Timeline</span>
@@ -118,7 +118,7 @@ function FollowupScene() {
           <div><strong>Now</strong><p>guide sent</p></div>
         </div>
         <div className={styles.timelineLine} />
-        <div className={styles.timelineEvent} data-current="true">
+        <div className={styles.timelineEvent} data-current="true" data-current-action="true">
           <span className={styles.timelineDot} />
           <div><strong>+ 18h</strong><p>check in</p></div>
         </div>
@@ -133,7 +133,7 @@ function FollowupScene() {
 
 function HandoffScene() {
   return (
-    <div className={styles.sceneBody}>
+    <div className={styles.sceneBody} data-scene-body="handoff">
       <div className={styles.sceneTopline}>
         <span>Human handoff</span>
         <Status active>Automation paused</Status>
@@ -153,21 +153,36 @@ function HandoffScene() {
   );
 }
 
-function Scene({ scene, mobile = false }: { scene: StoryChapter["scene"]; mobile?: boolean }) {
+function SceneBody({ scene }: { scene: StoryChapter["scene"] }) {
   return (
-    <div
-      className={`${styles.sceneFrame} ${mobile ? styles.mobileScene : ""}`}
-      data-flow-scene={mobile ? scene : undefined}
-      aria-hidden="true"
-    >
-      <div className={styles.frameBar}>
-        <span className={styles.frameBrand}>LINKAR</span>
-        <span className={styles.frameStatus}><span /> Flow live</span>
-      </div>
+    <>
       {scene === "comment" ? <CommentScene /> : null}
       {scene === "qualify" ? <QualifyScene /> : null}
       {scene === "followup" ? <FollowupScene /> : null}
       {scene === "handoff" ? <HandoffScene /> : null}
+    </>
+  );
+}
+
+function FrameBar() {
+  return (
+    <div className={styles.frameBar}>
+      <span className={styles.frameBrand}>LINKAR</span>
+      <span className={styles.frameStatus}><span /> Flow live</span>
+    </div>
+  );
+}
+
+function MobileScene({ scene }: { scene: StoryChapter["scene"] }) {
+  return (
+    <div
+      className={`${styles.sceneFrame} ${styles.mobileScene}`}
+      data-flow-scene={scene}
+      data-scene-frame
+      aria-hidden="true"
+    >
+      <FrameBar />
+      <SceneBody scene={scene} />
     </div>
   );
 }
@@ -175,52 +190,67 @@ function Scene({ scene, mobile = false }: { scene: StoryChapter["scene"]; mobile
 export function AutomationStory({ chapters = storyChapters }: AutomationStoryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [motion, setMotion] = useState<"full" | "reduced">("full");
-  const chapterRefs = useRef<Array<HTMLElement | null>>([]);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const storyBodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const desktopQuery = window.matchMedia("(min-width: 1024px)");
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let observer: IntersectionObserver | null = null;
-    let observedChapters: HTMLElement[] = [];
+    let frameId: number | null = null;
+    let tracking = false;
 
-    const releaseObserver = () => {
-      if (!observer) return;
-      observedChapters.forEach((chapter) => observer?.unobserve(chapter));
-      observer.disconnect();
-      observer = null;
-      observedChapters = [];
+    const updateProgress = () => {
+      const section = sectionRef.current;
+      const storyBody = storyBodyRef.current;
+      if (!section || !storyBody) return;
+
+      const bounds = storyBody.getBoundingClientRect();
+      const activationLine = window.innerHeight * 0.45;
+      const rawProgress = bounds.height > 0 ? (activationLine - bounds.top) / bounds.height : 0;
+      const progress = Math.min(Math.max(rawProgress, 0), 1);
+      const nextIndex = progress >= 0.75 ? 3 : progress >= 0.5 ? 2 : progress >= 0.25 ? 1 : 0;
+
+      section.style.setProperty("--story-progress", String(progress));
+      section.style.setProperty("--story-index", String(nextIndex));
+      setActiveIndex((current) => current === nextIndex ? current : nextIndex);
+    };
+
+    const scheduleProgress = () => {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateProgress();
+      });
+    };
+
+    const stopTracking = () => {
+      if (tracking) {
+        window.removeEventListener("scroll", scheduleProgress);
+        window.removeEventListener("resize", scheduleProgress);
+        tracking = false;
+      }
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+        frameId = null;
+      }
     };
 
     const syncTracking = () => {
-      releaseObserver();
-      setMotion(motionQuery.matches ? "reduced" : "full");
+      stopTracking();
+      const reduced = motionQuery.matches;
+      setMotion(reduced ? "reduced" : "full");
 
-      if (
-        motionQuery.matches ||
-        !desktopQuery.matches ||
-        typeof IntersectionObserver === "undefined"
-      ) {
+      if (reduced || !desktopQuery.matches) {
+        sectionRef.current?.style.setProperty("--story-progress", "0");
+        sectionRef.current?.style.setProperty("--story-index", "0");
+        setActiveIndex(0);
         return;
       }
 
-      observer = new IntersectionObserver(
-        (entries) => {
-          const crossing = entries.find((entry) => entry.isIntersecting);
-          if (!crossing) return;
-          const nextIndex = Number((crossing.target as HTMLElement).dataset.chapterIndex);
-          if (Number.isInteger(nextIndex)) setActiveIndex(nextIndex);
-        },
-        {
-          root: null,
-          rootMargin: "-45% 0px -55% 0px",
-          threshold: 0,
-        },
-      );
-
-      observedChapters = chapterRefs.current.filter(
-        (chapter): chapter is HTMLElement => chapter !== null,
-      );
-      observedChapters.forEach((chapter) => observer?.observe(chapter));
+      window.addEventListener("scroll", scheduleProgress, { passive: true });
+      window.addEventListener("resize", scheduleProgress, { passive: true });
+      tracking = true;
+      scheduleProgress();
     };
 
     desktopQuery.addEventListener("change", syncTracking);
@@ -228,7 +258,7 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
     syncTracking();
 
     return () => {
-      releaseObserver();
+      stopTracking();
       desktopQuery.removeEventListener("change", syncTracking);
       motionQuery.removeEventListener("change", syncTracking);
     };
@@ -245,13 +275,15 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
       data-active-scene={activeScene}
       data-active-index={safeActiveIndex}
       data-motion={motion}
+      ref={sectionRef}
+      style={{ "--story-progress": 0, "--story-index": safeActiveIndex } as React.CSSProperties}
     >
       <header className={styles.header}>
         <h2 id="story-title">One spark. A conversation that knows what comes next.</h2>
         <p>Linkar turns a simple trigger into a clear, useful sequence.</p>
       </header>
 
-      <div className={styles.storyGrid}>
+      <div className={styles.storyGrid} data-story-body ref={storyBodyRef}>
         <div className={styles.copyRail}>
           {chapters.map((chapter, index) => (
             <article
@@ -262,14 +294,11 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
               data-chapter={chapter.scene}
               data-chapter-index={index}
               data-active={safeActiveIndex === index ? "true" : "false"}
-              ref={(element) => {
-                chapterRefs.current[index] = element;
-              }}
             >
               <p className={styles.sequence} data-sequence>{chapter.eyebrow}</p>
               <h3 id={`story-${chapter.id}-title`}>{chapter.title}</h3>
               <p className={styles.chapterBody} data-chapter-copy>{chapter.body}</p>
-              <Scene scene={chapter.scene} mobile />
+              <MobileScene scene={chapter.scene} />
             </article>
           ))}
         </div>
@@ -285,16 +314,21 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
               ))}
             </ol>
             <div className={styles.controlRoom} aria-hidden="true">
-              {chapters.map((chapter, index) => (
-                <div
-                  key={chapter.id}
-                  className={styles.desktopScene}
-                  data-scene={chapter.scene}
-                  data-active={safeActiveIndex === index ? "true" : "false"}
-                >
-                  <Scene scene={chapter.scene} />
+              <div className={styles.sceneFrame} data-scene-frame>
+                <FrameBar />
+                <div className={styles.sceneLayers}>
+                  {chapters.map((chapter, index) => (
+                    <div
+                      key={chapter.id}
+                      className={styles.desktopScene}
+                      data-scene={chapter.scene}
+                      data-active={safeActiveIndex === index ? "true" : "false"}
+                    >
+                      <SceneBody scene={chapter.scene} />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
             <figcaption className={styles.figcaption}>Linkar conversation flow.</figcaption>
           </figure>
