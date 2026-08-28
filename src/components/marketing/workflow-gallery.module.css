@@ -1,0 +1,274 @@
+.section {
+  padding: clamp(120px, 11vw, 176px) clamp(32px, 4.45vw, 72px);
+  color: #050505;
+  background: #ffffff;
+  scroll-margin-top: 88px;
+}
+
+.header { max-inline-size: 980px; }
+
+.header h2 {
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-weight: 850;
+  line-height: .9;
+  letter-spacing: -.07em;
+}
+
+.header p {
+  max-inline-size: 60ch;
+  margin: 28px 0 0;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.desktopGallery {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 56px;
+  margin-top: 72px;
+}
+
+.tablist {
+  display: grid;
+  grid-column: 1 / span 4;
+  align-content: start;
+  gap: 4px;
+}
+
+.tab {
+  position: relative;
+  display: grid;
+  min-block-size: 92px;
+  padding: 18px 18px 18px 24px;
+  color: rgb(5 5 5 / 58%);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-inline-start: 6px solid transparent;
+  cursor: pointer;
+}
+
+.tab > span,
+.workflowTitle,
+.builderChrome,
+.node,
+.accordionTrigger {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.tab > span,
+.accordionTrigger {
+  font-size: .78rem;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.tab small {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .86rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.tab[aria-selected="true"] {
+  color: #050505;
+  border-inline-start-color: #fa0cf7;
+}
+
+.tab:focus-visible,
+.accordionTrigger:focus-visible {
+  outline: 2px solid #050505;
+  outline-offset: 3px;
+}
+
+.stage {
+  position: relative;
+  grid-column: 5 / -1;
+  min-block-size: 600px;
+  aspect-ratio: 1.32 / 1;
+  background: #f7f6ef;
+  border-radius: 32px;
+}
+
+.panel {
+  position: absolute;
+  inset: clamp(16px, 2vw, 28px);
+  animation: panel-in 360ms cubic-bezier(.43, .195, .02, 1) both;
+}
+
+.leavingPanel { animation-name: panel-out; pointer-events: none; }
+
+.preview {
+  display: grid;
+  block-size: 100%;
+  aspect-ratio: auto;
+  min-block-size: 0;
+  margin: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.builderFrame {
+  display: grid;
+  min-block-size: 0;
+  padding: 20px;
+  color: #ffffff;
+  background: #050505;
+  border-radius: 28px;
+}
+
+.builderChrome {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: rgb(255 255 255 / 70%);
+  font-size: .64rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.workflowTitle {
+  margin: 32px 0 auto;
+  font-size: clamp(1.1rem, 1.9vw, 1.8rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -.04em;
+}
+
+.canvas {
+  position: relative;
+  display: grid;
+  min-block-size: 260px;
+  margin-top: 32px;
+  align-items: center;
+}
+
+.connectors {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+.connectors path {
+  stroke: #fff100;
+  stroke-width: 3;
+  stroke-dasharray: 12 8;
+  stroke-linecap: round;
+  animation: connector-draw 450ms cubic-bezier(.43, .195, .02, 1) both;
+}
+
+.nodes {
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--node-count, 3), minmax(0, 1fr));
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.node {
+  display: grid;
+  min-block-size: 94px;
+  padding: 14px;
+  align-content: space-between;
+  color: #050505;
+  background: #ffffff;
+  border-radius: 14px;
+  font-size: .67rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.node:nth-child(even) { background: #f7f6ef; }
+
+.port {
+  inline-size: 11px;
+  block-size: 11px;
+  background: #fa0cf7;
+  border: 2px solid #050505;
+  border-radius: 999px;
+}
+
+.node:last-child .port { background: #fff100; }
+
+.preview figcaption {
+  margin-top: 16px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .95rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.mobileAccordion { display: none; }
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes connector-draw {
+  from { stroke-dashoffset: 32; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes panel-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(16px); }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .section { padding: 112px 32px; }
+  .desktopGallery { grid-template-columns: 280px minmax(0, 1fr); gap: 32px; }
+  .tablist { grid-column: auto; }
+  .stage { grid-column: auto; min-block-size: 520px; }
+  .tab { padding-inline-end: 10px; }
+}
+
+@media (max-width: 767px) {
+  .section { padding: 88px 20px; }
+  .header h2 { font-size: clamp(2.75rem, 14vw, 4.5rem); }
+  .desktopGallery { display: none; }
+  .mobileAccordion { display: block; margin-top: 48px; }
+  .accordionItem { border-block-start: 1px solid rgb(5 5 5 / 16%); }
+  .accordionItem:last-child { border-block-end: 1px solid rgb(5 5 5 / 16%); }
+  .accordionItem h3 { margin: 0; }
+  .accordionTrigger {
+    display: flex;
+    inline-size: 100%;
+    min-block-size: 76px;
+    padding: 18px 0;
+    justify-content: space-between;
+    align-items: center;
+    color: #050505;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+  }
+  .accordionMark { font-size: 1.45rem; font-weight: 400; line-height: 1; }
+  .accordionTrigger[aria-expanded="true"] .accordionMark { transform: rotate(45deg); }
+  .accordionPanel { padding: 0 0 32px; }
+  .accordionPanel > p { margin: 0 0 24px; font-weight: 600; line-height: 1.5; }
+  .preview { min-block-size: 360px; block-size: auto; }
+  .builderFrame { min-block-size: 360px; }
+  .canvas { min-block-size: 190px; }
+  .nodes { gap: 8px; }
+  .node { min-block-size: 84px; padding: 11px; font-size: .58rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .connectors path { animation: none; }
+  .accordionTrigger[aria-expanded="true"] .accordionMark { transition: none; }
+}
