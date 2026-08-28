@@ -1,0 +1,13 @@
+.root,
+.page {
+  min-inline-size: 0;
+}
+
+.root {
+  isolation: isolate;
+  overflow: clip;
+}
+
+.page {
+  display: block;
+}

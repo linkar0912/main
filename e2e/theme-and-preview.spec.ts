@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("sidebar theme toggle switches and persists dark mode", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/dashboard");
   await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
 
   const toggle = page.getByRole("button", { name: /dark mode/i });
@@ -17,8 +17,8 @@ test("sidebar theme toggle switches and persists dark mode", async ({ page }) =>
   await expect(page.locator("html[data-theme='dark']")).toHaveCount(0);
 });
 
-test("home shows ManyChat-style quick-start recipe cards", async ({ page }) => {
-  await page.goto("/");
+test("dashboard shows quick-start recipe cards", async ({ page }) => {
+  await page.goto("/dashboard");
   await expect(page.getByRole("heading", { name: "Start here" }).nth(0)).toBeVisible();
   await expect(page.getByRole("link", { name: /Auto-DM links from comments/ })).toBeVisible();
   await expect(page.getByText("Popular", { exact: true })).toBeVisible();

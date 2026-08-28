@@ -4,13 +4,42 @@ test.describe("unauthenticated visitor", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test("workspace requires authentication", async ({ page, request }) => {
-    for (const path of ["/", "/profile", "/help"]) {
+    for (const path of ["/dashboard", "/profile", "/help"]) {
       await page.goto(path);
       await expect(page).toHaveURL(new RegExp(`/login\\?next=${encodeURIComponent(path)}$`));
     }
 
     const response = await request.get("/api/automations");
     expect(response.status()).toBe(401);
+  });
+
+  test("public home exposes the hero and signup path", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", {
+      level: 1,
+      name: /Turn attention into conversations that keep moving/i,
+    })).toBeVisible();
+    await page.getByRole("link", { name: "Start building" }).click();
+    await expect(page).toHaveURL(/\/signup$/);
+  });
+
+  test("public mobile navigation and FAQ work without an account", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+
+    const opener = page.getByRole("button", { name: "Open menu" });
+    await opener.click();
+    await expect(page.getByRole("dialog", { name: "Menu" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Menu" })).toHaveCount(0);
+    await expect(opener).toBeFocused();
+
+    const question = page.getByRole("button", { name: "How does Linkar protect my account?" });
+    await question.scrollIntoViewIfNeeded();
+    await expect(question).toHaveAttribute("aria-expanded", "false");
+    await question.click();
+    await expect(question).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByText(/encrypts stored access tokens/i)).toBeVisible();
   });
 });
 
@@ -22,7 +51,7 @@ test("owner can sign out", async ({ browser }) => {
   await page.getByLabel("Password").fill("linkar-e2e-password");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/automations$/);
-  await page.goto("/");
+  await page.goto("/dashboard");
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await context.close();
@@ -46,7 +75,7 @@ test("member can sign up and sign back in", async ({ page }) => {
 });
 
 test("dashboard and automation list are reachable", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/dashboard");
   await expect(page.locator(".sidebar-brand")).toBeVisible();
   await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
   await expect(page.getByLabel("Performance over time")).toBeVisible();

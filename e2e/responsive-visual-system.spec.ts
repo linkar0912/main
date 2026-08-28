@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const routes = [
-  "/",
+  "/dashboard",
   "/automations",
   "/automations/sequences",
   "/automations/broadcasts",
@@ -92,6 +92,26 @@ for (const viewport of viewports) {
   });
 }
 
+test.describe("public marketing route", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  for (const viewport of viewports) {
+    test(`marketing home stays contained at ${viewport.width}px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await expect(page.getByRole("heading", {
+        level: 1,
+        name: /Turn attention into conversations that keep moving/i,
+      })).toBeVisible();
+      const width = await page.evaluate(() => ({
+        viewport: window.innerWidth,
+        document: document.documentElement.scrollWidth,
+      }));
+      expect(width.document).toBeLessThanOrEqual(width.viewport);
+    });
+  }
+});
+
 test("mobile settings stacks connection copy above its action", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/settings");
@@ -119,7 +139,7 @@ test("mobile automation controls wrap inside their row", async ({ page }) => {
 test("tablet navigation keeps a full-size menu target", async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 900 });
   await page.goto("/");
-  const menu = await page.getByRole("button", { name: "Open navigation" }).boundingBox();
+  const menu = await page.getByRole("button", { name: "Open menu" }).boundingBox();
   expect(menu).not.toBeNull();
   expect(menu!.width).toBeGreaterThanOrEqual(44);
   expect(menu!.height).toBeGreaterThanOrEqual(44);
@@ -184,7 +204,7 @@ test("mobile sequence edit actions remain comfortably tappable", async ({ page }
 
 test("desktop chart fills the content field", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto("/");
+  await page.goto("/dashboard");
   const panel = await page.locator(".chart-panel").boundingBox();
   const plot = await page.locator(".chart-plot").boundingBox();
   expect(panel).not.toBeNull();

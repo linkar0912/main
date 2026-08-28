@@ -1,10 +1,29 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import HomePage, { generateMetadata } from "@/app/page";
 import { PublicPage } from "./public-page";
 
 describe("PublicPage", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      callback(performance.now());
+      return 1;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
   it("returns people to the gated dashboard", () => {
     render(<PublicPage title="Privacy" intro="How Linkar handles your data."><p>Policy content</p></PublicPage>);
 
