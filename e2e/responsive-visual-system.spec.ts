@@ -110,6 +110,37 @@ test.describe("public marketing route", () => {
       expect(width.document).toBeLessThanOrEqual(width.viewport);
     });
   }
+
+  test("tablet workflow stage fits its section without clipped overflow", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto("/");
+
+    const section = page.locator("#workflows");
+    const stage = section.locator("[role='tabpanel']").first().locator("..");
+    const [sectionBox, stageBox, sectionWidths] = await Promise.all([
+      section.boundingBox(),
+      stage.boundingBox(),
+      section.evaluate((element) => ({
+        client: element.clientWidth,
+        scroll: element.scrollWidth,
+      })),
+    ]);
+
+    expect(sectionBox).not.toBeNull();
+    expect(stageBox).not.toBeNull();
+    expect(sectionWidths.scroll).toBeLessThanOrEqual(sectionWidths.client);
+    expect(stageBox!.x).toBeGreaterThanOrEqual(sectionBox!.x);
+    expect(stageBox!.x + stageBox!.width).toBeLessThanOrEqual(sectionBox!.x + sectionBox!.width);
+  });
+
+  test("public tablet navigation keeps a full-size menu target", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto("/");
+    const menu = await page.getByRole("button", { name: "Open menu" }).boundingBox();
+    expect(menu).not.toBeNull();
+    expect(menu!.width).toBeGreaterThanOrEqual(44);
+    expect(menu!.height).toBeGreaterThanOrEqual(44);
+  });
 });
 
 test("mobile settings stacks connection copy above its action", async ({ page }) => {
@@ -136,10 +167,10 @@ test("mobile automation controls wrap inside their row", async ({ page }) => {
   expect(actionBox!.x + actionBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
 });
 
-test("tablet navigation keeps a full-size menu target", async ({ page }) => {
+test("authenticated tablet navigation keeps a full-size app target", async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 900 });
-  await page.goto("/");
-  const menu = await page.getByRole("button", { name: "Open menu" }).boundingBox();
+  await page.goto("/dashboard");
+  const menu = await page.getByRole("button", { name: "Open navigation" }).boundingBox();
   expect(menu).not.toBeNull();
   expect(menu!.width).toBeGreaterThanOrEqual(44);
   expect(menu!.height).toBeGreaterThanOrEqual(44);

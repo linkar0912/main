@@ -231,7 +231,20 @@
   .section { padding: 112px 32px; }
   .desktopGallery { grid-template-columns: 280px minmax(0, 1fr); gap: 32px; }
   .tablist { grid-column: auto; }
-  .stage { grid-column: auto; min-block-size: 520px; }
+  .stage {
+    grid-column: auto;
+    min-inline-size: 0;
+    inline-size: 100%;
+    min-block-size: 520px;
+    aspect-ratio: auto;
+  }
+  .panel,
+  .preview,
+  .builderFrame,
+  .canvas,
+  .nodes,
+  .node { min-inline-size: 0; }
+  .node { overflow-wrap: anywhere; }
   .tab { padding-inline-end: 10px; }
 }
 
