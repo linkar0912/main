@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SurfaceRunway } from "./surface-runway";
@@ -141,6 +143,14 @@ describe("SurfaceRunway", () => {
     expect(reducedSection.getAttribute("data-reduced-motion-state")).toBe("static");
     expect(reducedAddEventListener).not.toHaveBeenCalledWith("scroll", expect.any(Function), expect.anything());
     expect(reducedFrames.requestAnimationFrame).not.toHaveBeenCalled();
+  });
+
+  it("uses a two-column, transform-free grid at 768px and 900px", () => {
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/surface-runway.module.css"), "utf8");
+    const tabletRule = stylesheet.match(/@media \(min-width: 768px\) and \(max-width: 1023px\) \{([\s\S]*?)\n\}/)?.[1];
+
+    expect(tabletRule).toContain(".track { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 0; }");
+    expect(tabletRule).not.toContain("transform:");
   });
 
   it("registers passive listeners only for desktop motion and fully cleans them up", () => {

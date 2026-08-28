@@ -177,7 +177,7 @@
 @media (min-width: 768px) and (max-width: 1023px) {
   .section { padding: 112px 32px; }
   .header { padding: 0 0 56px; }
-  .track { gap: 24px; padding: 0; }
+  .track { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 0; }
 }
 
 @media (max-width: 767px) {
