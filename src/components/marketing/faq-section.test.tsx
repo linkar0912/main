@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FaqSection } from "./faq-section";
 
@@ -53,18 +54,20 @@ describe("FaqSection", () => {
     expect(panel?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("allows multiple answers to stay expanded through native Enter and Space activation", () => {
+  it("allows multiple answers to stay expanded through native Enter and Space activation", async () => {
+    const user = userEvent.setup();
     render(<FaqSection />);
     const accountSafety = screen.getByRole("button", { name: "How does Linkar protect my account?" });
     const officialApi = screen.getByRole("button", { name: "Does Linkar use the official API?" });
 
-    fireEvent.keyDown(accountSafety, { key: "Enter" });
-    fireEvent.click(accountSafety);
-    fireEvent.keyDown(officialApi, { key: " " });
-    fireEvent.click(officialApi);
-
+    accountSafety.focus();
+    await user.keyboard("{Enter}");
     expect(accountSafety.getAttribute("aria-expanded")).toBe("true");
+
+    officialApi.focus();
+    await user.keyboard(" ");
     expect(officialApi.getAttribute("aria-expanded")).toBe("true");
+
     expect(document.getElementById(accountSafety.getAttribute("aria-controls") ?? "")?.textContent).toContain("keeps each workspace’s data scoped");
     expect(document.getElementById(officialApi.getAttribute("aria-controls") ?? "")?.textContent).toContain("official API");
   });

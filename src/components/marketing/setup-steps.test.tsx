@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SetupSteps } from "./setup-steps";
 
@@ -62,5 +64,43 @@ describe("SetupSteps", () => {
     const section = screen.getByRole("region", { name: "From first connection to live flow in three clear steps." });
     expect(section.getAttribute("data-reduced-motion-state")).toBe("visible");
     expect(within(section).getAllByRole("figure")).toHaveLength(3);
+  });
+
+  it("starts illustration motion only after each card is revealed", () => {
+    let observerCallback: IntersectionObserverCallback | undefined;
+    const observer = {
+      observe: vi.fn(),
+      unobserve: vi.fn(),
+      disconnect: vi.fn(),
+    } as unknown as IntersectionObserver;
+    vi.stubGlobal("IntersectionObserver", vi.fn(function IntersectionObserverConstructor(callback: IntersectionObserverCallback) {
+      observerCallback = callback;
+      return observer;
+    }));
+
+    render(<SetupSteps />);
+    const cards = Array.from(screen.getByRole("list").querySelectorAll(":scope > li"));
+    expect(cards).toHaveLength(3);
+    expect(cards.every((card) => !card.hasAttribute("data-visible"))).toBe(true);
+
+    act(() => {
+      observerCallback?.(
+        [{ isIntersecting: true, target: cards[1] } as unknown as IntersectionObserverEntry],
+        observer,
+      );
+    });
+
+    expect(cards[0].hasAttribute("data-visible")).toBe(false);
+    expect(cards[1].getAttribute("data-visible")).toBe("true");
+    expect(cards[2].hasAttribute("data-visible")).toBe(false);
+  });
+
+  it("scopes connector and switch animations to the revealed card state", () => {
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/setup-steps.module.css"), "utf8");
+
+    expect(stylesheet).toContain('.revealCard[data-visible="true"] .connector {');
+    expect(stylesheet).toContain('.revealCard[data-visible="true"] .switchKnob {');
+    expect(stylesheet.match(/\.connector \{[^}]+\}/)?.[0]).not.toContain("animation:");
+    expect(stylesheet.match(/\.switchKnob \{[^}]+\}/)?.[0]).not.toContain("animation:");
   });
 });
