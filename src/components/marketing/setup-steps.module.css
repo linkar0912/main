@@ -1,0 +1,147 @@
+.section {
+  padding: clamp(120px, 11vw, 176px) clamp(32px, 4.45vw, 72px);
+  color: #050505;
+  background: #f7f6ef;
+  scroll-margin-top: 88px;
+}
+
+.header { max-inline-size: 1000px; }
+
+.header h2,
+.card h3 {
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+}
+
+.header h2 {
+  margin: 0;
+  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-weight: 850;
+  line-height: .9;
+  letter-spacing: -.07em;
+}
+
+.header p,
+.description { font-family: var(--font-sans, ui-sans-serif, sans-serif); }
+
+.header p {
+  max-inline-size: 60ch;
+  margin: 28px 0 0;
+  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+  padding: 0;
+  margin: 72px 0 0;
+  list-style: none;
+}
+
+.revealCard { min-inline-size: 0; }
+
+.revealCard[data-enhanced="true"] { transition-duration: 700ms; transition-timing-function: cubic-bezier(.22,.61,.21,1); }
+.revealCard[data-enhanced="true"]:not([data-visible="true"]) { transform: translateY(48px); }
+
+.card {
+  display: flex;
+  min-block-size: 680px;
+  padding: clamp(24px, 3vw, 40px);
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid rgb(5 5 5 / 12%);
+  border-radius: 32px;
+}
+
+.number,
+.illustration figcaption { font-family: var(--font-mono, ui-monospace, monospace); }
+
+.number {
+  margin: 0;
+  color: #fff100;
+  font-size: .78rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+
+.card h3 {
+  max-inline-size: 12ch;
+  margin: 24px 0 0;
+  font-size: clamp(2rem, 2.8vw, 3.2rem);
+  font-weight: 800;
+  line-height: .94;
+  letter-spacing: -.06em;
+}
+
+.description {
+  margin: 20px 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.illustration {
+  display: grid;
+  min-block-size: 300px;
+  margin: auto 0 0;
+  align-content: end;
+}
+
+.illustration svg { inline-size: 100%; block-size: auto; }
+.illustration figcaption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: #050505;
+  font-size: .7rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.illustration figcaption > span { inline-size: 8px; block-size: 8px; background: #fff100; border-radius: 99px; }
+
+.previewFrame { fill: #050505; }
+.shield { fill: #fff100; }
+.shieldCheck { stroke: #050505; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
+.rule { stroke: rgb(255 255 255 / 42%); stroke-width: 4; stroke-linecap: round; }
+.voltDot { fill: #fff100; }
+.magentaDot { fill: #fa0cf7; }
+.lightCard { fill: #ffffff; }
+.connector { stroke: #fff100; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 10 8; animation: connector-draw 420ms cubic-bezier(.43,.195,.02,1) both; }
+.cardLine { stroke: #050505; stroke-width: 4; stroke-linecap: round; }
+.switchTrack { fill: #fa0cf7; }
+.switchKnob { fill: #fff100; animation: switch-on 400ms cubic-bezier(.43,.195,.02,1) both; }
+
+@keyframes connector-draw { from { stroke-dashoffset: 36; } to { stroke-dashoffset: 0; } }
+@keyframes switch-on { from { transform: translateX(-22px); } to { transform: translateX(0); } }
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .section { padding: 112px 32px; }
+  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+  .card { min-block-size: 560px; }
+  .revealCard:last-child { grid-column: span 2; }
+  .revealCard:last-child .card { display: grid; min-block-size: 420px; grid-template-columns: minmax(0, 1fr) minmax(260px, .9fr); column-gap: 32px; }
+  .revealCard:last-child .number,
+  .revealCard:last-child h3,
+  .revealCard:last-child .description { grid-column: 1; }
+  .revealCard:last-child .illustration { grid-row: 1 / span 3; grid-column: 2; min-block-size: 0; }
+}
+
+@media (max-width: 767px) {
+  .section { padding: 88px 20px; }
+  .header h2 { font-size: clamp(2.75rem, 12vw, 4rem); }
+  .steps { grid-template-columns: 1fr; gap: 20px; margin-top: 48px; }
+  .card { min-block-size: 520px; padding: 28px 24px; }
+  .illustration { min-block-size: 220px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .revealCard,
+  .revealCard[data-enhanced="true"],
+  .revealCard[data-enhanced="true"]:not([data-visible="true"]) { opacity: 1; transform: none; transition: none; }
+  .connector,
+  .switchKnob { animation: none; }
+}
