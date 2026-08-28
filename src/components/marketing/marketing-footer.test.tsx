@@ -14,6 +14,7 @@ describe("MarketingFooter", () => {
     render(<MarketingFooter />);
 
     const footer = screen.getByRole("contentinfo");
+    const navigation = within(footer).getByRole("navigation", { name: "Footer" });
     expect(footer.id).toBe("resources");
     expect(within(footer).getByText(
       "Linkar keeps repeatable conversations moving and makes human attention count.",
@@ -33,7 +34,6 @@ describe("MarketingFooter", () => {
       ["Login", "/login"],
       ["Dashboard", "/dashboard"],
       ["Linkar home", "/#top"],
-      ["Linkar home section", "/#top"],
       ["Setup", "/#setup"],
       ["Questions", "/#faq"],
       ["Privacy", "/privacy"],
@@ -41,12 +41,12 @@ describe("MarketingFooter", () => {
       ["Data deletion", "/data-deletion"],
     ]);
     for (const [name, href] of expected) {
-      const link = within(footer).getByRole("link", { name });
+      const link = within(navigation).getByRole("link", { name });
       expect(link.getAttribute("href")).toBe(href);
     }
 
     const links = within(footer).getAllByRole("link");
-    expect(links).toHaveLength(expected.size);
+    expect(links).toHaveLength(expected.size + 1);
     expect(links.every((link) => {
       const href = link.getAttribute("href") ?? "";
       return href.startsWith("/") || href.startsWith("#");
@@ -62,7 +62,10 @@ describe("MarketingFooter", () => {
     expect(within(footer).getByText(
       "Linkar uses supported platform interfaces. Availability and messaging limits depend on the connected account and platform policies.",
     )).toBeTruthy();
-    const brandLink = within(footer).getByRole("link", { name: "Linkar home" });
+    const brandLink = within(footer).getAllByRole("link", { name: "Linkar home" })
+      .find((link) => link.className.includes("brandLink"));
+    expect(brandLink).toBeTruthy();
+    if (!brandLink) throw new Error("Brand link is missing");
     expect(brandLink.querySelector("svg")).not.toBeNull();
     const wordmark = within(footer).getByText("LINKAR");
     expect(wordmark.getAttribute("aria-hidden")).toBe("true");

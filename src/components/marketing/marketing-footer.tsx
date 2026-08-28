@@ -63,7 +63,7 @@ export function MarketingFooter() {
                 <ul>
                   {column.links.map(([label, href]) => (
                     <li key={label}>
-                      <Link href={href} aria-label={label === "Linkar home" ? "Linkar home section" : undefined}>{label}</Link>
+                      <Link href={href}>{label}</Link>
                     </li>
                   ))}
                 </ul>

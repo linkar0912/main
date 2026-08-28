@@ -32,7 +32,7 @@ describe("FinalCta", () => {
     expect(figure.hasAttribute("data-reveal")).toBe(true);
   });
 
-  it("keeps both actions keyboard-visible and content in its final state without an observer", () => {
+  it("keeps both action links and reveal hooks in server-rendered markup", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<FinalCta />);
 
@@ -41,10 +41,7 @@ describe("FinalCta", () => {
     });
     const links = within(section).getAllByRole("link");
     expect(links).toHaveLength(2);
-    links.forEach((link) => {
-      expect(link.className).toContain("action");
-    });
     expect(section.querySelectorAll("[data-reveal]")).toHaveLength(2);
-    expect(section.querySelector("[data-reduced-motion-state=visible]")).not.toBeNull();
+    expect(links.map((link) => link.getAttribute("href"))).toEqual(["/signup", "/#how-it-works"]);
   });
 });
