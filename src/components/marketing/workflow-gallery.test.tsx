@@ -2,10 +2,13 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkflowGallery } from "./workflow-gallery";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("WorkflowGallery", () => {
   it("renders the exact ordered Linkar workflow examples with the first tab selected", () => {
@@ -27,9 +30,16 @@ describe("WorkflowGallery", () => {
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect(tabs.slice(1).every((tab) => tab.getAttribute("aria-selected") === "false")).toBe(true);
 
+    const panels = within(section).getAllByRole("tabpanel", { hidden: true });
+    expect(panels).toHaveLength(4);
+    tabs.forEach((tab, index) => {
+      const controlledPanel = document.getElementById(tab.getAttribute("aria-controls") ?? "");
+      expect(controlledPanel).toBe(panels[index]);
+      expect(controlledPanel?.getAttribute("aria-labelledby")).toBe(tab.id);
+      expect(controlledPanel?.hidden).toBe(index !== 0);
+    });
+
     const panel = within(section).getByRole("tabpanel");
-    expect(panel.getAttribute("aria-labelledby")).toBe(tabs[0].id);
-    expect(tabs[0].getAttribute("aria-controls")).toBe(panel.id);
     expect(within(panel).getByText("Keyword trigger")).toBeTruthy();
     expect(within(panel).getByText("Send guide")).toBeTruthy();
     expect(within(panel).getByText("Ask goal")).toBeTruthy();
@@ -86,6 +96,12 @@ describe("WorkflowGallery", () => {
     expect(guide.getAttribute("aria-expanded")).toBe("true");
     expect(lead.getAttribute("aria-expanded")).toBe("false");
     expect(guide.getAttribute("aria-controls")).toBeTruthy();
+    within(accordion).getAllByRole("button").forEach((trigger, index) => {
+      const controlledPanel = document.getElementById(trigger.getAttribute("aria-controls") ?? "");
+      expect(trigger.id).toBeTruthy();
+      expect(controlledPanel?.getAttribute("aria-labelledby")).toBe(trigger.id);
+      expect(controlledPanel?.hidden).toBe(index !== 0);
+    });
 
     fireEvent.click(lead);
     expect(guide.getAttribute("aria-expanded")).toBe("false");
@@ -96,12 +112,28 @@ describe("WorkflowGallery", () => {
     expect(lead.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("keeps selected content immediate when reduced motion is preferred", () => {
+  it("replaces the active panel immediately without outgoing residue when reduced motion is preferred", () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
     render(<WorkflowGallery />);
 
     const section = screen.getByRole("region", { name: "Build the path your audience actually needs." });
     expect(section.getAttribute("data-reduced-motion-state")).toBe("visible");
-    expect(screen.getByRole("tabpanel").textContent).toContain("Send guide");
+    fireEvent.click(screen.getByRole("tab", { name: "Lead qualifier" }));
+    expect(screen.getByRole("tabpanel").textContent).toContain("Save answer");
+    const exposedPanels = screen.getAllByRole("tabpanel");
+    expect(exposedPanels).toHaveLength(1);
+    expect(exposedPanels[0].textContent).not.toContain("Send guide");
+    expect(screen.getAllByRole("tabpanel", { hidden: true })).toHaveLength(4);
+    expect(section.querySelector("[data-transition-state='leaving']")).toBeNull();
   });
 
   it("keeps the contract's desktop, tablet, mobile, and motion values in the local stylesheet", () => {

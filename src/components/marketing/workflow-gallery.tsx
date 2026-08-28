@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { workflowItems, type WorkflowItem } from "./marketing-content";
 import styles from "./workflow-gallery.module.css";
 
-const panelId = "workflow-gallery-panel";
-
 function workflowNodes(workflow: WorkflowItem) {
   return [workflow.event, ...workflow.reply.split(" → ")];
 }
@@ -115,7 +113,7 @@ export function WorkflowGallery() {
                 role="tab"
                 aria-label={workflow.label}
                 aria-selected={isActive}
-                aria-controls={panelId}
+                aria-controls={`workflow-panel-${workflow.id}`}
                 tabIndex={isActive ? 0 : -1}
                 onClick={() => selectWorkflow(workflow.id)}
                 onKeyDown={(event) => selectByKeyboard(event, index)}
@@ -132,6 +130,7 @@ export function WorkflowGallery() {
             <div
               className={`${styles.panel} ${styles.leavingPanel}`}
               aria-hidden="true"
+              data-transition-state="leaving"
               onAnimationEnd={(event) => {
                 if (event.target === event.currentTarget) setLeavingWorkflow(null);
               }}
@@ -139,15 +138,18 @@ export function WorkflowGallery() {
               <BuilderPreview workflow={leavingWorkflow} />
             </div>
           ) : null}
-          <div
-            key={activeWorkflow.id}
-            id={panelId}
-            className={styles.panel}
-            role="tabpanel"
-            aria-labelledby={`workflow-tab-${activeWorkflow.id}`}
-          >
-            <BuilderPreview workflow={activeWorkflow} />
-          </div>
+          {workflowItems.map((workflow) => (
+            <div
+              key={workflow.id}
+              id={`workflow-panel-${workflow.id}`}
+              className={styles.panel}
+              role="tabpanel"
+              aria-labelledby={`workflow-tab-${workflow.id}`}
+              hidden={workflow.id !== activeId}
+            >
+              <BuilderPreview workflow={workflow} />
+            </div>
+          ))}
         </div>
       </div>
 
@@ -155,12 +157,14 @@ export function WorkflowGallery() {
         {workflowItems.map((workflow) => {
           const isActive = workflow.id === activeId;
           const contentId = `workflow-mobile-panel-${workflow.id}`;
+          const triggerId = `workflow-mobile-trigger-${workflow.id}`;
           return (
             <section className={styles.accordionItem} key={workflow.id}>
               <h3>
                 <button
                   className={styles.accordionTrigger}
                   type="button"
+                  id={triggerId}
                   ref={(element) => { accordionRefs.current[workflow.id] = element; }}
                   aria-expanded={isActive}
                   aria-controls={contentId}
@@ -170,7 +174,7 @@ export function WorkflowGallery() {
                   <span aria-hidden="true" className={styles.accordionMark}>+</span>
                 </button>
               </h3>
-              <div id={contentId} className={styles.accordionPanel} hidden={!isActive}>
+              <div id={contentId} className={styles.accordionPanel} aria-labelledby={triggerId} hidden={!isActive}>
                 <p>{workflow.body}</p>
                 <BuilderPreview workflow={workflow} />
               </div>
