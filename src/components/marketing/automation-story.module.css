@@ -1,0 +1,724 @@
+.section {
+  position: relative;
+  scroll-margin-top: 6rem;
+  color: #050505;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  background: #fff100;
+}
+
+.header {
+  padding: clamp(112px, 10vw, 160px) clamp(32px, 4.45vw, 72px) 48px;
+}
+
+.header h2 {
+  max-inline-size: 1180px;
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-weight: 850;
+  line-height: .9;
+  letter-spacing: -.065em;
+}
+
+.header > p {
+  max-inline-size: 54ch;
+  margin: 32px 0 0;
+  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  font-weight: 620;
+  line-height: 1.45;
+}
+
+.storyGrid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: clamp(18px, 1.7vw, 28px);
+  min-block-size: 400vh;
+  padding-inline: clamp(32px, 4.45vw, 72px);
+}
+
+.copyRail {
+  grid-column: 1 / span 5;
+}
+
+.chapter {
+  display: grid;
+  align-content: center;
+  min-block-size: 100vh;
+  max-inline-size: 520px;
+  scroll-margin-top: 6rem;
+  opacity: .35;
+  transform: translateY(24px);
+  transition: opacity 600ms cubic-bezier(.43, .195, .02, 1), transform 600ms cubic-bezier(.43, .195, .02, 1);
+}
+
+.chapter[data-active="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.sequence,
+.status,
+.cardLabel,
+.frameBar,
+.queueFlag,
+.figcaption {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.sequence {
+  margin: 0 0 26px;
+  font-size: .78rem;
+  font-weight: 650;
+  letter-spacing: .08em;
+}
+
+.chapter h3 {
+  max-inline-size: 480px;
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(3rem, 4.2vw, 5.25rem);
+  font-weight: 850;
+  line-height: .94;
+  letter-spacing: -.055em;
+}
+
+.chapterBody {
+  max-inline-size: 48ch;
+  margin: 28px 0 0;
+  font-size: clamp(1rem, 1.25vw, 1.2rem);
+  font-weight: 570;
+  line-height: 1.55;
+}
+
+.stage {
+  position: sticky;
+  top: 88px;
+  grid-column: 7 / span 6;
+  align-self: start;
+  height: calc(100vh - 88px);
+}
+
+.stage figure {
+  display: grid;
+  block-size: 100%;
+  max-inline-size: 680px;
+  max-block-size: 720px;
+  margin: auto;
+  place-items: center;
+}
+
+.controlRoom {
+  position: relative;
+  inline-size: 100%;
+  block-size: min(720px, calc(100vh - 132px));
+}
+
+.desktopScene {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 600ms cubic-bezier(.43, .195, .02, 1), transform 600ms cubic-bezier(.43, .195, .02, 1);
+}
+
+.desktopScene[data-active="true"] {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.sceneFrame {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 24px;
+  inline-size: 100%;
+  min-block-size: min(640px, calc(100vh - 164px));
+  padding: clamp(20px, 3vw, 44px);
+  overflow: hidden;
+  color: #ffffff;
+  background: #050505;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 32px;
+  box-shadow: 0 28px 70px rgb(5 5 5 / 24%);
+}
+
+.frameBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-block-size: 58px;
+  padding: 0;
+  font-size: .65rem;
+  font-weight: 650;
+  letter-spacing: .08em;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+}
+
+.frameBrand {
+  letter-spacing: .18em;
+}
+
+.frameStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgb(255 255 255 / 66%);
+}
+
+.frameStatus > span {
+  inline-size: 7px;
+  block-size: 7px;
+  background: #fff100;
+  border-radius: 50%;
+}
+
+.sceneBody {
+  position: relative;
+  display: grid;
+  align-content: center;
+  padding: 0;
+}
+
+.sceneTopline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-block-end: 28px;
+  color: rgb(255 255 255 / 62%);
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .64rem;
+  font-weight: 650;
+  letter-spacing: .025em;
+}
+
+.statusDot {
+  inline-size: 7px;
+  block-size: 7px;
+  flex: 0 0 auto;
+  background: #fff100;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgb(255 241 0 / 13%);
+}
+
+.status[data-current-action="true"] .statusDot {
+  background: #fa0cf7;
+  box-shadow: 0 0 0 4px rgb(250 12 247 / 16%);
+}
+
+.card {
+  color: #050505;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 14px 36px rgb(0 0 0 / 22%);
+}
+
+.card p {
+  margin: 5px 0 0;
+  font-size: clamp(.86rem, 1.15vw, 1rem);
+  font-weight: 650;
+  line-height: 1.42;
+}
+
+.cardLabel {
+  display: block;
+  color: rgb(5 5 5 / 48%);
+  font-size: .58rem;
+  font-weight: 650;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.commentCard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: center;
+  inline-size: min(78%, 400px);
+  padding: 18px;
+}
+
+.avatar {
+  display: grid;
+  inline-size: 38px;
+  block-size: 38px;
+  color: #ffffff;
+  font-weight: 800;
+  background: #050505;
+  border-radius: 50%;
+  place-items: center;
+}
+
+.replyCard {
+  inline-size: min(86%, 440px);
+  margin-inline-start: auto;
+  padding: 22px;
+}
+
+.connector {
+  inline-size: 28px;
+  block-size: 54px;
+  margin-inline-start: 36%;
+  fill: none;
+  stroke: #fa0cf7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.questionCard,
+.memoryCard,
+.timelineCard,
+.checkinCard,
+.signalCard,
+.queueCard {
+  padding: 22px;
+}
+
+.questionCard {
+  inline-size: min(88%, 460px);
+}
+
+.answerChip {
+  display: inline-block;
+  margin-block-start: 20px;
+  padding: 9px 13px;
+  color: #ffffff;
+  font-size: .72rem;
+  font-weight: 750;
+  background: #050505;
+  border-radius: 999px;
+}
+
+.memoryCard {
+  inline-size: min(86%, 440px);
+  margin-inline-start: auto;
+}
+
+.savedField {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 16px;
+  margin-block-start: 14px;
+  padding: 14px;
+  background: #f2f2f2;
+  border-radius: 12px;
+}
+
+.savedField > span:first-child {
+  color: rgb(5 5 5 / 52%);
+  font-size: .66rem;
+}
+
+.savedField strong {
+  grid-row: 2;
+  font-size: .82rem;
+}
+
+.savedField .status {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  color: #050505;
+}
+
+.timelineCard {
+  position: relative;
+  inline-size: min(86%, 440px);
+  margin-inline: auto;
+}
+
+.timelineEvent {
+  display: grid;
+  grid-template-columns: 13px 1fr;
+  gap: 13px;
+  align-items: start;
+  margin-block-start: 20px;
+}
+
+.timelineEvent strong {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .7rem;
+}
+
+.timelineEvent p {
+  margin-block-start: 2px;
+}
+
+.timelineDot {
+  inline-size: 11px;
+  block-size: 11px;
+  margin-block-start: 3px;
+  background: #050505;
+  border-radius: 50%;
+}
+
+.timelineEvent[data-current="true"] .timelineDot {
+  background: #fa0cf7;
+  box-shadow: 0 0 0 5px rgb(250 12 247 / 15%);
+}
+
+.timelineLine {
+  inline-size: 2px;
+  block-size: 44px;
+  margin: 4px 0 -14px 5px;
+  background: #050505;
+}
+
+.checkinCard {
+  inline-size: min(78%, 400px);
+  margin: 22px 0 0 auto;
+  background: #fff100;
+}
+
+.signalCard {
+  inline-size: min(62%, 330px);
+}
+
+.connectorAcross {
+  inline-size: 90px;
+  block-size: 28px;
+  margin: 22px auto;
+  fill: none;
+  stroke: #fa0cf7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.queueCard {
+  position: relative;
+  inline-size: min(88%, 460px);
+  margin-inline-start: auto;
+}
+
+.queueFlag {
+  position: absolute;
+  inset-block-start: -12px;
+  inset-inline-end: 18px;
+  padding: 7px 10px;
+  color: #050505;
+  font-size: .58rem;
+  font-weight: 650;
+  background: #fa0cf7;
+  border-radius: 999px;
+}
+
+.queueCard strong {
+  display: block;
+  margin-block-start: 9px;
+  font-size: .9rem;
+}
+
+.contextLines {
+  display: grid;
+  gap: 7px;
+  margin-block-start: 18px;
+}
+
+.contextLines span {
+  block-size: 7px;
+  background: #e7e7e7;
+  border-radius: 999px;
+}
+
+.contextLines span:nth-child(2) { inline-size: 82%; }
+.contextLines span:nth-child(3) { inline-size: 58%; }
+
+.mobileScene {
+  display: none;
+}
+
+.semanticSummary {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+
+.figcaption {
+  position: absolute;
+  inset-block-end: 13px;
+  inset-inline-start: 50%;
+  color: rgb(255 255 255 / 58%);
+  font-size: .58rem;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .section {
+    padding: 112px 32px;
+  }
+
+  .header {
+    max-inline-size: 820px;
+    padding: 0;
+    margin-block-end: 48px;
+  }
+
+  .header h2 {
+    font-size: clamp(4rem, 8.2vw, 5.5rem);
+  }
+
+  .storyGrid {
+    display: block;
+    min-block-size: auto;
+    padding: 0;
+  }
+
+  .chapter {
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+    column-gap: 40px;
+    min-block-size: auto;
+    max-inline-size: none;
+    padding: 64px 0;
+    border-bottom: 1px solid #050505;
+    opacity: 1;
+    transform: none;
+  }
+
+  .sequence,
+  .chapter h3,
+  .chapterBody {
+    grid-column: 1;
+  }
+
+  .chapter h3 {
+    font-size: 2.7rem;
+  }
+
+  .chapterBody {
+    margin-block-start: 22px;
+  }
+
+  .mobileScene {
+    display: grid;
+    grid-row: 1 / span 3;
+    grid-column: 2;
+    min-block-size: 430px;
+  }
+
+  .stage {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .controlRoom,
+  .figcaption {
+    display: none;
+  }
+
+  .sceneFrame {
+    min-block-size: 430px;
+  }
+
+  .sceneBody {
+    padding: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .section {
+    padding: 88px 20px;
+  }
+
+  .header {
+    padding: 0;
+    margin-block-end: 56px;
+  }
+
+  .header h2 {
+    font-size: clamp(2.75rem, 12vw, 4rem);
+    line-height: .92;
+  }
+
+  .header > p {
+    margin-block-start: 24px;
+  }
+
+  .storyGrid {
+    display: block;
+    min-block-size: auto;
+    padding: 0;
+  }
+
+  .chapter {
+    display: grid;
+    min-block-size: auto;
+    max-inline-size: none;
+    padding: 0 0 72px;
+    margin-block-end: 72px;
+    border-bottom: 1px solid #050505;
+    opacity: 1;
+    transform: none;
+  }
+
+  .chapter:last-child {
+    margin-block-end: 0;
+  }
+
+  .sequence {
+    margin-block-end: 18px;
+  }
+
+  .chapter h3 {
+    font-size: 2rem;
+  }
+
+  .chapterBody {
+    margin-block-start: 20px;
+  }
+
+  .mobileScene {
+    display: grid;
+    inline-size: 100%;
+    min-block-size: 380px;
+    margin-block-start: 28px;
+  }
+
+  .stage {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .controlRoom,
+  .figcaption {
+    display: none;
+  }
+
+  .sceneFrame {
+    min-block-size: 380px;
+    border-radius: 24px;
+  }
+
+  .frameBar {
+    min-block-size: 50px;
+  }
+
+  .sceneBody {
+    padding: 0;
+  }
+
+  .sceneTopline {
+    margin-block-end: 18px;
+  }
+
+  .commentCard,
+  .replyCard,
+  .questionCard,
+  .memoryCard,
+  .timelineCard,
+  .checkinCard,
+  .signalCard,
+  .queueCard {
+    inline-size: 92%;
+  }
+
+  .card {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header,
+  .storyGrid {
+    max-inline-size: none;
+  }
+
+  .storyGrid {
+    display: block;
+    min-block-size: auto;
+  }
+
+  .copyRail {
+    max-inline-size: 1440px;
+    margin-inline: auto;
+  }
+
+  .chapter {
+    grid-template-columns: minmax(0, .75fr) minmax(360px, 1fr);
+    column-gap: clamp(32px, 5vw, 80px);
+    min-block-size: auto;
+    max-inline-size: none;
+    padding: 80px 0;
+    border-bottom: 1px solid #050505;
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .sequence,
+  .chapter h3,
+  .chapterBody {
+    grid-column: 1;
+  }
+
+  .mobileScene {
+    display: grid;
+    grid-row: 1 / span 3;
+    grid-column: 2;
+    min-block-size: 430px;
+  }
+
+  .stage {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .controlRoom,
+  .figcaption {
+    display: none;
+  }
+
+  .desktopScene,
+  .chapter {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) and (max-width: 767px) {
+  .chapter {
+    display: grid;
+    grid-template-columns: 1fr;
+    padding-block-start: 0;
+  }
+
+  .sequence,
+  .chapter h3,
+  .chapterBody,
+  .mobileScene {
+    grid-row: auto;
+    grid-column: 1;
+  }
+
+  .mobileScene {
+    min-block-size: 380px;
+  }
+}
