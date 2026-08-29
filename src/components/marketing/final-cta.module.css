@@ -1,6 +1,6 @@
 .section {
-  min-block-size: 760px;
-  padding: clamp(112px, 10vw, 160px) clamp(32px, 4.45vw, 72px);
+  min-block-size: auto;
+  padding: clamp(104px, 9vw, 144px) clamp(32px, 4.45vw, 72px) 96px;
   overflow: hidden;
   color: #050505;
   background: #eee4f4;
@@ -12,21 +12,23 @@
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: clamp(20px, 2.5vw, 40px);
   inline-size: min(100%, 1440px);
-  min-block-size: 600px;
+  min-block-size: 0;
   margin-inline: auto;
 }
 
 .copy {
-  grid-column: 1 / span 7;
-  align-self: center;
-  max-inline-size: 800px;
+  grid-column: 1 / -1;
+  align-self: start;
+  justify-self: center;
+  max-inline-size: var(--marketing-section-title-width);
+  text-align: center;
 }
 
 .title {
-  max-inline-size: 8ch;
-  margin: 0;
+  max-inline-size: 12ch;
+  margin: 0 auto;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-size: var(--marketing-section-title-size);
   font-weight: 850;
   line-height: .9;
   letter-spacing: -.065em;
@@ -34,7 +36,7 @@
 
 .body {
   max-inline-size: 46ch;
-  margin: 36px 0 0;
+  margin: 36px auto 0;
   color: rgb(5 5 5 / 72%);
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: clamp(1rem, 1.35vw, 1.2rem);
@@ -48,6 +50,7 @@
   align-items: center;
   gap: 16px;
   margin-block-start: 40px;
+  justify-content: center;
 }
 
 .action {
@@ -84,11 +87,11 @@
 
 .figure {
   display: flex;
-  grid-column: 8 / -1;
+  grid-column: 4 / 10;
   align-self: end;
   inline-size: min(100%, 520px);
   min-block-size: 440px;
-  margin: 80px 0 -82px auto;
+  margin: 56px auto 0;
   padding: 30px;
   flex-direction: column;
   justify-content: flex-start;
@@ -185,22 +188,25 @@
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
-  .section { min-block-size: 720px; padding: 112px 32px 0; }
-  .frame { grid-template-columns: repeat(8, minmax(0, 1fr)); min-block-size: 608px; }
+  .section { padding: 104px 32px 84px; }
+  .frame { grid-template-columns: repeat(8, minmax(0, 1fr)); }
   .copy { grid-column: 1 / -1; max-inline-size: 760px; align-self: start; }
   .title { max-inline-size: 10ch; }
-  .figure { grid-column: 3 / -1; inline-size: 480px; margin: 56px 0 -64px auto; }
+  .figure { grid-column: 2 / 8; inline-size: 480px; margin: 56px auto 0; }
 }
 
 @media (max-width: 767px) {
-  .section { min-block-size: 700px; padding: 88px 20px 0; }
-  .frame { display: block; min-block-size: 620px; }
+  .section { padding: 88px 20px 72px; }
+  .frame { display: block; }
   .copy { max-inline-size: none; }
-  .title { max-inline-size: 10ch; font-size: clamp(2.75rem, 12vw, 4rem); }
+  .title { max-inline-size: 10ch; font-size: var(--marketing-section-title-size); }
   .body { margin-block-start: 28px; }
   .actions { margin-block-start: 32px; }
   .action { min-block-size: 52px; }
-  .figure { inline-size: min(112%, 420px); min-block-size: 390px; margin: 48px -6% -56px auto; padding: 24px; }
+  .figure { inline-size: 100%; min-block-size: 390px; margin: 48px auto 0; padding: 24px; }
+  .figure,
+  .figure[data-enhanced="true"]:not([data-visible="true"]),
+  .figure.figure[data-visible="true"] { transform: none; }
   .figureHeader { align-items: flex-start; flex-direction: column; }
   .commentCard { margin-block-start: 32px; }
 }

@@ -1,56 +1,64 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ProofRail } from "./proof-rail";
-
-const facts = [
-  "Built on the official messaging API",
-  "Tokens encrypted at rest",
-  "Deterministic flow rules",
-  "Follow-ups respect the messaging window",
-] as const;
 
 describe("ProofRail", () => {
   afterEach(cleanup);
 
-  it("keeps the four verifiable Linkar facts in one accessible static list", () => {
-    const markup = renderToStaticMarkup(<ProofRail />);
+  it("presents two creator conversation examples beside the audience statement", () => {
     render(<ProofRail />);
 
-    const rail = screen.getByRole("region", { name: "Linkar product facts" });
-    const lists = screen.getAllByRole("list");
-
+    const rail = screen.getByRole("region", { name: "Creator conversation examples" });
     expect(rail.id).toBe("proof");
-    expect(lists).toHaveLength(1);
-    expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual(facts);
-    expect(markup).toContain(facts[0]);
-    expect(markup).toContain(facts[1]);
-    expect(markup).toContain(facts[2]);
-    expect(markup).toContain(facts[3]);
+    expect(within(rail).getByRole("heading", {
+      level: 2,
+      name: "Made for creators, marketers & brands.",
+    })).toBeTruthy();
+
+    const examples = within(rail).getAllByRole("article");
+    expect(examples).toHaveLength(2);
+    expect(examples[0]?.getAttribute("aria-label")).toBe("Aanya Mehta, beauty creator");
+    expect(examples[1]?.getAttribute("aria-label")).toBe("Arjun Nair, growth marketer");
   });
 
-  it("keeps its loop duplicate out of assistive technology without introducing actions or claims", () => {
+  it("keeps the audience statement fixed while the creator examples live in a right-hand ticker", () => {
     render(<ProofRail />);
 
-    const rail = screen.getByRole("region", { name: "Linkar product facts" });
-    const duplicate = rail.querySelector('ul[aria-hidden="true"]');
+    const rail = screen.getByRole("region", { name: "Creator conversation examples" });
+    expect(rail.getAttribute("data-proof-layout")).toBe("compact");
+    const statement = rail.querySelector("[data-proof-statement]");
+    const ticker = rail.querySelector("[data-proof-ticker]");
+    const track = ticker?.querySelector("[data-proof-track]");
+    const duplicate = ticker?.querySelector('[data-proof-duplicate][aria-hidden="true"]');
 
-    expect(duplicate?.querySelectorAll("li")).toHaveLength(4);
+    expect(statement).not.toBeNull();
+    expect(ticker).not.toBeNull();
+    expect(track).not.toBeNull();
+    expect(duplicate).not.toBeNull();
+    expect(ticker?.querySelectorAll("[data-proof-card]")).toHaveLength(2);
+  });
+
+  it("uses descriptive local creator portraits", () => {
+    render(<ProofRail />);
+
+    const aanyaCard = screen.getByRole("article", { name: "Aanya Mehta, beauty creator" });
+    const arjunCard = screen.getByRole("article", { name: "Arjun Nair, growth marketer" });
+    const aanya = within(aanyaCard).getByAltText("Aanya Mehta at a Bengaluru cafe") as HTMLImageElement;
+    const arjun = within(arjunCard).getByAltText("Arjun Nair on a Mumbai terrace") as HTMLImageElement;
+
+    expect(aanya.getAttribute("src")).toContain("linkar-creator-aanya");
+    expect(arjun.getAttribute("src")).toContain("linkar-creator-arjun");
+  });
+
+  it("labels the cards as examples without unsupported customer or follower claims", () => {
+    render(<ProofRail />);
+
+    const visibleCards = within(screen.getByRole("region", { name: "Creator conversation examples" }))
+      .getAllByRole("article");
+    expect(visibleCards.map((card) => within(card).getByText(/Creator workflow/i))).toHaveLength(2);
+    expect(screen.queryByText(/followers|customers|revenue|million|testimonial/i)).toBeNull();
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(screen.queryAllByRole("button")).toHaveLength(0);
-    expect(screen.queryByText(/customers|teams|people use|revenue|testimonial/i)).toBeNull();
-  });
-
-  it("exposes pause hooks and the canonical reduced-motion wrapping contract", () => {
-    render(<ProofRail />);
-
-    const rail = screen.getByRole("region", { name: "Linkar product facts" });
-    const frame = rail.querySelector('[data-ticker="continuous"]');
-    const canonical = frame?.querySelector("ul:not([aria-hidden=\"true\"])");
-
-    expect(frame?.getAttribute("data-pause-on-hover")).toBe("true");
-    expect(frame?.getAttribute("data-pause-on-focus")).toBe("true");
-    expect(canonical?.getAttribute("data-reduced-motion-layout")).toBe("wrap");
   });
 });

@@ -20,12 +20,12 @@
 }
 
 .title {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   justify-self: center;
-  max-inline-size: 1240px;
+  max-inline-size: var(--marketing-section-title-width);
   margin: 0;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-size: var(--marketing-section-title-size);
   font-weight: 850;
   line-height: .9;
   letter-spacing: -.055em;
@@ -34,13 +34,15 @@
 }
 
 .body {
-  grid-column: 2 / span 6;
+  grid-column: 1 / -1;
+  justify-self: center;
   max-inline-size: 620px;
-  margin: 44px 0 0;
+  margin: 44px auto 0;
   color: rgb(5 5 5 / 72%);
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: clamp(1.05rem, 1.5vw, 1.35rem);
   line-height: 1.5;
+  text-align: center;
 }
 
 .section[data-enhanced="true"] .title,
@@ -83,7 +85,7 @@
   }
 
   .body {
-    grid-column: 1 / span 6;
+    grid-column: 1 / -1;
     margin-block-start: 36px;
   }
 }
@@ -102,19 +104,20 @@
   .title,
   .body {
     grid-column: 1;
-    justify-self: start;
-    text-align: start;
+    justify-self: center;
+    text-align: center;
   }
 
   .title {
     max-inline-size: none;
-    font-size: clamp(2.75rem, 12vw, 4rem);
+    font-size: var(--marketing-section-title-size);
     line-height: .96;
   }
 
   .body {
     max-inline-size: 32ch;
     margin-block-start: 28px;
+    margin-inline: auto;
   }
 }
 

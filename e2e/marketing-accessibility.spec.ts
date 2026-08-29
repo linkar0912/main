@@ -95,22 +95,22 @@ function scopeModuleCss(css: string, prefix: string, classes: string[]) {
 
 function proofRailMarkup() {
   return `
-    <section id="proof" class="proof-section" aria-label="Linkar product facts">
-      <h2 class="visually-hidden">Linkar product facts</h2>
-      <div class="proof-frame" data-ticker="continuous" data-pause-on-hover="true" data-pause-on-focus="true">
-        <div class="proof-track">
-          <ul class="proof-facts" data-reduced-motion-layout="wrap">
-            <li>Built on the official messaging API</li>
-            <li>Tokens encrypted at rest</li>
-            <li>Deterministic flow rules</li>
-            <li>Follow-ups respect the messaging window</li>
-          </ul>
-          <ul class="proof-facts" aria-hidden="true">
-            <li>Built on the official messaging API</li>
-            <li>Tokens encrypted at rest</li>
-            <li>Deterministic flow rules</li>
-            <li>Follow-ups respect the messaging window</li>
-          </ul>
+    <section id="proof" class="proof-section" aria-label="Creator conversation examples">
+      <div class="proof-inner">
+        <div class="proof-statement">
+          <h2>Made for creators, marketers &amp; brands.</h2>
+        </div>
+        <div class="proof-ticker" data-ticker="continuous" data-pause-on-hover="true" data-pause-on-focus="true">
+          <div class="proof-track">
+            <div class="proof-trackSegment">
+              <article class="proof-example" tabindex="0">Aanya Mehta</article>
+              <article class="proof-example">Arjun Nair</article>
+            </div>
+            <div class="proof-trackSegment" data-proof-duplicate="true" aria-hidden="true">
+              <article class="proof-example">Aanya Mehta</article>
+              <article class="proof-example">Arjun Nair</article>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -132,7 +132,7 @@ test("ProofRail pauses on hover/focus and settles both editorial sections under 
   const proofCss = scopeModuleCss(
     await readFile("src/components/marketing/proof-rail.module.css", "utf8"),
     "proof",
-    ["section", "frame", "track", "facts"],
+    ["section", "inner", "statement", "ticker", "track", "trackSegment", "example"],
   );
   const manifestoCss = scopeModuleCss(
     await readFile("src/components/marketing/manifesto-section.module.css", "utf8"),
@@ -143,7 +143,7 @@ test("ProofRail pauses on hover/focus and settles both editorial sections under 
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.setContent(`<style>${proofCss}${manifestoCss}</style>${proofRailMarkup()}${manifestoMarkup()}`);
 
-  const frame = page.locator(".proof-frame");
+  const frame = page.locator(".proof-ticker");
   const track = page.locator(".proof-track");
   await expect(track).toHaveCSS("animation-play-state", "running");
   await frame.hover();
@@ -151,16 +151,14 @@ test("ProofRail pauses on hover/focus and settles both editorial sections under 
 
   await page.mouse.move(1000, 500);
   await expect(track).toHaveCSS("animation-play-state", "running");
-  await page.locator(".proof-facts").first().evaluate((list) => list.setAttribute("tabindex", "0"));
-  await page.locator(".proof-facts").first().focus();
+  await page.locator(".proof-example").first().focus();
   await expect(track).toHaveCSS("animation-play-state", "paused");
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setContent(`<style>${proofCss}${manifestoCss}</style>${proofRailMarkup()}${manifestoMarkup()}`);
   await expect(frame).toHaveCSS("overflow-x", "hidden");
   await expect(track).toHaveCSS("animation-name", "none");
-  await expect(page.locator('.proof-facts[aria-hidden="true"]')).toHaveCSS("display", "none");
-  await expect(page.locator(".proof-facts").first()).toHaveCSS("flex-wrap", "wrap");
+  await expect(page.locator('.proof-trackSegment[data-proof-duplicate="true"]')).toHaveCSS("display", "none");
   await expect(page.locator(".manifesto-title")).toHaveCSS("opacity", "1");
   await expect(page.locator(".manifesto-title")).toHaveCSS("transform", /^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
   await expect(page.locator(".manifesto-title")).toHaveCSS("transition-duration", "0s");

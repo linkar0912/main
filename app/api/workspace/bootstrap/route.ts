@@ -14,10 +14,8 @@ export async function GET(request: Request) {
 
     const env = getServerEnv();
     const repository = getRepository();
-    const user = await repository.findUserById(session.userId);
-    if (!user) return NextResponse.json({ error: "Account not found" }, { status: 404 });
     const [role, connections] = await Promise.all([
-        repository.getMemberRole(session.workspaceId, user.email),
+        repository.getMemberRole(session.workspaceId, session.email),
         repository.listConnections(session.workspaceId).catch(() => []),
     ]);
 
@@ -28,7 +26,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
         data: {
-            email: user.email,
+            email: session.email,
             role: role ?? "MEMBER",
             plan: "free",
             igAvatarUrl,

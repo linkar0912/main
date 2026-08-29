@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
-import {
-    createSessionToken,
-    hashPassword,
-    safeNextPath,
-    sessionCookieName,
-} from "@/src/lib/auth/session";
+import { safeNextPath } from "@/src/lib/auth/session";
 import { LoginRateLimitStore } from "@/src/lib/auth/rate-limit";
 import { clientAddress } from "@/src/lib/auth/client-address";
 import { getServerEnv } from "@/src/lib/env";
 import { getRepository } from "@/src/lib/repository-provider";
 import { createId } from "@/src/lib/id";
-import { hashToken, issueAuthToken } from "@/src/lib/auth/tokens";
-import { emailVerificationEmail, sendEmail } from "@/src/lib/mailer";
+import { hashToken } from "@/src/lib/auth/tokens";
+import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -44,13 +39,6 @@ export async function POST(request: Request) {
         return NextResponse.redirect(new URL(`/signup?error=password&email=${encodeURIComponent(email)}&next=${encodeURIComponent(nextPath)}`, env.appUrl), 303);
     }
 
-    const existingUser = await repository.findUserByEmail(email);
-    if (existingUser) {
-        // Do not reveal whether the email exists beyond what signup already shows;
-        // send them to login with a neutral message.
-        return NextResponse.redirect(new URL("/login?error=exists", env.appUrl), 303);
-    }
-
     // Team invitations bind the new account to the inviting workspace instead of
     // provisioning a fresh one. The invite must match the signing-up email exactly.
     const inviteRaw = String(form.get("invite") ?? "");
@@ -63,30 +51,48 @@ export async function POST(request: Request) {
         return NextResponse.redirect(new URL("/signup?error=invite&email=" + encodeURIComponent(email), env.appUrl), 303);
     }
 
-    const workspaceId = inviteValid && invitation ? invitation.workspaceId : createId("workspace");
-    if (!invitation) await repository.ensureWorkspace(workspaceId, email);
-    const passwordHash = await hashPassword(password);
-    const { created, record: user } = await repository.createUser({ email, passwordHash });
-    if (!created) {
-        // Lost a race with a concurrent signup for the same email.
+    const supabase = await createSupabaseServerClient();
+    const confirmUrl = new URL("/auth/confirm", env.appUrl);
+    confirmUrl.searchParams.set("type", "signup");
+    confirmUrl.searchParams.set("next", nextPath);
+    const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: confirmUrl.toString() },
+    });
+    if (error) {
+        if (error.code === "email_exists" || error.code === "user_already_exists") {
+            return NextResponse.redirect(new URL("/login?error=exists", env.appUrl), 303);
+        }
+        if (error.code === "over_email_send_rate_limit" || error.code === "over_request_rate_limit") {
+            return NextResponse.redirect(new URL("/signup?error=locked", env.appUrl), 303);
+        }
+        if (error.code === "weak_password") {
+            return NextResponse.redirect(
+                new URL(`/signup?error=password&email=${encodeURIComponent(email)}&next=${encodeURIComponent(nextPath)}`, env.appUrl),
+                303,
+            );
+        }
+        if (error.code === "email_address_invalid") {
+            return NextResponse.redirect(new URL("/signup?error=email&next=" + encodeURIComponent(nextPath), env.appUrl), 303);
+        }
+        return NextResponse.redirect(new URL("/signup?error=unknown", env.appUrl), 303);
+    }
+    // An empty identities array is Supabase's anti-enumeration signal that the
+    // email is already registered - it returns a user object, not an error.
+    if (data.user && data.user.identities?.length === 0) {
         return NextResponse.redirect(new URL("/login?error=exists", env.appUrl), 303);
     }
+
+    const workspaceId = inviteValid && invitation ? invitation.workspaceId : createId("workspace");
+    if (!invitation) await repository.ensureWorkspace(workspaceId, email);
     if (invitation) await repository.acceptInvitation(invitation.id, new Date().toISOString());
 
-    // Fire-and-forget verification email; signup never blocks on the mailer.
-    void issueAuthToken(user.id, "EMAIL_VERIFY").then((raw) =>
-        sendEmail(emailVerificationEmail(env.appUrl, `/api/auth/verify-email?token=${encodeURIComponent(raw)}`)(user.email)),
-    ).catch(() => undefined);
-
-    const response = NextResponse.redirect(new URL(nextPath, env.appUrl), 303);
-    response.cookies.set({
-        name: sessionCookieName(env.appUrl),
-        value: createSessionToken({ userId: user.id, workspaceId }, env.authSessionSecret),
-        httpOnly: true,
-        sameSite: "lax",
-        secure: env.appUrl.startsWith("https://"),
-        maxAge: 24 * 60 * 60,
-        path: "/",
-    });
-    return response;
+    if (data.session) {
+        return NextResponse.redirect(new URL(nextPath, env.appUrl), 303);
+    }
+    return NextResponse.redirect(
+        new URL(`/signup?sent=1&next=${encodeURIComponent(nextPath)}`, env.appUrl),
+        303,
+    );
 }

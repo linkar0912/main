@@ -12,17 +12,14 @@ const INVITABLE_ROLES = new Set(["ADMIN", "MEMBER"]);
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 
 async function requireManager(request: Request) {
-    const env = getServerEnv();
     const session = await getValidatedSession(request);
     if (!session) return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
     const repository = getRepository();
-    const user = await repository.findUserById(session.userId);
-    if (!user) return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
-    const role = await repository.getMemberRole(session.workspaceId, user.email);
+    const role = await repository.getMemberRole(session.workspaceId, session.email);
     if (role !== "OWNER" && role !== "ADMIN") {
         return { error: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
     }
-    return { session, user, role };
+    return { session, role };
 }
 
 export async function GET(request: Request) {

@@ -1,33 +1,30 @@
 import { NextResponse } from "next/server";
 import { getServerEnv } from "@/src/lib/env";
-import { getRepository } from "@/src/lib/repository-provider";
-import { consumeAuthToken } from "@/src/lib/auth/tokens";
-import { hashPassword } from "@/src/lib/auth/session";
+import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
     const env = getServerEnv();
     const form = await request.formData();
-    const token = String(form.get("token") ?? "");
     const password = String(form.get("password") ?? "");
 
     if (password.length < 12 || password.length > 200) {
-        return NextResponse.redirect(
-            new URL(`/reset-password?token=${encodeURIComponent(token)}&error=password`, env.appUrl),
-            303,
-        );
+        return NextResponse.redirect(new URL("/reset-password?error=password", env.appUrl), 303);
     }
 
-    const consumed = await consumeAuthToken(token, "PASSWORD_RESET");
-    if (!consumed) {
+    // Reaching this page requires having already verified a recovery link via
+    // /auth/confirm, which establishes a session - there's no separate token
+    // to check here.
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
         return NextResponse.redirect(new URL("/reset-password?error=invalid", env.appUrl), 303);
     }
 
-    const repository = getRepository();
-    await repository.updateUserPassword(consumed.userId, await hashPassword(password));
-    // Invalidate every existing session for this user, including the attacker's
-    // if the account was compromised, then let them sign in fresh.
-    await repository.bumpUserTokenVersion(consumed.userId);
+    // Invalidate every session for this user, including the attacker's if the
+    // account was compromised and including the one just used to reset it,
+    // then let them sign in fresh.
+    await supabase.auth.signOut({ scope: "global" });
     return NextResponse.redirect(new URL("/login?reset=1", env.appUrl), 303);
 }

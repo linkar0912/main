@@ -1,6 +1,39 @@
 import { createHmac } from "node:crypto";
 import Redis from "ioredis";
-import { createLoginAttemptLimiter } from "./session";
+
+export type LoginAttemptLimiter = {
+  isAllowed(key: string, now?: Date): boolean;
+  recordFailure(key: string, now?: Date): void;
+  reset(key: string): void;
+};
+
+function createLoginAttemptLimiter(maxAttempts: number, windowMs: number, maxKeys = 1_000): LoginAttemptLimiter {
+  const failures = new Map<string, number[]>();
+  const active = (key: string, now: Date) => {
+    const cutoff = now.getTime() - windowMs;
+    const values = (failures.get(key) ?? []).filter((timestamp) => timestamp > cutoff);
+    if (values.length) failures.set(key, values);
+    else failures.delete(key);
+    return values;
+  };
+  return {
+    isAllowed(key, now = new Date()) {
+      return active(key, now).length < maxAttempts;
+    },
+    recordFailure(key, now = new Date()) {
+      if (!failures.has(key) && failures.size >= maxKeys) {
+        for (const [candidate, timestamps] of failures) {
+          if (timestamps.every((timestamp) => timestamp <= now.getTime() - windowMs)) failures.delete(candidate);
+        }
+        if (failures.size >= maxKeys) failures.delete(failures.keys().next().value as string);
+      }
+      failures.set(key, [...active(key, now), now.getTime()]);
+    },
+    reset(key) {
+      failures.delete(key);
+    },
+  };
+}
 
 export class LoginRateLimitStore {
   private readonly fallback;

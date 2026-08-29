@@ -1,148 +1,251 @@
 .section {
-  block-size: 104px;
   overflow: hidden;
   color: #050505;
   background: #ffffff;
-  border-block: 1px solid rgb(5 5 5 / 12%);
+  border-block: 1px solid rgb(5 5 5 / 14%);
 }
 
-.frame {
+.inner {
+  display: grid;
+  grid-template-columns: minmax(220px, 20%) minmax(0, 1fr);
+  min-inline-size: 0;
+}
+
+.statement {
   display: flex;
   align-items: center;
-  min-block-size: inherit;
+  min-block-size: clamp(112px, 8.2vw, 132px);
+  padding: 20px clamp(24px, 2.5vw, 44px);
+  border-inline-end: 1px solid rgb(5 5 5 / 12%);
+}
+
+.workflowTag,
+.role,
+.exampleFooter {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.statement h2 {
+  max-inline-size: 23ch;
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(1.2rem, 1.45vw, 1.65rem);
+  font-weight: 850;
+  line-height: .98;
+  letter-spacing: -.06em;
+}
+
+.ticker {
+  min-inline-size: 0;
   overflow: hidden;
-  padding-inline: 32px;
+  touch-action: pan-x;
 }
 
 .track {
   display: flex;
-  flex: none;
   inline-size: max-content;
-  animation: rail-scroll 28s linear infinite;
+  min-block-size: clamp(112px, 8.2vw, 132px);
+  animation: proof-scroll 36s linear infinite;
 }
 
-.frame:hover .track,
-.frame:focus-within .track {
+.ticker:hover .track,
+.ticker:focus-within .track {
   animation-play-state: paused;
 }
 
-.facts {
+.trackSegment {
   display: flex;
   flex: none;
-  align-items: center;
-  gap: 64px;
-  padding: 0;
+}
+
+.example {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  column-gap: 14px;
+  flex: 0 0 clamp(430px, 36vw, 560px);
+  min-block-size: inherit;
+  padding: 18px clamp(20px, 2.3vw, 38px);
+  border-inline-end: 1px solid rgb(5 5 5 / 12%);
+}
+
+.exampleHeader {
+  display: contents;
+}
+
+.portrait {
+  display: block;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: start;
+  inline-size: 68px;
+  block-size: 68px;
+  object-fit: cover;
+  border-radius: 14px;
+  filter: saturate(.92) contrast(1.02);
+  transition: transform 260ms cubic-bezier(.43, .195, .02, 1), filter 260ms ease;
+}
+
+.example:hover .portrait,
+.example:focus-within .portrait {
+  filter: saturate(1.04) contrast(1.04);
+  transform: rotate(-2deg) scale(1.04);
+}
+
+.identity {
+  grid-column: 2;
+  grid-row: 1;
+  min-inline-size: 0;
+}
+
+.workflowTag {
+  margin: 0 0 3px;
+  color: #747474;
+  font-size: .53rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.identity h3 {
   margin: 0;
-  list-style: none;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(1rem, 1.2vw, 1.22rem);
+  font-weight: 820;
+  line-height: 1;
+  letter-spacing: -.045em;
 }
 
-.facts::after {
-  flex: none;
-  inline-size: 8px;
-  block-size: 8px;
-  margin-inline: 28px;
-  content: "";
-  background: #fff100;
-  border-radius: 50%;
+.role {
+  margin: 4px 0 0;
+  color: #6c6c6c;
+  font-size: .55rem;
+  font-weight: 650;
+  letter-spacing: .02em;
 }
 
-.facts li {
-  position: relative;
-  flex: none;
-  white-space: nowrap;
+.example blockquote {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: center;
+  max-inline-size: 42ch;
+  margin: 7px 0 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .8125rem;
-  font-weight: 600;
+  font-size: clamp(.7rem, .8vw, .82rem);
+  font-weight: 650;
+  line-height: 1.18;
+  letter-spacing: -.02em;
+}
+
+.exampleFooter {
+  display: flex;
+  grid-column: 2;
+  grid-row: 3;
+  align-items: center;
+  justify-content: space-between;
+  padding-block-start: 5px;
+  color: #737373;
+  font-size: .51rem;
+  font-weight: 700;
   letter-spacing: .06em;
   text-transform: uppercase;
 }
 
-.facts li + li::before {
-  position: absolute;
-  inset-block-start: 50%;
-  inset-inline-start: -36px;
-  inline-size: 8px;
-  block-size: 8px;
-  content: "";
-  background: #fff100;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+.exampleFooter span:last-child {
+  color: #050505;
+  font-size: .95rem;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-@keyframes rail-scroll {
+@keyframes proof-scroll {
   to {
     transform: translateX(-50%);
   }
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
-  .section {
-    block-size: 96px;
+  .inner {
+    grid-template-columns: minmax(200px, 28%) minmax(0, 1fr);
   }
 
-  .facts {
-    gap: 48px;
+  .statement,
+  .track {
+    min-block-size: 118px;
   }
 
-  .facts li {
-    font-size: .78rem;
+  .statement {
+    padding-inline: 20px;
+  }
+
+  .statement h2 {
+    max-inline-size: 19ch;
+    font-size: 1.35rem;
+  }
+
+  .example {
+    grid-template-columns: 60px minmax(0, 1fr);
+    flex-basis: 390px;
+    padding-inline: 22px;
+  }
+
+  .portrait {
+    inline-size: 60px;
+    block-size: 60px;
   }
 }
 
 @media (max-width: 767px) {
-  .section {
-    block-size: auto;
-    min-block-size: 88px;
+  .inner {
+    grid-template-columns: 1fr;
   }
 
-  .frame {
-    padding-inline: 20px;
+  .statement {
+    min-block-size: 96px;
+    padding: 24px 20px 22px;
+    border-inline-end: 0;
+    border-block-end: 1px solid rgb(5 5 5 / 12%);
   }
 
-  .facts {
-    gap: 32px;
+  .statement h2 {
+    max-inline-size: 19ch;
+    font-size: clamp(1.45rem, 7.5vw, 1.95rem);
   }
 
-  .facts li {
-    font-size: .72rem;
+  .ticker,
+  .track {
+    min-block-size: 174px;
+  }
+
+  .example {
+    grid-template-columns: 56px minmax(0, 1fr);
+    flex-basis: min(86vw, 330px);
+    min-block-size: 174px;
+    padding: 18px 20px;
+  }
+
+  .portrait {
+    inline-size: 56px;
+    block-size: 56px;
+    border-radius: 12px;
+  }
+
+  .example blockquote {
+    max-inline-size: 31ch;
+    font-size: .7rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .section {
-    block-size: auto;
-    min-block-size: 0;
-  }
-
-  .frame {
-    overflow: hidden;
-    padding-block: 20px;
-  }
-
-  .track,
-  .frame:hover .track,
-  .frame:focus-within .track {
-    inline-size: 100%;
+  .track {
     animation: none;
+    transform: none;
   }
 
-  .facts {
-    flex: 1;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 12px 24px;
-  }
-
-  .facts[aria-hidden="true"] {
+  .trackSegment[data-proof-duplicate] {
     display: none;
   }
 
-  .facts::after,
-  .facts li + li::before {
-    display: none;
-  }
-
-  .facts li {
-    white-space: normal;
+  .portrait {
+    transition: none;
   }
 }

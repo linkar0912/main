@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getSessionFromRequest: vi.fn(),
   getValidatedSession: vi.fn(),
   listSequences: vi.fn(),
   countEnrollmentsBySequence: vi.fn(),
@@ -9,7 +8,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
-  getSessionFromRequest: mocks.getSessionFromRequest,
   getValidatedSession: mocks.getValidatedSession,
 }));
 
@@ -25,7 +23,6 @@ const { GET, POST } = await import("./route");
 
 describe("/api/sequences session validation", () => {
   beforeEach(() => {
-    mocks.getSessionFromRequest.mockReset().mockReturnValue({ userId: "user_1", workspaceId: "workspace_1" });
     mocks.getValidatedSession.mockReset().mockResolvedValue(null);
     mocks.listSequences.mockReset().mockResolvedValue([]);
     mocks.countEnrollmentsBySequence.mockReset().mockResolvedValue([]);

@@ -10,4 +10,14 @@
 
 .page {
   display: block;
+  --marketing-section-title-size: clamp(2.75rem, 4vw, 4.75rem);
+  --marketing-section-title-width: 1050px;
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .page { --marketing-section-title-size: clamp(2.75rem, 6.5vw, 4rem); }
+}
+
+@media (max-width: 767px) {
+  .page { --marketing-section-title-size: clamp(2.25rem, 10vw, 3.5rem); }
 }

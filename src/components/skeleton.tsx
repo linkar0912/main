@@ -1,5 +1,4 @@
 import { PRODUCT_NAME } from "@/src/lib/branding";
-import { LinkarMark } from "./linkar-mark";
 
 /** Shimmering placeholder block. */
 export function Skeleton({ style }: { style?: React.CSSProperties }) {
@@ -16,12 +15,9 @@ export function Skeleton({ style }: { style?: React.CSSProperties }) {
 export function RootSkeleton() {
   return (
     <main className="root-loading" aria-busy="true" aria-live="polite">
-      <span className="brand root-loading-brand">
-        <span className="brand-mark" aria-hidden><LinkarMark size={20} /></span>
-        <span>{PRODUCT_NAME}</span>
+      <span className="brand root-loading-logo" aria-label={PRODUCT_NAME}>
+        <span className="brand-name">{PRODUCT_NAME}</span>
       </span>
-      <span className="root-loading-copy">Loading {PRODUCT_NAME}</span>
-      <span className="loading-spinner" aria-hidden />
     </main>
   );
 }

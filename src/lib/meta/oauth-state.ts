@@ -30,7 +30,7 @@ export function readOAuthState(value: string, secret: string, now = new Date()):
     // Compare the canonical base64url encoding rather than decoded bytes: the
     // 32-byte signature encodes to 43 characters whose last character carries four
     // padding bits, so several mutated final characters decode to the same buffer
-    // and would otherwise verify. readSessionToken hardens the same way.
+    // and would otherwise verify.
     const expectedEncoded = sign(payload, secret).toString("base64url");
     if (
       encodedSignature.length !== expectedEncoded.length

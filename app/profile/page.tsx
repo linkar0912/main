@@ -1,32 +1,25 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { readSessionToken, sessionCookieName, validateSessionState } from "@/src/lib/auth/session";
-import { getServerEnv } from "@/src/lib/env";
 import { getRepository } from "@/src/lib/repository-provider";
+import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { ProfileScreen } from "@/src/components/profile-screen";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProfilePage() {
-    const env = getServerEnv();
-    const cookieStore = await cookies();
-    const token = cookieStore.get(sessionCookieName(env.appUrl))?.value;
-    const repository = getRepository();
-    const session = await validateSessionState(
-        readSessionToken(token, env.authSessionSecret),
-        repository,
-    );
-    if (!session) redirect("/login?next=%2Fprofile");
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user?.email) redirect("/login?next=%2Fprofile");
 
-    const user = await repository.findUserById(session.userId);
-    if (!user) redirect("/login");
-    const role = await repository.getMemberRole(session.workspaceId, user.email);
+    const repository = getRepository();
+    const workspaceId = await repository.findWorkspaceIdByMemberEmail(data.user.email);
+    if (!workspaceId) redirect("/login");
+    const role = await repository.getMemberRole(workspaceId, data.user.email);
 
     return (
         <ProfileScreen
-            email={user.email}
-            memberSince={user.createdAt}
-            emailVerified={Boolean(user.emailVerifiedAt)}
+            email={data.user.email}
+            memberSince={data.user.created_at}
+            emailVerified={Boolean(data.user.email_confirmed_at)}
             role={role ?? "MEMBER"}
         />
     );

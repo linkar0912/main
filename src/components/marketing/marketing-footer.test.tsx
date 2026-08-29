@@ -66,7 +66,8 @@ describe("MarketingFooter", () => {
       .find((link) => link.className.includes("brandLink"));
     expect(brandLink).toBeTruthy();
     if (!brandLink) throw new Error("Brand link is missing");
-    expect(brandLink.querySelector("svg")).not.toBeNull();
+    expect(brandLink.querySelector("svg")).toBeNull();
+    expect(brandLink.textContent).toBe("Linkar");
     const wordmark = within(footer).getByText("LINKAR");
     expect(wordmark.getAttribute("aria-hidden")).toBe("true");
     expect(wordmark.getAttribute("data-reveal")).not.toBeNull();

@@ -57,15 +57,18 @@ describe("MarketingHeader", () => {
     render(<MarketingHeader />);
 
     const primaryNavigation = within(screen.getByRole("navigation", { name: "Primary" }));
-    expect(screen.getByRole("link", { name: "Linkar home" }).getAttribute("href")).toBe("/#top");
+    const accountNavigation = within(screen.getByRole("navigation", { name: "Account" }));
+    expect(screen.getByRole("link", { name: "Linkar home" }).textContent).toBe("Linkar");
+    expect(screen.getByLabelText("Language: English").textContent).toContain("EN");
     expect(primaryNavigation.getByRole("link", { name: "Product" }).getAttribute("href")).toBe("/#product");
+    expect(primaryNavigation.getByRole("link", { name: "Workflows" }).getAttribute("href")).toBe("/#workflows");
     expect(primaryNavigation.getByRole("link", { name: "How it works" }).getAttribute("href")).toBe("/#how-it-works");
     expect(primaryNavigation.getByRole("link", { name: "Resources" }).getAttribute("href")).toBe("/#resources");
-    expect(primaryNavigation.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/signup");
-    expect(primaryNavigation.getByRole("link", { name: "Login" }).getAttribute("href")).toBe("/login");
+    expect(accountNavigation.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/signup");
+    expect(accountNavigation.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
   });
 
-  it("becomes solid after the hero threshold, hides downward, and reappears upward", () => {
+  it("stays visible while scrolling and settles onto its solid floating surface", () => {
     installBrowserControls();
     render(<MarketingHeader />);
 
@@ -77,20 +80,21 @@ describe("MarketingHeader", () => {
     expect(header().getAttribute("data-visibility")).toBe("visible");
 
     scrollTo(820);
-    expect(header().getAttribute("data-visibility")).toBe("hidden");
-
-    scrollTo(810);
+    expect(header().getAttribute("data-surface")).toBe("solid");
     expect(header().getAttribute("data-visibility")).toBe("visible");
+    expect(screen.getByRole("link", { name: "Linkar home" }).textContent).toBe("Linkar");
   });
 
-  it("does not hide while a header control has keyboard focus", () => {
+  it("preserves navigation focus while scrolling", () => {
     installBrowserControls();
     render(<MarketingHeader />);
-    screen.getByRole("link", { name: "Linkar home" }).focus();
+    const product = screen.getByRole("link", { name: "Product" });
+    product.focus();
 
     scrollTo(820);
 
     expect(header().getAttribute("data-visibility")).toBe("visible");
+    expect(document.activeElement).toBe(product);
   });
 
   it("opens a labelled modal menu, locks scrolling, and focuses its close control", () => {
@@ -146,7 +150,7 @@ describe("MarketingHeader", () => {
   it("leaves focus alone on a desktop resize when the menu is already closed", () => {
     installBrowserControls();
     render(<MarketingHeader />);
-    const login = screen.getByRole("link", { name: "Login" });
+    const login = screen.getByRole("link", { name: "Sign in" });
     login.focus();
 
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1_024 });

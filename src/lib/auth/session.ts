@@ -1,210 +1,42 @@
-import {
-  createHmac,
-  randomBytes,
-  scrypt as scryptCallback,
-  timingSafeEqual,
-} from "node:crypto";
-import { promisify } from "node:util";
-import { getServerEnv } from "../env";
-import { createId } from "../id";
+import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { getRepository } from "../repository-provider";
-import type { AutomationRepository } from "../repository";
-
-// Async scrypt keeps the Node event loop free while hashing (~50–100ms of CPU work);
-// the login/signup routes serve other requests concurrently.
-const scrypt = promisify(scryptCallback) as (
-  password: string,
-  salt: Buffer,
-  keylen: number,
-) => Promise<Buffer>;
-
-// Cookie name module-private constants. The active cookie name is exposed
-// via `sessionCookieName(appUrl)` so call sites do not need to know which
-// variant is in use (plain vs. `__Host-` prefix for HTTPS).
-const SESSION_COOKIE = "linkar_session";
-const PRODUCTION_SESSION_COOKIE = "__Host-linkar_session";
-const SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
 
 export type AppSession = {
   userId: string;
+  email: string;
   workspaceId: string;
-  // Per-session identifier, used to revoke a single session ("log out this device").
-  sid?: string;
-  // User token version at issue time; a mismatch means every session was invalidated.
-  ver?: number;
 };
 
-type StoredSession = AppSession & {
-  expiresAt: number;
-};
+/**
+ * Verifies the Supabase session cookie and resolves it to this app's
+ * {userId, workspaceId} shape. getClaims() verifies the JWT locally against
+ * the project's cached JWKS (no network round-trip) since the project uses
+ * asymmetric signing keys, refreshing first if the access token is close to
+ * expiry. workspaceId is derived per-request from team membership (keyed by
+ * email) rather than embedded in the token, since Supabase doesn't expose a
+ * custom session claim shape without extra setup.
+ */
+export async function getValidatedSession(_request: Request): Promise<AppSession | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data?.claims?.sub || !data.claims.email) return null;
 
-export type LoginAttemptLimiter = {
-  isAllowed(key: string, now?: Date): boolean;
-  recordFailure(key: string, now?: Date): void;
-  reset(key: string): void;
-};
+  const workspaceId = await getRepository().findWorkspaceIdByMemberEmail(data.claims.email);
+  if (!workspaceId) return null;
 
-export function createLoginAttemptLimiter(maxAttempts: number, windowMs: number, maxKeys = 1_000): LoginAttemptLimiter {
-  const failures = new Map<string, number[]>();
-  const active = (key: string, now: Date) => {
-    const cutoff = now.getTime() - windowMs;
-    const values = (failures.get(key) ?? []).filter((timestamp) => timestamp > cutoff);
-    if (values.length) failures.set(key, values);
-    else failures.delete(key);
-    return values;
-  };
-  return {
-    isAllowed(key, now = new Date()) {
-      return active(key, now).length < maxAttempts;
-    },
-    recordFailure(key, now = new Date()) {
-      if (!failures.has(key) && failures.size >= maxKeys) {
-        for (const [candidate, timestamps] of failures) {
-          if (timestamps.every((timestamp) => timestamp <= now.getTime() - windowMs)) failures.delete(candidate);
-        }
-        if (failures.size >= maxKeys) failures.delete(failures.keys().next().value as string);
-      }
-      failures.set(key, [...active(key, now), now.getTime()]);
-    },
-    reset(key) {
-      failures.delete(key);
-    },
-  };
+  return { userId: data.claims.sub, email: data.claims.email, workspaceId };
 }
 
-function signature(value: string, secret: string): Buffer {
-  return createHmac("sha256", secret).update(value).digest();
-}
-
-export async function hashPassword(
-  password: string,
-  salt = randomBytes(16).toString("hex"),
-): Promise<string> {
-  const digest = (await scrypt(password, Buffer.from(salt, "hex"), 64)).toString("hex");
-  return `scrypt$${salt}$${digest}`;
-}
-
-export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  const [algorithm, salt, expectedHex] = storedHash.split("$");
-  if (algorithm !== "scrypt" || !salt || !expectedHex) return false;
-
-  try {
-    const expected = Buffer.from(expectedHex, "hex");
-    if (expected.length === 0) return false;
-    const actual = await scrypt(password, Buffer.from(salt, "hex"), expected.length);
-    return actual.length === expected.length && timingSafeEqual(actual, expected);
-  } catch {
-    return false;
+function hasBackslashOrControlChar(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x1f || value[i] === "\\") return true;
   }
-}
-
-export function createSessionToken(
-  session: AppSession,
-  secret: string,
-  now = new Date(),
-): string {
-  const payload = Buffer.from(
-    JSON.stringify({
-      userId: session.userId,
-      workspaceId: session.workspaceId,
-      sid: session.sid ?? createId("session"),
-      ver: session.ver ?? 0,
-      expiresAt: now.getTime() + SESSION_TTL_MS,
-    } satisfies StoredSession),
-  ).toString("base64url");
-  return `${payload}.${signature(payload, secret).toString("base64url")}`;
-}
-
-export function readSessionToken(token: string | undefined, secret: string, now = new Date()): AppSession | null {
-  if (!token || secret.length < 32) return null;
-  const [payload, encodedSignature] = token.split(".");
-  if (!payload || !encodedSignature) return null;
-
-  try {
-    // Compare the canonical base64url encoding rather than decoded bytes: base64
-    // decoders ignore the trailing padding bits, so several mutated final
-    // characters would otherwise decode to the same signature and pass.
-    const expectedEncoded = signature(payload, secret).toString("base64url");
-    if (
-      encodedSignature.length !== expectedEncoded.length
-      || !timingSafeEqual(Buffer.from(encodedSignature), Buffer.from(expectedEncoded))
-    ) {
-      return null;
-    }
-
-    const value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<StoredSession>;
-    if (
-      typeof value.userId !== "string" ||
-      !value.userId ||
-      typeof value.workspaceId !== "string" ||
-      !value.workspaceId ||
-      typeof value.expiresAt !== "number" ||
-      value.expiresAt <= now.getTime()
-    ) return null;
-
-    return {
-      userId: value.userId,
-      workspaceId: value.workspaceId,
-      sid: typeof value.sid === "string" && value.sid ? value.sid : undefined,
-      ver: typeof value.ver === "number" ? value.ver : undefined,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function readCookie(cookieHeader: string | null, name: string): string | undefined {
-  if (!cookieHeader) return undefined;
-  // RFC 6265 §5.4 says "If multiple cookies with the same name are sent, the
-  // last one wins". Iterate in reverse so a misconfigured proxy that prepends
-  // a stale cookie cannot bypass the freshly-issued one.
-  const segments = cookieHeader.split(";");
-  for (let index = segments.length - 1; index >= 0; index -= 1) {
-    const trimmed = segments[index].trim();
-    const equals = trimmed.indexOf("=");
-    if (equals === -1) continue;
-    if (trimmed.slice(0, equals) !== name) continue;
-    return trimmed.slice(equals + 1);
-  }
-  return undefined;
-}
-
-export function getSessionFromRequest(request: Request): AppSession | null {
-  const env = getServerEnv();
-  return readSessionToken(
-    readCookie(request.headers.get("cookie"), sessionCookieName(env.appUrl)),
-    env.authSessionSecret,
-  );
-}
-
-type SessionStateRepository = Pick<AutomationRepository, "isSessionRevoked" | "getUserTokenVersion">;
-
-/** Validate a parsed session against server-side logout and token-version state. */
-export async function validateSessionState(
-  session: AppSession | null,
-  repository: SessionStateRepository,
-): Promise<AppSession | null> {
-  if (!session?.sid || session.ver === undefined) return null;
-  if (await repository.isSessionRevoked(session.sid)) return null;
-  const currentVersion = await repository.getUserTokenVersion(session.userId);
-  if (currentVersion === null || session.ver !== currentVersion) return null;
-  return session;
-}
-
-// Full validation: signature + expiry (readSessionToken) plus server-side
-// revocation state - single-session denylist and per-user token version.
-// Routes that mutate state should use this instead of getSessionFromRequest.
-export async function getValidatedSession(request: Request): Promise<AppSession | null> {
-  const session = getSessionFromRequest(request);
-  return validateSessionState(session, getRepository());
+  return false;
 }
 
 export function safeNextPath(value: string | null | undefined): string {
-  return value?.startsWith("/") && !value.startsWith("//") && !/[\\\u0000-\u001f]/.test(value)
+  return value?.startsWith("/") && !value.startsWith("//") && !hasBackslashOrControlChar(value)
     ? value
     : "/dashboard";
-}
-
-export function sessionCookieName(appUrl: string): string {
-  return appUrl.startsWith("https://") ? PRODUCTION_SESSION_COOKIE : SESSION_COOKIE;
 }

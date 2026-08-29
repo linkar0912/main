@@ -29,9 +29,10 @@ services:
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
       DISPATCH_LEASE_MS: ${DISPATCH_LEASE_MS:-30000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?NEXT_PUBLIC_SUPABASE_URL is required}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:?NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is required}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}
     depends_on:
-      postgres:
-        condition: service_healthy
       valkey:
         condition: service_healthy
     ports:
@@ -58,25 +59,8 @@ services:
     restart: unless-stopped
     environment: *application-environment
     depends_on:
-      postgres:
-        condition: service_healthy
       valkey:
         condition: service_healthy
-
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-linkar}
-      POSTGRES_USER: ${POSTGRES_USER:-linkar}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-    volumes:
-      - linkar-postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
 
   valkey:
     image: valkey/valkey:9.1.1-alpine3.24
@@ -104,5 +88,4 @@ services:
       retries: 10
 
 volumes:
-  linkar-postgres:
   linkar-valkey:

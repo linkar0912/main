@@ -59,21 +59,46 @@ function Status({ children, active = false }: { children: React.ReactNode; activ
 function CommentScene() {
   return (
     <div className={styles.sceneBody} data-scene-body="comment">
-      <div className={styles.sceneTopline}>
-        <span>Incoming comment</span>
-        <Status active>Keyword matched</Status>
-      </div>
-      <div className={`${styles.card} ${styles.commentCard}`}>
-        <span className={styles.avatar}>G</span>
-        <div>
-          <span className={styles.cardLabel}>Comment</span>
-          <p>GUIDE please</p>
+      <div className={styles.socialPost}>
+        <div className={styles.socialPostVisual}>
+          <span>LINKAR</span>
+          <strong>Turn comments into conversations.</strong>
         </div>
+        <div className={styles.socialActions} aria-hidden="true">
+          <span>♡</span><span>○</span><span>⌁</span><span>☆</span>
+        </div>
+        <p><strong>linkar.studio</strong> Comment GUIDE and I’ll send the quick version.</p>
       </div>
-      <Connector />
-      <div className={`${styles.card} ${styles.replyCard}`}>
-        <span className={styles.cardLabel}>Private reply</span>
-        <p>The quick guide is ready. What would you like to improve first?</p>
+      <div className={styles.commentsSheet}>
+        <div className={styles.commentsTitle}>
+          <span aria-hidden="true">‹</span>
+          <strong>Comments</strong>
+          <span aria-hidden="true">⌁</span>
+        </div>
+        <div className={styles.commentRow}>
+          <span className={styles.avatar}>G</span>
+          <div className={styles.commentCopy}>
+            <p><strong>giovanni</strong> GUIDE please</p>
+            <span>2m · Reply</span>
+          </div>
+          <span className={styles.commentHeart} aria-hidden="true">♡</span>
+        </div>
+        <div className={styles.automationNotice}>
+          <Status active>Keyword matched</Status>
+          <span>Private reply sent</span>
+        </div>
+        <div className={styles.dmPreview}>
+          <div className={styles.dmIdentity}>
+            <span className={styles.dmAvatar}>L</span>
+            <span><strong>linkar.studio</strong><small>sent you a message</small></span>
+          </div>
+          <p>The quick guide is ready. What would you like to improve first?</p>
+        </div>
+        <div className={styles.addComment}>
+          <span aria-hidden="true">☺</span>
+          <span>Add a comment…</span>
+          <span aria-hidden="true">♡</span>
+        </div>
       </div>
     </div>
   );
@@ -166,9 +191,25 @@ function SceneBody({ scene }: { scene: StoryChapter["scene"] }) {
 
 function FrameBar() {
   return (
-    <div className={styles.frameBar}>
-      <span className={styles.frameBrand}>LINKAR</span>
-      <span className={styles.frameStatus}><span /> Flow live</span>
+    <div className={styles.phoneChrome}>
+      <div className={styles.phoneStatusBar}>
+        <span>9:41</span>
+        <span className={styles.dynamicIsland} />
+        <span className={styles.phoneSignals}>
+          <span className={styles.cellularSignal} aria-hidden="true"><i /><i /><i /><i /></span>
+          <span className={styles.wifiSignal} aria-hidden="true" />
+          <b>87%</b>
+          <span className={styles.battery} aria-hidden="true"><i /></span>
+        </span>
+      </div>
+      <div className={styles.socialHeader}>
+        <span className={styles.socialAvatar}>L</span>
+        <span className={styles.socialIdentity}>
+          <strong>linkar.studio</strong>
+          <small>Professional dashboard</small>
+        </span>
+        <span className={styles.socialMenu} aria-hidden="true">•••</span>
+      </div>
     </div>
   );
 }
@@ -179,10 +220,13 @@ function MobileScene({ scene }: { scene: StoryChapter["scene"] }) {
       className={`${styles.sceneFrame} ${styles.mobileScene}`}
       data-flow-scene={scene}
       data-scene-frame
+      data-device-frame="iphone"
+      data-social-interface="true"
       aria-hidden="true"
     >
       <FrameBar />
       <SceneBody scene={scene} />
+      <span className={styles.homeIndicator} />
     </div>
   );
 }
@@ -304,7 +348,7 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
         </div>
 
         <div className={styles.stage} data-desktop-stage>
-          <figure aria-label="Four stages of a Linkar conversation">
+          <figure aria-label="Linkar automation preview in an iPhone social conversation interface">
             <ol className={styles.semanticSummary}>
               {chapters.map((chapter) => (
                 <li key={chapter.id}>
@@ -314,7 +358,12 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
               ))}
             </ol>
             <div className={styles.controlRoom} aria-hidden="true">
-              <div className={styles.sceneFrame} data-scene-frame>
+              <div
+                className={styles.sceneFrame}
+                data-scene-frame
+                data-device-frame="iphone"
+                data-social-interface="true"
+              >
                 <FrameBar />
                 <div className={styles.sceneLayers}>
                   {chapters.map((chapter, index) => (
@@ -328,6 +377,7 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
                     </div>
                   ))}
                 </div>
+                <span className={styles.homeIndicator} />
               </div>
             </div>
             <figcaption className={styles.figcaption}>Linkar conversation flow.</figcaption>

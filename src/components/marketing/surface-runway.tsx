@@ -59,7 +59,8 @@ export function SurfaceRunway() {
 
       const rect = section.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
-      const progress = Math.min(Math.max((viewportHeight - rect.top) / (viewportHeight + rect.height), 0), 1);
+      const scrollableDistance = Math.max(rect.height - viewportHeight, 1);
+      const progress = Math.min(Math.max(-rect.top / scrollableDistance, 0), 1);
       const travel = Math.max(track.scrollWidth - viewport.clientWidth, 0);
       section.style.setProperty("--runway-progress", String(progress));
       section.style.setProperty("--runway-travel", `${-travel}px`);

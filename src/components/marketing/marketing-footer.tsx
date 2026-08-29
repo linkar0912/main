@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { LinkarMark } from "@/src/components/linkar-mark";
 import { Reveal } from "./reveal";
 import styles from "./marketing-footer.module.css";
 
@@ -40,8 +39,14 @@ const columns = [
   },
 ] as const;
 
+type MarketingFooterProps = {
+  /** When set, omits the giant "LINKAR" wordmark (it dominates the footer on
+      short pages like the auth screens). Defaults to false (homepage). */
+  hideWordmark?: boolean;
+};
+
 /** The complete, route-safe footer for the public marketing page. */
-export function MarketingFooter() {
+export function MarketingFooter({ hideWordmark = false }: MarketingFooterProps = {}) {
   const year = new Date().getFullYear();
 
   return (
@@ -50,7 +55,6 @@ export function MarketingFooter() {
         <div className={styles.topGrid}>
           <div className={styles.brand}>
             <Link className={styles.brandLink} href="/#top" aria-label="Linkar home">
-              <LinkarMark size={26} />
               <span>Linkar</span>
             </Link>
             <p>Linkar keeps repeatable conversations moving and makes human attention count.</p>
@@ -77,9 +81,11 @@ export function MarketingFooter() {
           <p>Linkar uses supported platform interfaces. Availability and messaging limits depend on the connected account and platform policies.</p>
         </div>
 
-        <Reveal as="p" className={styles.wordmark} aria-hidden="true" data-reduced-motion-state="visible">
-          LINKAR
-        </Reveal>
+        {hideWordmark ? null : (
+          <Reveal as="p" className={styles.wordmark} aria-hidden="true" data-reduced-motion-state="visible">
+            LINKAR
+          </Reveal>
+        )}
       </div>
     </footer>
   );

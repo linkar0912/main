@@ -53,7 +53,7 @@ function installAnimationFrame() {
 function sectionRect(progress: number): DOMRect {
   const height = 3200;
   const viewportHeight = 1000;
-  const top = viewportHeight - progress * (viewportHeight + height);
+  const top = -progress * (height - viewportHeight);
   return {
     x: 0, y: top, top, right: 1440, bottom: top + height, left: 0,
     width: 1440, height, toJSON: () => ({}),

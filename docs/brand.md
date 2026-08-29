@@ -96,10 +96,10 @@ start that eases hard into the stop, snappier than a generic ease. Reduced-
 motion is fully respected.
 
 The `.grid-texture` utility overlays a faint white grid
-(`rgba(255,255,255,.06)`, 32px cells) via `::before` — applied to the dark
-hero panels (`.auth-hero`, `.profile-hero`, `.help-hero`) to mirror
-ManyChat's graph-paper backgrounds. It isn't used on dense list/table
-pages, where it would just be noise.
+(`rgba(255,255,255,.06)`, 32px cells) via `::before` — reserved for the
+help hero and product mockups where a diagram-like surface adds context.
+Auth screens use a quieter editorial panel with a soft contour instead of a
+grid, keeping the entry flow focused and professional.
 
 ## Voice
 

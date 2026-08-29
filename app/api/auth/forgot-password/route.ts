@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerEnv } from "@/src/lib/env";
-import { getRepository } from "@/src/lib/repository-provider";
-import { issueAuthToken } from "@/src/lib/auth/tokens";
-import { passwordResetEmail, sendEmail } from "@/src/lib/mailer";
 import { LoginRateLimitStore } from "@/src/lib/auth/rate-limit";
 import { clientAddress } from "@/src/lib/auth/client-address";
+import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -21,11 +19,13 @@ export async function POST(request: Request) {
 
     const form = await request.formData();
     const email = String(form.get("email") ?? "").trim().toLowerCase();
-    const user = email ? await getRepository().findUserByEmail(email) : null;
-    if (user) {
-        const raw = await issueAuthToken(user.id, "PASSWORD_RESET");
-        const template = passwordResetEmail(env.appUrl, `/reset-password?token=${encodeURIComponent(raw)}`);
-        await sendEmail(template(user.email));
+    if (email) {
+        const confirmUrl = new URL("/auth/confirm", env.appUrl);
+        confirmUrl.searchParams.set("type", "recovery");
+        const supabase = await createSupabaseServerClient();
+        // Errors are swallowed deliberately: the response below never signals
+        // whether the account exists (no enumeration).
+        await supabase.auth.resetPasswordForEmail(email, { redirectTo: confirmUrl.toString() });
     }
     // Always the same response whether or not the account exists (no enumeration).
     return NextResponse.redirect(new URL("/forgot-password?sent=1", env.appUrl), 303);

@@ -10,13 +10,14 @@
 
 .header {
   padding: 136px clamp(32px, 4.45vw, 72px) 64px;
+  text-align: center;
 }
 
 .header h2 {
-  max-inline-size: 1080px;
-  margin: 0;
+  max-inline-size: var(--marketing-section-title-width);
+  margin: 0 auto;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-size: var(--marketing-section-title-size);
   font-weight: 850;
   line-height: .9;
   letter-spacing: -.07em;
@@ -24,7 +25,7 @@
 
 .header p {
   max-inline-size: 56ch;
-  margin: 32px 0 0;
+  margin: 32px auto 0;
   font-size: clamp(1.05rem, 1.35vw, 1.3rem);
   font-weight: 600;
   line-height: 1.5;

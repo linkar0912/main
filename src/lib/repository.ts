@@ -474,34 +474,6 @@ export type DataDeletionRequestRecord = {
   completedAt?: string;
 };
 
-export type UserRecord = {
-  id: string;
-  email: string;
-  passwordHash: string;
-  emailVerifiedAt?: string;
-  tokenVersion: number;
-  createdAt: string;
-};
-
-export type CreateUserInput = {
-  email: string;
-  passwordHash: string;
-};
-
-export type AuthTokenType = "PASSWORD_RESET" | "EMAIL_VERIFY";
-
-export type AuthTokenRecord = {
-  id: string;
-  userId: string;
-  type: AuthTokenType;
-  tokenHash: string;
-  expiresAt: string;
-  usedAt?: string;
-  createdAt: string;
-};
-
-export type CreateAuthTokenInput = Pick<AuthTokenRecord, "userId" | "type" | "tokenHash" | "expiresAt">;
-
 export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
 
 export type MemberRecord = {
@@ -536,18 +508,6 @@ export type ParticipantFunnelCounts = {
 
 export interface AutomationRepository {
   ensureWorkspace(workspaceId: string, ownerEmail: string): Promise<void>;
-  createUser(input: CreateUserInput): Promise<{ created: boolean; record: UserRecord }>;
-  findUserByEmail(email: string): Promise<UserRecord | null>;
-  findUserById(id: string): Promise<UserRecord | null>;
-  updateUserPassword(userId: string, passwordHash: string): Promise<void>;
-  markUserEmailVerified(userId: string): Promise<void>;
-  getUserTokenVersion(userId: string): Promise<number | null>;
-  bumpUserTokenVersion(userId: string): Promise<number>;
-  createAuthToken(input: CreateAuthTokenInput): Promise<AuthTokenRecord>;
-  // Single-use consumption: returns null when unknown, wrong type, expired, or already used.
-  consumeAuthToken(tokenHash: string, type: AuthTokenType, now: string): Promise<AuthTokenRecord | null>;
-  isSessionRevoked(sessionId: string): Promise<boolean>;
-  revokeSession(sessionId: string, userId: string, expiresAt: string): Promise<void>;
   listMembers(workspaceId: string): Promise<MemberRecord[]>;
   getMemberRole(workspaceId: string, email: string): Promise<MemberRole | null>;
   addMember(workspaceId: string, email: string, role: MemberRole): Promise<{ created: boolean }>;

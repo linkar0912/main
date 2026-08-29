@@ -101,9 +101,14 @@ describe("AutomationStory", () => {
       "More replies or better leads?", "Better leads", "Goal saved", "Now: guide sent",
       "+ 18h: check in", "Within window", "Project details received", "Automation paused", "Ready for you",
     ].forEach((state) => expect(markup).toContain(state));
-    expect(screen.getAllByRole("figure", { name: "Four stages of a Linkar conversation" })).toHaveLength(1);
+    expect(screen.getAllByRole("figure", { name: "Linkar automation preview in an iPhone social conversation interface" })).toHaveLength(1);
     expect(screen.getAllByRole("list")).toHaveLength(1);
     expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    expect(section.querySelectorAll('[data-device-frame="iphone"]')).toHaveLength(5);
+    expect(section.querySelectorAll('[data-social-interface="true"]')).toHaveLength(5);
+    ["9:41", "87%", "Comments", "Reply", "Add a comment…"].forEach((detail) => {
+      expect(markup).toContain(detail);
+    });
     expect(section.querySelectorAll('[aria-hidden="true"] [data-scene-body]')).toHaveLength(8);
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
     expect(screen.queryAllByRole("button")).toHaveLength(0);

@@ -5,12 +5,16 @@
   scroll-margin-top: 88px;
 }
 
-.header { max-inline-size: 980px; }
+.header {
+  max-inline-size: var(--marketing-section-title-width);
+  margin-inline: auto;
+  text-align: center;
+}
 
 .header h2 {
   margin: 0;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-size: var(--marketing-section-title-size);
   font-weight: 850;
   line-height: .9;
   letter-spacing: -.07em;
@@ -18,7 +22,7 @@
 
 .header p {
   max-inline-size: 60ch;
-  margin: 28px 0 0;
+  margin: 28px auto 0;
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: clamp(1.05rem, 1.35vw, 1.3rem);
   font-weight: 600;
@@ -250,7 +254,7 @@
 
 @media (max-width: 767px) {
   .section { padding: 88px 20px; }
-  .header h2 { font-size: clamp(2.75rem, 14vw, 4.5rem); }
+  .header h2 { font-size: var(--marketing-section-title-size); }
   .desktopGallery { display: none; }
   .mobileAccordion { display: block; margin-top: 48px; }
   .accordionItem { border-block-start: 1px solid rgb(5 5 5 / 16%); }

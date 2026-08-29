@@ -17,10 +17,6 @@ import type {
   DataDeletionRequestRecord,
   ParticipantPatch,
   ParticipantState,
-  CreateUserInput,
-  UserRecord,
-  AuthTokenType,
-  AuthTokenRecord,
   MemberRole,
   MemberRecord,
   InvitationRecord,
@@ -118,13 +114,9 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const trackedLinks = new Map<string, TrackedLinkRecord>();
   const trackedLinkSlugs = new Map<string, string>(); // `${workspaceId}:${slug}` -> link id
   const trackedLinkClicks = new Map<string, TrackedLinkClickRecord[]>();
-  const usersByEmail = new Map<string, UserRecord>();
-  const usersById = new Map<string, UserRecord>();
   // email -> workspaceId, mirroring WorkspaceMember rows for login lookups.
   const memberWorkspacesByEmail = new Map<string, string>();
   const membersByEmail = new Map<string, MemberRecord>();
-  const authTokensByHash = new Map<string, AuthTokenRecord>();
-  const revokedSessions = new Map<string, { userId: string; expiresAt: string }>();
   const invitationsById = new Map<string, InvitationRecord>();
   // Keyed by `${workspaceId}:${providerEventId}` so replays stay idempotent.
   const webhookEvents = new Map<string, WebhookEventRecord & { workspaceId: string }>();
@@ -143,82 +135,6 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
           role: "OWNER",
         });
       }
-    },
-
-    async createUser(input: CreateUserInput) {
-      const email = input.email.toLowerCase();
-      const existing = usersByEmail.get(email);
-      if (existing) return { created: false, record: copy(existing) };
-      const record: UserRecord = {
-        id: createId("user"),
-        email,
-        passwordHash: input.passwordHash,
-        tokenVersion: 0,
-        createdAt: now(),
-      };
-      usersByEmail.set(email, record);
-      usersById.set(record.id, record);
-      return { created: true, record: copy(record) };
-    },
-
-    async findUserByEmail(email) {
-      const record = usersByEmail.get(email.toLowerCase());
-      return record ? copy(record) : null;
-    },
-
-    async findUserById(id) {
-      const record = usersById.get(id);
-      return record ? copy(record) : null;
-    },
-
-    async updateUserPassword(userId, passwordHash) {
-      const record = usersById.get(userId);
-      if (record) usersById.set(userId, { ...record, passwordHash });
-    },
-
-    async markUserEmailVerified(userId) {
-      const record = usersById.get(userId);
-      if (record && !record.emailVerifiedAt) usersById.set(userId, { ...record, emailVerifiedAt: now() });
-    },
-
-    async getUserTokenVersion(userId) {
-      return usersById.get(userId)?.tokenVersion ?? null;
-    },
-
-    async bumpUserTokenVersion(userId) {
-      const record = usersById.get(userId);
-      if (!record) throw new Error("User not found");
-      const tokenVersion = record.tokenVersion + 1;
-      usersById.set(userId, { ...record, tokenVersion });
-      return tokenVersion;
-    },
-
-    async createAuthToken(input) {
-      const record: AuthTokenRecord = { id: createId("token"), createdAt: now(), ...input };
-      authTokensByHash.set(record.tokenHash, record);
-      return copy(record);
-    },
-
-    async consumeAuthToken(tokenHash, type, nowIso) {
-      const record = authTokensByHash.get(tokenHash);
-      if (!record || record.type !== type || record.usedAt || record.expiresAt <= nowIso) return null;
-      const consumed: AuthTokenRecord = { ...record, usedAt: nowIso };
-      authTokensByHash.set(tokenHash, consumed);
-      return copy(consumed);
-    },
-
-    async isSessionRevoked(sessionId) {
-      const entry = revokedSessions.get(sessionId);
-      if (!entry) return false;
-      if (entry.expiresAt <= now()) {
-        revokedSessions.delete(sessionId);
-        return false;
-      }
-      return true;
-    },
-
-    async revokeSession(sessionId, userId, expiresAt) {
-      revokedSessions.set(sessionId, { userId, expiresAt });
     },
 
     async listMembers(workspaceId) {

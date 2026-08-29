@@ -52,9 +52,9 @@ this local workflow.
 
 ## Production deployment
 
-Production requires configured PostgreSQL, Valkey, Meta credentials, and a
-public HTTPS URL. Build the release, apply only committed migrations, then run
-the web and worker as separate long-lived processes:
+Production requires a Supabase project (Postgres + Auth), Valkey, Meta
+credentials, and a public HTTPS URL. Build the release, apply only committed
+migrations, then run the web and worker as separate long-lived processes:
 
 ```bash
 pnpm build
@@ -76,9 +76,12 @@ openssl rand -hex 32
 Put the result in `META_TOKEN_ENCRYPTION_KEY`. Never commit `.env` or any Meta secret.
 
 Accounts are self-serve: anyone can create a workspace at `/signup` (email +
-password, hashed with scrypt), then connect their Instagram account through the
-settings page. Configure one app-level `AUTH_SESSION_SECRET` of at least 32
-characters to sign session cookies — generate it with a password manager or:
+password), then connect their Instagram account through the settings page.
+Auth is handled by Supabase Auth (`NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`); email
+confirmation and password-reset links route through `/auth/confirm`.
+`AUTH_SESSION_SECRET` is still required for the rate-limit key HMAC — generate
+it with a password manager or:
 
 ```bash
 openssl rand -hex 32
@@ -97,7 +100,7 @@ pnpm test:e2e
 
 ## Production requirements
 
-Production needs a public HTTPS deployment, PostgreSQL, Valkey, a stable `NEXT_PUBLIC_APP_URL`, an `AUTH_SESSION_SECRET`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of PostgreSQL and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. Accounts are self-serve via `/signup`; each account gets its own isolated workspace.
+Production needs a public HTTPS deployment, a Supabase project (Postgres + Auth), Valkey, a stable `NEXT_PUBLIC_APP_URL`, an `AUTH_SESSION_SECRET`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of Postgres and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. Accounts are self-serve via `/signup`; each account gets its own isolated workspace.
 
 The local production topology can be checked with:
 

@@ -16,6 +16,9 @@ export type ServerEnv = {
   trustedProxyHops: number;
   workerConcurrency: number;
   dispatchLeaseMs: number;
+  supabaseUrl: string;
+  supabasePublishableKey: string;
+  supabaseServiceRoleKey: string;
 };
 
 function booleanEnv(value: string | undefined): boolean {
@@ -72,14 +75,14 @@ export function getServerEnv(): ServerEnv {
       .map((scope) => scope.trim())
       .filter(Boolean),
     followGatedCampaignsEnabled: booleanEnv(process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED),
-    // Sessions are signed with one app-level secret. OWNER_SESSION_SECRET is accepted
-    // as a fallback so existing deployments keep working through the rename.
     authSessionSecret:
       process.env.AUTH_SESSION_SECRET?.trim()
-      ?? process.env.OWNER_SESSION_SECRET?.trim()
       ?? "dev-insecure-session-secret-change-me-32ch",
     trustedProxyHops: integerEnv("TRUSTED_PROXY_HOPS", process.env.TRUSTED_PROXY_HOPS, 0),
     workerConcurrency: integerEnv("WORKER_CONCURRENCY", process.env.WORKER_CONCURRENCY, 5),
     dispatchLeaseMs: integerEnv("DISPATCH_LEASE_MS", process.env.DISPATCH_LEASE_MS, 30_000),
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    supabasePublishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
+    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   };
 }

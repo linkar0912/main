@@ -12,19 +12,21 @@
 }
 
 .frame > h2 {
-  position: sticky;
-  top: 144px;
-  grid-column: 1 / span 5;
+  position: static;
+  grid-column: 1 / -1;
   align-self: start;
-  margin: 0;
+  justify-self: center;
+  max-inline-size: var(--marketing-section-title-width);
+  margin: 0 0 72px;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-size: var(--marketing-section-title-size);
   font-weight: 850;
   line-height: .9;
   letter-spacing: -.07em;
+  text-align: center;
 }
 
-.questions { grid-column: 7 / -1; }
+.questions { grid-column: 3 / 11; }
 .question { min-block-size: 112px; border-block-start: 1px solid rgb(255 255 255 / 22%); }
 .question:last-child { border-block-end: 1px solid rgb(255 255 255 / 22%); }
 .question h3 { margin: 0; }
@@ -88,7 +90,7 @@
 @media (min-width: 768px) and (max-width: 1023px) {
   .section { padding: 112px 32px; }
   .frame { display: block; }
-  .frame > h2 { position: static; max-inline-size: 800px; margin-bottom: 56px; }
+  .frame > h2 { max-inline-size: 800px; margin-bottom: 56px; }
   .question,
   .trigger { min-block-size: 104px; }
 }
@@ -96,7 +98,7 @@
 @media (max-width: 767px) {
   .section { padding: 88px 20px; }
   .frame { display: block; }
-  .frame > h2 { position: static; margin-bottom: 44px; font-size: clamp(2.75rem, 12vw, 4rem); }
+  .frame > h2 { margin-bottom: 44px; font-size: var(--marketing-section-title-size); }
   .question,
   .trigger { min-block-size: 88px; }
   .trigger { gap: 20px; font-size: 1.2rem; }

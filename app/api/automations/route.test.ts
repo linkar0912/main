@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getSessionFromRequest: vi.fn(),
   getValidatedSession: vi.fn(),
   createAutomation: vi.fn(),
   listAutomations: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
-  getSessionFromRequest: mocks.getSessionFromRequest,
   getValidatedSession: mocks.getValidatedSession,
 }));
 
@@ -20,7 +18,6 @@ const { GET, POST } = await import("./route");
 
 describe("POST /api/automations", () => {
   beforeEach(() => {
-    mocks.getSessionFromRequest.mockReset().mockReturnValue({ userId: "user_1", workspaceId: "workspace_1" });
     mocks.getValidatedSession.mockReset().mockResolvedValue(null);
     mocks.createAutomation.mockReset();
     mocks.listAutomations.mockReset().mockResolvedValue([]);

@@ -6,13 +6,14 @@
 }
 
 .section header h2 {
-  max-inline-size: 1100px;
-  margin: 0 0 72px;
+  max-inline-size: var(--marketing-section-title-width);
+  margin: 0 auto 72px;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(4.5rem, 7vw, 7.5rem);
+  font-size: var(--marketing-section-title-size);
   font-weight: 850;
   line-height: .9;
   letter-spacing: -.07em;
+  text-align: center;
 }
 
 .comparison {
@@ -127,17 +128,18 @@
 
 .closing {
   max-inline-size: 58ch;
-  margin: 48px 0 0;
+  margin: 48px auto 0;
   font-size: clamp(1.05rem, 1.55vw, 1.38rem);
   font-weight: 650;
   line-height: 1.45;
+  text-align: center;
 }
 
 .closing::before {
   display: block;
   inline-size: 38px;
   block-size: 4px;
-  margin-block-end: 18px;
+  margin: 0 auto 18px;
   content: "";
   background: #fa0cf7;
 }
@@ -165,7 +167,7 @@
 
 @media (max-width: 767px) {
   .section { padding: 88px 20px; }
-  .section header h2 { margin-bottom: 48px; font-size: clamp(2.75rem, 12vw, 4rem); }
+  .section header h2 { margin-bottom: 48px; font-size: var(--marketing-section-title-size); }
   .comparison { grid-template-columns: 1fr; gap: 0; }
   .manual, .linkar { min-block-size: 420px; padding: 32px 24px; border-radius: 32px; }
   .manual ul, .linkar ol { margin-top: 88px; }

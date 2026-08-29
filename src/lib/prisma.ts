@@ -20,8 +20,6 @@ import type {
   DataDeletionRequestRecord,
   ParticipantPatch,
   ParticipantState,
-  AuthTokenType,
-  AuthTokenRecord,
   MemberRole,
   MemberRecord,
   InvitationRecord,
@@ -47,44 +45,6 @@ import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTA
 import type { EmailCaptureField } from "./automation/types";
 import { toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
-
-function mapUser(record: {
-  id: string;
-  email: string;
-  passwordHash: string;
-  emailVerifiedAt: Date | null;
-  tokenVersion: number;
-  createdAt: Date;
-}) {
-  return {
-    id: record.id,
-    email: record.email,
-    passwordHash: record.passwordHash,
-    emailVerifiedAt: record.emailVerifiedAt?.toISOString(),
-    tokenVersion: record.tokenVersion,
-    createdAt: record.createdAt.toISOString(),
-  };
-}
-
-function mapAuthToken(record: {
-  id: string;
-  userId: string;
-  type: string;
-  tokenHash: string;
-  expiresAt: Date;
-  usedAt: Date | null;
-  createdAt: Date;
-}): AuthTokenRecord {
-  return {
-    id: record.id,
-    userId: record.userId,
-    type: record.type as AuthTokenType,
-    tokenHash: record.tokenHash,
-    expiresAt: record.expiresAt.toISOString(),
-    usedAt: record.usedAt?.toISOString(),
-    createdAt: record.createdAt.toISOString(),
-  };
-}
 
 function mapInvitation(record: {
   id: string;
@@ -528,104 +488,6 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           slug: `linkar-${workspaceId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40)}`,
           members: { create: { id: createId("member"), email: ownerEmail, role: "OWNER" } },
         },
-        update: {},
-      });
-    },
-
-    async createUser(input) {
-      const email = input.email.toLowerCase();
-      try {
-        const record = await client.user.create({
-          data: { id: createId("user"), email, passwordHash: input.passwordHash },
-        });
-        return { created: true, record: mapUser(record) };
-      } catch (error) {
-        // P2002 = unique constraint violation on email.
-        if ((error as { code?: string }).code === "P2002") {
-          const existing = await client.user.findUnique({ where: { email } });
-          if (!existing) throw error;
-          return { created: false, record: mapUser(existing) };
-        }
-        throw error;
-      }
-    },
-
-    async findUserByEmail(email) {
-      const record = await client.user.findUnique({ where: { email: email.toLowerCase() } });
-      return record ? mapUser(record) : null;
-    },
-
-    async findUserById(id) {
-      const record = await client.user.findUnique({ where: { id } });
-      return record ? mapUser(record) : null;
-    },
-
-    async updateUserPassword(userId, passwordHash) {
-      await client.user.update({ where: { id: userId }, data: { passwordHash } });
-    },
-
-    async markUserEmailVerified(userId) {
-      await client.user.updateMany({
-        where: { id: userId, emailVerifiedAt: null },
-        data: { emailVerifiedAt: new Date() },
-      });
-    },
-
-    async getUserTokenVersion(userId) {
-      const record = await client.user.findUnique({ where: { id: userId }, select: { tokenVersion: true } });
-      return record?.tokenVersion ?? null;
-    },
-
-    async bumpUserTokenVersion(userId) {
-      const record = await client.user.update({
-        where: { id: userId },
-        data: { tokenVersion: { increment: 1 } },
-        select: { tokenVersion: true },
-      });
-      return record.tokenVersion;
-    },
-
-    async createAuthToken(input) {
-      const record = await client.authToken.create({
-        data: {
-          id: createId("token"),
-          userId: input.userId,
-          type: input.type,
-          tokenHash: input.tokenHash,
-          expiresAt: new Date(input.expiresAt),
-        },
-      });
-      return mapAuthToken(record);
-    },
-
-    async consumeAuthToken(tokenHash, type, nowIso) {
-      // Single-use consumption guarded by the unique hash and the usedAt-null filter.
-      const updated = await client.authToken.updateMany({
-        where: { tokenHash, type, usedAt: null, expiresAt: { gt: new Date(nowIso) } },
-        data: { usedAt: new Date(nowIso) },
-      });
-      if (updated.count !== 1) return null;
-      const record = await client.authToken.findUniqueOrThrow({ where: { tokenHash } });
-      return mapAuthToken(record);
-    },
-
-    async isSessionRevoked(sessionId) {
-      const record = await client.revokedSession.findUnique({
-        where: { sessionId },
-        select: { expiresAt: true },
-      });
-      if (!record) return false;
-      if (record.expiresAt.getTime() <= Date.now()) {
-        await client.revokedSession.delete({ where: { sessionId } }).catch(() => undefined);
-        return false;
-      }
-      return true;
-    },
-
-    async revokeSession(sessionId, userId, expiresAt) {
-      await client.revokedSession.upsert({
-        where: { sessionId },
-        create: { sessionId, userId, expiresAt: new Date(expiresAt) },
         update: {},
       });
     },

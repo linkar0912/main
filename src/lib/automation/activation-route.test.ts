@@ -8,7 +8,6 @@ const sessionState = vi.hoisted(() => ({
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
-  getSessionFromRequest: () => ({ email: "owner@example.com", workspaceId: "workspace_a" }),
   getValidatedSession: () => Promise.resolve(sessionState.validated),
 }));
 

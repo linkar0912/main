@@ -2,29 +2,34 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
-import { LinkarMark } from "@/src/components/linkar-mark";
 import { ButtonRoll } from "./button-roll";
 import styles from "./marketing-header.module.css";
 
 const navigationItems = [
   { label: "Product", href: "/#product" },
+  { label: "Workflows", href: "/#workflows" },
   { label: "How it works", href: "/#how-it-works" },
   { label: "Resources", href: "/#resources" },
 ] as const;
 
 const accountItems = [
   { label: "Get started", href: "/signup" },
-  { label: "Login", href: "/login" },
+  { label: "Sign in", href: "/login" },
 ] as const;
 
-export function MarketingHeader() {
+type MarketingHeaderProps = {
+  /** When set, pins the header surface (skips the scroll-driven flip). */
+  forceSurface?: "solid" | "hero";
+};
+
+/** Floating marketing header with primary and account navigation, and a mobile sheet. */
+export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
   const headerRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuOpenRef = useRef(false);
-  const [scrolled, setScrolled] = useState(false);
-  const [hidden, setHidden] = useState(false);
+  const [scrolled, setScrolled] = useState(forceSurface === "solid");
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -47,38 +52,15 @@ export function MarketingHeader() {
   }, [menuOpen]);
 
   useEffect(() => {
-    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    if (forceSurface) {
+      return;
+    }
+
     let animationFrame = 0;
-    let lastScrollPosition = window.scrollY;
 
     const updateHeader = () => {
       animationFrame = 0;
-      const scrollPosition = window.scrollY;
-      const threshold = window.innerHeight * 0.7;
-
-      if (scrollPosition <= 24) {
-        setScrolled(false);
-        setHidden(false);
-        lastScrollPosition = scrollPosition;
-        return;
-      }
-
-      setScrolled(scrollPosition > threshold);
-
-      const focusIsInHeader = headerRef.current?.contains(document.activeElement) ?? false;
-      if (reduceMotion || menuOpenRef.current || focusIsInHeader) {
-        setHidden(false);
-        lastScrollPosition = scrollPosition;
-        return;
-      }
-
-      if (scrollPosition > threshold + 96 && scrollPosition - lastScrollPosition > 8) {
-        setHidden(true);
-      } else if (lastScrollPosition - scrollPosition > 4) {
-        setHidden(false);
-      }
-
-      lastScrollPosition = scrollPosition;
+      setScrolled(window.scrollY > 24);
     };
 
     const onScroll = () => {
@@ -97,7 +79,7 @@ export function MarketingHeader() {
         window.cancelAnimationFrame(animationFrame);
       }
     };
-  }, []);
+  }, [forceSurface]);
 
   useEffect(() => {
     const closeOnTabletResize = () => {
@@ -152,28 +134,42 @@ export function MarketingHeader() {
     <header
       ref={headerRef}
       className={styles.header}
-      data-surface={scrolled ? "solid" : "hero"}
-      data-visibility={hidden ? "hidden" : "visible"}
+      data-surface={forceSurface ?? (scrolled ? "solid" : "hero")}
+      data-visibility="visible"
       data-menu={menuOpen ? "open" : "closed"}
     >
       <div className={styles.frame}>
-        <Link className={styles.brand} href="/#top" aria-label="Linkar home">
-          <LinkarMark size={24} />
-          <span className={styles.wordmark}>Linkar</span>
-        </Link>
+        <div className={styles.leftRail}>
+          <Link
+            className={styles.wordmark}
+            href="/#top"
+            aria-label="Linkar home"
+          >
+            Linkar
+          </Link>
+          <div className={styles.language} aria-label="Language: English">
+            <span>EN</span>
+            <span className={styles.languageCaret} aria-hidden="true" />
+          </div>
+        </div>
 
         <nav className={styles.primaryNavigation} aria-label="Primary">
           <ul>
             {navigationItems.map((item) => (
-              <li key={item.href} className={styles.sectionLink}>
+              <li key={item.href}>
                 <Link href={item.href}>{item.label}</Link>
               </li>
             ))}
+          </ul>
+        </nav>
+
+        <nav className={styles.accountNavigation} aria-label="Account">
+          <ul>
             <li>
               <Link className={styles.getStarted} href="/signup"><ButtonRoll label="Get started" /></Link>
             </li>
             <li>
-              <Link className={styles.login} href="/login">Login</Link>
+              <Link className={styles.login} href="/login">Sign in</Link>
             </li>
           </ul>
         </nav>
