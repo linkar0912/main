@@ -3,6 +3,7 @@ import { validateFlowDefinition } from "@/src/lib/automation/definition";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
+import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
 import type { UpdateAutomationInput } from "@/src/lib/repository";
 
 export const runtime = "nodejs";
@@ -22,9 +23,9 @@ export async function PATCH(request: Request, context: RouteContext) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
-  let body: { name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown };
+  let body: { name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
   try {
-    body = (await request.json()) as { name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown };
+    body = (await request.json()) as { name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
   } catch {
     return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
   }
@@ -42,6 +43,24 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "That Instagram account is not connected to this workspace" }, { status: 400 });
   }
   if (instagramAccountId !== undefined) patch.instagramAccountId = instagramAccountId;
+
+  const facebookPageId = await resolveFacebookPageId(session.workspaceId, body.facebookPageId);
+  const askedToUnpinPage = body.facebookPageId === null || body.facebookPageId === "";
+  if (facebookPageId === null && !askedToUnpinPage) {
+    return NextResponse.json({ error: "That Facebook Page is not connected to this workspace" }, { status: 400 });
+  }
+  if (facebookPageId !== undefined) patch.facebookPageId = facebookPageId;
+
+  // Reject explicit dual-pinning in a single PATCH. A PATCH that clears one
+  // channel implicitly clears the other (handled at the repository layer),
+  // but setting both to real values would leave the automation in a
+  // dispatchable conflict, so the route layer rejects the request.
+  if (
+    (patch.instagramAccountId && patch.facebookPageId)
+    || (instagramAccountId && facebookPageId)
+  ) {
+    return NextResponse.json({ error: "An automation pins to either Instagram or a Facebook Page, not both" }, { status: 400 });
+  }
 
   if (body.name !== undefined) {
     const name = typeof body.name === "string" ? body.name.trim() : "";

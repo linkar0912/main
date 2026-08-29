@@ -20,14 +20,16 @@ import type { FlowAction, FlowCondition, FlowDefinition, FlowDefinitionV1, FlowD
 import { MediaPicker } from "./media-picker";
 import { FollowGateFields } from "./follow-gate-fields";
 import { InstagramPreview, type DmBubble, type PreviewView } from "./instagram-preview";
+import { FacebookPagePreview } from "./facebook-page-preview";
 import { AutomationSimulator } from "./automation-simulator";
-import { getInstagramConnections } from "@/src/lib/client/workspace-data";
+import { getInstagramConnections, getFacebookPages, type FacebookPageSummary } from "@/src/lib/client/workspace-data";
 
 type AutomationBuilderProps = {
   automationId?: string;
   initialName?: string;
   initialDefinition?: FlowDefinition;
   initialInstagramAccountId?: string;
+  initialFacebookPageId?: string;
   onSaved?: (automation: unknown) => void;
 };
 
@@ -57,6 +59,26 @@ function useInstagramConnections(): ConnectionSummary[] {
     };
   }, []);
   return connections;
+}
+
+/** Every Facebook Page connected to this workspace, for the page picker and the
+ * Facebook preview. Mirrors `useInstagramConnections` so the two channels
+ * can be interchanged by the channel toggle. */
+function useFacebookPages(): FacebookPageSummary[] {
+  const [pages, setPages] = useState<FacebookPageSummary[]>([]);
+  useEffect(() => {
+    let active = true;
+    getFacebookPages()
+      .then((data) => {
+        if (!active) return;
+        setPages(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  return pages;
 }
 
 /** The workspace's first connected Instagram account, so the phone preview shows the real
@@ -150,16 +172,25 @@ function AutomationBuilderV1({
   initialName = "",
   initialDefinition = defaultDefinitionV1,
   initialInstagramAccountId = "",
+  initialFacebookPageId = "",
   onSaved,
 }: {
   automationId?: string;
   initialName?: string;
   initialDefinition?: FlowDefinitionV1;
   initialInstagramAccountId?: string;
+  initialFacebookPageId?: string;
   onSaved?: (automation: unknown) => void;
 }) {
   const [name, setName] = useState(initialName);
   const [instagramAccountId, setInstagramAccountId] = useState(initialInstagramAccountId);
+  const facebookPages = useFacebookPages();
+  // Default the channel off; once a Facebook page is selected the preview +
+  // pin all use Facebook. If both fields are set on the server, the API will
+  // return 400 so we clear the other channel when the user picks one.
+  const [facebookPageId, setFacebookPageId] = useState(
+    initialFacebookPageId || "",
+  );
   const [triggerType, setTriggerType] = useState<ClassicTriggerType>(initialDefinition.trigger.type);
   const [triggerMatch, setTriggerMatch] = useState<"keyword" | "any">(
     initialDefinition.trigger.type === "comment" || initialDefinition.trigger.type === "message"
@@ -519,10 +550,26 @@ function AutomationBuilderV1({
     }
     setSaving(true);
     try {
+      // Mutually exclusive: the API rejects dual-pinning, so the client only
+      // sends the field that the user actually selected. A future iteration
+      // could keep both visible as a clear "either/or" picker; the current UX
+      // toggles the channel explicitly so the saved payload never carries a
+      // pair of pins.
+      const body: { name: string; definition: FlowDefinitionV1; instagramAccountId?: string | null; facebookPageId?: string | null } = {
+        name,
+        definition: buildDefinition(),
+      };
+      if (facebookPageId) {
+        body.facebookPageId = facebookPageId;
+        body.instagramAccountId = null;
+      } else {
+        body.instagramAccountId = instagramAccountId || null;
+        body.facebookPageId = null;
+      }
       const response = await fetch(automationId ? `/api/automations/${automationId}` : "/api/automations", {
         method: automationId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, definition: buildDefinition(), instagramAccountId: instagramAccountId || null }),
+        body: JSON.stringify(body),
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: unknown; error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Could not save this automation");
@@ -550,6 +597,12 @@ function AutomationBuilderV1({
 
   const previewMediaId = triggerType === "comment" ? parseCommaSeparated(mediaIds)[0] : undefined;
   const previewThumb = previewMediaId ? mediaThumbs[previewMediaId] : undefined;
+  // First non-empty reply text from the v1 action list. v2 stores replies in
+  // `publicReplies`; v1 uses the `actions` array with a `private_reply` or
+  // `send_text` action. We take any action's text to feed the FB preview.
+  const firstReplyText = actions
+    .map((a) => ("text" in a ? a.text.trim() : ""))
+    .find((text) => Boolean(text));
 
   return (
     <form className="builder-layout" onSubmit={save}>
@@ -579,11 +632,33 @@ function AutomationBuilderV1({
             <select
               aria-label="Instagram account"
               value={instagramAccountId}
-              onChange={(event) => setInstagramAccountId(event.target.value)}
+              onChange={(event) => {
+                setInstagramAccountId(event.target.value);
+                if (event.target.value) setFacebookPageId("");
+              }}
             >
               <option value="">All connected accounts</option>
               {connections.map((item) => (
                 <option key={item.igUserId || item.username} value={item.igUserId}>@{item.username}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {facebookPages.length > 0 && (
+          <label className="field field-wide">
+            <span>Facebook Page</span>
+            <select
+              aria-label="Facebook Page"
+              value={facebookPageId}
+              onChange={(event) => {
+                setFacebookPageId(event.target.value);
+                if (event.target.value) setInstagramAccountId("");
+              }}
+            >
+              <option value="">Don&apos;t pin to a Page</option>
+              {facebookPages.map((page) => (
+                <option key={page.id} value={page.pageId}>{page.pageName}</option>
               ))}
             </select>
           </label>
@@ -1277,18 +1352,29 @@ function AutomationBuilderV1({
       <aside className="builder-preview" aria-label="Test preview">
         <p className="eyebrow">Test preview</p>
         <div className="preview-line" />
-        <InstagramPreview
-          view={previewView}
-          onViewChange={setPreviewView}
-          showPost={triggerType === "comment"}
-          showComments={false}
-          username={connection?.username ?? "yourbrand"}
-          avatarUrl={connection?.avatarUrl}
-          profileId={connection?.igUserId || undefined}
-          postImageUrl={previewThumb?.thumbnailUrl}
-          postIsReel={previewThumb?.isReel}
-          messages={dmMessages}
-        />
+        {facebookPageId ? (
+          <FacebookPagePreview
+            pageName={facebookPages.find((p) => p.pageId === facebookPageId)?.pageName ?? "Your Page"}
+            posterName="Your brand"
+            postBody=""
+            commentAuthor="A follower"
+            commentText={triggerMatch === "keyword" ? (parseKeywords(keywords)[0] ? `“${parseKeywords(keywords)[0]}”` : "any comment") : "any comment"}
+            replyText={firstReplyText ?? "(reply not set)"}
+          />
+        ) : (
+          <InstagramPreview
+            view={previewView}
+            onViewChange={setPreviewView}
+            showPost={triggerType === "comment"}
+            showComments={false}
+            username={connection?.username ?? "yourbrand"}
+            avatarUrl={connection?.avatarUrl}
+            profileId={connection?.igUserId || undefined}
+            postImageUrl={previewThumb?.thumbnailUrl}
+            postIsReel={previewThumb?.isReel}
+            messages={dmMessages}
+          />
+        )}
         <AutomationSimulator buildDefinition={buildDefinition} />
       </aside>
     </form>
@@ -2004,6 +2090,7 @@ export function AutomationBuilder({
   initialName,
   initialDefinition,
   initialInstagramAccountId,
+  initialFacebookPageId,
   onSaved,
   variant,
 }: AutomationBuilderProps & { variant?: "campaign" | "classic" }) {
@@ -2014,6 +2101,7 @@ export function AutomationBuilder({
         initialName={initialName}
         initialDefinition={initialDefinition}
         initialInstagramAccountId={initialInstagramAccountId}
+        initialFacebookPageId={initialFacebookPageId}
         onSaved={onSaved}
       />
     );
@@ -2024,6 +2112,7 @@ export function AutomationBuilder({
         automationId={automationId}
         initialName={initialName}
         initialInstagramAccountId={initialInstagramAccountId}
+        initialFacebookPageId={initialFacebookPageId}
         onSaved={onSaved}
       />
     );

@@ -10,6 +10,7 @@ import type {
   CreateAutomationInput,
   CreateParticipantInput,
   ExecutionRecord,
+  FacebookPageConnectionRecord,
   InstagramConnectionRecord,
   RecordExecutionInput,
   RecordExecutionResult,
@@ -42,7 +43,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 
 function now(): string {
@@ -95,6 +96,7 @@ function validateQuotaRequest(utcDate: string, amount: number, limit: number): v
 export function createMemoryRepository(seed: AutomationRecord[] = []): AutomationRepository {
   const automations = new Map(seed.map((automation) => [automation.id, copy(automation)]));
   const connections = new Map<string, InstagramConnectionRecord>();
+  const facebookPages = new Map<string, FacebookPageConnectionRecord>();
   const executions = new Map<string, ExecutionRecord>();
   const outboundDeliveries = new Map<string, OutboundDeliveryRecord>();
   const automationDailySendCounters = new Map<string, number>();
@@ -381,6 +383,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         updatedAt: timestamp,
       };
       if (input.instagramAccountId) automation.instagramAccountId = input.instagramAccountId;
+      if (input.facebookPageId) automation.facebookPageId = input.facebookPageId;
       automations.set(automation.id, automation);
       return copy(automation);
     },
@@ -388,12 +391,27 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     async updateAutomation(workspaceId, id, patch: UpdateAutomationInput) {
       const current = automations.get(id);
       if (!current || current.workspaceId !== workspaceId) return null;
-      const { boundMediaId, instagramAccountId, ...rest } = patch;
+      const { boundMediaId, instagramAccountId, facebookPageId, ...rest } = patch;
+      // Mutual exclusion: clearing one channel implicitly unpins the other so
+      // a single PATCH never leaves an automation pinned to two channels at
+      // once. The route layer also rejects explicit dual-pins; this is the
+      // last line of defense.
+      const clearingInstagram = instagramAccountId === null;
+      const clearingFacebook = facebookPageId === null;
       const updated: AutomationRecord = {
         ...current,
         ...rest,
         ...(boundMediaId === undefined ? {} : { boundMediaId: boundMediaId ?? undefined }),
-        ...(instagramAccountId === undefined ? {} : { instagramAccountId: instagramAccountId ?? undefined }),
+        ...(instagramAccountId === undefined
+          ? clearingFacebook
+            ? { instagramAccountId: undefined }
+            : {}
+          : { instagramAccountId: instagramAccountId ?? undefined }),
+        ...(facebookPageId === undefined
+          ? clearingInstagram
+            ? { facebookPageId: undefined }
+            : {}
+          : { facebookPageId: facebookPageId ?? undefined }),
         name: patch.name?.trim() || current.name,
         definition: patch.definition ? copy(patch.definition) : current.definition,
         version: patch.definition?.version ?? current.version,
@@ -442,6 +460,71 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       if (!connection || connection.workspaceId !== workspaceId) return false;
       connections.delete(id);
       return true;
+    },
+
+    // Facebook Page support (parallel to the IG block above). Only a tiny
+    // surface for v1 (comment-reply automation) - no participants, contacts,
+    // or sequences yet.
+    async listFacebookPages(workspaceId) {
+      return copy([...facebookPages.values()].filter((page) => page.workspaceId === workspaceId));
+    },
+    async findWorkspaceByFacebookPage(pageId) {
+      const page = [...facebookPages.values()].find(
+        (candidate) => candidate.pageId === pageId && candidate.status === "CONNECTED",
+      );
+      return page ? { workspaceId: page.workspaceId, page: copy(page) } : null;
+    },
+    async upsertFacebookPage(input) {
+      const existing = [...facebookPages.values()].find((page) => page.pageId === input.pageId);
+      if (existing && existing.workspaceId !== input.workspaceId) {
+        throw new FacebookPageOwnershipError();
+      }
+      const record: FacebookPageConnectionRecord = {
+        id: existing?.id ?? createId("facebook_page"),
+        ...input,
+        connectedAt: existing?.connectedAt ?? now(),
+      };
+      facebookPages.set(record.id, record);
+      return copy(record);
+    },
+    async updateFacebookPageToken(id, accessTokenEncrypted, tokenExpiresAt) {
+      const page = facebookPages.get(id);
+      if (!page) return;
+      facebookPages.set(id, { ...page, accessTokenEncrypted, ...(tokenExpiresAt ? { tokenExpiresAt } : {}) });
+    },
+    async updateFacebookPageStatus(id, status) {
+      const page = facebookPages.get(id);
+      if (!page) return;
+      facebookPages.set(id, { ...page, status });
+    },
+    async deleteFacebookPageByPageId(pageId) {
+      for (const [id, page] of facebookPages.entries()) {
+        if (page.pageId === pageId) facebookPages.delete(id);
+      }
+    },
+    async deleteFacebookPage(workspaceId, id) {
+      const page = facebookPages.get(id);
+      if (!page || page.workspaceId !== workspaceId) return false;
+      facebookPages.delete(id);
+      // Unpin any automations that were pinned to this page so the runner
+      // never tries to dispatch to a deleted account. The automation itself
+      // is preserved - the user can repin or delete it explicitly.
+      for (const [aid, automation] of automations.entries()) {
+        if (automation.workspaceId === workspaceId && automation.facebookPageId === page.pageId) {
+          automations.set(aid, { ...automation, facebookPageId: undefined });
+        }
+      }
+      return true;
+    },
+    async listAutomationsForFacebookPage(workspaceId, pageId) {
+      return copy(
+        [...automations.values()].filter(
+          (automation) =>
+            automation.workspaceId === workspaceId
+            && automation.facebookPageId === pageId
+            && automation.status === "ACTIVE",
+        ),
+      );
     },
 
     async beginInstagramDataDeletion(igUserId, confirmationCode, signedRequestHash) {
@@ -1418,6 +1501,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
         ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
         ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
+        ...(current.facebookPageId ? { facebookPageId: current.facebookPageId } : {}),
         ...(snapshotBy ? { snapshotBy } : {}),
         snapshotAt: now(),
       };
@@ -1463,6 +1547,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         activatedAt: target.activatedAt,
         boundMediaId: target.boundMediaId,
         instagramAccountId: target.instagramAccountId,
+        facebookPageId: target.facebookPageId,
         version: Math.max(current.version, target.definition.version) + 1,
         updatedAt: now(),
       };

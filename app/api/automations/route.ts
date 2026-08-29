@@ -3,6 +3,7 @@ import { validateFlowDefinition } from "@/src/lib/automation/definition";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
+import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
 
 export const runtime = "nodejs";
 
@@ -16,9 +17,9 @@ export async function POST(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    let body: { name?: unknown; definition?: unknown; instagramAccountId?: unknown };
+    let body: { name?: unknown; definition?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
     try {
-      body = (await request.json()) as { name?: unknown; definition?: unknown };
+      body = (await request.json()) as { name?: unknown; definition?: unknown; facebookPageId?: unknown };
     } catch {
       return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
     }
@@ -35,10 +36,20 @@ export async function POST(request: Request) {
     if (instagramAccountId === null) {
       return NextResponse.json({ error: "That Instagram account is not connected to this workspace" }, { status: 400 });
     }
+    const facebookPageId = body.facebookPageId === undefined || body.facebookPageId === null || body.facebookPageId === ""
+      ? undefined
+      : await resolveFacebookPageId(session.workspaceId, body.facebookPageId);
+    if (facebookPageId === null) {
+      return NextResponse.json({ error: "That Facebook Page is not connected to this workspace" }, { status: 400 });
+    }
+    if (instagramAccountId && facebookPageId) {
+      return NextResponse.json({ error: "An automation pins to either Instagram or a Facebook Page, not both" }, { status: 400 });
+    }
     const automation = await getRepository().createAutomation(session.workspaceId, {
       name,
       definition,
       ...(instagramAccountId ? { instagramAccountId } : {}),
+      ...(facebookPageId ? { facebookPageId } : {}),
     });
     return NextResponse.json({ data: automation }, { status: 201 });
   } catch (error) {

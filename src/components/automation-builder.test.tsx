@@ -9,6 +9,7 @@ type FetchOverrides = {
   createResponse?: unknown;
   patchResponse?: unknown;
   connection?: unknown;
+  facebookPages?: unknown;
 };
 
 function stubFetch(overrides: FetchOverrides = {}) {
@@ -17,8 +18,11 @@ function stubFetch(overrides: FetchOverrides = {}) {
     if (url.includes("/api/meta/media")) {
       return { ok: true, json: async () => overrides.media ?? { data: [], paging: {} } } as Response;
     }
-    if (url.includes("/api/meta/connection")) {
+    if (url.endsWith("/api/meta/connection") || url.includes("/api/meta/connection?")) {
       return { ok: true, json: async () => overrides.connection ?? { data: [] } } as Response;
+    }
+    if (url.endsWith("/api/facebook/connection") || url.includes("/api/facebook/connection?")) {
+      return { ok: true, json: async () => overrides.facebookPages ?? { data: [] } } as Response;
     }
     if (!init?.method || init.method === "POST") {
       return { ok: true, json: async () => overrides.createResponse ?? { data: { id: "automation_new" } } } as Response;
@@ -117,6 +121,42 @@ describe("AutomationBuilder", () => {
     expect(JSON.parse(String(request.body))).toMatchObject({
       definition: { version: 1, trigger: { type: "comment", keywords: ["guide"] } },
     });
+  });
+
+  it("shows a Facebook Page picker when a Page is connected and swaps the preview to the Facebook layout", async () => {
+    const fetchMock = stubFetch({
+      facebookPages: { data: [
+        { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+      ] },
+    });
+    const legacyDefinition: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Thanks!" }],
+    };
+
+    render(<AutomationBuilder initialDefinition={legacyDefinition} initialName="FB flow" />);
+
+    const pageSelect = await screen.findByLabelText(/Facebook Page/i);
+    expect(pageSelect).toBeTruthy();
+    fireEvent.change(pageSelect, { target: { value: "12345" } });
+
+    // Preview should now be the Facebook layout, not the Instagram phone shell.
+    const preview = screen.getAllByLabelText(/test preview/i)[0] as HTMLElement;
+    expect(preview.querySelector(".facebook-preview")).toBeTruthy();
+    expect(preview.querySelector(".ig-device")).toBeNull();
+
+    // Walk through the wizard and save; the request should carry the
+    // facebookPageId and explicitly null the instagramAccountId so the API
+    // does not see dual pins.
+    for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save automation/i }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST").length).toBe(1));
+    const createRequest = findRequest(fetchMock, (url) => url === "/api/automations");
+    const body = JSON.parse(String(createRequest.body)) as { facebookPageId?: string; instagramAccountId?: string | null };
+    expect(body.facebookPageId).toBe("12345");
+    expect(body.instagramAccountId).toBeNull();
   });
 
   it("shows lead webhook and custom-question controls without fulfillment email", () => {

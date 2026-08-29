@@ -102,4 +102,28 @@ describe("AutomationList activity link", () => {
 
     expect((await screen.findByRole("alert")).textContent).toBe("Instagram must be connected before activation.");
   });
+
+  it("shows a Facebook Page pin badge when the automation is pinned to a Page", () => {
+    render(
+      <AutomationList
+        automations={[v1Automation({ id: "automation_fb", name: "Acme comment-reply", facebookPageId: "12345" })]}
+        loading={false}
+        onStatusChange={async () => {}}
+      />,
+    );
+
+    expect(screen.getByText(/Pinned to Facebook Page/)).toBeTruthy();
+  });
+
+  it("does not show a Facebook Page pin badge when the automation is unpinned", () => {
+    render(
+      <AutomationList
+        automations={[v1Automation()]}
+        loading={false}
+        onStatusChange={async () => {}}
+      />,
+    );
+
+    expect(screen.queryByText(/Pinned to Facebook Page/)).toBeNull();
+  });
 });

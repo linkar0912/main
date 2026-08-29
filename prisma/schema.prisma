@@ -62,6 +62,7 @@ model AutomationVersion {
   activatedAt        DateTime?
   boundMediaId       String?
   instagramAccountId String?
+  facebookPageId     String?
   // Who/what produced the snapshot (user id when available; "system" for cron).
   snapshotBy         String?
   // When the snapshot was taken.
@@ -113,6 +114,7 @@ model Workspace {
   timezone           String?
   members            WorkspaceMember[]
   connections        InstagramConnection[]
+  facebookPages      FacebookPageConnection[]
   automations        Automation[]
   participants       AutomationParticipant[]
   executions         AutomationExecution[]
@@ -157,6 +159,9 @@ model Automation {
   // Instagram account (igUserId) this automation is pinned to. Null = the
   // automation answers events from every connected account in the workspace.
   instagramAccountId String?
+  // Facebook Page this automation is pinned to. Mutually exclusive with
+  // instagramAccountId: an automation pins to exactly one channel.
+  facebookPageId     String?
   name              String
   status            AutomationStatus             @default(DRAFT)
   version           Int                          @default(1)
@@ -448,6 +453,26 @@ model WebhookEvent {
 
   @@unique([workspaceId, providerEventId])
   @@index([workspaceId, receivedAt])
+}
+
+// A Facebook Page connected to a workspace for comment-reply automation.
+// Parallel to InstagramConnection - never the two are bridged; an automation
+// pins to either one. Page access tokens are stored encrypted, exactly like
+// Instagram access tokens.
+model FacebookPageConnection {
+  id                   String           @id
+  workspaceId          String
+  pageId               String
+  pageName             String
+  accessTokenEncrypted String
+  tokenExpiresAt       DateTime?
+  status               ConnectionStatus @default(CONNECTED)
+  connectedAt          DateTime         @default(now())
+  workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // One Facebook Page has exactly one owning workspace.
+  @@unique([pageId])
+  @@index([workspaceId, status])
 }
 
 model DataDeletionRequest {

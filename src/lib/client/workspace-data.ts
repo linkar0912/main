@@ -16,10 +16,19 @@ export type InstagramConnectionSummary = {
   profilePictureUrl?: string | null;
 };
 
+export type FacebookPageSummary = {
+  id: string;
+  pageId: string;
+  pageName: string;
+  status: ConnectionStatus;
+  connectedAt: string;
+};
+
 type ClientCache<T> = { value?: T; pending?: Promise<T>; fetcher?: typeof fetch };
 
 const bootstrapCache: ClientCache<WorkspaceBootstrap> = {};
 const connectionsCache: ClientCache<InstagramConnectionSummary[]> = {};
+const facebookPagesCache: ClientCache<FacebookPageSummary[]> = {};
 
 async function requestData<T>(url: string): Promise<T> {
   const response = await fetch(url);
@@ -60,6 +69,10 @@ export function getInstagramConnections(): Promise<InstagramConnectionSummary[]>
   return cachedRequest(connectionsCache, "/api/meta/connection");
 }
 
+export function getFacebookPages(): Promise<FacebookPageSummary[]> {
+  return cachedRequest(facebookPagesCache, "/api/facebook/connection");
+}
+
 /**
  * Force a fresh fetch of the workspace bootstrap, bypassing the in-memory
  * cache. Use after a role change, plan upgrade, or avatar update so the
@@ -77,6 +90,9 @@ export function clearWorkspaceDataCache(scope: "connections" | "all" = "all"): v
   connectionsCache.value = undefined;
   connectionsCache.pending = undefined;
   connectionsCache.fetcher = undefined;
+  facebookPagesCache.value = undefined;
+  facebookPagesCache.pending = undefined;
+  facebookPagesCache.fetcher = undefined;
   if (scope === "all") {
     bootstrapCache.value = undefined;
     bootstrapCache.pending = undefined;

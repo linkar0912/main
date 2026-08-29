@@ -16,8 +16,16 @@ function stubFetch(routes: Record<string, Route>) {
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      const match = Object.entries(routes).find(([path]) => url.includes(path));
-      if (!match) throw new Error(`Unexpected fetch to ${url}`);
+      const match = Object.entries(routes).find(([path]) => url.endsWith(path) || url.includes(path + "?"));
+      if (!match) {
+        // Find the longest path the URL contains as a prefix, to disambiguate
+        // `/api/facebook/connection` from `/api/facebook/connection/health`.
+        const prefixMatch = Object.entries(routes)
+          .filter(([path]) => url.startsWith(path) || url.includes(path + "/") || url.includes(path + "?"))
+          .sort(([a], [b]) => b.length - a.length)[0];
+        if (!prefixMatch) throw new Error(`Unexpected fetch to ${url}`);
+        return { ok: true, json: async () => prefixMatch[1] } as unknown as Response;
+      }
       return { ok: true, json: async () => match[1] } as unknown as Response;
     }),
   );
@@ -43,6 +51,8 @@ describe("SettingsScreen webhook health panel", () => {
         }],
       },
       "/api/meta/connection": { data: [{ id: "connection_1", igUserId: "ig_1", username: "creator", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" }] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
       "/api/health": { mode: "configured" },
     });
 
@@ -65,6 +75,8 @@ describe("SettingsScreen webhook health panel", () => {
         }],
       },
       "/api/meta/connection": { data: [{ id: "connection_1", igUserId: "ig_1", username: "creator", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" }] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
       "/api/health": { mode: "configured" },
     });
 
@@ -79,6 +91,8 @@ describe("SettingsScreen webhook health panel", () => {
     stubFetch({
       "/api/meta/connection/health": { data: [] },
       "/api/meta/connection": { data: [] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
       "/api/health": { mode: "demo" },
     });
 
@@ -93,11 +107,74 @@ describe("SettingsScreen webhook health panel", () => {
     stubFetch({
       "/api/meta/connection/health": { data: [] },
       "/api/meta/connection": { data: [] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
       "/api/health": { mode: "configured" },
     });
 
     await act(async () => { render(<SettingsScreen />); });
 
     expect(await screen.findByText(/already belongs to another Linkar workspace/)).toBeTruthy();
+  });
+
+  it("renders a Facebook Page card and a connect button when no Pages are linked", async () => {
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": { data: [] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
+      "/api/health": { mode: "configured" },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+
+    expect(await screen.findByText("No Page connected")).toBeTruthy();
+    const connectLink = screen.getByRole("link", { name: /Connect Facebook Page/ });
+    expect(connectLink.getAttribute("href")).toBe("/api/facebook/oauth/start");
+  });
+
+  it("lists connected Pages and offers a disconnect button", async () => {
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": { data: [] },
+      "/api/facebook/connection": {
+        data: [
+          { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+        ],
+      },
+      "/api/facebook/connection/health": { data: [{
+        id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED",
+        requiredFields: ["feed"], subscribedFields: ["feed"], missingFields: [],
+      }] },
+      "/api/health": { mode: "configured" },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+
+    expect(await screen.findByText("Acme Co")).toBeTruthy();
+    const disconnectButtons = screen.getAllByRole("button", { name: "Disconnect" });
+    expect(disconnectButtons).toHaveLength(1);
+  });
+
+  it("shows a reconnect prompt when the Facebook health check reports missing fields", async () => {
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": { data: [] },
+      "/api/facebook/connection": {
+        data: [
+          { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+        ],
+      },
+      "/api/facebook/connection/health": { data: [{
+        id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED",
+        requiredFields: ["feed"], subscribedFields: [], missingFields: ["feed"],
+      }] },
+      "/api/health": { mode: "configured" },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+
+    expect(await screen.findByText("Some fields need a reconnect")).toBeTruthy();
+    expect(screen.getByText(/Reconnect the Page/)).toBeTruthy();
   });
 });

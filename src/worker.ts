@@ -3,10 +3,13 @@ import Redis from "ioredis";
 import { getServerEnv } from "./lib/env";
 import { logger } from "./lib/logger";
 import { MetaClient } from "./lib/meta/client";
+import { FacebookClient } from "./lib/facebook/client";
 import { getRepository } from "./lib/repository-provider";
 import { WEBHOOK_QUEUE_NAME } from "./lib/queue";
 import { processNormalizedEvent } from "./lib/automation/runner";
+import { processNormalizedFacebookEvent } from "./lib/facebook/runner";
 import type { NormalizedEvent } from "./lib/automation/types";
+import type { FacebookNormalizedEvent } from "./lib/facebook/types";
 import { refreshInstagramToken } from "./lib/meta/oauth";
 import { refreshExpiringInstagramTokens } from "./lib/meta/token-refresh";
 import { sweepStaleParticipants } from "./lib/automation/participant-retention";
@@ -62,6 +65,15 @@ if (!env.redisUrl) {
           claimLeaseMs: env.dispatchLeaseMs,
         };
         return processFlowFollowUp(payload, getRepository(), options);
+      }
+
+      if (job.name === "facebook-event") {
+        const event = job.data as FacebookNormalizedEvent;
+        const client = env.facebookAppId ? new FacebookClient({ apiVersion: env.facebookApiVersion }) : undefined;
+        return processNormalizedFacebookEvent(event, getRepository(), {
+          client,
+          tokenEncryptionKey: env.facebookTokenEncryptionKey ?? env.metaTokenEncryptionKey,
+        });
       }
 
       const event = job.data as NormalizedEvent;

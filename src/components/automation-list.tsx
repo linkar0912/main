@@ -7,7 +7,7 @@ import { CreateAutomationButton } from "./create-automation-button";
 import { AutomationVersionsModal } from "./automation-versions-modal";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
-import { getInstagramConnections } from "@/src/lib/client/workspace-data";
+import { getInstagramConnections, getFacebookPages } from "@/src/lib/client/workspace-data";
 
 async function requestAutomations(signal?: AbortSignal): Promise<AutomationRecord[]> {
   const response = await fetch("/api/automations", { signal });
@@ -116,6 +116,28 @@ function useConnectionUsernames(): Map<string, string> {
   return usernames;
 }
 
+/** id-by-pageId map for Facebook Page pin badges. The list view doesn't
+ * display the Page name unless the user hovers; a future iteration can
+ * promote this to a chip with the page glyph. */
+function useFacebookPageNames(): Map<string, string> {
+  const [names, setNames] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    let active = true;
+    getFacebookPages()
+      .then((data) => {
+        if (!active) return;
+        setNames(new Map(
+          data
+            .filter((page) => page.pageId && page.pageName)
+            .map((page) => [page.pageId, page.pageName]),
+        ));
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+  return names;
+}
+
 export function AutomationList({
   automations,
   loading,
@@ -137,15 +159,36 @@ export function AutomationList({
   const [historyForId, setHistoryForId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const usernames = useConnectionUsernames();
+  const facebookPageNames = useFacebookPageNames();
   // With a single connection the account chip adds nothing - every automation
   // runs on that one account anyway. Show chips only for multi-account workspaces.
   const showAccountChips = usernames.size > 1;
+  // Same logic for Facebook Pages: a single Page means every Facebook-pinned
+  // automation targets it, so the chip is noise. Multi-Page workspaces need
+  // to see which Page is pinned.
+  const showFacebookPageChips = facebookPageNames.size > 1;
 
   function accountChip(automation: AutomationRecord) {
     if (!showAccountChips) return null;
     return (
       <span className="automation-account" title={automation.instagramAccountId ?? undefined}>
         {automation.instagramAccountId ? `@${usernames.get(automation.instagramAccountId) ?? "account"}` : "All accounts"}
+      </span>
+    );
+  }
+
+  function facebookPageChip(automation: AutomationRecord) {
+    if (!automation.facebookPageId) return null;
+    if (showFacebookPageChips) {
+      return (
+        <span className="automation-account" title={automation.facebookPageId}>
+          Page: {facebookPageNames.get(automation.facebookPageId) ?? automation.facebookPageId}
+        </span>
+      );
+    }
+    return (
+      <span className="automation-account" title={automation.facebookPageId}>
+        Pinned to Facebook Page
       </span>
     );
   }
@@ -192,6 +235,11 @@ export function AutomationList({
               {showAccountChips && (
                 <>
                   {" "}<span className="row-divider">·</span> {accountChip(automation)}
+                </>
+              )}
+              {facebookPageChip(automation) && (
+                <>
+                  {" "}<span className="row-divider">·</span> {facebookPageChip(automation)}
                 </>
               )}
             </p>

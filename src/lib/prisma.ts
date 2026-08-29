@@ -13,6 +13,7 @@ import type {
   CreateParticipantInput,
   ExecutionDispatchStatus,
   ExecutionRecord,
+  FacebookPageConnectionRecord,
   InstagramConnectionRecord,
   RecordExecutionInput,
   RecordExecutionResult,
@@ -41,7 +42,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
@@ -80,6 +81,7 @@ function mapAutomation(record: {
   id: string;
   workspaceId: string;
   instagramAccountId: string | null;
+  facebookPageId: string | null;
   name: string;
   status: "DRAFT" | "ACTIVE" | "PAUSED";
   version: number;
@@ -96,6 +98,7 @@ function mapAutomation(record: {
     activatedAt: record.activatedAt?.toISOString(),
     boundMediaId: record.boundMediaId ?? undefined,
     instagramAccountId: record.instagramAccountId ?? undefined,
+    facebookPageId: record.facebookPageId ?? undefined,
     priority: record.priority,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -326,6 +329,7 @@ function mapAutomationVersion(record: {
   activatedAt: Date | null;
   boundMediaId: string | null;
   instagramAccountId: string | null;
+  facebookPageId: string | null;
   snapshotBy: string | null;
   snapshotAt: Date;
 }): AutomationVersionRecord {
@@ -341,8 +345,31 @@ function mapAutomationVersion(record: {
     ...(record.activatedAt ? { activatedAt: record.activatedAt.toISOString() } : {}),
     ...(record.boundMediaId ? { boundMediaId: record.boundMediaId } : {}),
     ...(record.instagramAccountId ? { instagramAccountId: record.instagramAccountId } : {}),
+    ...(record.facebookPageId ? { facebookPageId: record.facebookPageId } : {}),
     ...(record.snapshotBy ? { snapshotBy: record.snapshotBy } : {}),
     snapshotAt: record.snapshotAt.toISOString(),
+  };
+}
+
+function mapFacebookPage(record: {
+  id: string;
+  workspaceId: string;
+  pageId: string;
+  pageName: string;
+  accessTokenEncrypted: string;
+  tokenExpiresAt: Date | null;
+  status: "CONNECTED" | "DISCONNECTED" | "EXPIRED";
+  connectedAt: Date;
+}): FacebookPageConnectionRecord {
+  return {
+    id: record.id,
+    workspaceId: record.workspaceId,
+    pageId: record.pageId,
+    pageName: record.pageName,
+    accessTokenEncrypted: record.accessTokenEncrypted,
+    tokenExpiresAt: record.tokenExpiresAt?.toISOString(),
+    status: record.status,
+    connectedAt: record.connectedAt.toISOString(),
   };
 }
 
@@ -771,6 +798,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           definition: input.definition,
           version: input.definition.version,
           instagramAccountId: input.instagramAccountId ?? null,
+          facebookPageId: input.facebookPageId ?? null,
           priority: input.priority ?? 0,
         },
       });
@@ -780,13 +808,32 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async updateAutomation(workspaceId, id, patch: UpdateAutomationInput) {
       // Transaction keeps the existence check and the update atomic so a concurrent
       // delete cannot turn the findFirst/update pair into a spurious P2025 failure.
+      // For the channel pins we strip them out of the spread and apply explicit
+      // null-handling: the route layer rejects dual-pins, but a PATCH that clears
+      // one channel must implicitly clear the other so a single request can never
+      // leave the automation pinned to two channels.
+      const { boundMediaId, instagramAccountId, facebookPageId, definition, ...rest } = patch;
+      const data: Record<string, unknown> = {
+        ...rest,
+        ...(definition ? { version: definition.version } : {}),
+      };
+      if (boundMediaId !== undefined) data.boundMediaId = boundMediaId ?? null;
+      if (instagramAccountId !== undefined) {
+        data.instagramAccountId = instagramAccountId ?? null;
+        if (instagramAccountId !== null && facebookPageId === undefined) {
+          data.facebookPageId = null;
+        }
+      }
+      if (facebookPageId !== undefined) {
+        data.facebookPageId = facebookPageId ?? null;
+        if (facebookPageId !== null && instagramAccountId === undefined) {
+          data.instagramAccountId = null;
+        }
+      }
       const record = await client.$transaction(async (transaction) => {
         const existing = await transaction.automation.findFirst({ where: { workspaceId, id } });
         if (!existing) return null;
-        return transaction.automation.update({
-          where: { id },
-          data: { ...patch, ...(patch.definition ? { version: patch.definition.version } : {}) },
-        });
+        return transaction.automation.update({ where: { id }, data });
       });
       return record ? mapAutomation(record) : null;
     },
@@ -916,6 +963,75 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         if (!winner) throw error;
         return mapConnection(winner);
       }
+    },
+
+    // Facebook Page support (parallel to the IG block above). The v1 surface
+    // is comment-reply automation only - no participants, contacts, sequences,
+    // or broadcasts. The same ownership-race protection that protects IG
+    // connections applies here.
+    async listFacebookPages(workspaceId) {
+      const records = await client.facebookPageConnection.findMany({ where: { workspaceId } });
+      return records.map(mapFacebookPage);
+    },
+    async findWorkspaceByFacebookPage(pageId) {
+      const record = await client.facebookPageConnection.findUnique({
+        where: { pageId, status: "CONNECTED" },
+      });
+      return record ? { workspaceId: record.workspaceId, page: mapFacebookPage(record) } : null;
+    },
+    async upsertFacebookPage(input) {
+      try {
+        return await client.$transaction(async (transaction) => {
+          const owner = await transaction.facebookPageConnection.findUnique({ where: { pageId: input.pageId } });
+          if (owner && owner.workspaceId !== input.workspaceId) throw new FacebookPageOwnershipError();
+          const record = await transaction.facebookPageConnection.upsert({
+            where: { pageId: input.pageId },
+            create: { id: createId("facebook_page"), ...input },
+            update: input,
+          });
+          return mapFacebookPage(record);
+        });
+      } catch (error) {
+        if (error instanceof FacebookPageOwnershipError) throw error;
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+        const winner = await client.facebookPageConnection.findUnique({ where: { pageId: input.pageId } });
+        if (winner?.workspaceId !== input.workspaceId) throw new FacebookPageOwnershipError();
+        if (!winner) throw error;
+        return mapFacebookPage(winner);
+      }
+    },
+    async updateFacebookPageToken(id, accessTokenEncrypted, tokenExpiresAt) {
+      await client.facebookPageConnection.update({
+        where: { id },
+        data: { accessTokenEncrypted, tokenExpiresAt: tokenExpiresAt ? new Date(tokenExpiresAt) : null },
+      });
+    },
+    async updateFacebookPageStatus(id, status) {
+      await client.facebookPageConnection.update({ where: { id }, data: { status } });
+    },
+    async deleteFacebookPageByPageId(pageId) {
+      await client.facebookPageConnection.deleteMany({ where: { pageId } });
+    },
+    async deleteFacebookPage(workspaceId, id) {
+      // Two-step delete: unpin any automations first so the runner never
+      // tries to dispatch to a missing page, then drop the connection.
+      return await client.$transaction(async (transaction) => {
+        const page = await transaction.facebookPageConnection.findFirst({ where: { id, workspaceId } });
+        if (!page) return false;
+        await transaction.automation.updateMany({
+          where: { workspaceId, facebookPageId: page.pageId },
+          data: { facebookPageId: null },
+        });
+        await transaction.facebookPageConnection.delete({ where: { id } });
+        return true;
+      });
+    },
+    async listAutomationsForFacebookPage(workspaceId, pageId) {
+      const records = await client.automation.findMany({
+        where: { workspaceId, facebookPageId: pageId, status: "ACTIVE" },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      });
+      return records.map(mapAutomation);
     },
 
     async recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult> {
@@ -1857,6 +1973,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
           ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
           ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
+          ...(current.facebookPageId ? { facebookPageId: current.facebookPageId } : {}),
           ...(snapshotBy ? { snapshotBy } : {}),
         },
       });
@@ -1905,6 +2022,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
           ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
           ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
+          ...(current.facebookPageId ? { facebookPageId: current.facebookPageId } : {}),
           snapshotBy: restoredBy ?? "restore",
         },
       });
@@ -1926,6 +2044,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           ...(target.activatedAt ? { activatedAt: target.activatedAt } : { activatedAt: null }),
           ...(target.boundMediaId ? { boundMediaId: target.boundMediaId } : { boundMediaId: null }),
           ...(target.instagramAccountId ? { instagramAccountId: target.instagramAccountId } : { instagramAccountId: null }),
+          ...(target.facebookPageId ? { facebookPageId: target.facebookPageId } : { facebookPageId: null }),
         },
       });
       return mapAutomation(updated);

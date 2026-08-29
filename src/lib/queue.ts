@@ -3,6 +3,7 @@ import Redis from "ioredis";
 import { createHash } from "node:crypto";
 import { getServerEnv } from "./env";
 import type { NormalizedEvent } from "./automation/types";
+import type { FacebookNormalizedEvent } from "./facebook/types";
 
 export const WEBHOOK_QUEUE_NAME = "linkar-webhooks";
 
@@ -19,6 +20,13 @@ export function createWebhookJobId(event: NormalizedEvent): string {
   // id under a different account does not collide. The hash keeps the id
   // length bounded for Redis key namespacing.
   return createHash("sha256").update(`${event.accountId}\0${event.id}`).digest("base64url");
+}
+
+export function createFacebookWebhookJobId(event: FacebookNormalizedEvent): string {
+  // Same dedupe contract as the IG jobId: stable per (pageId, event.id). We
+  // use pageId instead of accountId because Facebook webhooks are scoped to
+  // Page objects, not user accounts.
+  return createHash("sha256").update(`${event.pageId}\0${event.id}`).digest("base64url");
 }
 
 export type LeadDeliveryJob = {
@@ -90,6 +98,30 @@ export async function enqueueWebhookEvents(events: NormalizedEvent[]): Promise<n
     events.map((event) =>
       queue.add("instagram-event", event, {
         jobId: createWebhookJobId(event),
+        attempts: 3,
+        backoff: { type: "exponential", delay: 1_000, jitter: 0.5 },
+        removeOnComplete: 1_000,
+        removeOnFail: 5_000,
+      }),
+    ),
+  );
+  return events.length;
+}
+
+/**
+ * Enqueue a Facebook Page feed event. Uses the same queue (and therefore the
+ * same worker) as Instagram events; the worker dispatches on the job name
+ * ("facebook-event" vs "instagram-event"). Sharing the queue avoids spinning
+ * up a second Redis connection and lets the same concurrency setting cover
+ * both channels.
+ */
+export async function enqueueFacebookEvents(events: FacebookNormalizedEvent[]): Promise<number> {
+  const queue = getWebhookQueue();
+  if (!queue) return 0;
+  await Promise.all(
+    events.map((event) =>
+      queue.add("facebook-event", event, {
+        jobId: createFacebookWebhookJobId(event),
         attempts: 3,
         backoff: { type: "exponential", delay: 1_000, jitter: 0.5 },
         removeOnComplete: 1_000,

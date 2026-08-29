@@ -18,11 +18,12 @@ import {
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
 import { InstagramGlyph } from "./instagram-glyph";
+import { FacebookGlyph } from "./facebook-glyph";
 import { StatusBadge } from "./status-badge";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
-import { clearWorkspaceDataCache, getInstagramConnections } from "@/src/lib/client/workspace-data";
+import { clearWorkspaceDataCache, getInstagramConnections, getFacebookPages, type FacebookPageSummary } from "@/src/lib/client/workspace-data";
 
 type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string; profilePictureUrl?: string | null };
 type ConnectionHealth = {
@@ -52,7 +53,20 @@ export function SettingsScreen() {
   const [mode, setMode] = useState<"demo" | "configured">("demo");
   // useSearchParams (not a window.location initializer) so the server and the
   // first client render agree on this value - no hydration mismatch to fix up.
-  const metaState = useSearchParams().get("meta") ?? "";
+  const searchParams = useSearchParams();
+  const metaState = searchParams.get("meta") ?? "";
+  const facebookState = searchParams.get("facebook") ?? "";
+  const [facebookPages, setFacebookPages] = useState<FacebookPageSummary[]>([]);
+  const [facebookHealth, setFacebookHealth] = useState<{
+    pageId: string;
+    pageName: string;
+    status: ConnectionStatus;
+    checkError?: string;
+    subscribedFields: string[];
+    missingFields: string[];
+  } | null>(null);
+  const [facebookBusyId, setFacebookBusyId] = useState("");
+  const [facebookError, setFacebookError] = useState("");
   const [section, setSection] = useState<"connections" | "delivery" | "team" | "policies">("connections");
   const [disconnectingId, setDisconnectingId] = useState("");
   const [disconnectError, setDisconnectError] = useState("");
@@ -130,14 +144,21 @@ export function SettingsScreen() {
   useEffect(() => {
     void Promise.all([
       getInstagramConnections(),
+      getFacebookPages(),
       fetch("/api/health"),
       fetch("/api/meta/connection/health"),
-    ]).then(async ([connectionData, healthResponse, connectionHealthResponse]) => {
+      fetch("/api/facebook/connection/health"),
+    ]).then(async ([connectionData, fbPages, healthResponse, connectionHealthResponse, fbHealthResponse]) => {
       const healthPayload = (await healthResponse.json()) as { mode?: "demo" | "configured" };
       const connectionHealthPayload = (await connectionHealthResponse.json()) as { data?: ConnectionHealth[] };
+      const fbHealthPayload = (await fbHealthResponse.json().catch(() => ({ data: [] }))) as {
+        data?: Array<{ id: string; pageId: string; pageName: string; status: ConnectionStatus; checkError?: string; subscribedFields: string[]; missingFields: string[]; requiredFields: string[] }>;
+      };
       setConnections(connectionData);
+      setFacebookPages(fbPages);
       setMode(healthPayload.mode ?? "demo");
       setHealth(connectionHealthPayload.data?.[0] ?? null);
+      setFacebookHealth(fbHealthPayload.data?.[0] ?? null);
     }).catch(() => undefined);
   }, []);
 
@@ -205,6 +226,40 @@ export function SettingsScreen() {
     error: "Meta could not finish the connection. Check the app settings and try again.",
   };
 
+  const facebookStatusMessage: Record<string, string> = {
+    connected: "Facebook Page is connected. The Page is ready to receive comment-reply webhooks.",
+    "missing-config": "Add your Facebook App ID, App Secret, and redirect URI before connecting a Page.",
+    "missing-encryption-key": "Add FACEBOOK_TOKEN_ENCRYPTION_KEY (or META_TOKEN_ENCRYPTION_KEY) before connecting a Page.",
+    "invalid-state": "The Facebook sign-in expired. Start the connection again.",
+    cancelled: "You cancelled the Facebook authorization - click Connect again whenever you're ready.",
+    denied: "Facebook refused this connection before it started. Make sure this workspace owner has a role on the Meta app and that the Pages the user manages appear under their Business portfolio.",
+    "token-exchange": "Facebook rejected the app credentials while finishing sign-in. Verify FACEBOOK_APP_ID and FACEBOOK_APP_SECRET, and that the callback URL is listed under Valid OAuth Redirect URIs in the Meta app.",
+    "missing-permissions": "Facebook signed in but did not approve every permission Linkar needs (pages_show_list, pages_manage_metadata, pages_manage_engagement, pages_messaging). Reconnect and accept all requested scopes.",
+    "no-pages": "Signed in, but no Facebook Pages were found under this account. Create a Page in Business Manager or claim an existing one, then retry.",
+    "page-listing": "Signed in, but Linkar could not read the Pages from Meta. This is usually transient - retry the connection.",
+    "already-connected": "That Facebook Page already belongs to another Linkar workspace. Disconnect it there before connecting it here.",
+    error: "Meta could not finish the Facebook connection. Check the app settings and try again.",
+  };
+
+  async function disconnectFacebook(id: string) {
+    setFacebookBusyId(id);
+    setFacebookError("");
+    try {
+      const response = await fetch("/api/facebook/connection", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) throw new Error("Could not disconnect Facebook Page");
+      clearWorkspaceDataCache("connections");
+      setFacebookPages((current) => current.filter((page) => page.id !== id));
+    } catch (error) {
+      setFacebookError(error instanceof Error ? error.message : "Could not disconnect Facebook Page");
+    } finally {
+      setFacebookBusyId("");
+    }
+  }
+
   const sectionCounts = {
     connections: connections.length,
     team: (team?.members.length ?? 0) + (team?.invitations.length ?? 0),
@@ -216,6 +271,7 @@ export function SettingsScreen() {
         <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage Instagram connections, delivery defaults, team access, and account safeguards.</p></div></header>
 
         {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}<p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
+        {facebookState && <div className={`notice-banner ${facebookState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{facebookState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}<p>{facebookStatusMessage[facebookState] ?? "Facebook connection status updated."}</p></div>}
 
         <div className="section-layout">
           <nav className="section-nav" aria-label="Settings sections">
@@ -312,6 +368,59 @@ export function SettingsScreen() {
                     {(health.missingFields.length > 0 || health.checkError) && (
                       <p className="muted">
                         Reconnect Instagram to refresh the subscription. <a className="text-link" href="/api/meta/oauth/start">Reconnect <ExternalLink size={15} /></a>
+                      </p>
+                    )}
+                  </section>
+                )}
+
+                <section className="settings-hero panel settings-card facebook-settings-card">
+                  <div className="settings-icon"><FacebookGlyph size={25} /></div>
+                  <div className="settings-copy"><p className="eyebrow">Facebook Pages</p><h2>{facebookPages.length === 0 ? "No Page connected" : `${facebookPages.length} Page${facebookPages.length === 1 ? "" : "s"} connected`}</h2><p>{facebookPages.length > 0 ? "Connected Pages can deliver comment-reply automations on public posts." : "Connect a Facebook Page to auto-reply to comments with the same flows you use on Instagram."}</p></div>
+                  <div className="settings-action"><a className="button button-primary" href="/api/facebook/oauth/start">{facebookPages.length > 0 ? "Connect another Page" : "Connect Facebook Page"} <ExternalLink size={15} /></a></div>
+                  {facebookPages.length > 0 && (
+                    <ul className="connection-list">
+                      {facebookPages.map((page) => (
+                        <li className="panel connection-row" key={page.id}>
+                          <span className="connection-avatar" aria-hidden="true">{(page.pageName ?? "?").slice(0, 2).toUpperCase()}</span>
+                          <div className="connection-copy">
+                            <strong>{page.pageName}</strong>
+                            <small>Connected {formatDate(page.connectedAt)} · Page ID {page.pageId}</small>
+                          </div>
+                          <StatusBadge status={page.status} />
+                          <button
+                            className="button button-secondary"
+                            type="button"
+                            disabled={facebookBusyId === page.id}
+                            onClick={() => void disconnectFacebook(page.id)}
+                          >
+                            {facebookBusyId === page.id ? "Disconnecting…" : "Disconnect"}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {facebookError && <p className="form-error" role="alert">{facebookError}</p>}
+                </section>
+
+                {facebookPages.length > 0 && facebookHealth && (
+                  <section className="panel settings-panel settings-card webhook-card" aria-label="Facebook webhook health">
+                    <div className="panel-heading">
+                      <div><p className="eyebrow">Facebook webhook health</p><h2>{facebookHealth.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>
+                      {facebookHealth.missingFields.length === 0 ? <ShieldCheck size={21} /> : <AlertTriangle size={21} />}
+                    </div>
+                    {facebookHealth.checkError ? (
+                      <p className="muted">Could not check with Meta right now: {facebookHealth.checkError}</p>
+                    ) : (
+                      <ul className="check-list">
+                        <li>
+                          <Check size={16} />
+                          Feed (Page posts + comments)
+                        </li>
+                      </ul>
+                    )}
+                    {(facebookHealth.missingFields.length > 0 || facebookHealth.checkError) && (
+                      <p className="muted">
+                        Reconnect the Page to refresh the subscription. <a className="text-link" href="/api/facebook/oauth/start">Reconnect <ExternalLink size={15} /></a>
                       </p>
                     )}
                   </section>

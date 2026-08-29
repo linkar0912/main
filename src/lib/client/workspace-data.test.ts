@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearWorkspaceDataCache,
+  getFacebookPages,
   getInstagramConnections,
   getWorkspaceBootstrap,
 } from "./workspace-data";
@@ -42,5 +43,23 @@ describe("workspace client data cache", () => {
     await getInstagramConnections();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("deduplicates Facebook Page fetches and resets when the connections cache is cleared", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/facebook/connection") {
+        return { ok: true, json: async () => ({ data: [{ id: "fb_rec_1", pageId: "12345", pageName: "Acme", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" }] }) } as Response;
+      }
+      throw new Error(`Unexpected fetch to ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await Promise.all([getFacebookPages(), getFacebookPages()]);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/facebook/connection")).toHaveLength(1);
+
+    clearWorkspaceDataCache("connections");
+    await getFacebookPages();
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/facebook/connection")).toHaveLength(2);
   });
 });

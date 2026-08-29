@@ -35,6 +35,10 @@ export type AutomationRecord = {
   workspaceId: string;
   /** igUserId this automation is pinned to; undefined = all connected accounts. */
   instagramAccountId?: string;
+  /** Facebook Page this automation is pinned to. Mutually exclusive with
+   * instagramAccountId: an automation pins to one channel or the other, never
+   * both. The runner treats the two columns as separate dispatch keys. */
+  facebookPageId?: string;
   name: string;
   status: AutomationStatus;
   version: number;
@@ -65,6 +69,7 @@ export type AutomationVersionRecord = {
   activatedAt?: string;
   boundMediaId?: string;
   instagramAccountId?: string;
+  facebookPageId?: string;
   snapshotBy?: string;
   snapshotAt: string;
 };
@@ -127,6 +132,26 @@ export class InstagramAccountOwnershipError extends Error {
   constructor() {
     super("This Instagram account is already connected to another workspace");
     this.name = "InstagramAccountOwnershipError";
+  }
+}
+
+export type FacebookPageConnectionRecord = {
+  id: string;
+  workspaceId: string;
+  pageId: string;
+  pageName: string;
+  accessTokenEncrypted: string;
+  tokenExpiresAt?: string;
+  status: ConnectionStatus;
+  connectedAt: string;
+};
+
+export class FacebookPageOwnershipError extends Error {
+  readonly code = "FACEBOOK_PAGE_ALREADY_CONNECTED";
+
+  constructor() {
+    super("This Facebook Page is already connected to another workspace");
+    this.name = "FacebookPageOwnershipError";
   }
 }
 
@@ -203,6 +228,7 @@ export type CreateAutomationInput = {
   name: string;
   definition: FlowDefinition;
   instagramAccountId?: string;
+  facebookPageId?: string;
   priority?: number;
 };
 
@@ -210,6 +236,10 @@ export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "sta
   boundMediaId?: string | null;
   /** Pin/unpin the automation: a string pins it to that account, null unpins it. */
   instagramAccountId?: string | null;
+  /** Pin/unpin the automation to a Facebook Page. Mutually exclusive with
+   * instagramAccountId; setting both on the same request is rejected by the
+   * route. */
+  facebookPageId?: string | null;
 };
 
 export type CreateParticipantInput = Pick<
@@ -578,6 +608,20 @@ export interface AutomationRepository {
   deleteConnectionByInstagramAccount(igUserId: string): Promise<void>;
   deleteConnection(workspaceId: string, id: string): Promise<boolean>;
   beginInstagramDataDeletion(igUserId: string, confirmationCode: string, signedRequestHash: string): Promise<DataDeletionRequestRecord>;
+  // Facebook Page connections (parallel to the IG block above; never the
+  // two are bridged - an automation pins to either one or the other).
+  listFacebookPages(workspaceId: string): Promise<FacebookPageConnectionRecord[]>;
+  findWorkspaceByFacebookPage(pageId: string): Promise<{
+    workspaceId: string;
+    page: FacebookPageConnectionRecord;
+  } | null>;
+  upsertFacebookPage(input: Omit<FacebookPageConnectionRecord, "id" | "connectedAt">): Promise<FacebookPageConnectionRecord>;
+  updateFacebookPageToken(id: string, accessTokenEncrypted: string, tokenExpiresAt?: string): Promise<void>;
+  updateFacebookPageStatus(id: string, status: ConnectionStatus): Promise<void>;
+  deleteFacebookPageByPageId(pageId: string): Promise<void>;
+  deleteFacebookPage(workspaceId: string, id: string): Promise<boolean>;
+  /** List the active automations pinned to a given Facebook Page. */
+  listAutomationsForFacebookPage(workspaceId: string, pageId: string): Promise<AutomationRecord[]>;
   completeDataDeletion(confirmationCode: string): Promise<DataDeletionRequestRecord>;
   findDataDeletionByRequestHash(signedRequestHash: string): Promise<DataDeletionRequestRecord | null>;
   getDataDeletionRequest(confirmationCode: string): Promise<DataDeletionRequestRecord | null>;
