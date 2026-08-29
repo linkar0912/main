@@ -118,7 +118,7 @@ After the web service is public, verify its configured dependencies without
 printing connection details:
 
 ```bash
-curl --fail --show-error https://<linkar-domain>/api/health
+curl --fail --show-error https://linkar.in/api/health
 ```
 
 ## Meta App Review

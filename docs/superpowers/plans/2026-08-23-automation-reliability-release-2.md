@@ -1004,7 +1004,7 @@ Wait for CI and production image publication. Redeploy only Coolify service `alz
 
 ```bash
 docker compose -f docker-compose.coolify.yml ps
-curl --fail --silent --show-error https://alzmminzroqpaftmprqt6lny.200.141.14.225.sslip.io/api/health
+curl --fail --silent --show-error https://linkar.in/api/health
 ```
 
 Expected: `web` is `running:healthy`, `worker` is running, `migrate` exited 0, PostgreSQL and Valkey are healthy, `/api/health` returns 200, worker logs show scheduled sequence and expired-claim reconciliation without repeated crashes.

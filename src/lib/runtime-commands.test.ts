@@ -5,6 +5,8 @@ import { getServerEnv } from "./env";
 
 const readProjectFile = (path: string) => readFileSync(path, "utf8");
 const originalCampaignFlag = process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED;
+const originalAppUrl = process.env.APP_URL;
+const originalPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL;
 
 afterEach(() => {
   if (originalCampaignFlag === undefined) {
@@ -12,6 +14,10 @@ afterEach(() => {
   } else {
     process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED = originalCampaignFlag;
   }
+  if (originalAppUrl === undefined) delete process.env.APP_URL;
+  else process.env.APP_URL = originalAppUrl;
+  if (originalPublicAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+  else process.env.NEXT_PUBLIC_APP_URL = originalPublicAppUrl;
 });
 
 describe("production runtime commands", () => {
@@ -80,5 +86,14 @@ describe("follow-gated campaign environment flag", () => {
     expect(() => getServerEnv()).toThrow(
       "FOLLOW_GATED_CAMPAIGNS_ENABLED must be true or false",
     );
+  });
+});
+
+describe("application URL environment", () => {
+  it("prefers the server-only runtime URL over the build-time public URL", () => {
+    process.env.APP_URL = "https://linkar.in";
+    process.env.NEXT_PUBLIC_APP_URL = "https://old-host.invalid";
+
+    expect(getServerEnv().appUrl).toBe("https://linkar.in");
   });
 });

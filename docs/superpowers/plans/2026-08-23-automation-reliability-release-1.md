@@ -724,7 +724,7 @@ Wait for repository CI and image publication, then redeploy only Coolify service
 
 ```bash
 docker compose -f docker-compose.coolify.yml ps
-curl --fail --silent --show-error https://alzmminzroqpaftmprqt6lny.200.141.14.225.sslip.io/api/health
+curl --fail --silent --show-error https://linkar.in/api/health
 ```
 
 Expected: `web` is `running:healthy`, `worker` is running, `migrate` exited 0, PostgreSQL and Valkey are healthy, and `/api/health` returns HTTP 200.

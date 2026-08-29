@@ -33,7 +33,7 @@ Set these production values on the web app and worker:
 
 ```dotenv
 APP_NAME=Linkar
-NEXT_PUBLIC_APP_URL=https://<linkar-domain>
+NEXT_PUBLIC_APP_URL=https://linkar.in
 SUPPORT_EMAIL=<owner-monitored-support-email>
 AUTH_SESSION_SECRET=<at least 32 random characters>
 DATABASE_URL=postgresql://...
@@ -41,7 +41,7 @@ REDIS_URL=redis://...
 META_APP_ID=your_meta_app_id
 META_APP_SECRET=your_meta_app_secret
 META_TOKEN_ENCRYPTION_KEY=<64 hex characters from openssl rand -hex 32>
-META_REDIRECT_URI=https://<linkar-domain>/api/meta/oauth/callback
+META_REDIRECT_URI=https://linkar.in/api/meta/oauth/callback
 META_VERIFY_TOKEN=<long random verify token>
 META_API_VERSION=v25.0
 META_SCOPES=instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages
@@ -68,13 +68,13 @@ Use these deployed URLs:
 
 | Meta field | Linkar URL |
 | --- | --- |
-| OAuth redirect URI | `https://<linkar-domain>/api/meta/oauth/callback` |
-| Webhooks callback URL | `https://<linkar-domain>/api/meta/webhook` |
-| Data deletion callback URL | `https://<linkar-domain>/api/meta/data-deletion` |
-| Privacy policy URL | `https://<linkar-domain>/privacy` |
-| Terms URL | `https://<linkar-domain>/terms` |
-| Data deletion instructions URL | `https://<linkar-domain>/data-deletion` |
-| Support URL | `https://<linkar-domain>/support` |
+| OAuth redirect URI | `https://linkar.in/api/meta/oauth/callback` |
+| Webhooks callback URL | `https://linkar.in/api/meta/webhook` |
+| Data deletion callback URL | `https://linkar.in/api/meta/data-deletion` |
+| Privacy policy URL | `https://linkar.in/privacy` |
+| Terms URL | `https://linkar.in/terms` |
+| Data deletion instructions URL | `https://linkar.in/data-deletion` |
+| Support URL | `https://linkar.in/support` |
 
 Set the webhook verify token in the dashboard to the same value as `META_VERIFY_TOKEN`. Configure these five app-level webhook fields in Meta:
 
@@ -94,7 +94,7 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
 
 ## 4. Verify the deployed app yourself
 
-1. Call `GET https://<linkar-domain>/api/health`; confirm the response reports `configured`.
+1. Call `GET https://linkar.in/api/health`; confirm the response reports `configured`.
 2. Open `/privacy`, `/terms`, `/data-deletion`, and `/support` in a private browser window. Confirm they load without login and use the final business contact details.
 3. Sign in at `/login` with the configured owner account, open Settings, and choose **Connect Instagram**.
 4. Complete the official Meta login with the test Instagram Professional account.

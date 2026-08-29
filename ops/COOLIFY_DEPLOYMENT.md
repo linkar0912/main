@@ -114,7 +114,7 @@ templates (Authentication → Emails → Templates) pointed at
 
 ## 3. Route the web app through Cloudflare
 
-Set `NEXT_PUBLIC_APP_URL` to `https://<linkar-domain>` and use matching HTTPS
+Set both `APP_URL` and `NEXT_PUBLIC_APP_URL` to `https://linkar.in` and use matching HTTPS
 URLs throughout Meta and Coolify. Create the DNS record for the web container
 with proxying enabled, and use Full (strict) TLS with a valid origin
 certificate.
@@ -168,9 +168,9 @@ Never route Cloudflare, a public hostname, or any port to `worker` or
    Verify by asset, not by the deploy's own say-so — §5 of this file explains
    why the `release` field cannot be trusted:
    ```bash
-   CSS=$(curl -sk https://<linkar-domain>/login \
+   CSS=$(curl -sk https://linkar.in/login \
      | grep -oE '/_next/static/[a-z0-9/_-]+\.css' | head -1)
-   curl -sk "https://<linkar-domain>$CSS" | grep -c icon-rail   # 0 = old build
+   curl -sk "https://linkar.in$CSS" | grep -c icon-rail   # 0 = old build
    ```
 6. **Watch it settle.** A rollout takes roughly 60–90 seconds and takes the
    *whole stack* down in the middle — a brief window where `valkey` also reads
@@ -203,7 +203,7 @@ unless the response is `ok`.
 Then verify from outside:
 
 ```bash
-curl --fail --show-error https://<linkar-domain>/api/health
+curl --fail --show-error https://linkar.in/api/health
 ```
 
 Require `status: "ok"`, `mode: "configured"`, `dependencies.database: "ok"`
@@ -330,12 +330,12 @@ Use the final public domain, never a Coolify internal URL:
 
 | Meta setting | Production value |
 | --- | --- |
-| OAuth redirect URI | `https://<linkar-domain>/api/meta/oauth/callback` |
-| Webhooks callback URL | `https://<linkar-domain>/api/meta/webhook` |
-| Data deletion callback URL | `https://<linkar-domain>/api/meta/data-deletion` |
-| Privacy policy | `https://<linkar-domain>/privacy` |
-| Terms of service | `https://<linkar-domain>/terms` |
-| Support URL | `https://<linkar-domain>/support` |
+| OAuth redirect URI | `https://linkar.in/api/meta/oauth/callback` |
+| Webhooks callback URL | `https://linkar.in/api/meta/webhook` |
+| Data deletion callback URL | `https://linkar.in/api/meta/data-deletion` |
+| Privacy policy | `https://linkar.in/privacy` |
+| Terms of service | `https://linkar.in/terms` |
+| Support URL | `https://linkar.in/support` |
 
 Set `META_REDIRECT_URI` to the OAuth row exactly. Keep `META_VERIFY_TOKEN`
 server-only and enter the same value in Meta when validating the webhook. See
