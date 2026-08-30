@@ -194,14 +194,9 @@ body {
   line-height: 1.55;
 }
 
-/* The public homepage is a light, self-contained editorial surface even when
-   an authenticated visitor has stored the dashboard's dark preference. */
 .marketing-page-root {
-  color-scheme: light;
   min-inline-size: 0;
   overflow-x: clip;
-  background: #ffffff;
-  color: #050505;
   font-family: var(--font-sans, "Manrope"), "SF Pro Text", "Segoe UI", sans-serif;
 }
 

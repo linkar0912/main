@@ -28,7 +28,7 @@
 }
 
 .header[data-surface="solid"] {
-  --header-ink: #101010;
+  --header-ink: var(--marketing-text, var(--ink));
 }
 
 :global([data-theme="dark"]) :global([data-header-tone="light"]) .header[data-surface="hero"] {
@@ -36,29 +36,19 @@
 }
 
 .header[data-mega-menu="open"] {
-  --header-ink: #101010;
+  --header-ink: var(--marketing-text, var(--ink));
 }
 
 .header[data-mega-menu="open"] .frame {
-  background: rgb(242 242 238 / 96%);
-  border-color: rgb(5 5 5 / 10%);
-  box-shadow: 0 14px 38px rgb(5 5 5 / 14%);
+  background: var(--marketing-raised, var(--panel));
+  border-color: var(--marketing-border, var(--line));
+  box-shadow: var(--shadow-pop, 0 14px 38px rgb(5 5 5 / 14%));
 }
 
 .header[data-surface="solid"] .frame {
-  background: rgb(242 242 238 / 92%);
-  border-color: rgb(5 5 5 / 10%);
-  box-shadow: 0 14px 38px rgb(5 5 5 / 14%);
-}
-
-:global([data-theme="dark"]) :global([data-header-tone="light"]) .header[data-surface="solid"] {
-  --header-ink: #ffffff;
-}
-
-:global([data-theme="dark"]) :global([data-header-tone="light"]) .header[data-surface="solid"] .frame {
-  background: rgb(28 29 36 / 92%);
-  border-color: rgb(255 255 255 / 12%);
-  box-shadow: 0 14px 38px rgb(0 0 0 / 34%);
+  background: var(--marketing-raised, var(--panel));
+  border-color: var(--marketing-border, var(--line));
+  box-shadow: var(--shadow-card, 0 14px 38px rgb(5 5 5 / 14%));
 }
 
 @supports (backdrop-filter: blur(10px)) {
@@ -71,7 +61,7 @@
    text dark in its hero state too - the floating pill stays transparent until
    the user scrolls, matching the rest of the marketing site. */
 :where([data-header-tone="light"]) .header[data-surface="hero"] {
-  --header-ink: #101010;
+  --header-ink: var(--marketing-text, var(--ink));
 }
 
 .leftRail {
@@ -153,15 +143,9 @@
 
 .themeToggle:hover,
 .themeToggle:focus-visible {
-  color: #ffffff;
-  background: #050505;
+  color: var(--marketing-raised, var(--panel));
+  background: var(--marketing-text, var(--ink));
   transform: rotate(8deg);
-}
-
-:global([data-theme="dark"]) :global([data-header-tone="light"]) .themeToggle:hover,
-:global([data-theme="dark"]) :global([data-header-tone="light"]) .themeToggle:focus-visible {
-  color: #101010;
-  background: #ffffff;
 }
 
 .primaryNavigation ul,
@@ -275,7 +259,7 @@
   inset: 0;
   z-index: 1;
   padding: 0;
-  background: rgb(5 5 5 / 58%);
+  background: var(--marketing-overlay, rgb(5 5 5 / 58%));
   border: 0;
   pointer-events: auto;
   cursor: default;
@@ -295,9 +279,9 @@
   gap: clamp(36px, 5vw, 84px);
   min-block-size: 350px;
   padding: clamp(36px, 4vw, 64px);
-  color: #050505;
-  background: #ffffff;
-  border: 1px solid rgb(5 5 5 / 14%);
+  color: var(--marketing-text, var(--ink));
+  background: var(--marketing-panel, var(--panel));
+  border: 1px solid var(--marketing-border, var(--line));
   border-radius: 16px;
   box-shadow: 0 30px 80px rgb(5 5 5 / 24%);
   pointer-events: auto;
@@ -307,7 +291,7 @@
 
 .solutionsColumn + .solutionsColumn {
   padding-inline-start: clamp(36px, 5vw, 84px);
-  border-inline-start: 1px solid rgb(5 5 5 / 14%);
+  border-inline-start: 1px solid var(--marketing-border, var(--line));
 }
 
 .resourcesPanel {
@@ -321,7 +305,7 @@
 
 .solutionsEyebrow {
   margin: 0 0 28px;
-  color: #696969;
+  color: var(--marketing-muted, var(--muted));
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: .72rem;
   font-weight: 700;
@@ -341,7 +325,7 @@
   position: relative;
   gap: 18px;
   padding: 16px 0;
-  border-block-start: 1px solid rgb(5 5 5 / 12%);
+  border-block-start: 1px solid var(--marketing-border, var(--line));
   animation: solution-link-in 320ms cubic-bezier(.43, .195, .02, 1) both;
 }
 
@@ -377,7 +361,7 @@
 
 .channelLink small,
 .useCaseList small {
-  color: #66645d;
+  color: var(--marketing-muted, var(--muted));
   font-size: .78rem;
   font-weight: 600;
   line-height: 1.4;
@@ -404,7 +388,7 @@
 }
 
 .useCaseList li {
-  border-block-start: 1px solid rgb(5 5 5 / 12%);
+  border-block-start: 1px solid var(--marketing-border, var(--line));
   animation: solution-link-in 320ms cubic-bezier(.43, .195, .02, 1) both;
   animation-delay: calc(var(--solution-index) * 45ms + 70ms);
 }
@@ -433,7 +417,7 @@
   place-items: center;
   min-block-size: 50px;
   padding-inline: 26px;
-  color: #050505;
+  color: inherit;
   background: transparent;
   border: 1px solid currentColor;
   border-radius: 999px;
@@ -444,13 +428,13 @@
 .getStarted:focus-visible,
 .mobileGetStarted:hover,
 .mobileGetStarted:focus-visible {
-  color: #ffffff;
-  background: #050505;
+  color: var(--marketing-raised, var(--panel));
+  background: var(--marketing-text, var(--ink));
 }
 
 .getStarted:focus-visible,
 .mobileGetStarted:focus-visible {
-  outline-color: #050505;
+  outline-color: currentColor;
 }
 
 .mobileActions {
@@ -504,20 +488,20 @@
   display: flex;
   flex-direction: column;
   padding: 20px;
-  color: #ffffff;
-  background: #050505;
+  color: var(--marketing-on-inverse, #f4f4f5);
+  background: var(--marketing-inverse, #101116);
   pointer-events: auto;
   animation: menu-in 320ms cubic-bezier(.43, .195, .02, 1) both;
 }
 
 .closeButton {
   align-self: flex-end;
-  color: #ffffff;
+  color: var(--marketing-on-inverse, #f4f4f5);
 }
 
 .menuSheet a:focus-visible,
 .closeButton:focus-visible {
-  outline: 2px solid #fff100;
+  outline: 2px solid var(--volt, #fff100);
 }
 
 .menuSheet nav {

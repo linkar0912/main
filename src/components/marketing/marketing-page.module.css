@@ -4,8 +4,33 @@
 }
 
 .root {
+  --marketing-canvas: #ffffff;
+  --marketing-raised: #f2f2ee;
+  --marketing-panel: #f7f6ef;
+  --marketing-inverse: #101116;
+  --marketing-on-inverse: #f4f4f5;
+  --marketing-text: #050505;
+  --marketing-muted: #5f6068;
+  --marketing-border: rgb(5 5 5 / 14%);
+  --marketing-overlay: rgb(5 5 5 / 58%);
+  --marketing-on-accent: #101116;
+  --marketing-on-volt: #101116;
+  color: var(--marketing-text);
+  background: var(--marketing-canvas);
   isolation: isolate;
   overflow: clip;
+}
+
+:global([data-theme="dark"]) .root {
+  --marketing-canvas: #101116;
+  --marketing-raised: #1c1d24;
+  --marketing-panel: #25262e;
+  --marketing-inverse: #101116;
+  --marketing-on-inverse: #f4f4f5;
+  --marketing-text: #f4f4f5;
+  --marketing-muted: #b6b7c0;
+  --marketing-border: rgb(244 244 245 / 14%);
+  --marketing-overlay: rgb(0 0 0 / 68%);
 }
 
 .page {
