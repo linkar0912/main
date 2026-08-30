@@ -33,6 +33,7 @@ export type ServerEnv = {
   googleRedirectUri: string;
   followGatedCampaignsEnabled: boolean;
   authSessionSecret: string;
+  platformOwnerUserIds: string[];
   trustedProxyHops: number;
   workerConcurrency: number;
   dispatchLeaseMs: number;
@@ -65,6 +66,27 @@ function integerEnv(name: string, value: string | undefined, fallback: number): 
     throw new Error(`${name} must be a non-negative integer (got "${value}")`);
   }
   return parsed;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function parseUuidList(name: string, value: string | undefined): string[] {
+  const ids = [
+    ...new Set(
+      (value ?? "")
+        .split(",")
+        .map((id) => id.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+
+  if (ids.some((id) => !UUID.test(id))) {
+    throw new Error(`${name} must contain UUIDs`);
+  }
+  if (process.env.NODE_ENV === "production" && ids.length === 0) {
+    throw new Error(`${name} is required in production`);
+  }
+  return ids;
 }
 
 export function getServerEnv(): ServerEnv {
@@ -149,6 +171,10 @@ export function getServerEnv(): ServerEnv {
     authSessionSecret:
       process.env.AUTH_SESSION_SECRET?.trim()
       ?? "dev-insecure-session-secret-change-me-32ch",
+    platformOwnerUserIds: parseUuidList(
+      "PLATFORM_OWNER_USER_IDS",
+      process.env.PLATFORM_OWNER_USER_IDS,
+    ),
     trustedProxyHops: integerEnv("TRUSTED_PROXY_HOPS", process.env.TRUSTED_PROXY_HOPS, 0),
     workerConcurrency: integerEnv("WORKER_CONCURRENCY", process.env.WORKER_CONCURRENCY, 5),
     dispatchLeaseMs: integerEnv("DISPATCH_LEASE_MS", process.env.DISPATCH_LEASE_MS, 30_000),

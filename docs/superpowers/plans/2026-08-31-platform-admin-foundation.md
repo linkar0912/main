@@ -33,7 +33,7 @@
 - Produces: `ServerEnv.platformOwnerUserIds: string[]`
 - Produces: `parseUuidList(name: string, value: string | undefined): string[]`
 
-- [ ] **Step 1: Write the failing environment tests**
+- [x] **Step 1: Write the failing environment tests**
 
 ```ts
 it("parses a comma-separated platform owner UUID allowlist", () => {
@@ -50,13 +50,13 @@ it("rejects malformed platform owner identifiers", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `pnpm vitest run src/lib/env.test.ts`
 
 Expected: FAIL because `platformOwnerUserIds` does not exist and malformed values are accepted.
 
-- [ ] **Step 3: Implement strict UUID-list parsing**
+- [x] **Step 3: Implement strict UUID-list parsing**
 
 ```ts
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -71,13 +71,13 @@ export function parseUuidList(name: string, value: string | undefined): string[]
 
 Add `PLATFORM_OWNER_USER_IDS=` to `.env.example` and a required placeholder UUID to `.env.production.example`.
 
-- [ ] **Step 4: Verify GREEN and type safety**
+- [x] **Step 4: Verify GREEN and type safety**
 
 Run: `pnpm vitest run src/lib/env.test.ts && pnpm typecheck`
 
 Expected: all focused tests pass and TypeScript exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/env.ts src/lib/env.test.ts .env.example .env.production.example
