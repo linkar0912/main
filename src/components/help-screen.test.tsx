@@ -29,4 +29,23 @@ describe("HelpScreen search", () => {
     expect(screen.getByText("Can I test before going live?")).toBeTruthy();
     expect(screen.queryByText("What is a follow gate?")).toBeNull();
   });
+
+  it("documents Facebook Page public replies separately from Instagram DMs", () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/account")) {
+        return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
+      }
+      if (String(input).includes("/api/contacts")) {
+        return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
+      }
+      throw new Error(`Unexpected fetch to ${String(input)}`);
+    }));
+
+    render(<HelpScreen supportEmail="support@example.com" />);
+
+    expect(screen.getAllByText("Connecting Facebook Pages")).toHaveLength(2);
+    fireEvent.click(screen.getByText("What can Facebook automations reply to?"));
+    expect(screen.getByText(/public replies to top-level comments/i)).toBeTruthy();
+    expect(screen.getByText(/Facebook does not use Instagram private-reply or DM actions/i)).toBeTruthy();
+  });
 });

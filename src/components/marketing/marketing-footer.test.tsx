@@ -26,6 +26,7 @@ describe("MarketingFooter", () => {
 
     const expected = new Map([
       ["Product", "/#product"],
+      ["Channels", "/#channels"],
       ["How it works", "/#how-it-works"],
       ["Workflows", "/#workflows"],
       ["Get started", "/signup"],
@@ -60,7 +61,7 @@ describe("MarketingFooter", () => {
     const footer = screen.getByRole("contentinfo");
     expect(within(footer).getByText(`© ${new Date().getFullYear()} Linkar.`)).toBeTruthy();
     expect(within(footer).getByText(
-      "Linkar uses supported platform interfaces. Availability and messaging limits depend on the connected account and platform policies.",
+      "Linkar uses Meta’s supported Instagram and Facebook interfaces. Availability and limits depend on the connected account, Page, and platform policies.",
     )).toBeTruthy();
     const brandLink = within(footer).getAllByRole("link", { name: "Linkar home" })
       .find((link) => link.className.includes("brandLink"));

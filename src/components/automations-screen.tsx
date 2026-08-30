@@ -101,7 +101,7 @@ export function AutomationsScreen() {
     <AppShell>
       <div className="page-wrap narrow-wrap">
         <header className="page-header">
-          <div><p className="eyebrow">Workspace / automation</p><h1>Automations</h1><p className="muted page-lede">Rules that turn Instagram signals into helpful, timely replies.</p></div>
+          <div><p className="eyebrow">Workspace / automation</p><h1>Automations</h1><p className="muted page-lede">Rules that turn Instagram and Facebook signals into helpful, timely replies.</p></div>
           <div className="header-actions">
             <CreateAutomationButton className="button button-primary"><Plus size={17} /> New automation</CreateAutomationButton>
           </div>

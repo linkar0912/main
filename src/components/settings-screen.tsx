@@ -305,7 +305,7 @@ export function SettingsScreen() {
   return (
     <AppShell>
       <div className="page-wrap settings-wrap">
-        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage Instagram connections, delivery defaults, team access, and account safeguards.</p></div></header>
+        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage Instagram and Facebook connections, delivery defaults, team access, and account safeguards.</p></div></header>
 
         {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}<p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
         {facebookState && <div className={`notice-banner ${facebookState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{facebookState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}<p>{facebookStatusMessage[facebookState] ?? "Facebook connection status updated."}</p></div>}
@@ -424,7 +424,7 @@ export function SettingsScreen() {
                           onChange={(event) => setSelectedFacebookPageId(event.target.value)}
                         >
                           {facebookChoices.map((page) => (
-                            <option key={page.id} value={page.id}>{page.name}{page.category ? ` — ${page.category}` : ""}</option>
+                            <option key={page.id} value={page.id}>{page.name}{page.category ? `, ${page.category}` : ""}</option>
                           ))}
                         </select>
                       </label>

@@ -37,11 +37,11 @@ describe("HeroSection", () => {
     expect(scene.querySelector("ol")).not.toBeNull();
     expect(screen.getByText("Can you send the guide?")).toBeTruthy();
     expect(screen.getByText("Keyword found: GUIDE")).toBeTruthy();
-    expect(screen.getByText("Absolutely — I’ve sent the quick version. What are you hoping to improve first?")).toBeTruthy();
+    expect(screen.getByText("Absolutely, I’ve sent the quick version. What are you hoping to improve first?")).toBeTruthy();
     expect(screen.getByText("Conversation moving")).toBeTruthy();
     expect(markup).toContain("Can you send the guide?");
     expect(markup).toContain("Keyword found: GUIDE");
-    expect(markup).toContain("Absolutely — I’ve sent the quick version. What are you hoping to improve first?");
+    expect(markup).toContain("Absolutely, I’ve sent the quick version. What are you hoping to improve first?");
     expect(markup).toContain("Conversation moving");
   });
 

@@ -109,7 +109,7 @@ async function step1_verifyBuildIsGreen(headSha) {
     fail("Build check", `the run is still "${run.status}".`, `Wait for it to finish: ${run.url}`);
   }
   if (run.conclusion !== "success") {
-    fail("Build check", `the run concluded "${run.conclusion}" — do not deploy a failed build.`, run.url);
+    fail("Build check", `the run concluded "${run.conclusion}" - do not deploy a failed build.`, run.url);
   }
   console.log(`  ✓ green: ${run.url}`);
 }
@@ -121,7 +121,7 @@ function step2_checkMigrations(headSha, migrationsBackedUp) {
     lastDeployedSha = JSON.parse(readFileSync(STATE_FILE, "utf8")).lastDeployedSha;
   }
   if (!lastDeployedSha) {
-    console.log("  ⚠ no deploy history on this machine — cannot diff migrations automatically.");
+    console.log("  ⚠ no deploy history on this machine - cannot diff migrations automatically.");
     if (!migrationsBackedUp) {
       fail(
         "Migration check",
@@ -178,7 +178,7 @@ async function step4_pollStatus(env) {
   fail(
     "Rollout",
     `web never reached running:healthy after ${(POLL_MAX_ATTEMPTS * POLL_INTERVAL_MS) / 1000}s.`,
-    "See the troubleshooting table in ops/COOLIFY_DEPLOYMENT.md — likely a stuck migration (§5) or a container that needs a force recreate.",
+    "See the troubleshooting table in ops/COOLIFY_DEPLOYMENT.md - likely a stuck migration (§5) or a container that needs a force recreate.",
   );
 }
 
@@ -204,7 +204,7 @@ async function step5_verifyExternally(beforeCss) {
     console.log(`  ✓ build asset present (${afterCss}); no pre-deploy baseline to compare against.`);
   } else {
     console.log(
-      "  ⚠ build asset fingerprint did not change — this can be legitimate (no CSS changes this release) or a sign the deploy didn't take. Double check if unexpected.",
+      "  ⚠ build asset fingerprint did not change - this can be legitimate (no CSS changes this release) or a sign the deploy didn't take. Double check if unexpected.",
     );
   }
 }
@@ -214,7 +214,7 @@ async function main() {
   const headSha = git(["rev-parse", "HEAD"]);
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   if (branch !== "main") {
-    fail("Setup", `you're on "${branch}", not main.`, "Merge to main first — production deploys from main only.");
+    fail("Setup", `you're on "${branch}", not main.`, "Merge to main first - production deploys from main only.");
   }
 
   const env = readEnvLocal();

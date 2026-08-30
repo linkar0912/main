@@ -41,7 +41,7 @@ export function FacebookPagePreview({
       </div>
       <div className="phone-body facebook-preview">
         <h2 id={headingId} className="phone-only-heading">Test preview</h2>
-        <p className="muted phone-preview-caption">Test preview — not sent to Facebook</p>
+        <p className="muted phone-preview-caption">Test preview, not sent to Facebook</p>
         <article className="facebook-post">
           <header className="facebook-post-head">
             <span className="facebook-avatar" aria-hidden>
@@ -67,9 +67,8 @@ export function FacebookPagePreview({
             </div>
           </section>
         </article>
-        <p className="muted phone-preview-foot">{posterName ? `Post by ${posterName}. ` : ""}Preview only — nothing here is sent to Facebook.</p>
+        <p className="muted phone-preview-foot">{posterName ? `Post by ${posterName}. ` : ""}Preview only. Nothing here is sent to Facebook.</p>
       </div>
     </div>
   );
 }
-

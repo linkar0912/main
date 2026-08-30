@@ -9,8 +9,8 @@ const sans = Manrope({ subsets: ["latin"], variable: "--font-sans" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "Linkar - Instagram automation, made clear",
-  description: "Deterministic Instagram comment and DM automations for creators and businesses.",
+  title: "Linkar - Instagram and Facebook automation, made clear",
+  description: "Deterministic Instagram conversations and Facebook Page public comment replies for creators and businesses.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -28,4 +28,3 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     </html>
   );
 }
-

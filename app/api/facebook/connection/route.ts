@@ -36,16 +36,25 @@ export async function DELETE(request: Request) {
     const repository = getRepository();
     const pages = await repository.listFacebookPages(session.workspaceId);
     const page = pages?.find((candidate) => candidate.id === body.id);
+    let remoteUnsubscribed = true;
     if (page) {
-      const env = getServerEnv();
-      if (!env.facebookTokenEncryptionKey) throw new Error("Facebook token encryption is not configured");
-      const accessToken = unsealSecret(page.accessTokenEncrypted, env.facebookTokenEncryptionKey);
-      const unsubscribed = await unsubscribeFacebookPageFromWebhooks(page.pageId, accessToken, env.facebookApiVersion);
-      if (!unsubscribed) throw new Error("Meta did not confirm the Facebook webhook unsubscribe");
+      try {
+        const env = getServerEnv();
+        if (!env.facebookTokenEncryptionKey) throw new Error("Facebook token encryption is not configured");
+        const accessToken = unsealSecret(page.accessTokenEncrypted, env.facebookTokenEncryptionKey);
+        remoteUnsubscribed = await unsubscribeFacebookPageFromWebhooks(page.pageId, accessToken, env.facebookApiVersion);
+      } catch (error) {
+        remoteUnsubscribed = false;
+        logger.warn("Remote Facebook webhook unsubscribe failed during disconnect", {
+          workspaceId: session.workspaceId,
+          pageId: page.pageId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
     const ok = await repository.deleteFacebookPage(session.workspaceId, body.id);
     if (!ok) return NextResponse.json({ error: "Page not found" }, { status: 404 });
-    return NextResponse.json({ disconnected: true });
+    return NextResponse.json({ disconnected: true, remoteUnsubscribed });
   } catch (error) {
     logger.error("Failed to disconnect Facebook Page", {
       workspaceId: session.workspaceId,

@@ -6,12 +6,13 @@ Reference the current [Meta Instagram Private Replies collection](https://www.po
 
 ## 1. Prepare the business and test accounts
 
-Use the business owner’s Meta developer account to create and own the app. Do not use a throwaway personal account as the long-term app owner. Keep a separate Instagram Professional test account for the reviewer and a second Instagram account that can comment or send a DM during testing.
+Use the business owner’s Meta developer account to create and own the Instagram and Facebook apps. Do not use a throwaway personal account as the long-term app owner. Keep a separate Instagram Professional test account for the reviewer, a second Instagram account that can comment or send a DM, a test Facebook Page, and a Facebook account that can leave test comments.
 
 Before requesting advanced access, make sure:
 
 - the app has a recognizable name, icon, contact email, privacy URL, terms URL, and data-deletion instructions URL;
 - the connected Instagram account is eligible for the current Instagram Login/Business Login product flow;
+- the Facebook test user can manage the test Page and the Page appears in the Graph API Page list;
 - the business has completed Meta Business Verification if Meta requests it;
 - the production domain is verified in the Meta Business settings when required;
 - the reviewer can sign in without an invitation that expires during review.
@@ -23,11 +24,12 @@ be completed:
 
 - the final public Linkar domain and a monitored support mailbox;
 - Coolify/server access and private PostgreSQL and Valkey connection values;
-- the Meta developer app ID, app secret, and the business account that owns it;
+- the Instagram and Facebook app IDs, app secrets, and the business account that owns them;
 - a stable token-encryption key, a high-entropy webhook verify token, and a
   session signing secret (`AUTH_SESSION_SECRET`); and
 - two eligible Instagram test accounts: one connected Professional account and
-  one account that can send test comments and direct messages.
+  one account that can send test comments and direct messages; and
+- one Facebook test Page plus a separate account that can leave a top-level comment on its public post.
 
 Set these production values on the web app and worker:
 
@@ -45,6 +47,13 @@ META_REDIRECT_URI=https://linkar.in/api/meta/oauth/callback
 META_VERIFY_TOKEN=<long random verify token>
 META_API_VERSION=v25.0
 META_SCOPES=instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages
+FACEBOOK_APP_ID=your_facebook_app_id
+FACEBOOK_APP_SECRET=your_facebook_app_secret
+FACEBOOK_TOKEN_ENCRYPTION_KEY=<optional dedicated 64 hex characters>
+FACEBOOK_REDIRECT_URI=https://linkar.in/api/facebook/oauth/callback
+FACEBOOK_VERIFY_TOKEN=<long random verify token>
+FACEBOOK_API_VERSION=v25.0
+FACEBOOK_SCOPES=pages_show_list,pages_manage_engagement,pages_manage_metadata,pages_read_engagement,pages_read_user_content
 ```
 
 Apply committed migrations and start both production processes:
@@ -84,13 +93,24 @@ Set the webhook verify token in the dashboard to the same value as `META_VERIFY_
 - `messaging_optins`
 - `messaging_referral`
 
-After OAuth, Linkar subscribes the connected Professional account through `/{ig-user-id}/subscribed_apps` on `graph.instagram.com`: the extended set is requested first (`comments`, `messages`, plus Messenger-era `messaging_*` names where the platform accepts them) and automatically falls back to just `comments,messages` if Meta rejects any field — a rejected field never fails the connection, and `/api/meta/connection/health` reports exactly what Meta is sending. Story-mention automations need **no extra field** — Meta delivers story mentions as `messages` payloads with a `story_mention` attachment. First-contact welcome automations likewise rely only on inbound messaging events; Meta does not offer a follower webhook, so "new follower" greetings are implemented as once-per-person first-contact greetings. Request only the permissions required by the product — no new permission is needed for follower verification, since `GET /{igsid}?fields=is_user_follow_business` is covered by the existing messaging scope:
+After OAuth, Linkar subscribes the connected Professional account through `/{ig-user-id}/subscribed_apps` on `graph.instagram.com`: the extended set is requested first (`comments`, `messages`, plus Messenger-era `messaging_*` names where the platform accepts them) and automatically falls back to just `comments,messages` if Meta rejects any field - a rejected field never fails the connection, and `/api/meta/connection/health` reports exactly what Meta is sending. Story-mention automations need **no extra field** - Meta delivers story mentions as `messages` payloads with a `story_mention` attachment. First-contact welcome automations likewise rely only on inbound messaging events; Meta does not offer a follower webhook, so "new follower" greetings are implemented as once-per-person first-contact greetings. Request only the permissions required by the product - no new permission is needed for follower verification, since `GET /{igsid}?fields=is_user_follow_business` is covered by the existing messaging scope:
 
 - `instagram_business_basic`
 - `instagram_business_manage_comments`
 - `instagram_business_manage_messages`
 
 The code does not request publishing, insights, ads, or unrelated permissions. If Meta presents a renamed or replacement scope, update `META_SCOPES` and the App Review explanation together.
+
+Configure the separate Facebook Login for Business app with these deployed URLs:
+
+| Meta field | Linkar URL |
+| --- | --- |
+| OAuth redirect URI | `https://linkar.in/api/facebook/oauth/callback` |
+| Webhooks callback URL | `https://linkar.in/api/facebook/webhook` |
+| Deauthorization callback URL | `https://linkar.in/api/facebook/deauthorize` |
+| Data deletion callback URL | `https://linkar.in/api/facebook/data-deletion` |
+
+Set the Facebook webhook verify token to `FACEBOOK_VERIFY_TOKEN`, subscribe the Page object to `feed`, and request only `pages_show_list`, `pages_manage_metadata`, `pages_manage_engagement`, `pages_read_engagement`, and `pages_read_user_content`. Linkar uses these permissions to list Pages, subscribe the selected Page, read public Page-post comments, and publish public replies. It does not request or implement Facebook Messenger or private replies. After connecting, verify `/api/facebook/connection/health` reports no missing `feed` field.
 
 ## 4. Verify the deployed app yourself
 
@@ -105,13 +125,16 @@ The code does not request publishing, insights, ads, or unrelated permissions. I
    - Follow gate (required): a not-following message with an "I've followed" recheck quick reply.
    - Delivery: a private message containing a real test URL, released only after the follow check passes.
 7. Activate the campaign.
-8. Using the second Instagram test account — while it does **not** yet follow the connected Professional account — comment `guide` on the test Reel.
+8. Using the second Instagram test account - while it does **not** yet follow the connected Professional account - comment `guide` on the test Reel.
 9. Confirm the opening private reply arrives with the opt-in quick reply, and tap it. This is the opening interaction that establishes consent and captures the commenter's Instagram-scoped ID.
 10. Confirm the false-follow prompt arrives immediately after: because the second account does not yet follow the connected account, Linkar sends the configured not-following message with the "I've followed" recheck quick reply.
 11. From the second test account, follow the connected Instagram Professional account (the follow action).
-12. Tap "I've followed". Confirm Linkar rechecks the follower relationship against Meta and delivers the configured link message exactly once — this is the successful delivery.
+12. Tap "I've followed". Confirm Linkar rechecks the follower relationship against Meta and delivers the configured link message exactly once - this is the successful delivery.
 13. Tap "I've followed" again to resend an identical recheck event; confirm it does not produce a second delivery for the same participant.
 14. Pause the campaign and repeat the comment event from a third account or a fresh comment; confirm no new opening reply is sent while paused.
+15. Choose **Connect Facebook Page**, complete Facebook authorization, select the test Page, and confirm webhook health reports `feed` subscribed.
+16. Create and activate a Facebook comment automation pinned to that Page. From the separate Facebook account, add a top-level public comment containing the configured keyword and confirm Linkar posts exactly one public nested reply.
+17. Add a Page-authored comment and a nested reply. Confirm Linkar ignores both and does not create a reply loop.
 
 ## 5. App Review submission copy
 
@@ -124,6 +147,18 @@ Request only the three permissions required by the product:
 - `instagram_business_basic`
 - `instagram_business_manage_comments`
 - `instagram_business_manage_messages`
+
+For the Facebook Page flow, request only:
+
+- `pages_show_list`
+- `pages_manage_metadata`
+- `pages_manage_engagement`
+- `pages_read_engagement`
+- `pages_read_user_content`
+
+Use this permission explanation:
+
+> Linkar lets a Page manager select a Facebook Page, receive top-level public comments on Page posts, and publish one configured public reply beneath a matching comment. Linkar ignores comments authored by the Page and nested comments to prevent reply loops. Linkar does not send Facebook Messenger messages or private replies.
 
 For the reviewer instructions, provide:
 
@@ -145,6 +180,7 @@ Record one uninterrupted screencast covering, in order: signing in and connectin
 - Confirm the owner login redirects unauthenticated dashboard/API requests and the reviewer credentials work.
 - Confirm the connected account shows its real Instagram username, proving profile lookup and webhook subscription completed.
 - Confirm all five webhook fields (`comments`, `messages`, `messaging_postbacks`, `messaging_optins`, `messaging_referral`) show as subscribed for the connected account.
+- Confirm the selected Facebook Page reports the `feed` webhook field and all five Facebook Page permissions are granted.
 - Confirm `X-Hub-Signature-256` requests are accepted only with the correct App Secret.
 - Confirm the worker is running and can reach Redis and PostgreSQL.
 - Confirm the app is not in demo mode.

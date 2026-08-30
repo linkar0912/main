@@ -16,6 +16,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { AppShell } from "./app-shell";
+import { FacebookGlyph } from "./facebook-glyph";
 import { InstagramGlyph } from "./instagram-glyph";
 
 type Topic = {
@@ -37,8 +38,8 @@ const TOPICS: Topic[] = [
         q: "What is this app?",
         a: (
           <>
-            A workspace for Instagram DM automation. Rules watch signals on your account -
-            comments, story mentions, first-contact DMs - and reply with helpful messages in seconds.
+            A workspace for Instagram conversations and Facebook Page comment automation. Rules watch
+            supported signals and send the reply you configured.
           </>
         ),
       },
@@ -46,7 +47,7 @@ const TOPICS: Topic[] = [
         q: "What's the fastest way to get value out of it?",
         a: (
           <>
-            Connect your Instagram account, then start from a ready-made recipe on the{" "}
+            Connect Instagram or a Facebook Page, then start from a ready-made recipe on the{" "}
             <Link href="/automations/templates">Templates</Link> page. Most recipes need only a keyword and a message.
           </>
         ),
@@ -57,6 +58,42 @@ const TOPICS: Topic[] = [
           <>
             An automation is a trigger plus actions: when someone comments a keyword or mentions your
             story, the flow replies privately, sends a link, or captures their email.
+          </>
+        ),
+      },
+    ],
+  },
+  {
+    id: "connecting-facebook",
+    title: "Connecting Facebook Pages",
+    blurb: "Connect a Page, choose the right Page, and keep public comment subscriptions healthy.",
+    icon: FacebookGlyph,
+    articles: [
+      {
+        q: "What can Facebook automations reply to?",
+        a: (
+          <>
+            Facebook Page automations send public replies to top-level comments on Page posts.
+            Page-authored comments and nested replies are ignored to prevent loops. Facebook does not use Instagram private-reply or DM actions.
+          </>
+        ),
+      },
+      {
+        q: "Which Facebook permissions are required?",
+        a: (
+          <>
+            The Page connection requests pages_show_list, pages_manage_metadata,
+            pages_manage_engagement, pages_read_engagement, and pages_read_user_content.
+            The person connecting must be allowed to manage the selected Page.
+          </>
+        ),
+      },
+      {
+        q: "Why does Facebook webhook health show missing fields?",
+        a: (
+          <>
+            Open Settings and reconnect the Page. Linkar checks the current feed subscription without
+            changing it, then reconnecting refreshes the Page subscription when needed.
           </>
         ),
       },
@@ -204,8 +241,8 @@ const TOPICS: Topic[] = [
         q: "What does the free plan include?",
         a: (
           <>
-            Every automation feature, up to 25 captured contacts, and one connected Instagram
-            account. The sidebar meter shows how much of the limit you’ve used.
+            Every automation feature, up to 25 captured contacts, and one connected social
+            channel. The sidebar meter shows how much of the limit you’ve used.
           </>
         ),
       },

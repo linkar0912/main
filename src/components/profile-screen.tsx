@@ -15,10 +15,11 @@ import {
   Users,
 } from "lucide-react";
 import { AppShell } from "./app-shell";
+import { FacebookGlyph } from "./facebook-glyph";
 import { InstagramGlyph } from "./instagram-glyph";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { formatDate } from "@/src/lib/format-date";
-import { getInstagramConnections } from "@/src/lib/client/workspace-data";
+import { getFacebookPages, getInstagramConnections, type FacebookPageSummary } from "@/src/lib/client/workspace-data";
 
 type Connection = {
   id: string;
@@ -77,6 +78,7 @@ function accountErrorFor(error: string | null): string {
 
 export function ProfileScreen({ email, memberSince, emailVerified, role }: ProfileScreenProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [facebookPages, setFacebookPages] = useState<FacebookPageSummary[]>([]);
   const [dismissed, setDismissed] = useState(false);
   // The redirect from /api/account carries feedback in the query string.
   // useSearchParams (rather than reading window.location during render) is
@@ -94,12 +96,18 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
   }, [savedMessage]);
 
   useEffect(() => {
-    getInstagramConnections()
-      .then((data) => setConnections(data))
-      .catch(() => undefined);
+    void Promise.all([
+      getInstagramConnections().catch(() => []),
+      getFacebookPages().catch(() => []),
+    ]).then(([instagram, facebook]) => {
+      setConnections(instagram);
+      setFacebookPages(facebook);
+    });
   }, []);
 
   const connection = connections[0];
+  const facebookPage = facebookPages[0];
+  const hasChannel = Boolean(connection || facebookPage);
   const avatar = connection?.profilePictureUrl ?? undefined;
 
   return (
@@ -109,7 +117,7 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
           <div>
             <p className="eyebrow">Account</p>
             <h1>My Profile</h1>
-            <p className="muted page-lede">Your identity, security, and connected Instagram account in one place.</p>
+            <p className="muted page-lede">Your identity, security, and connected Instagram and Facebook channels in one place.</p>
           </div>
         </header>
 
@@ -163,8 +171,8 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
 
           <div className="profile-hero-channel">
             <div className="panel-heading">
-              <div><p className="eyebrow">Active channel</p><h2>Instagram</h2></div>
-              <InstagramGlyph size={19} brand />
+              <div><p className="eyebrow">Active channels</p><h2>Connected channels</h2></div>
+              <Link2 size={19} />
             </div>
             {connection ? (
               <div className="connection-card">
@@ -190,11 +198,27 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
               </div>
             ) : (
               <p className="muted connection-empty">
-                No Instagram account connected yet. Link a professional account to start automating replies.
+                No Instagram account connected yet.
               </p>
             )}
-            <Link className={`button ${connection ? "button-secondary" : "button-primary"} button-block`} href="/settings">
-              <Link2 size={15} /> {connection ? "Manage connection" : "Connect Instagram"}
+            {facebookPage ? (
+              <div className="connection-card">
+                <span className="avatar avatar-connection" aria-hidden><FacebookGlyph size={20} brand /></span>
+                <div className="connection-card-id">
+                  <strong>{facebookPage.pageName}</strong>
+                  <span className="connection-status">
+                    <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
+                    Facebook Page
+                    {" · "}
+                    {facebookPage.status === "CONNECTED" ? "Connected" : facebookPage.status === "EXPIRED" ? "Token expired" : "Disconnected"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="muted connection-empty">No Facebook Page connected yet.</p>
+            )}
+            <Link className={`button ${hasChannel ? "button-secondary" : "button-primary"} button-block`} href="/settings">
+              <Link2 size={15} /> {hasChannel ? "Manage channels" : "Connect a channel"}
             </Link>
           </div>
         </section>

@@ -10,8 +10,8 @@ export const runtime = "nodejs";
 
 const REQUIRED_FIELDS = ["feed"] as const;
 
-/** GET: for each connected Page, attempt to re-subscribe to the webhook
- * fields and report which are confirmed vs missing. Parallel to the IG
+/** GET: for each connected Page, read the current webhook subscription and
+ * report which fields are confirmed or missing without mutating it. Parallel to the IG
  * /api/meta/connection/health endpoint so the settings UI can render one
  * status card per Page. */
 export async function GET(request: Request) {
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
         status: page.status,
         requiredFields: [...REQUIRED_FIELDS],
         subscribedFields: subscribed,
-        missingFields: subscribed.length === REQUIRED_FIELDS.length ? [] : [...REQUIRED_FIELDS],
+        missingFields: REQUIRED_FIELDS.filter((field) => !subscribed.includes(field)),
       };
     } catch (error) {
       logger.warn("Facebook webhook health check failed", {

@@ -93,7 +93,7 @@ describe("AutomationStory", () => {
     expect(Array.from(section.querySelectorAll("[data-chapter-copy]")).map((copy) => copy.textContent)).toEqual([
       "When the right comment arrives, Linkar sends a useful private reply in your voice.",
       "Ask one focused question, save the answer, and shape the next message around it.",
-      "Schedule a thoughtful follow-up while the conversation is still open — no reminder list required.",
+      "Schedule a thoughtful follow-up while the conversation is still open, with no reminder list required.",
       "When intent becomes valuable or nuanced, pause the flow and place the full context in your queue.",
     ]);
     [

@@ -1,4 +1,4 @@
-# Automation reliability — Release 1
+# Automation reliability - Release 1
 
 Date: 2026-08-23  
 Service: `alzmminzroqpaftmprqt6lny`  

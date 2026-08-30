@@ -26,7 +26,7 @@ type Stats = {
 };
 
 function formatDate(value: string | undefined): string {
-  if (!value) return "—";
+  if (!value) return "Not available";
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -316,5 +316,4 @@ export function TrackedLinksPanel() {
     </div>
   );
 }
-
 

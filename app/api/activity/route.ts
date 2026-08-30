@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 
 const EVENT_LABELS: Record<string, string> = {
   "comment.created": "Comment",
+  "facebook.comment.created": "Facebook Page comment",
   "message.received": "Direct message",
   "quick_reply.received": "Quick reply tap",
   "postback.received": "Button tap",
@@ -14,7 +15,7 @@ const EVENT_LABELS: Record<string, string> = {
   "story_mention.received": "Story mention",
 };
 
-// GET /api/activity - recent inbound Instagram events for this workspace,
+// GET /api/activity - recent inbound Instagram and Facebook events for this workspace,
 // summarized for the activity inbox. Read-only over the persisted webhook log.
 export async function GET(request: Request) {
   const session = await getValidatedSession(request);
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
     data: events.map((event) => {
       const payload = event.payload as Record<string, unknown>;
       const username = typeof payload.senderUsername === "string" ? payload.senderUsername : undefined;
+      const senderName = typeof payload.senderName === "string" ? payload.senderName : undefined;
       const text = typeof payload.text === "string" ? payload.text : "";
       return {
         id: event.id,
@@ -37,12 +39,18 @@ export async function GET(request: Request) {
         type: event.eventType,
         label: EVENT_LABELS[event.eventType] ?? event.eventType,
         at: event.receivedAt,
-        account: typeof payload.accountId === "string" ? payload.accountId : undefined,
+        account: typeof payload.accountId === "string"
+          ? payload.accountId
+          : typeof payload.pageId === "string"
+            ? payload.pageId
+            : undefined,
         from: username
           ? `@${username}`
-          : typeof payload.recipientId === "string"
-            ? `IG user ·${payload.recipientId.slice(-6)}`
-            : undefined,
+          : senderName
+            ? senderName
+            : typeof payload.recipientId === "string"
+              ? `IG user ·${payload.recipientId.slice(-6)}`
+              : undefined,
         summary: text.length > 0 ? (text.length > 120 ? `${text.slice(0, 120)}…` : text) : undefined,
       };
     }),

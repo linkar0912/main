@@ -234,7 +234,7 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   await page.getByLabel("Not-following prompt").fill("Follow us first, then tap I followed to unlock this.");
   // Delivery step.
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await page.getByLabel("Delivery message").fill("You are verified — here is your guide.");
+  await page.getByLabel("Delivery message").fill("You are verified - here is your guide.");
   await page.getByLabel("Delivery link").fill("https://example.com/guide");
   // Guardrails, then Review.
   await page.getByRole("button", { name: "Next", exact: true }).click();

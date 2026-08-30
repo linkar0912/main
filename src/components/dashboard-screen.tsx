@@ -20,7 +20,7 @@ import { TrackedLinksPanel } from "./tracked-links-panel";
 import { StatusBadge } from "./status-badge";
 import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
-import { clearWorkspaceDataCache, getInstagramConnections } from "@/src/lib/client/workspace-data";
+import { clearWorkspaceDataCache, getFacebookPages, getInstagramConnections } from "@/src/lib/client/workspace-data";
 
 // Mirrors DailyCount in src/lib/repository.ts - the key is `day`, not `date`.
 type DayPoint = { day: string; count: number };
@@ -165,8 +165,8 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
     {
       key: "connect",
       done: hasConnection === true,
-      title: "Connect your Instagram account",
-      hint: "Link a professional account so replies can be sent.",
+      title: "Connect an Instagram account or Facebook Page",
+      hint: "Link at least one supported channel so replies can be sent.",
       href: "/settings",
     },
     {
@@ -180,7 +180,7 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
       key: "activate",
       done: automations.some((automation) => automation.status === "ACTIVE"),
       title: "Activate it and go live",
-      hint: "Active flows reply to real comments and DMs instantly.",
+      hint: "Active flows reply to supported comments and messages.",
       href: "/automations",
     },
   ];
@@ -264,9 +264,10 @@ export function DashboardScreen() {
       // shared in-memory cache would have served the stale "connected"
       // snapshot from the previous load.
       clearWorkspaceDataCache("connections");
-      getInstagramConnections()
-        .then((connections) => setHasConnection(connections.length > 0))
-        .catch(() => undefined);
+      Promise.all([
+        getInstagramConnections().catch(() => []),
+        getFacebookPages().catch(() => []),
+      ]).then(([connections, pages]) => setHasConnection(connections.length > 0 || pages.length > 0));
     }
     refresh();
     // The dashboard is the workspace overview; a stale "you are connected"

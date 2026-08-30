@@ -128,4 +128,37 @@ describe("ProfileScreen", () => {
     expect(document.querySelector(".avatar-connection")).toBeTruthy();
     expect(document.querySelector(".settings-avatar")).toBeNull();
   });
+
+  it("shows a connected Facebook Page alongside Instagram channel management", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/account")) {
+        return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
+      }
+      if (url.includes("/api/contacts")) {
+        return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
+      }
+      if (url.includes("/api/meta/connection")) {
+        return { ok: true, json: async () => ({ data: [] }) } as Response;
+      }
+      if (url.includes("/api/facebook/connection")) {
+        return { ok: true, json: async () => ({ data: [{ id: "fb_1", pageId: "page_1", pageName: "Linkar Page", status: "CONNECTED", connectedAt: "2026-08-30T00:00:00.000Z" }] }) } as Response;
+      }
+      throw new Error(`Unexpected fetch to ${url}`);
+    }));
+
+    render(
+      <ProfileScreen
+        email="owner@example.com"
+        memberSince="2026-08-20T00:00:00.000Z"
+        emailVerified={true}
+        role="OWNER"
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Connected channels" })).toBeTruthy();
+    expect(screen.getByText("Linkar Page")).toBeTruthy();
+    expect(screen.getByText(/Facebook Page/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /manage channels/i }).getAttribute("href")).toBe("/settings");
+  });
 });

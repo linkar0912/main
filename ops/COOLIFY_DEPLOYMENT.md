@@ -1,7 +1,7 @@
 # Linkar production deployment: Coolify behind Cloudflare
 
 Production runs as **one Coolify service** built from the checked-in
-[`docker-compose.coolify.yml`](../docker-compose.coolify.yml) — not as separate
+[`docker-compose.coolify.yml`](../docker-compose.coolify.yml) - not as separate
 applications. Four containers share one image and one private network:
 
 ```text
@@ -14,13 +14,13 @@ Cloudflare (public HTTPS)
 
 **Postgres and Auth are hosted on Supabase**, not run in this stack.
 `DATABASE_URL` (web/worker) is Supabase's transaction pooler
-(`?pgbouncer=true` required); `migrate` needs `DIRECT_URL` instead — Prisma's
+(`?pgbouncer=true` required); `migrate` needs `DIRECT_URL` instead - Prisma's
 migration lock is incompatible with transaction-mode pooling.
 
 GitHub Actions builds and publishes `ghcr.io/linkar0912/main:main` on
 every push to `main`. Coolify only pulls that image; it never runs a Next.js
 build on the production host. Create Linkar as its own Coolify project and do
-**not** enable *Connect to Predefined Network* — the resource-specific network
+**not** enable *Connect to Predefined Network* - the resource-specific network
 and `linkar-*` volumes keep this stack separate from TrackParcel.
 
 The Compose file caps each container's CPU and memory. Those ceilings are
@@ -33,7 +33,7 @@ live in this repository.
 
 ---
 
-## 1. The dependency gate — read this before deploying
+## 1. The dependency gate - read this before deploying
 
 This is the single most important thing to understand about the stack, and the
 cause of the 2026-08-22 outage.
@@ -47,12 +47,12 @@ depends_on:
 ```
 
 They will not start until the `migrate` container **exits 0**. If a migration
-fails, the whole application stays down — the failure is not isolated to the
+fails, the whole application stays down - the failure is not isolated to the
 database step. Three consequences follow, and each one has bitten this stack:
 
 **A failed migration is sticky.** `prisma migrate deploy` records the failed
 attempt in `_prisma_migrations` with `finished_at` NULL. Every later run then
-aborts with **P3009 before executing any SQL**. Redeploying cannot clear it —
+aborts with **P3009 before executing any SQL**. Redeploying cannot clear it -
 the fix must be applied to the database by hand (§5).
 
 **A plain redeploy does not re-run the one-shot.** `migrate` is
@@ -72,7 +72,7 @@ in-flight Deploy; use the force/recreate option on Deploy instead.
 supabase.com, link it with `supabase link --project-ref <ref>` (see
 `supabase/config.toml`), and apply the committed migration history with
 `prisma migrate deploy` using the project's `DIRECT_URL` (port 5432, no
-pooling — `migrate deploy` takes a Postgres advisory lock the transaction
+pooling - `migrate deploy` takes a Postgres advisory lock the transaction
 pooler doesn't support). RLS is enabled (default-deny) on every table in
 `public`; Prisma still reads/writes everything since it connects as the
 table owner, which bypasses RLS.
@@ -80,7 +80,7 @@ table owner, which bypasses RLS.
 **Valkey** is the only data service still defined inside the Compose file,
 reachable only on the service's private network. It must have **no public
 port and no FQDN**. Its data lives in the named volume `linkar-valkey`.
-Deleting the Coolify service deletes that volume and its queue state — Valkey
+Deleting the Coolify service deletes that volume and its queue state - Valkey
 itself holds no durable business data (BullMQ job state only), so this is
 recoverable by re-running affected jobs, unlike a Postgres loss would be.
 
@@ -89,22 +89,25 @@ Environment values Compose requires (`?` means the deploy fails fast if unset):
 | Variable | Notes |
 | --- | --- |
 | `DATABASE_URL` | Supabase transaction pooler, port 6543, `?pgbouncer=true` required |
-| `DIRECT_URL` | Supabase direct connection, port 5432 — `migrate` only |
+| `DIRECT_URL` | Supabase direct connection, port 5432 - `migrate` only |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | from the Supabase project's API settings |
 | `VALKEY_PASSWORD` | required |
 | `AUTH_SESSION_SECRET` | required, ≥ 32 characters (HMAC key for login/signup rate-limit keys) |
 | `META_TOKEN_ENCRYPTION_KEY` | required |
 | `META_REDIRECT_URI`, `META_VERIFY_TOKEN` | required, must match Meta exactly |
+| `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` | required when Facebook Pages are enabled |
+| `FACEBOOK_REDIRECT_URI`, `FACEBOOK_VERIFY_TOKEN` | required when Facebook Pages are enabled, must match the Facebook app exactly |
+| `FACEBOOK_TOKEN_ENCRYPTION_KEY` | optional dedicated 64-hex-character key; falls back to `META_TOKEN_ENCRYPTION_KEY` |
 | `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL` | required |
 
 `REDIS_URL` is assembled inside the Compose file from `VALKEY_PASSWORD`
 against the in-network hostname `valkey`. `DATABASE_URL`/`DIRECT_URL` are not
-assembled — set them directly from the Supabase project's connection strings.
+assembled - set them directly from the Supabase project's connection strings.
 
 `NEXT_PUBLIC_APP_URL` is inlined at **image build time**, not read at runtime.
-Changing it requires a rebuild, not just a redeploy — a mismatch sends every
+Changing it requires a rebuild, not just a redeploy - a mismatch sends every
 unauthenticated request to the wrong host on redirect. It's also the
-`SiteURL` Supabase Auth uses in email links — keep the Supabase email
+`SiteURL` Supabase Auth uses in email links - keep the Supabase email
 templates (Authentication → Emails → Templates) pointed at
 `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup` (and
 `type=recovery` for the reset template) rather than the default
@@ -133,7 +136,7 @@ Never route Cloudflare, a public hostname, or any port to `worker` or
 
 1. **Merge to `main`.** CI runs lint, typecheck, and the unit suite; the
    container workflow publishes `ghcr.io/linkar0912/main:main`.
-2. **Run `pnpm deploy:coolify`.** This is the preferred path — it mechanizes
+2. **Run `pnpm deploy:coolify`.** This is the preferred path - it mechanizes
    the rest of this section: confirms the build for the current commit is
    green, refuses to proceed on an unreviewed migration (add
    `-- --migrations-backed-up` once §6 is done), calls the restart endpoint,
@@ -144,7 +147,7 @@ Never route Cloudflare, a public hostname, or any port to `worker` or
    `COOLIFY_HOST`, `COOLIFY_PORT`, `COOLIFY_SERVICE_UUID`, and
    `PUBLIC_APP_DOMAIN` in `.env.local`, and `gh` authenticated.
 
-   The steps below are what that script does — use them directly only if the
+   The steps below are what that script does - use them directly only if the
    script itself is unavailable or its output needs cross-checking by hand.
 
 3. **Wait for both workflows to go green.** Deploying before the image is
@@ -165,7 +168,7 @@ Never route Cloudflare, a public hostname, or any port to `worker` or
    absent, which is why it appears to work right after a Stop. The restart
    endpoint above performs a real down/up and honours `pull_policy: always`.
 
-   Verify by asset, not by the deploy's own say-so — §5 of this file explains
+   Verify by asset, not by the deploy's own say-so - §5 of this file explains
    why the `release` field cannot be trusted:
    ```bash
    CSS=$(curl -sk https://linkar.in/login \
@@ -173,7 +176,7 @@ Never route Cloudflare, a public hostname, or any port to `worker` or
    curl -sk "https://linkar.in$CSS" | grep -c icon-rail   # 0 = old build
    ```
 6. **Watch it settle.** A rollout takes roughly 60–90 seconds and takes the
-   *whole stack* down in the middle — a brief window where `valkey` also reads
+   *whole stack* down in the middle - a brief window where `valkey` also reads
    as exited is normal, not an outage.
    ```bash
    curl -s -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
@@ -187,12 +190,12 @@ Never route Cloudflare, a public hostname, or any port to `worker` or
    not the pooler.** Using the transaction pooler for `migrate` causes
    `prisma migrate deploy` to hang indefinitely trying to acquire its
    advisory lock, which then blocks `web`/`worker` forever (they wait on
-   `migrate: service_completed_successfully`) — this caused a real outage
+   `migrate: service_completed_successfully`) - this caused a real outage
    during the Supabase cutover. If `migrate` is stuck at
    `running:unknown:excluded` for more than a minute or two, this is the
    first thing to check.
 
-`worker: running:unknown` is correct — the worker has no healthcheck because it
+`worker: running:unknown` is correct - the worker has no healthcheck because it
 does not listen on a port. `migrate: exited` is correct for a completed
 one-shot.
 
@@ -212,7 +215,7 @@ connection, then exercise one controlled webhook event before re-enabling
 customer automations.
 
 **Ignore the `release` field.** It echoes the `SOURCE_COMMIT` environment
-variable, which is set by hand in Coolify and is not updated by a deploy — as
+variable, which is set by hand in Coolify and is not updated by a deploy - as
 of 2026-08-23 it still reports `2b43339`, many releases old. It will happily
 confirm a release that never shipped. Until it is wired to the real commit,
 verify with the asset check in step 4.
@@ -224,9 +227,9 @@ verify with the asset check in step 4.
 Symptom: the site is down, `migrate` shows `exited`, and `web`/`worker` never
 leave `created`/`starting`. Redeploying changes nothing.
 
-**Step 1 — confirm the diagnosis.** Coolify 4.1.2 has no logs API for compose
+**Step 1 - confirm the diagnosis.** Coolify 4.1.2 has no logs API for compose
 services (`/api/v1/services/{uuid}/logs` returns 404), so use the UI logs, or
-query Supabase directly — its SQL Editor (dashboard) or `psql <DIRECT_URL>`
+query Supabase directly - its SQL Editor (dashboard) or `psql <DIRECT_URL>`
 both work from anywhere, since Supabase's Postgres (unlike the old in-stack
 container) isn't restricted to the private compose network:
 
@@ -237,12 +240,12 @@ WHERE finished_at IS NULL;
 ```
 
 One row with an empty `finished_at` is a wedged migration. No rows at all means
-`migrate` never ran the SQL — skip to step 3, it is a container-recreation
+`migrate` never ran the SQL - skip to step 3, it is a container-recreation
 problem, not a database problem. (Also check that `migrate`'s `DATABASE_URL`
-is actually `DIRECT_URL` — see the note in §4 step 6; a migration stuck
+is actually `DIRECT_URL` - see the note in §4 step 6; a migration stuck
 *running*, not failed, is usually that instead of a real P3009.)
 
-**Step 2 — clear the failed row.** Back up first (`pg_dump` against
+**Step 2 - clear the failed row.** Back up first (`pg_dump` against
 `DIRECT_URL`, or a Supabase point-in-time restore if enabled on the project's
 plan).
 
@@ -264,16 +267,16 @@ DATABASE_URL='<DIRECT_URL>' ./node_modules/.bin/prisma migrate resolve --rolled-
 ```
 
 Both are safe because Postgres DDL is transactional: a failed migration rolls
-back completely, leaving no partial tables. Confirm before assuming — if the
+back completely, leaving no partial tables. Confirm before assuming - if the
 migration contains `CREATE INDEX CONCURRENTLY` or similar non-transactional
 statements, inspect the schema by hand first.
 
-**Step 3 — recreate the containers.** A plain Deploy leaves the exited one-shot
+**Step 3 - recreate the containers.** A plain Deploy leaves the exited one-shot
 in place. Use Coolify's **force rebuild / force recreate** option on Deploy. If
 the UI offers no such option, press **Stop**, wait for it to finish completely,
-then press **Deploy** — never overlap the two.
+then press **Deploy** - never overlap the two.
 
-**Step 4 — verify.**
+**Step 4 - verify.**
 
 ```sql
 SELECT migration_name, finished_at
@@ -311,7 +314,7 @@ the P3009 lock-out took the site down until an operator intervened.
   the machine you ran the dump on. The migration is additive and does not
   replay historical sends.
 - Test against a real PostgreSQL 17 before merging, applying the migration to a
-  database already at the previous revision — not only to an empty one. A fresh
+  database already at the previous revision - not only to an empty one. A fresh
   database applies the whole history in order and hides ordering bugs.
 - Back up Supabase Postgres (`pg_dump` against `DIRECT_URL`) before any release
   containing a migration.
@@ -333,12 +336,17 @@ Use the final public domain, never a Coolify internal URL:
 | OAuth redirect URI | `https://linkar.in/api/meta/oauth/callback` |
 | Webhooks callback URL | `https://linkar.in/api/meta/webhook` |
 | Data deletion callback URL | `https://linkar.in/api/meta/data-deletion` |
+| Facebook OAuth redirect URI | `https://linkar.in/api/facebook/oauth/callback` |
+| Facebook webhooks callback URL | `https://linkar.in/api/facebook/webhook` |
+| Facebook data deletion callback URL | `https://linkar.in/api/facebook/data-deletion` |
+| Facebook deauthorization callback URL | `https://linkar.in/api/facebook/deauthorize` |
 | Privacy policy | `https://linkar.in/privacy` |
 | Terms of service | `https://linkar.in/terms` |
 | Support URL | `https://linkar.in/support` |
 
-Set `META_REDIRECT_URI` to the OAuth row exactly. Keep `META_VERIFY_TOKEN`
-server-only and enter the same value in Meta when validating the webhook. See
+Set `META_REDIRECT_URI` and `FACEBOOK_REDIRECT_URI` to their OAuth rows exactly.
+Keep both verify tokens server-only and enter the matching value in each Meta
+app when validating its webhook. See
 [`docs/meta-app-review.md`](../docs/meta-app-review.md) for the reviewer test
 script and App Review checklist.
 
@@ -355,7 +363,7 @@ tested against the backup. A schema that has moved forward will usually still
 serve the previous image, because migrations here are additive.
 
 If the failure is a Supabase incident, check Supabase's own status page and
-project logs first — this stack no longer manages that data service directly.
+project logs first - this stack no longer manages that data service directly.
 If it's Valkey, recover that private service and keep its volume. Either way,
 repeat the health check and a controlled webhook delivery afterward. Rotate
 secrets only for a compromise or a planned rotation.

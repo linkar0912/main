@@ -12,8 +12,7 @@ import {
   FacebookPageSummary,
 } from "@/src/lib/facebook/oauth";
 import { FacebookApiError } from "@/src/lib/facebook/client";
-import { createOAuthState as _unused, readOAuthState } from "@/src/lib/meta/oauth-state";
-import { FacebookPageOwnershipError } from "@/src/lib/repository";
+import { readOAuthState } from "@/src/lib/meta/oauth-state";
 import { FACEBOOK_OAUTH_STATE_COOKIE } from "../start/route";
 import { createFacebookPageSelection, FACEBOOK_PAGE_SELECTION_COOKIE } from "@/src/lib/facebook/page-selection";
 
@@ -99,7 +98,6 @@ export async function GET(request: Request) {
     if (error instanceof FacebookPermissionError) status = "missing-permissions";
     else if (error instanceof FacebookOAuthError) status = "token-exchange";
     else if (error instanceof FacebookApiError) status = "page-listing";
-    else if (error instanceof FacebookPageOwnershipError) status = "already-connected";
     return withoutStateCookie(settingsRedirect(env, status));
   }
 }

@@ -30,13 +30,15 @@ describe("PublicPage", () => {
     expect(screen.getByRole("link", { name: /back to app/i }).getAttribute("href")).toBe("/dashboard");
   });
 
-  it("keeps third-party platform names out of public page copy and metadata", async () => {
+  it("names both supported channels in public page copy and metadata", async () => {
     const metadata = await generateMetadata();
     const page = render(<HomePage />);
     const publicMain = page.container.querySelector("main");
 
     expect(publicMain).not.toBeNull();
-    expect(publicMain?.textContent ?? "").not.toMatch(/instagram/i);
-    expect(`${metadata.title} ${metadata.description}`).not.toMatch(/instagram/i);
+    expect(publicMain?.textContent ?? "").toMatch(/instagram/i);
+    expect(publicMain?.textContent ?? "").toMatch(/facebook/i);
+    expect(`${metadata.title} ${metadata.description}`).toMatch(/instagram/i);
+    expect(`${metadata.title} ${metadata.description}`).toMatch(/facebook/i);
   });
 });

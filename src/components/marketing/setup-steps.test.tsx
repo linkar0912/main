@@ -29,8 +29,8 @@ describe("SetupSteps", () => {
       "Publish the flow",
     ]);
     expect(Array.from(steps, (step) => within(step).getByText(/^0[1-3]$/).textContent)).toEqual(["01", "02", "03"]);
-    expect(within(steps[0]).getByText("Authorize the messaging connection securely and confirm the account you want Linkar to use.")).toBeTruthy();
-    expect(within(steps[1]).getByText("Pick the comment, message, mention, or campaign condition that should begin the flow.")).toBeTruthy();
+    expect(within(steps[0]).getByText("Authorize Instagram or a Facebook Page securely and confirm the channel you want Linkar to use.")).toBeTruthy();
+    expect(within(steps[1]).getByText("Pick a supported Instagram or Facebook comment, message, mention, or campaign condition.")).toBeTruthy();
     expect(within(steps[2]).getByText("Review the path, switch it on, and watch each conversation move through visible states.")).toBeTruthy();
     expect(Array.from(steps, (step) => within(step).getByRole("figure").getAttribute("aria-label"))).toEqual([
       "Protected Linkar connection preview",

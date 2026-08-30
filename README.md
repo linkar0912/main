@@ -1,6 +1,6 @@
 # Linkar
 
-Linkar is an India-first Instagram automation MVP for deterministic comment and inbound-DM replies. It uses a guided Trigger → Condition → Action builder and Meta’s official Instagram APIs. There is no AI integration in this version.
+Linkar is an India-first Instagram and Facebook Page automation MVP. It provides deterministic Instagram comment and inbound-DM replies plus public replies to top-level Facebook Page comments through Meta’s official APIs. There is no AI integration in this version.
 
 ## What is built
 
@@ -15,8 +15,9 @@ Linkar is an India-first Instagram automation MVP for deterministic comment and 
 - Win-back broadcast segments (quiet 7+ / 30+ days).
 - Seven new India-first recipes: lead magnet, price-list responder, course FAQ, event registration, collab intake, giveaway entries, and offer follow-up.
 - Current Instagram Business Login callback handling, webhook verification, inbound-only event normalization, BullMQ worker retries, and atomic execution claims.
-- A visual follow-gated Reel/post campaign builder: a matched comment triggers a public reply and a private opening message with an opt-in prompt, then Meta's own follower relationship gates a single private link delivery — with a participant activity view for diagnostics.
-- AES-256-GCM encryption for stored Instagram access tokens.
+- Facebook Page OAuth with an explicit Page picker, permission validation, read-only webhook health, loop prevention, reply-once enforcement, daily quotas, and public comment replies.
+- A visual follow-gated Reel/post campaign builder: a matched comment triggers a public reply and a private opening message with an opt-in prompt, then Meta's own follower relationship gates a single private link delivery - with a participant activity view for diagnostics.
+- AES-256-GCM encryption for stored Instagram and Facebook Page access tokens.
 - Public privacy, terms, data deletion, and support pages for Meta App Review.
 - Local demo mode when `DATABASE_URL` and `REDIS_URL` are omitted.
 
@@ -76,11 +77,11 @@ openssl rand -hex 32
 Put the result in `META_TOKEN_ENCRYPTION_KEY`. Never commit `.env` or any Meta secret.
 
 Accounts are self-serve: anyone can create a workspace at `/signup` (email +
-password), then connect their Instagram account through the settings page.
+password), then connect an Instagram account or Facebook Page through the settings page.
 Auth is handled by Supabase Auth (`NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`); email
 confirmation and password-reset links route through `/auth/confirm`.
-`AUTH_SESSION_SECRET` is still required for the rate-limit key HMAC — generate
+`AUTH_SESSION_SECRET` is still required for the rate-limit key HMAC - generate
 it with a password manager or:
 
 ```bash

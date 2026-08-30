@@ -14,14 +14,14 @@ const setupSteps: readonly SetupStep[] = [
     id: "connect",
     number: "01",
     title: "Connect your professional account",
-    description: "Authorize the messaging connection securely and confirm the account you want Linkar to use.",
+    description: "Authorize Instagram or a Facebook Page securely and confirm the channel you want Linkar to use.",
     status: "Connection protected",
   },
   {
     id: "trigger",
     number: "02",
     title: "Choose a trigger",
-    description: "Pick the comment, message, mention, or campaign condition that should begin the flow.",
+    description: "Pick a supported Instagram or Facebook comment, message, mention, or campaign condition.",
     status: "Trigger ready",
   },
   {

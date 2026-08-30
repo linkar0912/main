@@ -82,9 +82,23 @@ describe("DELETE /api/facebook/connection", () => {
       method: "DELETE", body: JSON.stringify({ id: "rec_1" }),
     }));
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ disconnected: true });
+    await expect(response.json()).resolves.toEqual({ disconnected: true, remoteUnsubscribed: true });
     expect(mocks.deleteFacebookPage).toHaveBeenCalledWith("ws_1", "rec_1");
     expect(mocks.unsubscribe).toHaveBeenCalledWith("p_1", "page-token", "v25.0");
+  });
+
+  it("removes the local connection when Meta cannot unsubscribe an expired Page token", async () => {
+    mocks.listFacebookPages.mockResolvedValue([{ id: "rec_1", pageId: "p_1", accessTokenEncrypted: "sealed" }]);
+    mocks.unsubscribe.mockRejectedValue(new Error("Meta request failed (401)"));
+    mocks.deleteFacebookPage.mockResolvedValue(true);
+
+    const response = await DELETE(new Request("http://localhost/api/facebook/connection", {
+      method: "DELETE", body: JSON.stringify({ id: "rec_1" }),
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ disconnected: true, remoteUnsubscribed: false });
+    expect(mocks.deleteFacebookPage).toHaveBeenCalledWith("ws_1", "rec_1");
   });
 
   it("returns 500 when the repository throws", async () => {

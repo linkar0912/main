@@ -45,6 +45,24 @@ describe("DashboardScreen onboarding", () => {
     expect(screen.queryByText("Connect your Instagram account")).toBeNull();
   });
 
+  it("treats a connected Facebook Page as a connected channel", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
+      if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [] }) } as Response;
+      if (url.includes("/api/facebook/connection")) return { ok: true, json: async () => ({ data: [{ id: "fb_1", pageId: "page_1", pageName: "Linkar Page", status: "CONNECTED", connectedAt: "2026-08-30T00:00:00.000Z" }] }) } as Response;
+      if (url.includes("/api/contacts")) return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
+      if (url.includes("/api/health")) return { ok: true, json: async () => ({ mode: "configured" }) } as Response;
+      if (url.includes("/api/insights")) return { ok: true, json: async () => ({ timeseries: {} }) } as Response;
+      throw new Error(`Unexpected fetch to ${url}`);
+    }));
+
+    render(<DashboardScreen />);
+
+    expect(await screen.findByText("1/3 done")).toBeTruthy();
+    expect(screen.getByText("Connect an Instagram account or Facebook Page").closest(".setup-row")?.classList.contains("is-done")).toBe(true);
+  });
+
   it("greets the signed-in user by their account handle", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

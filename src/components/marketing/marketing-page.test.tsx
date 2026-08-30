@@ -8,6 +8,7 @@ const landmarkIds = [
   "proof",
   "product",
   "how-it-works",
+  "channels",
   "surfaces",
   "outcomes",
   "workflows",
@@ -46,7 +47,7 @@ describe("MarketingPage", () => {
     const landmarks = Array.from(
       container.querySelectorAll("header[data-surface], section[id], footer[id]"),
     );
-    expect(landmarks).toHaveLength(12);
+    expect(landmarks).toHaveLength(13);
     expect(landmarks.map((landmark) => landmark.id || "header")).toEqual([
       "header",
       ...landmarkIds,
@@ -79,5 +80,20 @@ describe("MarketingPage", () => {
 
     expect(publicText.toLowerCase()).not.toContain(prohibitedBrand);
     expect(publicText.toLowerCase()).not.toContain(`${prohibitedBrand}.com`);
+  });
+
+  it("names both supported Meta channels without overstating Facebook capabilities", () => {
+    render(<MarketingPage />);
+
+    const channels = screen.getByRole("region", { name: "Everywhere your audience is" });
+    expect(within(channels).getByRole("heading", { name: "Instagram" })).toBeTruthy();
+    expect(within(channels).getByText(/private replies, direct messages, and follow-gated/i)).toBeTruthy();
+    expect(within(channels).getByRole("heading", { name: "Facebook Pages" })).toBeTruthy();
+    expect(within(channels).getByText(/public replies to top-level Page comments/i)).toBeTruthy();
+  });
+
+  it("does not render em dashes in public copy", () => {
+    const { container } = render(<MarketingPage />);
+    expect(container.textContent).not.toContain("\u2014");
   });
 });

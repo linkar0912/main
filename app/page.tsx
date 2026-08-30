@@ -3,8 +3,8 @@ import { MarketingPage } from "@/src/components/marketing/marketing-page";
 
 export function generateMetadata(): Metadata {
   return {
-    title: "Linkar — conversations that keep moving",
-    description: "Build clear conversation flows with useful replies, timely follow-ups, and human handoffs.",
+    title: "Linkar | Instagram and Facebook automation",
+    description: "Build Instagram conversation flows and Facebook Page public comment replies with clear rules, useful responses, and human handoffs.",
   };
 }
 

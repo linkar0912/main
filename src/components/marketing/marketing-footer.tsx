@@ -7,6 +7,7 @@ const columns = [
     title: "Product",
     links: [
       ["Product", "/#product"],
+      ["Channels", "/#channels"],
       ["How it works", "/#how-it-works"],
       ["Workflows", "/#workflows"],
       ["Get started", "/signup"],
@@ -78,7 +79,7 @@ export function MarketingFooter({ hideWordmark = false }: MarketingFooterProps =
 
         <div className={styles.legalLine}>
           <p>© {year} Linkar.</p>
-          <p>Linkar uses supported platform interfaces. Availability and messaging limits depend on the connected account and platform policies.</p>
+          <p>Linkar uses Meta’s supported Instagram and Facebook interfaces. Availability and limits depend on the connected account, Page, and platform policies.</p>
         </div>
 
         {hideWordmark ? null : (

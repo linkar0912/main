@@ -1,15 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import Link from "next/link";
+import { FacebookGlyph } from "../facebook-glyph";
+import { InstagramGlyph } from "../instagram-glyph";
 import { ButtonRoll } from "./button-roll";
 import styles from "./marketing-header.module.css";
 
 const navigationItems = [
   { label: "Product", href: "/#product" },
-  { label: "Workflows", href: "/#workflows" },
   { label: "How it works", href: "/#how-it-works" },
   { label: "Resources", href: "/#resources" },
+] as const;
+
+const mobileNavigationItems = [
+  navigationItems[0],
+  { label: "Instagram", href: "/#channels" },
+  { label: "Facebook Pages", href: "/#channels" },
+  { label: "Workflows", href: "/#workflows" },
+  ...navigationItems.slice(1),
+] as const;
+
+const useCaseItems = [
+  { label: "Comment automation", detail: "Instagram private replies and Facebook public replies", href: "/#surfaces" },
+  { label: "Direct messages", detail: "Instagram conversations triggered by incoming messages", href: "/#surfaces" },
+  { label: "Follow-gated campaigns", detail: "Instagram delivery after an official follow check", href: "/#workflows" },
+  { label: "Human handoff", detail: "Pause the flow when a person should take over", href: "/#workflows" },
 ] as const;
 
 const accountItems = [
@@ -28,9 +44,11 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
   const openerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const solutionsButtonRef = useRef<HTMLButtonElement>(null);
   const menuOpenRef = useRef(false);
   const [scrolled, setScrolled] = useState(forceSurface === "solid");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [solutionsOpen, setSolutionsOpen] = useState(false);
 
   useEffect(() => {
     menuOpenRef.current = menuOpen;
@@ -82,7 +100,25 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
   }, [forceSurface]);
 
   useEffect(() => {
+    if (!solutionsOpen) return;
+
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setSolutionsOpen(false);
+      solutionsButtonRef.current?.focus();
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [solutionsOpen]);
+
+  useEffect(() => {
     const closeOnTabletResize = () => {
+      if (window.innerWidth < 1_180) {
+        setSolutionsOpen(false);
+      }
+
       if (window.innerWidth >= 768 && menuOpenRef.current) {
         menuOpenRef.current = false;
         setMenuOpen(false);
@@ -137,6 +173,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
       data-surface={forceSurface ?? (scrolled ? "solid" : "hero")}
       data-visibility="visible"
       data-menu={menuOpen ? "open" : "closed"}
+      data-solutions={solutionsOpen ? "open" : "closed"}
     >
       <div className={styles.frame}>
         <div className={styles.leftRail}>
@@ -155,7 +192,21 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
 
         <nav className={styles.primaryNavigation} aria-label="Primary">
           <ul>
-            {navigationItems.map((item) => (
+            <li><Link href={navigationItems[0].href}>{navigationItems[0].label}</Link></li>
+            <li className={styles.solutionsTrigger}>
+              <button
+                ref={solutionsButtonRef}
+                className={styles.solutionsButton}
+                type="button"
+                aria-expanded={solutionsOpen}
+                aria-controls="marketing-solutions"
+                onClick={() => setSolutionsOpen(true)}
+                onPointerEnter={() => setSolutionsOpen(true)}
+              >
+                Solutions <span className={styles.solutionsCaret} aria-hidden="true" />
+              </button>
+            </li>
+            {navigationItems.slice(1).map((item) => (
               <li key={item.href}>
                 <Link href={item.href}>{item.label}</Link>
               </li>
@@ -209,8 +260,8 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
               </button>
               <nav aria-label="Mobile primary">
                 <ul>
-                  {[...navigationItems, ...accountItems].map((item) => (
-                    <li key={item.href}>
+                  {[...mobileNavigationItems, ...accountItems].map((item) => (
+                    <li key={item.label}>
                       <Link href={item.href} onClick={() => closeMenu(false)}>{item.label}</Link>
                     </li>
                   ))}
@@ -220,6 +271,46 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
           ) : null}
         </div>
       </div>
+
+      {solutionsOpen ? (
+        <>
+          <button
+            className={styles.solutionsBackdrop}
+            type="button"
+            aria-label="Close Solutions"
+            data-solutions-backdrop
+            onClick={() => setSolutionsOpen(false)}
+          />
+          <nav id="marketing-solutions" className={styles.solutionsPanel} aria-label="Solutions">
+            <section className={styles.solutionsColumn} aria-labelledby="solutions-channel-title">
+              <p id="solutions-channel-title" className={styles.solutionsEyebrow}>By channel</p>
+              <Link className={styles.channelLink} href="/#channels" aria-label="Instagram" onClick={() => setSolutionsOpen(false)}>
+                <span className={styles.channelIcon} data-channel="instagram" aria-hidden="true"><InstagramGlyph size={27} brand /></span>
+                <span><strong>Instagram</strong><small>Private replies and DMs</small></span>
+                <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
+              </Link>
+              <Link className={styles.channelLink} href="/#channels" aria-label="Facebook Pages" onClick={() => setSolutionsOpen(false)}>
+                <span className={styles.channelIcon} data-channel="facebook" aria-hidden="true"><FacebookGlyph size={27} brand /></span>
+                <span><strong>Facebook Pages</strong><small>Public comment replies</small></span>
+                <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
+              </Link>
+            </section>
+            <section className={styles.solutionsColumn} aria-labelledby="solutions-use-case-title">
+              <p id="solutions-use-case-title" className={styles.solutionsEyebrow}>By use case</p>
+              <ul className={styles.useCaseList}>
+                {useCaseItems.map((item, index) => (
+                  <li key={item.label} style={{ "--solution-index": index } as CSSProperties}>
+                    <Link href={item.href} onClick={() => setSolutionsOpen(false)}>
+                      <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                      <span className={styles.linkArrow} aria-hidden="true">&#8594;</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </nav>
+        </>
+      ) : null}
     </header>
   );
 }

@@ -13,7 +13,7 @@ const flowStates = [
   },
   {
     label: "Reply sent",
-    text: "Absolutely — I’ve sent the quick version. What are you hoping to improve first?",
+    text: "Absolutely, I’ve sent the quick version. What are you hoping to improve first?",
   },
 ] as const;
 

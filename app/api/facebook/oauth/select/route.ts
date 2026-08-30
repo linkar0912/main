@@ -6,6 +6,7 @@ import { listFacebookPages, subscribeFacebookPageToWebhooks } from "@/src/lib/fa
 import { FACEBOOK_PAGE_SELECTION_COOKIE, readFacebookPageSelection } from "@/src/lib/facebook/page-selection";
 import { sealSecret } from "@/src/lib/security/secrets";
 import { getRepository } from "@/src/lib/repository-provider";
+import { FacebookPageOwnershipError } from "@/src/lib/repository";
 
 export const runtime = "nodejs";
 
@@ -31,15 +32,22 @@ export async function POST(request: Request) {
   if (!subscription.subscribed) {
     return NextResponse.json({ error: subscription.error ?? "Facebook webhook subscription failed" }, { status: 502 });
   }
-  await getRepository().upsertFacebookPage({
-    workspaceId: session.workspaceId,
-    pageId: page.id,
-    pageName: page.name,
-    facebookUserId: selection.facebookUserId,
-    accessTokenEncrypted: sealSecret(page.accessToken, env.facebookTokenEncryptionKey),
-    tokenExpiresAt: selection.tokenExpiresAt,
-    status: "CONNECTED",
-  });
+  try {
+    await getRepository().upsertFacebookPage({
+      workspaceId: session.workspaceId,
+      pageId: page.id,
+      pageName: page.name,
+      facebookUserId: selection.facebookUserId,
+      accessTokenEncrypted: sealSecret(page.accessToken, env.facebookTokenEncryptionKey),
+      tokenExpiresAt: selection.tokenExpiresAt,
+      status: "CONNECTED",
+    });
+  } catch (error) {
+    if (!(error instanceof FacebookPageOwnershipError)) throw error;
+    const response = NextResponse.json({ error: error.message, code: "already-connected" }, { status: 409 });
+    response.cookies.delete(FACEBOOK_PAGE_SELECTION_COOKIE);
+    return response;
+  }
   const response = NextResponse.json({ connected: true });
   response.cookies.delete(FACEBOOK_PAGE_SELECTION_COOKIE);
   return response;

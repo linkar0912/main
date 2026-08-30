@@ -47,7 +47,7 @@ export const storyChapters: StoryChapter[] = [
     id: "followup",
     eyebrow: "03",
     title: "Return on time",
-    body: "Schedule a thoughtful follow-up while the conversation is still open — no reminder list required.",
+    body: "Schedule a thoughtful follow-up while the conversation is still open, with no reminder list required.",
     scene: "followup",
   },
   {

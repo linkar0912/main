@@ -1,5 +1,6 @@
 import { AutomationStory } from "./automation-story";
 import { BeforeAfterSection } from "./before-after-section";
+import { ChannelShowcase } from "./channel-showcase";
 import { FaqSection } from "./faq-section";
 import { FinalCta } from "./final-cta";
 import { HeroSection } from "./hero-section";
@@ -22,6 +23,7 @@ export function MarketingPage() {
         <ProofRail />
         <ManifestoSection />
         <AutomationStory />
+        <ChannelShowcase />
         <SurfaceRunway />
         <BeforeAfterSection />
         <WorkflowGallery />

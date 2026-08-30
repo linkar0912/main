@@ -25,6 +25,7 @@ type EventMeta = { icon: typeof MessageCircle; tone: string };
 
 const EVENT_META: Record<string, EventMeta> = {
   "comment.created": { icon: MessageCircle, tone: "slate" },
+  "facebook.comment.created": { icon: MessageCircle, tone: "accent" },
   "message.received": { icon: Send, tone: "accent" },
   "quick_reply.received": { icon: MousePointerClick, tone: "grape" },
   "postback.received": { icon: MousePointerClick, tone: "grape" },
@@ -37,6 +38,7 @@ const DEFAULT_META: EventMeta = { icon: Inbox, tone: "slate" };
 const FILTERS: Array<{ value: string; label: string }> = [
   { value: "", label: "All" },
   { value: "comment.created", label: "Comments" },
+  { value: "facebook.comment.created", label: "Facebook comments" },
   { value: "message.received", label: "Direct messages" },
   { value: "quick_reply.received", label: "Quick replies" },
   { value: "postback.received", label: "Button taps" },
@@ -72,7 +74,7 @@ function groupByDay(entries: ActivityEntry[]): Array<{ heading: string; entries:
   return groups;
 }
 
-/** Live inbox of recent inbound Instagram events, served by /api/activity. */
+/** Live inbox of recent inbound Instagram and Facebook events. */
 export function ActivityFeed() {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -117,7 +119,7 @@ export function ActivityFeed() {
   if (error) return <p className="form-error" role="alert">{error}</p>;
 
   return (
-    <section aria-label="Recent Instagram activity">
+    <section aria-label="Recent social activity">
       {entries.length > 0 && (
         <div className="inbox-stat-strip" aria-hidden={filter !== ""}>
           {FILTERS.slice(1).map(({ value, label }) => {

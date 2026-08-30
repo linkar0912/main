@@ -61,11 +61,70 @@ describe("MarketingHeader", () => {
     expect(screen.getByRole("link", { name: "Linkar home" }).textContent).toBe("Linkar");
     expect(screen.getByLabelText("Language: English").textContent).toContain("EN");
     expect(primaryNavigation.getByRole("link", { name: "Product" }).getAttribute("href")).toBe("/#product");
-    expect(primaryNavigation.getByRole("link", { name: "Workflows" }).getAttribute("href")).toBe("/#workflows");
+    const solutions = primaryNavigation.getByRole("button", { name: "Solutions" });
+    expect(solutions.getAttribute("aria-expanded")).toBe("false");
+    expect(solutions.getAttribute("aria-controls")).toBe("marketing-solutions");
     expect(primaryNavigation.getByRole("link", { name: "How it works" }).getAttribute("href")).toBe("/#how-it-works");
     expect(primaryNavigation.getByRole("link", { name: "Resources" }).getAttribute("href")).toBe("/#resources");
     expect(accountNavigation.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/signup");
     expect(accountNavigation.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
+  });
+
+  it("opens a channel-accurate Solutions panel", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const solutions = screen.getByRole("button", { name: "Solutions" });
+    fireEvent.click(solutions);
+
+    expect(solutions.getAttribute("aria-expanded")).toBe("true");
+    const panel = screen.getByRole("navigation", { name: "Solutions" });
+    expect(panel.getAttribute("id")).toBe("marketing-solutions");
+    expect(within(panel).getByRole("link", { name: "Instagram" }).getAttribute("href")).toBe("/#channels");
+    expect(within(panel).getByRole("link", { name: "Facebook Pages" }).getAttribute("href")).toBe("/#channels");
+    expect(within(panel).getByText("Private replies and DMs")).toBeTruthy();
+    expect(within(panel).getByText("Public comment replies")).toBeTruthy();
+    expect(document.querySelector("[data-solutions-backdrop]")).toBeTruthy();
+  });
+
+  it("keeps Solutions open when a pointer enters before clicking", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const solutions = screen.getByRole("button", { name: "Solutions" });
+    fireEvent.pointerEnter(solutions);
+    fireEvent.click(solutions);
+
+    expect(solutions.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("navigation", { name: "Solutions" })).toBeTruthy();
+  });
+
+  it("closes Solutions with Escape and restores focus", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const solutions = screen.getByRole("button", { name: "Solutions" });
+    fireEvent.click(solutions);
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("navigation", { name: "Solutions" })).toBeNull();
+    expect(solutions.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(solutions);
+  });
+
+  it("closes Solutions when the desktop navigation is hidden by a resize", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const solutions = screen.getByRole("button", { name: "Solutions" });
+    fireEvent.click(solutions);
+    expect(screen.getByRole("navigation", { name: "Solutions" })).toBeTruthy();
+
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1_100 });
+    fireEvent.resize(window);
+
+    expect(screen.queryByRole("navigation", { name: "Solutions" })).toBeNull();
+    expect(solutions.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("stays visible while scrolling and settles onto its solid floating surface", () => {
