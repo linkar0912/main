@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MarketingHeader } from "@/src/components/marketing/marketing-header";
 import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
+import { OAuthButtons } from "@/src/components/auth/oauth-buttons";
 import { safeNextPath } from "@/src/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +43,9 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                     ? "This invitation link is invalid, already used, or was sent to a different email."
                     : params.error === "unknown"
                         ? "Something went wrong creating your account. Please try again."
-                        : "";
+                        : params.error === "oauth"
+                            ? "Something went wrong signing in. Please try again."
+                            : "";
 
     return (
         <div data-header-tone="light">
@@ -57,6 +60,8 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                             : "Start free - upgrade when your audience grows."}
                     </p>
                     {error && <p className="form-error" role="alert">{error}</p>}
+                    <OAuthButtons next={nextPath} invite={invite} />
+                    <p className="auth-page-divider"><span>or</span></p>
                     <form action="/api/auth/signup" method="post" className="login-form">
                         <input type="hidden" name="next" value={nextPath} />
                         {invite && <input type="hidden" name="invite" value={invite} />}

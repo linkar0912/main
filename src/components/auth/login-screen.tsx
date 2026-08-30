@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { MarketingHeader } from "@/src/components/marketing/marketing-header";
 import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
+import { OAuthButtons } from "@/src/components/auth/oauth-buttons";
 
 type LoginScreenProps = {
   nextPath: string;
@@ -21,6 +22,9 @@ export function LoginScreen({ nextPath, error }: LoginScreenProps) {
           </p>
 
           {error && <p className="form-error" role="alert">{error}</p>}
+
+          <OAuthButtons next={nextPath} />
+          <p className="auth-page-divider"><span>or</span></p>
 
           <form
             action="/api/auth/login"

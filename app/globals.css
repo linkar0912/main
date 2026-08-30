@@ -1682,6 +1682,32 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   margin: 0 0 var(--space-2, 8px);
   max-inline-size: 42ch;
 }
+.auth-page-frame .oauth-buttons {
+  display: grid;
+  gap: var(--space-3, 12px);
+  inline-size: 100%;
+  margin-top: var(--space-3, 12px);
+}
+.auth-page-frame .oauth-form { inline-size: 100%; }
+.auth-page-frame .auth-page-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  color: var(--subtle, #a3a29b);
+  font-size: .78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  inline-size: 100%;
+  margin: var(--space-2, 8px) 0 0;
+}
+.auth-page-frame .auth-page-divider::before,
+.auth-page-frame .auth-page-divider::after {
+  content: "";
+  flex: 1;
+  block-size: 1px;
+  background: var(--line, #e7e5dc);
+}
 .auth-page-frame .login-form {
   display: grid;
   gap: var(--space-4, 16px);

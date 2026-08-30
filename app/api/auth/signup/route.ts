@@ -4,8 +4,8 @@ import { LoginRateLimitStore } from "@/src/lib/auth/rate-limit";
 import { clientAddress } from "@/src/lib/auth/client-address";
 import { getServerEnv } from "@/src/lib/env";
 import { getRepository } from "@/src/lib/repository-provider";
-import { createId } from "@/src/lib/id";
-import { hashToken } from "@/src/lib/auth/tokens";
+import { resolveInvitation } from "@/src/lib/auth/invitations";
+import { provisionWorkspace } from "@/src/lib/auth/provision-workspace";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -42,12 +42,8 @@ export async function POST(request: Request) {
     // Team invitations bind the new account to the inviting workspace instead of
     // provisioning a fresh one. The invite must match the signing-up email exactly.
     const inviteRaw = String(form.get("invite") ?? "");
-    const invitation = inviteRaw ? await repository.findInvitationByTokenHash(hashToken(inviteRaw)) : null;
-    const inviteValid = Boolean(
-        invitation && !invitation.acceptedAt && !invitation.revokedAt
-        && invitation.email === email && invitation.expiresAt > new Date().toISOString(),
-    );
-    if (inviteRaw && !inviteValid) {
+    const invitationResolution = await resolveInvitation({ inviteRaw, email, repository });
+    if (invitationResolution.status === "invalid") {
         return NextResponse.redirect(new URL("/signup?error=invite&email=" + encodeURIComponent(email), env.appUrl), 303);
     }
 
@@ -84,9 +80,11 @@ export async function POST(request: Request) {
         return NextResponse.redirect(new URL("/login?error=exists", env.appUrl), 303);
     }
 
-    const workspaceId = inviteValid && invitation ? invitation.workspaceId : createId("workspace");
-    if (!invitation) await repository.ensureWorkspace(workspaceId, email);
-    if (invitation) await repository.acceptInvitation(invitation.id, new Date().toISOString());
+    await provisionWorkspace({
+        email,
+        invitation: invitationResolution.status === "valid" ? invitationResolution.invitation : null,
+        repository,
+    });
 
     if (data.session) {
         return NextResponse.redirect(new URL(nextPath, env.appUrl), 303);

@@ -16,7 +16,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       ? "An account with that email already exists. Sign in instead."
       : params.error === "locked"
         ? "Too many failed attempts. Wait fifteen minutes before trying again."
-        : "";
+        : params.error === "oauth"
+          ? "Something went wrong signing in. Please try again."
+          : "";
 
   return <LoginScreen nextPath={nextPath} error={error} />;
 }
