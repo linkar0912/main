@@ -101,7 +101,7 @@ pnpm test:e2e
 
 ## Production requirements
 
-Production needs a public HTTPS deployment, a Supabase project (Postgres + Auth), Valkey, a stable `NEXT_PUBLIC_APP_URL`, an `AUTH_SESSION_SECRET`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of Postgres and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. Accounts are self-serve via `/signup`; each account gets its own isolated workspace.
+Production needs a public HTTPS deployment, a Supabase project (Postgres + Auth), Valkey, `APP_URL`/`NEXT_PUBLIC_APP_URL` set to the app origin, `PUBLIC_SITE_URL` set to the marketing origin, an `AUTH_SESSION_SECRET`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of Postgres and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. Accounts are self-serve via `/signup`; each account gets its own isolated workspace.
 
 The local production topology can be checked with:
 
@@ -119,7 +119,7 @@ After the web service is public, verify its configured dependencies without
 printing connection details:
 
 ```bash
-curl --fail --show-error https://linkar.in/api/health
+curl --fail --show-error https://app.linkar.in/api/health
 ```
 
 ## Meta App Review

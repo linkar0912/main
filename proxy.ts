@@ -3,15 +3,30 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
+import { isProtectedAppPath, resolveHostRedirect } from "@/src/lib/site-routing";
 
-// Optimistic gate for page routes only - redirects to /login when there's no
-// plausibly valid session. This also refreshes the Supabase session cookie
-// (via getClaims()) so it stays fresh across page navigations without every
-// page needing its own refresh logic. Each API route still independently
+// Canonicalizes the marketing and app hosts, then applies an optimistic gate
+// to authenticated page routes. The gate also refreshes the Supabase session
+// cookie (via getClaims()) so it stays fresh across page navigations without
+// every page needing its own refresh logic. Each API route still independently
 // verifies via getValidatedSession(); Proxy is not the source of truth for
 // authorization (see Next.js's Proxy guidance against using it as one).
 export async function proxy(request: NextRequest) {
   const env = getServerEnv();
+
+  const hostRedirect = resolveHostRedirect(request.nextUrl.hostname, request.nextUrl.pathname);
+  if (hostRedirect) {
+    const baseUrl = hostRedirect.target === "app" ? env.appUrl : env.publicSiteUrl;
+    const destination = new URL(hostRedirect.pathname, baseUrl);
+    destination.search = request.nextUrl.search;
+    return NextResponse.redirect(destination);
+  }
+
+  // Public marketing, legal, and authentication routes should not be sent
+  // through the session gate. Their host canonicalization above is separate
+  // from authorization so the same app build can serve both domains safely.
+  if (!isProtectedAppPath(request.nextUrl.pathname)) return NextResponse.next();
+
   const response = NextResponse.next();
   const supabase = createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
     cookies: {
@@ -42,6 +57,16 @@ export const config = {
   // authenticated page. New gated routes should be appended here - keep the
   // list aligned with the routes that render <AppShell> in app/.
   matcher: [
+    "/",
+    "/auth/:path*",
+    "/login/:path*",
+    "/signup/:path*",
+    "/forgot-password/:path*",
+    "/reset-password/:path*",
+    "/privacy/:path*",
+    "/terms/:path*",
+    "/data-deletion/:path*",
+    "/support/:path*",
     "/dashboard/:path*",
     "/activity/:path*",
     "/automations/:path*",

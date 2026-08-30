@@ -29,7 +29,7 @@ Coolify; it does not belong in this repository. Keep Valkey on
 2. Confirm the service has no public port, FQDN, cross-project attachment, or
    TrackParcel alias, and shares only `linkar-private` with the three
    other Linkar production services.
-3. Check `https://linkar.in/api/health`; require
+3. Check `https://app.linkar.in/api/health`; require
    `status: "ok"`, `dependencies.database: "ok"`, and
    `dependencies.redis: "ok"`.
 4. Send a controlled Instagram webhook only after the Meta configuration is

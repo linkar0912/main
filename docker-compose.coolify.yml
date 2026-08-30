@@ -10,6 +10,7 @@ x-application-environment: &application-environment
   APP_NAME: ${APP_NAME:-Linkar}
   APP_URL: ${APP_URL:?APP_URL is required}
   NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+  PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://linkar.in}
   SUPPORT_EMAIL: ${SUPPORT_EMAIL:?SUPPORT_EMAIL is required}
   # Fallback only - /api/health prefers BUILD_COMMIT, which is baked into the
   # image at build time and cannot drift from the running build.
@@ -31,7 +32,7 @@ x-application-environment: &application-environment
   META_SCOPES: ${META_SCOPES:-instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages}
   FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:?FACEBOOK_APP_ID is required}
   FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:?FACEBOOK_APP_SECRET is required}
-  FACEBOOK_REDIRECT_URI: ${FACEBOOK_REDIRECT_URI:-https://linkar.in/api/facebook/oauth/callback}
+  FACEBOOK_REDIRECT_URI: ${FACEBOOK_REDIRECT_URI:-https://app.linkar.in/api/facebook/oauth/callback}
   FACEBOOK_VERIFY_TOKEN: ${FACEBOOK_VERIFY_TOKEN:?FACEBOOK_VERIFY_TOKEN is required}
   FACEBOOK_API_VERSION: ${FACEBOOK_API_VERSION:-v25.0}
   FACEBOOK_SCOPES: ${FACEBOOK_SCOPES:-pages_show_list,pages_manage_engagement,pages_manage_metadata,pages_read_engagement,pages_read_user_content}

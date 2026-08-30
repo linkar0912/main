@@ -38,7 +38,9 @@ Set these production values on the web app and worker:
 # FACEBOOK_APP_ID, FACEBOOK_APP_SECRET and FACEBOOK_VERIFY_TOKEN. Set all five
 # before deploying - a missing one is a failed boot, not a silent degrade.
 APP_NAME=Linkar
-NEXT_PUBLIC_APP_URL=https://linkar.in
+APP_URL=https://app.linkar.in
+NEXT_PUBLIC_APP_URL=https://app.linkar.in
+PUBLIC_SITE_URL=https://linkar.in
 SUPPORT_EMAIL=<owner-monitored-support-email>
 AUTH_SESSION_SECRET=<at least 32 random characters>
 DATABASE_URL=postgresql://...
@@ -46,14 +48,14 @@ REDIS_URL=redis://...
 META_APP_ID=your_meta_app_id
 META_APP_SECRET=your_meta_app_secret
 META_TOKEN_ENCRYPTION_KEY=<64 hex characters from openssl rand -hex 32>
-META_REDIRECT_URI=https://linkar.in/api/meta/oauth/callback
+META_REDIRECT_URI=https://app.linkar.in/api/meta/oauth/callback
 META_VERIFY_TOKEN=<long random verify token>
 META_API_VERSION=v25.0
 META_SCOPES=instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages
 FACEBOOK_APP_ID=your_facebook_app_id
 FACEBOOK_APP_SECRET=your_facebook_app_secret
 FACEBOOK_TOKEN_ENCRYPTION_KEY=<optional dedicated 64 hex characters>
-FACEBOOK_REDIRECT_URI=https://linkar.in/api/facebook/oauth/callback
+FACEBOOK_REDIRECT_URI=https://app.linkar.in/api/facebook/oauth/callback
 FACEBOOK_VERIFY_TOKEN=<long random verify token>
 FACEBOOK_API_VERSION=v25.0
 FACEBOOK_SCOPES=pages_show_list,pages_manage_engagement,pages_manage_metadata,pages_read_engagement,pages_read_user_content
@@ -80,9 +82,9 @@ Use these deployed URLs:
 
 | Meta field | Linkar URL |
 | --- | --- |
-| OAuth redirect URI | `https://linkar.in/api/meta/oauth/callback` |
-| Webhooks callback URL | `https://linkar.in/api/meta/webhook` |
-| Data deletion callback URL | `https://linkar.in/api/meta/data-deletion` |
+| OAuth redirect URI | `https://app.linkar.in/api/meta/oauth/callback` |
+| Webhooks callback URL | `https://app.linkar.in/api/meta/webhook` |
+| Data deletion callback URL | `https://app.linkar.in/api/meta/data-deletion` |
 | Privacy policy URL | `https://linkar.in/privacy` |
 | Terms URL | `https://linkar.in/terms` |
 | Data deletion instructions URL | `https://linkar.in/data-deletion` |
@@ -108,20 +110,20 @@ Configure the separate Facebook Login for Business app with these deployed URLs:
 
 | Meta field | Linkar URL |
 | --- | --- |
-| OAuth redirect URI | `https://linkar.in/api/facebook/oauth/callback` |
-| Webhooks callback URL | `https://linkar.in/api/facebook/webhook` |
-| Deauthorization callback URL | `https://linkar.in/api/facebook/deauthorize` |
-| Data deletion callback URL | `https://linkar.in/api/facebook/data-deletion` |
+| OAuth redirect URI | `https://app.linkar.in/api/facebook/oauth/callback` |
+| Webhooks callback URL | `https://app.linkar.in/api/facebook/webhook` |
+| Deauthorization callback URL | `https://app.linkar.in/api/facebook/deauthorize` |
+| Data deletion callback URL | `https://app.linkar.in/api/facebook/data-deletion` |
 
 Set the Facebook webhook verify token to `FACEBOOK_VERIFY_TOKEN`, subscribe the Page object to `feed`, and request only `pages_show_list`, `pages_manage_metadata`, `pages_manage_engagement`, `pages_read_engagement`, and `pages_read_user_content`. Linkar uses these permissions to list Pages, subscribe the selected Page, read public Page-post comments, and publish public replies. It does not request or implement Facebook Messenger or private replies. After connecting, verify `/api/facebook/connection/health` reports no missing `feed` field.
 
 ## 4. Verify the deployed app yourself
 
-1. Call `GET https://linkar.in/api/health`. Confirm three things, not just the first:
+1. Call `GET https://app.linkar.in/api/health`. Confirm three things, not just the first:
    - `mode` is `configured` and both `dependencies` report `ok`;
    - `integrations` reports `{"instagram": "configured", "facebook": "configured"}` - `mode` only tracks the database and Redis, so it says `configured` even with no Meta credentials at all;
    - `release` matches the commit you expect to be live. It is baked into the image at build time, so a mismatch means the deploy did not take.
-2. Open `/privacy`, `/terms`, `/data-deletion`, and `/support` in a private browser window. Confirm they load without login and use the final business contact details.
+2. Open `https://linkar.in/privacy`, `https://linkar.in/terms`, `https://linkar.in/data-deletion`, and `https://linkar.in/support` in a private browser window. Confirm they load without login and use the final business contact details. The app host redirects these same legal paths to the marketing host.
 3. Sign in at `/login` with the configured owner account, open Settings, and choose **Connect Instagram**.
 4. Complete the official Meta login with the test Instagram Professional account.
 5. Confirm the callback returns to Settings and shows the account as connected.

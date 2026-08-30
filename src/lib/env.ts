@@ -1,6 +1,7 @@
 export type ServerEnv = {
   appName: string;
   appUrl: string;
+  publicSiteUrl: string;
   supportEmail: string;
   databaseUrl?: string;
   redisUrl?: string;
@@ -71,6 +72,9 @@ export function getServerEnv(): ServerEnv {
   // server-only variable so one container image can be configured correctly
   // at runtime by Coolify.
   const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const publicSiteUrl =
+    process.env.PUBLIC_SITE_URL ??
+    (process.env.NODE_ENV === "production" ? "https://linkar.in" : "http://localhost:3000");
   const metaRedirectUri =
     process.env.META_REDIRECT_URI ?? "http://localhost:3000/api/meta/oauth/callback";
   const metaApiVersion = process.env.META_API_VERSION ?? "v25.0";
@@ -84,6 +88,7 @@ export function getServerEnv(): ServerEnv {
   // Demo mode is unaffected: every validated value has a valid default.
   for (const [name, value] of [
     ["APP_URL", appUrl],
+    ["PUBLIC_SITE_URL", publicSiteUrl],
     ["META_REDIRECT_URI", metaRedirectUri],
     ["FACEBOOK_REDIRECT_URI", facebookRedirectUri],
     ["GOOGLE_REDIRECT_URI", googleRedirectUri],
@@ -104,6 +109,7 @@ export function getServerEnv(): ServerEnv {
   return {
     appName: process.env.APP_NAME ?? "Linkar",
     appUrl,
+    publicSiteUrl,
     supportEmail: process.env.SUPPORT_EMAIL ?? "support@linkar.in",
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,

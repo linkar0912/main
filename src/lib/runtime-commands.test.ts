@@ -7,6 +7,7 @@ const readProjectFile = (path: string) => readFileSync(path, "utf8");
 const originalCampaignFlag = process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED;
 const originalAppUrl = process.env.APP_URL;
 const originalPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+const originalPublicSiteUrl = process.env.PUBLIC_SITE_URL;
 
 afterEach(() => {
   if (originalCampaignFlag === undefined) {
@@ -18,6 +19,8 @@ afterEach(() => {
   else process.env.APP_URL = originalAppUrl;
   if (originalPublicAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
   else process.env.NEXT_PUBLIC_APP_URL = originalPublicAppUrl;
+  if (originalPublicSiteUrl === undefined) delete process.env.PUBLIC_SITE_URL;
+  else process.env.PUBLIC_SITE_URL = originalPublicSiteUrl;
 });
 
 describe("production runtime commands", () => {
@@ -91,9 +94,16 @@ describe("follow-gated campaign environment flag", () => {
 
 describe("application URL environment", () => {
   it("prefers the server-only runtime URL over the build-time public URL", () => {
-    process.env.APP_URL = "https://linkar.in";
+    process.env.APP_URL = "https://app.linkar.in";
     process.env.NEXT_PUBLIC_APP_URL = "https://old-host.invalid";
 
-    expect(getServerEnv().appUrl).toBe("https://linkar.in");
+    expect(getServerEnv().appUrl).toBe("https://app.linkar.in");
+  });
+
+  it("keeps the public marketing URL separate from the application URL", () => {
+    process.env.APP_URL = "https://app.linkar.in";
+    process.env.PUBLIC_SITE_URL = "https://linkar.in";
+
+    expect(getServerEnv().publicSiteUrl).toBe("https://linkar.in");
   });
 });

@@ -100,16 +100,21 @@ Environment values Compose requires (`?` means the deploy fails fast if unset):
 | `FACEBOOK_TOKEN_ENCRYPTION_KEY` | optional dedicated 64-hex-character key; falls back to `META_TOKEN_ENCRYPTION_KEY` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | required when Google sign-in is enabled; hides the button when unset |
 | `GOOGLE_REDIRECT_URI` | required when Google sign-in is enabled, must match the redirect URI registered in Google Cloud Console exactly |
-| `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL` | required |
+| `APP_URL`, `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL` | required |
+| `PUBLIC_SITE_URL` | marketing/legal origin; defaults to `https://linkar.in` |
 
 `REDIS_URL` is assembled inside the Compose file from `VALKEY_PASSWORD`
 against the in-network hostname `valkey`. `DATABASE_URL`/`DIRECT_URL` are not
 assembled - set them directly from the Supabase project's connection strings.
 
 `NEXT_PUBLIC_APP_URL` is inlined at **image build time**, not read at runtime.
-Changing it requires a rebuild, not just a redeploy - a mismatch sends every
-unauthenticated request to the wrong host on redirect. It's also the
-`SiteURL` Supabase Auth uses in email links - keep the Supabase email
+Changing it requires a rebuild, not just a redeploy - the app image must be
+built with `https://app.linkar.in`. `APP_URL` is the server-side application
+origin used by auth, OAuth, invitation, and dashboard redirects. `PUBLIC_SITE_URL`
+is the marketing/legal origin used for host canonicalization. Supabase's
+`SiteURL` remains `https://linkar.in` so public email links start from the
+marketing domain; the proxy moves `/auth/*` links to the app host while
+preserving their query parameters. Keep the Supabase email
 templates (Authentication → Emails → Templates) pointed at
 `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup` (and
 `type=recovery` for the reset template) rather than the default
@@ -119,8 +124,10 @@ templates (Authentication → Emails → Templates) pointed at
 
 ## 3. Route the web app through Cloudflare
 
-Set both `APP_URL` and `NEXT_PUBLIC_APP_URL` to `https://linkar.in` and use matching HTTPS
-URLs throughout Meta and Coolify. Create the DNS record for the web container
+Set `APP_URL` and `NEXT_PUBLIC_APP_URL` to `https://app.linkar.in` for the
+application origin, and set `PUBLIC_SITE_URL` to `https://linkar.in` for the
+marketing/legal origin. Use matching HTTPS URLs throughout Meta and Coolify.
+Create the DNS records for the web container
 with proxying enabled, and use Full (strict) TLS with a valid origin
 certificate.
 
@@ -173,9 +180,9 @@ Never route Cloudflare, a public hostname, or any port to `worker` or
    Verify by asset, not by the deploy's own say-so - §5 of this file explains
    why the `release` field cannot be trusted:
    ```bash
-   CSS=$(curl -sk https://linkar.in/login \
+   CSS=$(curl -sk https://app.linkar.in/login \
      | grep -oE '/_next/static/[a-z0-9/_-]+\.css' | head -1)
-   curl -sk "https://linkar.in$CSS" | grep -c icon-rail   # 0 = old build
+   curl -sk "https://app.linkar.in$CSS" | grep -c icon-rail   # 0 = old build
    ```
 6. **Watch it settle.** The containers themselves cycle down and back up in
    roughly 60–90 seconds - a brief window where `valkey` also reads as exited
@@ -217,7 +224,7 @@ unless the response is `ok`.
 Then verify from outside:
 
 ```bash
-curl --fail --show-error https://linkar.in/api/health
+curl --fail --show-error https://app.linkar.in/api/health
 ```
 
 Require `status: "ok"`, `mode: "configured"`, `dependencies.database: "ok"`
@@ -344,13 +351,13 @@ Use the final public domain, never a Coolify internal URL:
 
 | Meta setting | Production value |
 | --- | --- |
-| OAuth redirect URI | `https://linkar.in/api/meta/oauth/callback` |
-| Webhooks callback URL | `https://linkar.in/api/meta/webhook` |
-| Data deletion callback URL | `https://linkar.in/api/meta/data-deletion` |
-| Facebook OAuth redirect URI | `https://linkar.in/api/facebook/oauth/callback` |
-| Facebook webhooks callback URL | `https://linkar.in/api/facebook/webhook` |
-| Facebook data deletion callback URL | `https://linkar.in/api/facebook/data-deletion` |
-| Facebook deauthorization callback URL | `https://linkar.in/api/facebook/deauthorize` |
+| OAuth redirect URI | `https://app.linkar.in/api/meta/oauth/callback` |
+| Webhooks callback URL | `https://app.linkar.in/api/meta/webhook` |
+| Data deletion callback URL | `https://app.linkar.in/api/meta/data-deletion` |
+| Facebook OAuth redirect URI | `https://app.linkar.in/api/facebook/oauth/callback` |
+| Facebook webhooks callback URL | `https://app.linkar.in/api/facebook/webhook` |
+| Facebook data deletion callback URL | `https://app.linkar.in/api/facebook/data-deletion` |
+| Facebook deauthorization callback URL | `https://app.linkar.in/api/facebook/deauthorize` |
 | Privacy policy | `https://linkar.in/privacy` |
 | Terms of service | `https://linkar.in/terms` |
 | Support URL | `https://linkar.in/support` |
@@ -399,7 +406,7 @@ doesn't produce an OIDC ID token the way Google's does, so there's no
   Redirect URIs** needs *both* URIs at once, for two different features on the
   same app:
   `https://<supabase-project-ref>.supabase.co/auth/v1/callback` (consumer
-  sign-in, relayed through Supabase) and `https://linkar.in/api/facebook/oauth/callback`
+  sign-in, relayed through Supabase) and `https://app.linkar.in/api/facebook/oauth/callback`
   (the Page-automation connect flow in Settings, unrelated to sign-in).
 - Supabase Dashboard → Authentication → Sign In / Providers → Facebook →
   enabled, with the Facebook App ID/Secret. There is no scopes field in this
