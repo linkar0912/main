@@ -124,6 +124,87 @@ describe("AutomationBuilder", () => {
     });
   });
 
+  it("lets a DM keyword flow add a second message, the way its own multi-action templates ship", async () => {
+    // "Main menu", "Conversation starters" and "Price list responder" all prefill
+    // two or three actions on a message trigger. Without this the button is hidden
+    // for exactly those flows, so deleting one action makes it unrecoverable.
+    stubFetch();
+    const menuDefinition: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["menu"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Here's what I can help with" }],
+    };
+    render(<AutomationBuilder initialDefinition={menuDefinition} initialName="Main menu" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add another message/i }));
+
+    expect(screen.getByLabelText(/step 2 message/i)).toBeTruthy();
+  });
+
+  it("warns at review when a template's placeholder links were never replaced, without blocking the save", async () => {
+    // Every premade recipe ships example.com URLs. Activating one untouched used
+    // to silently DM followers a dead link.
+    const fetchMock = stubFetch();
+    const fromTemplate: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["shop"] },
+      conditions: [],
+      actions: [{ type: "send_button", text: "Here you go", buttonLabel: "Shop now", url: "https://example.com/shop" }],
+    };
+    render(<AutomationBuilder initialDefinition={fromTemplate} initialName="Affiliate link" />);
+
+    // A message trigger gets six stages: trigger, condition, action, email,
+    // guardrails, review - so five Nexts land on review.
+    for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    expect(screen.getByText(/still points at example\.com/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
+  });
+
+  it("does not warn about placeholder links once they are replaced", () => {
+    stubFetch();
+    const edited: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["shop"] },
+      conditions: [],
+      actions: [{ type: "send_button", text: "Here you go", buttonLabel: "Shop now", url: "https://acme.test/shop" }],
+    };
+    render(<AutomationBuilder initialDefinition={edited} initialName="Affiliate link" />);
+
+    for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    expect(screen.getByRole("button", { name: /save/i })).toBeTruthy();
+    expect(screen.queryByText(/still points at example\.com/i)).toBeNull();
+  });
+
+  it("saves follow-up nudges on the DM-side triggers whose editor offers them", async () => {
+    // The nudge editor renders for every non-comment trigger, so first_contact
+    // must persist them too - not just the keyword-matched message trigger.
+    const fetchMock = stubFetch();
+    const greeting: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "first_contact" },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Hi there!" }],
+    };
+    render(<AutomationBuilder initialDefinition={greeting} initialName="Welcome" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add a follow-up nudge/i }));
+    fireEvent.change(screen.getByLabelText(/nudge 1 message/i), { target: { value: "Still there?" } });
+    for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
+    const request = findRequest(fetchMock, (url) => url === "/api/automations");
+    expect(JSON.parse(String(request.body)).definition.followUps).toEqual([
+      { delayMinutes: 1440, text: "Still there?" },
+    ]);
+  });
+
   it("shows a Facebook Page picker when a Page is connected and swaps the preview to the Facebook layout", async () => {
     const fetchMock = stubFetch({
       facebookPages: { data: [

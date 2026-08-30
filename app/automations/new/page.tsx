@@ -24,7 +24,7 @@ export default async function NewAutomationPage({ searchParams }: NewAutomationP
         </Link>
         {template && setup && (
           <p className="template-prefill-note muted">
-            Started from the “{template.title.split(":")[0]}” recipe - tweak anything before saving.
+            Started from the “{template.title}” recipe - tweak anything before saving.
           </p>
         )}
         <AutomationBuilder

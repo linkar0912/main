@@ -5,6 +5,7 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
 import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
 import type { UpdateAutomationInput } from "@/src/lib/repository";
+import { toReadableValidationError } from "@/src/lib/validation-error";
 
 export const runtime = "nodejs";
 
@@ -73,7 +74,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     try {
       patch.definition = validateFlowDefinition(body.definition);
     } catch (error) {
-      return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid definition" }, { status: 400 });
+      return NextResponse.json({ error: toReadableValidationError(error, "Invalid definition") }, { status: 400 });
     }
   }
 

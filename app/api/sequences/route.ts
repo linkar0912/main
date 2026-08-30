@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { parseSequenceInput } from "@/src/lib/automation/sequence";
+import { toReadableValidationError } from "@/src/lib/validation-error";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,6 @@ export async function POST(request: Request) {
     const record = await repository.createSequence(session.workspaceId, input);
     return NextResponse.json({ data: record }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid sequence" }, { status: 400 });
+    return NextResponse.json({ error: toReadableValidationError(error, "Invalid sequence") }, { status: 400 });
   }
 }

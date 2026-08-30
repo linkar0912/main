@@ -137,6 +137,19 @@ const action = z.discriminatedUnion("type", [
     imageUrl: link.refine(isSafeOutboundUrl, "Image URL must be a public http(s) address"),
     caption: z.string().trim().min(1).max(1_000).optional(),
   }),
+  z.object({
+    type: z.literal("quick_replies"),
+    text: z.string().trim().min(1).max(1_000),
+    // The builder always submits four chip slots and leaves the unused ones
+    // blank, so empty entries are expected here and dropped by normalizeV1.
+    // Instagram renders at most four chips and truncates past 20 characters -
+    // the simulator warns about the latter rather than blocking the save, so
+    // the bound here only has to stop obviously-wrong input.
+    replies: z
+      .array(z.string().trim().max(80))
+      .max(4)
+      .refine((replies) => replies.some((reply) => reply.length > 0), "Quick replies need at least one chip"),
+  }),
 ]);
 
 // Timed nudges after a DM flow fires. Comment flows are excluded - a private
@@ -425,15 +438,23 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
         ? { type: item.type, keywords: normalizeKeywords(item.keywords) }
         : { type: item.type, mediaIds: item.mediaIds.map((mediaId) => mediaId.trim()).filter(Boolean) },
     ),
-    actions: parsed.actions.map((item) =>
-      item.type === "send_image"
-        ? {
-            type: item.type,
-            imageUrl: item.imageUrl,
-            ...(item.caption ? { caption: item.caption.trim() } : {}),
-          }
-        : { ...item, text: item.text.trim() },
-    ),
+    actions: parsed.actions.map((item) => {
+      if (item.type === "send_image") {
+        return {
+          type: item.type,
+          imageUrl: item.imageUrl,
+          ...(item.caption ? { caption: item.caption.trim() } : {}),
+        };
+      }
+      if (item.type === "quick_replies") {
+        return {
+          type: item.type,
+          text: item.text.trim(),
+          replies: item.replies.filter(Boolean),
+        };
+      }
+      return { ...item, text: item.text.trim() };
+    }),
     ...(parsed.dailySendLimit ? { dailySendLimit: parsed.dailySendLimit } : {}),
     ...(parsed.schedule ? { schedule: normalizeSchedule(parsed.schedule) } : {}),
     ...(parsed.followUps && parsed.followUps.length > 0

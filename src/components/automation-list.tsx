@@ -92,10 +92,16 @@ function actionSummary(automation: AutomationRecord): string {
 
   const action = automation.definition.actions[0];
   if (!action) return "No action configured";
-  if (action.type === "private_reply") return "Private reply";
-  if (action.type === "send_text") return "Send a DM";
-  if (action.type === "send_link") return "Send a link";
-  return "Send a button";
+  // Every action type gets its own label - `send_image` and `quick_replies`
+  // used to fall through the bottom of this chain and read as "Send a button".
+  switch (action.type) {
+    case "private_reply": return "Private reply";
+    case "send_text": return "Send a DM";
+    case "send_link": return "Send a link";
+    case "send_image": return "Send an image";
+    case "quick_replies": return "Send quick replies";
+    case "send_button": return "Send a button";
+  }
 }
 
 /** igUserId -> @username for every connected account, for the per-row account chips. */

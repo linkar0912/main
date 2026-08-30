@@ -6,7 +6,7 @@ import { basicAutomationTemplates } from "@/src/lib/automation/templates";
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
-const { TemplatePickerModal } = await import("./template-picker-modal");
+const { TemplatePickerModal, TEMPLATE_EXAMPLES } = await import("./template-picker-modal");
 
 describe("TemplatePickerModal", () => {
   afterEach(() => {
@@ -26,6 +26,42 @@ describe("TemplatePickerModal", () => {
     expect(screen.getByText(/Main Menu/)).toBeTruthy();
     // Template tiles carry no icons anymore.
     expect(document.querySelector(".template-picker-tile-icon")).toBeNull();
+  });
+
+  it("keeps every example line consistent with the recipe's real trigger", () => {
+    // "Comment "guide" → DM asking for email" described a flow the builder
+    // refuses to build: email capture is unavailable on comment triggers.
+    for (const template of basicAutomationTemplates) {
+      const example = TEMPLATE_EXAMPLES[template.id];
+      expect(example, `${template.id} has no example line`).toBeTruthy();
+      const triggerType = template.setup.definition.trigger.type;
+      if (/^Comment\b/.test(example!)) {
+        expect(triggerType, `${template.id} example says "Comment" but triggers on ${triggerType}`).toBe("comment");
+      }
+      if (/^DM\b/.test(example!)) {
+        expect(triggerType, `${template.id} example says "DM" but triggers on ${triggerType}`).toBe("message");
+      }
+    }
+  });
+
+  it("quotes only keywords the recipe actually matches", () => {
+    // The Conversation Starters line promised DM "hi" while the recipe matches
+    // price/hours/delivery - the one keyword a curious user tries first misses.
+    for (const template of basicAutomationTemplates) {
+      const trigger = template.setup.definition.trigger;
+      if (trigger.type !== "comment" && trigger.type !== "message") continue;
+      if (trigger.match !== "keyword") continue;
+      // Only the trigger half of the line names keywords; everything past the
+      // first arrow is reply copy, which quotes whatever it likes.
+      const triggerHalf = TEMPLATE_EXAMPLES[template.id]!.split("→")[0]!;
+      const quoted = [...triggerHalf.matchAll(/[“"]([^”"]+)[”"]/g)].map((match) => match[1]!.toLowerCase());
+      for (const word of quoted) {
+        expect(
+          trigger.keywords.some((keyword) => keyword.toLowerCase() === word),
+          `${template.id} example quotes "${word}" but its keywords are ${trigger.keywords.join(", ")}`,
+        ).toBe(true);
+      }
+    }
   });
 
   it("narrows to matching templates as you search", () => {

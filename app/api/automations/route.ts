@@ -4,6 +4,7 @@ import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
 import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
+import { toReadableValidationError } from "@/src/lib/validation-error";
 
 export const runtime = "nodejs";
 
@@ -53,7 +54,6 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ data: automation }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid automation";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: toReadableValidationError(error, "Invalid automation") }, { status: 400 });
   }
 }

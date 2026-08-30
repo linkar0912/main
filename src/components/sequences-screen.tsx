@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Play, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Play, Plus, RotateCw, Trash2 } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { AutomationSectionNav } from "./automation-section-nav";
 
@@ -18,6 +17,18 @@ type SequenceRow = {
 type AutomationOption = { id: string; name: string };
 
 const EMPTY_STEPS: SequenceStepView[] = [{ id: "step-initial", delayHours: 0, text: "" }];
+
+/**
+ * Step ids only have to be unique within one submitted sequence, but they used to
+ * be `step-${Date.now()}` - two clicks inside the same millisecond produced a
+ * duplicate pair, which the API rejects outright. The counter makes that
+ * impossible regardless of how fast the steps are added.
+ */
+let stepCounter = 0;
+function nextStepId(): string {
+  stepCounter += 1;
+  return `step-${Date.now()}-${stepCounter}`;
+}
 
 /** Timed drip campaigns: ordered DM steps sent to enrolled email leads. */
 export function SequencesScreen() {
@@ -67,7 +78,7 @@ export function SequencesScreen() {
     setEditingId("");
     setName("");
     setSourceAutomationId("");
-    setSteps([{ id: `step-${Date.now()}`, delayHours: 0, text: "" }]);
+    setSteps([{ id: nextStepId(), delayHours: 0, text: "" }]);
     setFormError("");
   }
 
@@ -97,7 +108,7 @@ export function SequencesScreen() {
   function addStep() {
     setSteps((current) => [
       ...current,
-      { id: `step-${Date.now()}`, delayHours: 24, text: "" },
+      { id: nextStepId(), delayHours: 24, text: "" },
     ]);
   }
 
@@ -268,7 +279,11 @@ export function SequencesScreen() {
             <section className="panel full-list-panel">
               <div className="list-intro">
                 <div className="list-count"><ListOrdered size={17} /><span>{loading ? "Loading" : `${sequences.length} ${sequences.length === 1 ? "sequence" : "sequences"}`}</span></div>
-                <Link className="text-link" href="/automations/sequences">Refresh</Link>
+                {/* A Link here pointed at the page it already sits on, so the soft
+                    navigation never remounted the screen and nothing refetched. */}
+                <button className="text-link" type="button" onClick={() => void refresh()}>
+                  <RotateCw size={14} /> Refresh
+                </button>
               </div>
               {!loading && !pageError && sequences.length === 0 && (
                 <div className="empty-state">

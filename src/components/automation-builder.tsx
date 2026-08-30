@@ -130,6 +130,22 @@ const defaultDefinitionV1: FlowDefinitionV1 = {
 type ClassicTriggerType = FlowDefinitionV1["trigger"]["type"];
 const MAX_CLASSIC_ACTIONS = 3;
 
+/**
+ * Every premade recipe ships example.com links so the shape of the flow is
+ * obvious in the builder. They are valid URLs, so nothing else objects to them -
+ * activating an untouched template just DMs followers a dead link. Surfaced as a
+ * review-step warning rather than a blocker: example.com is legitimate in a
+ * demo workspace, and the person saving is the one who knows.
+ */
+function isPlaceholderUrl(url: string | undefined): boolean {
+  if (!url?.trim()) return false;
+  try {
+    return new URL(url.trim()).hostname.replace(/^www\./, "").endsWith("example.com");
+  } catch {
+    return false;
+  }
+}
+
 function classicActionOptions(trigger: ClassicTriggerType, isFacebook = false): { value: FlowAction["type"]; label: string; description: string }[] {
   if (trigger === "comment") {
     return [{
@@ -545,7 +561,10 @@ function AutomationBuilderV1({
             },
           }
         : {}),
-      ...(!usesTextTrigger
+      // Nudges are offered by the editor for every non-comment trigger, so the
+      // save gate has to match that exactly. Gating on `usesTextTrigger` instead
+      // dropped them on first_contact/story_mention/referral/optin without a word.
+      ...(triggerType === "comment"
         ? {}
         : followUps.length > 0
           ? {
@@ -663,6 +682,14 @@ function AutomationBuilderV1({
     }
     return bubbles;
   });
+
+  // Covers every place a template can leave a placeholder behind: action links,
+  // image sources, the fulfillment email's link, and follow-up nudge buttons.
+  const hasPlaceholderLinks =
+    actions.some((action) =>
+      isPlaceholderUrl(action.type === "send_image" ? action.imageUrl : "url" in action ? action.url : undefined))
+    || (deliveryEnabled && isPlaceholderUrl(deliveryLinkUrl))
+    || followUps.some((followUp) => isPlaceholderUrl(followUp.url));
 
   const previewMediaId = triggerType === "comment" ? parseCommaSeparated(mediaIds)[0] : undefined;
   const previewThumb = previewMediaId ? mediaThumbs[previewMediaId] : undefined;
@@ -1003,7 +1030,10 @@ function AutomationBuilderV1({
                 )}
               </div>
             ))}
-            {!usesTextTrigger && actions.length < MAX_CLASSIC_ACTIONS && (
+            {/* Only comment flows are capped at a single action (the schema
+                enforces one private reply); every DM-side trigger, keyword
+                matched or not, can chain up to MAX_CLASSIC_ACTIONS messages. */}
+            {triggerType !== "comment" && actions.length < MAX_CLASSIC_ACTIONS && (
               <button
                 className="button button-secondary"
                 type="button"
@@ -1012,7 +1042,7 @@ function AutomationBuilderV1({
                 <Plus size={15} /> Add another message
               </button>
             )}
-            {!usesTextTrigger && actions.length > 1 && (
+            {triggerType !== "comment" && actions.length > 1 && (
               <p className="muted">Messages are sent in order, one after another.</p>
             )}
             {triggerType !== "comment" && (
@@ -1391,6 +1421,12 @@ function AutomationBuilderV1({
                 <li>Active {scheduleStart ? `from ${scheduleStart}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${scheduleEnd}` : ""}</li>
               )}
             </ul>
+            {hasPlaceholderLinks && (
+              <p className="form-warning" role="status">
+                <AlertTriangle size={14} /> A link here still points at example.com - swap in your own before this
+                goes live, or the people who reply will get a dead link.
+              </p>
+            )}
           </div>
         </section>
         </div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { sequencePatchSchema } from "@/src/lib/automation/sequence";
+import { toReadableValidationError } from "@/src/lib/validation-error";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!record) return NextResponse.json({ error: "Sequence not found" }, { status: 404 });
     return NextResponse.json({ data: record });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid update" }, { status: 400 });
+    return NextResponse.json({ error: toReadableValidationError(error, "Invalid update") }, { status: 400 });
   }
 }
 

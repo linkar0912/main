@@ -103,6 +103,41 @@ describe("AutomationList activity link", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("Instagram must be connected before activation.");
   });
 
+  it("names image and quick-reply actions instead of falling through to the button label", () => {
+    render(
+      <AutomationList
+        automations={[
+          v1Automation({
+            id: "automation_image",
+            name: "Price list responder",
+            definition: {
+              version: 1,
+              trigger: { type: "message", match: "keyword", keywords: ["price"] },
+              conditions: [],
+              actions: [{ type: "send_image", imageUrl: "https://cdn.example/prices.jpg" }],
+            },
+          } as Partial<AutomationRecord>),
+          v1Automation({
+            id: "automation_chips",
+            name: "Interest check",
+            definition: {
+              version: 1,
+              trigger: { type: "message", match: "keyword", keywords: ["offer"] },
+              conditions: [],
+              actions: [{ type: "quick_replies", text: "Interested?", replies: ["Yes", "Not now"] }],
+            },
+          } as Partial<AutomationRecord>),
+        ]}
+        loading={false}
+        onStatusChange={async () => {}}
+      />,
+    );
+
+    expect(screen.getByText(/Send an image/)).toBeTruthy();
+    expect(screen.getByText(/Send quick replies/)).toBeTruthy();
+    expect(screen.queryByText(/Send a button/)).toBeNull();
+  });
+
   it("shows a Facebook Page pin badge when the automation is pinned to a Page", () => {
     render(
       <AutomationList

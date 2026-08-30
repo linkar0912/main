@@ -232,6 +232,45 @@ describe("validateFlowDefinition", () => {
     });
   });
 
+  it("accepts a quick-reply action and normalizes its chips", () => {
+    const flow = validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["offer"] },
+      conditions: [],
+      actions: [{ type: "quick_replies", text: "  Interested?  ", replies: ["  Yes  ", "", "Not now"] }],
+    });
+    expect(flow.version).toBe(1);
+    if (flow.version !== 1) return;
+    expect(flow.actions[0]).toEqual({
+      type: "quick_replies",
+      text: "Interested?",
+      replies: ["Yes", "Not now"],
+    });
+  });
+
+  it("rejects quick-reply actions with no usable chips, too many chips, or on comment triggers", () => {
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["offer"] },
+      conditions: [],
+      actions: [{ type: "quick_replies", text: "Interested?", replies: ["  ", ""] }],
+    })).toThrow();
+
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["offer"] },
+      conditions: [],
+      actions: [{ type: "quick_replies", text: "Interested?", replies: ["a", "b", "c", "d", "e"] }],
+    })).toThrow();
+
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "comment", match: "any", keywords: [], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "quick_replies", text: "Interested?", replies: ["Yes"] }],
+    })).toThrow("Comment triggers support only a private reply");
+  });
+
   it("rejects image actions on comment triggers and with private image URLs", () => {
     expect(() => validateFlowDefinition({
       version: 1,

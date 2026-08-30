@@ -26,11 +26,16 @@ const CATEGORY_ICONS: Record<TemplateTriggerType, typeof MessageCircle> = {
   optin: CheckCircle2,
 };
 
-/** One concrete line per recipe so the tile shows the flow, not just the label. */
-const TEMPLATE_EXAMPLES: Record<string, string> = {
+/**
+ * One concrete line per recipe so the tile shows the flow, not just the label.
+ * The opening word has to match the recipe's real trigger - a line that promises
+ * "Comment X →" on a DM-triggered recipe describes a flow the builder will not
+ * let you build. `template-picker-modal.test.tsx` enforces that.
+ */
+export const TEMPLATE_EXAMPLES: Record<string, string> = {
   "comment-link-dm": "Comment “link” → DM: “Here you go: https://…”",
-  "conversation-starters": "DM “hi” → menu: Pricing / Support / Catalog",
-  "email-capture": "Comment “guide” → DM asking for email → deliver it",
+  "conversation-starters": "DM “price” → menu: Pricing / Hours / Delivery",
+  "email-capture": "DM “guide” → asks for their email → delivers it",
   "welcome-new-followers": "First DM ever → “Hey! Thanks for reaching out.”",
   "story-mention-reply": "They mention you in a story → thank-you DM",
   "default-reply": "Anything unmatched → “Got it! Someone will reply soon.”",
@@ -39,7 +44,7 @@ const TEMPLATE_EXAMPLES: Record<string, string> = {
   "referral-welcome": "Tap from an ad/ref link → warm welcome DM",
   "optin-confirmation": "Opt-in tap → “Done! Here is what you asked for.”",
   "giveaway-entry": "DM “enter” → “You are in. Here are the rules.”",
-  "affiliate-link": "Comment your code word → affiliate link by DM",
+  "affiliate-link": "DM “shop” → affiliate link with a tappable button",
   "lead-magnet-comment": "Comment “GUIDE” → private reply with your free PDF link",
   "price-list-responder": "DM “price” → product photo + prices → catalog button",
   "course-faq-booking": "DM “course” → program details → book-a-call button",

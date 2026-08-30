@@ -12,7 +12,12 @@
   --ink-strong: #0b0c10;
   --slate: #44454e;
   --muted: #6b6c74;
-  --subtle: #a3a29b;
+  /* De-emphasized text (eyebrows, counts, timestamps, placeholders). This was
+     #a3a29b, which reads at 2.6:1 on white - below WCAG AA and genuinely hard
+     to read at the .68rem uppercase sizes it is used at. --subtle and --muted
+     now sit close together on purpose: the visual step between them comes from
+     size, weight and casing, not from making one of them unreadable. */
+  --subtle: #6c6b65;
   --line: #e7e5dc;
   --line-strong: #d8d6ca;
   --white: #ffffff;
@@ -62,6 +67,15 @@
   --danger: #b42318;
   --danger-soft: #fdeceb;
   --danger-line: #f3cfcc;
+  /* Warning *text*. --honey is tuned to sit on --honey-soft as an icon/fill and
+     only reaches 3.4:1 as body copy on a dark panel, so warning sentences get
+     their own token that is contrast-checked against the page in both themes. */
+  --warning-ink: #8a5a09;
+  /* Skeleton shimmer. Previously hardcoded light grays with no dark-mode
+     counterpart, so every route-level loading screen flashed near-white on the
+     dark canvas before the real page swapped in. */
+  --skeleton-base: #e9ebef;
+  --skeleton-sheen: #f4f5f7;
 
   /* Semantic aliases consumed by existing components. */
   --green: var(--leaf);
@@ -135,7 +149,7 @@ html {
   --ink-strong: #ffffff;
   --slate: #c7c8cd;
   --muted: #9b9ca4;
-  --subtle: #707177;
+  --subtle: #8d8e96;
   --line: #35363f;
   --line-strong: #484a55;
   --paper: #101116;
@@ -158,6 +172,9 @@ html {
   --honey-line: #57431c;
   --danger-soft: #3a1512;
   --danger-line: #6b2b25;
+  --warning-ink: #e3ab4d;
+  --skeleton-base: #25262e;
+  --skeleton-sheen: #303139;
   --shadow: 0 1px 2px rgba(0, 0, 0, .45);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 18px rgba(0, 0, 0, .45);
   --shadow-lift: 0 10px 22px rgba(0, 0, 0, .5);
@@ -393,7 +410,7 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
 .form-error, .form-success, .form-warning { align-items: center; display: flex; font-size: var(--type-body); gap: 6px; margin: 0; }
 .form-error { color: var(--danger); }
 .form-success { color: var(--green); animation: pop-in .3s var(--ease-out) both; }
-.form-warning { color: var(--amber); margin-top: var(--space-1); }
+.form-warning { color: var(--warning-ink); margin-top: var(--space-1); }
 
 .demo-banner, .notice-banner {
   align-items: center;
@@ -913,10 +930,15 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 }
 .sequence-submit-actions { align-items: center; display: flex; gap: var(--space-4); }
 .sequence-submit-actions .text-link { justify-content: center; min-height: 44px; padding-inline: var(--space-3); }
-.sequence-status { background: var(--subtle); border-radius: 5px; color: var(--white); font-size: .58rem; font-style: normal; font-weight: 800; letter-spacing: .07em; margin-left: var(--space-2); padding: 3px 7px; text-transform: uppercase; }
+/* DRAFT is the default and by far the most common state, so it has to be
+   readable rather than decorative: white on --subtle was 2.6:1. --slate/--paper
+   invert together, which keeps the fill legible in both themes (9.5:1 / 11.4:1)
+   instead of only one. PAUSED gets amber so it is distinguishable from DRAFT
+   at a glance, not just by reading the word. */
+.sequence-status { background: var(--slate); border-radius: 5px; color: var(--paper); font-size: .58rem; font-style: normal; font-weight: 800; letter-spacing: .07em; margin-left: var(--space-2); padding: 3px 7px; text-transform: uppercase; }
 .sequence-status[data-status="ACTIVE"] { background: var(--accent); color: var(--on-accent); }
 .sequence-status[data-status="RUNNING"] { background: var(--accent); color: var(--on-accent); }
-.sequence-status[data-status="PAUSED"], .sequence-status[data-status="PENDING"] { background: var(--subtle); }
+.sequence-status[data-status="PAUSED"], .sequence-status[data-status="PENDING"] { background: var(--honey); color: var(--white); }
 
 /* Campaign activity */
 .activity-layout { align-items: start; display: grid; gap: var(--space-6); grid-template-columns: minmax(0, 1fr) 340px; }
@@ -2105,7 +2127,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 }
 .skeleton-block {
   animation: shimmer 1.6s linear infinite;
-  background: linear-gradient(90deg, #e9ebef 25%, #f4f5f7 45%, #e9ebef 65%);
+  background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-sheen) 45%, var(--skeleton-base) 65%);
   background-size: 200% 100%;
   border-radius: 8px;
   display: block;
@@ -2160,7 +2182,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .simulator-actions { display: grid; gap: 6px; list-style: none; margin: var(--space-2) 0 0; padding: 0; }
 .simulator-actions li { font-size: .8rem; }
 .simulator-actions code { background: var(--surface-soft); border-radius: 4px; font-size: .7rem; padding: 1px 5px; }
-.warning-text { color: #a2701d; }
+.warning-text { color: var(--warning-ink); }
 /* Lives in the 340px activity sidebar, where "40 reached - 50 delivered
    (125%) - 22 clicks" never fits beside the chip on one line - the old
    single-row flex (space-between + center) left the chip stranded next to
