@@ -45,12 +45,19 @@ describe("workspace palette contract", () => {
   });
 
   it("uses the brand palette by semantic role", () => {
-    expect(css).toMatch(/\.quickstart-badge\s*{[^}]*background:\s*var\(--volt\)[^}]*color:\s*var\(--ink-strong\)/);
+    expect(css).toMatch(/\.quickstart-badge\s*{[^}]*background:\s*var\(--volt\)[^}]*color:\s*var\(--on-volt\)/);
     expect(css).toMatch(/\.bar-participants,\s*\.swatch-participants\s*{[^}]*background:\s*var\(--slate\)/);
     expect(css).toMatch(/\.bar-sent,\s*\.swatch-sent\s*{[^}]*background:\s*var\(--accent\)/);
     expect(css).toMatch(/\.condition-marker,\s*\.guard-marker\s*{[^}]*background:\s*var\(--surface-sunk\)[^}]*color:\s*var\(--slate\)/);
     expect(css).not.toMatch(/\.quickstart-badge\s*{[^}]*var\(--flame\)/);
     expect(css).not.toMatch(/\.bar-participants,\s*\.swatch-participants\s*{[^}]*var\(--grape\)/);
+  });
+
+  it("keeps text readable on brand fills in both themes", () => {
+    expect(css).toMatch(/--on-accent:\s*#101116/);
+    expect(css).toMatch(/--on-volt:\s*#101116/);
+    expect(css).toMatch(/\[data-theme="dark"\]\s*{[^}]*--accent-text:\s*#[0-9a-f]{6}/);
+    expect(css).toMatch(/\.wizard-progress-step\.is-active \.wizard-progress-index\s*{[^}]*color:\s*var\(--on-accent\)/);
   });
 
   it("keeps fields and icon controls comfortably tappable", () => {
