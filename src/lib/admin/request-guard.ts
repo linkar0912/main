@@ -5,6 +5,7 @@ import { createHmac } from "node:crypto";
 import { getServerEnv } from "@/src/lib/env";
 import { clientAddress } from "@/src/lib/auth/client-address";
 import {
+  getPlatformOwnerIdentity,
   getPlatformOwnerSession,
   type PlatformOwnerIdentity,
 } from "@/src/lib/admin/authorization";
@@ -55,6 +56,22 @@ export async function requireAdminWrite(
   options: AdminWriteOptions,
 ): Promise<AdminWriteContext> {
   const owner = await getPlatformOwnerSession();
+  return buildAdminWriteContext(request, options, owner);
+}
+
+export async function requireAdminIdentityWrite(
+  request: Request,
+  options: AdminWriteOptions,
+): Promise<AdminWriteContext> {
+  const owner = await getPlatformOwnerIdentity();
+  return buildAdminWriteContext(request, options, owner);
+}
+
+function buildAdminWriteContext(
+  request: Request,
+  options: AdminWriteOptions,
+  owner: PlatformOwnerIdentity,
+): AdminWriteContext {
   const env = getServerEnv();
   const origin = request.headers.get("origin")?.trim();
   if (!origin) throw new AdminRequestError(403, "origin_required");

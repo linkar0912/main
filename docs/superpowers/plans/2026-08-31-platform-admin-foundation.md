@@ -301,7 +301,7 @@ git commit -m "feat(admin): protect privileged mutations"
 - `GET /api/admin/security` returns current AAL and verified/unverified TOTP factors for the allowlisted owner.
 - `POST /api/admin/security` accepts `{ action: "enroll" }`, `{ action: "verify", factorId, code }`, or challenge-protected `{ action: "unenroll", factorId, reason }` from an AAL2 owner.
 
-- [ ] **Step 1: Write failing route and component tests**
+- [x] **Step 1: Write failing route and component tests**
 
 ```ts
 it("allows an AAL1 owner to enroll but rejects a non-owner", async () => {
@@ -314,23 +314,23 @@ it("allows an AAL1 owner to enroll but rejects a non-owner", async () => {
 
 Component tests assert the QR/secret is shown only after enrollment, six-digit codes are validated, errors remain in the security panel, success navigates to `/admin`, and removing a factor requires AAL2 plus an explicit confirmation challenge.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run app/api/admin/security/route.test.ts src/components/admin/admin-security-screen.test.tsx`
 
 Expected: FAIL because routes/components do not exist.
 
-- [ ] **Step 3: Implement Supabase MFA calls server-side**
+- [x] **Step 3: Implement Supabase MFA calls server-side**
 
 Use `supabase.auth.mfa.listFactors()`, `getAuthenticatorAssuranceLevel()`, `enroll({ factorType: "totp", friendlyName: "Linkar Operator" })`, `challengeAndVerify({ factorId, code })`, and `unenroll({ factorId })`. Return only factor IDs, friendly names, status, QR URI, and secret needed for active enrollment. Factor removal is reasoned, audited, single-use-challenge protected, and must not remove the last verified factor unless a second verified factor exists.
 
-- [ ] **Step 4: Verify GREEN and accessibility**
+- [x] **Step 4: Verify GREEN and accessibility**
 
 Run: `pnpm vitest run app/api/admin/security/route.test.ts src/components/admin/admin-security-screen.test.tsx && pnpm lint`
 
 Expected: tests and lint pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/admin/security app/api/admin/security src/components/admin/admin-security-screen.tsx src/components/admin/admin-security-screen.test.tsx

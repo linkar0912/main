@@ -1623,6 +1623,33 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .delivery-settings-layout .builder-footer { margin-top: var(--space-5); }
 .settings-wrap .review-links { margin-top: 0; }
 
+.admin-security-wrap { max-width: 920px; }
+.admin-security-alert { background: var(--danger-soft); border: 1px solid var(--danger-line); border-radius: var(--radius-sm); margin-bottom: var(--space-5); padding: var(--space-3) var(--space-4); }
+.admin-security-identity { align-items: center; display: flex; gap: var(--space-4); }
+.admin-security-identity h2 { margin-bottom: 4px; }
+.admin-security-identity p:last-child { margin: 0; }
+.admin-security-enrollment > .muted { margin: 0 0 var(--space-5); }
+.admin-enrollment-grid { align-items: start; display: grid; gap: var(--space-6); grid-template-columns: 220px minmax(0, 1fr); }
+.admin-qr-frame { background: var(--white); border: 1px solid var(--line-strong); border-radius: var(--radius-md); padding: var(--space-4); }
+.admin-qr-frame img { display: block; height: auto; width: 100%; }
+.admin-enrollment-fields { display: grid; gap: var(--space-4); }
+.admin-enrollment-fields > .muted { margin: 0; }
+.admin-secret { background: var(--surface-sunk); border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--ink); display: block; overflow-wrap: anywhere; padding: var(--space-3); user-select: all; }
+.admin-factor-list { display: grid; }
+.admin-factor-row { align-items: center; border-top: 1px solid var(--line); display: grid; gap: var(--space-3); grid-template-columns: auto minmax(0, 1fr) auto; padding: var(--space-4) 0; }
+.admin-factor-row:first-child { border-top: 0; padding-top: 0; }
+.admin-factor-row:last-child { padding-bottom: 0; }
+.admin-factor-row p { color: var(--muted); font-size: var(--type-meta); margin: 3px 0 0; }
+.admin-danger-panel { border-color: var(--danger-line); }
+.admin-security-actions { display: flex; gap: var(--space-3); }
+
+@media (max-width: 680px) {
+  .admin-enrollment-grid { grid-template-columns: 1fr; }
+  .admin-qr-frame { max-width: 240px; }
+  .admin-factor-row { align-items: start; grid-template-columns: auto minmax(0, 1fr); }
+  .admin-factor-row .button { grid-column: 1 / -1; width: 100%; }
+}
+
 @media (max-width: 1080px) {
   .settings-overview-grid { grid-template-columns: 1fr; }
   .delivery-settings-layout { grid-template-columns: 1fr; }

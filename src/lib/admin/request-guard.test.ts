@@ -8,17 +8,19 @@ const OWNER = {
 };
 
 const mocks = vi.hoisted(() => ({
+  getPlatformOwnerIdentity: vi.fn(),
   getPlatformOwnerSession: vi.fn(),
   getServerEnv: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("./authorization", () => ({
+  getPlatformOwnerIdentity: mocks.getPlatformOwnerIdentity,
   getPlatformOwnerSession: mocks.getPlatformOwnerSession,
 }));
 vi.mock("@/src/lib/env", () => ({ getServerEnv: mocks.getServerEnv }));
 
-const { requireAdminRead, requireAdminWrite } = await import("./request-guard");
+const { requireAdminIdentityWrite, requireAdminRead, requireAdminWrite } = await import("./request-guard");
 
 function writeRequest(headers: Record<string, string> = {}): Request {
   return new Request("https://app.linkar.in/api/admin/workspaces/w1", {
@@ -30,6 +32,8 @@ function writeRequest(headers: Record<string, string> = {}): Request {
 
 describe("admin request guard", () => {
   beforeEach(() => {
+    mocks.getPlatformOwnerIdentity.mockReset();
+    mocks.getPlatformOwnerIdentity.mockResolvedValue({ ...OWNER, aal: "aal1" });
     mocks.getPlatformOwnerSession.mockReset();
     mocks.getPlatformOwnerSession.mockResolvedValue(OWNER);
     mocks.getServerEnv.mockReset();
@@ -99,5 +103,23 @@ describe("admin request guard", () => {
     expect(result.ipHash).toMatch(/^[0-9a-f]{64}$/);
     expect(result.ipHash).not.toContain("203.0.113.7");
     expect(result.requestId).toMatch(/^admin_req_[0-9a-f]{64}$/);
+  });
+
+  it("permits the allowlisted AAL1 identity only through the enrollment write guard", async () => {
+    const request = writeRequest({
+      origin: "https://app.linkar.in",
+      "content-type": "application/json",
+      "x-admin-reason": "Enroll owner MFA",
+      "idempotency-key": "security-enrollment-0001",
+    });
+
+    const result = await requireAdminIdentityWrite(request, {
+      action: "security.factor.enroll",
+      targetType: "owner",
+      targetId: OWNER.userId,
+    });
+
+    expect(result.owner.aal).toBe("aal1");
+    expect(mocks.getPlatformOwnerSession).not.toHaveBeenCalled();
   });
 });
