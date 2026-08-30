@@ -28,6 +28,12 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+# Identifies the build itself. The operator-supplied SOURCE_COMMIT is set by
+# hand in the deploy target and has gone stale there, so /api/health prefers
+# this value - it cannot drift from the image it is baked into.
+ARG BUILD_COMMIT=unknown
+ENV BUILD_COMMIT=${BUILD_COMMIT}
+
 RUN groupadd --system --gid 1001 linkar \
   && useradd --system --uid 1001 --gid linkar --create-home linkar
 

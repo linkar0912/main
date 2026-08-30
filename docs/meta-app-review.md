@@ -34,6 +34,9 @@ be completed:
 Set these production values on the web app and worker:
 
 ```dotenv
+# The Coolify stack refuses to start without META_APP_ID, META_APP_SECRET,
+# FACEBOOK_APP_ID, FACEBOOK_APP_SECRET and FACEBOOK_VERIFY_TOKEN. Set all five
+# before deploying - a missing one is a failed boot, not a silent degrade.
 APP_NAME=Linkar
 NEXT_PUBLIC_APP_URL=https://linkar.in
 SUPPORT_EMAIL=<owner-monitored-support-email>
@@ -114,7 +117,10 @@ Set the Facebook webhook verify token to `FACEBOOK_VERIFY_TOKEN`, subscribe the 
 
 ## 4. Verify the deployed app yourself
 
-1. Call `GET https://linkar.in/api/health`; confirm the response reports `configured`.
+1. Call `GET https://linkar.in/api/health`. Confirm three things, not just the first:
+   - `mode` is `configured` and both `dependencies` report `ok`;
+   - `integrations` reports `{"instagram": "configured", "facebook": "configured"}` - `mode` only tracks the database and Redis, so it says `configured` even with no Meta credentials at all;
+   - `release` matches the commit you expect to be live. It is baked into the image at build time, so a mismatch means the deploy did not take.
 2. Open `/privacy`, `/terms`, `/data-deletion`, and `/support` in a private browser window. Confirm they load without login and use the final business contact details.
 3. Sign in at `/login` with the configured owner account, open Settings, and choose **Connect Instagram**.
 4. Complete the official Meta login with the test Instagram Professional account.
@@ -182,7 +188,7 @@ Record one uninterrupted screencast covering, in order: signing in and connectin
 - Confirm all five webhook fields (`comments`, `messages`, `messaging_postbacks`, `messaging_optins`, `messaging_referral`) show as subscribed for the connected account.
 - Confirm the selected Facebook Page reports the `feed` webhook field and all five Facebook Page permissions are granted.
 - Confirm `X-Hub-Signature-256` requests are accepted only with the correct App Secret.
-- Confirm the worker is running and can reach Redis and PostgreSQL.
+- Confirm the worker is running and can reach Redis and PostgreSQL: its container healthcheck now probes `/health` on `WORKER_HEALTH_PORT` (default 3001), so the orchestrator reporting the worker healthy is sufficient evidence.
 - Confirm the app is not in demo mode.
 - Confirm your business, test accounts, and app roles meet Meta’s current eligibility rules.
 - Capture the screencast described in section 5 in case Meta asks for one.

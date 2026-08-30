@@ -15,6 +15,7 @@ services:
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:?SUPPORT_EMAIL is required}
       SOURCE_COMMIT: ${SOURCE_COMMIT:-local-compose}
+      WORKER_HEALTH_PORT: ${WORKER_HEALTH_PORT:-3001}
       AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:?AUTH_SESSION_SECRET is required}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
@@ -72,6 +73,14 @@ services:
     depends_on:
       valkey:
         condition: service_healthy
+    # Mirrors the web probe: confirms the worker can still reach Redis and
+    # PostgreSQL, not merely that its process is alive.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.WORKER_HEALTH_PORT || 3001) + '/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
 
   valkey:
     image: valkey/valkey:9.1.1-alpine3.24

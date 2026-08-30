@@ -20,6 +20,7 @@ import { reconcileExpiredDeliveryClaims } from "./lib/automation/delivery-reconc
 import { processLeadDelivery } from "./lib/automation/lead-delivery";
 import { processFlowFollowUp, type FlowFollowUpRunnerOptions } from "./lib/automation/followup-runner";
 import type { FlowFollowUpJob } from "./lib/queue";
+import { createWorkerHealthServer, workerHealthPort } from "./lib/worker-health";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 
@@ -29,6 +30,13 @@ if (!env.redisUrl) {
   logger.error("Linkar worker requires REDIS_URL");
   process.exitCode = 1;
 } else {
+  // Give the container something to probe. Without this the orchestrator can
+  // only see "the process is alive", not "it can still reach its dependencies".
+  const healthServer = createWorkerHealthServer();
+  healthServer.listen(workerHealthPort(), () =>
+    logger.info("Worker health server listening", { port: workerHealthPort() }));
+  healthServer.unref();
+
   const redis = new Redis(env.redisUrl, { maxRetriesPerRequest: null });
   const worker = new Worker(
     WEBHOOK_QUEUE_NAME,

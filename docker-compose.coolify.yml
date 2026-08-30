@@ -11,21 +11,28 @@ x-application-environment: &application-environment
   APP_URL: ${APP_URL:?APP_URL is required}
   NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
   SUPPORT_EMAIL: ${SUPPORT_EMAIL:?SUPPORT_EMAIL is required}
+  # Fallback only - /api/health prefers BUILD_COMMIT, which is baked into the
+  # image at build time and cannot drift from the running build.
   SOURCE_COMMIT: ${SOURCE_COMMIT:-main}
+  WORKER_HEALTH_PORT: ${WORKER_HEALTH_PORT:-3001}
   AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:?AUTH_SESSION_SECRET is required}
   DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
   REDIS_URL: redis://:${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}@valkey:6379/0
-  META_APP_ID: ${META_APP_ID:-}
-  META_APP_SECRET: ${META_APP_SECRET:-}
+  # Both channels are part of the App Review submission, so a missing app id or
+  # secret is a broken deployment, not a degraded one. Without these guards the
+  # stack booted clean and only failed later as a `?meta=missing-config`
+  # redirect that nothing was watching.
+  META_APP_ID: ${META_APP_ID:?META_APP_ID is required}
+  META_APP_SECRET: ${META_APP_SECRET:?META_APP_SECRET is required}
   META_TOKEN_ENCRYPTION_KEY: ${META_TOKEN_ENCRYPTION_KEY:?META_TOKEN_ENCRYPTION_KEY is required}
   META_REDIRECT_URI: ${META_REDIRECT_URI:?META_REDIRECT_URI is required}
   META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:?META_VERIFY_TOKEN is required}
   META_API_VERSION: ${META_API_VERSION:-v25.0}
   META_SCOPES: ${META_SCOPES:-instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages}
-  FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
-  FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+  FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:?FACEBOOK_APP_ID is required}
+  FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:?FACEBOOK_APP_SECRET is required}
   FACEBOOK_REDIRECT_URI: ${FACEBOOK_REDIRECT_URI:-https://linkar.in/api/facebook/oauth/callback}
-  FACEBOOK_VERIFY_TOKEN: ${FACEBOOK_VERIFY_TOKEN:-}
+  FACEBOOK_VERIFY_TOKEN: ${FACEBOOK_VERIFY_TOKEN:?FACEBOOK_VERIFY_TOKEN is required}
   FACEBOOK_API_VERSION: ${FACEBOOK_API_VERSION:-v25.0}
   FACEBOOK_SCOPES: ${FACEBOOK_SCOPES:-pages_show_list,pages_manage_engagement,pages_manage_metadata,pages_read_engagement,pages_read_user_content}
   FACEBOOK_TOKEN_ENCRYPTION_KEY: ${FACEBOOK_TOKEN_ENCRYPTION_KEY:-}
@@ -90,6 +97,14 @@ services:
         condition: service_completed_successfully
       valkey:
         condition: service_healthy
+    # Without this the orchestrator reported the worker as running:unknown - up,
+    # but with nothing confirming it could still reach Redis and PostgreSQL.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + (process.env.WORKER_HEALTH_PORT || 3001) + '/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     deploy:
       resources:
         limits:
