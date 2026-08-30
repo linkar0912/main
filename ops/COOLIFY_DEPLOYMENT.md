@@ -175,9 +175,18 @@ Never route Cloudflare, a public hostname, or any port to `worker` or
      | grep -oE '/_next/static/[a-z0-9/_-]+\.css' | head -1)
    curl -sk "https://linkar.in$CSS" | grep -c icon-rail   # 0 = old build
    ```
-6. **Watch it settle.** A rollout takes roughly 60–90 seconds and takes the
-   *whole stack* down in the middle - a brief window where `valkey` also reads
-   as exited is normal, not an outage.
+6. **Watch it settle.** The containers themselves cycle down and back up in
+   roughly 60–90 seconds - a brief window where `valkey` also reads as exited
+   is normal, not an outage. But `web` reporting `running:healthy` internally
+   and the site actually being reachable from outside are two different
+   things: in practice there's a further gap, observed anywhere from ~0s to
+   ~2.5 minutes, before the reverse proxy routes real traffic to the new
+   container. `pnpm deploy:coolify`'s external check (§4 step 2 above)
+   retries against `/api/health` for up to ~3 minutes to cover this rather
+   than failing on the first miss - if you're checking by hand instead of
+   via the script, don't treat one failed `curl` right after the internal
+   status flips healthy as a real failure; wait and retry before concluding
+   something is actually wrong.
    ```bash
    curl -s -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
      "$COOLIFY_HOST/api/v1/services/$SERVICE_UUID" \
@@ -377,6 +386,7 @@ secrets only for a compromise or a planned rotation.
 | Site down, `migrate: exited`, redeploy does nothing | Failed migration → P3009 | §5 |
 | No new row in `_prisma_migrations` after a deploy | One-shot never recreated (`restart: "no"`) | §5 step 3 |
 | Whole stack exited for ~60–90s right after a push | Normal rollout | Wait |
+| `/api/health` fails once right after `web` reports `running:healthy` internally | Reverse-proxy routing lag (up to ~2.5 min observed) | Retry - `pnpm deploy:coolify` already does this for you |
 | `web` never leaves `created` | Dependency gate reading a stale failure | §5 step 3 |
 | Container logs unavailable in the UI | Stop ran `docker compose down` | Deploy, then read logs |
 | Deploy reports success but nothing changes | Webhook no-ops on a running stack | Use the restart endpoint (§4) |

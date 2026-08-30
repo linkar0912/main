@@ -184,12 +184,34 @@ async function step4_pollStatus(env) {
 
 async function step5_verifyExternally(beforeCss) {
   console.log("\n[5/5] Verifying from outside the container…");
-  const health = await fetchPublic("/api/health");
+  // Step 4 already confirmed Coolify's internal healthcheck passed, but there's
+  // a real gap - observed anywhere from ~0s to ~2.5 minutes in practice -
+  // before the reverse proxy actually routes traffic to the new container. A
+  // single immediate check here used to fail on roughly half of this
+  // project's real deploys even though the site recovered on its own shortly
+  // after, so this retries instead of failing on the first miss.
+  const EXTERNAL_POLL_MAX_ATTEMPTS = 18; // ~3 minutes
   let healthBody;
-  try {
-    healthBody = JSON.parse(health.body);
-  } catch {
-    fail("External check", `/api/health did not return JSON: ${health.body.slice(0, 200)}`);
+  let lastRawBody = "";
+  for (let attempt = 1; attempt <= EXTERNAL_POLL_MAX_ATTEMPTS; attempt += 1) {
+    const health = await fetchPublic("/api/health").catch(() => ({ body: "" }));
+    lastRawBody = health.body;
+    try {
+      const parsed = JSON.parse(health.body);
+      if (parsed.status === "ok") {
+        healthBody = parsed;
+        break;
+      }
+      healthBody = parsed;
+    } catch {
+      healthBody = undefined;
+    }
+    if (attempt === EXTERNAL_POLL_MAX_ATTEMPTS) break;
+    console.log(`  [${attempt}/${EXTERNAL_POLL_MAX_ATTEMPTS}] not serving healthy yet, retrying…`);
+    await sleep(POLL_INTERVAL_MS);
+  }
+  if (!healthBody) {
+    fail("External check", `/api/health never returned JSON: ${lastRawBody.slice(0, 200)}`);
   }
   if (healthBody.status !== "ok") {
     fail("External check", `/api/health reports status "${healthBody.status}".`, JSON.stringify(healthBody));
