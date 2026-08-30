@@ -504,35 +504,39 @@ export function SettingsScreen() {
             )}
 
             {section === "delivery" && (
-              <>
+              <div className="delivery-settings-layout">
                 <section className="panel settings-panel settings-card" aria-label="Messaging hours">
                   <div className="panel-heading"><div><p className="eyebrow">Delivery defaults</p><h2>Messaging quiet hours</h2></div><Clock size={21} /></div>
                   <p className="muted">Sequences and broadcasts hold all DMs during this window (workspace time). Direct replies to a person’s own message are never delayed.</p>
                   {quietError && <p className="form-error" role="alert">{quietError}</p>}
-                  <label className="field checkbox-field">
-                    <input type="checkbox" checked={quietEnabled} onChange={(event) => setQuietEnabled(event.target.checked)} />
-                    <span>Hold automated DMs during quiet hours</span>
-                  </label>
-                  {quietEnabled && (
-                    <div className="field-grid">
+                  <div className="delivery-status" data-enabled={quietEnabled}>
+                    <span className={`mode-orb ${quietEnabled ? "orb-live" : "orb-demo"}`} aria-hidden="true" />
+                    <strong>{quietEnabled ? "Quiet hours enabled" : "Quiet hours disabled"}</strong>
+                  </div>
+                  <div className="delivery-controls">
+                    <label className="field checkbox-field">
+                      <input type="checkbox" checked={quietEnabled} onChange={(event) => setQuietEnabled(event.target.checked)} />
+                      <span>Hold automated DMs during quiet hours</span>
+                    </label>
+                    <div className="delivery-time-grid">
                       <label className="field">
-                        <span>Quiet from (hour)</span>
-                        <select value={String(quietStart)} onChange={(e) => setQuietStart(Number(e.target.value))}>
+                        <span>Start time</span>
+                        <select value={String(quietStart)} disabled={!quietEnabled} onChange={(e) => setQuietStart(Number(e.target.value))}>
                           {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
                         </select>
                       </label>
                       <label className="field">
-                        <span>Quiet until (hour)</span>
-                        <select value={String(quietEnd)} onChange={(e) => setQuietEnd(Number(e.target.value))}>
+                        <span>End time</span>
+                        <select value={String(quietEnd)} disabled={!quietEnabled} onChange={(e) => setQuietEnd(Number(e.target.value))}>
                           {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
                         </select>
-                      </label>
-                      <label className="field">
-                        <span>Timezone</span>
-                        <input value={quietTz} onChange={(e) => setQuietTz(e.target.value)} placeholder="Europe/Berlin" />
                       </label>
                     </div>
-                  )}
+                      <label className="field">
+                        <span>Workspace timezone</span>
+                        <input value={quietTz} disabled={!quietEnabled} onChange={(e) => setQuietTz(e.target.value)} placeholder="Europe/Berlin" />
+                      </label>
+                  </div>
                   <div className="builder-footer">
                     <div>{quietSaved && <span className="form-success" role="status"><Check size={15} /> Saved.</span>}</div>
                     <button className="button button-secondary" type="button" disabled={quietBusy} onClick={() => void saveMessagingWindow(quietEnabled)}>
@@ -541,11 +545,11 @@ export function SettingsScreen() {
                   </div>
                 </section>
 
-                <div className="settings-grid settings-trust-grid">
+                <aside className="delivery-safeguards" aria-label="Delivery safeguards">
                   <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Protected by default</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> Replies follow saved rules, never scraping.</li></ul></section>
                   <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Environment</p><h2>{mode === "demo" ? "Demo mode" : "Connected mode"}</h2></div><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} /></div><p className="muted">{mode === "demo" ? "The workspace runs on sample data until DATABASE_URL and Meta credentials are configured." : "This workspace is configured for live Meta-backed delivery."}</p><Link className="text-link" href="/support">View setup guidance <ExternalLink size={15} /></Link></section>
-                </div>
-              </>
+                </aside>
+              </div>
             )}
 
             {section === "team" && (

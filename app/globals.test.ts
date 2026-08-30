@@ -83,4 +83,10 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.sequence-submit-actions \.text-link\s*{[^}]*min-height:\s*44px/);
     expect(css).toMatch(/\.row-identity\s*{[^}]*min-width:\s*0/);
   });
+
+  it("keeps settings cards free of decorative top strips", () => {
+    expect(css).not.toMatch(/\.channel-settings-card::before/);
+    expect(css).not.toMatch(/\.facebook-settings-card::before/);
+    expect(css).not.toMatch(/\.settings-summary-intro\s*{[^}]*border-top/);
+  });
 });

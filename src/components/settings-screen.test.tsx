@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -101,6 +101,27 @@ describe("SettingsScreen webhook health panel", () => {
 
     await screen.findByText("No account connected");
     expect(screen.queryByLabelText("Webhook health")).toBeNull();
+  });
+
+  it("organizes delivery controls before the supporting safeguards", async () => {
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": { data: [] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
+      "/api/health": { mode: "configured" },
+      "/api/workspace/messaging": { data: null },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Delivery/ }));
+
+    expect(screen.getByRole("region", { name: "Messaging hours" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Delivery safeguards" })).toBeTruthy();
+    expect(screen.getByText("Quiet hours disabled")).toBeTruthy();
+    expect(screen.getByLabelText("Start time")).toBeTruthy();
+    expect(screen.getByLabelText("End time")).toBeTruthy();
+    expect(screen.getByLabelText("Workspace timezone")).toBeTruthy();
   });
 
   it("explains when the Instagram account belongs to another workspace", async () => {
