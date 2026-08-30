@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pages = await getRepository().listFacebookPages(session.workspaceId);
-  if (!env.facebookTokenEncryptionKey) {
+  if (!env.facebookTokenEncryptionKey || !env.facebookAppId) {
     return NextResponse.json({ data: pages.map((page) => ({
       id: page.id,
       pageId: page.pageId,
@@ -28,9 +28,11 @@ export async function GET(request: Request) {
       requiredFields: [...REQUIRED_FIELDS],
       subscribedFields: [],
       missingFields: [...REQUIRED_FIELDS],
-      checkError: "Facebook token encryption is not configured",
+      checkError: "Facebook App ID and token encryption must be configured",
     })) });
   }
+  const tokenEncryptionKey = env.facebookTokenEncryptionKey;
+  const facebookAppId = env.facebookAppId;
   const data = await Promise.all(pages.map(async (page) => {
     if (page.status !== "CONNECTED") {
       return {
@@ -44,12 +46,12 @@ export async function GET(request: Request) {
       };
     }
     try {
-      const accessToken = unsealSecret(page.accessTokenEncrypted, env.facebookTokenEncryptionKey!);
+      const accessToken = unsealSecret(page.accessTokenEncrypted, tokenEncryptionKey);
       const subscribed = await readFacebookPageWebhookSubscription(
         page.pageId,
         accessToken,
         env.facebookApiVersion,
-        env.facebookAppId,
+        facebookAppId,
       );
       return {
         id: page.id,
