@@ -178,7 +178,7 @@ git commit -m "feat(admin): add owner authorization boundary"
 - Produces: `redactAdminAuditValue(value: unknown): unknown`
 - Produces: `appendAdminAuditEvent(input: AdminAuditInput): Promise<void>`
 
-- [ ] **Step 1: Write failing redaction tests**
+- [x] **Step 1: Write failing redaction tests**
 
 ```ts
 it("redacts secret-bearing keys recursively", () => {
@@ -191,15 +191,15 @@ it("truncates oversized strings and arrays", () => {
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/audit.test.ts`
 
 Expected: FAIL because audit helpers do not exist.
 
-- [ ] **Step 3: Add Prisma model and SQL protections**
+- [x] **Step 3: Add Prisma model and SQL protections**
 
-Add `AdminAuditEvent` with `id`, `requestId`, `phase`, `actorUserId`, `actorEmail`, `sessionId`, `action`, `targetType`, `targetId`, optional `workspaceId`, `reason`, optional `before`/`after`, optional `errorCode`, `ipHash`, `userAgent`, and `createdAt`.
+Add `AdminAuditEvent` with `id`, `requestId`, `phase`, `actorUserId`, `actorEmail`, `sessionId`, `action`, `targetType`, `targetId`, optional `workspaceId`, `reason`, optional `before`/`after`, optional `errorCode`, `ipHash`, `userAgent`, optional approved request `origin`, and `createdAt`.
 
 The migration must include:
 
@@ -219,17 +219,17 @@ BEFORE UPDATE OR DELETE ON "AdminAuditEvent"
 FOR EACH ROW EXECUTE FUNCTION reject_admin_audit_mutation();
 ```
 
-- [ ] **Step 4: Implement redaction and append-only writes**
+- [x] **Step 4: Implement redaction and append-only writes**
 
 Redact keys matching `/token|secret|password|cookie|authorization|otp|signedrequest|payload/i`, cap strings at 4,000 characters, arrays at 100 entries, and object depth at six. `appendAdminAuditEvent()` creates a new custom Linkar ID and never exposes update/delete methods.
 
-- [ ] **Step 5: Verify schema and GREEN**
+- [x] **Step 5: Verify schema and GREEN**
 
 Run: `pnpm prisma validate && pnpm prisma generate && pnpm vitest run src/lib/admin/audit.test.ts src/lib/migration-history.test.ts`
 
 Expected: schema valid and tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add prisma/schema.prisma prisma/migrations/20260831120000_platform_admin_audit/migration.sql src/lib/admin/audit.ts src/lib/admin/audit.test.ts src/lib/migration-history.test.ts

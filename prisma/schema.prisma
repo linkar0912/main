@@ -19,6 +19,12 @@ enum ConnectionStatus {
   EXPIRED
 }
 
+enum AdminAuditPhase {
+  ATTEMPT
+  SUCCESS
+  FAILURE
+}
+
 enum ExecutionStatus {
   PROCESSING
   SENT
@@ -501,4 +507,29 @@ model DataDeletionRequest {
   completedAt       DateTime?
 
   @@index([requestedAt])
+}
+
+model AdminAuditEvent {
+  id          String          @id
+  requestId   String
+  phase       AdminAuditPhase
+  actorUserId String
+  actorEmail  String
+  sessionId   String
+  action      String
+  targetType  String
+  targetId    String
+  workspaceId String?
+  reason      String
+  before      Json?
+  after       Json?
+  errorCode   String?
+  ipHash      String
+  userAgent   String
+  origin      String?
+  createdAt   DateTime        @default(now())
+
+  @@unique([requestId, phase])
+  @@index([createdAt, id])
+  @@index([workspaceId, createdAt])
 }
