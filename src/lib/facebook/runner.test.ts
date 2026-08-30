@@ -35,7 +35,7 @@ function commentEvent(overrides: Partial<FacebookNormalizedEvent> = {}): Faceboo
     text: "guide please",
     senderId: "user_1",
     senderName: "Maya",
-    timestamp: 1_700_000_000,
+    timestamp: 1_700_000_000_000,
     ...overrides,
   };
 }
@@ -172,6 +172,76 @@ describe("processNormalizedFacebookEvent", () => {
     const result = await processNormalizedFacebookEvent(commentEvent(), repository, { client, tokenEncryptionKey: TOKEN_KEY });
     expect(result.skipped).toBe(1);
     expect(postCommentReply).not.toHaveBeenCalled();
+  });
+
+  it("retains a successful send against the daily quota so the next event is blocked", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Limited", { match: "any", keywords: [] }, { dailySendLimit: 1 });
+    const { client, postCommentReply } = fakeClient();
+
+    const first = await processNormalizedFacebookEvent(commentEvent({ id: "evt_1", commentId: "comment_1" }), repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+    const second = await processNormalizedFacebookEvent(commentEvent({ id: "evt_2", commentId: "comment_2" }), repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+
+    expect(first.sent).toBe(1);
+    expect(second.skipped).toBe(1);
+    expect(postCommentReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the daily quota reservation after a retryable provider failure", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Limited", { match: "any", keywords: [] }, { dailySendLimit: 1 });
+    const postCommentReply = vi.fn()
+      .mockRejectedValueOnce(new FacebookApiError("throttled", 429, true, true))
+      .mockResolvedValueOnce({ id: "fb_comment_42" });
+    const { client } = fakeClient({ postCommentReply });
+
+    await expect(processNormalizedFacebookEvent(commentEvent(), repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    })).rejects.toBeInstanceOf(RetryableFacebookError);
+
+    const retry = await processNormalizedFacebookEvent(commentEvent(), repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+    expect(retry.sent).toBe(1);
+    expect(postCommentReply).toHaveBeenCalledTimes(2);
+  });
+
+  it("replyOncePerUser sends the first reply and skips later comments from that sender", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Once", { match: "any", keywords: [] }, {
+      trigger: {
+        type: "comment",
+        match: "any",
+        keywords: [],
+        mediaIds: [],
+        replyOncePerUser: true,
+      },
+    });
+    const { client, postCommentReply } = fakeClient();
+
+    const first = await processNormalizedFacebookEvent(commentEvent({ id: "evt_1", commentId: "comment_1" }), repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+    const second = await processNormalizedFacebookEvent(commentEvent({ id: "evt_2", commentId: "comment_2" }), repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+
+    expect(first.sent).toBe(1);
+    expect(second.skipped).toBe(1);
+    expect(postCommentReply).toHaveBeenCalledTimes(1);
   });
 
   it("treats any-comment match (keywords=[]) as a match without requiring a keyword", async () => {

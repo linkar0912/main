@@ -135,6 +135,38 @@ describe("memory repository", () => {
     expect(await repository.claimExecution(claim)).toBe(false);
   });
 
+  it("claims a Facebook reply-once recipient atomically and allows a failed attempt to release it", async () => {
+    const repository = createMemoryRepository();
+    const claim = {
+      automationId: "automation_1",
+      pageId: "page_1",
+      senderId: "sender_1",
+      eventId: "event_1",
+      claimedAt: "2026-08-29T10:00:00.000Z",
+      claimExpiresAt: "2026-08-29T10:05:00.000Z",
+    };
+
+    expect(await repository.claimFacebookReplyRecipient(claim)).toBe(true);
+    expect(await repository.claimFacebookReplyRecipient({ ...claim, eventId: "event_2" })).toBe(false);
+
+    await repository.releaseFacebookReplyRecipient(claim.automationId, claim.pageId, claim.senderId, claim.eventId);
+    expect(await repository.claimFacebookReplyRecipient({ ...claim, eventId: "event_2" })).toBe(true);
+
+    await repository.completeFacebookReplyRecipient(
+      claim.automationId,
+      claim.pageId,
+      claim.senderId,
+      "event_2",
+      "2026-08-29T10:01:00.000Z",
+    );
+    expect(await repository.claimFacebookReplyRecipient({
+      ...claim,
+      eventId: "event_3",
+      claimedAt: "2026-08-29T11:00:00.000Z",
+      claimExpiresAt: "2026-08-29T11:05:00.000Z",
+    })).toBe(false);
+  });
+
   it("allows only the durable dispatch owner to persist provider success", async () => {
     const repository = createMemoryRepository();
     const claim = {

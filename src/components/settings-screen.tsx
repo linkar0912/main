@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   Check,
@@ -48,6 +48,7 @@ const WEBHOOK_FIELD_LABELS: Record<string, string> = {
 };
 
 export function SettingsScreen() {
+  const router = useRouter();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [health, setHealth] = useState<ConnectionHealth | null>(null);
   const [mode, setMode] = useState<"demo" | "configured">("demo");
@@ -67,6 +68,9 @@ export function SettingsScreen() {
   } | null>(null);
   const [facebookBusyId, setFacebookBusyId] = useState("");
   const [facebookError, setFacebookError] = useState("");
+  const [facebookChoices, setFacebookChoices] = useState<Array<{ id: string; name: string; category?: string }>>([]);
+  const [selectedFacebookPageId, setSelectedFacebookPageId] = useState("");
+  const [facebookSelectionBusy, setFacebookSelectionBusy] = useState(false);
   const [section, setSection] = useState<"connections" | "delivery" | "team" | "policies">("connections");
   const [disconnectingId, setDisconnectingId] = useState("");
   const [disconnectError, setDisconnectError] = useState("");
@@ -97,6 +101,38 @@ export function SettingsScreen() {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (facebookState !== "select-page") return;
+    void fetch("/api/facebook/oauth/pages")
+      .then(async (response) => {
+        const payload = await response.json() as { data?: Array<{ id: string; name: string; category?: string }>; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "Could not load Facebook Pages");
+        const choices = payload.data ?? [];
+        setFacebookChoices(choices);
+        setSelectedFacebookPageId(choices[0]?.id ?? "");
+      })
+      .catch((error) => setFacebookError(error instanceof Error ? error.message : "Could not load Facebook Pages"));
+  }, [facebookState]);
+
+  async function connectSelectedFacebookPage() {
+    if (!selectedFacebookPageId || facebookSelectionBusy) return;
+    setFacebookSelectionBusy(true);
+    setFacebookError("");
+    try {
+      const response = await fetch("/api/facebook/oauth/select", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pageId: selectedFacebookPageId }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Could not connect Facebook Page");
+      router.push("/settings?facebook=connected");
+    } catch (error) {
+      setFacebookError(error instanceof Error ? error.message : "Could not connect Facebook Page");
+      setFacebookSelectionBusy(false);
+    }
+  }
 
   async function saveMessagingWindow(enabled: boolean) {
     setQuietBusy(true);
@@ -228,13 +264,14 @@ export function SettingsScreen() {
 
   const facebookStatusMessage: Record<string, string> = {
     connected: "Facebook Page is connected. The Page is ready to receive comment-reply webhooks.",
+    "select-page": "Choose which Facebook Page Linkar should connect. Nothing is connected until you confirm.",
     "missing-config": "Add your Facebook App ID, App Secret, and redirect URI before connecting a Page.",
     "missing-encryption-key": "Add FACEBOOK_TOKEN_ENCRYPTION_KEY (or META_TOKEN_ENCRYPTION_KEY) before connecting a Page.",
     "invalid-state": "The Facebook sign-in expired. Start the connection again.",
     cancelled: "You cancelled the Facebook authorization - click Connect again whenever you're ready.",
     denied: "Facebook refused this connection before it started. Make sure this workspace owner has a role on the Meta app and that the Pages the user manages appear under their Business portfolio.",
     "token-exchange": "Facebook rejected the app credentials while finishing sign-in. Verify FACEBOOK_APP_ID and FACEBOOK_APP_SECRET, and that the callback URL is listed under Valid OAuth Redirect URIs in the Meta app.",
-    "missing-permissions": "Facebook signed in but did not approve every permission Linkar needs (pages_show_list, pages_manage_metadata, pages_manage_engagement, pages_messaging). Reconnect and accept all requested scopes.",
+    "missing-permissions": "Facebook signed in but did not approve every permission Linkar needs (pages_show_list, pages_manage_metadata, pages_manage_engagement, pages_read_engagement, pages_read_user_content). Reconnect and accept all requested scopes.",
     "no-pages": "Signed in, but no Facebook Pages were found under this account. Create a Page in Business Manager or claim an existing one, then retry.",
     "page-listing": "Signed in, but Linkar could not read the Pages from Meta. This is usually transient - retry the connection.",
     "already-connected": "That Facebook Page already belongs to another Linkar workspace. Disconnect it there before connecting it here.",
@@ -377,6 +414,30 @@ export function SettingsScreen() {
                   <div className="settings-icon"><FacebookGlyph size={25} /></div>
                   <div className="settings-copy"><p className="eyebrow">Facebook Pages</p><h2>{facebookPages.length === 0 ? "No Page connected" : `${facebookPages.length} Page${facebookPages.length === 1 ? "" : "s"} connected`}</h2><p>{facebookPages.length > 0 ? "Connected Pages can deliver comment-reply automations on public posts." : "Connect a Facebook Page to auto-reply to comments with the same flows you use on Instagram."}</p></div>
                   <div className="settings-action"><a className="button button-primary" href="/api/facebook/oauth/start">{facebookPages.length > 0 ? "Connect another Page" : "Connect Facebook Page"} <ExternalLink size={15} /></a></div>
+                  {facebookState === "select-page" && (
+                    <div className="settings-copy">
+                      <label className="field">
+                        <span>Choose Facebook Page</span>
+                        <select
+                          aria-label="Choose Facebook Page"
+                          value={selectedFacebookPageId}
+                          onChange={(event) => setSelectedFacebookPageId(event.target.value)}
+                        >
+                          {facebookChoices.map((page) => (
+                            <option key={page.id} value={page.id}>{page.name}{page.category ? ` — ${page.category}` : ""}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        className="button button-primary"
+                        type="button"
+                        disabled={!selectedFacebookPageId || facebookSelectionBusy}
+                        onClick={() => void connectSelectedFacebookPage()}
+                      >
+                        {facebookSelectionBusy ? "Connecting…" : "Connect selected Page"}
+                      </button>
+                    </div>
+                  )}
                   {facebookPages.length > 0 && (
                     <ul className="connection-list">
                       {facebookPages.map((page) => (

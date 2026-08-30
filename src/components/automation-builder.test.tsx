@@ -145,6 +145,7 @@ describe("AutomationBuilder", () => {
     // Preview should now be the Facebook layout, not the Instagram phone shell.
     const preview = screen.getAllByLabelText(/test preview/i)[0] as HTMLElement;
     expect(preview.querySelector(".facebook-preview")).toBeTruthy();
+    expect(screen.getByText("Public comment reply")).toBeTruthy();
     expect(preview.querySelector(".ig-device")).toBeNull();
 
     // Walk through the wizard and save; the request should carry the

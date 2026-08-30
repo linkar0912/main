@@ -121,7 +121,7 @@ export function getServerEnv(): ServerEnv {
     facebookVerifyToken: process.env.FACEBOOK_VERIFY_TOKEN ?? process.env.META_VERIFY_TOKEN ?? "change-me",
     facebookApiVersion,
     facebookScopes: (process.env.FACEBOOK_SCOPES ??
-      "pages_show_list,pages_manage_engagement,pages_manage_metadata,pages_read_engagement")
+      "pages_show_list,pages_manage_engagement,pages_manage_metadata,pages_read_engagement,pages_read_user_content")
       .split(",")
       .map((scope) => scope.trim())
       .filter(Boolean),

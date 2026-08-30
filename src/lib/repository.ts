@@ -140,10 +140,20 @@ export type FacebookPageConnectionRecord = {
   workspaceId: string;
   pageId: string;
   pageName: string;
+  facebookUserId?: string;
   accessTokenEncrypted: string;
   tokenExpiresAt?: string;
   status: ConnectionStatus;
   connectedAt: string;
+};
+
+export type ClaimFacebookReplyRecipientInput = {
+  automationId: string;
+  pageId: string;
+  senderId: string;
+  eventId: string;
+  claimedAt: string;
+  claimExpiresAt: string;
 };
 
 export class FacebookPageOwnershipError extends Error {
@@ -619,7 +629,18 @@ export interface AutomationRepository {
   updateFacebookPageToken(id: string, accessTokenEncrypted: string, tokenExpiresAt?: string): Promise<void>;
   updateFacebookPageStatus(id: string, status: ConnectionStatus): Promise<void>;
   deleteFacebookPageByPageId(pageId: string): Promise<void>;
+  deleteFacebookPagesByUserId(facebookUserId: string): Promise<void>;
   deleteFacebookPage(workspaceId: string, id: string): Promise<boolean>;
+  claimFacebookReplyRecipient(input: ClaimFacebookReplyRecipientInput): Promise<boolean>;
+  completeFacebookReplyRecipient(
+    automationId: string,
+    pageId: string,
+    senderId: string,
+    eventId: string,
+    repliedAt: string,
+  ): Promise<void>;
+  releaseFacebookReplyRecipient(automationId: string, pageId: string, senderId: string, eventId: string): Promise<void>;
+  beginFacebookDataDeletion(facebookUserId: string, confirmationCode: string, signedRequestHash: string): Promise<DataDeletionRequestRecord>;
   /** List the active automations pinned to a given Facebook Page. */
   listAutomationsForFacebookPage(workspaceId: string, pageId: string): Promise<AutomationRecord[]>;
   completeDataDeletion(confirmationCode: string): Promise<DataDeletionRequestRecord>;

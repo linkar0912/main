@@ -177,6 +177,7 @@ model Automation {
   executions        AutomationExecution[]
   participants      AutomationParticipant[]
   dailySendCounters AutomationDailySendCounter[]
+  facebookReplyRecipients FacebookReplyRecipient[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, priority])
@@ -464,6 +465,7 @@ model FacebookPageConnection {
   workspaceId          String
   pageId               String
   pageName             String
+  facebookUserId       String?
   accessTokenEncrypted String
   tokenExpiresAt       DateTime?
   status               ConnectionStatus @default(CONNECTED)
@@ -473,6 +475,21 @@ model FacebookPageConnection {
   // One Facebook Page has exactly one owning workspace.
   @@unique([pageId])
   @@index([workspaceId, status])
+  @@index([facebookUserId])
+}
+
+model FacebookReplyRecipient {
+  id             String     @id
+  automationId   String
+  pageId         String
+  senderId       String
+  claimEventId   String
+  claimExpiresAt DateTime
+  repliedAt      DateTime?
+  automation     Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, pageId, senderId])
+  @@index([claimExpiresAt])
 }
 
 model DataDeletionRequest {

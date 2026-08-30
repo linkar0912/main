@@ -356,6 +356,7 @@ function mapFacebookPage(record: {
   workspaceId: string;
   pageId: string;
   pageName: string;
+  facebookUserId: string | null;
   accessTokenEncrypted: string;
   tokenExpiresAt: Date | null;
   status: "CONNECTED" | "DISCONNECTED" | "EXPIRED";
@@ -366,6 +367,7 @@ function mapFacebookPage(record: {
     workspaceId: record.workspaceId,
     pageId: record.pageId,
     pageName: record.pageName,
+    ...(record.facebookUserId ? { facebookUserId: record.facebookUserId } : {}),
     accessTokenEncrypted: record.accessTokenEncrypted,
     tokenExpiresAt: record.tokenExpiresAt?.toISOString(),
     status: record.status,
@@ -1012,6 +1014,22 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async deleteFacebookPageByPageId(pageId) {
       await client.facebookPageConnection.deleteMany({ where: { pageId } });
     },
+    async deleteFacebookPagesByUserId(facebookUserId) {
+      await client.$transaction(async (transaction) => {
+        const pages = await transaction.facebookPageConnection.findMany({
+          where: { facebookUserId },
+          select: { pageId: true },
+        });
+        const pageIds = pages.map((page) => page.pageId);
+        if (pageIds.length > 0) {
+          await transaction.automation.updateMany({
+            where: { facebookPageId: { in: pageIds } },
+            data: { facebookPageId: null },
+          });
+        }
+        await transaction.facebookPageConnection.deleteMany({ where: { facebookUserId } });
+      });
+    },
     async deleteFacebookPage(workspaceId, id) {
       // Two-step delete: unpin any automations first so the runner never
       // tries to dispatch to a missing page, then drop the connection.
@@ -1025,6 +1043,58 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         await transaction.facebookPageConnection.delete({ where: { id } });
         return true;
       });
+    },
+    async claimFacebookReplyRecipient(input) {
+      const claimed = await client.$executeRaw(Prisma.sql`
+        INSERT INTO "FacebookReplyRecipient"
+          ("id", "automationId", "pageId", "senderId", "claimEventId", "claimExpiresAt")
+        VALUES
+          (${createId("facebook_reply_recipient")}, ${input.automationId}, ${input.pageId}, ${input.senderId}, ${input.eventId}, ${new Date(input.claimExpiresAt)})
+        ON CONFLICT ("automationId", "pageId", "senderId") DO UPDATE SET
+          "claimEventId" = EXCLUDED."claimEventId",
+          "claimExpiresAt" = EXCLUDED."claimExpiresAt"
+        WHERE "FacebookReplyRecipient"."repliedAt" IS NULL
+          AND (
+            "FacebookReplyRecipient"."claimEventId" = EXCLUDED."claimEventId"
+            OR "FacebookReplyRecipient"."claimExpiresAt" <= ${new Date(input.claimedAt)}
+          )
+      `);
+      return claimed === 1;
+    },
+    async completeFacebookReplyRecipient(automationId, pageId, senderId, eventId, repliedAt) {
+      await client.$executeRaw(Prisma.sql`
+        UPDATE "FacebookReplyRecipient"
+        SET "repliedAt" = ${new Date(repliedAt)}
+        WHERE "automationId" = ${automationId}
+          AND "pageId" = ${pageId}
+          AND "senderId" = ${senderId}
+          AND "claimEventId" = ${eventId}
+      `);
+    },
+    async releaseFacebookReplyRecipient(automationId, pageId, senderId, eventId) {
+      await client.$executeRaw(Prisma.sql`
+        DELETE FROM "FacebookReplyRecipient"
+        WHERE "automationId" = ${automationId}
+          AND "pageId" = ${pageId}
+          AND "senderId" = ${senderId}
+          AND "claimEventId" = ${eventId}
+          AND "repliedAt" IS NULL
+      `);
+    },
+    async beginFacebookDataDeletion(facebookUserId, confirmationCode, signedRequestHash) {
+      const record = await client.$transaction(async (transaction) => {
+        const pages = await transaction.facebookPageConnection.findMany({
+          where: { facebookUserId },
+          select: { pageId: true },
+        });
+        const pageIds = pages.map((page) => page.pageId);
+        if (pageIds.length > 0) await transaction.automation.deleteMany({ where: { facebookPageId: { in: pageIds } } });
+        await transaction.facebookPageConnection.deleteMany({ where: { facebookUserId } });
+        return transaction.dataDeletionRequest.create({
+          data: { id: createId("deletion"), confirmationCode, signedRequestHash, status: "PENDING" },
+        });
+      });
+      return mapDeletionRequest(record);
     },
     async listAutomationsForFacebookPage(workspaceId, pageId) {
       const records = await client.automation.findMany({

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/settings",
+  useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
@@ -131,6 +132,28 @@ describe("SettingsScreen webhook health panel", () => {
     expect(await screen.findByText("No Page connected")).toBeTruthy();
     const connectLink = screen.getByRole("link", { name: /Connect Facebook Page/ });
     expect(connectLink.getAttribute("href")).toBe("/api/facebook/oauth/start");
+  });
+
+  it("shows the Pages returned by Facebook after OAuth instead of auto-connecting the first", async () => {
+    window.history.replaceState({}, "", "/settings?facebook=select-page");
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": { data: [] },
+      "/api/facebook/oauth/pages": { data: [
+        { id: "page_1", name: "Acme Co" },
+        { id: "page_2", name: "Acme Studio" },
+      ] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
+      "/api/health": { mode: "configured" },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+
+    const picker = await screen.findByLabelText("Choose Facebook Page");
+    expect(picker.textContent).toContain("Acme Co");
+    expect(picker.textContent).toContain("Acme Studio");
+    expect(screen.getByRole("button", { name: "Connect selected Page" })).toBeTruthy();
   });
 
   it("lists connected Pages and offers a disconnect button", async () => {

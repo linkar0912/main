@@ -17,11 +17,19 @@ export class FacebookOAuthError extends Error {
 
 /** Meta completed sign-in but withheld a scope the product requires. */
 export class FacebookPermissionError extends Error {
-  constructor() {
-    super("Meta did not grant the required Facebook permissions");
+  constructor(readonly missingPermissions: string[] = []) {
+    super(`Meta did not grant the required Facebook permissions${missingPermissions.length ? `: ${missingPermissions.join(", ")}` : ""}`);
     this.name = "FacebookPermissionError";
   }
 }
+
+export const REQUIRED_FACEBOOK_PERMISSIONS = [
+  "pages_show_list",
+  "pages_manage_metadata",
+  "pages_manage_engagement",
+  "pages_read_engagement",
+  "pages_read_user_content",
+] as const;
 
 type FacebookOAuthConfig = Pick<
   ServerEnv,
@@ -107,8 +115,8 @@ export async function exchangeFacebookCode(
 export type FacebookPageSummary = {
   id: string;
   name: string;
-  /** Page-scoped access token (NOT the user token) - the only kind that
-   * can post comments, send private replies, or subscribe the Page to webhooks. */
+  /** Page-scoped access token (NOT the user token), used to post public
+   * comment replies and manage the Page webhook subscription. */
   accessToken: string;
   /** Optional category for UI grouping. */
   category?: string;
@@ -148,6 +156,39 @@ export async function listFacebookPages(
   return pages;
 }
 
+export async function validateFacebookPermissions(
+  userAccessToken: string,
+  apiVersion: string,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const url = new URL(`https://graph.facebook.com/${apiVersion}/me/permissions`);
+  const payload = await jsonOrThrow(await fetcher(url, {
+    headers: { authorization: `Bearer ${userAccessToken}` },
+  }));
+  const granted = new Set(
+    (Array.isArray(payload.data) ? payload.data : [])
+      .filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
+      .filter((entry) => entry.status === "granted" && typeof entry.permission === "string")
+      .map((entry) => entry.permission as string),
+  );
+  const missing = REQUIRED_FACEBOOK_PERMISSIONS.filter((permission) => !granted.has(permission));
+  if (missing.length > 0) throw new FacebookPermissionError([...missing]);
+}
+
+export async function getFacebookUserId(
+  userAccessToken: string,
+  apiVersion: string,
+  fetcher: typeof fetch = fetch,
+): Promise<string> {
+  const url = new URL(`https://graph.facebook.com/${apiVersion}/me`);
+  url.searchParams.set("fields", "id");
+  const payload = await jsonOrThrow(await fetcher(url, {
+    headers: { authorization: `Bearer ${userAccessToken}` },
+  }));
+  if (typeof payload.id !== "string" || !payload.id) throw new FacebookOAuthError("Meta did not return a Facebook user id", 502);
+  return payload.id;
+}
+
 /**
  * Subscribe the Page to webhook fields. The Page token is what authenticates
  * the call (not the app token) - this is different from Instagram, where the
@@ -171,4 +212,42 @@ export async function subscribeFacebookPageToWebhooks(
   );
   if (payload.success === true) return { subscribed: true };
   return { subscribed: false, error: "Meta did not confirm the webhook subscription" };
+}
+
+export async function readFacebookPageWebhookSubscription(
+  pageId: string,
+  pageAccessToken: string,
+  apiVersion: string,
+  appId: string,
+  fetcher: typeof fetch = fetch,
+): Promise<string[]> {
+  const url = new URL(`https://graph.facebook.com/${apiVersion}/${pageId}/subscribed_apps`);
+  url.searchParams.set("fields", "subscribed_fields");
+  const payload = await jsonOrThrow(await fetcher(url, {
+    headers: { authorization: `Bearer ${pageAccessToken}` },
+  }));
+  const fields = new Set<string>();
+  for (const entry of Array.isArray(payload.data) ? payload.data : []) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (record.id !== appId) continue;
+    const subscribedFields = record.subscribed_fields;
+    if (!Array.isArray(subscribedFields)) continue;
+    for (const field of subscribedFields) if (typeof field === "string") fields.add(field);
+  }
+  return [...fields];
+}
+
+export async function unsubscribeFacebookPageFromWebhooks(
+  pageId: string,
+  pageAccessToken: string,
+  apiVersion: string,
+  fetcher: typeof fetch = fetch,
+): Promise<boolean> {
+  const url = new URL(`https://graph.facebook.com/${apiVersion}/${pageId}/subscribed_apps`);
+  const payload = await jsonOrThrow(await fetcher(url, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${pageAccessToken}` },
+  }));
+  return payload.success === true;
 }

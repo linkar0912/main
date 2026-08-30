@@ -6,6 +6,10 @@ import {
   subscribeFacebookPageToWebhooks,
   FacebookOAuthError,
   FacebookPermissionError,
+  getFacebookUserId,
+  readFacebookPageWebhookSubscription,
+  unsubscribeFacebookPageFromWebhooks,
+  validateFacebookPermissions,
 } from "./oauth";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -127,5 +131,48 @@ describe("FacebookPermissionError", () => {
   it("has a stable, user-readable message", () => {
     const error = new FacebookPermissionError();
     expect(error.message).toMatch(/permissions/i);
+  });
+});
+
+describe("validateFacebookPermissions", () => {
+  it("accepts all required Page permissions", async () => {
+    const fetcher = vi.fn(async () => jsonResponse(200, { data: [
+      "pages_show_list", "pages_manage_metadata", "pages_manage_engagement",
+      "pages_read_engagement", "pages_read_user_content",
+    ].map((permission) => ({ permission, status: "granted" })) })) as typeof fetch;
+    await expect(validateFacebookPermissions("user-token", "v25.0", fetcher)).resolves.toBeUndefined();
+  });
+
+  it("reports every missing or declined permission", async () => {
+    const fetcher = vi.fn(async () => jsonResponse(200, { data: [
+      { permission: "pages_show_list", status: "granted" },
+      { permission: "pages_manage_metadata", status: "declined" },
+    ] })) as typeof fetch;
+    await expect(validateFacebookPermissions("user-token", "v25.0", fetcher)).rejects.toMatchObject({
+      name: "FacebookPermissionError",
+      missingPermissions: expect.arrayContaining(["pages_manage_metadata", "pages_read_user_content"]),
+    });
+  });
+});
+
+it("reads the app-scoped Facebook user id", async () => {
+  const fetcher = vi.fn(async () => jsonResponse(200, { id: "fb_user_1" })) as typeof fetch;
+  await expect(getFacebookUserId("user-token", "v25.0", fetcher)).resolves.toBe("fb_user_1");
+});
+
+describe("Facebook Page webhook lifecycle", () => {
+  it("checks subscribed fields with a read-only GET", async () => {
+    const fetcher = vi.fn(async () => jsonResponse(200, { data: [
+      { id: "another_app", subscribed_fields: ["feed"] },
+      { id: "app_1", subscribed_fields: ["feed"] },
+    ] })) as typeof fetch;
+    await expect(readFacebookPageWebhookSubscription("page_1", "token", "v25.0", "app_1", fetcher)).resolves.toEqual(["feed"]);
+    expect(fetcher).toHaveBeenCalledWith(expect.any(URL), expect.not.objectContaining({ method: "POST" }));
+  });
+
+  it("unsubscribes the Page with DELETE", async () => {
+    const fetcher = vi.fn(async () => jsonResponse(200, { success: true })) as typeof fetch;
+    await expect(unsubscribeFacebookPageFromWebhooks("page_1", "token", "v25.0", fetcher)).resolves.toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ method: "DELETE" }));
   });
 });

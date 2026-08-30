@@ -97,6 +97,11 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const automations = new Map(seed.map((automation) => [automation.id, copy(automation)]));
   const connections = new Map<string, InstagramConnectionRecord>();
   const facebookPages = new Map<string, FacebookPageConnectionRecord>();
+  const facebookReplyRecipients = new Map<string, {
+    eventId: string;
+    claimExpiresAt: string;
+    repliedAt?: string;
+  }>();
   const executions = new Map<string, ExecutionRecord>();
   const outboundDeliveries = new Map<string, OutboundDeliveryRecord>();
   const automationDailySendCounters = new Map<string, number>();
@@ -502,6 +507,19 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         if (page.pageId === pageId) facebookPages.delete(id);
       }
     },
+    async deleteFacebookPagesByUserId(facebookUserId) {
+      const removedPageIds = new Set<string>();
+      for (const [id, page] of facebookPages.entries()) {
+        if (page.facebookUserId !== facebookUserId) continue;
+        removedPageIds.add(page.pageId);
+        facebookPages.delete(id);
+      }
+      for (const [id, automation] of automations.entries()) {
+        if (automation.facebookPageId && removedPageIds.has(automation.facebookPageId)) {
+          automations.set(id, { ...automation, facebookPageId: undefined });
+        }
+      }
+    },
     async deleteFacebookPage(workspaceId, id) {
       const page = facebookPages.get(id);
       if (!page || page.workspaceId !== workspaceId) return false;
@@ -515,6 +533,47 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
         }
       }
       return true;
+    },
+    async claimFacebookReplyRecipient(input) {
+      const key = `${input.automationId}\0${input.pageId}\0${input.senderId}`;
+      const existing = facebookReplyRecipients.get(key);
+      if (
+        existing?.repliedAt
+        || (existing && existing.eventId !== input.eventId && existing.claimExpiresAt > input.claimedAt)
+      ) return false;
+      facebookReplyRecipients.set(key, {
+        eventId: input.eventId,
+        claimExpiresAt: input.claimExpiresAt,
+      });
+      return true;
+    },
+    async completeFacebookReplyRecipient(automationId, pageId, senderId, eventId, repliedAt) {
+      const key = `${automationId}\0${pageId}\0${senderId}`;
+      const existing = facebookReplyRecipients.get(key);
+      if (existing?.eventId === eventId) facebookReplyRecipients.set(key, { ...existing, repliedAt });
+    },
+    async releaseFacebookReplyRecipient(automationId, pageId, senderId, eventId) {
+      const key = `${automationId}\0${pageId}\0${senderId}`;
+      if (facebookReplyRecipients.get(key)?.eventId === eventId) facebookReplyRecipients.delete(key);
+    },
+    async beginFacebookDataDeletion(facebookUserId, confirmationCode, signedRequestHash) {
+      const removedPageIds = new Set<string>();
+      for (const [id, page] of facebookPages.entries()) {
+        if (page.facebookUserId !== facebookUserId) continue;
+        removedPageIds.add(page.pageId);
+        facebookPages.delete(id);
+      }
+      for (const [id, automation] of automations.entries()) {
+        if (automation.facebookPageId && removedPageIds.has(automation.facebookPageId)) automations.delete(id);
+      }
+      const record: DataDeletionRequestRecord = {
+        confirmationCode,
+        signedRequestHash,
+        status: "PENDING",
+        requestedAt: now(),
+      };
+      deletionRequests.set(confirmationCode, record);
+      return copy(record);
     },
     async listAutomationsForFacebookPage(workspaceId, pageId) {
       return copy(

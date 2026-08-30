@@ -4,18 +4,18 @@ import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
 import {
   exchangeFacebookCode,
+  getFacebookUserId,
   listFacebookPages,
-  subscribeFacebookPageToWebhooks,
+  validateFacebookPermissions,
   FacebookOAuthError,
   FacebookPermissionError,
   FacebookPageSummary,
 } from "@/src/lib/facebook/oauth";
 import { FacebookApiError } from "@/src/lib/facebook/client";
 import { createOAuthState as _unused, readOAuthState } from "@/src/lib/meta/oauth-state";
-import { sealSecret } from "@/src/lib/security/secrets";
-import { getRepository } from "@/src/lib/repository-provider";
 import { FacebookPageOwnershipError } from "@/src/lib/repository";
 import { FACEBOOK_OAUTH_STATE_COOKIE } from "../start/route";
+import { createFacebookPageSelection, FACEBOOK_PAGE_SELECTION_COOKIE } from "@/src/lib/facebook/page-selection";
 
 export const runtime = "nodejs";
 
@@ -66,34 +66,28 @@ export async function GET(request: Request) {
     const tokenExpiresAt = token.expiresIn
       ? new Date(Date.now() + token.expiresIn * 1_000).toISOString()
       : undefined;
+    await validateFacebookPermissions(token.accessToken, env.facebookApiVersion);
+    const facebookUserId = await getFacebookUserId(token.accessToken, env.facebookApiVersion);
     const pages: FacebookPageSummary[] = await listFacebookPages(token.accessToken, env.facebookApiVersion);
     if (pages.length === 0) {
       return withoutStateCookie(settingsRedirect(env, "no-pages"));
     }
-    // For v1 we auto-connect the first Page the user administers. A future
-    // UX iteration can add a Page picker so owners with multiple Pages can
-    // pick which one to connect.
-    const page = pages[0]!;
-    const subscription = await subscribeFacebookPageToWebhooks(
-      page.id,
-      page.accessToken,
-      env.facebookApiVersion,
-    );
-    if (!subscription.subscribed) {
-      logger.warn("Facebook webhook subscription degraded", {
-        pageId: page.id,
-        error: subscription.error,
-      });
-    }
-    await getRepository().upsertFacebookPage({
-      workspaceId: responseState.workspaceId,
-      pageId: page.id,
-      pageName: page.name,
-      accessTokenEncrypted: sealSecret(page.accessToken, env.facebookTokenEncryptionKey),
-      tokenExpiresAt,
-      status: "CONNECTED",
+    const response = settingsRedirect(env, "select-page");
+    response.cookies.set({
+      name: FACEBOOK_PAGE_SELECTION_COOKIE,
+      value: createFacebookPageSelection({
+        workspaceId: responseState.workspaceId,
+        facebookUserId,
+        userAccessToken: token.accessToken,
+        tokenExpiresAt,
+        selectionExpiresAt: new Date(Date.now() + 10 * 60 * 1_000).toISOString(),
+      }, env.facebookTokenEncryptionKey),
+      httpOnly: true,
+      sameSite: "lax",
+      secure: env.appUrl.startsWith("https://"),
+      maxAge: 600,
+      path: "/",
     });
-    const response = settingsRedirect(env, "connected");
     response.cookies.delete(FACEBOOK_OAUTH_STATE_COOKIE);
     return response;
   } catch (error) {

@@ -113,6 +113,8 @@ describe("AutomationList activity link", () => {
     );
 
     expect(screen.getByText(/Pinned to Facebook Page/)).toBeTruthy();
+    expect(screen.getByText(/Public comment reply/)).toBeTruthy();
+    expect(screen.queryByText("Private reply")).toBeNull();
   });
 
   it("does not show a Facebook Page pin badge when the automation is unpinned", () => {

@@ -130,9 +130,13 @@ const defaultDefinitionV1: FlowDefinitionV1 = {
 type ClassicTriggerType = FlowDefinitionV1["trigger"]["type"];
 const MAX_CLASSIC_ACTIONS = 3;
 
-function classicActionOptions(trigger: ClassicTriggerType): { value: FlowAction["type"]; label: string; description: string }[] {
+function classicActionOptions(trigger: ClassicTriggerType, isFacebook = false): { value: FlowAction["type"]; label: string; description: string }[] {
   if (trigger === "comment") {
-    return [{ value: "private_reply", label: "Private reply", description: "Reply to the comment privately" }];
+    return [{
+      value: "private_reply",
+      label: isFacebook ? "Public comment reply" : "Private reply",
+      description: isFacebook ? "Reply publicly beneath the Facebook comment" : "Reply to the comment privately",
+    }];
   }
   return [
     { value: "send_text", label: "Send a DM", description: "Send a plain text message" },
@@ -289,7 +293,7 @@ function AutomationBuilderV1({
   }, [triggerType]);
 
   const usesTextTrigger = triggerType === "comment" || triggerType === "message";
-  const allowedActionTypes = classicActionOptions(triggerType);
+  const allowedActionTypes = classicActionOptions(triggerType, Boolean(facebookPageId));
   const hasEmailStep = triggerType !== "comment";
 
   // Keyword ideas from the workspace's own automations plus proven staples -
@@ -385,7 +389,7 @@ function AutomationBuilderV1({
         ? current.filter((action) => action.type !== "private_reply")
         : [newClassicAction("send_text")]);
     }
-    // Comment flows cannot collect emails (they may only send a single private reply).
+    // Comment flows only support their channel's single immediate reply action.
     if (value === "comment") {
       setEmailCaptureEnabled(false);
       setFollowUps([]);
@@ -818,7 +822,7 @@ function AutomationBuilderV1({
             <div className="step-heading">
               <div>
                 <p className="eyebrow">{actions.length > 1 ? "Actions" : "Action"}</p>
-                <h2>What should the person receive?</h2>
+                <h2>{facebookPageId ? "What should Linkar reply publicly?" : "What should the person receive?"}</h2>
               </div>
               <Send size={21} strokeWidth={1.7} />
             </div>
@@ -853,7 +857,7 @@ function AutomationBuilderV1({
                 </div>
                 {action.type !== "send_image" && (
                   <label className="field">
-                    <span>{actions.length > 1 ? `Step ${index + 1} message` : "Message text"}</span>
+                    <span>{facebookPageId ? "Public comment reply" : actions.length > 1 ? `Step ${index + 1} message` : "Message text"}</span>
                     <textarea
                       aria-label={actions.length > 1 ? `Step ${index + 1} message` : "Message text"}
                       value={action.text}

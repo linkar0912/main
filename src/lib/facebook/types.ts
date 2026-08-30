@@ -20,10 +20,6 @@ export type FacebookConnection = {
   accessToken: string;
 };
 
-export type FacebookCommentReply = {
-  message: string;
-};
-
 export type FacebookSendResult = {
   /** Facebook returns the new comment id, not a message id. */
   id?: string;

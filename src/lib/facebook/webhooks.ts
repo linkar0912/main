@@ -15,6 +15,11 @@ function numberValue(value: unknown, fallback: number): number {
   return typeof value === "number" ? value : fallback;
 }
 
+function unixTimestampMs(value: unknown, fallback: number): number {
+  const timestamp = numberValue(value, fallback);
+  return timestamp < 10_000_000_000 ? timestamp * 1_000 : timestamp;
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   const object = record(value);
@@ -49,7 +54,7 @@ export function normalizeFacebookWebhook(payload: unknown): FacebookNormalizedEv
     if (!entry) continue;
     const pageId = stringValue(entry.id);
     if (!pageId) continue;
-    const entryTime = numberValue(entry.time, Date.now());
+    const entryTime = unixTimestampMs(entry.time, Date.now());
 
     const changes = Array.isArray(entry.changes) ? entry.changes : [];
     for (const changeValue of changes) {
@@ -71,9 +76,15 @@ export function normalizeFacebookWebhook(payload: unknown): FacebookNormalizedEv
       const senderId = stringValue(from?.id);
       const senderName = stringValue(from?.name);
       const parentId = stringValue(value.parent_id);
+      const timestamp = unixTimestampMs(value.created_time, entryTime);
+
+      // Ignore replies made by the Page itself and replies to other comments.
+      // A top-level feed comment may identify its post as parent_id.
+      if (senderId === pageId) continue;
+      if (parentId && parentId !== postId) continue;
 
       events.push({
-        id: feedChangeId(pageId, entryTime, change),
+        id: feedChangeId(pageId, timestamp, change),
         pageId,
         commentId,
         postId,
@@ -81,7 +92,7 @@ export function normalizeFacebookWebhook(payload: unknown): FacebookNormalizedEv
         ...(senderId ? { senderId } : {}),
         ...(senderName ? { senderName } : {}),
         ...(parentId ? { parentId } : {}),
-        timestamp: entryTime,
+        timestamp,
       });
     }
   }

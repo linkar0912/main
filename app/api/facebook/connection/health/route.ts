@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerEnv } from "@/src/lib/env";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
-import { subscribeFacebookPageToWebhooks } from "@/src/lib/facebook/oauth";
+import { readFacebookPageWebhookSubscription } from "@/src/lib/facebook/oauth";
 import { unsealSecret } from "@/src/lib/security/secrets";
 import { logger } from "@/src/lib/logger";
 
@@ -45,11 +45,12 @@ export async function GET(request: Request) {
     }
     try {
       const accessToken = unsealSecret(page.accessTokenEncrypted, env.facebookTokenEncryptionKey!);
-      // Meta does not expose a "list subscribed fields" endpoint, so the
-      // most reliable health check is to re-issue the subscribe call. Meta
-      // returns success:true for already-subscribed fields too.
-      const result = await subscribeFacebookPageToWebhooks(page.pageId, accessToken, env.facebookApiVersion);
-      const subscribed = result.subscribed ? [...REQUIRED_FIELDS] : [];
+      const subscribed = await readFacebookPageWebhookSubscription(
+        page.pageId,
+        accessToken,
+        env.facebookApiVersion,
+        env.facebookAppId,
+      );
       return {
         id: page.id,
         pageId: page.pageId,
@@ -58,7 +59,6 @@ export async function GET(request: Request) {
         requiredFields: [...REQUIRED_FIELDS],
         subscribedFields: subscribed,
         missingFields: subscribed.length === REQUIRED_FIELDS.length ? [] : [...REQUIRED_FIELDS],
-        ...(result.error ? { checkError: result.error } : {}),
       };
     } catch (error) {
       logger.warn("Facebook webhook health check failed", {

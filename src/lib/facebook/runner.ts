@@ -28,6 +28,8 @@ export type FacebookRunnerOptions = {
   tokenEncryptionKey?: string;
 };
 
+const REPLY_CLAIM_LEASE_MS = 5 * 60 * 1_000;
+
 export class RetryableFacebookError extends Error {
   readonly retryable = true;
 
@@ -131,26 +133,6 @@ export async function processNormalizedFacebookEvent(
       result.skipped += 1;
       continue;
     }
-    if (
-      definition.trigger.type === "comment"
-      && definition.trigger.replyOncePerUser
-      && event.senderId
-    ) {
-      const prior = await countPriorRepliesForSender(repository, automation.id, event.pageId, event.senderId);
-      if (prior > 0) {
-        await repository.recordExecution({
-          workspaceId: mapping.workspaceId,
-          automationId: automation.id,
-          externalEventId: event.id,
-          dedupeKey,
-          status: "SKIPPED",
-          reason: "replyOncePerUser is set and this sender already triggered this flow",
-        });
-        result.skipped += 1;
-        continue;
-      }
-    }
-
     if (!withinSchedule(definition.schedule, new Date(event.timestamp))) {
       await repository.recordExecution({
         workspaceId: mapping.workspaceId,
@@ -164,8 +146,41 @@ export async function processNormalizedFacebookEvent(
       continue;
     }
 
+    const replyOnce = definition.trigger.type === "comment"
+      && definition.trigger.replyOncePerUser
+      && event.senderId
+      ? { pageId: event.pageId, senderId: event.senderId }
+      : null;
+    let replyRecipientClaimed = false;
+    if (replyOnce) {
+      const claimedAt = new Date();
+      replyRecipientClaimed = await repository.claimFacebookReplyRecipient({
+        automationId: automation.id,
+        pageId: replyOnce.pageId,
+        senderId: replyOnce.senderId,
+        eventId: event.id,
+        claimedAt: claimedAt.toISOString(),
+        claimExpiresAt: new Date(claimedAt.getTime() + REPLY_CLAIM_LEASE_MS).toISOString(),
+      });
+      if (!replyRecipientClaimed) {
+        await repository.recordExecution({
+          workspaceId: mapping.workspaceId,
+          automationId: automation.id,
+          externalEventId: event.id,
+          dedupeKey,
+          status: "SKIPPED",
+          reason: "replyOncePerUser is set and this sender already received a reply",
+        });
+        result.skipped += 1;
+        continue;
+      }
+    }
+
     const reserved = await reserveSlots(repository, automation);
     if (!reserved.allowed) {
+      if (replyOnce && replyRecipientClaimed) {
+        await repository.releaseFacebookReplyRecipient(automation.id, replyOnce.pageId, replyOnce.senderId, event.id);
+      }
       await repository.recordExecution({
         workspaceId: mapping.workspaceId,
         automationId: automation.id,
@@ -185,11 +200,15 @@ export async function processNormalizedFacebookEvent(
       dedupeKey,
     });
     if (!claimed) {
-      await releaseSlots(repository, reserved);
+      await releaseSlots(repository, automation.id, reserved);
+      if (replyOnce && replyRecipientClaimed) {
+        await repository.releaseFacebookReplyRecipient(automation.id, replyOnce.pageId, replyOnce.senderId, event.id);
+      }
       result.skipped += 1;
       continue;
     }
 
+    let sent = false;
     try {
       const action = pickFirstPublicReply(definition);
       if (!action) {
@@ -216,6 +235,16 @@ export async function processNormalizedFacebookEvent(
         status: "SENT",
         ...(sendResult.id ? { providerMessageId: sendResult.id } : {}),
       });
+      if (replyOnce) {
+        await repository.completeFacebookReplyRecipient(
+          automation.id,
+          replyOnce.pageId,
+          replyOnce.senderId,
+          event.id,
+          new Date().toISOString(),
+        );
+      }
+      sent = true;
       result.sent += 1;
     } catch (error) {
       if (error instanceof FacebookApiError && error.retryable) {
@@ -228,7 +257,12 @@ export async function processNormalizedFacebookEvent(
       });
       result.failed += 1;
     } finally {
-      await releaseSlots(repository, reserved);
+      if (!sent) {
+        await releaseSlots(repository, automation.id, reserved);
+        if (replyOnce && replyRecipientClaimed) {
+          await repository.releaseFacebookReplyRecipient(automation.id, replyOnce.pageId, replyOnce.senderId, event.id);
+        }
+      }
     }
   }
 
@@ -266,30 +300,10 @@ function matchesFacebookTrigger(definition: FlowDefinitionV1, event: FacebookNor
 }
 
 function pickFirstPublicReply(definition: FlowDefinitionV1): { text: string } | null {
-  // v1 only supports the legacy "private_reply" action which on Facebook
-  // surfaces as a nested public comment on the original post. Future versions
-  // will add a distinct public_reply action.
+  // Keep the serialized legacy action type for backward compatibility; the
+  // Facebook product surface and delivery semantics are public comment reply.
   const action = definition.actions.find((candidate) => candidate.type === "private_reply");
   return action ? { text: action.text } : null;
-}
-
-async function countPriorRepliesForSender(
-  repository: AutomationRepository,
-  automationId: string,
-  pageId: string,
-  senderId: string,
-): Promise<number> {
-  // Best-effort: there is no dedicated "replied to this sender" ledger on the
-  // Facebook path yet, so we approximate by counting the executions we've
-  // already SENT for this automation. A future migration can promote this to
-  // a real contact registry without touching the runner.
-  const events = await repository.listRecentWebhookEvents(automationId, 500, "facebook.comment.created");
-  let count = 0;
-  for (const entry of events) {
-    const payload = entry.payload as { pageId?: string; senderId?: string } | undefined;
-    if (payload?.pageId === pageId && payload.senderId === senderId) count += 1;
-  }
-  return count;
 }
 
 async function reserveSlots(
@@ -304,10 +318,11 @@ async function reserveSlots(
 
 async function releaseSlots(
   repository: AutomationRepository,
+  automationId: string,
   reservation: SendLimitReservation,
 ): Promise<void> {
   await releaseDailySendSlots(
-    { automationId: "noop", repository },
+    { automationId, repository },
     reservation,
   );
 }
