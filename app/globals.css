@@ -2198,6 +2198,18 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .skeleton-stack { display: flex; flex-direction: column; gap: 6px; }
 .sidebar-skeleton { gap: var(--space-3); }
 .page-header-skeleton { margin-bottom: var(--space-7, 30px); }
+/* Row shape shared by every list-style skeleton (activity, automations,
+   sequences, broadcasts): an icon at the start, a stack of two text lines in
+   the middle, and one or two trailing badges/buttons on the right. */
+.skeleton-row {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: var(--space-3) 0;
+}
+.skeleton-row-bordered { border-bottom: 1px solid var(--line); }
+.skeleton-row-bordered:last-child { border-bottom: 0; }
 
 /* Campaign activity: click-through + truncation notices */
 .activity-clicks { align-items: center; color: var(--slate); display: flex; font-size: .74rem; font-weight: 650; gap: 6px; margin: -6px 0 var(--space-4); }

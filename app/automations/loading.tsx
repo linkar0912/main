@@ -1,5 +1,5 @@
-import { ScreenSkeleton } from "@/src/components/skeleton";
+import { AutomationsSkeleton } from "@/src/components/skeleton";
 
 export default function Loading() {
-  return <ScreenSkeleton />;
+  return <AutomationsSkeleton />;
 }
