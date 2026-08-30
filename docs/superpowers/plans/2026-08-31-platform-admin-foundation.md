@@ -250,7 +250,7 @@ git commit -m "feat(admin): add append-only audit events"
 - Produces: `createAdminChallenge(input): Promise<{ token; expiresAt }>`
 - Produces: `consumeAdminChallenge(input): Promise<void>`
 
-- [ ] **Step 1: Write failing request-policy tests**
+- [x] **Step 1: Write failing request-policy tests**
 
 ```ts
 it.each([
@@ -264,23 +264,23 @@ it.each([
 
 Add a challenge test proving the first exact action/target/session consumption succeeds and the second fails with `409`.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/request-guard.test.ts src/lib/admin/challenges.test.ts`
 
 Expected: FAIL because modules do not exist.
 
-- [ ] **Step 3: Implement the guards and Redis challenge record**
+- [x] **Step 3: Implement the guards and Redis challenge record**
 
 Store only a SHA-256 hash of the random challenge token under `admin-challenge:<hash>` with a 600-second TTL. The JSON value contains `userId`, `sessionId`, `action`, `targetType`, `targetId`, `expectedVersion`, and `confirmationHash`. Consume with a single Redis Lua compare-and-delete operation so concurrent submissions cannot both succeed.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `pnpm vitest run src/lib/admin/request-guard.test.ts src/lib/admin/challenges.test.ts && pnpm typecheck`
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/admin/request-guard.ts src/lib/admin/request-guard.test.ts src/lib/admin/challenges.ts src/lib/admin/challenges.test.ts
