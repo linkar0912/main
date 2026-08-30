@@ -12,6 +12,7 @@ import {
   Megaphone,
   Menu,
   Settings,
+  ShieldCheck,
   UserRound,
   Workflow,
 } from "lucide-react";
@@ -78,6 +79,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [role, setRole] = useState<AccountIdentity["role"] | "">("");
   const [plan, setPlan] = useState("free");
   const [igAvatarUrl, setIgAvatarUrl] = useState("");
+  const [platformOwner, setPlatformOwner] = useState(false);
   const [identityError, setIdentityError] = useState("");
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -101,6 +103,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         setRole(data.role ?? "");
         setPlan(data.plan ?? "free");
         setIgAvatarUrl(data.igAvatarUrl ?? "");
+        setPlatformOwner(data.platformOwner ?? false);
         setIdentityError("");
       })
       .catch((caught: unknown) => {
@@ -124,6 +127,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           setRole(data.role ?? "");
           setPlan(data.plan ?? "free");
           setIgAvatarUrl(data.igAvatarUrl ?? "");
+          setPlatformOwner(data.platformOwner ?? false);
           setIdentityError("");
         })
         .catch(() => undefined);
@@ -238,6 +242,14 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </nav>
 
         <hr className="sidebar-divider" />
+
+        {platformOwner ? (
+          <nav className="sidebar-nav" aria-label="Platform administration">
+            <Link className="sidebar-link admin-entry-link" href="/admin" onClick={closeDrawer}>
+              <ShieldCheck size={18} strokeWidth={1.9} /> Admin
+            </Link>
+          </nav>
+        ) : null}
 
         <nav className="sidebar-nav" aria-label="Account">
           {accountNavigation.map(({ href, label, icon: Icon }) => (

@@ -67,4 +67,8 @@ describe("proxy.ts matcher coverage", () => {
     const uncovered = segmentsPerPage.filter((segments) => !matcherCoversRoute(matcher, segments));
     expect(uncovered, `proxy.ts matcher does not cover these gated pages: ${uncovered.map((s) => "/" + s.join("/")).join(", ")}`).toEqual([]);
   });
+
+  it("covers the owner console route family", () => {
+    expect(matcherCoversRoute(matcher, ["admin"])).toBe(true);
+  });
 });

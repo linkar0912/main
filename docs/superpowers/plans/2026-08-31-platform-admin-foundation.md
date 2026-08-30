@@ -357,7 +357,7 @@ git commit -m "feat(admin): require owner MFA enrollment"
 - Produces: `AdminRouteGuard({ children, requireAal2 })` that calls the server DAL close to the rendered data.
 - Adds `/admin` to app-host canonicalization and protected Proxy coverage.
 
-- [ ] **Step 1: Write failing shell and routing tests**
+- [x] **Step 1: Write failing shell and routing tests**
 
 ```tsx
 it("renders the operator navigation without customer workspace links", () => {
@@ -371,25 +371,25 @@ it("renders the operator navigation without customer workspace links", () => {
 
 Add host-routing coverage proving `https://linkar.in/admin` redirects to `https://app.linkar.in/admin` and Proxy matcher coverage includes `/admin/:path*`.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/components/admin/admin-shell.test.tsx src/lib/site-routing.test.ts src/proxy-coverage.test.ts`
 
 Expected: FAIL because AdminShell and `/admin` routing do not exist.
 
-- [ ] **Step 3: Implement the shared shell behavior**
+- [x] **Step 3: Implement the shared shell behavior**
 
 Use the existing sidebar width, drawer focus trap, ThemeToggle, active-link behavior, and mobile top bar. `app/admin/layout.tsx` verifies allowlisted owner identity at AAL1 so the enrollment route can render; every admin page except `/admin/security` wraps its data with `AdminRouteGuard requireAal2`. Admin navigation is exactly Overview, Workspaces, Users, Plans, Operations, Integrations, System, Audit, Security. Add the volt-yellow operator rail without introducing new fonts or dependencies.
 
 The regular AppShell receives `platformOwner` from `/api/workspace/bootstrap` and shows an Admin link only when true; the admin route remains secure when the link is absent or manually entered.
 
-- [ ] **Step 4: Verify GREEN and responsive CSS invariants**
+- [x] **Step 4: Verify GREEN and responsive CSS invariants**
 
 Run: `pnpm vitest run src/components/admin/admin-shell.test.tsx src/components/app-shell.test.tsx src/lib/site-routing.test.ts src/proxy-coverage.test.ts && pnpm lint`
 
 Expected: tests and lint pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/admin/layout.tsx src/components/admin/admin-shell.tsx src/components/admin/admin-shell.test.tsx src/components/admin/admin-route-guard.tsx src/components/app-shell.tsx src/components/app-shell.test.tsx app/globals.css src/lib/site-routing.ts src/lib/site-routing.test.ts proxy.ts src/proxy-coverage.test.ts

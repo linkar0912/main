@@ -5,6 +5,7 @@ export type WorkspaceBootstrap = {
   role: MemberRole;
   plan: string;
   igAvatarUrl?: string | null;
+  platformOwner: boolean;
 };
 
 export type InstagramConnectionSummary = {

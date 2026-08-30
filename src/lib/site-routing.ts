@@ -7,6 +7,7 @@ const APP_ROUTE_PREFIXES = [
   "/signup",
   "/forgot-password",
   "/reset-password",
+  "/admin",
   "/dashboard",
   "/activity",
   "/automations",
@@ -22,6 +23,7 @@ const PROTECTED_APP_ROUTE_PREFIXES = [
   "/settings",
   "/profile",
   "/help",
+  "/admin",
 ] as const;
 
 const MARKETING_ROUTE_PREFIXES = [

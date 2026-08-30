@@ -15,6 +15,10 @@ describe("site host routing", () => {
       target: "app",
       pathname: "/auth/confirm",
     });
+    expect(resolveHostRedirect("linkar.in", "/admin/workspaces")).toEqual({
+      target: "app",
+      pathname: "/admin/workspaces",
+    });
   });
 
   it("moves marketing and legal paths from the app host to the marketing host", () => {
@@ -52,6 +56,7 @@ describe("site host routing", () => {
     expect(isProtectedAppPath("/dashboard")).toBe(true);
     expect(isProtectedAppPath("/automations/new")).toBe(true);
     expect(isProtectedAppPath("/help")).toBe(true);
+    expect(isProtectedAppPath("/admin/security")).toBe(true);
     expect(isProtectedAppPath("/login")).toBe(false);
     expect(isProtectedAppPath("/privacy")).toBe(false);
     expect(isProtectedAppPath("/")).toBe(false);

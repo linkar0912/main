@@ -1642,6 +1642,12 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .admin-factor-row p { color: var(--muted); font-size: var(--type-meta); margin: 3px 0 0; }
 .admin-danger-panel { border-color: var(--danger-line); }
 .admin-security-actions { display: flex; gap: var(--space-3); }
+.admin-sidebar { border-right-color: color-mix(in srgb, var(--honey) 55%, var(--line)); }
+.admin-operator-rail { align-items: center; background: var(--honey); border: 1px solid color-mix(in srgb, var(--honey) 55%, var(--ink)); border-radius: 8px; color: var(--ink-strong); display: flex; font-family: var(--font-mono); font-size: .65rem; font-weight: 900; gap: 7px; letter-spacing: .08em; margin-bottom: var(--space-4); padding: 9px var(--space-3); }
+.admin-mobile-topbar .admin-operator-rail { margin: 0 0 0 auto; padding: 6px 9px; }
+.admin-owner-chip { margin-bottom: var(--space-4); }
+.admin-back-link { border-top: 1px solid var(--line); margin-top: var(--space-3); padding-top: var(--space-4); }
+.admin-entry-link { background: color-mix(in srgb, var(--honey) 20%, transparent); color: var(--ink); }
 
 @media (max-width: 680px) {
   .admin-enrollment-grid { grid-template-columns: 1fr; }

@@ -8,13 +8,13 @@ vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
 
 const { AppShell } = await import("./app-shell");
 
-function stubShellFetch(role = "MEMBER", igAvatarUrl: string | null = null) {
+function stubShellFetch(role = "MEMBER", igAvatarUrl: string | null = null, platformOwner = false) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes("/api/workspace/bootstrap")) {
       return {
         ok: true,
-        json: async () => ({ data: { email: "member@example.com", role, plan: "free", igAvatarUrl } }),
+        json: async () => ({ data: { email: "member@example.com", role, plan: "free", igAvatarUrl, platformOwner } }),
       } as Response;
     }
     if (url.includes("/api/contacts")) {
@@ -79,6 +79,19 @@ describe("AppShell", () => {
 
     const avatar = await screen.findByAltText("Instagram profile picture");
     expect(avatar.getAttribute("src")).toBe("https://cdn.instagram.com/dp.jpg");
+  });
+
+  it("shows the operator-console link only to an allowlisted platform owner", async () => {
+    stubShellFetch("OWNER", null, true);
+    render(<AppShell><main>Workspace</main></AppShell>);
+
+    expect(await screen.findByRole("link", { name: "Admin" })).toBeTruthy();
+
+    cleanup();
+    stubShellFetch("OWNER", null, false);
+    render(<AppShell><main>Workspace</main></AppShell>);
+    await screen.findByText("Owner");
+    expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
   });
 
   it("closes the mobile drawer with Escape and restores page scrolling", async () => {

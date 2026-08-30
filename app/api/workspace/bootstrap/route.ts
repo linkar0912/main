@@ -30,7 +30,7 @@ export async function GET(request: Request) {
             role: role ?? "MEMBER",
             plan: "free",
             igAvatarUrl,
+            platformOwner: env.platformOwnerUserIds.includes(session.userId.toLowerCase()),
         },
     });
 }
-
