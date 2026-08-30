@@ -1928,7 +1928,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   display: flex;
   align-items: center;
   gap: var(--space-3, 12px);
-  color: var(--subtle, #a3a29b);
+  color: var(--subtle);
   font-size: var(--type-label);
   font-weight: 600;
   text-transform: uppercase;
@@ -1953,7 +1953,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .auth-page-frame .login-form .button,
 .auth-page-frame .login-form button[type="submit"] { width: 100%; justify-content: center; }
 .auth-page-frame .auth-page-hint {
-  color: var(--subtle, #a3a29b);
+  color: var(--subtle);
   font-size: var(--type-label);
   font-weight: 500;
   margin: 0;

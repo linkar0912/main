@@ -40,6 +40,19 @@ function contrast(foreground: string, background: string): number {
 const light = block(":root {");
 const dark = block('[data-theme="dark"] {');
 
+describe("token fallbacks", () => {
+  it("never disagrees with the token it falls back from", () => {
+    // `var(--subtle, #a3a29b)` kept a copy of the pre-AA colour alive in the
+    // auth pages long after --subtle itself was retuned. The fallback is inert
+    // while the token is defined, so nothing renders wrong - it just sits there
+    // waiting to be resurrected by a scope that does not inherit :root.
+    for (const [, name, fallback] of css.matchAll(/var\(--([a-z-]+),\s*(#[0-9a-fA-F]{6})\)/g)) {
+      expect(token(name!, light).toLowerCase(), `var(--${name}, ${fallback}) disagrees with --${name}`)
+        .toBe(fallback!.toLowerCase());
+    }
+  });
+});
+
 // Every surface --subtle text is ever painted on.
 const SURFACES = ["canvas", "panel", "surface-soft", "surface-sunk"] as const;
 
