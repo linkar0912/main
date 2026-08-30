@@ -99,33 +99,27 @@ function VolumeChart({ sentPoints, reachedPoints }: { sentPoints: DayPoint[]; re
   }
 
   return (
-    <>
-      <div className="chart-plot">
-        <div className="insights-chart" role="img" aria-label="Daily replies sent and people reached for the last 14 days">
-          {sentPoints.map((point) => {
-            const reached = reachedByDay.get(point.day) ?? 0;
-            const isEmpty = point.count === 0 && reached === 0;
-            return (
-              <div
-                className={isEmpty ? "chart-column is-empty" : "chart-column"}
-                key={point.day}
-                title={`${formatDayLabel(point.day)} - ${point.count} sent, ${reached} reached`}
-              >
-                <div className="chart-bars is-lg">
-                  <span className="chart-bar bar-participants" style={{ height: `${heightOf(reached)}%` }} />
-                  <span className="chart-bar bar-sent" style={{ height: `${heightOf(point.count)}%` }} />
-                </div>
-                <small>{formatDayLabel(point.day)}</small>
+    <div className="chart-plot">
+      <div className="insights-chart" role="img" aria-label="Daily replies sent and people reached for the last 14 days">
+        {sentPoints.map((point) => {
+          const reached = reachedByDay.get(point.day) ?? 0;
+          const isEmpty = point.count === 0 && reached === 0;
+          return (
+            <div
+              className={isEmpty ? "chart-column is-empty" : "chart-column"}
+              key={point.day}
+              title={`${formatDayLabel(point.day)} - ${point.count} sent, ${reached} reached`}
+            >
+              <div className="chart-bars is-lg">
+                <span className="chart-bar bar-participants" style={{ height: `${heightOf(reached)}%` }} />
+                <span className="chart-bar bar-sent" style={{ height: `${heightOf(point.count)}%` }} />
               </div>
-            );
-          })}
-        </div>
+              <small>{formatDayLabel(point.day)}</small>
+            </div>
+          );
+        })}
       </div>
-      <p className="chart-legend">
-        <span className="legend-swatch swatch-sent" /> Replies sent
-        <span className="legend-swatch swatch-participants" /> People reached
-      </p>
-    </>
+    </div>
   );
 }
 
@@ -285,6 +279,16 @@ export function DashboardScreen() {
   const reachedTotal = sumPoints(participantsPerDay);
   const sentDelta = halfWindowDelta(sentPerDay);
   const reachedDelta = halfWindowDelta(participantsPerDay);
+  const capturedTotal = capturedCount ?? insights?.capturedEmails ?? 0;
+  const optedOutTotal = insights?.optedOut ?? 0;
+  // Gate on `insights` having resolved: before it does every total reads zero,
+  // and claiming "no activity yet" to an established account would be a lie.
+  const hasPerformanceHistory =
+    insights === null ||
+    sentTotal > 0 ||
+    reachedTotal > 0 ||
+    capturedTotal > 0 ||
+    optedOutTotal > 0;
 
   const activeFlows = automations.filter((a) => a.status === "ACTIVE");
   const pausedFlows = automations.filter((a) => a.status !== "ACTIVE");
@@ -348,44 +352,55 @@ export function DashboardScreen() {
               <h2>Reply volume</h2>
             </div>
           </div>
-          <div className="stat-row">
-            <div className="stat-block">
-              <span className="stat-label">Replies sent</span>
-              <span className="stat-value-row">
-                <strong>{sentTotal.toLocaleString()}</strong>
-                <DeltaPill delta={sentDelta} />
-              </span>
-            </div>
-            <div className="stat-block">
-              <span className="stat-label">People reached</span>
-              <span className="stat-value-row">
-                <strong>{reachedTotal.toLocaleString()}</strong>
-                <DeltaPill delta={reachedDelta} />
-              </span>
-            </div>
-            <div className="stat-block">
-              <span className="stat-label">Emails captured</span>
-              <span className="stat-value-row">
-                <strong>{(capturedCount ?? insights?.capturedEmails ?? 0).toLocaleString()}</strong>
-                <NeutralPill>all time</NeutralPill>
-              </span>
-            </div>
-            <div className="stat-block">
-              <span className="stat-label">Opted out</span>
-              <span className="stat-value-row">
-                <strong>{(insights?.optedOut ?? 0).toLocaleString()}</strong>
-                <NeutralPill>respected</NeutralPill>
-              </span>
-            </div>
-            <div className="stat-block">
-              <span className="stat-label">Active flows</span>
-              <span className="stat-value-row">
-                <strong>{activeCount}</strong>
-                <NeutralPill>{automations.length} total</NeutralPill>
-              </span>
-            </div>
-          </div>
-          <VolumeChart sentPoints={sentPerDay} reachedPoints={participantsPerDay} />
+          {hasPerformanceHistory ? (
+            <>
+              {/* Tier one: only the two charted series. Each carries its chart
+                  swatch, which binds the number to its bars and makes the
+                  separate legend line redundant. */}
+              <div className="stat-row">
+                <div className="stat-block">
+                  <span className="stat-label">
+                    <span className="legend-swatch swatch-sent" /> Replies sent
+                  </span>
+                  <span className="stat-value-row">
+                    <strong>{sentTotal.toLocaleString()}</strong>
+                    <DeltaPill delta={sentDelta} />
+                  </span>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">
+                    <span className="legend-swatch swatch-participants" /> People reached
+                  </span>
+                  <span className="stat-value-row">
+                    <strong>{reachedTotal.toLocaleString()}</strong>
+                    <DeltaPill delta={reachedDelta} />
+                  </span>
+                </div>
+              </div>
+              {/* Tier two: context and health, not performance - so they read as
+                  a quiet strip rather than competing cards. */}
+              <dl className="stat-meta">
+                <div className="stat-meta-item">
+                  <dt>Emails captured</dt>
+                  <dd>{capturedTotal.toLocaleString()} <span>all time</span></dd>
+                </div>
+                <div className="stat-meta-item">
+                  <dt>Opted out</dt>
+                  <dd>{optedOutTotal.toLocaleString()} <span>respected</span></dd>
+                </div>
+                <div className="stat-meta-item">
+                  <dt>Active flows</dt>
+                  <dd>{activeCount.toLocaleString()} <span>of {automations.length.toLocaleString()}</span></dd>
+                </div>
+              </dl>
+              <VolumeChart sentPoints={sentPerDay} reachedPoints={participantsPerDay} />
+            </>
+          ) : (
+            <p className="panel-empty">
+              No activity yet - once an automation replies, you’ll see replies sent, people reached and
+              emails captured here.
+            </p>
+          )}
         </section>
 
         <section className="panel automations-panel" aria-label="Your automations">

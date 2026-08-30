@@ -44,6 +44,13 @@ describe("workspace palette contract", () => {
     expect(css).not.toMatch(/\.delta-pill\[data-dir="down"\]\s*{[^}]*var\(--danger\)/);
   });
 
+  it("reserves success green for pills that actually moved up", () => {
+    // `NeutralPill` renders a bare `.delta-pill` with no data-dir, so a green
+    // base rule paints "all time" and "respected" as if they were gains.
+    expect(css).not.toMatch(/\.delta-pill\s*{[^}]*var\(--green\)/);
+    expect(css).toMatch(/\.delta-pill\[data-dir="up"\]\s*{[^}]*var\(--green\)/);
+  });
+
   it("uses the brand palette by semantic role", () => {
     expect(css).toMatch(/\.quickstart-badge\s*{[^}]*background:\s*var\(--volt\)[^}]*color:\s*var\(--on-volt\)/);
     expect(css).toMatch(/\.bar-participants,\s*\.swatch-participants\s*{[^}]*background:\s*var\(--slate\)/);

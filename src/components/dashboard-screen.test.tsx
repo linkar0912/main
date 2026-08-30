@@ -29,6 +29,22 @@ function stubDashboardFetch() {
   }));
 }
 
+/** Stubs a workspace where nothing has ever happened: no replies, no reach, no captured emails. */
+function stubEmptyDashboardFetch() {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
+    if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [{}] }) } as Response;
+    if (url.includes("/api/contacts")) return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
+    if (url.includes("/api/health")) return { ok: true, json: async () => ({ mode: "configured" }) } as Response;
+    if (url.includes("/api/insights")) {
+      const days = Array.from({ length: 14 }, (_, index) => ({ day: `2026-08-${String(index + 1).padStart(2, "0")}`, count: 0 }));
+      return { ok: true, json: async () => ({ timeseries: { sentPerDay: days, participantsPerDay: days }, capturedEmails: 0, optedOut: 0 }) } as Response;
+    }
+    throw new Error(`Unexpected fetch to ${url}`);
+  }));
+}
+
 describe("DashboardScreen onboarding", () => {
   afterEach(() => {
     cleanup();
@@ -153,5 +169,30 @@ describe("DashboardScreen onboarding", () => {
     render(<DashboardScreen />);
 
     expect((await screen.findByText("Popular")).classList.contains("quickstart-badge")).toBe(true);
+  });
+  it("replaces the performance stats with an empty state when nothing has happened yet", async () => {
+    stubEmptyDashboardFetch();
+    render(<DashboardScreen />);
+
+    expect(await screen.findByText(/No activity yet/i)).toBeTruthy();
+    expect(document.querySelectorAll(".stat-block")).toHaveLength(0);
+  });
+
+  it("splits populated metrics into a headline pair and a secondary meta strip", async () => {
+    stubDashboardFetch();
+    render(<DashboardScreen />);
+
+    await screen.findByRole("img", { name: /daily replies sent and people reached/i });
+
+    // Tier one: only the two charted series get full stat-block treatment.
+    const headline = document.querySelectorAll(".stat-block");
+    expect(headline).toHaveLength(2);
+    expect(screen.getByText("Replies sent").closest(".stat-block")).toBeTruthy();
+    expect(screen.getByText("People reached").closest(".stat-block")).toBeTruthy();
+
+    // Tier two: the context metrics live in the meta strip, not in cards.
+    expect(screen.getByText("Emails captured").closest(".stat-meta")).toBeTruthy();
+    expect(screen.getByText("Opted out").closest(".stat-meta")).toBeTruthy();
+    expect(screen.getByText("Active flows").closest(".stat-meta")).toBeTruthy();
   });
 });

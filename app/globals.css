@@ -781,15 +781,26 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 /* Dashboard performance panel */
 /* Plain, monochrome stat row - numbers are the substance, not decoration.
    Magenta is reserved for the delta pills' real up/down signal, nothing else. */
-.stat-row { border-top: 1px solid var(--line); display: grid; gap: var(--space-5); grid-template-columns: repeat(4, minmax(0, 1fr)); margin: var(--space-5) 0 var(--space-6); padding-top: var(--space-5); }
-.stat-label { color: var(--muted); font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace; font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.stat-row { border-top: 1px solid var(--line); display: grid; gap: var(--space-5); grid-template-columns: repeat(2, minmax(0, 1fr)); margin: var(--space-5) 0 var(--space-4); padding-top: var(--space-5); }
+.stat-label { align-items: center; color: var(--muted); display: flex; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace; font-size: .66rem; font-weight: 700; gap: 7px; letter-spacing: .06em; text-transform: uppercase; }
 .stat-value-row { align-items: center; display: flex; flex-wrap: wrap; gap: 9px; margin-top: 7px; }
 .stat-value-row strong { font-size: 1.85rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
-.delta-pill { align-items: center; background: var(--green-soft); border-radius: 999px; color: var(--green); display: inline-flex; font-size: .68rem; font-weight: 750; gap: 4px; padding: 3px 9px; }
+/* Neutral by default. `NeutralPill` renders a bare `.delta-pill` with no
+   data-dir, so a green base rule painted "all time" and "respected" as if they
+   were gains - success green has to be opted into by an explicit direction. */
+.delta-pill { align-items: center; background: var(--surface-soft); border-radius: 999px; color: var(--muted); display: inline-flex; font-size: .68rem; font-weight: 750; gap: 4px; padding: 3px 9px; }
+.delta-pill[data-dir="up"] { background: var(--green-soft); color: var(--green); }
 .delta-pill[data-dir="down"] { background: var(--surface-sunk); color: var(--muted); }
-.delta-pill[data-dir="flat"] { background: var(--surface-soft); color: var(--muted); }
 .chart-empty { align-items: center; color: var(--muted); display: flex; font-size: .85rem; height: 200px; justify-content: center; }
-.chart-legend { align-items: center; color: var(--muted); display: flex; font-size: .72rem; gap: var(--space-2); margin: var(--space-4) 0 0; }
+/* Tier two of the performance panel: context and health metrics. Deliberately
+   not cards - they sit under the headline pair as a quiet strip so they read
+   as supporting detail rather than competing for the same attention. */
+.stat-meta { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: 0 0 var(--space-5); }
+.stat-meta-item { display: flex; align-items: baseline; gap: 8px; }
+.stat-meta dt { color: var(--muted); font-size: .74rem; font-weight: 650; }
+.stat-meta dd { align-items: baseline; color: var(--ink); display: flex; font-size: .9rem; font-weight: 750; gap: 5px; margin: 0; }
+.stat-meta dd span { color: var(--muted); font-size: .72rem; font-weight: 600; }
+.panel-empty { color: var(--muted); font-size: .85rem; line-height: 1.65; margin: var(--space-5) 0 0; max-width: 46ch; }
 
 /* Setup checklist (Start here): a single connected rail, not equal-weight cards -
    one step reads as "do this next," done steps recede, later steps stay quiet. */
@@ -1369,8 +1380,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .chart-bar { border-radius: 4px 4px 2px 2px; display: inline-block; min-height: 2px; transition: height .5s var(--ease-out); width: 42%; }
 .bar-participants, .swatch-participants { background: var(--slate); }
 .bar-sent, .swatch-sent { background: var(--accent); }
-.legend-swatch { border-radius: 3px; display: inline-block; height: 10px; margin-left: 8px; width: 10px; }
-.legend-swatch:first-child { margin-left: 0; }
+.legend-swatch { border-radius: 3px; display: inline-block; flex-shrink: 0; height: 10px; width: 10px; }
 .insights-table { border-collapse: collapse; font-size: .76rem; margin-top: 14px; width: 100%; }
 .insights-table th, .insights-table td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; }
 .insights-table th { color: var(--muted); font-size: .66rem; letter-spacing: .05em; text-transform: uppercase; }
@@ -2112,7 +2122,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .wizard-progress-label { display: inline; }
   .settings-grid { grid-template-columns: 1fr; }
   .settings-grid > *:nth-child(even) { border-left: 0; padding-left: 0; }
-  .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-row { grid-template-columns: 1fr; }
+  .stat-meta { gap: var(--space-2) var(--space-4); }
 }
 
 @media (max-width: 720px) {
