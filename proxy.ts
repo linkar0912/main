@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
-import { isProtectedAppPath, resolveHostRedirect } from "@/src/lib/site-routing";
+import { isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
 
 // Canonicalizes the marketing and app hosts, then applies an optimistic gate
 // to authenticated page routes. The gate also refreshes the Supabase session
@@ -14,7 +14,8 @@ import { isProtectedAppPath, resolveHostRedirect } from "@/src/lib/site-routing"
 export async function proxy(request: NextRequest) {
   const env = getServerEnv();
 
-  const hostRedirect = resolveHostRedirect(request.nextUrl.hostname, request.nextUrl.pathname);
+  const hostname = resolveRequestHostname(request.headers, request.nextUrl.hostname);
+  const hostRedirect = resolveHostRedirect(hostname, request.nextUrl.pathname);
   if (hostRedirect) {
     const baseUrl = hostRedirect.target === "app" ? env.appUrl : env.publicSiteUrl;
     const destination = new URL(hostRedirect.pathname, baseUrl);

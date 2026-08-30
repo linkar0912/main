@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isProtectedAppPath, resolveHostRedirect } from "./site-routing";
+import { isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "./site-routing";
 
 describe("site host routing", () => {
   it("moves app paths from the marketing host to the app host", () => {
@@ -36,6 +36,16 @@ describe("site host routing", () => {
     expect(resolveHostRedirect("linkar.in", "/")).toBeNull();
     expect(resolveHostRedirect("app.linkar.in", "/dashboard")).toBeNull();
     expect(resolveHostRedirect("localhost", "/login")).toBeNull();
+  });
+
+  it("uses the reverse proxy host when Next's request URL is internal", () => {
+    expect(
+      resolveRequestHostname(
+        new Headers({ "x-forwarded-host": "app.linkar.in", host: "127.0.0.1:3000" }),
+        "127.0.0.1",
+      ),
+    ).toBe("app.linkar.in");
+    expect(resolveRequestHostname(new Headers({ host: "linkar.in:443" }), "127.0.0.1")).toBe("linkar.in:443");
   });
 
   it("identifies only authenticated workspace pages as protected", () => {
