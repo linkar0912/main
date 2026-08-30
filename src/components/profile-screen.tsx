@@ -133,9 +133,9 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
           </div>
         )}
 
-        <section className="panel profile-card profile-hero" aria-label="Account summary">
-          <div className="profile-hero-main">
-            <div className="profile-hero-identity">
+        <section className="panel profile-card profile-overview" aria-label="Account overview">
+          <div className="profile-overview-main">
+            <div className="profile-overview-identity">
               {avatar ? (
                 // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
                 <img className="avatar avatar-large is-photo" src={avatar} alt="" />
@@ -151,79 +151,36 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
                 </span>
               </div>
             </div>
-            <div className="account-summary-chips">
-              <span className="profile-chip" data-tone="accent">{roleLabel(role)}</span>
-              <span className="profile-chip">Free plan</span>
-              <span className="profile-chip" data-tone={emailVerified ? "ok" : "warn"}>
-                {emailVerified ? "Email verified" : "Email unverified"}
-              </span>
-            </div>
-            {!emailVerified && (
-              <form action="/api/account" method="post" className="account-verify-row">
-                <input type="hidden" name="action" value="resend-verification" />
-                <p className="muted">Confirm your email to keep full access to your workspace.</p>
-                <button className="button button-secondary" type="submit">
-                  Resend verification email
-                </button>
-              </form>
-            )}
           </div>
-
-          <div className="profile-hero-channel">
-            <div className="panel-heading">
-              <div><p className="eyebrow">Active channels</p><h2>Connected channels</h2></div>
-              <Link2 size={19} />
+          <dl className="profile-facts">
+            <div className="profile-fact">
+              <dt>Role</dt>
+              <dd data-tone="accent">{roleLabel(role)}</dd>
             </div>
-            {connection ? (
-              <div className="connection-card">
-                {connection.profilePictureUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
-                  <img
-                    className="avatar avatar-connection is-photo"
-                    src={connection.profilePictureUrl}
-                    alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
-                  />
-                ) : (
-                  <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
-                )}
-                <div className="connection-card-id">
-                  <strong>@{connection.username}</strong>
-                  <span className="connection-status">
-                    <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
-                    {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
-                    {" · "}
-                    {formatDate(connection.connectedAt)}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <p className="muted connection-empty">
-                No Instagram account connected yet.
-              </p>
-            )}
-            {facebookPage ? (
-              <div className="connection-card">
-                <span className="avatar avatar-connection" aria-hidden><FacebookGlyph size={20} brand /></span>
-                <div className="connection-card-id">
-                  <strong>{facebookPage.pageName}</strong>
-                  <span className="connection-status">
-                    <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
-                    Facebook Page
-                    {" · "}
-                    {facebookPage.status === "CONNECTED" ? "Connected" : facebookPage.status === "EXPIRED" ? "Token expired" : "Disconnected"}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <p className="muted connection-empty">No Facebook Page connected yet.</p>
-            )}
-            <Link className={`button ${hasChannel ? "button-secondary" : "button-primary"} button-block`} href="/settings">
-              <Link2 size={15} /> {hasChannel ? "Manage channels" : "Connect a channel"}
-            </Link>
-          </div>
+            <div className="profile-fact">
+              <dt>Plan</dt>
+              <dd>Free</dd>
+            </div>
+            <div className="profile-fact">
+              <dt>Email status</dt>
+              <dd data-tone={emailVerified ? "ok" : "warn"}>
+                {emailVerified ? "Verified" : "Unverified"}
+              </dd>
+            </div>
+          </dl>
+          {!emailVerified && (
+            <form action="/api/account" method="post" className="account-verify-row">
+              <input type="hidden" name="action" value="resend-verification" />
+              <p className="muted">Confirm your email to keep full access to your workspace.</p>
+              <button className="button button-secondary" type="submit">
+                Resend verification email
+              </button>
+            </form>
+          )}
         </section>
 
-        <div className="profile-detail-grid">
+        <div className="profile-layout">
+          <main className="profile-main">
             <section className="panel profile-card profile-security-card" aria-label="Security">
               <div className="panel-heading">
                 <div><p className="eyebrow">Security</p><h2>Password &amp; sessions</h2></div>
@@ -262,8 +219,61 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
                 </form>
               </div>
             </section>
-          <aside className="profile-side">
-            <section className="panel profile-card" aria-label="Related pages">
+          </main>
+          <aside className="profile-side" aria-label="Profile supporting information">
+            <section className="panel profile-card profile-channels-card" aria-label="Connected channels">
+              <div className="panel-heading">
+                <div><p className="eyebrow">Active channels</p><h2>Connected channels</h2></div>
+                <Link2 size={19} />
+              </div>
+              <div className="profile-channel-list">
+                {connection ? (
+                  <div className="connection-card">
+                    {connection.profilePictureUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
+                      <img
+                        className="avatar avatar-connection is-photo"
+                        src={connection.profilePictureUrl}
+                        alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
+                      />
+                    ) : (
+                      <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
+                    )}
+                    <div className="connection-card-id">
+                      <strong>@{connection.username}</strong>
+                      <span className="connection-status">
+                        <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
+                        {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
+                        {" · "}
+                        {formatDate(connection.connectedAt)}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted connection-empty">No Instagram account connected yet.</p>
+                )}
+                {facebookPage ? (
+                  <div className="connection-card">
+                    <span className="avatar avatar-connection" aria-hidden><FacebookGlyph size={20} brand /></span>
+                    <div className="connection-card-id">
+                      <strong>{facebookPage.pageName}</strong>
+                      <span className="connection-status">
+                        <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
+                        Facebook Page
+                        {" · "}
+                        {facebookPage.status === "CONNECTED" ? "Connected" : facebookPage.status === "EXPIRED" ? "Token expired" : "Disconnected"}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted connection-empty">No Facebook Page connected yet.</p>
+                )}
+              </div>
+              <Link className={`button ${hasChannel ? "button-secondary" : "button-primary"} button-block`} href="/settings">
+                <Link2 size={15} /> {hasChannel ? "Manage channels" : "Connect a channel"}
+              </Link>
+            </section>
+            <section className="panel profile-card" aria-label="Workspace links">
               <div className="panel-heading">
                 <div><p className="eyebrow">Quick access</p><h2>Workspace links</h2></div>
                 <Users size={19} strokeWidth={1.8} />

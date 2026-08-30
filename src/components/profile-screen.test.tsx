@@ -42,9 +42,15 @@ describe("ProfileScreen", () => {
       />,
     );
 
-    const summary = screen.getByLabelText("Account summary");
-    expect(within(summary).getByText("Member")).toBeTruthy();
-    expect(within(summary).queryByText("Owner")).toBeNull();
+    const overview = screen.getByRole("region", { name: "Account overview" });
+    expect(within(overview).getByText("Role")).toBeTruthy();
+    expect(within(overview).getByText("Plan")).toBeTruthy();
+    expect(within(overview).getByText("Email status")).toBeTruthy();
+    expect(within(overview).getByText("Member")).toBeTruthy();
+    expect(within(overview).queryByText("Owner")).toBeNull();
+    expect(screen.getByRole("region", { name: "Security" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Connected channels" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Workspace links" })).toBeTruthy();
   });
 
   it("shows the connected Instagram account's profile picture", async () => {
