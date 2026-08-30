@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   findInvitationByTokenHash: vi.fn(),
   ensureWorkspace: vi.fn(),
   acceptInvitation: vi.fn(),
+  loggerWarn: vi.fn(),
+  loggerError: vi.fn(),
 }));
 
 vi.mock("@/src/lib/env", () => ({
@@ -32,6 +34,7 @@ vi.mock("@/src/lib/repository-provider", () => ({
   }),
 }));
 vi.mock("@/src/lib/id", () => ({ createId: (prefix: string) => `${prefix}_fixed` }));
+vi.mock("@/src/lib/logger", () => ({ logger: { warn: mocks.loggerWarn, error: mocks.loggerError } }));
 
 const { GET } = await import("./route");
 
@@ -56,6 +59,8 @@ beforeEach(() => {
   mocks.findInvitationByTokenHash.mockReset().mockResolvedValue(null);
   mocks.ensureWorkspace.mockReset();
   mocks.acceptInvitation.mockReset();
+  mocks.loggerWarn.mockReset();
+  mocks.loggerError.mockReset();
 });
 
 describe("GET /api/auth/oauth/google/callback", () => {
@@ -90,18 +95,26 @@ describe("GET /api/auth/oauth/google/callback", () => {
     expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
   });
 
-  it("redirects to login with error=oauth when the Google code exchange fails", async () => {
+  it("redirects to login with error=oauth when the Google code exchange fails, logging why", async () => {
     mocks.exchangeGoogleCode.mockRejectedValue(new Error("boom"));
     const { state } = validState();
     const response = await GET(callbackRequest(`?code=abc&state=${state}`, state));
     expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.stringContaining("code exchange"),
+      expect.objectContaining({ error: "boom" }),
+    );
   });
 
-  it("redirects to login with error=oauth when signInWithIdToken fails", async () => {
-    mocks.signInWithIdToken.mockResolvedValue({ data: { user: null }, error: { message: "bad token" } });
+  it("redirects to login with error=oauth when signInWithIdToken fails, logging Supabase's error message", async () => {
+    mocks.signInWithIdToken.mockResolvedValue({ data: { user: null }, error: { message: "Unacceptable audience in id_token" } });
     const { state } = validState();
     const response = await GET(callbackRequest(`?code=abc&state=${state}`, state));
     expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.stringContaining("signInWithIdToken"),
+      expect.objectContaining({ error: "Unacceptable audience in id_token" }),
+    );
   });
 
   it("passes the nonce embedded in the state to signInWithIdToken", async () => {

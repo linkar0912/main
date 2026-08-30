@@ -5,6 +5,7 @@ import { exchangeGoogleCode } from "@/src/lib/auth/google-oauth";
 import { GOOGLE_OAUTH_STATE_COOKIE, readGoogleOAuthState } from "@/src/lib/auth/google-oauth-state";
 import { completeOAuthSignIn } from "@/src/lib/auth/complete-oauth-signin";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import { logger } from "@/src/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -28,18 +29,33 @@ export async function GET(request: NextRequest) {
   const oauthErrorRedirect = () =>
     withoutStateCookie(NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303));
 
+  const providerError = url.searchParams.get("error");
+  if (providerError) {
+    logger.warn("Google OAuth redirect returned an error", { error: providerError });
+    return oauthErrorRedirect();
+  }
   if (!code || !stateParam || !storedState || stateParam !== storedState) {
+    logger.warn("Google OAuth callback failed state validation", {
+      hasCode: Boolean(code),
+      hasStateParam: Boolean(stateParam),
+      hasStoredState: Boolean(storedState),
+      stateMatches: stateParam === storedState,
+    });
     return oauthErrorRedirect();
   }
   const decoded = readGoogleOAuthState(stateParam, env.authSessionSecret);
   if (!decoded) {
+    logger.warn("Google OAuth state signature was invalid or expired");
     return oauthErrorRedirect();
   }
 
   let idToken: string;
   try {
     ({ idToken } = await exchangeGoogleCode(code, env));
-  } catch {
+  } catch (error) {
+    logger.error("Google OAuth code exchange failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return oauthErrorRedirect();
   }
 
@@ -50,6 +66,9 @@ export async function GET(request: NextRequest) {
     nonce: decoded.nonce,
   });
   if (error || !data.user?.email) {
+    logger.error("Supabase signInWithIdToken failed for Google sign-in", {
+      error: error?.message ?? "no user email returned",
+    });
     return oauthErrorRedirect();
   }
 
