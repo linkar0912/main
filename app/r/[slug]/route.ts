@@ -2,8 +2,14 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { logger } from "@/src/lib/logger";
+import { isSafeOutboundUrl } from "@/src/lib/security/outbound-url";
 
 export const runtime = "nodejs";
+
+// How long the visitor's browser will wait on the conversion-webhook POST before
+// we give up. Without this, a slow customer endpoint ties up a Node socket
+// (and a request slot) for the full keep-alive timeout.
+const CONVERSION_CALLBACK_TIMEOUT_MS = 5_000;
 
 // A non-secret salt keeps the IP hash stable across deployments without revealing
 // the raw address. A pure-cryptographic random per deployment is also fine; this
@@ -33,7 +39,20 @@ function readUserAgent(request: Request): string | undefined {
   return ua.slice(0, 240);
 }
 
-function appendUtm(destination: string, link: { utmSource?: string; utmMedium?: string; utmCampaign?: string; utmTerm?: string; utmContent?: string }): string {
+/**
+ * Appends UTM params to `destination`, or returns null when `destination` is
+ * not a safe public http(s) URL - unparseable (the workspace owner typed
+ * `mailto:`, `tel:`, a stray space), a `javascript:`/`data:` scheme, or an
+ * address on a private/link-local network. Returning null instead of throwing
+ * keeps a single bad row from 500ing every click on the short link.
+ *
+ * Destinations are validated by isSafeOutboundUrl at create time in
+ * /api/links, but rows predating that check (or written by a seed, import, or
+ * direct DB edit) can still hold an unsafe value, so the redirect path
+ * re-validates rather than trusting the stored value. Caller 404s.
+ */
+function appendUtm(destination: string, link: { utmSource?: string; utmMedium?: string; utmCampaign?: string; utmTerm?: string; utmContent?: string }): string | null {
+  if (!isSafeOutboundUrl(destination)) return null;
   const url = new URL(destination);
   if (link.utmSource) url.searchParams.set("utm_source", link.utmSource);
   if (link.utmMedium) url.searchParams.set("utm_medium", link.utmMedium);
@@ -73,6 +92,7 @@ export async function GET(request: Request, context: RouteContext) {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ slug, linkId: link.id, country: country ?? null, at: new Date().toISOString() }),
+            signal: AbortSignal.timeout(CONVERSION_CALLBACK_TIMEOUT_MS),
           });
         } catch (error) {
           logger.warn("Conversion callback failed", {
@@ -89,5 +109,16 @@ export async function GET(request: Request, context: RouteContext) {
     }
   })();
   const finalDestination = appendUtm(link.destination, link);
+  if (!finalDestination) {
+    // Destination is unparseable or not publicly routable. Treat it the same
+    // way /api/t/[id] treats an unsafe outbound URL: 404, never bounce the
+    // visitor to an attacker-controlled or malformed address.
+    logger.warn("Rejected tracked-link with unsafe destination", {
+      slug,
+      linkId: link.id,
+      workspaceId: link.workspaceId,
+    });
+    return new NextResponse("This link is unavailable", { status: 404 });
+  }
   return NextResponse.redirect(finalDestination, 302);
 }
