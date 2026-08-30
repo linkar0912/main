@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FacebookGlyph } from "../facebook-glyph";
 import { InstagramGlyph } from "../instagram-glyph";
 import { ButtonRoll } from "./button-roll";
+import { ThemeToggle } from "../theme-toggle";
 import styles from "./marketing-header.module.css";
 
 const navigationItems = [
@@ -214,20 +215,21 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
           </ul>
         </nav>
 
-        <nav className={styles.accountNavigation} aria-label="Account">
-          <ul>
-            <li>
-              <Link className={styles.getStarted} href="/signup"><ButtonRoll label="Get started" /></Link>
-            </li>
-            <li>
-              <Link className={styles.login} href="/login">Sign in</Link>
-            </li>
-          </ul>
-        </nav>
-
-        <div className={styles.mobileActions}>
-          <Link className={styles.mobileGetStarted} href="/signup"><ButtonRoll label="Get started" /></Link>
-          <button
+        <div className={styles.rightRail}>
+          <nav className={styles.accountNavigation} aria-label="Account">
+            <ul>
+              <li>
+                <Link className={styles.getStarted} href="/signup"><ButtonRoll label="Get started" /></Link>
+              </li>
+              <li>
+                <Link className={styles.login} href="/login">Sign in</Link>
+              </li>
+            </ul>
+          </nav>
+          <ThemeToggle className={styles.themeToggle} />
+          <div className={styles.mobileActions}>
+            <Link className={styles.mobileGetStarted} href="/signup"><ButtonRoll label="Get started" /></Link>
+            <button
             ref={openerRef}
             className={styles.menuButton}
             type="button"
@@ -235,9 +237,9 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
             aria-expanded={menuOpen}
             aria-controls="marketing-menu"
             onClick={() => setMenuOpen(true)}
-          >
-            <span aria-hidden="true" className={styles.menuGlyph} />
-          </button>
+            >
+              <span aria-hidden="true" className={styles.menuGlyph} />
+            </button>
 
           {menuOpen ? (
             <div
@@ -268,7 +270,8 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
                 </ul>
               </nav>
             </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </div>
 

@@ -49,6 +49,8 @@ describe("MarketingHeader", () => {
   afterEach(() => {
     cleanup();
     document.body.style.overflow = "";
+    document.documentElement.removeAttribute("data-theme");
+    window.localStorage.clear();
     vi.unstubAllGlobals();
   });
 
@@ -68,6 +70,22 @@ describe("MarketingHeader", () => {
     expect(primaryNavigation.getByRole("link", { name: "Resources" }).getAttribute("href")).toBe("/#resources");
     expect(accountNavigation.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/signup");
     expect(accountNavigation.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
+  });
+
+  it("lets visitors switch themes from the shared header and persists the choice", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const toggle = screen.getByRole("button", { name: "Switch to dark mode" });
+    fireEvent.click(toggle);
+
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(window.localStorage.getItem("linkar-theme")).toBe("dark");
+    expect(screen.getByRole("button", { name: "Switch to light mode" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to light mode" }));
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(window.localStorage.getItem("linkar-theme")).toBe("light");
   });
 
   it("opens a channel-accurate Solutions panel", () => {

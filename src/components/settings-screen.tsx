@@ -334,7 +334,7 @@ export function SettingsScreen() {
           <div className="section-content">
             {section === "connections" && (
               <div className="settings-overview-grid">
-                <section className="settings-hero panel settings-card instagram-settings-card">
+                <section className="settings-hero panel settings-card channel-settings-card instagram-settings-card" data-channel-card="instagram">
                   {connections[0]?.profilePictureUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value here.
                     <img
@@ -343,7 +343,7 @@ export function SettingsScreen() {
                       alt={connections[0].username ? `@${connections[0].username} profile picture` : "Instagram profile picture"}
                     />
                   ) : (
-                    <div className="settings-icon"><InstagramGlyph size={25} brand /></div>
+                    <div className="settings-brand-icon"><InstagramGlyph size={30} brand /></div>
                   )}
                   <div className="settings-copy"><p className="eyebrow">Instagram connections</p><h2>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h2><p>{connections.length > 0 ? "Your connected accounts can receive comment and DM webhooks." : `Connect a professional account to start delivering ${PRODUCT_NAME} automations.`}</p></div>
                   <div className="settings-action"><a className="button button-primary" href="/api/meta/oauth/start">{connections.length > 0 ? "Connect another account" : "Connect Instagram"} <ExternalLink size={15} /></a></div>
@@ -410,8 +410,8 @@ export function SettingsScreen() {
                   </section>
                 )}
 
-                <section className="settings-hero panel settings-card facebook-settings-card">
-                  <div className="settings-icon"><FacebookGlyph size={25} /></div>
+                <section className="settings-hero panel settings-card channel-settings-card facebook-settings-card" data-channel-card="facebook">
+                  <div className="settings-brand-icon"><FacebookGlyph size={30} brand /></div>
                   <div className="settings-copy"><p className="eyebrow">Facebook Pages</p><h2>{facebookPages.length === 0 ? "No Page connected" : `${facebookPages.length} Page${facebookPages.length === 1 ? "" : "s"} connected`}</h2><p>{facebookPages.length > 0 ? "Connected Pages can deliver comment-reply automations on public posts." : "Connect a Facebook Page to auto-reply to comments with the same flows you use on Instagram."}</p></div>
                   <div className="settings-action"><a className="button button-primary" href="/api/facebook/oauth/start">{facebookPages.length > 0 ? "Connect another Page" : "Connect Facebook Page"} <ExternalLink size={15} /></a></div>
                   {facebookState === "select-page" && (

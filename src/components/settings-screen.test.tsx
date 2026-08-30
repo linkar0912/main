@@ -132,6 +132,15 @@ describe("SettingsScreen webhook health panel", () => {
     expect(await screen.findByText("No Page connected")).toBeTruthy();
     const connectLink = screen.getByRole("link", { name: /Connect Facebook Page/ });
     expect(connectLink.getAttribute("href")).toBe("/api/facebook/oauth/start");
+
+    const instagramCard = screen.getByText("Instagram connections").closest("[data-channel-card]");
+    const facebookCard = screen.getByText("Facebook Pages").closest("[data-channel-card]");
+    expect(instagramCard?.getAttribute("data-channel-card")).toBe("instagram");
+    expect(facebookCard?.getAttribute("data-channel-card")).toBe("facebook");
+    expect(instagramCard?.classList.contains("channel-settings-card")).toBe(true);
+    expect(facebookCard?.classList.contains("channel-settings-card")).toBe(true);
+    expect(instagramCard?.querySelector('[data-brand-logo="instagram"]')).toBeTruthy();
+    expect(facebookCard?.querySelector('[data-brand-logo="facebook"]')).toBeTruthy();
   });
 
   it("shows the Pages returned by Facebook after OAuth instead of auto-connecting the first", async () => {

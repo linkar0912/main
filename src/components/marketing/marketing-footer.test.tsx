@@ -74,4 +74,14 @@ describe("MarketingFooter", () => {
     expect(wordmark.getAttribute("data-reveal")).not.toBeNull();
     expect(within(footer).getAllByRole("link").every((link) => !link.getAttribute("href")?.includes("://"))).toBe(true);
   });
+
+  it("offers a compact version without changing its navigation contract", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    render(<MarketingFooter compact />);
+
+    const footer = screen.getByRole("contentinfo");
+    expect(footer.getAttribute("data-compact")).toBe("true");
+    expect(within(footer).getByRole("navigation", { name: "Footer" })).toBeTruthy();
+    expect(within(footer).queryByText("LINKAR")).toBeNull();
+  });
 });

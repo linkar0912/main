@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default function TermsPage() {
   const { supportEmail } = getServerEnv();
   return (
-    <PublicPage title="Terms of service" intro={`These terms govern your use of ${PRODUCT_NAME}, the Instagram and Facebook Page automation workspace operated by the ${PRODUCT_NAME} team.`}>
+    <PublicPage currentPath="/terms" title="Terms of service" intro={`These terms govern your use of ${PRODUCT_NAME}, the Instagram and Facebook Page automation workspace operated by the ${PRODUCT_NAME} team.`}>
       <h2>Using {PRODUCT_NAME}</h2>
       <p>You may use {PRODUCT_NAME} only if you can legally enter this agreement and you have the right to connect each Instagram account or Facebook Page and its content. You are responsible for your workspace, saved automations, and the replies those automations send.</p>
       <h2>Rules and compliance</h2>

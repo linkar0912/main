@@ -31,6 +31,10 @@
   --header-ink: #101010;
 }
 
+:global([data-theme="dark"]) :global([data-header-tone="light"]) .header[data-surface="hero"] {
+  --header-ink: #ffffff;
+}
+
 .header[data-solutions="open"] {
   --header-ink: #101010;
 }
@@ -45,6 +49,16 @@
   background: rgb(242 242 238 / 92%);
   border-color: rgb(5 5 5 / 10%);
   box-shadow: 0 14px 38px rgb(5 5 5 / 14%);
+}
+
+:global([data-theme="dark"]) :global([data-header-tone="light"]) .header[data-surface="solid"] {
+  --header-ink: #ffffff;
+}
+
+:global([data-theme="dark"]) :global([data-header-tone="light"]) .header[data-surface="solid"] .frame {
+  background: rgb(28 29 36 / 92%);
+  border-color: rgb(255 255 255 / 12%);
+  box-shadow: 0 14px 38px rgb(0 0 0 / 34%);
 }
 
 @supports (backdrop-filter: blur(10px)) {
@@ -112,7 +126,42 @@
 }
 
 .accountNavigation {
+  justify-self: auto;
+}
+
+.rightRail {
+  display: flex;
+  align-items: center;
   justify-self: end;
+  gap: clamp(10px, 1vw, 16px);
+}
+
+.themeToggle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  inline-size: 44px;
+  block-size: 44px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 220ms ease, background-color 220ms ease, transform 220ms ease;
+}
+
+.themeToggle:hover,
+.themeToggle:focus-visible {
+  color: #ffffff;
+  background: #050505;
+  transform: rotate(8deg);
+}
+
+:global([data-theme="dark"]) :global([data-header-tone="light"]) .themeToggle:hover,
+:global([data-theme="dark"]) :global([data-header-tone="light"]) .themeToggle:focus-visible {
+  color: #101010;
+  background: #ffffff;
 }
 
 .primaryNavigation ul,
@@ -296,8 +345,8 @@
   flex: 0 0 48px;
   inline-size: 48px;
   block-size: 48px;
-  background: #f7f6ef;
-  border: 1px solid rgb(5 5 5 / 14%);
+  background: transparent;
+  border: 0;
   border-radius: 50%;
 }
 
@@ -552,7 +601,8 @@
   .solutionsButton::after,
   .login::after,
   .getStarted,
-  .mobileGetStarted {
+  .mobileGetStarted,
+  .themeToggle {
     transition: none;
   }
 

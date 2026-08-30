@@ -23,6 +23,7 @@ export function InstagramGlyph({ size = 18, brand = false }: { size?: number; br
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
+      data-brand-logo={brand ? "instagram" : undefined}
       aria-hidden="true"
       focusable="false"
     >

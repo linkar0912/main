@@ -8,6 +8,10 @@
 
 .frame { inline-size: min(100%, 1440px); min-block-size: 780px; margin-inline: auto; }
 
+.compact { min-block-size: 0; padding-block-start: 72px; }
+.compact .frame { min-block-size: 0; }
+.compact .legalLine { margin-block-start: 72px; }
+
 .topGrid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -70,6 +74,9 @@
   .column a { min-block-size: 44px; }
   .legalLine { display: grid; gap: 20px; margin-block-start: 72px; }
   .wordmark { margin-block-start: 64px; font-size: clamp(5.25rem, 26vw, 8rem); letter-spacing: -.07em; }
+  .compact { min-block-size: 0; padding-block-start: 56px; }
+  .compact .frame { min-block-size: 0; }
+  .compact .legalLine { margin-block-start: 56px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

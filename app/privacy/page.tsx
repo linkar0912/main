@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default function PrivacyPage() {
   const { supportEmail } = getServerEnv();
   return (
-    <PublicPage title="Privacy policy" intro={`${PRODUCT_NAME} helps creators and businesses automate Instagram conversations and public Facebook Page comment replies. This policy explains what we collect, why we use it, and how you can ask us to delete it.`}>
+    <PublicPage currentPath="/privacy" title="Privacy policy" intro={`${PRODUCT_NAME} helps creators and businesses automate Instagram conversations and public Facebook Page comment replies. This policy explains what we collect, why we use it, and how you can ask us to delete it.`}>
       <h2>Information we receive</h2>
       <p>When you connect an Instagram professional account, we receive the account identifier, username where available, access token, and the Instagram comments, messages, media identifiers, and delivery events needed to run the rules you create. We also receive your workspace details and support messages.</p>
       <p>When you connect a Facebook Page, we receive the Page identifier, Page name, encrypted Page access token, Page posts and top-level comments needed to run public comment-reply rules, and delivery results. Linkar ignores Page-authored and nested comment events for automation execution.</p>

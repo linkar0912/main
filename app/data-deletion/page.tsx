@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default function DataDeletionPage() {
   const { supportEmail } = getServerEnv();
   return (
-    <PublicPage title="Data deletion" intro={`You can ask ${PRODUCT_NAME} to delete information associated with your Instagram account, Facebook Page, and workspace. We make deletion requests straightforward and do not require you to keep using the service.`}>
+    <PublicPage currentPath="/data-deletion" title="Data deletion" intro={`You can ask ${PRODUCT_NAME} to delete information associated with your Instagram account, Facebook Page, and workspace. We make deletion requests straightforward and do not require you to keep using the service.`}>
       <h2>Request deletion</h2>
       <p>Send an email to <a href={`mailto:${supportEmail}?subject=${PRODUCT_NAME}%20data%20deletion`}>{supportEmail}</a> from the workspace owner. Include the Instagram username or Facebook Page name, workspace name, and account email. Do not send a password or access token.</p>
       <h2>What we remove</h2>
