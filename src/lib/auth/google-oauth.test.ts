@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { buildGoogleAuthorizeUrl, exchangeGoogleCode, GoogleOAuthError } from "./google-oauth";
 
@@ -8,7 +9,7 @@ const CONFIG = {
 };
 
 describe("buildGoogleAuthorizeUrl", () => {
-  it("builds Google's authorize URL with our redirect_uri, an OIDC scope, state, and nonce", () => {
+  it("builds Google's authorize URL with our redirect_uri, an OIDC scope, and state", () => {
     const url = new URL(buildGoogleAuthorizeUrl("state-123", "nonce-456", CONFIG));
     expect(url.origin + url.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
     expect(url.searchParams.get("client_id")).toBe("client-1");
@@ -16,7 +17,11 @@ describe("buildGoogleAuthorizeUrl", () => {
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("scope")).toBe("openid email profile");
     expect(url.searchParams.get("state")).toBe("state-123");
-    expect(url.searchParams.get("nonce")).toBe("nonce-456");
+  });
+
+  it("sends Google a SHA-256 hash of the nonce, not the raw value - Supabase's signInWithIdToken hashes the raw nonce it's given and compares it to the (hashed) nonce claim in the ID token", () => {
+    const url = new URL(buildGoogleAuthorizeUrl("state-123", "nonce-456", CONFIG));
+    expect(url.searchParams.get("nonce")).toBe(createHash("sha256").update("nonce-456").digest("hex"));
   });
 
   it("throws when Google isn't configured", () => {

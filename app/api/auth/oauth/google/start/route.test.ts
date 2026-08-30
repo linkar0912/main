@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { readGoogleOAuthState } from "@/src/lib/auth/google-oauth-state";
 
@@ -34,7 +35,11 @@ describe("GET /api/auth/oauth/google/start", () => {
 
     const state = url.searchParams.get("state")!;
     const decoded = readGoogleOAuthState(state, "test-secret-at-least-32-characters");
-    expect(decoded).toEqual({ next: "/automations", invite: "tok-123", nonce: url.searchParams.get("nonce") });
+    expect(decoded?.next).toBe("/automations");
+    expect(decoded?.invite).toBe("tok-123");
+    // Google gets a SHA-256 hash of the nonce, not the raw value stored in
+    // state - see src/lib/auth/google-oauth.ts for why.
+    expect(url.searchParams.get("nonce")).toBe(createHash("sha256").update(decoded!.nonce).digest("hex"));
   });
 
   it("sets an httpOnly state cookie matching the state param", async () => {

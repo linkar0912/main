@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ServerEnv } from "@/src/lib/env";
 
 /** Errors raised while exchanging a Google authorization code for an ID token. */
@@ -19,7 +20,13 @@ type GoogleOAuthConfig = Pick<ServerEnv, "googleClientId" | "googleClientSecret"
  * domain instead of the Supabase project's. `openid` is required to get an
  * ID token back; `state` carries next/invite (Google's redirect_uri must
  * match a pre-registered value exactly, so it can't carry dynamic query
- * params itself); `nonce` is later checked by Supabase's signInWithIdToken.
+ * params itself).
+ *
+ * Google is sent a SHA-256 hash of `nonce`, not the raw value: Supabase's
+ * signInWithIdToken hashes whatever raw nonce *it's* given and compares that
+ * hash to the ID token's `nonce` claim, so the claim must already be a hash
+ * for the two to match - callers pass the same raw `nonce` straight through
+ * to signInWithIdToken.
  */
 export function buildGoogleAuthorizeUrl(
   state: string,
@@ -33,7 +40,7 @@ export function buildGoogleAuthorizeUrl(
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
-  url.searchParams.set("nonce", nonce);
+  url.searchParams.set("nonce", createHash("sha256").update(nonce).digest("hex"));
   return url.toString();
 }
 
