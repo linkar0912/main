@@ -35,11 +35,11 @@
   --header-ink: #ffffff;
 }
 
-.header[data-solutions="open"] {
+.header[data-mega-menu="open"] {
   --header-ink: #101010;
 }
 
-.header[data-solutions="open"] .frame {
+.header[data-mega-menu="open"] .frame {
   background: rgb(242 242 238 / 96%);
   border-color: rgb(5 5 5 / 10%);
   box-shadow: 0 14px 38px rgb(5 5 5 / 14%);
@@ -236,7 +236,7 @@
   transition: transform 220ms cubic-bezier(.43, .195, .02, 1);
 }
 
-.header[data-solutions="open"] .solutionsCaret {
+.solutionsButton[aria-expanded="true"] .solutionsCaret {
   transform: translateY(2px) rotate(225deg);
 }
 
@@ -263,7 +263,7 @@
 .primaryNavigation a:focus-visible::after,
 .solutionsButton:hover::after,
 .solutionsButton:focus-visible::after,
-.header[data-solutions="open"] .solutionsButton::after,
+.solutionsButton[aria-expanded="true"]::after,
 .login:hover::after,
 .login:focus-visible::after {
   transform: scaleX(1);
@@ -308,6 +308,15 @@
 .solutionsColumn + .solutionsColumn {
   padding-inline-start: clamp(36px, 5vw, 84px);
   border-inline-start: 1px solid rgb(5 5 5 / 14%);
+}
+
+.resourcesPanel {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-block-size: 330px;
+}
+
+.resourceList a {
+  min-block-size: 58px;
 }
 
 .solutionsEyebrow {
@@ -401,6 +410,7 @@
 }
 
 .useCaseList a { gap: 24px; padding: 13px 0; }
+.resourceList strong { font-size: clamp(1.45rem, 2vw, 2rem); }
 
 @keyframes solutions-backdrop-in {
   from { opacity: 0; }

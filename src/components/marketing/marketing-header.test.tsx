@@ -67,7 +67,9 @@ describe("MarketingHeader", () => {
     expect(solutions.getAttribute("aria-expanded")).toBe("false");
     expect(solutions.getAttribute("aria-controls")).toBe("marketing-solutions");
     expect(primaryNavigation.getByRole("link", { name: "How it works" }).getAttribute("href")).toBe("/#how-it-works");
-    expect(primaryNavigation.getByRole("link", { name: "Resources" }).getAttribute("href")).toBe("/#resources");
+    const resources = primaryNavigation.getByRole("button", { name: "Resources" });
+    expect(resources.getAttribute("aria-expanded")).toBe("false");
+    expect(resources.getAttribute("aria-controls")).toBe("marketing-resources");
     expect(accountNavigation.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/signup");
     expect(accountNavigation.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
   });
@@ -103,6 +105,71 @@ describe("MarketingHeader", () => {
     expect(within(panel).getByText("Private replies and DMs")).toBeTruthy();
     expect(within(panel).getByText("Public comment replies")).toBeTruthy();
     expect(document.querySelector("[data-solutions-backdrop]")).toBeTruthy();
+  });
+
+  it("opens a Resources panel with Linkar destinations", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const resources = screen.getByRole("button", { name: "Resources" });
+    fireEvent.click(resources);
+
+    expect(resources.getAttribute("aria-expanded")).toBe("true");
+    const panel = screen.getByRole("navigation", { name: "Resources" });
+    expect(panel.getAttribute("id")).toBe("marketing-resources");
+    expect(within(panel).getByRole("link", { name: "How it works" }).getAttribute("href")).toBe("/#how-it-works");
+    expect(within(panel).getByRole("link", { name: "Automation workflows" }).getAttribute("href")).toBe("/#workflows");
+    expect(within(panel).getByRole("link", { name: "Frequently asked questions" }).getAttribute("href")).toBe("/#faq");
+    expect(within(panel).getByRole("link", { name: "Help center" }).getAttribute("href")).toBe("/support");
+    expect(within(panel).getByRole("link", { name: "Privacy policy" }).getAttribute("href")).toBe("/privacy");
+    expect(within(panel).getByRole("link", { name: "Terms of service" }).getAttribute("href")).toBe("/terms");
+    expect(within(panel).getByRole("link", { name: "Data deletion" }).getAttribute("href")).toBe("/data-deletion");
+    expect(within(panel).getByRole("link", { name: "Support" }).getAttribute("href")).toBe("/support");
+  });
+
+  it("keeps only one desktop mega menu open", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const solutions = screen.getByRole("button", { name: "Solutions" });
+    const resources = screen.getByRole("button", { name: "Resources" });
+    fireEvent.click(solutions);
+    expect(screen.getByRole("navigation", { name: "Solutions" })).toBeTruthy();
+
+    fireEvent.click(resources);
+
+    expect(screen.queryByRole("navigation", { name: "Solutions" })).toBeNull();
+    expect(screen.getByRole("navigation", { name: "Resources" })).toBeTruthy();
+    expect(solutions.getAttribute("aria-expanded")).toBe("false");
+    expect(resources.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("closes Resources with Escape and restores focus", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const resources = screen.getByRole("button", { name: "Resources" });
+    fireEvent.click(resources);
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("navigation", { name: "Resources" })).toBeNull();
+    expect(resources.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(resources);
+  });
+
+  it("closes Resources from its backdrop and when desktop navigation is hidden", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const resources = screen.getByRole("button", { name: "Resources" });
+    fireEvent.click(resources);
+    fireEvent.click(screen.getByRole("button", { name: "Close Resources" }));
+    expect(screen.queryByRole("navigation", { name: "Resources" })).toBeNull();
+
+    fireEvent.click(resources);
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1_100 });
+    fireEvent.resize(window);
+    expect(screen.queryByRole("navigation", { name: "Resources" })).toBeNull();
   });
 
   it("keeps Solutions open when a pointer enters before clicking", () => {

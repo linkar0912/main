@@ -12,6 +12,10 @@
   display: block;
   --marketing-section-title-size: clamp(2.75rem, 4vw, 4.75rem);
   --marketing-section-title-width: 1050px;
+  --marketing-lede-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  --marketing-card-title-size: clamp(2rem, 3vw, 3.25rem);
+  --marketing-body-size: 1rem;
+  --marketing-label-size: .72rem;
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {

@@ -301,29 +301,45 @@ export function SettingsScreen() {
     connections: connections.length,
     team: (team?.members.length ?? 0) + (team?.invitations.length ?? 0),
   };
+  const connectedChannelCount = Number(connections.length > 0) + Number(facebookPages.length > 0);
 
   return (
     <AppShell>
       <div className="page-wrap settings-wrap">
         <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage Instagram and Facebook connections, delivery defaults, team access, and account safeguards.</p></div></header>
 
+        <section className="settings-summary" aria-label="Workspace summary">
+          <div className="settings-summary-intro">
+            <p className="eyebrow">Control center</p>
+            <strong>Everything your workspace needs, in one place.</strong>
+          </div>
+          <div className="settings-summary-stat">
+            <span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" />
+            <span><small>Environment</small><strong>{mode === "demo" ? "Demo mode" : "Connected mode"}</strong></span>
+          </div>
+          <div className="settings-summary-stat">
+            <Plug size={18} aria-hidden="true" />
+            <span><small>Channels</small><strong>{connectedChannelCount} connected {connectedChannelCount === 1 ? "channel" : "channels"}</strong></span>
+          </div>
+        </section>
+
         {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}<p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
         {facebookState && <div className={`notice-banner ${facebookState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{facebookState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}<p>{facebookStatusMessage[facebookState] ?? "Facebook connection status updated."}</p></div>}
 
         <div className="section-layout">
           <nav className="section-nav" aria-label="Settings sections">
-            <button type="button" className={`section-nav-link ${section === "connections" ? "is-active" : ""}`} onClick={() => setSection("connections")}>
+            <button type="button" aria-pressed={section === "connections"} className={`section-nav-link ${section === "connections" ? "is-active" : ""}`} onClick={() => setSection("connections")}>
               <Plug size={16} strokeWidth={1.9} /> Connections
               <span className="section-nav-count">{sectionCounts.connections}</span>
             </button>
-            <button type="button" className={`section-nav-link ${section === "delivery" ? "is-active" : ""}`} onClick={() => setSection("delivery")}>
+            <button type="button" aria-pressed={section === "delivery"} className={`section-nav-link ${section === "delivery" ? "is-active" : ""}`} onClick={() => setSection("delivery")}>
               <Clock size={16} strokeWidth={1.9} /> Delivery
             </button>
-            <button type="button" className={`section-nav-link ${section === "team" ? "is-active" : ""}`} onClick={() => setSection("team")}>
+            <button type="button" aria-pressed={section === "team"} className={`section-nav-link ${section === "team" ? "is-active" : ""}`} onClick={() => setSection("team")}>
               <Users size={16} strokeWidth={1.9} /> Team
               <span className="section-nav-count">{sectionCounts.team}</span>
             </button>
-            <button type="button" className={`section-nav-link ${section === "policies" ? "is-active" : ""}`} onClick={() => setSection("policies")}>
+            <button type="button" aria-pressed={section === "policies"} className={`section-nav-link ${section === "policies" ? "is-active" : ""}`} onClick={() => setSection("policies")}>
               <FileText size={16} strokeWidth={1.9} /> Policies
             </button>
             <Link className="section-nav-link settings-security-link" href="/profile">
@@ -379,10 +395,8 @@ export function SettingsScreen() {
                     </ul>
                   )}
                   {disconnectError && <p className="form-error" role="alert">{disconnectError}</p>}
-                </section>
-
-                {connections.length > 0 && health && (
-                  <section className="panel settings-panel settings-card webhook-card" aria-label="Webhook health">
+                  {connections.length > 0 && health && (
+                    <div className="channel-health" data-channel-health="instagram" aria-label="Webhook health">
                     <div className="panel-heading">
                       <div><p className="eyebrow">Webhook health</p><h2>{health.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>
                       {health.missingFields.length === 0 ? <ShieldCheck size={21} /> : <AlertTriangle size={21} />}
@@ -407,8 +421,9 @@ export function SettingsScreen() {
                         Reconnect Instagram to refresh the subscription. <a className="text-link" href="/api/meta/oauth/start">Reconnect <ExternalLink size={15} /></a>
                       </p>
                     )}
-                  </section>
-                )}
+                    </div>
+                  )}
+                </section>
 
                 <section className="settings-hero panel settings-card channel-settings-card facebook-settings-card" data-channel-card="facebook">
                   <div className="settings-brand-icon"><FacebookGlyph size={30} brand /></div>
@@ -461,10 +476,8 @@ export function SettingsScreen() {
                     </ul>
                   )}
                   {facebookError && <p className="form-error" role="alert">{facebookError}</p>}
-                </section>
-
-                {facebookPages.length > 0 && facebookHealth && (
-                  <section className="panel settings-panel settings-card webhook-card" aria-label="Facebook webhook health">
+                  {facebookPages.length > 0 && facebookHealth && (
+                    <div className="channel-health" data-channel-health="facebook" aria-label="Facebook webhook health">
                     <div className="panel-heading">
                       <div><p className="eyebrow">Facebook webhook health</p><h2>{facebookHealth.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>
                       {facebookHealth.missingFields.length === 0 ? <ShieldCheck size={21} /> : <AlertTriangle size={21} />}
@@ -484,8 +497,9 @@ export function SettingsScreen() {
                         Reconnect the Page to refresh the subscription. <a className="text-link" href="/api/facebook/oauth/start">Reconnect <ExternalLink size={15} /></a>
                       </p>
                     )}
-                  </section>
-                )}
+                    </div>
+                  )}
+                </section>
               </div>
             )}
 

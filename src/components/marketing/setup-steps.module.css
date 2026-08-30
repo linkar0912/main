@@ -30,7 +30,7 @@
 .header p {
   max-inline-size: 60ch;
   margin: 28px auto 0;
-  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  font-size: var(--marketing-lede-size);
   font-weight: 600;
   line-height: 1.5;
 }
@@ -65,7 +65,7 @@
 .number {
   margin: 0;
   color: #fff100;
-  font-size: .78rem;
+  font-size: var(--marketing-label-size);
   font-weight: 850;
   letter-spacing: .08em;
 }
@@ -73,7 +73,7 @@
 .card h3 {
   max-inline-size: 12ch;
   margin: 24px 0 0;
-  font-size: clamp(2rem, 2.8vw, 3.2rem);
+  font-size: var(--marketing-card-title-size);
   font-weight: 800;
   line-height: .94;
   letter-spacing: -.06em;
@@ -81,7 +81,7 @@
 
 .description {
   margin: 20px 0 0;
-  font-size: 1rem;
+  font-size: var(--marketing-body-size);
   font-weight: 600;
   line-height: 1.5;
 }

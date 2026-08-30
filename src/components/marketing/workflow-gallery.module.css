@@ -24,7 +24,7 @@
   max-inline-size: 60ch;
   margin: 28px auto 0;
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
-  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  font-size: var(--marketing-lede-size);
   font-weight: 600;
   line-height: 1.5;
 }
@@ -66,7 +66,7 @@
 
 .tab > span,
 .accordionTrigger {
-  font-size: .78rem;
+  font-size: var(--marketing-label-size);
   font-weight: 800;
   line-height: 1.25;
   letter-spacing: .035em;

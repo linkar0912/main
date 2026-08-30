@@ -24,7 +24,7 @@
 .header > p {
   max-inline-size: 54ch;
   margin: 32px auto 0;
-  font-size: clamp(1.05rem, 1.35vw, 1.3rem);
+  font-size: var(--marketing-lede-size);
   font-weight: 620;
   line-height: 1.45;
 }
@@ -68,7 +68,7 @@
 
 .sequence {
   margin: 0 0 26px;
-  font-size: .78rem;
+  font-size: var(--marketing-label-size);
   font-weight: 650;
   letter-spacing: .08em;
 }
@@ -77,7 +77,7 @@
   max-inline-size: 440px;
   margin: 0;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(2rem, 3vw, 3.4rem);
+  font-size: var(--marketing-card-title-size);
   font-weight: 850;
   line-height: .94;
   letter-spacing: -.055em;
@@ -87,7 +87,7 @@
 .chapterBody {
   max-inline-size: 48ch;
   margin: 28px 0 0;
-  font-size: clamp(1rem, 1.25vw, 1.2rem);
+  font-size: var(--marketing-body-size);
   font-weight: 570;
   line-height: 1.55;
 }

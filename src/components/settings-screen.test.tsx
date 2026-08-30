@@ -141,6 +141,53 @@ describe("SettingsScreen webhook health panel", () => {
     expect(facebookCard?.classList.contains("channel-settings-card")).toBe(true);
     expect(instagramCard?.querySelector('[data-brand-logo="instagram"]')).toBeTruthy();
     expect(facebookCard?.querySelector('[data-brand-logo="facebook"]')).toBeTruthy();
+    expect(instagramCard?.querySelector('[data-channel-health="instagram"]')).toBeNull();
+    expect(facebookCard?.querySelector('[data-channel-health="facebook"]')).toBeNull();
+  });
+
+  it("summarizes the workspace and keeps each webhook status with its channel", async () => {
+    stubFetch({
+      "/api/meta/connection/health": {
+        data: [{
+          id: "connection_1",
+          username: "creator",
+          status: "CONNECTED",
+          requiredFields: ["comments", "messages"],
+          subscribedFields: ["comments", "messages"],
+          missingFields: [],
+        }],
+      },
+      "/api/meta/connection": {
+        data: [{ id: "connection_1", igUserId: "ig_1", username: "creator", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" }],
+      },
+      "/api/facebook/connection": {
+        data: [{ id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" }],
+      },
+      "/api/facebook/connection/health": {
+        data: [{
+          id: "fb_rec_1",
+          pageId: "12345",
+          pageName: "Acme Co",
+          status: "CONNECTED",
+          requiredFields: ["feed"],
+          subscribedFields: ["feed"],
+          missingFields: [],
+        }],
+      },
+      "/api/health": { mode: "configured" },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+
+    const summary = await screen.findByLabelText("Workspace summary");
+    expect(summary.textContent).toContain("2 connected channels");
+    expect(summary.textContent).toContain("Connected mode");
+    expect(screen.getByRole("button", { name: /Connections/ }).getAttribute("aria-pressed")).toBe("true");
+
+    const instagramCard = screen.getByText("Instagram connections").closest('[data-channel-card="instagram"]');
+    const facebookCard = screen.getByText("Facebook Pages").closest('[data-channel-card="facebook"]');
+    expect(instagramCard?.querySelector('[data-channel-health="instagram"]')).toBeTruthy();
+    expect(facebookCard?.querySelector('[data-channel-health="facebook"]')).toBeTruthy();
   });
 
   it("shows the Pages returned by Facebook after OAuth instead of auto-connecting the first", async () => {

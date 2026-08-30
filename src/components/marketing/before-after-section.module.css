@@ -55,7 +55,7 @@
   max-inline-size: 11ch;
   margin: 0;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(2rem, 3vw, 3.25rem);
+  font-size: var(--marketing-card-title-size);
   font-weight: 850;
   line-height: .94;
   letter-spacing: -.055em;
@@ -76,7 +76,7 @@
   padding: 20px 0;
   border-top: 1px solid currentcolor;
   border-color: color-mix(in srgb, currentcolor 18%, transparent);
-  font-size: clamp(.96rem, 1.22vw, 1.13rem);
+  font-size: var(--marketing-body-size);
   font-weight: 650;
   line-height: 1.35;
 }
@@ -120,7 +120,7 @@
 .linkar li[data-current="true"] {
   color: #fff100;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .72rem;
+  font-size: var(--marketing-label-size);
   font-weight: 700;
   letter-spacing: .035em;
   text-transform: uppercase;
@@ -129,7 +129,7 @@
 .closing {
   max-inline-size: 58ch;
   margin: 48px auto 0;
-  font-size: clamp(1.05rem, 1.55vw, 1.38rem);
+  font-size: var(--marketing-lede-size);
   font-weight: 650;
   line-height: 1.45;
   text-align: center;

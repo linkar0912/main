@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MarketingPage } from "./marketing-page";
 
@@ -71,6 +71,18 @@ describe("MarketingPage", () => {
     const navigation = screen.getByRole("navigation", { name: "Primary" });
     expect(within(navigation).getByRole("link", { name: "Product" }).getAttribute("href"))
       .toBe("/#product");
+  });
+
+  it("connects every same-page Resources link to a rendered section", () => {
+    const { container } = render(<MarketingPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Resources" }));
+    const resources = within(screen.getByRole("navigation", { name: "Resources" }));
+
+    for (const label of ["How it works", "Automation workflows", "Frequently asked questions"]) {
+      const href = resources.getByRole("link", { name: label }).getAttribute("href");
+      expect(href?.startsWith("/#")).toBe(true);
+      expect(container.querySelector(href?.slice(1) ?? "missing-anchor")).toBeTruthy();
+    }
   });
 
   it("renders only Linkar-owned public copy", () => {

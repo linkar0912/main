@@ -40,7 +40,7 @@
   margin: 44px auto 0;
   color: rgb(5 5 5 / 72%);
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
-  font-size: clamp(1.05rem, 1.5vw, 1.35rem);
+  font-size: var(--marketing-lede-size);
   line-height: 1.5;
   text-align: center;
 }
