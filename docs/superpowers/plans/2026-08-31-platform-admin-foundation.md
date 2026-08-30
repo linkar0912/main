@@ -98,7 +98,7 @@ git commit -m "feat(admin): validate platform owner allowlist"
 - Produces: `getPlatformOwnerSession(): Promise<PlatformOwnerIdentity>`
 - Produces: `PlatformOwnerAuthError` with status `401 | 403 | 428`
 
-- [ ] **Step 1: Write failing pure authorization tests**
+- [x] **Step 1: Write failing pure authorization tests**
 
 ```ts
 it.each([
@@ -117,13 +117,13 @@ it("returns only the verified owner identity fields", () => {
 
 The production change each test catches is accepting an unsigned/missing identity, a non-allowlisted UUID, AAL1, or extra user-controlled metadata.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/authorization.test.ts`
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement the server-only DAL**
+- [x] **Step 3: Implement the server-only DAL**
 
 ```ts
 import "server-only";
@@ -147,17 +147,17 @@ export function authorizePlatformOwner(
 
 `getPlatformOwnerIdentity()` calls `createSupabaseServerClient().auth.getClaims()` and passes `requireAal2=false`; `getPlatformOwnerSession()` passes `true`. Do not read `getSession()`.
 
-- [ ] **Step 4: Add session-control hook without changing behavior yet**
+- [x] **Step 4: Add session-control hook without changing behavior yet**
 
 Add an optional `validateApplicationSession` dependency in `getValidatedSession()` that defaults to an allow-all implementation until Phase 2 installs persisted user/workspace suspension. Test that the hook can reject a session.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm vitest run src/lib/admin/authorization.test.ts src/lib/auth/session.test.ts && pnpm typecheck`
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/admin/authorization.ts src/lib/admin/authorization.test.ts src/lib/supabase/server.ts src/lib/auth/session.ts src/lib/auth/session.test.ts

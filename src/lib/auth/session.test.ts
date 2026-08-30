@@ -50,6 +50,20 @@ describe("getValidatedSession", () => {
 
     expect(await getValidatedSession(new Request("http://localhost"))).toBeNull();
   });
+
+  it("returns null when the application session hook rejects access", async () => {
+    mocks.getClaims.mockResolvedValue({
+      data: { claims: { sub: "user_1", email: "member@example.com" } },
+      error: null,
+    });
+    mocks.findWorkspaceIdByMemberEmail.mockResolvedValue("workspace_1");
+
+    const session = await getValidatedSession(new Request("http://localhost"), {
+      validateApplicationSession: async () => false,
+    });
+
+    expect(session).toBeNull();
+  });
 });
 
 describe("safeNextPath", () => {

@@ -7,6 +7,16 @@ export type AppSession = {
   workspaceId: string;
 };
 
+export type ApplicationSessionValidationInput = AppSession & {
+  claims: Record<string, unknown>;
+};
+
+export type GetValidatedSessionOptions = {
+  validateApplicationSession?: (
+    input: ApplicationSessionValidationInput,
+  ) => boolean | Promise<boolean>;
+};
+
 /**
  * Verifies the Supabase session cookie and resolves it to this app's
  * {userId, workspaceId} shape. getClaims() verifies the JWT locally against
@@ -23,7 +33,10 @@ export type AppSession = {
  * today - cookie reads happen via createSupabaseServerClient() which calls
  * next/headers cookies() itself.
  */
-export async function getValidatedSession(_request: Request): Promise<AppSession | null> {
+export async function getValidatedSession(
+  _request: Request,
+  options: GetValidatedSessionOptions = {},
+): Promise<AppSession | null> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
   if (error || !data?.claims?.sub || !data.claims.email) return null;
@@ -31,7 +44,13 @@ export async function getValidatedSession(_request: Request): Promise<AppSession
   const workspaceId = await getRepository().findWorkspaceIdByMemberEmail(data.claims.email);
   if (!workspaceId) return null;
 
-  return { userId: data.claims.sub, email: data.claims.email, workspaceId };
+  const session = { userId: data.claims.sub, email: data.claims.email, workspaceId };
+  const allowed = await (options.validateApplicationSession?.({
+    ...session,
+    claims: data.claims as Record<string, unknown>,
+  }) ?? true);
+
+  return allowed ? session : null;
 }
 
 function hasBackslashOrControlChar(value: string): boolean {
