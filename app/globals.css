@@ -1688,7 +1688,6 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   inline-size: 100%;
   margin-top: var(--space-3, 12px);
 }
-.auth-page-frame .oauth-form { inline-size: 100%; }
 .auth-page-frame .auth-page-divider {
   display: flex;
   align-items: center;

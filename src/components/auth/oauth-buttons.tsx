@@ -6,7 +6,7 @@ type OAuthButtonsProps = {
   invite?: string;
 };
 
-function ProviderForm({
+function ProviderLink({
   provider,
   label,
   glyph,
@@ -19,27 +19,25 @@ function ProviderForm({
   next: string;
   invite?: string;
 }) {
+  const params = new URLSearchParams({ next });
+  if (invite) params.set("invite", invite);
   return (
-    <form action={`/api/auth/oauth/${provider}`} method="post" className="oauth-form">
-      <input type="hidden" name="next" value={next} />
-      {invite && <input type="hidden" name="invite" value={invite} />}
-      <button
-        type="submit"
-        className="button button-secondary button-block"
-        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-      >
-        {glyph}
-        <span>Continue with {label}</span>
-      </button>
-    </form>
+    <a
+      href={`/api/auth/oauth/${provider}?${params.toString()}`}
+      className="button button-secondary button-block"
+      style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+    >
+      {glyph}
+      <span>Continue with {label}</span>
+    </a>
   );
 }
 
 export function OAuthButtons({ next, invite }: OAuthButtonsProps) {
   return (
     <div className="oauth-buttons">
-      <ProviderForm provider="google" label="Google" glyph={<GoogleGlyph size={16} />} next={next} invite={invite} />
-      <ProviderForm provider="facebook" label="Facebook" glyph={<FacebookGlyph size={16} brand />} next={next} invite={invite} />
+      <ProviderLink provider="google" label="Google" glyph={<GoogleGlyph size={16} />} next={next} invite={invite} />
+      <ProviderLink provider="facebook" label="Facebook" glyph={<FacebookGlyph size={16} brand />} next={next} invite={invite} />
     </div>
   );
 }

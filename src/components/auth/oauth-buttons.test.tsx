@@ -6,36 +6,40 @@ import { OAuthButtons } from "./oauth-buttons";
 afterEach(cleanup);
 
 describe("OAuthButtons", () => {
-  it("renders a Google and a Facebook continue button, each posting to its own provider route", () => {
+  it("renders a Google and a Facebook continue link, each pointing at its own provider route", () => {
     render(<OAuthButtons next="/dashboard" />);
 
-    const google = screen.getByRole("button", { name: /continue with google/i });
-    const facebook = screen.getByRole("button", { name: /continue with facebook/i });
+    const google = screen.getByRole("link", { name: /continue with google/i });
+    const facebook = screen.getByRole("link", { name: /continue with facebook/i });
 
-    expect(google.closest("form")?.getAttribute("action")).toBe("/api/auth/oauth/google");
-    expect(google.closest("form")?.getAttribute("method")).toBe("post");
-    expect(facebook.closest("form")?.getAttribute("action")).toBe("/api/auth/oauth/facebook");
-    expect(facebook.closest("form")?.getAttribute("method")).toBe("post");
+    expect(google.getAttribute("href")).toBe("/api/auth/oauth/google?next=%2Fdashboard");
+    expect(facebook.getAttribute("href")).toBe("/api/auth/oauth/facebook?next=%2Fdashboard");
   });
 
-  it("carries the next path through both forms as a hidden field", () => {
+  it("carries the next path through both links as a query param", () => {
     render(<OAuthButtons next="/automations" />);
 
-    const nextInputs = document.querySelectorAll<HTMLInputElement>('input[name="next"]');
-    expect(nextInputs).toHaveLength(2);
-    for (const input of nextInputs) expect(input.value).toBe("/automations");
+    for (const link of screen.getAllByRole("link")) {
+      const href = new URL(link.getAttribute("href")!, "http://localhost");
+      expect(href.searchParams.get("next")).toBe("/automations");
+    }
   });
 
-  it("carries an invite token through both forms when provided", () => {
+  it("carries an invite token through both links when provided", () => {
     render(<OAuthButtons next="/dashboard" invite="invite-token-123" />);
 
-    const inviteInputs = document.querySelectorAll<HTMLInputElement>('input[name="invite"]');
-    expect(inviteInputs).toHaveLength(2);
-    for (const input of inviteInputs) expect(input.value).toBe("invite-token-123");
+    for (const link of screen.getAllByRole("link")) {
+      const href = new URL(link.getAttribute("href")!, "http://localhost");
+      expect(href.searchParams.get("invite")).toBe("invite-token-123");
+    }
   });
 
-  it("omits the invite field entirely when no invite is given", () => {
+  it("omits the invite param entirely when no invite is given", () => {
     render(<OAuthButtons next="/dashboard" />);
-    expect(document.querySelectorAll('input[name="invite"]')).toHaveLength(0);
+
+    for (const link of screen.getAllByRole("link")) {
+      const href = new URL(link.getAttribute("href")!, "http://localhost");
+      expect(href.searchParams.has("invite")).toBe(false);
+    }
   });
 });

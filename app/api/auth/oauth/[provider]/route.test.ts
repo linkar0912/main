@@ -11,15 +11,11 @@ vi.mock("@/src/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth: { signInWithOAuth: mocks.signInWithOAuth } }),
 }));
 
-const { POST } = await import("./route");
+const { GET } = await import("./route");
 
-function oauthRequest(provider: string, fields: Record<string, string>): Request {
-  const form = new URLSearchParams(fields);
-  return new Request(`http://localhost/api/auth/oauth/${provider}`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: form.toString(),
-  });
+function oauthRequest(provider: string, params: Record<string, string>): Request {
+  const query = new URLSearchParams(params);
+  return new Request(`http://localhost/api/auth/oauth/${provider}?${query.toString()}`);
 }
 
 function paramsFor(provider: string) {
@@ -34,15 +30,15 @@ beforeEach(() => {
   mocks.signInWithOAuth.mockReset().mockResolvedValue({ data: { url: "https://accounts.google.com/authorize?x=1" }, error: null });
 });
 
-describe("POST /api/auth/oauth/[provider]", () => {
+describe("GET /api/auth/oauth/[provider]", () => {
   it("rejects a provider that isn't google or facebook", async () => {
-    const response = await POST(oauthRequest("twitter", { next: "/dashboard" }), paramsFor("twitter"));
+    const response = await GET(oauthRequest("twitter", { next: "/dashboard" }), paramsFor("twitter"));
     expect(location(response)).toContain("/login?error=oauth");
     expect(mocks.signInWithOAuth).not.toHaveBeenCalled();
   });
 
   it("starts the Google OAuth flow, carrying next and invite through the callback redirect", async () => {
-    const response = await POST(
+    const response = await GET(
       oauthRequest("google", { next: "/automations", invite: "tok-123" }),
       paramsFor("google"),
     );
@@ -59,19 +55,19 @@ describe("POST /api/auth/oauth/[provider]", () => {
   });
 
   it("starts the Facebook OAuth flow", async () => {
-    await POST(oauthRequest("facebook", { next: "/automations" }), paramsFor("facebook"));
+    await GET(oauthRequest("facebook", { next: "/automations" }), paramsFor("facebook"));
     expect(mocks.signInWithOAuth.mock.calls[0][0].provider).toBe("facebook");
   });
 
   it("omits the invite param from the callback redirect when none was given", async () => {
-    await POST(oauthRequest("google", { next: "/automations" }), paramsFor("google"));
+    await GET(oauthRequest("google", { next: "/automations" }), paramsFor("google"));
     const redirectTo = new URL(mocks.signInWithOAuth.mock.calls[0][0].options.redirectTo);
     expect(redirectTo.searchParams.has("invite")).toBe(false);
   });
 
   it("redirects to login with error=oauth when Supabase fails to produce an authorize URL", async () => {
     mocks.signInWithOAuth.mockResolvedValue({ data: { url: null }, error: { message: "boom" } });
-    const response = await POST(oauthRequest("google", { next: "/automations" }), paramsFor("google"));
+    const response = await GET(oauthRequest("google", { next: "/automations" }), paramsFor("google"));
     expect(location(response)).toContain("/login?error=oauth");
   });
 });
