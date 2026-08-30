@@ -15,6 +15,13 @@ export type AppSession = {
  * expiry. workspaceId is derived per-request from team membership (keyed by
  * email) rather than embedded in the token, since Supabase doesn't expose a
  * custom session claim shape without extra setup.
+ *
+ * The `_request` parameter is reserved for symmetry with how route handlers
+ * are typed (`(request: Request, context) => …`) and so a future change to
+ * pull additional context (IP-bound rate limiting, request-scoped caches,
+ * etc.) doesn't need to update every call site. It is intentionally unused
+ * today - cookie reads happen via createSupabaseServerClient() which calls
+ * next/headers cookies() itself.
  */
 export async function getValidatedSession(_request: Request): Promise<AppSession | null> {
   const supabase = await createSupabaseServerClient();
