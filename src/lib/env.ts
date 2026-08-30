@@ -22,6 +22,14 @@ export type ServerEnv = {
   facebookVerifyToken: string;
   facebookApiVersion: string;
   facebookScopes: string[];
+  // Google sign-in talks to Google directly instead of through Supabase's
+  // hosted OAuth relay, so Google's consent screen shows this app's own
+  // domain instead of the Supabase project's - see
+  // src/lib/auth/google-oauth.ts. The resulting ID token still goes through
+  // Supabase (signInWithIdToken) to create the actual session.
+  googleClientId?: string;
+  googleClientSecret?: string;
+  googleRedirectUri: string;
   followGatedCampaignsEnabled: boolean;
   authSessionSecret: string;
   trustedProxyHops: number;
@@ -69,6 +77,8 @@ export function getServerEnv(): ServerEnv {
   const facebookRedirectUri =
     process.env.FACEBOOK_REDIRECT_URI ?? "http://localhost:3000/api/facebook/oauth/callback";
   const facebookApiVersion = process.env.FACEBOOK_API_VERSION ?? "v25.0";
+  const googleRedirectUri =
+    process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:3000/api/auth/oauth/google/callback";
 
   // Fail fast on malformed values instead of discovering them at request time.
   // Demo mode is unaffected: every validated value has a valid default.
@@ -76,6 +86,7 @@ export function getServerEnv(): ServerEnv {
     ["APP_URL", appUrl],
     ["META_REDIRECT_URI", metaRedirectUri],
     ["FACEBOOK_REDIRECT_URI", facebookRedirectUri],
+    ["GOOGLE_REDIRECT_URI", googleRedirectUri],
   ] as const) {
     try {
       new URL(value);
@@ -125,6 +136,9 @@ export function getServerEnv(): ServerEnv {
       .split(",")
       .map((scope) => scope.trim())
       .filter(Boolean),
+    googleClientId: process.env.GOOGLE_CLIENT_ID || undefined,
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || undefined,
+    googleRedirectUri,
     followGatedCampaignsEnabled: booleanEnv(process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED),
     authSessionSecret:
       process.env.AUTH_SESSION_SECRET?.trim()

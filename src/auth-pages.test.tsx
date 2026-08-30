@@ -1,36 +1,37 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import SignupPage from "@/app/signup/page";
 import ForgotPasswordPage from "@/app/forgot-password/page";
 import ResetPasswordPage from "@/app/reset-password/page";
-import SignupPage from "@/app/signup/page";
 
-// ResetPasswordPage checks for a Supabase session (via next/headers cookies()),
-// which only exists inside a real Next.js request - not when calling the page
-// function directly in a unit test. Stub it as "no session", the same state
-// an unauthenticated visit to this page would be in.
 vi.mock("@/src/lib/supabase/server", () => ({
-  createSupabaseServerClient: async () => ({
-    auth: { getClaims: async () => ({ data: null, error: { message: "no session" } }) },
+  createSupabaseServerClient: vi.fn().mockResolvedValue({
+    auth: { getClaims: vi.fn().mockResolvedValue({ data: { claims: null } }) },
   }),
 }));
 
 afterEach(cleanup);
 
-describe("auth page visual shell", () => {
-  it("uses the editorial tone without the graph-paper texture", async () => {
-    render(await ForgotPasswordPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByRole("main").getAttribute("data-auth-tone")).toBe("editorial");
-    expect(document.querySelector(".auth-hero.grid-texture")).toBeNull();
-    cleanup();
-
+describe("auth pages", () => {
+  it("starts signup directly with its page heading", async () => {
     render(await SignupPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByRole("main").getAttribute("data-auth-tone")).toBe("editorial");
-    expect(document.querySelector(".auth-hero.grid-texture")).toBeNull();
-    cleanup();
 
+    expect(screen.getByRole("heading", { level: 1, name: "Create your account." })).toBeTruthy();
+    expect(within(screen.getByRole("main")).queryByText("Get started")).toBeNull();
+  });
+
+  it("starts password recovery directly with its page heading", async () => {
+    render(await ForgotPasswordPage({ searchParams: Promise.resolve({}) }));
+
+    expect(screen.getByRole("heading", { level: 1, name: "Reset your password" })).toBeTruthy();
+    expect(screen.queryByText("Account recovery")).toBeNull();
+  });
+
+  it("keeps reset-password states free of decorative labels", async () => {
     render(await ResetPasswordPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByRole("main").getAttribute("data-auth-tone")).toBe("editorial");
-    expect(document.querySelector(".auth-hero.grid-texture")).toBeNull();
+
+    expect(screen.getByRole("heading", { level: 1, name: "Set a new password" })).toBeTruthy();
+    expect(screen.queryByText("Account recovery")).toBeNull();
   });
 });

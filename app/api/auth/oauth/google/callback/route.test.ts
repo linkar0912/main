@@ -1,0 +1,143 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
+import { createGoogleOAuthState, GOOGLE_OAUTH_STATE_COOKIE } from "@/src/lib/auth/google-oauth-state";
+
+const SECRET = "test-secret-at-least-32-characters";
+
+const mocks = vi.hoisted(() => ({
+  exchangeGoogleCode: vi.fn(),
+  signInWithIdToken: vi.fn(),
+  findWorkspaceIdByMemberEmail: vi.fn(),
+  findInvitationByTokenHash: vi.fn(),
+  ensureWorkspace: vi.fn(),
+  acceptInvitation: vi.fn(),
+}));
+
+vi.mock("@/src/lib/env", () => ({
+  getServerEnv: () => ({ appUrl: "http://localhost:3000", authSessionSecret: SECRET }),
+}));
+vi.mock("@/src/lib/auth/google-oauth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/src/lib/auth/google-oauth")>();
+  return { ...actual, exchangeGoogleCode: mocks.exchangeGoogleCode };
+});
+vi.mock("@/src/lib/supabase/server", () => ({
+  createSupabaseServerClient: async () => ({ auth: { signInWithIdToken: mocks.signInWithIdToken } }),
+}));
+vi.mock("@/src/lib/repository-provider", () => ({
+  getRepository: () => ({
+    findWorkspaceIdByMemberEmail: mocks.findWorkspaceIdByMemberEmail,
+    findInvitationByTokenHash: mocks.findInvitationByTokenHash,
+    ensureWorkspace: mocks.ensureWorkspace,
+    acceptInvitation: mocks.acceptInvitation,
+  }),
+}));
+vi.mock("@/src/lib/id", () => ({ createId: (prefix: string) => `${prefix}_fixed` }));
+
+const { GET } = await import("./route");
+
+function callbackRequest(query: string, cookieState?: string): NextRequest {
+  return new NextRequest(`http://localhost/api/auth/oauth/google/callback${query}`, {
+    headers: cookieState ? { cookie: `${GOOGLE_OAUTH_STATE_COOKIE}=${cookieState}` } : {},
+  });
+}
+
+function location(response: Response): string {
+  return response.headers.get("location") ?? "";
+}
+
+function validState(params: { next: string; invite?: string } = { next: "/automations" }) {
+  return createGoogleOAuthState(params, SECRET);
+}
+
+beforeEach(() => {
+  mocks.exchangeGoogleCode.mockReset().mockResolvedValue({ idToken: "id-token-abc" });
+  mocks.signInWithIdToken.mockReset().mockResolvedValue({ data: { user: { email: "person@example.com" } }, error: null });
+  mocks.findWorkspaceIdByMemberEmail.mockReset().mockResolvedValue(null);
+  mocks.findInvitationByTokenHash.mockReset().mockResolvedValue(null);
+  mocks.ensureWorkspace.mockReset();
+  mocks.acceptInvitation.mockReset();
+});
+
+describe("GET /api/auth/oauth/google/callback", () => {
+  it("redirects to login with error=oauth when there is no code", async () => {
+    const { state } = validState();
+    const response = await GET(callbackRequest(`?state=${state}`, state));
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+    expect(mocks.exchangeGoogleCode).not.toHaveBeenCalled();
+  });
+
+  it("redirects to login with error=oauth when Google reports an error instead of a code", async () => {
+    const response = await GET(callbackRequest("?error=access_denied"));
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+  });
+
+  it("redirects to login with error=oauth when there is no state cookie", async () => {
+    const { state } = validState();
+    const response = await GET(callbackRequest(`?code=abc&state=${state}`));
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+    expect(mocks.exchangeGoogleCode).not.toHaveBeenCalled();
+  });
+
+  it("redirects to login with error=oauth when the state param doesn't match the cookie", async () => {
+    const { state } = validState();
+    const response = await GET(callbackRequest(`?code=abc&state=${state}-tampered`, state));
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+  });
+
+  it("redirects to login with error=oauth when the state signature is invalid", async () => {
+    const bogusState = "not-a-real-state";
+    const response = await GET(callbackRequest(`?code=abc&state=${bogusState}`, bogusState));
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+  });
+
+  it("redirects to login with error=oauth when the Google code exchange fails", async () => {
+    mocks.exchangeGoogleCode.mockRejectedValue(new Error("boom"));
+    const { state } = validState();
+    const response = await GET(callbackRequest(`?code=abc&state=${state}`, state));
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+  });
+
+  it("redirects to login with error=oauth when signInWithIdToken fails", async () => {
+    mocks.signInWithIdToken.mockResolvedValue({ data: { user: null }, error: { message: "bad token" } });
+    const { state } = validState();
+    const response = await GET(callbackRequest(`?code=abc&state=${state}`, state));
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+  });
+
+  it("passes the nonce embedded in the state to signInWithIdToken", async () => {
+    const { state, nonce } = validState();
+    await GET(callbackRequest(`?code=abc&state=${state}`, state));
+    expect(mocks.signInWithIdToken).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "google", token: "id-token-abc", nonce }),
+    );
+  });
+
+  it("logs in (no provisioning) when the email already belongs to a workspace", async () => {
+    mocks.findWorkspaceIdByMemberEmail.mockResolvedValue("ws_existing");
+    const { state } = validState({ next: "/automations" });
+    const response = await GET(callbackRequest(`?code=abc&state=${state}`, state));
+    expect(location(response)).toBe("http://localhost:3000/automations");
+    expect(mocks.ensureWorkspace).not.toHaveBeenCalled();
+    expect(mocks.acceptInvitation).not.toHaveBeenCalled();
+  });
+
+  it("accepts a valid invite for a first-time sign-in", async () => {
+    mocks.findInvitationByTokenHash.mockResolvedValue({
+      id: "inv_1", workspaceId: "ws_invited", email: "person@example.com", role: "MEMBER",
+      tokenHash: "hash", invitedByUserId: "u_1",
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(), createdAt: new Date().toISOString(),
+    });
+    const { state } = validState({ next: "/automations", invite: "raw-token" });
+    const response = await GET(callbackRequest(`?code=abc&state=${state}`, state));
+    expect(mocks.acceptInvitation).toHaveBeenCalledWith("inv_1", expect.any(String));
+    expect(mocks.ensureWorkspace).not.toHaveBeenCalled();
+    expect(location(response)).toBe("http://localhost:3000/automations");
+  });
+
+  it("provisions a fresh workspace for a first-time sign-in with no invite", async () => {
+    const { state } = validState({ next: "/automations" });
+    const response = await GET(callbackRequest(`?code=abc&state=${state}`, state));
+    expect(mocks.ensureWorkspace).toHaveBeenCalledWith("workspace_fixed", "person@example.com");
+    expect(location(response)).toBe("http://localhost:3000/automations");
+  });
+});

@@ -29,6 +29,9 @@ x-application-environment: &application-environment
   FACEBOOK_API_VERSION: ${FACEBOOK_API_VERSION:-v25.0}
   FACEBOOK_SCOPES: ${FACEBOOK_SCOPES:-pages_show_list,pages_manage_engagement,pages_manage_metadata,pages_read_engagement,pages_read_user_content}
   FACEBOOK_TOKEN_ENCRYPTION_KEY: ${FACEBOOK_TOKEN_ENCRYPTION_KEY:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://linkar.in/api/auth/oauth/google/callback}
   FOLLOW_GATED_CAMPAIGNS_ENABLED: ${FOLLOW_GATED_CAMPAIGNS_ENABLED:-false}
   TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
   WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}

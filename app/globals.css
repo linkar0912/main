@@ -1654,16 +1654,17 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   background: var(--canvas, #ffffff);
   display: grid;
   place-items: center;
-  padding: clamp(96px, 12vh, 132px) clamp(20px, 4vw, 48px) clamp(48px, 8vh, 96px);
+  padding: clamp(112px, 13vh, 148px) clamp(20px, 4vw, 48px) clamp(52px, 7vh, 80px);
   min-block-size: 100svh;
 }
 .auth-page-frame {
   inline-size: 100%;
-  max-inline-size: 440px;
+  max-inline-size: 460px;
   display: grid;
-  gap: var(--space-4, 16px);
+  gap: 12px;
   text-align: center;
   justify-items: center;
+  margin-inline: auto;
 }
 .auth-page-frame h1 {
   font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif;
@@ -1679,14 +1680,14 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   color: var(--slate);
   font-size: .98rem;
   line-height: 1.55;
-  margin: 0 0 var(--space-2, 8px);
+  margin: 0 0 10px;
   max-inline-size: 42ch;
 }
 .auth-page-frame .oauth-buttons {
   display: grid;
   gap: var(--space-3, 12px);
   inline-size: 100%;
-  margin-top: var(--space-3, 12px);
+  margin-top: 6px;
 }
 .auth-page-frame .auth-page-divider {
   display: flex;
@@ -1698,7 +1699,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   text-transform: uppercase;
   letter-spacing: .04em;
   inline-size: 100%;
-  margin: var(--space-2, 8px) 0 0;
+  margin: 4px 0;
 }
 .auth-page-frame .auth-page-divider::before,
 .auth-page-frame .auth-page-divider::after {
@@ -1709,10 +1710,11 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 }
 .auth-page-frame .login-form {
   display: grid;
-  gap: var(--space-4, 16px);
-  margin-top: var(--space-3, 12px);
+  gap: 14px;
+  margin-top: 2px;
   inline-size: 100%;
 }
+.auth-page-frame .login-form .field { align-items: stretch; text-align: center; }
 .auth-page-frame .login-form .button,
 .auth-page-frame .login-form button[type="submit"] { width: 100%; justify-content: center; }
 .auth-page-frame .auth-page-hint {
@@ -1724,7 +1726,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .auth-page-frame .auth-page-foot {
   color: var(--muted);
   font-size: .88rem;
-  margin: var(--space-3, 12px) 0 0;
+  margin: 2px 0 0;
 }
 .auth-page-frame .auth-page-foot a {
   color: var(--ink-strong);
@@ -1767,8 +1769,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 }
 
 @media (max-width: 640px) {
-  .auth-page-section { padding: clamp(88px, 14vh, 120px) 20px clamp(40px, 6vh, 72px); }
+  .auth-page-section { padding: 104px 20px 48px; }
   .auth-page-frame { max-inline-size: 100%; }
+  .auth-page-frame h1 { font-size: clamp(2rem, 10vw, 2.45rem); }
 }
 
 /* ── Responsive ────────────────────────────────────────────────────────── */

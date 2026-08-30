@@ -12,7 +12,7 @@ describe("OAuthButtons", () => {
     const google = screen.getByRole("link", { name: /continue with google/i });
     const facebook = screen.getByRole("link", { name: /continue with facebook/i });
 
-    expect(google.getAttribute("href")).toBe("/api/auth/oauth/google?next=%2Fdashboard");
+    expect(google.getAttribute("href")).toBe("/api/auth/oauth/google/start?next=%2Fdashboard");
     expect(facebook.getAttribute("href")).toBe("/api/auth/oauth/facebook?next=%2Fdashboard");
   });
 

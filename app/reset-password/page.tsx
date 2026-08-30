@@ -31,7 +31,6 @@ export default async function ResetPasswordPage({
     if (params.error === "invalid") {
         return (
             <Card>
-                <p className="eyebrow">Account recovery</p>
                 <h1>Reset link invalid</h1>
                 <p className="auth-page-lede">This reset link is invalid, already used, or expired.</p>
                 <p className="auth-page-foot"><Link className="text-link" href="/forgot-password">Request a new link</Link></p>
@@ -47,7 +46,6 @@ export default async function ResetPasswordPage({
     if (!data?.claims) {
         return (
             <Card>
-                <p className="eyebrow">Account recovery</p>
                 <h1>Set a new password</h1>
                 <p className="auth-page-lede">Open the reset link from your email to choose a new password.</p>
                 <p className="auth-page-foot"><Link className="text-link" href="/forgot-password">Request a reset link</Link></p>
@@ -57,7 +55,6 @@ export default async function ResetPasswordPage({
 
     return (
         <Card>
-            <p className="eyebrow">Account recovery</p>
             <h1>Set a new password</h1>
             <p className="auth-page-lede">Twelve characters or more. A passphrase you have not used elsewhere works best.</p>
             {params.error === "password" ? (

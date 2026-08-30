@@ -17,7 +17,6 @@ export default async function ForgotPasswordPage({
             <MarketingHeader />
             <main className="auth-page-section" data-auth-tone="editorial">
                 <div className="auth-page-frame">
-                    <p className="eyebrow">Account recovery</p>
                     <h1>Reset your password</h1>
                     <p className="auth-page-lede">
                         Request a reset link and you will be back in your control room within minutes.

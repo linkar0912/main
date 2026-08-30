@@ -6,6 +6,14 @@ type OAuthButtonsProps = {
   invite?: string;
 };
 
+// Google talks to Google directly (see src/lib/auth/google-oauth.ts) so its
+// consent screen shows our own domain; Facebook still goes through
+// Supabase's hosted relay at /api/auth/oauth/facebook.
+const START_PATH = {
+  google: "/api/auth/oauth/google/start",
+  facebook: "/api/auth/oauth/facebook",
+} as const;
+
 function ProviderLink({
   provider,
   label,
@@ -23,7 +31,7 @@ function ProviderLink({
   if (invite) params.set("invite", invite);
   return (
     <a
-      href={`/api/auth/oauth/${provider}?${params.toString()}`}
+      href={`${START_PATH[provider]}?${params.toString()}`}
       className="button button-secondary button-block"
       style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }}
     >

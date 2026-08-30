@@ -15,7 +15,6 @@ export function LoginScreen({ nextPath, error }: LoginScreenProps) {
       <MarketingHeader />
       <main className="auth-page-section" data-login-layout="conversation-desk" data-auth-tone="editorial">
         <div className="auth-page-frame">
-          <p className="eyebrow">Welcome back</p>
           <h1>Keep the right conversations moving.</h1>
           <p className="auth-page-lede">
             Pick up where your flows left off, with every useful next step close at hand.

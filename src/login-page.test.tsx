@@ -16,6 +16,7 @@ describe("LoginPage", () => {
     const banner = screen.getByRole("banner");
     expect(within(banner).getByRole("link", { name: "Linkar home" }).textContent).toBe("Linkar");
     expect(screen.getByRole("heading", { name: "Keep the right conversations moving.", level: 1 })).toBeTruthy();
+    expect(screen.queryByText("Welcome back")).toBeNull();
   });
 
   it("keeps the login endpoint, next path, fields, and recovery links intact", async () => {

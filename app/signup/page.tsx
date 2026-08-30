@@ -21,7 +21,6 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                 <MarketingHeader />
                 <main className="auth-page-section" data-auth-tone="editorial">
                     <div className="auth-page-frame">
-                        <p className="eyebrow">Get started</p>
                         <h1>Check your email</h1>
                         <p className="auth-page-lede">
                             We sent a confirmation link. Open it to finish creating your account.
@@ -52,7 +51,6 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             <MarketingHeader />
             <main className="auth-page-section" data-auth-tone="editorial">
                 <div className="auth-page-frame">
-                    <p className="eyebrow">{invite ? "Team invitation" : "Get started"}</p>
                     <h1>{invite ? "Almost there." : "Create your account."}</h1>
                     <p className="auth-page-lede">
                         {invite
