@@ -1204,7 +1204,11 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .quickstart-card strong { font-size: .98rem; letter-spacing: -.01em; }
 .quickstart-card-meta { align-items: center; display: flex; gap: 9px; }
 .quickstart-card-meta span { color: var(--muted); display: inline-flex; align-items: center; font-size: .76rem; gap: 5px; }
-.quickstart-badge { background: var(--volt); border-radius: 5px; color: var(--on-volt); font-size: .56rem; font-weight: 800; letter-spacing: .08em; padding: 3px 7px; text-transform: uppercase; }
+/* `.quickstart-badge` is a span inside `.quickstart-card-meta`, so the parent
+   rule above (specificity 0,1,1) would otherwise paint over its own color.
+   Re-targeting through the parent raises this rule to 0,2,1 so the dark
+   `--on-volt` text on the volt-yellow fill stays legible. */
+.quickstart-card-meta .quickstart-badge { background: var(--volt); border-radius: 5px; color: var(--on-volt); font-size: .56rem; font-weight: 800; letter-spacing: .08em; padding: 3px 7px; text-transform: uppercase; }
 @media (max-width: 980px) { .quickstart-grid { grid-template-columns: 1fr; } }
 
 /* ── Theme toggle ─────────────────────────────────────────────────────────── */
@@ -1653,48 +1657,86 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 
 /* Help centre */
 .help-hero {
+  align-items: flex-start;
   animation: rise .45s var(--ease-out) both;
-  background: linear-gradient(125deg, var(--ink) 0%, #3a1538 72%, var(--accent-hover) 125%);
-  border: 1px solid transparent;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  color: #f4f4f5;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
   margin-bottom: var(--space-5);
-  padding: var(--space-7, 30px);
+  padding: var(--space-6) var(--space-6);
 }
-.help-kicker { color: var(--accent-tint-dark); font-size: var(--type-meta); font-weight: 800; letter-spacing: .12em; margin-bottom: 6px; text-transform: uppercase; }
-.help-hero h1 { color: var(--white); margin-bottom: 6px; }
-.help-lede { color: var(--accent-pale-dark); font-size: var(--type-lede); margin-bottom: var(--space-4); max-width: 540px; }
-.help-search { display: flex; }
+.help-kicker {
+  color: var(--accent);
+  font-size: var(--type-meta);
+  font-weight: 800;
+  letter-spacing: .12em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.help-hero h1 { color: var(--ink); margin-bottom: 6px; }
+.help-lede { color: var(--slate); font-size: var(--type-lede); margin-bottom: var(--space-4); max-width: 540px; }
+.help-search { display: flex; width: 100%; max-width: 560px; }
 .help-search input {
-  background: rgba(255, 255, 255, .1);
-  border: 1px solid rgba(255, 255, 255, .2);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  color: var(--white);
+  color: var(--ink);
   flex: 1;
   min-height: 44px;
   outline: 0;
   padding: 9px 14px;
 }
-.help-search input::placeholder { color: var(--accent-tint-dark); }
-.help-search input:focus { background: rgba(255, 255, 255, .16); }
+.help-search input::placeholder { color: var(--muted); }
+.help-search input:focus { border-color: var(--accent); }
 .help-search button {
   align-items: center;
-  background: var(--accent);
+  background: var(--ink);
   border: 0;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  color: var(--on-accent);
+  color: var(--white);
   display: flex;
   font-weight: 800;
   justify-content: center;
   min-height: 44px;
   padding: 0 var(--space-4);
+  transition: background var(--speed);
 }
+.help-search button:hover { background: var(--ink-strong); }
+/* In dark mode `--ink` flips to a near-white token (it carries body text), so
+   the default ink-fill on the search button collides with the white icon.
+   Pin the button to the lightest "ink" surface and swap the icon to the dark
+   "paper" token so the search affordance stays visible on the dark canvas. */
+[data-theme="dark"] .help-search button { background: #ececee; color: #101116; }
+[data-theme="dark"] .help-search button:hover { background: #ffffff; }
 .help-content-head { margin-bottom: var(--space-5); }
 .help-content-head h2 { margin-bottom: 4px; }
 .help-content-head p { margin: 0; }
-.faq-list { display: flex; flex-direction: column; margin-bottom: var(--space-6); }
-.faq-item { border-bottom: 1px solid var(--line); transition: background var(--speed); }
-.faq-item:last-child { border-bottom: 0; }
+.help-topic-groups { display: grid; gap: var(--space-5); margin-bottom: var(--space-6); }
+.help-topic-group { display: grid; gap: var(--space-3); }
+.help-topic-group-label {
+  color: var(--muted);
+  font-size: var(--type-meta);
+  font-weight: 800;
+  letter-spacing: .12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+.faq-list { display: grid; gap: var(--space-3); margin-bottom: var(--space-6); }
+.faq-item {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color var(--speed), box-shadow var(--speed);
+}
+.faq-item:hover { border-color: var(--line-strong); }
+.faq-item.is-open {
+  border-color: var(--accent-line);
+  box-shadow: 0 6px 18px rgb(15 15 17 / 5%);
+}
 .faq-question {
   align-items: center;
   background: transparent;
@@ -1710,9 +1752,30 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   width: 100%;
 }
 .faq-question:hover { background: var(--hover-wash); }
-.faq-chevron { color: var(--muted); transition: transform var(--speed); }
-.faq-item.is-open .faq-chevron { color: var(--accent); transform: rotate(180deg); }
-.faq-answer { animation: fade-in .25s ease both; color: var(--slate); display: flex; flex-direction: column; gap: 8px; font-size: var(--type-body); line-height: 1.65; padding: 0 var(--space-4) var(--space-4); }
+.faq-chevron {
+  background: var(--surface-soft);
+  border-radius: 999px;
+  color: var(--muted);
+  flex-shrink: 0;
+  padding: 4px;
+  transition: transform var(--speed), background var(--speed), color var(--speed);
+}
+.faq-item.is-open .faq-chevron {
+  background: var(--accent-soft);
+  color: var(--accent);
+  transform: rotate(180deg);
+}
+.faq-answer {
+  animation: fade-in .25s ease both;
+  border-top: 1px solid var(--line);
+  color: var(--slate);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--type-body);
+  line-height: 1.65;
+  padding: var(--space-4);
+}
 .faq-answer a { color: var(--accent); font-weight: 700; }
 .faq-empty { background: var(--surface-soft); border: 1px dashed var(--line-strong); border-radius: var(--radius-md); color: var(--muted); font-size: .85rem; padding: var(--space-6); text-align: center; }
 .help-contact-card { margin-bottom: var(--space-6); text-align: left; }

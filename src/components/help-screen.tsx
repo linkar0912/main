@@ -307,7 +307,7 @@ export function HelpScreen({ supportEmail }: { supportEmail: string }) {
           </div>
         </header>
 
-        <section className="help-hero grid-texture" aria-label="Search help articles">
+        <section className="help-hero" aria-label="Search help articles">
           <p className="help-kicker">Help centre</p>
           <h1>How can we help?</h1>
           <p className="help-lede">
@@ -371,28 +371,30 @@ export function HelpScreen({ supportEmail }: { supportEmail: string }) {
             {visibleTopics.length === 0 ? (
               <p className="faq-empty">No guides match “{query}”. Try a different word, or email us below.</p>
             ) : (
-              <div className="faq-list">
+              <div className="help-topic-groups">
                 {visibleTopics.map((topic) => (
-                  <div key={topic.id} style={{ display: "contents" }}>
-                    {showGroupLabels && <p className="sidebar-label">{topic.title}</p>}
-                    {topic.articles.map((article, index) => {
-                      const key = `${topic.id}:${index}`;
-                      const open = openArticle === key;
-                      return (
-                        <div className={`faq-item ${open ? "is-open" : ""}`} key={key}>
-                          <button
-                            className="faq-question"
-                            type="button"
-                            aria-expanded={open}
-                            onClick={() => setOpenArticle(open ? null : key)}
-                          >
-                            {article.q}
-                            <CircleHelp className="faq-chevron" size={16} />
-                          </button>
-                          {open && <div className="faq-answer">{article.a}</div>}
-                        </div>
-                      );
-                    })}
+                  <div key={topic.id} className="help-topic-group">
+                    {showGroupLabels && <p className="help-topic-group-label">{topic.title}</p>}
+                    <div className="faq-list">
+                      {topic.articles.map((article, index) => {
+                        const key = `${topic.id}:${index}`;
+                        const open = openArticle === key;
+                        return (
+                          <div className={`faq-item ${open ? "is-open" : ""}`} key={key}>
+                            <button
+                              className="faq-question"
+                              type="button"
+                              aria-expanded={open}
+                              onClick={() => setOpenArticle(open ? null : key)}
+                            >
+                              {article.q}
+                              <CircleHelp className="faq-chevron" size={16} />
+                            </button>
+                            {open && <div className="faq-answer">{article.a}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>
