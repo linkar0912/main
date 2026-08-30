@@ -2,8 +2,8 @@
   min-block-size: auto;
   padding: clamp(104px, 9vw, 144px) clamp(32px, 4.45vw, 72px) 96px;
   overflow: hidden;
-  color: #050505;
-  background: #eee4f4;
+  color: var(--marketing-on-inverse);
+  background: #24152f;
   scroll-margin-top: 88px;
 }
 
@@ -37,7 +37,7 @@
 .body {
   max-inline-size: 46ch;
   margin: 36px auto 0;
-  color: rgb(5 5 5 / 72%);
+  color: #d5c7dc;
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: var(--marketing-lede-size);
   font-weight: 600;
@@ -70,20 +70,20 @@
 }
 
 .action:focus-visible {
-  outline: 2px solid #050505;
+  outline: 2px solid var(--marketing-on-inverse);
   outline-offset: 3px;
 }
 
-.primaryAction { color: #050505; background: #fa0cf7; }
+.primaryAction { color: var(--marketing-on-accent); background: #fa0cf7; }
 .primaryAction:hover { background: #ff5ff0; }
 
 .secondaryAction {
-  color: #050505;
+  color: var(--marketing-on-inverse);
   background: transparent;
-  border-color: rgb(5 5 5 / 28%);
+  border-color: rgb(244 244 245 / 34%);
 }
 
-.secondaryAction:hover { background: rgb(5 5 5 / 8%); border-color: #050505; }
+.secondaryAction:hover { background: rgb(244 244 245 / 10%); border-color: var(--marketing-on-inverse); }
 
 .figure {
   display: flex;
@@ -95,8 +95,8 @@
   padding: 30px;
   flex-direction: column;
   justify-content: flex-start;
-  color: #ffffff;
-  background: #050505;
+  color: var(--marketing-on-inverse);
+  background: var(--marketing-inverse);
   border-radius: 28px;
   box-shadow: 0 24px 0 rgb(5 5 5 / 8%);
   transform: rotate(-2deg);

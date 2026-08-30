@@ -1,7 +1,7 @@
 .section {
   padding: clamp(120px, 11vw, 176px) clamp(32px, 4.45vw, 72px);
-  color: #050505;
-  background: #f7f6ef;
+  color: var(--marketing-text);
+  background: var(--marketing-panel);
   scroll-margin-top: 88px;
 }
 
@@ -54,8 +54,8 @@
   min-block-size: 680px;
   padding: clamp(24px, 3vw, 40px);
   flex-direction: column;
-  background: #ffffff;
-  border: 1px solid rgb(5 5 5 / 12%);
+  background: var(--marketing-raised);
+  border: 1px solid var(--marketing-border);
   border-radius: 32px;
 }
 
@@ -99,7 +99,7 @@
   align-items: center;
   gap: 8px;
   margin-top: 16px;
-  color: #050505;
+  color: var(--marketing-text);
   font-size: .7rem;
   font-weight: 800;
   letter-spacing: .04em;

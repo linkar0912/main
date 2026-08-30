@@ -1,7 +1,7 @@
 .section {
   padding: clamp(120px, 11vw, 176px) clamp(32px, 4.45vw, 72px);
-  color: #050505;
-  background: #ffffff;
+  color: var(--marketing-text);
+  background: var(--marketing-canvas);
   scroll-margin-top: 88px;
 }
 
@@ -30,13 +30,13 @@
   border-radius: 32px;
 }
 
-.manual { background: #f7f6ef; }
+.manual { background: var(--marketing-panel); }
 
 .linkar {
   position: relative;
   overflow: hidden;
-  color: #ffffff;
-  background: #050505;
+  color: var(--marketing-on-inverse);
+  background: var(--marketing-inverse);
 }
 
 .linkar::after {
@@ -90,7 +90,7 @@
   block-size: 20px;
   flex: 0 0 auto;
   place-items: center;
-  color: rgb(5 5 5 / 52%);
+  color: var(--marketing-muted);
   border: 1px solid currentcolor;
   border-radius: 50%;
   font-size: .84rem;

@@ -1,8 +1,8 @@
 .section {
   overflow: hidden;
-  color: #050505;
-  background: #ffffff;
-  border-block: 1px solid rgb(5 5 5 / 14%);
+  color: var(--marketing-text);
+  background: var(--marketing-raised);
+  border-block: 1px solid var(--marketing-border);
 }
 
 .inner {
@@ -16,7 +16,7 @@
   align-items: center;
   min-block-size: clamp(112px, 8.2vw, 132px);
   padding: 20px clamp(24px, 2.5vw, 44px);
-  border-inline-end: 1px solid rgb(5 5 5 / 12%);
+  border-inline-end: 1px solid var(--marketing-border);
 }
 
 .workflowTag,
@@ -66,7 +66,7 @@
   flex: 0 0 clamp(430px, 36vw, 560px);
   min-block-size: inherit;
   padding: 18px clamp(20px, 2.3vw, 38px);
-  border-inline-end: 1px solid rgb(5 5 5 / 12%);
+  border-inline-end: 1px solid var(--marketing-border);
 }
 
 .exampleHeader {
@@ -100,7 +100,7 @@
 
 .workflowTag {
   margin: 0 0 3px;
-  color: #747474;
+  color: var(--marketing-muted);
   font-size: .53rem;
   font-weight: 700;
   letter-spacing: .08em;
@@ -117,7 +117,7 @@
 
 .role {
   margin: 4px 0 0;
-  color: #6c6c6c;
+  color: var(--marketing-muted);
   font-size: .55rem;
   font-weight: 650;
   letter-spacing: .02em;
@@ -143,7 +143,7 @@
   align-items: center;
   justify-content: space-between;
   padding-block-start: 5px;
-  color: #737373;
+  color: var(--marketing-muted);
   font-size: .51rem;
   font-weight: 700;
   letter-spacing: .06em;
@@ -151,7 +151,7 @@
 }
 
 .exampleFooter span:last-child {
-  color: #050505;
+  color: var(--marketing-text);
   font-size: .95rem;
   letter-spacing: 0;
   text-transform: none;
@@ -203,7 +203,7 @@
     min-block-size: 96px;
     padding: 24px 20px 22px;
     border-inline-end: 0;
-    border-block-end: 1px solid rgb(5 5 5 / 12%);
+    border-block-end: 1px solid var(--marketing-border);
   }
 
   .statement h2 {

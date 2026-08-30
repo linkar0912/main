@@ -1,7 +1,7 @@
 .section {
   position: relative;
   scroll-margin-top: 6rem;
-  color: #050505;
+  color: var(--marketing-on-volt);
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   background: #fff100;
 }
@@ -838,7 +838,7 @@
     min-block-size: auto;
     max-inline-size: none;
     padding: 64px 0;
-    border-bottom: 1px solid #050505;
+    border-bottom: 1px solid var(--marketing-on-volt);
     opacity: 1;
     transform: none;
   }
@@ -916,7 +916,7 @@
     min-block-size: auto;
     max-inline-size: none;
     padding: 0 0 72px;
-    border-bottom: 1px solid #050505;
+    border-bottom: 1px solid var(--marketing-on-volt);
     opacity: 1;
     transform: none;
   }
@@ -1008,7 +1008,7 @@
     min-block-size: auto;
     max-inline-size: none;
     padding: 80px 0;
-    border-bottom: 1px solid #050505;
+    border-bottom: 1px solid var(--marketing-on-volt);
     opacity: 1;
     transform: none;
     transition: none;

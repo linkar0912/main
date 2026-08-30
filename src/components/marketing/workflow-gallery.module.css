@@ -1,7 +1,7 @@
 .section {
   padding: clamp(120px, 11vw, 176px) clamp(32px, 4.45vw, 72px);
-  color: #050505;
-  background: #ffffff;
+  color: var(--marketing-text);
+  background: var(--marketing-canvas);
   scroll-margin-top: 88px;
 }
 
@@ -48,7 +48,7 @@
   display: grid;
   min-block-size: 92px;
   padding: 18px 18px 18px 24px;
-  color: rgb(5 5 5 / 58%);
+  color: var(--marketing-muted);
   text-align: left;
   background: transparent;
   border: 0;
@@ -83,13 +83,13 @@
 }
 
 .tab[aria-selected="true"] {
-  color: #050505;
+  color: var(--marketing-text);
   border-inline-start-color: #fa0cf7;
 }
 
 .tab:focus-visible,
 .accordionTrigger:focus-visible {
-  outline: 2px solid #050505;
+  outline: 2px solid var(--marketing-text);
   outline-offset: 3px;
 }
 
@@ -98,7 +98,7 @@
   grid-column: 5 / -1;
   min-block-size: 600px;
   aspect-ratio: 1.32 / 1;
-  background: #f7f6ef;
+  background: var(--marketing-panel);
   border-radius: 32px;
 }
 
@@ -257,8 +257,8 @@
   .header h2 { font-size: var(--marketing-section-title-size); }
   .desktopGallery { display: none; }
   .mobileAccordion { display: block; margin-top: 48px; }
-  .accordionItem { border-block-start: 1px solid rgb(5 5 5 / 16%); }
-  .accordionItem:last-child { border-block-end: 1px solid rgb(5 5 5 / 16%); }
+  .accordionItem { border-block-start: 1px solid var(--marketing-border); }
+  .accordionItem:last-child { border-block-end: 1px solid var(--marketing-border); }
   .accordionItem h3 { margin: 0; }
   .accordionTrigger {
     display: flex;
@@ -267,7 +267,7 @@
     padding: 18px 0;
     justify-content: space-between;
     align-items: center;
-    color: #050505;
+    color: var(--marketing-text);
     text-align: left;
     background: transparent;
     border: 0;

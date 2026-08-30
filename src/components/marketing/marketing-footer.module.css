@@ -2,8 +2,8 @@
   min-block-size: 900px;
   padding: 96px clamp(32px, 4.45vw, 72px) 24px;
   overflow: hidden;
-  color: #ffffff;
-  background: #050505;
+  color: var(--marketing-on-inverse, #f4f4f5);
+  background: var(--marketing-inverse, #101116);
 }
 
 .frame { inline-size: min(100%, 1440px); min-block-size: 780px; margin-inline: auto; }
@@ -21,10 +21,10 @@
 }
 
 .brand { grid-column: 1 / span 4; max-inline-size: 34ch; }
-.brandLink { display: inline-flex; min-block-size: 44px; align-items: center; gap: 12px; color: #ffffff; font-family: var(--font-display, ui-sans-serif, sans-serif); font-size: 1.4rem; font-weight: 800; letter-spacing: -.04em; }
+.brandLink { display: inline-flex; min-block-size: 44px; align-items: center; gap: 12px; color: var(--marketing-on-inverse, #f4f4f5); font-family: var(--font-display, ui-sans-serif, sans-serif); font-size: 1.4rem; font-weight: 800; letter-spacing: -.04em; }
 .brandLink:focus-visible,
 .navigation a:focus-visible { outline: 2px solid #fff100; outline-offset: 3px; }
-.brandLink svg { color: #ffffff; flex: 0 0 auto; }
+.brandLink svg { color: var(--marketing-on-inverse, #f4f4f5); flex: 0 0 auto; }
 .brand p { margin: 28px 0 0; color: rgb(255 255 255 / 72%); font-family: var(--font-sans, ui-sans-serif, sans-serif); font-size: 1rem; font-weight: 600; line-height: 1.5; }
 
 .navigation { grid-column: 6 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 36px; }
@@ -40,7 +40,7 @@
 
 .wordmark {
   margin: 64px 0 -20px;
-  color: #ffffff;
+  color: var(--marketing-on-inverse, #f4f4f5);
   font-family: var(--font-display, ui-sans-serif, sans-serif);
   font-size: clamp(9rem, 22vw, 22rem);
   font-weight: 900;

@@ -27,4 +27,38 @@ describe("marketing theme contract", () => {
     expect(css).toMatch(/background:\s*var\(--marketing-overlay,/);
     expect(css).toMatch(/border[^;]*:\s*1px solid var\(--marketing-border,/);
   });
+
+  it("themes every adaptive marketing chapter", () => {
+    const adaptiveModules = [
+      "./proof-rail.module.css",
+      "./manifesto-section.module.css",
+      "./surface-runway.module.css",
+      "./before-after-section.module.css",
+      "./workflow-gallery.module.css",
+      "./setup-steps.module.css",
+      "./final-cta.module.css",
+    ];
+
+    for (const name of adaptiveModules) {
+      expect(cssFile(name), name).toMatch(
+        /var\(--marketing-(canvas|raised|panel|text|muted|border|inverse|on-inverse|on-accent)/,
+      );
+    }
+  });
+
+  it("preserves branded yellow and dark chapters with readable foregrounds", () => {
+    const story = cssFile("./automation-story.module.css");
+    const channels = cssFile("./channel-showcase.module.css");
+    const faq = cssFile("./faq-section.module.css");
+    const footer = cssFile("./marketing-footer.module.css");
+
+    expect(story).toMatch(/color:\s*var\(--marketing-on-volt\)/);
+    expect(channels).toMatch(/background:\s*#fff100/);
+    expect(channels).toMatch(/color:\s*var\(--marketing-on-volt\)/);
+    expect(channels).toMatch(/\.icon\s*{[^}]*background:\s*#ffffff/);
+    expect(faq).toMatch(/background:\s*var\(--marketing-inverse\)/);
+    expect(faq).toMatch(/color:\s*var\(--marketing-on-inverse\)/);
+    expect(footer).toMatch(/background:\s*var\(--marketing-inverse,/);
+    expect(footer).toMatch(/color:\s*var\(--marketing-on-inverse,/);
+  });
 });

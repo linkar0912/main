@@ -1,7 +1,7 @@
 .section {
   padding: clamp(120px, 11vw, 176px) clamp(32px, 4.45vw, 72px);
-  color: #ffffff;
-  background: #050505;
+  color: var(--marketing-on-inverse);
+  background: var(--marketing-inverse);
   scroll-margin-top: 88px;
 }
 
@@ -39,7 +39,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 24px;
-  color: #ffffff;
+  color: var(--marketing-on-inverse);
   font-family: var(--font-display, ui-sans-serif, sans-serif);
   font-size: clamp(1.3rem, 1.8vw, 1.8rem);
   font-weight: 700;

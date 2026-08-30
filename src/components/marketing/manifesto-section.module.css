@@ -4,8 +4,8 @@
   min-block-size: max(86svh, 720px);
   place-items: center;
   padding: clamp(120px, 14vw, 220px) 32px;
-  color: #050505;
-  background: #ffffff;
+  color: var(--marketing-text);
+  background: var(--marketing-canvas);
   opacity: 1;
   transform: none;
   transition: none;
@@ -38,7 +38,7 @@
   justify-self: center;
   max-inline-size: 620px;
   margin: 44px auto 0;
-  color: rgb(5 5 5 / 72%);
+  color: var(--marketing-muted);
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: var(--marketing-lede-size);
   line-height: 1.5;

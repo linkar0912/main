@@ -3,7 +3,7 @@
   overflow: hidden;
   margin-block-start: clamp(72px, 8vw, 132px);
   padding: 128px clamp(24px, 4.45vw, 72px);
-  color: #050505;
+  color: var(--marketing-on-volt);
   background: #fff100;
   scroll-margin-top: 88px;
 }
