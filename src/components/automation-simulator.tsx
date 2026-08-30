@@ -90,7 +90,7 @@ export function AutomationSimulator({ buildDefinition }: { buildDefinition: () =
           />
         </label>
       </div>
-      <button className="button button-secondary button-small" type="button" onClick={run} disabled={running}>
+      <button className="button button-secondary button-small field-spaced" type="button" onClick={run} disabled={running}>
         {running ? "Running…" : "Run simulation"}
       </button>
       {error && <p className="form-error" role="alert">{error}</p>}

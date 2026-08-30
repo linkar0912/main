@@ -1100,7 +1100,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .builder-main { min-width: 0; }
 .builder-intro { align-items: flex-start; display: flex; justify-content: space-between; margin-bottom: var(--space-6); }
 .builder-intro h1 { margin-bottom: 9px; }
-.builder-footer { align-items: center; border-top: 1px solid var(--line); display: flex; justify-content: space-between; margin-top: var(--space-5); padding-top: var(--space-4); }
+.builder-footer { align-items: center; display: flex; justify-content: space-between; margin-top: var(--space-5); padding-top: var(--space-4); }
 .builder-actions { display: flex; gap: 10px; }
 .builder-preview { position: sticky; top: 24px; }
 .preview-line { background: var(--accent); border-radius: 2px; height: 2px; margin: var(--space-4) 0 var(--space-6); width: 41px; }
