@@ -98,6 +98,8 @@ Environment values Compose requires (`?` means the deploy fails fast if unset):
 | `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` | required when Facebook Pages are enabled |
 | `FACEBOOK_REDIRECT_URI`, `FACEBOOK_VERIFY_TOKEN` | required when Facebook Pages are enabled, must match the Facebook app exactly |
 | `FACEBOOK_TOKEN_ENCRYPTION_KEY` | optional dedicated 64-hex-character key; falls back to `META_TOKEN_ENCRYPTION_KEY` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | required when Google sign-in is enabled; hides the button when unset |
+| `GOOGLE_REDIRECT_URI` | required when Google sign-in is enabled, must match the redirect URI registered in Google Cloud Console exactly |
 | `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL` | required |
 
 `REDIS_URL` is assembled inside the Compose file from `VALKEY_PASSWORD`
@@ -358,6 +360,63 @@ Keep both verify tokens server-only and enter the matching value in each Meta
 app when validating its webhook. See
 [`docs/meta-app-review.md`](../docs/meta-app-review.md) for the reviewer test
 script and App Review checklist.
+
+---
+
+## 7a. Configure Google and Facebook sign-in
+
+Two separate mechanisms, not one - Google talks to Google directly; Facebook
+still goes through Supabase's hosted OAuth relay. See
+`src/lib/auth/google-oauth.ts` and `app/api/auth/oauth/facebook/route.ts` for
+the code-level reasoning.
+
+**Google.** Google's consent screen shows whichever domain owns the
+`redirect_uri` in the authorize request. Supabase's hosted relay uses its own
+project domain there, which is why this app bypasses it and talks to Google
+directly - the tradeoff is one extra manual registration step:
+
+- Google Cloud Console → APIs & Services → Credentials → the OAuth client used
+  for `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` → **Authorized redirect URIs**
+  must include `https://linkar.in/api/auth/oauth/google/callback` (our own
+  callback, not Supabase's `.../auth/v1/callback` - that one is unused by this
+  flow even though Supabase's Google provider must still be enabled below).
+- Supabase Dashboard → Authentication → Sign In / Providers → Google →
+  enabled, with the same Client ID/Secret. This is still required even though
+  Supabase's own `/authorize` redirect isn't used: `signInWithIdToken()`
+  validates the ID token's audience against this configuration.
+- The OIDC `nonce` sent to Google must be a SHA-256 hash of the raw nonce
+  passed to `signInWithIdToken()` (see `buildGoogleAuthorizeUrl` in
+  `src/lib/auth/google-oauth.ts`) - Supabase hashes whatever raw nonce it's
+  given and compares that hash to the ID token's `nonce` claim, so the claim
+  has to already be a hash for the two to match. Getting this backwards
+  produces `{"error":"Nonces mismatch"}` in the logs with no other symptom.
+
+**Facebook.** Stays on Supabase's hosted relay (Facebook's classic web login
+doesn't produce an OIDC ID token the way Google's does, so there's no
+`signInWithIdToken` path available for it).
+
+- Meta App → **Facebook Login for Business** → Settings → **Valid OAuth
+  Redirect URIs** needs *both* URIs at once, for two different features on the
+  same app:
+  `https://<supabase-project-ref>.supabase.co/auth/v1/callback` (consumer
+  sign-in, relayed through Supabase) and `https://linkar.in/api/facebook/oauth/callback`
+  (the Page-automation connect flow in Settings, unrelated to sign-in).
+- Supabase Dashboard → Authentication → Sign In / Providers → Facebook →
+  enabled, with the Facebook App ID/Secret. There is no scopes field in this
+  panel.
+- **Supabase's Facebook provider defaults to requesting `scope=email` alone,
+  which this app's Facebook Login for Business setup rejects outright** as an
+  invalid scope combination (`Invalid Scopes: email` at Facebook's own
+  authorize endpoint, confirmed by hand-building the request directly against
+  `facebook.com/dialog/oauth` outside Supabase entirely - no App Review or
+  Meta-side permission grant fixes it). The code works around this by passing
+  `options: { scopes: "email public_profile" }` to `signInWithOAuth()` in
+  `app/api/auth/oauth/facebook/route.ts` - if this route is ever rewritten,
+  keep that option or the same error comes back.
+
+**Testing either flow end-to-end** needs a real account and a human click -
+curl can confirm the redirect chain reaches the right domain with the right
+scopes, but completing the actual consent screen isn't something to automate.
 
 ---
 
