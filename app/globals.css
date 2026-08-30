@@ -1236,6 +1236,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .wizard-progress-step.is-active .wizard-progress-index { background: var(--accent); color: var(--white); }
 .wizard-progress-step.is-active .wizard-progress-label, .wizard-progress-step.is-active { color: var(--ink); }
 .wizard-progress-step.is-done .wizard-progress-index { background: var(--ink); color: var(--white); }
+.wizard-progress-step.is-locked { cursor: not-allowed; opacity: .42; }
+.wizard-progress-step.is-locked .wizard-progress-index { background: var(--surface-sunk); color: var(--subtle); }
 .wizard-step.is-hidden { display: none; }
 @media (min-width: 860px) {
   .wizard-progress-label { display: inline; }

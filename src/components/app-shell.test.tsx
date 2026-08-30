@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
+const navigation = vi.hoisted(() => ({ pathname: "/dashboard" }));
+
+vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
 
 const { AppShell } = await import("./app-shell");
 
@@ -23,10 +25,28 @@ function stubShellFetch(role = "MEMBER", igAvatarUrl: string | null = null) {
 }
 
 describe("AppShell", () => {
+  beforeEach(() => {
+    vi.stubGlobal("scrollTo", vi.fn());
+  });
+
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     document.body.style.overflow = "";
+    navigation.pathname = "/dashboard";
+  });
+
+  it("resets workspace pages to the top after route changes", () => {
+    stubShellFetch();
+    const scrollTo = vi.mocked(window.scrollTo);
+
+    const view = render(<AppShell><main>Dashboard</main></AppShell>);
+    scrollTo.mockClear();
+
+    navigation.pathname = "/settings";
+    view.rerender(<AppShell><main>Settings</main></AppShell>);
+
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
   });
 
   it("shows the signed-in user's actual workspace role", async () => {

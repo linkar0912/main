@@ -89,6 +89,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   };
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  useEffect(() => {
     let mounted = true;
     getWorkspaceBootstrap()
       .then((data) => {

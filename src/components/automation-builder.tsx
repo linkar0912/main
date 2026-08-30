@@ -262,6 +262,7 @@ function AutomationBuilderV1({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [activeStep, setActiveStep] = useState(0);
+  const [highestUnlockedStep, setHighestUnlockedStep] = useState(0);
   const [previewView, setPreviewView] = useState<PreviewView>(initialDefinition.trigger.type === "comment" ? "post" : "dm");
   const connections = useInstagramConnections();
   const connection = connections[0] ?? null;
@@ -343,10 +344,73 @@ function AutomationBuilderV1({
     return key === "trigger" || key === "condition" ? "post" : "dm";
   }
 
+  function validateStep(key: (typeof wizardSteps)[number]): string | null {
+    if (key === "trigger") {
+      if (!name.trim()) return "Give this automation a name first.";
+      if (usesTextTrigger && triggerMatch === "keyword" && parseKeywords(keywords).length === 0) {
+        return "Add at least one keyword.";
+      }
+    }
+    if (key === "condition" && conditionType !== "" && parseCommaSeparated(conditionValue).length === 0) {
+      return "Add at least one condition value, or choose no extra condition.";
+    }
+    if (key === "action") {
+      if (actions.some((action) => action.type !== "send_image" && !action.text.trim())) return "Every message needs text.";
+      if (actions.some((action) => action.type === "send_image" && !action.imageUrl.trim())) return "Image actions need a public image URL.";
+      if (actions.some((action) => (action.type === "send_link" || action.type === "send_button") && !action.url.trim())) {
+        return "Link actions need a URL.";
+      }
+      if (actions.some((action) => action.type === "quick_replies" && !action.replies.some((reply) => reply.trim()))) {
+        return "Quick-reply actions need at least one reply chip.";
+      }
+      if (followUps.some((followUp) => followUp.text.trim() && followUp.buttonLabel.trim() && !followUp.url.trim())) {
+        return "A follow-up button needs its link URL.";
+      }
+    }
+    if (key === "email") {
+      if (emailCaptureEnabled && (!emailPrompt.trim() || !emailConfirmation.trim())) {
+        return "The email collector needs both a prompt and a confirmation message.";
+      }
+      if (emailCaptureEnabled && deliveryEnabled && (!deliverySubject.trim() || !deliveryMessage.trim())) {
+        return "The fulfillment email needs a subject and a message.";
+      }
+    }
+    if (key === "guardrails") {
+      const startsAt = localInputToIso(scheduleStart);
+      const endsAt = localInputToIso(scheduleEnd);
+      if (scheduleStart && !startsAt) return "Enter a valid start date and time.";
+      if (scheduleEnd && !endsAt) return "Enter a valid end date and time.";
+      if (startsAt && endsAt && startsAt > endsAt) return "The start must come before the end of the schedule.";
+    }
+    return null;
+  }
+
   function goToStep(next: number) {
     const clamped = Math.max(0, Math.min(wizardSteps.length - 1, next));
+    if (clamped > highestUnlockedStep) return;
+    if (clamped > clampedStep) {
+      const validationError = validateStep(wizardSteps[clampedStep]);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    }
+    setError("");
     setActiveStep(clamped);
     setPreviewView(previewViewForStep(wizardSteps[clamped]));
+  }
+
+  function goToNextStep() {
+    const validationError = validateStep(wizardSteps[clampedStep]);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    const next = Math.min(wizardSteps.length - 1, clampedStep + 1);
+    setError("");
+    setHighestUnlockedStep((current) => Math.max(current, next));
+    setActiveStep(next);
+    setPreviewView(previewViewForStep(wizardSteps[next]));
   }
 
   function updateAction(index: number, patch: Partial<FlowAction>) {
@@ -379,6 +443,7 @@ function AutomationBuilderV1({
   function changeTriggerType(value: ClassicTriggerType) {
     setTriggerType(value);
     setActiveStep(0);
+    setHighestUnlockedStep(0);
     setPreviewView(value === "comment" ? "post" : "dm");
     if (value === "comment") {
       setActions((current) => (current.every((action) => action.type === "private_reply") ? current : [newClassicAction("private_reply")]));
@@ -673,7 +738,8 @@ function AutomationBuilderV1({
             <button
               type="button"
               key={key}
-              className={`wizard-progress-step${index === clampedStep ? " is-active" : ""}${index < clampedStep ? " is-done" : ""}`}
+              className={`wizard-progress-step${index === clampedStep ? " is-active" : ""}${index < clampedStep ? " is-done" : ""}${index > highestUnlockedStep ? " is-locked" : ""}`}
+              disabled={index > highestUnlockedStep}
               onClick={() => goToStep(index)}
             >
               <span className="wizard-progress-index">{index < clampedStep ? <Check size={12} /> : index + 1}</span>
@@ -1341,7 +1407,7 @@ function AutomationBuilderV1({
               </button>
             )}
             {clampedStep < wizardSteps.length - 1 ? (
-              <button type="button" className="button button-primary" onClick={() => goToStep(clampedStep + 1)}>
+              <button type="button" className="button button-primary" onClick={goToNextStep}>
                 Next
               </button>
             ) : (
@@ -1448,6 +1514,7 @@ function AutomationBuilderV2({
   const [savedIntent, setSavedIntent] = useState<"draft" | "activate" | null>(null);
   const [error, setError] = useState("");
   const [activeStep, setActiveStep] = useState(0);
+  const [highestUnlockedStep, setHighestUnlockedStep] = useState(0);
   const [previewView, setPreviewView] = useState<PreviewView>("post");
   const connections = useInstagramConnections();
   const connection = connections[0] ?? null;
@@ -1517,6 +1584,48 @@ function AutomationBuilderV2({
       ...(Number.isFinite(parsedLimit) && parsedLimit > 0 ? { dailySendLimit: parsedLimit } : {}),
       ...(startsAt || endsAt ? { schedule } : {}),
     };
+  }
+
+  function validateStep(step: number): string | null {
+    if (step === 0) {
+      if (!name.trim()) return "Give this automation a name first.";
+      if (source === "specific_media" && mediaIds.length === 0) return "Select at least one post or Reel to watch.";
+      if (match === "keyword" && parseKeywords(keywords).length === 0) return "Add at least one keyword.";
+    }
+    if (step === 1) {
+      if (publicReplies.every((reply) => !reply.trim())) return "Add at least one public reply.";
+      if (publicReplies.map((reply) => reply.trim()).filter(Boolean).length > MAX_PUBLIC_REPLIES) {
+        return `Use up to ${MAX_PUBLIC_REPLIES} public reply variations.`;
+      }
+    }
+    if (step === 2) {
+      if (!openingText.trim()) return "Write the opening message.";
+      if (!optInButtonLabel.trim()) return "Add an opt-in button label.";
+      if (optInButtonLabel.trim().length > QUICK_REPLY_LABEL_MAX_LENGTH) return "Quick-reply labels must be 20 characters or fewer.";
+      if (recheckButtonLabel.trim().length > QUICK_REPLY_LABEL_MAX_LENGTH) return "Quick-reply labels must be 20 characters or fewer.";
+      if (followGateRequired && !notFollowingMessage.trim()) return "Write the not-following prompt, or turn the follow gate off.";
+      if (followGateRequired && !recheckButtonLabel.trim()) return "Add a recheck button label.";
+      if (openingVariants.split("\n").filter((variant) => variant.trim()).length > 5) return "Use up to 5 opening message variations.";
+    }
+    if (step === 3) {
+      if (!deliveryText.trim()) return "Write the delivery message.";
+      if (!deliveryUrl.trim()) return "Add a delivery link.";
+      if (deliveryVariants.split("\n").filter((variant) => variant.trim()).length > 5) return "Use up to 5 delivery message variations.";
+      try {
+        const url = new URL(deliveryUrl.trim());
+        if (url.protocol !== "https:" && !isLocalDeliveryUrl(url)) return "Delivery links must use HTTPS.";
+      } catch {
+        return "Enter a valid delivery URL.";
+      }
+    }
+    if (step === 4) {
+      const startsAt = localInputToIso(scheduleStart);
+      const endsAt = localInputToIso(scheduleEnd);
+      if (scheduleStart && !startsAt) return "Enter a valid schedule start.";
+      if (scheduleEnd && !endsAt) return "Enter a valid schedule end.";
+      if (startsAt && endsAt && startsAt > endsAt) return "The start must come before the end of the schedule.";
+    }
+    return null;
   }
 
   function validate(): string | null {
@@ -1597,8 +1706,30 @@ function AutomationBuilderV2({
 
   function goToStep(next: number) {
     const clamped = Math.max(0, Math.min(WIZARD_STEPS.length - 1, next));
+    if (clamped > highestUnlockedStep) return;
+    if (clamped > activeStep) {
+      const validationError = validateStep(activeStep);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    }
+    setError("");
     setActiveStep(clamped);
     setPreviewView(STEP_PREVIEW_VIEW[clamped]);
+  }
+
+  function goToNextStep() {
+    const validationError = validateStep(activeStep);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    const next = Math.min(WIZARD_STEPS.length - 1, activeStep + 1);
+    setError("");
+    setHighestUnlockedStep((current) => Math.max(current, next));
+    setActiveStep(next);
+    setPreviewView(STEP_PREVIEW_VIEW[next]);
   }
 
   const dmMessages: DmBubble[] = [];
@@ -1658,7 +1789,8 @@ function AutomationBuilderV2({
             <button
               type="button"
               key={label}
-              className={`wizard-progress-step${index === activeStep ? " is-active" : ""}${index < activeStep ? " is-done" : ""}`}
+              className={`wizard-progress-step${index === activeStep ? " is-active" : ""}${index < activeStep ? " is-done" : ""}${index > highestUnlockedStep ? " is-locked" : ""}`}
+              disabled={index > highestUnlockedStep}
               onClick={() => goToStep(index)}
             >
               <span className="wizard-progress-index">{index < activeStep ? <Check size={12} /> : index + 1}</span>
@@ -2040,7 +2172,7 @@ function AutomationBuilderV2({
               </button>
             )}
             {activeStep < WIZARD_STEPS.length - 1 ? (
-              <button type="button" className="button button-primary" onClick={() => goToStep(activeStep + 1)}>
+              <button type="button" className="button button-primary" onClick={goToNextStep}>
                 Next
               </button>
             ) : (
