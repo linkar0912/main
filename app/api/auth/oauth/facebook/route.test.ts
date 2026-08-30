@@ -41,6 +41,12 @@ describe("GET /api/auth/oauth/facebook", () => {
     expect(location(response)).toBe("https://www.facebook.com/dialog/oauth?x=1");
   });
 
+  it("requests public_profile alongside email - Supabase's default scope is email alone, which this app's Facebook Login for Business setup rejects outright as an invalid scope combination", async () => {
+    await GET(oauthRequest({ next: "/automations" }));
+    const call = mocks.signInWithOAuth.mock.calls[0][0];
+    expect(call.options.scopes).toBe("email public_profile");
+  });
+
   it("omits the invite param from the callback redirect when none was given", async () => {
     await GET(oauthRequest({ next: "/automations" }));
     const redirectTo = new URL(mocks.signInWithOAuth.mock.calls[0][0].options.redirectTo);

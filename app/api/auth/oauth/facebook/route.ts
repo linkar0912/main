@@ -28,7 +28,14 @@ export async function GET(request: Request) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "facebook",
-    options: { redirectTo: redirectTo.toString() },
+    options: {
+      redirectTo: redirectTo.toString(),
+      // Supabase's own default scope for Facebook is `email` alone, which
+      // this app's Facebook Login for Business setup rejects outright as an
+      // invalid scope combination - Meta requires public_profile alongside
+      // it (confirmed directly against Facebook's own authorize endpoint).
+      scopes: "email public_profile",
+    },
   });
   if (error || !data?.url) {
     return NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303);
