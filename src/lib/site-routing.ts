@@ -98,6 +98,11 @@ export function applicationOriginForPath(pathname: string, origins: { appUrl: st
   return matchesPathPrefix(pathname, "/admin") ? origins.adminUrl : origins.appUrl;
 }
 
+/** Whether a request belongs to the owner-console route family. */
+export function isAdminRoutePath(pathname: string): boolean {
+  return ADMIN_ROUTE_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix));
+}
+
 /** Whether a page path should run the optimistic Supabase session gate. */
 export function isProtectedAppPath(pathname: string): boolean {
   return PROTECTED_APP_ROUTE_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix));

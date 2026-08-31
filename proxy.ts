@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { assertApplicationAccess, safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
-import { ADMIN_HOST, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
+import { ADMIN_HOST, isAdminRoutePath, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
 
 // Canonicalizes the marketing and app hosts, then applies an optimistic gate
 // to authenticated page routes. The gate also refreshes the Supabase session
@@ -29,6 +29,7 @@ export async function proxy(request: NextRequest) {
   if (!isProtectedAppPath(request.nextUrl.pathname)) return NextResponse.next();
 
   const response = NextResponse.next();
+  const isAdminRoute = isAdminRoutePath(request.nextUrl.pathname);
   const supabase = createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
     cookies: {
       getAll: () => request.cookies.getAll(),
@@ -43,6 +44,11 @@ export async function proxy(request: NextRequest) {
 
   const { data, error } = await supabase.auth.getClaims();
   if (!error && data?.claims?.sub && data.claims.email) {
+    // Admin authorization is intentionally separate from workspace access:
+    // the platform owner may have no workspace membership at all. Let the
+    // owner-console DAL perform the authoritative allowlist/MFA checks.
+    if (isAdminRoute) return response;
+
     const access = await assertApplicationAccess(
       String(data.claims.sub),
       String(data.claims.email),
