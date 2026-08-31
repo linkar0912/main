@@ -419,31 +419,31 @@ git commit -m "feat(admin): manage every workspace"
 - POST reset sends a password-reset link; it never sets or displays a password.
 - Membership commands add/remove a user from a workspace and change role while preserving at least one owner.
 
-- [ ] **Step 1: Write failing server behavior tests**
+- [x] **Step 1: Write failing server behavior tests**
 
 Prove allowlisted owner IDs cannot be targeted, invite/create modes use the selected confirmation behavior, Auth errors append `FAILURE`, email changes update membership atomically after Auth success, session revocation advances `sessionInvalidBefore`, membership changes preserve a workspace owner, and reset sends only to the selected current email.
 
-- [ ] **Step 2: Write failing UI tests**
+- [x] **Step 2: Write failing UI tests**
 
 Prove search/status filters, detail loading, role changes, reset confirmation, suspension/restoration, ban/unban copy, and audit history render the exact selected user ID/email.
 
-- [ ] **Step 3: Run and verify RED**
+- [x] **Step 3: Run and verify RED**
 
 Run: `pnpm vitest run app/api/admin/users src/components/admin/users-screen.test.tsx src/components/admin/user-detail-screen.test.tsx`
 
 Expected: FAIL because modules do not exist.
 
-- [ ] **Step 4: Implement Supabase Admin mutations and direct Linkar controls**
+- [x] **Step 4: Implement Supabase Admin mutations and direct Linkar controls**
 
 Use `listUsers`, `getUserById`, `inviteUserByEmail`, `createUser`, `updateUserById`, `generateLink({ type: "recovery" })`, and server-side mail delivery. Ban uses explicit finite/unban values supported by the installed Supabase client. Do not use user metadata for authorization or plan state.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm vitest run app/api/admin/users src/components/admin/users-screen.test.tsx src/components/admin/user-detail-screen.test.tsx src/lib/auth/session.test.ts && pnpm typecheck && pnpm lint`
 
 Expected: tests, typecheck, and lint pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/api/admin/users app/admin/users src/components/admin/users-screen.tsx src/components/admin/users-screen.test.tsx src/components/admin/user-detail-screen.tsx src/components/admin/user-detail-screen.test.tsx
