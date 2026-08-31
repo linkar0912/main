@@ -97,6 +97,37 @@ describe("POST /api/automations", () => {
     }));
   });
 
+  it("rejects a Messenger definition on the Facebook Page-comment channel with field-addressable issues", async () => {
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.listFacebookPages.mockResolvedValue([{ pageId: "page_1", status: "CONNECTED" }]);
+
+    const response = await POST(new Request("http://localhost/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "FACEBOOK",
+        facebookPageId: "page_1",
+        name: "Invalid Page flow",
+        definition: {
+          version: 1,
+          trigger: { type: "message", match: "any", keywords: [] },
+          conditions: [],
+          actions: [{ type: "send_text", text: "Hello" }],
+        },
+      }),
+    }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_channel_definition",
+      issues: [
+        { path: ["trigger", "type"], message: "Facebook Page comments do not support message triggers" },
+        { path: ["actions", 0, "type"], message: "Facebook Page comments do not support send_text actions" },
+      ],
+    });
+    expect(mocks.createAutomation).not.toHaveBeenCalled();
+  });
+
   it("rejects a revoked session before creating an automation", async () => {
     const response = await POST(new Request("http://localhost/api/automations", {
       method: "POST",

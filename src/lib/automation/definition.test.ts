@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateFlowDefinition } from "./definition";
+import { validateFlowDefinition, validateFlowDefinitionForTarget } from "./definition";
 
 const campaign = {
   version: 2,
@@ -34,6 +34,25 @@ const campaign = {
 };
 
 describe("validateFlowDefinition", () => {
+  it("returns field-addressable errors for a definition incompatible with its channel", () => {
+    try {
+      validateFlowDefinitionForTarget({
+        version: 1,
+        trigger: { type: "message", match: "any", keywords: [] },
+        conditions: [],
+        actions: [{ type: "send_text", text: "Hello" }],
+      }, { provider: "FACEBOOK", surface: "COMMENT" });
+      throw new Error("expected channel validation to fail");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "invalid_channel_definition",
+        issues: [
+          { path: ["trigger", "type"] },
+          { path: ["actions", 0, "type"] },
+        ],
+      });
+    }
+  });
   it("accepts a comment keyword flow with a private reply", () => {
     const flow = validateFlowDefinition({
       version: 1,

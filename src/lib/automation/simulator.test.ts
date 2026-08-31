@@ -78,6 +78,24 @@ describe("flow simulation", () => {
     expect(simulation).toMatchObject({ matched: false, reason: "trigger did not match" });
   });
 
+  it("describes Facebook Page comment delivery as a public Page reply", () => {
+    const simulation = simulateDefinition(
+      {
+        version: 1,
+        trigger: { type: "comment", match: "any", keywords: [], mediaIds: [] },
+        conditions: [],
+        actions: [{ type: "private_reply", text: "Thanks {username}!" }],
+      },
+      { accountId: "page_1", type: "comment.created", text: "hello", commentId: "comment_1", recipientId: "person_1", senderUsername: "Sam" },
+      { provider: "FACEBOOK", surface: "COMMENT" },
+    );
+
+    expect(simulation).toMatchObject({
+      matched: true,
+      actions: [{ type: "public_page_reply", summary: "Public Page reply: \"Thanks Sam!\"" }],
+    });
+  });
+
   it("previews the full campaign journey for a matching comment", () => {
     const simulation = simulateDefinition(
       {

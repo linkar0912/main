@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { FlowDefinition, FlowDefinitionV1, FlowDefinitionV2, FlowSchedule } from "./types";
 import { isSafeOutboundUrl } from "../security/outbound-url";
+import { validateDefinitionForTarget, type ChannelDescriptor, type ChannelValidationIssue } from "./channels/registry";
 const keyword = z.string().trim().min(1);
 const link = z
   .string()
@@ -556,4 +557,20 @@ function normalizeV2(parsed: z.output<typeof flowV2Schema>): FlowDefinitionV2 {
 export function validateFlowDefinition(input: unknown): FlowDefinition {
   const parsed = flowSchema.parse(input);
   return parsed.version === 1 ? normalizeV1(parsed) : normalizeV2(parsed);
+}
+
+export class ChannelDefinitionValidationError extends Error {
+  readonly code = "invalid_channel_definition";
+
+  constructor(readonly issues: ChannelValidationIssue[]) {
+    super(issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "));
+    this.name = "ChannelDefinitionValidationError";
+  }
+}
+
+export function validateFlowDefinitionForTarget(input: unknown, target: ChannelDescriptor): FlowDefinition {
+  const definition = validateFlowDefinition(input);
+  const issues = validateDefinitionForTarget(definition, target);
+  if (issues.length > 0) throw new ChannelDefinitionValidationError(issues);
+  return definition;
 }

@@ -7,6 +7,7 @@ import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
 import type { UpdateAutomationInput } from "@/src/lib/repository";
 import { toReadableValidationError } from "@/src/lib/validation-error";
 import { parseAutomationTarget } from "@/src/lib/automation/channel-target";
+import { deriveAutomationSurface, validateDefinitionForTarget } from "@/src/lib/automation/channels/registry";
 
 export const runtime = "nodejs";
 
@@ -32,6 +33,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
   }
   const patch: UpdateAutomationInput = {};
+  const repository = getRepository();
+  const current = await repository.getAutomation(session.workspaceId, id);
+  if (!current) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
 
   let parsedTarget;
   try {
@@ -88,9 +92,18 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
   }
 
-  const repository = getRepository();
-  const current = await repository.getAutomation(session.workspaceId, id);
-  if (!current) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
+  if (parsedTarget || patch.definition) {
+    const resultingDefinition = patch.definition ?? current.definition;
+    const resultingProvider = parsedTarget?.provider ?? current.provider;
+    const channelIssues = validateDefinitionForTarget(resultingDefinition, {
+      provider: resultingProvider,
+      surface: resultingProvider === "FACEBOOK" ? "COMMENT" : deriveAutomationSurface(resultingDefinition),
+    });
+    if (channelIssues.length > 0) {
+      return NextResponse.json({ error: "invalid_channel_definition", issues: channelIssues }, { status: 400 });
+    }
+  }
+
   if (body.status === "ACTIVE" && current.status !== "ACTIVE") {
     patch.status = "ACTIVE";
     patch.activatedAt = new Date().toISOString();

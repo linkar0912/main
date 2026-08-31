@@ -8,6 +8,7 @@ import { toReadableValidationError } from "@/src/lib/validation-error";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 import { parseAutomationTarget } from "@/src/lib/automation/channel-target";
+import { deriveAutomationSurface, validateDefinitionForTarget } from "@/src/lib/automation/channels/registry";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,13 @@ export async function POST(request: Request) {
     const target = parseAutomationTarget(body, { requirePin: true });
     if (!target) return NextResponse.json({ error: "invalid_channel_target" }, { status: 400 });
     const definition = validateFlowDefinition(body.definition);
+    const channelIssues = validateDefinitionForTarget(definition, {
+      provider: target.provider,
+      surface: target.provider === "FACEBOOK" ? "COMMENT" : deriveAutomationSurface(definition),
+    });
+    if (channelIssues.length > 0) {
+      return NextResponse.json({ error: "invalid_channel_definition", issues: channelIssues }, { status: 400 });
+    }
     const instagramAccountId = target.provider === "INSTAGRAM"
       ? await resolveInstagramAccountId(session.workspaceId, target.instagramAccountId)
       : undefined;

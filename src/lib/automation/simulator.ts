@@ -4,6 +4,7 @@ import { PERSONALIZATION_TOKENS } from "./types";
 import { evaluateFlow } from "./engine";
 import { matchCampaign } from "./campaign-match";
 import { renderTemplate } from "./send-limits";
+import { getChannelCapability, validateDefinitionForTarget, type ChannelDescriptor } from "./channels/registry";
 
 export type ValidationIssue = {
   severity: "error" | "warning";
@@ -126,7 +127,12 @@ function selectPublicReplyForSimulation(replies: string[], seed: string): string
 export function simulateDefinition(
   definition: FlowDefinition,
   sampleEvent: Omit<NormalizedEvent, "id" | "timestamp"> & Partial<Pick<NormalizedEvent, "id" | "timestamp">>,
+  target?: ChannelDescriptor,
 ): SimulationResult {
+  if (target) {
+    const issues = validateDefinitionForTarget(definition, target);
+    if (issues.length > 0) return { matched: false, reason: issues[0].message };
+  }
   const event: NormalizedEvent = {
     id: sampleEvent.id ?? "simulate_1",
     timestamp: sampleEvent.timestamp ?? Date.now(),
@@ -163,6 +169,9 @@ export function simulateDefinition(
   const actions = result.actions.map((action) => {
     switch (action.type) {
       case "private_reply":
+        if (target && getChannelCapability(target).actionSemantics.private_reply === "public_page_reply") {
+          return { type: "public_page_reply", summary: `Public Page reply: "${renderTemplate(action.text, vars).slice(0, 140)}"` };
+        }
         return { type: "private_reply", summary: `Private reply to comment: "${renderTemplate(action.text, vars).slice(0, 140)}"` };
       case "send_text":
         return { type: "send_text", summary: `DM: "${renderTemplate(action.text, vars).slice(0, 140)}"` };

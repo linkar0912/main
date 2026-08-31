@@ -117,25 +117,25 @@ export type ChannelCapability = {
 };
 ```
 
-- [ ] **Step 1: Write failing registry consistency tests**
+- [x] **Step 1: Write failing registry consistency tests**
 
 Assert unique capability IDs, valid provider/surface pairs, no Messenger actions in `facebook-page-comment`, required Page permissions `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`, `pages_manage_engagement`, and that every catalog template resolves to one compatible capability.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm vitest run src/lib/automation/channels/registry.test.ts`
 
 Expected: FAIL because the registry modules do not exist.
 
-- [ ] **Step 3: Implement registry lookup and target derivation**
+- [x] **Step 3: Implement registry lookup and target derivation**
 
 Export `getChannelCapability(target)`, `deriveAutomationSurface(definition)`, and `validateDefinitionForTarget(definition, target)`. Keep current v1 parsing unchanged first, then apply capability validation as a second pass. Return field-addressable issues rather than throwing generic provider errors.
 
-- [ ] **Step 4: Make simulator and API validation consume the registry**
+- [x] **Step 4: Make simulator and API validation consume the registry**
 
 For Facebook Page comments, interpret the existing `private_reply` storage action as the public nested-reply capability only at the adapter boundary. Display and validation language must say “public Page reply”; do not mutate saved Instagram definitions.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `pnpm vitest run src/lib/automation/channels/registry.test.ts src/lib/automation/definition.test.ts src/lib/automation/simulator.test.ts app/api/automations/route.test.ts && pnpm typecheck`
 
