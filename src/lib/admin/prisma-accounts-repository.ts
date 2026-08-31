@@ -20,6 +20,8 @@ function workspaceSummary(record: {
   slug: string;
   status: WorkspaceStatus;
   createdAt: Date;
+  updatedAt: Date;
+  version: number;
   entitlement: { plan: { key: string; name: string } } | null;
   _count: { members: number; automations: number; connections: number; facebookPages: number };
 }): AdminWorkspaceSummary {
@@ -29,6 +31,8 @@ function workspaceSummary(record: {
     slug: record.slug,
     status: record.status,
     createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    version: record.version,
     planKey: record.entitlement?.plan.key ?? "unassigned",
     planName: record.entitlement?.plan.name ?? "Unassigned",
     memberCount: record._count.members,

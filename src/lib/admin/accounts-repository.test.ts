@@ -8,6 +8,8 @@ const workspaces = Array.from({ length: 30 }, (_, index) => ({
   slug: `workspace-${index}`,
   status: index === 0 ? "SUSPENDED" as const : "ACTIVE" as const,
   createdAt: new Date(Date.UTC(2026, 7, 31, 10, 0, 0) - index * 1_000).toISOString(),
+  updatedAt: new Date(Date.UTC(2026, 7, 31, 10, 0, 0) - index * 1_000).toISOString(),
+  version: 1,
   planKey: "free",
   planName: "Free",
   memberCount: 2,

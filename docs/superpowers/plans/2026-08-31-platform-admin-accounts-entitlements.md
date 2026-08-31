@@ -364,31 +364,31 @@ git commit -m "feat(admin): add cross-tenant account queries"
 - POST lifecycle accepts `SUSPEND` or `RESTORE`; permanent deletion is Phase 4.
 - Export streams the safe workspace dataset as formula-escaped CSV/JSON, and bulk pause uses version-checked domain commands without touching archived automations.
 
-- [ ] **Step 1: Write failing API transition tests**
+- [x] **Step 1: Write failing API transition tests**
 
 Test literal outcomes for create, duplicate slug `409`, rename, owner transfer, platform-owner protection, suspension, restoration, safe export redaction/escaping, pause-all partial conflicts, missing reason, stale version, non-owner authorization, and audit `ATTEMPT`/`SUCCESS` writes.
 
-- [ ] **Step 2: Write failing component behavior tests**
+- [x] **Step 2: Write failing component behavior tests**
 
 Assert search query updates, cursor navigation, selected workspace identity, tab navigation, effective plan/usage rendering, suspension confirmation phrase, error persistence, and focus restoration.
 
-- [ ] **Step 3: Run and verify RED**
+- [x] **Step 3: Run and verify RED**
 
 Run: `pnpm vitest run app/api/admin/workspaces src/components/admin/workspaces-screen.test.tsx src/components/admin/workspace-detail-screen.test.tsx`
 
 Expected: FAIL because routes and screens do not exist.
 
-- [ ] **Step 4: Implement APIs and Linkar-styled screens**
+- [x] **Step 4: Implement APIs and Linkar-styled screens**
 
 Use `RouteContext<'/api/admin/workspaces/[workspaceId]'>` and `await context.params`. Every mutation runs request guard, validates strict Zod input, appends audit events, and returns a redacted DTO. Use the existing section rail, panels, badges, form controls, and responsive table patterns.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm vitest run app/api/admin/workspaces src/components/admin/workspaces-screen.test.tsx src/components/admin/workspace-detail-screen.test.tsx && pnpm lint`
 
 Expected: tests and lint pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/api/admin/workspaces app/admin/workspaces src/components/admin/workspaces-screen.tsx src/components/admin/workspaces-screen.test.tsx src/components/admin/workspace-detail-screen.tsx src/components/admin/workspace-detail-screen.test.tsx app/globals.css

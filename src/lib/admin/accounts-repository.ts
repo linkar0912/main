@@ -14,6 +14,8 @@ export type AdminWorkspaceSummary = {
   slug: string;
   status: WorkspaceStatus;
   createdAt: string;
+  updatedAt: string;
+  version: number;
   planKey: string;
   planName: string;
   memberCount: number;

@@ -1675,6 +1675,50 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .admin-owner-chip { margin-bottom: var(--space-4); }
 .admin-back-link { border-top: 1px solid var(--line); margin-top: var(--space-3); padding-top: var(--space-4); }
 .admin-entry-link { background: color-mix(in srgb, var(--honey) 20%, transparent); color: var(--ink); }
+.admin-resource-page { max-width: 1360px; }
+.admin-count-badge, .admin-inline-count, .admin-back-inline { align-items: center; display: inline-flex; gap: 7px; }
+.admin-count-badge { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 999px; font-family: var(--font-mono); font-size: .72rem; font-weight: 800; padding: 10px 14px; }
+.admin-filter-bar { align-items: end; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); display: flex; gap: var(--space-3); margin-bottom: var(--space-4); padding: var(--space-4); }
+.admin-search-field { flex: 1; margin: 0; }
+.admin-input-icon { align-items: center; display: flex; position: relative; }
+.admin-input-icon > svg { color: var(--muted); left: 13px; position: absolute; }
+.admin-input-icon input { padding-left: 40px; width: 100%; }
+.admin-table-panel { overflow: hidden; padding: 0; }
+.admin-table-scroll { overflow-x: auto; }
+.admin-table { border-collapse: collapse; min-width: 820px; width: 100%; }
+.admin-table th { background: var(--surface-soft); color: var(--muted); font-size: .66rem; letter-spacing: .08em; padding: 13px var(--space-4); text-align: left; text-transform: uppercase; }
+.admin-table td { border-top: 1px solid var(--line); font-size: .8rem; padding: var(--space-4); vertical-align: middle; }
+.admin-table td > strong, .admin-table td > small { display: block; }
+.admin-table td > small { color: var(--muted); margin-top: 4px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table td:last-child { text-align: right; }
+.admin-pagination { align-items: center; display: flex; justify-content: space-between; margin-top: var(--space-4); }
+.admin-back-inline { color: var(--muted); font-size: .78rem; font-weight: 750; margin-bottom: var(--space-5); }
+.admin-detail-header { align-items: center; }
+.admin-section-tabs { border-bottom: 1px solid var(--line); display: flex; gap: var(--space-2); margin-bottom: var(--space-5); overflow-x: auto; }
+.admin-section-tabs a { color: var(--muted); flex: 0 0 auto; font-size: .76rem; font-weight: 750; padding: 12px var(--space-3); }
+.admin-section-tabs a:hover { color: var(--ink); }
+.admin-detail-grid { display: grid; gap: var(--space-5); grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: var(--space-5); }
+.admin-summary-card, .admin-detail-section { padding: var(--space-5); }
+.admin-summary-card dl { display: grid; gap: 0; margin: var(--space-5) 0 0; }
+.admin-summary-card dl div { align-items: center; border-top: 1px solid var(--line); display: flex; justify-content: space-between; padding: 11px 0; }
+.admin-summary-card dt { color: var(--muted); font-size: .74rem; }
+.admin-summary-card dd { font-family: var(--font-mono); font-size: .78rem; font-weight: 800; margin: 0; }
+.admin-detail-section { margin-bottom: var(--space-5); scroll-margin-top: 20px; }
+.admin-record-list { display: grid; }
+.admin-record-row { align-items: center; border-top: 1px solid var(--line); display: flex; gap: var(--space-3); justify-content: space-between; padding: var(--space-3) 0; }
+.admin-record-row:first-child { border-top: 0; }
+.admin-record-row > span:first-child { display: grid; gap: 3px; min-width: 0; }
+.admin-record-row small { color: var(--muted); overflow-wrap: anywhere; }
+.admin-command-form { display: grid; gap: var(--space-4); max-width: 720px; }
+.admin-command-form textarea { min-height: 86px; resize: vertical; }
+.admin-command-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
+@media (max-width: 720px) {
+  .admin-filter-bar { align-items: stretch; flex-direction: column; }
+  .admin-detail-grid { grid-template-columns: 1fr; }
+  .admin-pagination { align-items: stretch; flex-direction: column; gap: var(--space-3); }
+  .admin-command-actions .button { width: 100%; }
+}
 
 @media (max-width: 680px) {
   .admin-enrollment-grid { grid-template-columns: 1fr; }

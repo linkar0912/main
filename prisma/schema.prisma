@@ -125,6 +125,8 @@ model Workspace {
   name               String
   slug               String                  @unique
   createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  version            Int                     @default(1)
   // Optional messaging quiet hours (workspace-local time). Null = always-on.
   quietStartHour     Int?
   quietEndHour       Int?
@@ -151,6 +153,7 @@ model Workspace {
   usageReservations WorkspaceUsageReservation[]
 
   @@index([status, createdAt])
+  @@index([updatedAt, id])
 }
 
 model PlanDefinition {
