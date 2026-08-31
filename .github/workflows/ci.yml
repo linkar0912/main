@@ -26,6 +26,9 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Generate Next.js types
+        run: pnpm exec next typegen
+
       - name: Lint
         run: pnpm lint
 
