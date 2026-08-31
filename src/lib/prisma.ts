@@ -518,6 +518,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           name: "Linkar workspace",
           slug: `linkar-${workspaceId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40)}`,
           members: { create: { id: createId("member"), email, role: "OWNER", userId: ownerUserId } },
+          entitlement: { create: { plan: { connect: { key: "free" } } } },
         },
         update: {},
       });

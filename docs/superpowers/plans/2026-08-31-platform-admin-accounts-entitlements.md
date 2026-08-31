@@ -175,7 +175,7 @@ git commit -m "feat(admin): enforce user and workspace suspension"
 - Produces `assertEntitled(workspaceId, capability, currentUsage): Promise<void>`.
 - Produces `reserveMonthlyDelivery(workspaceId, key): Promise<{ reserved: boolean; used; limit }>`.
 
-- [ ] **Step 1: Write failing resolution and concurrency tests**
+- [x] **Step 1: Write failing resolution and concurrency tests**
 
 ```ts
 it("resolves workspace overrides over plan defaults", async () => {
@@ -191,29 +191,29 @@ it("allows only reservations within the monthly limit under concurrency", async 
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/entitlements/service.test.ts`
 
 Expected: FAIL because entitlement modules do not exist.
 
-- [ ] **Step 3: Add schema and seeded free plan**
+- [x] **Step 3: Add schema and seeded free plan**
 
 `PlanDefinition` has nullable nonnegative integer limits (`null` means unlimited), explicit feature booleans, stable unique key, and active flag. `WorkspaceEntitlement` references workspace and plan, stores typed overrides JSON and a version. `WorkspaceUsagePeriod` uses `(workspaceId, periodStart)` primary key and stores `deliveriesReserved`, `broadcastsCreated`, and `updatedAt`.
 
 The migration inserts one `free` plan and creates a matching entitlement for every existing workspace. Enable RLS and index `WorkspaceEntitlement.planId`.
 
-- [ ] **Step 4: Implement typed resolution and atomic reservation**
+- [x] **Step 4: Implement typed resolution and atomic reservation**
 
 Use a strict Zod schema for overrides. The Prisma reservation uses a short transaction and an atomic conditional update so concurrent sends cannot exceed the limit. Record delivery reservation keys in a companion `WorkspaceUsageReservation` table with unique `deliveryKey` to make retries idempotent.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm prisma validate && pnpm prisma generate && pnpm vitest run src/lib/entitlements/service.test.ts`
 
 Expected: tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add prisma/schema.prisma prisma/migrations/20260831140000_workspace_entitlements/migration.sql src/lib/entitlements

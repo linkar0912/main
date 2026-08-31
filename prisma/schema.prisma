@@ -146,8 +146,70 @@ model Workspace {
   broadcasts         Broadcast[]
   outboundDeliveries OutboundDelivery[]
   trackedLinks       TrackedLink[]
+  entitlement       WorkspaceEntitlement?
+  usagePeriods      WorkspaceUsagePeriod[]
+  usageReservations WorkspaceUsageReservation[]
 
   @@index([status, createdAt])
+}
+
+model PlanDefinition {
+  id                       String   @id
+  key                      String   @unique
+  name                     String
+  isActive                 Boolean  @default(true)
+  memberLimit              Int?
+  automationLimit          Int?
+  instagramConnectionLimit Int?
+  facebookConnectionLimit  Int?
+  sequenceLimit            Int?
+  monthlyBroadcastLimit    Int?
+  monthlyDeliveryLimit     Int?
+  sequencesEnabled         Boolean  @default(false)
+  broadcastsEnabled        Boolean  @default(false)
+  trackedLinksEnabled      Boolean  @default(false)
+  teamEnabled              Boolean  @default(false)
+  facebookEnabled          Boolean  @default(false)
+  exportsEnabled           Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  workspaceEntitlements    WorkspaceEntitlement[]
+
+  @@index([isActive, key])
+}
+
+model WorkspaceEntitlement {
+  workspaceId String   @id
+  planId      String
+  overrides   Json     @default("{}")
+  version     Int      @default(1)
+  updatedAt   DateTime @updatedAt
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan        PlanDefinition @relation(fields: [planId], references: [id])
+
+  @@index([planId])
+}
+
+model WorkspaceUsagePeriod {
+  workspaceId       String
+  periodStart       DateTime @db.Date
+  deliveriesReserved Int    @default(0)
+  broadcastsCreated  Int    @default(0)
+  updatedAt          DateTime @updatedAt
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, periodStart])
+  @@index([periodStart, workspaceId])
+}
+
+model WorkspaceUsageReservation {
+  deliveryKey String   @id
+  workspaceId String
+  periodStart DateTime @db.Date
+  createdAt   DateTime @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, periodStart])
 }
 
 model WorkspaceMember {
