@@ -1329,6 +1329,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return record ? mapExecution(record) : null;
     },
 
+    async listAutomationExecutions(workspaceId, automationId, limit) {
+      const records = await client.automationExecution.findMany({
+        where: { workspaceId, automationId },
+        orderBy: { createdAt: "desc" },
+        take: Math.min(100, Math.max(0, limit)),
+      });
+      return records.map(mapExecution);
+    },
+
     async completeExecution(workspaceId, dedupeKey, result) {
       await client.automationExecution.updateMany({
         where: { workspaceId, dedupeKey, status: "PROCESSING" },

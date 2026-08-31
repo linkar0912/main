@@ -28,6 +28,18 @@ import {
 
 export type { ParticipantActivitySummary, ParticipantFunnelSummary };
 
+export type FacebookPageActivitySummary = {
+  id: string;
+  provider: "FACEBOOK";
+  surface: "COMMENT";
+  connectionName: string;
+  eventType: "comment.created";
+  result: "PROCESSING" | "SENT" | "SKIPPED" | "FAILED";
+  safeErrorCode?: string;
+  replyPreview?: string;
+  createdAt: string;
+};
+
 type CampaignContext = { id: string; name: string; status: string };
 
 const FUNNEL_STAGES: { key: keyof ParticipantFunnelSummary; label: string }[] = [
@@ -314,8 +326,50 @@ function ActivityTableHead() {
   );
 }
 
+function FacebookPageActivityView({ activity }: { activity: FacebookPageActivitySummary[] }) {
+  const [result, setResult] = useState("all");
+  const connectionName = activity[0]?.connectionName ?? "Facebook Page";
+  const visible = result === "all" ? activity : activity.filter((item) => item.result === result);
+  return (
+    <div className="activity-list facebook-page-activity">
+      <div className="feed-toolbar" aria-label="Facebook Page activity filters">
+        <label className="field"><span>Provider</span><select aria-label="Provider filter" value="FACEBOOK" disabled><option value="FACEBOOK">Facebook</option></select></label>
+        <label className="field"><span>Surface</span><select aria-label="Surface filter" value="COMMENT" disabled><option value="COMMENT">Page comments</option></select></label>
+        <label className="field"><span>Page</span><select aria-label="Page filter" value={connectionName} disabled><option value={connectionName}>{connectionName}</option></select></label>
+        <label className="field"><span>Result</span><select aria-label="Result filter" value={result} onChange={(event) => setResult(event.target.value)}><option value="all">All results</option><option value="SENT">Sent</option><option value="SKIPPED">Skipped</option><option value="FAILED">Failed</option></select></label>
+      </div>
+      <p className="muted">Facebook Page replies are public comments. They do not open a Messenger conversation or grant messaging eligibility.</p>
+      {activity.length === 0 ? (
+        <div className="empty-state"><span className="empty-icon"><Radio size={22} /></span><h3>No Page activity yet.</h3><p>New matching Page comments will appear here after Linkar evaluates them.</p></div>
+      ) : visible.length === 0 ? (
+        <p className="muted feed-empty">No Page replies match this result.</p>
+      ) : (
+        <div className="activity-groups">
+          {visible.map((item) => (
+            <article className="activity-row" key={item.id}>
+              <div className="activity-row-grid">
+                <span className="automation-account">Facebook</span>
+                <span className="keyword-chip is-any">Page comment</span>
+                <span>{item.connectionName}</span>
+                <span className={`status-badge status-${item.result.toLowerCase()}`}>{statusBadgeLabel(item.result)}</span>
+                <time dateTime={item.createdAt}>{formatRelativeTime(item.createdAt)}</time>
+              </div>
+              <div className="row-detail">
+                <strong>Public Page reply</strong>
+                {item.replyPreview && <p>{item.replyPreview}</p>}
+                {item.safeErrorCode && <p className="muted">Result code: {item.safeErrorCode}</p>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AutomationActivity({ automationId }: { automationId: string }) {
   const [participants, setParticipants] = useState<ParticipantActivitySummary[] | null>(null);
+  const [facebookActivity, setFacebookActivity] = useState<FacebookPageActivitySummary[] | null>(null);
   const [summary, setSummary] = useState<ParticipantFunnelSummary | null>(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -349,14 +403,22 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
     fetch(`/api/automations/${automationId}/activity`)
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as {
-          data?: ParticipantActivitySummary[];
+          data?: ParticipantActivitySummary[] | FacebookPageActivitySummary[];
+          channel?: { provider?: string; surface?: string };
           summary?: ParticipantFunnelSummary;
           error?: string;
         };
         if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load activity");
         if (active) {
-          setParticipants(payload.data);
-          setSummary(payload.summary ?? null);
+          if (payload.channel?.provider === "FACEBOOK") {
+            setFacebookActivity(payload.data as FacebookPageActivitySummary[]);
+            setParticipants([]);
+            setSummary(null);
+          } else {
+            setParticipants(payload.data as ParticipantActivitySummary[]);
+            setFacebookActivity(null);
+            setSummary(payload.summary as ParticipantFunnelSummary ?? null);
+          }
           setError("");
         }
       })
@@ -453,6 +515,8 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
       </div>
     );
   }
+
+  if (facebookActivity) return <FacebookPageActivityView activity={facebookActivity} />;
 
   if (participants.length === 0) {
     return (

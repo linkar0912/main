@@ -67,5 +67,5 @@ setup("create the workspace owner", async ({ page }) => {
   await expect(page).toHaveURL(/\/dashboard$/);
 
   mkdirSync(".playwright", { recursive: true });
-  await page.request.storageState({ path: STORAGE_STATE });
+  await page.context().storageState({ path: STORAGE_STATE });
 });

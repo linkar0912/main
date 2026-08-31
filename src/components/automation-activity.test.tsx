@@ -184,4 +184,38 @@ describe("AutomationActivity", () => {
     expect(container.innerHTML).not.toContain("cdn.example");
     expect(container.querySelectorAll("img").length).toBe(0);
   });
+
+  it("renders sanitized public Facebook Page reply activity with channel filters", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/activity")) {
+        return {
+          ok: true,
+          json: async () => ({
+            channel: { provider: "FACEBOOK", surface: "COMMENT", connectionName: "Acme Page" },
+            data: [{
+              id: "execution_1",
+              provider: "FACEBOOK",
+              surface: "COMMENT",
+              connectionName: "Acme Page",
+              eventType: "comment.created",
+              result: "SENT",
+              replyPreview: "Thanks for commenting!",
+              createdAt: "2026-09-01T01:00:00.000Z",
+            }],
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({ data: { id: "automation_1", name: "Page replies", status: "ACTIVE" } }) } as Response;
+    }));
+
+    render(<AutomationActivity automationId="automation_1" />);
+
+    expect(await screen.findByText("Public Page reply")).toBeTruthy();
+    expect(screen.getByText("Thanks for commenting!")).toBeTruthy();
+    expect((screen.getByLabelText("Provider filter") as HTMLSelectElement).value).toBe("FACEBOOK");
+    expect((screen.getByLabelText("Surface filter") as HTMLSelectElement).value).toBe("COMMENT");
+    expect((screen.getByLabelText("Page filter") as HTMLSelectElement).value).toBe("Acme Page");
+    expect(screen.getByText(/do not open a Messenger conversation/i)).toBeTruthy();
+    expect(document.body.textContent).not.toContain("token");
+  });
 });

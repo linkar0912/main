@@ -298,25 +298,25 @@ git commit -m "feat(facebook): complete Page comment execution"
 - Test: `src/components/automation-activity.test.tsx`
 - Create: `e2e/facebook-page-comment-automation.spec.ts`
 
-- [ ] **Step 1: Write failing provider-filter and activity tests**
+- [x] **Step 1: Write failing provider-filter and activity tests**
 
 Assert provider, surface, and Page filters; public-reply terminology; sanitized Graph error details; and isolation between workspaces and Pages.
 
-- [ ] **Step 2: Implement activity DTOs and UI filters**
+- [x] **Step 2: Implement activity DTOs and UI filters**
 
 Return only provider, surface, connection display name, event type, result, safe error code, timestamps, and reply preview. Add help content explaining that Page comments are public and do not grant Messenger eligibility.
 
-- [ ] **Step 3: Add the Playwright flow**
+- [x] **Step 3: Add the Playwright flow**
 
 Create a Page-comment automation from a template, select a Page and post scope, configure keywords and two variants, simulate, save, reopen, activate, and verify the activity rendering with a mocked signed webhook.
 
-- [ ] **Step 4: Run the complete Phase 1 gate**
+- [x] **Step 4: Run the complete Phase 1 gate**
 
 Run: `pnpm test && pnpm typecheck && pnpm lint && pnpm build && pnpm playwright test e2e/facebook-page-comment-automation.spec.ts`
 
 Expected: every command exits 0. Production smoke configuration still exposes Page comments and contains no Messenger capability.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/api/automations src/components/automation-activity.tsx src/components/automation-activity.test.tsx src/components/automations-screen.tsx app/help/page.tsx src/components/help-screen.tsx e2e/facebook-page-comment-automation.spec.ts

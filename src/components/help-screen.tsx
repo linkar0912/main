@@ -154,7 +154,8 @@ const TOPICS: Topic[] = [
           <>
             Facebook Page automations send public replies to top-level comments on Page posts.
             Page-authored comments and nested replies are ignored to prevent loops. Facebook does not
-            use Instagram private-reply or DM actions.
+            use Instagram private-reply or DM actions. A public Page reply does not open a Messenger
+            conversation and does not give Linkar permission to message that person.
           </>
         ),
       },

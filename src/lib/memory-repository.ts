@@ -848,6 +848,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return record ? copy(record) : null;
     },
 
+    async listAutomationExecutions(workspaceId, automationId, limit) {
+      return [...executions.values()]
+        .filter((record) => record.workspaceId === workspaceId && record.automationId === automationId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, Math.min(100, Math.max(0, limit)))
+        .map(copy);
+    },
+
     async completeExecution(workspaceId, dedupeKey, result) {
       const entry = [...executions.entries()].find(([, record]) =>
         record.workspaceId === workspaceId && record.dedupeKey === dedupeKey && record.status === "PROCESSING",

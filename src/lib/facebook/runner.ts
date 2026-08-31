@@ -281,6 +281,7 @@ export async function processNormalizedFacebookEvent(
       const sendResult = await options.client.postCommentReply(connection, event.commentId, text);
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SENT",
+        reason: `reply:${text.slice(0, 160)}`,
         ...(sendResult.id ? { providerMessageId: sendResult.id } : {}),
       });
       if (replyOnce) {

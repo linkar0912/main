@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   getAutomation: vi.fn(),
   listParticipants: vi.fn(),
   countParticipantFunnel: vi.fn(),
+  listAutomationExecutions: vi.fn(),
+  listFacebookPages: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
@@ -89,15 +91,21 @@ describe("GET /api/automations/[id]/activity", () => {
     mocks.getAutomation.mockReset();
     mocks.listParticipants.mockReset();
     mocks.countParticipantFunnel.mockReset();
+    mocks.listAutomationExecutions.mockReset();
+    mocks.listFacebookPages.mockReset();
     mocks.getValidatedSession.mockResolvedValue({ email: "owner@example.com", workspaceId: "workspace_a" });
     mocks.getRepository.mockReturnValue({
       getAutomation: mocks.getAutomation,
       listParticipants: mocks.listParticipants,
       countParticipantFunnel: mocks.countParticipantFunnel,
+      listAutomationExecutions: mocks.listAutomationExecutions,
+      listFacebookPages: mocks.listFacebookPages,
     });
     mocks.getAutomation.mockResolvedValue({ id: "automation_1", workspaceId: "workspace_a" });
     mocks.listParticipants.mockResolvedValue([]);
     mocks.countParticipantFunnel.mockResolvedValue({ commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 });
+    mocks.listAutomationExecutions.mockResolvedValue([]);
+    mocks.listFacebookPages.mockResolvedValue([]);
   });
 
   function call(id = "automation_1") {
@@ -193,5 +201,69 @@ describe("GET /api/automations/[id]/activity", () => {
     expect(raw).not.toContain("workspaceId");
     expect(raw).not.toContain("webhook");
     expect(raw).not.toContain("payload");
+  });
+
+  it("returns a sanitized Facebook Page activity DTO scoped to the saved Page", async () => {
+    mocks.getAutomation.mockResolvedValue({
+      id: "automation_1",
+      workspaceId: "workspace_a",
+      provider: "FACEBOOK",
+      facebookPageId: "page_1",
+    });
+    mocks.listFacebookPages.mockResolvedValue([
+      { pageId: "page_1", pageName: "Acme Page", accessTokenEncrypted: "must-not-escape" },
+      { pageId: "page_other", pageName: "Other Page", accessTokenEncrypted: "must-not-escape" },
+    ]);
+    mocks.listAutomationExecutions.mockResolvedValue([
+      {
+        id: "execution_sent",
+        workspaceId: "workspace_a",
+        automationId: "automation_1",
+        externalEventId: "event_must-not-escape",
+        dedupeKey: "dedupe_must-not-escape",
+        status: "SENT",
+        reason: "reply:Thanks for commenting!",
+        providerMessageId: "provider_must-not-escape",
+        createdAt: "2026-09-01T01:00:00.000Z",
+      },
+      {
+        id: "execution_failed",
+        workspaceId: "workspace_a",
+        automationId: "automation_1",
+        status: "FAILED",
+        reason: "OAuth token abc_must-not-escape",
+        createdAt: "2026-09-01T00:00:00.000Z",
+      },
+    ]);
+
+    const response = await call();
+    const body = await response.json();
+
+    expect(body.channel).toEqual({ provider: "FACEBOOK", surface: "COMMENT", connectionName: "Acme Page" });
+    expect(body.data).toEqual([
+      {
+        id: "execution_sent",
+        provider: "FACEBOOK",
+        surface: "COMMENT",
+        connectionName: "Acme Page",
+        eventType: "comment.created",
+        result: "SENT",
+        replyPreview: "Thanks for commenting!",
+        createdAt: "2026-09-01T01:00:00.000Z",
+      },
+      {
+        id: "execution_failed",
+        provider: "FACEBOOK",
+        surface: "COMMENT",
+        connectionName: "Acme Page",
+        eventType: "comment.created",
+        result: "FAILED",
+        safeErrorCode: "delivery_failed",
+        createdAt: "2026-09-01T00:00:00.000Z",
+      },
+    ]);
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain("must-not-escape");
+    expect(mocks.listAutomationExecutions).toHaveBeenCalledWith("workspace_a", "automation_1", 100);
   });
 });

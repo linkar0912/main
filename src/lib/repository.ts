@@ -687,6 +687,7 @@ export interface AutomationRepository {
   claimExecution(input: ClaimExecutionInput): Promise<boolean>;
   claimExecutionDispatch(input: ClaimExecutionDispatchInput): Promise<boolean>;
   getExecution(workspaceId: string, dedupeKey: string): Promise<ExecutionRecord | null>;
+  listAutomationExecutions(workspaceId: string, automationId: string, limit: number): Promise<ExecutionRecord[]>;
   completeExecution(workspaceId: string, dedupeKey: string, result: CompleteExecutionResult): Promise<void>;
   completeOwnedExecution(workspaceId: string, dedupeKey: string, dispatchOwner: string, result: CompleteExecutionResult): Promise<boolean>;
   failAbandonedExecution(workspaceId: string, dedupeKey: string, observedAt: string, reason: string): Promise<boolean>;

@@ -266,7 +266,7 @@ export function AutomationList({
               >
                 <Pencil size={16} />
               </Link>
-              {automation.definition.version === 2 && (
+              {(automation.definition.version === 2 || automation.provider === "FACEBOOK" || Boolean(automation.facebookPageId)) && (
                 <Link
                   className="icon-button"
                   href={`/automations/${automation.id}/activity`}
