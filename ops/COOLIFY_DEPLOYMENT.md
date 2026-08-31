@@ -384,7 +384,7 @@ directly - the tradeoff is one extra manual registration step:
 
 - Google Cloud Console → APIs & Services → Credentials → the OAuth client used
   for `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` → **Authorized redirect URIs**
-  must include `https://linkar.in/api/auth/oauth/google/callback` (our own
+  must include `https://app.linkar.in/api/auth/oauth/google/callback` (our own
   callback, not Supabase's `.../auth/v1/callback` - that one is unused by this
   flow even though Supabase's Google provider must still be enabled below).
 - Supabase Dashboard → Authentication → Sign In / Providers → Google →
