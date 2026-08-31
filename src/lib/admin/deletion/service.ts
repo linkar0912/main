@@ -5,7 +5,7 @@ import type { AdminWriteContext } from "../request-guard";
 import { AdminWorkspaceError } from "../workspace-service";
 import { enqueueAdminDeletion } from "@/src/lib/queue";
 import { previewDeletion } from "./impact";
-import { createDeletionJob, requestDeletionCancellation, resetFailedDeletion } from "./repository";
+import { createDeletionJob, getDeletionJobByIdempotencyKey, requestDeletionCancellation, resetFailedDeletion } from "./repository";
 import type { DeletionTarget } from "./types";
 
 export async function prepareDeletion(target: DeletionTarget, actor: { userId: string; sessionId: string }) {
@@ -22,6 +22,14 @@ export async function requestPermanentDeletion(input: {
   target: DeletionTarget; impactDigest: string; confirmation: string; challengeToken: string;
   includeAuthUsers: boolean; context: AdminWriteContext;
 }) {
+  const existing = await getDeletionJobByIdempotencyKey(input.context.idempotencyKey);
+  if (existing) {
+    if (existing.targetKind !== input.target.kind || existing.targetId !== input.target.id || existing.impactDigest !== input.impactDigest) {
+      throw new AdminWorkspaceError(409, "idempotency_conflict");
+    }
+    if (!await enqueueAdminDeletion(existing.id)) throw new AdminWorkspaceError(503, "deletion_queue_unavailable");
+    return existing;
+  }
   const fresh = await previewDeletion(input.target);
   if (fresh.impactDigest !== input.impactDigest) throw new AdminWorkspaceError(409, "impact_changed");
   if (input.confirmation !== fresh.confirmationPhrase) throw new AdminWorkspaceError(422, "confirmation_mismatch");

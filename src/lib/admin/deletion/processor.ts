@@ -7,7 +7,7 @@ import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
 import { previewDeletion } from "./impact";
 import type { DeletionImpact } from "./types";
 
-const STAGES: AdminDeletionStageKind[] = ["VALIDATE", "CANCEL_WORK", "DISCONNECT_PROVIDERS", "DELETE_TENANT_DATA", "MARK_IRREVERSIBLE", "DELETE_AUTH_USER", "FINALIZE"];
+const STAGES: AdminDeletionStageKind[] = ["VALIDATE", "CANCEL_WORK", "DISCONNECT_PROVIDERS", "MARK_IRREVERSIBLE", "DELETE_TENANT_DATA", "DELETE_AUTH_USER", "FINALIZE"];
 
 function safeCode(error: unknown): string {
   const message = error instanceof Error ? error.message : "deletion_stage_failed";
@@ -27,7 +27,10 @@ async function completeStage(jobId: string, stage: AdminDeletionStageKind, opera
   }
 }
 
-async function markCancelled(jobId: string) {
+async function markCancelled(jobId: string, targetKind: "USER" | "WORKSPACE", targetId: string) {
+  if (targetKind === "WORKSPACE") {
+    await prisma.workspace.updateMany({ where: { id: targetId, deletionScheduledAt: { not: null } }, data: { status: "ACTIVE", deletionScheduledAt: null, version: { increment: 1 } } });
+  }
   await prisma.adminDeletionJob.update({ where: { id: jobId }, data: { state: "CANCELLED", cancelledAt: new Date(), finishedAt: new Date(), progress: 100, version: { increment: 1 } } });
 }
 
@@ -45,7 +48,7 @@ export async function processAdminDeletion(jobId: string): Promise<{ state: "COM
       const current = await prisma.adminDeletionJob.findUnique({ where: { id: jobId } });
       if (!current) throw new Error("deletion_job_not_found");
       if (current.cancelRequestedAt && !current.irreversibleAt) {
-        await markCancelled(jobId);
+        await markCancelled(jobId, current.targetKind, current.targetId);
         return { state: "CANCELLED" };
       }
       await prisma.adminDeletionJob.update({ where: { id: jobId }, data: { currentStage: stage, progress: Math.floor((index / STAGES.length) * 100) } });
@@ -57,10 +60,9 @@ export async function processAdminDeletion(jobId: string): Promise<{ state: "COM
           await deleteQueuedWorkspaceEvents(current.targetId);
           await prisma.workspace.update({ where: { id: current.targetId }, data: { status: "SUSPENDED", deletionScheduledAt: new Date(), version: { increment: 1 } } });
         } else if (stage === "DISCONNECT_PROVIDERS" && current.targetKind === "WORKSPACE") {
-          await prisma.$transaction([
-            prisma.instagramConnection.deleteMany({ where: { workspaceId: current.targetId } }),
-            prisma.facebookPageConnection.deleteMany({ where: { workspaceId: current.targetId } }),
-          ]);
+          // The suspended workspace cannot dispatch. Provider credentials remain
+          // intact until the irreversible boundary so cancellation is honest.
+          await prisma.workspace.findUniqueOrThrow({ where: { id: current.targetId }, select: { id: true } });
         } else if (stage === "DELETE_TENANT_DATA") {
           if (current.targetKind === "WORKSPACE") await prisma.workspace.deleteMany({ where: { id: current.targetId } });
           else await prisma.$transaction([

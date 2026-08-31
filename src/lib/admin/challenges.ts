@@ -123,7 +123,7 @@ export async function createAdminChallenge(
 ): Promise<{ token: string; expiresAt: string }> {
   const store = dependencies.store ?? challengeStore();
   const token = dependencies.randomToken?.() ?? randomBytes(32).toString("base64url");
-  const ttlSeconds = dependencies.ttlSeconds ?? CHALLENGE_TTL_SECONDS;
+  const ttlSeconds = dependencies.ttlSeconds ?? getServerEnv().adminChallengeTtlSeconds ?? CHALLENGE_TTL_SECONDS;
   const inserted = await store.put(sha256(token), recordFor(binding), ttlSeconds);
   if (!inserted) throw new AdminChallengeError(503, "challenge_unavailable");
 

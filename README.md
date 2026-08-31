@@ -1,5 +1,7 @@
 # Linkar
 
+Owner operations: [admin console runbook](docs/admin-console-operations.md) and [permanent deletion runbook](docs/admin-console-deletion-runbook.md).
+
 Linkar is an India-first Instagram and Facebook Page automation MVP. It provides deterministic Instagram comment and inbound-DM replies plus public replies to top-level Facebook Page comments through Meta’s official APIs. There is no AI integration in this version.
 
 ## What is built

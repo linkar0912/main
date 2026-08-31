@@ -42,8 +42,9 @@ async function previewUser(id: string): Promise<DeletionImpact> {
 
 async function previewWorkspace(id: string): Promise<DeletionImpact> {
   return prisma.$transaction(async (transaction) => {
-    const workspace = await transaction.workspace.findUnique({ where: { id }, select: { name: true } });
+    const workspace = await transaction.workspace.findUnique({ where: { id }, select: { name: true, status: true } });
     if (!workspace) throw new AdminWorkspaceError(404, "workspace_not_found");
+    if (workspace.status !== "ACTIVE") throw new AdminWorkspaceError(409, "workspace_not_active");
     const members = await transaction.workspaceMember.findMany({ where: { workspaceId: id }, select: { userId: true } });
     const userIds = members.flatMap((member) => member.userId ? [member.userId] : []).sort();
     if (userIds.some((userId) => getServerEnv().platformOwnerUserIds.includes(userId.toLowerCase()))) {

@@ -29,7 +29,9 @@ CREATE TABLE "AdminDeletionJob" (
   "startedAt" TIMESTAMP(3),
   "finishedAt" TIMESTAMP(3),
   "updatedAt" TIMESTAMP(3) NOT NULL,
-  CONSTRAINT "AdminDeletionJob_pkey" PRIMARY KEY ("id")
+  CONSTRAINT "AdminDeletionJob_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "AdminDeletionJob_progress_check" CHECK ("progress" >= 0 AND "progress" <= 100),
+  CONSTRAINT "AdminDeletionJob_terminal_finished_check" CHECK ("state" NOT IN ('CANCELLED', 'COMPLETED', 'FAILED') OR "finishedAt" IS NOT NULL)
 );
 CREATE UNIQUE INDEX "AdminDeletionJob_idempotencyKey_key" ON "AdminDeletionJob"("idempotencyKey");
 CREATE INDEX "AdminDeletionJob_state_createdAt_idx" ON "AdminDeletionJob"("state", "createdAt");
@@ -46,7 +48,8 @@ CREATE TABLE "AdminDeletionStage" (
   "completedAt" TIMESTAMP(3),
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "AdminDeletionStage_pkey" PRIMARY KEY ("jobId", "stage"),
-  CONSTRAINT "AdminDeletionStage_jobId_fkey" FOREIGN KEY ("jobId") REFERENCES "AdminDeletionJob"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT "AdminDeletionStage_jobId_fkey" FOREIGN KEY ("jobId") REFERENCES "AdminDeletionJob"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT "AdminDeletionStage_completed_at_check" CHECK ("state" <> 'COMPLETED' OR "completedAt" IS NOT NULL)
 );
 CREATE INDEX "AdminDeletionStage_state_updatedAt_idx" ON "AdminDeletionStage"("state", "updatedAt");
 

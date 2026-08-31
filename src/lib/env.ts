@@ -37,6 +37,9 @@ export type ServerEnv = {
   trustedProxyHops: number;
   workerConcurrency: number;
   dispatchLeaseMs: number;
+  adminChallengeTtlSeconds: number;
+  deletionJobAttempts: number;
+  deletionJobBackoffMs: number;
   supabaseUrl: string;
   supabasePublishableKey: string;
   supabaseServiceRoleKey: string;
@@ -178,6 +181,9 @@ export function getServerEnv(): ServerEnv {
     trustedProxyHops: integerEnv("TRUSTED_PROXY_HOPS", process.env.TRUSTED_PROXY_HOPS, 0),
     workerConcurrency: integerEnv("WORKER_CONCURRENCY", process.env.WORKER_CONCURRENCY, 5),
     dispatchLeaseMs: integerEnv("DISPATCH_LEASE_MS", process.env.DISPATCH_LEASE_MS, 30_000),
+    adminChallengeTtlSeconds: integerEnv("ADMIN_CHALLENGE_TTL_SECONDS", process.env.ADMIN_CHALLENGE_TTL_SECONDS, 600),
+    deletionJobAttempts: integerEnv("DELETION_JOB_ATTEMPTS", process.env.DELETION_JOB_ATTEMPTS, 8),
+    deletionJobBackoffMs: integerEnv("DELETION_JOB_BACKOFF_MS", process.env.DELETION_JOB_BACKOFF_MS, 5_000),
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
     supabasePublishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",

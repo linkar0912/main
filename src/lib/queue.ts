@@ -134,8 +134,8 @@ export async function enqueueAdminDeletion(jobId: string): Promise<boolean> {
   }
   await queue.add("admin-deletion", { jobId }, {
     jobId: `admin-deletion:${jobId}`,
-    attempts: 8,
-    backoff: { type: "exponential", delay: 5_000 },
+    attempts: getServerEnv().deletionJobAttempts,
+    backoff: { type: "exponential", delay: getServerEnv().deletionJobBackoffMs },
     removeOnComplete: 1_000,
     removeOnFail: 5_000,
   });

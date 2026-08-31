@@ -6,7 +6,7 @@ import { prisma } from "@/src/lib/prisma";
 import type { AdminWriteContext } from "../request-guard";
 import type { DeletionPreview, DeletionTarget } from "./types";
 
-const STAGES: AdminDeletionStageKind[] = ["VALIDATE", "CANCEL_WORK", "DISCONNECT_PROVIDERS", "DELETE_TENANT_DATA", "MARK_IRREVERSIBLE", "DELETE_AUTH_USER", "FINALIZE"];
+const STAGES: AdminDeletionStageKind[] = ["VALIDATE", "CANCEL_WORK", "DISCONNECT_PROVIDERS", "MARK_IRREVERSIBLE", "DELETE_TENANT_DATA", "DELETE_AUTH_USER", "FINALIZE"];
 
 export async function createDeletionJob(input: { target: DeletionTarget; preview: DeletionPreview; includeAuthUsers: boolean; context: AdminWriteContext }) {
   return prisma.adminDeletionJob.create({
@@ -29,6 +29,10 @@ export async function listDeletionJobs(limit = 50) {
 
 export async function getDeletionJob(id: string) {
   return prisma.adminDeletionJob.findUnique({ where: { id }, include: { stages: true } });
+}
+
+export async function getDeletionJobByIdempotencyKey(idempotencyKey: string) {
+  return prisma.adminDeletionJob.findUnique({ where: { idempotencyKey }, include: { stages: true } });
 }
 
 export async function requestDeletionCancellation(id: string, actorUserId: string) {
