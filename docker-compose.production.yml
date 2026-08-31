@@ -13,6 +13,7 @@ services:
       APP_NAME: ${APP_NAME:-Linkar}
       APP_URL: ${APP_URL:?APP_URL is required}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+      ADMIN_URL: ${ADMIN_URL:-https://admin.linkar.in}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://linkar.in}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:?SUPPORT_EMAIL is required}
       SOURCE_COMMIT: ${SOURCE_COMMIT:-local-compose}

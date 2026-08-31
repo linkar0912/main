@@ -70,5 +70,6 @@ describe("proxy.ts matcher coverage", () => {
 
   it("covers the owner console route family", () => {
     expect(matcherCoversRoute(matcher, ["admin"])).toBe(true);
+    expect(matcherCoversRoute(matcher, ["api", "admin"])).toBe(true);
   });
 });

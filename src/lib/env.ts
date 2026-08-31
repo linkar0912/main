@@ -1,6 +1,7 @@
 export type ServerEnv = {
   appName: string;
   appUrl: string;
+  adminUrl: string;
   publicSiteUrl: string;
   supportEmail: string;
   databaseUrl?: string;
@@ -97,6 +98,7 @@ export function getServerEnv(): ServerEnv {
   // server-only variable so one container image can be configured correctly
   // at runtime by Coolify.
   const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const adminUrl = process.env.ADMIN_URL ?? appUrl;
   const publicSiteUrl =
     process.env.PUBLIC_SITE_URL ??
     (process.env.NODE_ENV === "production" ? "https://linkar.in" : "http://localhost:3000");
@@ -113,6 +115,7 @@ export function getServerEnv(): ServerEnv {
   // Demo mode is unaffected: every validated value has a valid default.
   for (const [name, value] of [
     ["APP_URL", appUrl],
+    ["ADMIN_URL", adminUrl],
     ["PUBLIC_SITE_URL", publicSiteUrl],
     ["META_REDIRECT_URI", metaRedirectUri],
     ["FACEBOOK_REDIRECT_URI", facebookRedirectUri],
@@ -134,6 +137,7 @@ export function getServerEnv(): ServerEnv {
   return {
     appName: process.env.APP_NAME ?? "Linkar",
     appUrl,
+    adminUrl,
     publicSiteUrl,
     supportEmail: process.env.SUPPORT_EMAIL ?? "support@linkar.in",
     databaseUrl: process.env.DATABASE_URL,

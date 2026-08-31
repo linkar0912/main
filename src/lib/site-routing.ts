@@ -1,5 +1,8 @@
 export const MARKETING_HOST = "linkar.in";
 export const APP_HOST = "app.linkar.in";
+export const ADMIN_HOST = "admin.linkar.in";
+
+const ADMIN_ROUTE_PREFIXES = ["/admin", "/api/admin"] as const;
 
 const APP_ROUTE_PREFIXES = [
   "/auth",
@@ -7,7 +10,6 @@ const APP_ROUTE_PREFIXES = [
   "/signup",
   "/forgot-password",
   "/reset-password",
-  "/admin",
   "/dashboard",
   "/activity",
   "/automations",
@@ -42,7 +44,7 @@ function normalizeHostname(hostname: string): string {
 }
 
 export type HostRedirect = {
-  target: "app" | "marketing";
+  target: "app" | "admin" | "marketing";
   pathname: string;
 };
 
@@ -67,8 +69,20 @@ export function resolveRequestHostname(headers: HeaderReader, fallbackHostname: 
 export function resolveHostRedirect(hostname: string, pathname: string): HostRedirect | null {
   const host = normalizeHostname(hostname);
 
+  if (ADMIN_ROUTE_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix))) {
+    return host === ADMIN_HOST ? null : { target: "admin", pathname };
+  }
+
   if (host === MARKETING_HOST && APP_ROUTE_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix))) {
     return { target: "app", pathname };
+  }
+
+  if (host === ADMIN_HOST) {
+    if (pathname === "/") return { target: "admin", pathname: "/admin" };
+    if (pathname === "/login" || pathname === "/api/auth/login" || pathname === "/api/auth/logout") return null;
+    if (MARKETING_ROUTE_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix))) return { target: "marketing", pathname };
+    if (APP_ROUTE_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix))) return { target: "app", pathname };
+    return null;
   }
 
   if (host !== APP_HOST) return null;
@@ -78,6 +92,10 @@ export function resolveHostRedirect(hostname: string, pathname: string): HostRed
   }
 
   return null;
+}
+
+export function applicationOriginForPath(pathname: string, origins: { appUrl: string; adminUrl: string }): string {
+  return matchesPathPrefix(pathname, "/admin") ? origins.adminUrl : origins.appUrl;
 }
 
 /** Whether a page path should run the optimistic Supabase session gate. */

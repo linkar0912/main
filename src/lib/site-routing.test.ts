@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "./site-routing";
+import { applicationOriginForPath, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "./site-routing";
 
 describe("site host routing", () => {
   it("moves app paths from the marketing host to the app host", () => {
@@ -16,9 +16,18 @@ describe("site host routing", () => {
       pathname: "/auth/confirm",
     });
     expect(resolveHostRedirect("linkar.in", "/admin/workspaces")).toEqual({
-      target: "app",
+      target: "admin",
       pathname: "/admin/workspaces",
     });
+  });
+
+  it("keeps owner surfaces on the dedicated admin host", () => {
+    expect(resolveHostRedirect("app.linkar.in", "/admin")).toEqual({ target: "admin", pathname: "/admin" });
+    expect(resolveHostRedirect("app.linkar.in", "/api/admin/system")).toEqual({ target: "admin", pathname: "/api/admin/system" });
+    expect(resolveHostRedirect("admin.linkar.in", "/")).toEqual({ target: "admin", pathname: "/admin" });
+    expect(resolveHostRedirect("admin.linkar.in", "/admin/audit")).toBeNull();
+    expect(resolveHostRedirect("admin.linkar.in", "/login")).toBeNull();
+    expect(resolveHostRedirect("admin.linkar.in", "/dashboard")).toEqual({ target: "app", pathname: "/dashboard" });
   });
 
   it("moves marketing and legal paths from the app host to the marketing host", () => {
@@ -60,5 +69,11 @@ describe("site host routing", () => {
     expect(isProtectedAppPath("/login")).toBe(false);
     expect(isProtectedAppPath("/privacy")).toBe(false);
     expect(isProtectedAppPath("/")).toBe(false);
+  });
+
+  it("selects the admin origin for owner navigation and the app origin otherwise", () => {
+    const origins = { appUrl: "https://app.linkar.in", adminUrl: "https://admin.linkar.in" };
+    expect(applicationOriginForPath("/admin/security", origins)).toBe("https://admin.linkar.in");
+    expect(applicationOriginForPath("/dashboard", origins)).toBe("https://app.linkar.in");
   });
 });

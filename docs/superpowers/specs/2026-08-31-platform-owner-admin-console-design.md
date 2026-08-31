@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build a private operator console at `https://app.linkar.in/admin` that gives the Linkar platform owner direct, write-capable control over every Linkar workspace, user, plan, entitlement, automation surface, delivery, integration, operational queue, and audit event.
+Build a private operator console at `https://admin.linkar.in/admin` that gives the Linkar platform owner direct, write-capable control over every Linkar workspace, user, plan, entitlement, automation surface, delivery, integration, operational queue, and audit event.
 
 The console is an internal Linkar control plane. It is not an expanded customer workspace-admin screen, and no `OWNER`, `ADMIN`, or `MEMBER` workspace role can grant access to it.
 

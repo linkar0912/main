@@ -7,6 +7,10 @@ afterEach(() => {
 });
 
 describe("platform owner environment", () => {
+  it("keeps the owner console on its own production origin", () => {
+    vi.stubEnv("ADMIN_URL", "https://admin.linkar.in");
+    expect(getServerEnv().adminUrl).toBe("https://admin.linkar.in");
+  });
   it("normalizes and deduplicates a comma-separated UUID allowlist", () => {
     vi.stubEnv("PLATFORM_OWNER_USER_IDS", [
       "11111111-1111-4111-8111-111111111111",

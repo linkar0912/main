@@ -82,7 +82,7 @@ function buildAdminWriteContext(
   } catch {
     throw new AdminRequestError(403, "origin_mismatch");
   }
-  if (normalizedOrigin !== new URL(env.appUrl).origin) {
+  if (normalizedOrigin !== new URL(env.adminUrl ?? env.appUrl).origin) {
     throw new AdminRequestError(403, "origin_mismatch");
   }
 

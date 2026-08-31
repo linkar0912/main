@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { assertApplicationAccess, safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
-import { isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
+import { ADMIN_HOST, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
 
 // Canonicalizes the marketing and app hosts, then applies an optimistic gate
 // to authenticated page routes. The gate also refreshes the Supabase session
@@ -17,7 +17,7 @@ export async function proxy(request: NextRequest) {
   const hostname = resolveRequestHostname(request.headers, request.nextUrl.hostname);
   const hostRedirect = resolveHostRedirect(hostname, request.nextUrl.pathname);
   if (hostRedirect) {
-    const baseUrl = hostRedirect.target === "app" ? env.appUrl : env.publicSiteUrl;
+    const baseUrl = hostRedirect.target === "admin" ? env.adminUrl : hostRedirect.target === "app" ? env.appUrl : env.publicSiteUrl;
     const destination = new URL(hostRedirect.pathname, baseUrl);
     destination.search = request.nextUrl.search;
     return NextResponse.redirect(destination);
@@ -51,7 +51,7 @@ export async function proxy(request: NextRequest) {
     if (access) return response;
   }
 
-  const login = new URL("/login", env.appUrl);
+  const login = new URL("/login", hostname.toLowerCase().replace(/:\d+$/, "") === ADMIN_HOST || request.nextUrl.pathname.startsWith("/admin") ? env.adminUrl : env.appUrl);
   // safeNextPath rejects off-site paths ("//evil.example") and control
   // characters; we re-use it so a crafted /help?x=1%0d%0anext=… cannot smuggle
   // headers or a different login next into the redirect.
@@ -82,5 +82,6 @@ export const config = {
     "/profile/:path*",
     "/help/:path*",
     "/admin/:path*",
+    "/api/admin/:path*",
   ],
 };
