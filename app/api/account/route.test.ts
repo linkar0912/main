@@ -50,6 +50,8 @@ describe("GET /api/account", () => {
     expect(body.data).toMatchObject({
       email: "member@example.com",
       role: "MEMBER",
+      plan: "free",
+      planName: "Free",
     });
   });
 

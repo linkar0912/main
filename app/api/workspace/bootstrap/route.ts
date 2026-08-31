@@ -3,6 +3,7 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { loadProfilePictureUrl } from "@/src/lib/meta/profile-picture";
 import { getRepository } from "@/src/lib/repository-provider";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
 
 export const runtime = "nodejs";
 
@@ -14,9 +15,10 @@ export async function GET(request: Request) {
 
     const env = getServerEnv();
     const repository = getRepository();
-    const [role, connections] = await Promise.all([
+    const [role, connections, entitlements] = await Promise.all([
         repository.getMemberRole(session.workspaceId, session.email),
         repository.listConnections(session.workspaceId).catch(() => []),
+        getEntitlementService().getEffectiveEntitlements(session.workspaceId),
     ]);
 
     const first = connections[0];
@@ -28,7 +30,8 @@ export async function GET(request: Request) {
         data: {
             email: session.email,
             role: role ?? "MEMBER",
-            plan: "free",
+            plan: entitlements.planKey,
+            planName: entitlements.planName,
             igAvatarUrl,
             platformOwner: env.platformOwnerUserIds.includes(session.userId.toLowerCase()),
         },

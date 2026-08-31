@@ -161,6 +161,7 @@ model PlanDefinition {
   key                      String   @unique
   name                     String
   isActive                 Boolean  @default(true)
+  version                  Int      @default(1)
   memberLimit              Int?
   automationLimit          Int?
   instagramConnectionLimit Int?

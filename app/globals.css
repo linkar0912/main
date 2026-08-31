@@ -1715,6 +1715,20 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .admin-create-panel { margin-bottom: var(--space-4); padding: var(--space-5); }
 .admin-create-form { align-items: end; display: grid; gap: var(--space-3); grid-template-columns: minmax(180px, 1fr) 180px minmax(200px, 1fr) auto; }
 .admin-check-field { align-items: center; display: flex; font-size: .78rem; gap: 8px; grid-column: 1 / -1; }
+.admin-plan-stack { display: grid; gap: var(--space-5); }
+.admin-plan-card { display: grid; gap: var(--space-4); padding: var(--space-5); }
+.admin-new-plan { border-color: color-mix(in srgb, var(--honey) 55%, var(--line)); margin-bottom: var(--space-6); }
+.admin-plan-fieldset { border: 1px solid var(--line); border-radius: var(--radius-md); display: grid; gap: var(--space-3); margin: 0; padding: var(--space-4); }
+.admin-plan-fieldset legend { font-size: .78rem; font-weight: 800; padding: 0 7px; }
+.admin-plan-fieldset > .muted { font-size: .72rem; margin: 0; }
+.admin-plan-limit-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.admin-feature-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.admin-feature-grid .admin-check-field { grid-column: auto; }
+.admin-entitlement-grid { display: grid; gap: var(--space-5); grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: var(--space-5); }
+.admin-inline-kv { display: grid; margin: 0; }
+.admin-inline-kv div { align-items: center; border-top: 1px solid var(--line); display: flex; gap: var(--space-3); justify-content: space-between; padding: 9px 0; }
+.admin-inline-kv dt { color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
+.admin-inline-kv dd { font-family: var(--font-mono); font-size: .72rem; margin: 0; }
 
 @media (max-width: 720px) {
   .admin-filter-bar { align-items: stretch; flex-direction: column; }
@@ -1722,6 +1736,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .admin-pagination { align-items: stretch; flex-direction: column; gap: var(--space-3); }
   .admin-command-actions .button { width: 100%; }
   .admin-create-form { grid-template-columns: 1fr; }
+  .admin-plan-limit-grid, .admin-feature-grid { grid-template-columns: 1fr; }
+  .admin-entitlement-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {

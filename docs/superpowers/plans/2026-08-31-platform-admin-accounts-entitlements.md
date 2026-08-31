@@ -474,27 +474,27 @@ git commit -m "feat(admin): manage Linkar users"
 - Entitlement PATCH accepts `{ planId, overrides, version, reason }`.
 - Account/bootstrap DTOs return the effective plan key.
 
-- [ ] **Step 1: Write failing plan lifecycle tests**
+- [x] **Step 1: Write failing plan lifecycle tests**
 
 Test creation, duplicate key `409`, nullable unlimited limits, negative limit `422`, retire referenced plan, optimistic version conflict, override reset, audit snapshots, and effective app-shell plan display.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run app/api/admin/plans app/api/admin/workspaces src/components/admin/plans-screen.test.tsx app/api/account/route.test.ts src/lib/client/workspace-data.test.ts`
 
 Expected: tests fail because plan APIs/UI and real bootstrap plan are missing.
 
-- [ ] **Step 3: Implement strict plan forms and APIs**
+- [x] **Step 3: Implement strict plan forms and APIs**
 
 Render limits as nullable numeric controls with an explicit Unlimited switch. Show the number of assigned workspaces before retirement. Workspace detail shows defaults, overrides, effective values, and current usage side by side.
 
-- [ ] **Step 4: Verify Phase 2**
+- [x] **Step 4: Verify Phase 2**
 
 Run: `pnpm vitest run src/lib/entitlements src/lib/admin app/api/admin app/api/account app/api/workspace src/components/admin src/lib/auth/session.test.ts src/lib/automation && pnpm typecheck && pnpm lint && pnpm prisma validate && pnpm build`
 
 Expected: all commands exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/api/admin/plans app/api/admin/workspaces app/admin/plans src/components/admin/plans-screen.tsx src/components/admin/plans-screen.test.tsx app/api/account/route.ts app/api/account/route.test.ts app/api/workspace/bootstrap/route.ts src/lib/client/workspace-data.ts src/lib/client/workspace-data.test.ts
@@ -503,10 +503,10 @@ git commit -m "feat(admin): manage plans and workspace limits"
 
 ## Phase 2 Completion Gate
 
-- [ ] Every workspace member is linked to a stable Supabase user ID or is reported as an explicit backfill exception.
-- [ ] Suspended users/workspaces cannot use customer APIs or worker dispatch and can be restored.
-- [ ] Platform-owner identities cannot be targeted by lifecycle actions.
-- [ ] Plan templates, overrides, and monthly usage are persisted and enforced.
-- [ ] All resource limits return consistent typed errors.
-- [ ] Owner can manage workspaces, users, roles, plans, and limits from responsive admin screens.
-- [ ] AppShell displays the effective persisted plan instead of hard-coded `free`.
+- [x] Every workspace member is linked to a stable Supabase user ID or is reported as an explicit backfill exception.
+- [x] Suspended users/workspaces cannot use customer APIs or worker dispatch and can be restored.
+- [x] Platform-owner identities cannot be targeted by lifecycle actions.
+- [x] Plan templates, overrides, and monthly usage are persisted and enforced.
+- [x] All resource limits return consistent typed errors.
+- [x] Owner can manage workspaces, users, roles, plans, and limits from responsive admin screens.
+- [x] AppShell displays the effective persisted plan instead of hard-coded `free`.

@@ -7,6 +7,15 @@ import { ArrowLeft, Ban, Download, PauseCircle, RadioTower, RotateCcw, Users } f
 
 import type { AdminWorkspaceDetail } from "@/src/lib/admin/accounts-repository";
 
+type WorkspaceEntitlement = {
+  plan: { id: string; key: string; name: string };
+  defaults: Record<string, number | boolean | null>;
+  overrides: Record<string, number | boolean | null | undefined>;
+  effective: Record<string, number | boolean | null>;
+  version: number;
+  usage: { deliveriesReserved: number; broadcastsCreated: number; periodStart: string };
+};
+
 function key(): string {
   return `admin-${Date.now()}-${crypto.randomUUID()}`;
 }
@@ -22,12 +31,14 @@ async function command(url: string, body: unknown, reason: string, method = "POS
   return payload;
 }
 
-export function WorkspaceDetailScreen({ workspace }: { workspace: AdminWorkspaceDetail }) {
+export function WorkspaceDetailScreen({ workspace, entitlement, plans = [] }: { workspace: AdminWorkspaceDetail; entitlement?: WorkspaceEntitlement; plans?: Array<{ id: string; key: string; name: string; isActive: boolean }> }) {
   const router = useRouter();
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [planId, setPlanId] = useState(entitlement?.plan.id ?? "");
+  const [overrides, setOverrides] = useState(JSON.stringify(entitlement?.overrides ?? {}, null, 2));
   const lifecycleButton = useRef<HTMLButtonElement>(null);
   const phrase = `SUSPEND ${workspace.slug}`;
 
@@ -55,6 +66,14 @@ export function WorkspaceDetailScreen({ workspace }: { workspace: AdminWorkspace
     void mutate(() => command(`/api/admin/workspaces/${workspace.id}/lifecycle`, { action, version: workspace.version }, reason));
   }
 
+  function saveEntitlement(event: FormEvent) {
+    event.preventDefault();
+    let parsed: unknown;
+    try { parsed = JSON.parse(overrides); } catch { setError("Overrides must be valid JSON."); return; }
+    if (!entitlement) { setError("Entitlement record is unavailable."); return; }
+    void mutate(() => command(`/api/admin/workspaces/${workspace.id}/entitlement`, { planId, overrides: parsed, version: entitlement.version }, reason, "PATCH"));
+  }
+
   return (
     <main className="page-wrap admin-resource-page">
       <Link className="admin-back-inline" href="/admin/workspaces"><ArrowLeft size={16} /> All workspaces</Link>
@@ -73,6 +92,12 @@ export function WorkspaceDetailScreen({ workspace }: { workspace: AdminWorkspace
         <article className="panel admin-summary-card"><p className="eyebrow">Effective plan</p><h2>{workspace.planName}</h2><p className="muted">Key: {workspace.planKey}</p><dl><div><dt>Members</dt><dd>{workspace.memberCount}</dd></div><div><dt>Automations</dt><dd>{workspace.automationCount}</dd></div><div><dt>Entitlement version</dt><dd>{workspace.entitlementVersion ?? 1}</dd></div></dl></article>
         <article className="panel admin-summary-card"><p className="eyebrow">Channels</p><h2>Integration footprint</h2><dl><div><dt>Instagram</dt><dd>{workspace.instagramConnectionCount}</dd></div><div><dt>Facebook</dt><dd>{workspace.facebookConnectionCount}</dd></div><div><dt>Record version</dt><dd>{workspace.version}</dd></div></dl></article>
       </section>
+
+      {entitlement ? <section className="panel admin-detail-section">
+        <div className="panel-heading"><div><p className="eyebrow">Versioned entitlements</p><h2>Plan, usage, and overrides</h2></div><span className="status-pill">v{entitlement.version}</span></div>
+        <div className="admin-entitlement-grid"><div><h3>Current period usage</h3><dl className="admin-inline-kv"><div><dt>Deliveries reserved</dt><dd>{entitlement.usage.deliveriesReserved}</dd></div><div><dt>Broadcasts created</dt><dd>{entitlement.usage.broadcastsCreated}</dd></div></dl></div><div><h3>Effective limits</h3><dl className="admin-inline-kv">{Object.entries(entitlement.effective).map(([keyName, value]) => <div key={keyName}><dt>{keyName}</dt><dd>{value === null ? "Unlimited" : String(value)}</dd></div>)}</dl></div></div>
+        <form className="admin-command-form" onSubmit={saveEntitlement}><label className="field"><span>Plan template</span><select value={planId} onChange={(event) => setPlanId(event.target.value)}>{plans.filter((plan) => plan.isActive || plan.id === entitlement.plan.id).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} ({plan.key})</option>)}</select></label><label className="field"><span>Strict override JSON</span><textarea value={overrides} onChange={(event) => setOverrides(event.target.value)} spellCheck={false} /></label><p className="muted">Only documented limit and feature keys are accepted. Use <code>null</code> for unlimited; omit a key to inherit the plan.</p><button className="button button-primary" disabled={busy || reason.length < 3} type="submit">Save entitlement</button></form>
+      </section> : null}
 
       <section id="members" className="panel admin-detail-section">
         <div className="panel-heading"><div><p className="eyebrow">Access</p><h2>Workspace members</h2></div><Users size={20} /></div>

@@ -4,6 +4,7 @@ export type WorkspaceBootstrap = {
   email: string;
   role: MemberRole;
   plan: string;
+  planName?: string;
   igAvatarUrl?: string | null;
   platformOwner: boolean;
 };

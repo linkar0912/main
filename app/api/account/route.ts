@@ -4,6 +4,7 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 import { LoginRateLimitStore } from "@/src/lib/auth/rate-limit";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,10 @@ export async function GET(request: Request) {
     if (error || !data.user?.email) return Response.json({ error: "Account not found" }, { status: 404 });
 
     const repository = getRepository();
-    const role = await repository.getMemberRole(session.workspaceId, data.user.email);
+    const [role, entitlements] = await Promise.all([
+        repository.getMemberRole(session.workspaceId, data.user.email),
+        getEntitlementService().getEffectiveEntitlements(session.workspaceId),
+    ]);
 
     return Response.json({
         data: {
@@ -29,7 +33,8 @@ export async function GET(request: Request) {
             email: data.user.email,
             workspaceId: session.workspaceId,
             role: role ?? "MEMBER",
-            plan: "free",
+            plan: entitlements.planKey,
+            planName: entitlements.planName,
             memberSince: data.user.created_at,
             emailVerified: Boolean(data.user.email_confirmed_at),
         },
