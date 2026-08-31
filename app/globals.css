@@ -674,6 +674,30 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   outline: 0;
 }
 .template-picker-search input::placeholder { color: var(--subtle); }
+.template-channel-runway {
+  align-items: center;
+  background: var(--hover-wash);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px var(--space-6);
+}
+.template-channel-runway button {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--slate);
+  cursor: pointer;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 750;
+  padding: 6px 11px;
+}
+.template-channel-runway button.is-active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
+.template-channel-runway label { align-items: center; display: flex; gap: 8px; }
+.template-channel-runway select { min-width: 190px; padding: 6px 28px 6px 9px; }
+.template-channel-step, .template-channel-runway label span, .template-channel-surface { color: var(--subtle); font-size: .7rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .template-picker-layout { display: flex; flex: 1; min-height: 0; }
 .template-picker { display: flex; flex-direction: column; height: min(86vh, 820px); }
 .template-picker-categories {

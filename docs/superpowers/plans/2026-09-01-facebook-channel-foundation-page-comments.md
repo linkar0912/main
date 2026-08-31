@@ -170,25 +170,25 @@ export type AutomationTemplate = {
 };
 ```
 
-- [ ] **Step 1: Write failing catalog and picker tests**
+- [x] **Step 1: Write failing catalog and picker tests**
 
 Require exactly these Facebook Page templates: keyword reply, every-comment reply, product/pricing FAQ, availability/opening hours, giveaway acknowledgement, support acknowledgement, and per-post campaign reply. Assert every one contains a comment trigger and exactly one public Page reply, and that the picker filters by selected provider, surface, and connection capability.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm vitest run src/lib/automation/templates.test.ts src/components/template-picker-modal.test.tsx`
 
 Expected: FAIL because templates have no provider/surface metadata.
 
-- [ ] **Step 3: Split catalogs without changing Instagram IDs or payloads**
+- [x] **Step 3: Split catalogs without changing Instagram IDs or payloads**
 
 Move the current definitions verbatim into `templates/instagram.ts`. Add the seven Facebook definitions with neutral sample copy. Re-export the combined catalog and `getCompatibleTemplates({ provider, surface, capabilities })` from `templates.ts`.
 
-- [ ] **Step 4: Make the picker channel-first**
+- [x] **Step 4: Make the picker channel-first**
 
 Render provider, connection, surface, category, and template stages. Changing an established target must present a confirmation listing incompatible trigger/action fields that will be removed; cancel preserves the draft.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `pnpm vitest run src/lib/automation/templates.test.ts src/components/template-picker-modal.test.tsx src/components/automation-builder.test.tsx && pnpm typecheck`
 

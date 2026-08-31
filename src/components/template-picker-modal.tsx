@@ -15,7 +15,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { basicAutomationTemplates, triggerLabel, type PremadeTemplate, type TemplateTriggerType } from "@/src/lib/automation/templates";
+import { basicAutomationTemplates, getCompatibleTemplates, triggerLabel, type PremadeTemplate, type TemplateTriggerType } from "@/src/lib/automation/templates";
 
 const CATEGORY_ICONS: Record<TemplateTriggerType, typeof MessageCircle> = {
   comment: MessageSquare,
@@ -52,6 +52,13 @@ export const TEMPLATE_EXAMPLES: Record<string, string> = {
   "influencer-collab-intake": "DM “collab” → collects email, niche, platform → alerts team",
   "giveaway-comment-entry": "Comment “ENTER” → private reply: “You’re in!”",
   "offer-followup": "DM “offer” → deal link → next day: “Still interested?”",
+  "facebook-keyword-comment-reply": "Comment “price” → public Page reply",
+  "facebook-every-comment-reply": "Any top-level comment → public Page reply",
+  "facebook-product-pricing-faq": "Comment “price” → public pricing acknowledgement",
+  "facebook-availability-hours": "Comment “hours” → public availability acknowledgement",
+  "facebook-giveaway-acknowledgement": "Comment “enter” → public giveaway acknowledgement",
+  "facebook-support-acknowledgement": "Comment “help” → public support acknowledgement",
+  "facebook-per-post-campaign-reply": "Campaign comment → public reply on selected posts",
 };
 
 const CAMPAIGN_EXAMPLE = "Comment “drop” → public reply → DM opt-in → follow check → link";
@@ -98,6 +105,9 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<TemplateTriggerType | null>(null);
+  const [provider, setProvider] = useState<"INSTAGRAM" | "FACEBOOK">("INSTAGRAM");
+  const [facebookPages, setFacebookPages] = useState<{ pageId: string; pageName: string; status: string }[]>([]);
+  const [facebookPageId, setFacebookPageId] = useState("");
   const headingId = useId();
 
   useEffect(() => {
@@ -113,12 +123,31 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
     };
   }, [onClose]);
 
+  useEffect(() => {
+    if (provider !== "FACEBOOK") return;
+    let active = true;
+    fetch("/api/facebook/connection")
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as { data?: { pageId: string; pageName: string; status: string }[] };
+        if (active && response.ok) setFacebookPages((payload.data ?? []).filter((page) => page.status === "CONNECTED"));
+      })
+      .catch(() => {
+        if (active) setFacebookPages([]);
+      });
+    return () => { active = false; };
+  }, [provider]);
+
   function go(href: string) {
     onClose();
     router.push(href);
   }
 
+  const blankBuilderHref = provider === "FACEBOOK"
+    ? `/automations/new?type=classic&provider=facebook&surface=comment&connection=${encodeURIComponent(facebookPageId)}`
+    : "/automations/new?type=classic";
+
   const items: PickerItem[] = useMemo(() => {
+    if (provider === "FACEBOOK" && !facebookPageId) return [];
     const campaign: PickerItem = {
       id: "campaign-follow-gate",
       title: "Follow-gated Reel campaign",
@@ -129,17 +158,22 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
       featured: true,
       href: "/automations/new?type=campaign",
     };
-    const recipes: PickerItem[] = basicAutomationTemplates.map((template: PremadeTemplate) => ({
+    const compatible = provider === "FACEBOOK"
+      ? getCompatibleTemplates({ provider: "FACEBOOK", surface: "COMMENT", capabilities: ["facebook-page-comment"] })
+      : basicAutomationTemplates.filter((template) => template.provider === "INSTAGRAM");
+    const recipes: PickerItem[] = compatible.map((template: PremadeTemplate) => ({
       id: template.id,
       title: template.title,
       description: template.description,
       example: TEMPLATE_EXAMPLES[template.id],
       category: template.setup.definition.trigger.type,
       popular: template.popular,
-      href: `/automations/new?type=classic&template=${template.id}`,
+      href: provider === "FACEBOOK"
+        ? `/automations/new?type=classic&template=${template.id}&provider=facebook&surface=comment&connection=${encodeURIComponent(facebookPageId)}`
+        : `/automations/new?type=classic&template=${template.id}`,
     }));
-    return [campaign, ...recipes];
-  }, []);
+    return provider === "INSTAGRAM" ? [campaign, ...recipes] : recipes;
+  }, [facebookPageId, provider]);
 
   const categoryCounts = useMemo(() => {
     const counts = new Map<TemplateTriggerType, number>();
@@ -161,7 +195,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
         <header className="template-picker-head">
           <h2 id={headingId}>Templates</h2>
           <div className="template-picker-head-actions">
-            <button type="button" className="button button-secondary button-small" onClick={() => go("/automations/new?type=classic")}>
+            <button type="button" className="button button-secondary button-small" disabled={provider === "FACEBOOK" && !facebookPageId} onClick={() => go(blankBuilderHref)}>
               <Plus size={14} /> Start from scratch
             </button>
             <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
@@ -180,6 +214,22 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
             placeholder="Search templates…"
             aria-label="Search templates"
           />
+        </div>
+
+        <div className="template-channel-runway" aria-label="Automation channel">
+          <span className="template-channel-step">1 · Channel</span>
+          <button type="button" className={provider === "INSTAGRAM" ? "is-active" : ""} onClick={() => { setProvider("INSTAGRAM"); setCategory(null); }}>Instagram</button>
+          <button type="button" className={provider === "FACEBOOK" ? "is-active" : ""} onClick={() => { setProvider("FACEBOOK"); setCategory(null); }}>Facebook</button>
+          {provider === "FACEBOOK" && (
+            <label>
+              <span>2 · Page</span>
+              <select aria-label="Facebook Page" value={facebookPageId} onChange={(event) => setFacebookPageId(event.target.value)}>
+                <option value="">Select a connected Page</option>
+                {facebookPages.map((page) => <option key={page.pageId} value={page.pageId}>{page.pageName}</option>)}
+              </select>
+            </label>
+          )}
+          <span className="template-channel-surface">{provider === "FACEBOOK" ? "3 · Page comments" : "Instagram comments & messages"}</span>
         </div>
 
         <div className="template-picker-layout">
@@ -202,7 +252,11 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
           </nav>
 
           <div className="template-picker-content">
-            {visible.length === 0 && <p className="muted">No templates match “{query}”.</p>}
+            {visible.length === 0 && (
+              <p className="muted">
+                {provider === "FACEBOOK" && !facebookPageId ? "Select a connected Facebook Page to choose a recipe." : `No templates match “${query}”.`}
+              </p>
+            )}
 
             {popular.length > 0 && (
               <>

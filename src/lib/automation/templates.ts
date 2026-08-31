@@ -1,4 +1,5 @@
 import type { FlowDefinitionV1 } from "./types";
+import { facebookPageAutomationTemplates } from "./templates/facebook-page";
 
 export type TemplateTriggerType = FlowDefinitionV1["trigger"]["type"];
 
@@ -8,6 +9,9 @@ export type TemplateTriggerType = FlowDefinitionV1["trigger"]["type"];
  * definition so the classic builder can open it directly.
  */
 export type PremadeTemplate = {
+  provider: "INSTAGRAM" | "FACEBOOK";
+  surface: "COMMENT" | "MESSAGING";
+  requiredCapabilities: readonly string[];
   id: string;
   title: string;
   description: string;
@@ -30,7 +34,9 @@ export type PremadeTemplate = {
   setup: { name: string; definition: FlowDefinitionV1 };
 };
 
-export const basicAutomationTemplates: PremadeTemplate[] = [
+type LegacyInstagramTemplate = Omit<PremadeTemplate, "provider" | "surface" | "requiredCapabilities">;
+
+const legacyInstagramTemplates: LegacyInstagramTemplate[] = [
   {
     id: "comment-link-dm",
     title: "Auto-DM links from comments",
@@ -496,6 +502,33 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
     },
   },
 ];
+
+export const instagramAutomationTemplates: PremadeTemplate[] = legacyInstagramTemplates.map((template) => {
+  const surface = template.setup.definition.trigger.type === "comment" ? "COMMENT" : "MESSAGING";
+  return {
+    ...template,
+    provider: "INSTAGRAM",
+    surface,
+    requiredCapabilities: [surface === "COMMENT" ? "instagram-comment" : "instagram-messaging"],
+  };
+});
+
+export const basicAutomationTemplates: PremadeTemplate[] = [
+  ...instagramAutomationTemplates,
+  ...facebookPageAutomationTemplates,
+];
+
+export function getCompatibleTemplates(input: {
+  provider: PremadeTemplate["provider"];
+  surface: PremadeTemplate["surface"];
+  capabilities: readonly string[];
+}): PremadeTemplate[] {
+  const available = new Set(input.capabilities);
+  return basicAutomationTemplates.filter((template) =>
+    template.provider === input.provider
+    && template.surface === input.surface
+    && template.requiredCapabilities.every((capability) => available.has(capability)));
+}
 
 export function getTemplateById(id: string): PremadeTemplate | undefined {
   return basicAutomationTemplates.find((template) => template.id === id);

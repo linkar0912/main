@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { basicAutomationTemplates } from "@/src/lib/automation/templates";
 
@@ -12,6 +12,42 @@ describe("TemplatePickerModal", () => {
   afterEach(() => {
     cleanup();
     push.mockClear();
+    vi.unstubAllGlobals();
+  });
+
+  it("switches to a connected Facebook Page and shows only compatible Page-comment recipes", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: [{ pageId: "page_1", pageName: "Linkar Demo", status: "CONNECTED" }] }),
+    })));
+    render(<TemplatePickerModal onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Facebook" }));
+    const pageSelect = await screen.findByLabelText("Facebook Page");
+    expect(screen.queryByText("Keyword comment reply")).toBeNull();
+    fireEvent.change(pageSelect, { target: { value: "page_1" } });
+
+    expect(await screen.findByText("Keyword comment reply")).toBeTruthy();
+    expect(screen.queryByText(/Conversation Starters/)).toBeNull();
+    fireEvent.click(screen.getByText("Keyword comment reply"));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith(
+      "/automations/new?type=classic&template=facebook-keyword-comment-reply&provider=facebook&surface=comment&connection=page_1",
+    ));
+  });
+
+  it("carries the selected Facebook Page into a blank Page-comment builder", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: [{ pageId: "page_1", pageName: "Linkar Demo", status: "CONNECTED" }] }),
+    })));
+    render(<TemplatePickerModal onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Facebook" }));
+    fireEvent.change(await screen.findByLabelText("Facebook Page"), { target: { value: "page_1" } });
+    fireEvent.click(screen.getByText("Start from scratch"));
+
+    expect(push).toHaveBeenCalledWith("/automations/new?type=classic&provider=facebook&surface=comment&connection=page_1");
   });
 
   it("lists the campaign quick-start and every premade recipe", () => {

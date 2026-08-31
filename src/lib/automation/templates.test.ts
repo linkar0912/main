@@ -1,8 +1,40 @@
 import { describe, expect, it } from "vitest";
 import { validateFlowDefinition } from "./definition";
-import { basicAutomationTemplates, getTemplateById } from "./templates";
+import { basicAutomationTemplates, getCompatibleTemplates, getTemplateById } from "./templates";
 
 describe("premade automation templates", () => {
+  it("ships the complete Facebook Page-comment recipe set with safe public replies", () => {
+    const expectedIds = [
+      "facebook-keyword-comment-reply",
+      "facebook-every-comment-reply",
+      "facebook-product-pricing-faq",
+      "facebook-availability-hours",
+      "facebook-giveaway-acknowledgement",
+      "facebook-support-acknowledgement",
+      "facebook-per-post-campaign-reply",
+    ];
+    const templates = getCompatibleTemplates({ provider: "FACEBOOK", surface: "COMMENT", capabilities: ["facebook-page-comment"] });
+
+    expect(templates.map((template) => template.id)).toEqual(expectedIds);
+    for (const template of templates) {
+      expect(template.provider).toBe("FACEBOOK");
+      expect(template.surface).toBe("COMMENT");
+      expect(template.requiredCapabilities).toEqual(["facebook-page-comment"]);
+      expect(template.setup.definition.trigger.type).toBe("comment");
+      expect(template.setup.definition.actions).toHaveLength(1);
+      expect(template.setup.definition.actions[0].type).toBe("private_reply");
+      expect(JSON.stringify(template.setup)).not.toContain("example.com");
+    }
+  });
+
+  it("does not offer Instagram recipes for a Facebook Page target", () => {
+    const facebook = getCompatibleTemplates({ provider: "FACEBOOK", surface: "COMMENT", capabilities: ["facebook-page-comment"] });
+    expect(facebook.some((template) => template.id === "comment-catch-all")).toBe(false);
+
+    const instagram = getCompatibleTemplates({ provider: "INSTAGRAM", surface: "MESSAGING", capabilities: ["instagram-messaging"] });
+    expect(instagram.length).toBeGreaterThan(0);
+    expect(instagram.every((template) => template.provider === "INSTAGRAM" && template.surface === "MESSAGING")).toBe(true);
+  });
   it("exposes unique template ids", () => {
     const ids = basicAutomationTemplates.map((template) => template.id);
     expect(new Set(ids).size).toBe(ids.length);
