@@ -66,8 +66,9 @@ function asInputJson(value: unknown): Prisma.InputJsonValue {
 }
 
 export async function appendAdminAuditEvent(input: AdminAuditInput): Promise<void> {
-  await prisma.adminAuditEvent.create({
-    data: {
+  try {
+    await prisma.adminAuditEvent.create({
+      data: {
       id: createId("audit"),
       requestId: input.requestId,
       phase: input.phase,
@@ -85,6 +86,12 @@ export async function appendAdminAuditEvent(input: AdminAuditInput): Promise<voi
       ipHash: input.ipHash.slice(0, 200),
       userAgent: input.userAgent.slice(0, 1_000),
       origin: input.origin?.slice(0, 500),
-    },
-  });
+      },
+    });
+  } catch (error) {
+    // requestId is derived from the idempotency key. Replaying the same
+    // request must not append a second phase or block the idempotent command.
+    if ((error as { code?: string }).code === "P2002") return;
+    throw error;
+  }
 }
