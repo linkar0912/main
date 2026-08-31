@@ -412,7 +412,7 @@ git commit -m "feat(admin): add protected operator shell"
 - Produces: `AdminOverviewDTO` containing bounded counts, dependency health, queue counts, recent failures, and recent audit events.
 - `GET /api/admin/overview` returns `{ data: AdminOverviewDTO }` and `Cache-Control: private, no-store`.
 
-- [ ] **Step 1: Write failing DTO and endpoint tests**
+- [x] **Step 1: Write failing DTO and endpoint tests**
 
 ```ts
 it("returns bounded operational totals without secret fields", async () => {
@@ -425,23 +425,23 @@ it("returns bounded operational totals without secret fields", async () => {
 
 Route tests prove non-owners receive `403`, AAL1 receives `428`, and owner responses are `no-store`.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/overview.test.ts app/api/admin/overview/route.test.ts src/components/admin/admin-overview-screen.test.tsx`
 
 Expected: FAIL because overview modules do not exist.
 
-- [ ] **Step 3: Implement aggregate loaders and UI**
+- [x] **Step 3: Implement aggregate loaders and UI**
 
 Query bounded counts from Prisma, existing `/api/health` logic, BullMQ queue counts, and the latest 20 failure/audit items. Render the operator tape as the signature chronological surface, followed by concise operational cards and explicit empty/error states.
 
-- [ ] **Step 4: Verify Phase 1**
+- [x] **Step 4: Verify Phase 1**
 
 Run: `pnpm vitest run src/lib/admin app/api/admin src/components/admin src/lib/site-routing.test.ts src/proxy-coverage.test.ts && pnpm typecheck && pnpm lint && pnpm prisma validate && pnpm build`
 
 Expected: all commands exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/admin/page.tsx app/admin/loading.tsx app/api/admin/overview src/lib/admin/overview.ts src/lib/admin/overview.test.ts src/components/admin/admin-overview-screen.tsx src/components/admin/admin-overview-screen.test.tsx
@@ -450,9 +450,9 @@ git commit -m "feat(admin): add operational overview"
 
 ## Phase 1 Completion Gate
 
-- [ ] Exact UUID allowlisting fails closed in production.
-- [ ] AAL1 can reach only the security enrollment screen; AAL2 reaches admin data.
-- [ ] Non-owner page and API requests expose no admin data.
-- [ ] Audit rows are redacted and append-only.
-- [ ] AdminShell matches Linkar layout behavior on desktop and mobile.
-- [ ] Overview reports real bounded state and no secrets.
+- [x] Exact UUID allowlisting fails closed in production.
+- [x] AAL1 can reach only the security enrollment screen; AAL2 reaches admin data.
+- [x] Non-owner page and API requests expose no admin data.
+- [x] Audit rows are redacted and append-only.
+- [x] AdminShell matches Linkar layout behavior on desktop and mobile.
+- [x] Overview reports real bounded state and no secrets.

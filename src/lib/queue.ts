@@ -7,6 +7,14 @@ import type { FacebookNormalizedEvent } from "./facebook/types";
 
 export const WEBHOOK_QUEUE_NAME = "linkar-webhooks";
 
+export type WebhookQueueCounts = {
+  state: "ok" | "not_configured" | "error";
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+};
+
 // Scanning the whole queue at once (getJobs without bounds) loads every retained
 // job into memory; page through instead so data-deletion sweeps stay cheap even
 // with thousands of completed/failed jobs retained.
@@ -200,6 +208,23 @@ export type BroadcastEnqueueResult = {
 /** Whether background delivery is available at all - broadcasts depend on it. */
 export function isQueueConfigured(): boolean {
   return Boolean(getServerEnv().redisUrl);
+}
+
+export async function getWebhookQueueCounts(): Promise<WebhookQueueCounts> {
+  const queue = getWebhookQueue();
+  if (!queue) return { state: "not_configured", waiting: 0, active: 0, delayed: 0, failed: 0 };
+  try {
+    const counts = await queue.getJobCounts("waiting", "active", "delayed", "failed");
+    return {
+      state: "ok",
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      delayed: counts.delayed ?? 0,
+      failed: counts.failed ?? 0,
+    };
+  } catch {
+    return { state: "error", waiting: 0, active: 0, delayed: 0, failed: 0 };
+  }
 }
 
 export async function enqueueBroadcastSends(
