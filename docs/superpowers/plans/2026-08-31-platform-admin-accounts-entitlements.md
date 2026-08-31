@@ -297,7 +297,7 @@ git commit -m "feat(plans): enforce workspace limits"
 - Produces `listAdminUsers(query): Promise<CursorPage<AdminUserSummary>>`.
 - Produces `getAdminUser(id): Promise<AdminUserDetail | null>`.
 
-- [ ] **Step 1: Write failing cursor and DTO tests**
+- [x] **Step 1: Write failing cursor and DTO tests**
 
 ```ts
 it("round-trips a createdAt/id cursor and rejects tampering", () => {
@@ -312,23 +312,23 @@ it("never returns encrypted connection fields in workspace DTOs", async () => {
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/cursor.test.ts src/lib/admin/accounts-repository.test.ts`
 
 Expected: FAIL because the repository and cursor codec do not exist.
 
-- [ ] **Step 3: Implement signed keyset cursors and bounded DTOs**
+- [x] **Step 3: Implement signed keyset cursors and bounded DTOs**
 
 Use HMAC-SHA256 with `AUTH_SESSION_SECRET`, a maximum page size of 100, default 25, and `(createdAt, id)` keyset ordering. Join only the counts/status/plan fields the UI needs. Supabase user pagination is adapted into the same DTO contract without loading all users into the browser.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `pnpm vitest run src/lib/admin/cursor.test.ts src/lib/admin/accounts-repository.test.ts && pnpm typecheck`
 
 Expected: tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/admin/accounts-repository.ts src/lib/admin/prisma-accounts-repository.ts src/lib/admin/memory-accounts-repository.ts src/lib/admin/accounts-repository.test.ts src/lib/admin/cursor.ts src/lib/admin/cursor.test.ts
