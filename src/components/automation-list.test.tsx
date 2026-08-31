@@ -152,6 +152,25 @@ describe("AutomationList activity link", () => {
     expect(screen.queryByText("Private reply")).toBeNull();
   });
 
+  it("always identifies the provider, surface, and selected Facebook Page", () => {
+    render(
+      <AutomationList
+        automations={[v1Automation({
+          id: "automation_fb_target",
+          name: "Page support",
+          provider: "FACEBOOK",
+          facebookPageId: "12345",
+        })]}
+        loading={false}
+        onStatusChange={async () => {}}
+      />,
+    );
+
+    expect(screen.getByText("Facebook")).toBeTruthy();
+    expect(screen.getByText("Page comments")).toBeTruthy();
+    expect(screen.getByText(/Pinned to Facebook Page/)).toBeTruthy();
+  });
+
   it("does not show a Facebook Page pin badge when the automation is unpinned", () => {
     render(
       <AutomationList

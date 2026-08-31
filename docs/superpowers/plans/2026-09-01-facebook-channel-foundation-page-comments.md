@@ -214,25 +214,25 @@ git commit -m "feat(automation): add Facebook Page templates"
 - Test: `src/components/automation-builder.test.tsx`
 - Test: `src/components/automation-list.test.tsx`
 
-- [ ] **Step 1: Add failing Facebook editing tests**
+- [x] **Step 1: Add failing Facebook editing tests**
 
 Cover Page selection, post scope, include keywords, exclusion keywords, reply variants, reply-once, schedule, priority, daily limit, public-reply copy, Page preview, explicit target-change confirmation, and persistence of `initialFacebookPageId` when reopening an automation.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm vitest run src/components/automation-builder.test.tsx src/components/automation-list.test.tsx`
 
 Expected: at least the reply-variant, confirmation, and editor rehydration cases fail.
 
-- [ ] **Step 3: Extract sections with characterization tests kept green**
+- [x] **Step 3: Extract sections with characterization tests kept green**
 
 Move one section at a time. Each section receives `{ capability, draft, onChange, errors }`; it must not inspect provider IDs directly. Keep orchestration and save behavior in `automation-builder.tsx`.
 
-- [ ] **Step 4: Finish Page-comment UX**
+- [x] **Step 4: Finish Page-comment UX**
 
 Expose every approved control, pass `initialFacebookPageId` from `automation-editor-screen.tsx`, label the action “Public Page reply,” and show provider/surface/connection chips in list and review views. Preserve `FacebookPagePreview` as a local-only preview.
 
-- [ ] **Step 5: Verify accessibility and commit**
+- [x] **Step 5: Verify accessibility and commit**
 
 Run: `pnpm vitest run src/components/automation-builder.test.tsx src/components/automation-list.test.tsx src/lib/automation/templates.test.ts && pnpm typecheck && pnpm lint`
 

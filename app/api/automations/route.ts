@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    let body: { provider?: unknown; name?: unknown; definition?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
+    let body: { provider?: unknown; name?: unknown; definition?: unknown; priority?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
     try {
       body = (await request.json()) as typeof body;
     } catch {
@@ -31,6 +31,10 @@ export async function POST(request: Request) {
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 });
     if (name.length > 120) return NextResponse.json({ error: "Name must be 120 characters or fewer" }, { status: 400 });
+    const priority = body.priority === undefined ? 0 : body.priority;
+    if (typeof priority !== "number" || !Number.isInteger(priority) || priority < -100 || priority > 100) {
+      return NextResponse.json({ error: "Priority must be a whole number from -100 to 100" }, { status: 400 });
+    }
     const target = parseAutomationTarget(body, { requirePin: true });
     if (!target) return NextResponse.json({ error: "invalid_channel_target" }, { status: 400 });
     const definition = validateFlowDefinition(body.definition);
@@ -63,6 +67,7 @@ export async function POST(request: Request) {
       provider: target.provider,
       name,
       definition,
+      priority,
       ...(instagramAccountId ? { instagramAccountId } : {}),
       ...(facebookPageId ? { facebookPageId } : {}),
     });

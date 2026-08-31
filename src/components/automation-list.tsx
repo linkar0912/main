@@ -239,6 +239,10 @@ export function AutomationList({
           <div className="automation-copy">
             <div className="automation-title"><strong>{automation.name}</strong><StatusBadge status={automation.status} /></div>
             <p>
+              <span className="automation-account">{automation.provider === "FACEBOOK" || automation.facebookPageId ? "Facebook" : "Instagram"}</span>
+              {" "}<span className="row-divider">·</span>{" "}
+              <span className="automation-account">{automation.provider === "FACEBOOK" || automation.facebookPageId ? "Page comments" : automation.definition.trigger.type === "comment" ? "Comments" : "Messaging"}</span>
+              {" "}<span className="row-divider">·</span>{" "}
               {triggerSummary(automation)} <span className="row-divider">·</span> {actionSummary(automation)}
               {showAccountChips && (
                 <>

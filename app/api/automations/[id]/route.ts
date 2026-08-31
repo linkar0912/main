@@ -26,7 +26,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
-  let body: { provider?: unknown; name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
+  let body: { provider?: unknown; name?: unknown; status?: unknown; definition?: unknown; priority?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -84,6 +84,12 @@ export async function PATCH(request: Request, context: RouteContext) {
     patch.name = name;
   }
   if (body.status === "DRAFT" || body.status === "ACTIVE" || body.status === "PAUSED") patch.status = body.status;
+  if (body.priority !== undefined) {
+    if (typeof body.priority !== "number" || !Number.isInteger(body.priority) || body.priority < -100 || body.priority > 100) {
+      return NextResponse.json({ error: "Priority must be a whole number from -100 to 100" }, { status: 400 });
+    }
+    patch.priority = body.priority;
+  }
   if (body.definition !== undefined) {
     try {
       patch.definition = validateFlowDefinition(body.definition);

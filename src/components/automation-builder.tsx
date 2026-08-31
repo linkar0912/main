@@ -23,6 +23,12 @@ import { InstagramPreview, type DmBubble, type PreviewView } from "./instagram-p
 import { FacebookPagePreview } from "./facebook-page-preview";
 import { AutomationSimulator } from "./automation-simulator";
 import { getInstagramConnections, getFacebookPages, type FacebookPageSummary } from "@/src/lib/client/workspace-data";
+import { ChannelSelector } from "./automation-builder/channel-selector";
+import { CommentKeywordControls, type CommentKeywordMode } from "./automation-builder/trigger-section";
+import { CommentConditionsSection } from "./automation-builder/comment-conditions-section";
+import { PublicPageReplyVariants } from "./automation-builder/action-section";
+import { AutomationPriorityField } from "./automation-builder/delivery-controls-section";
+import { ChannelReviewItem } from "./automation-builder/review-section";
 
 type AutomationBuilderProps = {
   automationId?: string;
@@ -30,6 +36,7 @@ type AutomationBuilderProps = {
   initialDefinition?: FlowDefinition;
   initialInstagramAccountId?: string;
   initialFacebookPageId?: string;
+  initialPriority?: number;
   onSaved?: (automation: unknown) => void;
 };
 
@@ -193,6 +200,7 @@ function AutomationBuilderV1({
   initialDefinition = defaultDefinitionV1,
   initialInstagramAccountId = "",
   initialFacebookPageId = "",
+  initialPriority = 0,
   onSaved,
 }: {
   automationId?: string;
@@ -200,10 +208,14 @@ function AutomationBuilderV1({
   initialDefinition?: FlowDefinitionV1;
   initialInstagramAccountId?: string;
   initialFacebookPageId?: string;
+  initialPriority?: number;
   onSaved?: (automation: unknown) => void;
 }) {
   const [name, setName] = useState(initialName);
   const [instagramAccountId, setInstagramAccountId] = useState(initialInstagramAccountId);
+  const [channel, setChannel] = useState<"INSTAGRAM" | "FACEBOOK">(
+    initialFacebookPageId ? "FACEBOOK" : "INSTAGRAM",
+  );
   const facebookPages = useFacebookPages();
   // Default the channel off; once a Facebook page is selected the preview +
   // pin all use Facebook. If both fields are set on the server, the API will
@@ -221,6 +233,15 @@ function AutomationBuilderV1({
     initialDefinition.trigger.type === "comment" || initialDefinition.trigger.type === "message"
       ? commaSeparated(initialDefinition.trigger.keywords)
       : "",
+  );
+  const [keywordMode, setKeywordMode] = useState<CommentKeywordMode>(
+    initialDefinition.trigger.type === "comment" ? initialDefinition.trigger.mode ?? "any" : "any",
+  );
+  const [negativeKeywords, setNegativeKeywords] = useState(
+    initialDefinition.trigger.type === "comment" ? commaSeparated(initialDefinition.trigger.negativeKeywords ?? []) : "",
+  );
+  const [replyOncePerUser, setReplyOncePerUser] = useState(
+    initialDefinition.trigger.type === "comment" && Boolean(initialDefinition.trigger.replyOncePerUser),
   );
   const [mediaIds, setMediaIds] = useState(
     initialDefinition.trigger.type === "comment" ? commaSeparated(initialDefinition.trigger.mediaIds) : "",
@@ -274,6 +295,7 @@ function AutomationBuilderV1({
   const [scheduleStart, setScheduleStart] = useState(isoToLocalInput(initialDefinition.schedule?.startsAt));
   const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
   const [dailyLimit, setDailyLimit] = useState(initialDefinition.dailySendLimit ? String(initialDefinition.dailySendLimit) : "");
+  const [priority, setPriority] = useState(String(initialPriority));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -310,7 +332,8 @@ function AutomationBuilderV1({
   }, [triggerType]);
 
   const usesTextTrigger = triggerType === "comment" || triggerType === "message";
-  const allowedActionTypes = classicActionOptions(triggerType, Boolean(facebookPageId));
+  const isFacebook = channel === "FACEBOOK";
+  const allowedActionTypes = classicActionOptions(triggerType, isFacebook);
   const hasEmailStep = triggerType !== "comment";
 
   // Keyword ideas from the workspace's own automations plus proven staples -
@@ -485,6 +508,11 @@ function AutomationBuilderV1({
             match: triggerMatch,
             keywords: triggerMatch === "keyword" ? parseKeywords(keywords) : [],
             mediaIds: parseCommaSeparated(mediaIds),
+            ...(triggerMatch === "keyword" && keywordMode !== "any" ? { mode: keywordMode } : {}),
+            ...(parseKeywords(negativeKeywords).length > 0
+              ? { negativeKeywords: parseKeywords(negativeKeywords) }
+              : {}),
+            ...(replyOncePerUser ? { replyOncePerUser: true } : {}),
           }
         : triggerType === "message"
           ? {
@@ -520,7 +548,15 @@ function AutomationBuilderV1({
               imageUrl: action.imageUrl.trim(),
               ...(action.caption?.trim() ? { caption: action.caption.trim() } : {}),
             }
-          : { ...action, text: action.text.trim() },
+          : action.type === "private_reply"
+            ? {
+                type: action.type,
+                text: action.text.trim(),
+                ...(action.textVariants?.map((text) => text.trim()).filter(Boolean).length
+                  ? { textVariants: action.textVariants.map((text) => text.trim()).filter(Boolean) }
+                  : {}),
+              }
+            : { ...action, text: action.text.trim() },
       ),
       ...(Number.isFinite(parsedLimit) && parsedLimit > 0 ? { dailySendLimit: parsedLimit } : {}),
       ...(startsAt || endsAt ? { schedule } : {}),
@@ -643,12 +679,15 @@ function AutomationBuilderV1({
       // could keep both visible as a clear "either/or" picker; the current UX
       // toggles the channel explicitly so the saved payload never carries a
       // pair of pins.
-      const body: { provider: "INSTAGRAM" | "FACEBOOK"; name: string; definition: FlowDefinitionV1; instagramAccountId?: string | null; facebookPageId?: string | null } = {
-        provider: facebookPageId ? "FACEBOOK" : "INSTAGRAM",
+      const parsedPriority = Number.parseInt(priority, 10);
+      const body: { provider: "INSTAGRAM" | "FACEBOOK"; name: string; definition: FlowDefinitionV1; priority?: number; instagramAccountId?: string | null; facebookPageId?: string | null } = {
+        provider: channel,
         name,
         definition: buildDefinition(),
+        priority: Number.isFinite(parsedPriority) ? parsedPriority : 0,
       };
-      if (facebookPageId) {
+      if (channel === "FACEBOOK") {
+        if (!facebookPageId) throw new Error("Select a connected Facebook Page before saving.");
         body.facebookPageId = facebookPageId;
         body.instagramAccountId = null;
       } else {
@@ -723,43 +762,40 @@ function AutomationBuilderV1({
           />
         </label>
 
-        {connections.length > 1 && (
-          <label className="field field-wide">
-            <span>Instagram account</span>
-            <select
-              aria-label="Instagram account"
-              value={instagramAccountId}
-              onChange={(event) => {
-                setInstagramAccountId(event.target.value);
-                if (event.target.value) setFacebookPageId("");
-              }}
-            >
-              <option value="">All connected accounts</option>
-              {connections.map((item) => (
-                <option key={item.igUserId || item.username} value={item.igUserId}>@{item.username}</option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {facebookPages.length > 0 && (
-          <label className="field field-wide">
-            <span>Facebook Page</span>
-            <select
-              aria-label="Facebook Page"
-              value={facebookPageId}
-              onChange={(event) => {
-                setFacebookPageId(event.target.value);
-                if (event.target.value) setInstagramAccountId("");
-              }}
-            >
-              <option value="">Don&apos;t pin to a Page</option>
-              {facebookPages.map((page) => (
-                <option key={page.id} value={page.pageId}>{page.pageName}</option>
-              ))}
-            </select>
-          </label>
-        )}
+        <ChannelSelector
+          channel={channel}
+          instagramAccountId={instagramAccountId}
+          facebookPageId={facebookPageId}
+          instagramConnections={connections}
+          facebookPages={facebookPages}
+          onChannelChange={(next) => {
+            if (next === channel) return;
+            if (channel === "FACEBOOK") {
+              const confirmed = window.confirm(
+                "Changing channel will remove the selected Facebook Page and any Page-only reply settings. Continue?",
+              );
+              if (!confirmed) return;
+            }
+            setChannel(next);
+            if (next === "INSTAGRAM") setFacebookPageId("");
+            if (next === "FACEBOOK") {
+              changeTriggerType("comment");
+              setActions((current) => current[0]?.type === "private_reply" ? [current[0]] : [newClassicAction("private_reply")]);
+            }
+          }}
+          onInstagramAccountChange={(accountId) => {
+            setInstagramAccountId(accountId);
+            if (accountId) setFacebookPageId("");
+          }}
+          onFacebookPageChange={(pageId) => {
+            setFacebookPageId(pageId);
+            if (pageId) {
+              setChannel("FACEBOOK");
+              setInstagramAccountId("");
+              changeTriggerType("comment");
+            }
+          }}
+        />
 
         <nav className="wizard-progress" aria-label="Builder steps">
           {wizardSteps.map((key, index) => (
@@ -796,12 +832,12 @@ function AutomationBuilderV1({
                     value={triggerType}
                     onChange={(event) => changeTriggerType(event.target.value as ClassicTriggerType)}
                   >
-                    <option value="comment">Instagram comment</option>
-                    <option value="message">Instagram DM</option>
-                    <option value="first_contact">First-time contact</option>
-                    <option value="story_mention">Story mention</option>
-                    <option value="referral">Referral link tap</option>
-                    <option value="optin">Opt-in tap</option>
+                    <option value="comment">{isFacebook ? "Facebook Page comment" : "Instagram comment"}</option>
+                    {!isFacebook && <option value="message">Instagram DM</option>}
+                    {!isFacebook && <option value="first_contact">First-time contact</option>}
+                    {!isFacebook && <option value="story_mention">Story mention</option>}
+                    {!isFacebook && <option value="referral">Referral link tap</option>}
+                    {!isFacebook && <option value="optin">Opt-in tap</option>}
                   </select>
                   <ChevronDown size={16} />
                 </span>
@@ -824,6 +860,7 @@ function AutomationBuilderV1({
               )}
             </div>
             {usesTextTrigger && triggerMatch === "keyword" && (
+              <>
               <label className="field field-spaced">
                 <span>Keywords</span>
                 <input
@@ -848,17 +885,24 @@ function AutomationBuilderV1({
                   </span>
                 )}
               </label>
+              {triggerType === "comment" && (
+                <CommentKeywordControls
+                  mode={keywordMode}
+                  negativeKeywords={negativeKeywords}
+                  onModeChange={setKeywordMode}
+                  onNegativeKeywordsChange={setNegativeKeywords}
+                />
+              )}
+              </>
             )}
             {triggerType === "comment" && (
-              <label className="field field-spaced">
-                <span>Limit to posts <em>optional</em></span>
-                <input
-                  aria-label="Post IDs"
-                  value={mediaIds}
-                  onChange={(event) => setMediaIds(event.target.value)}
-                  placeholder="Paste Instagram media IDs, separated by commas"
-                />
-              </label>
+              <CommentConditionsSection
+                mediaIds={mediaIds}
+                replyOncePerUser={replyOncePerUser}
+                provider={channel}
+                onMediaIdsChange={setMediaIds}
+                onReplyOncePerUserChange={setReplyOncePerUser}
+              />
             )}
           </div>
         </section>
@@ -916,7 +960,7 @@ function AutomationBuilderV1({
             <div className="step-heading">
               <div>
                 <p className="eyebrow">{actions.length > 1 ? "Actions" : "Action"}</p>
-                <h2>{facebookPageId ? "What should Linkar reply publicly?" : "What should the person receive?"}</h2>
+                <h2>{isFacebook ? "What should Linkar reply publicly?" : "What should the person receive?"}</h2>
               </div>
               <Send size={21} strokeWidth={1.7} />
             </div>
@@ -951,9 +995,9 @@ function AutomationBuilderV1({
                 </div>
                 {action.type !== "send_image" && (
                   <label className="field">
-                    <span>{facebookPageId ? "Public comment reply" : actions.length > 1 ? `Step ${index + 1} message` : "Message text"}</span>
+                    <span>{isFacebook ? "Public Page reply" : actions.length > 1 ? `Step ${index + 1} message` : "Message text"}</span>
                     <textarea
-                      aria-label={actions.length > 1 ? `Step ${index + 1} message` : "Message text"}
+                      aria-label={isFacebook ? "Public Page reply variation 1" : actions.length > 1 ? `Step ${index + 1} message` : "Message text"}
                       value={action.text}
                       onChange={(event) => updateAction(index, { text: event.target.value })}
                       rows={3}
@@ -964,6 +1008,9 @@ function AutomationBuilderV1({
                       Personalize with <code>{"{username}"}</code> <code>{"{keyword}"}</code> <code>{"{media}"}</code> - they fill in per person.
                     </small>
                   </label>
+                )}
+                {isFacebook && action.type === "private_reply" && (
+                  <PublicPageReplyVariants variants={action.textVariants ?? []} onChange={(textVariants) => updateAction(index, { textVariants })} />
                 )}
                 {action.type === "send_image" && (
                   <>
@@ -1371,6 +1418,7 @@ function AutomationBuilderV1({
               />
               <small>Pauses the automation for the rest of the day when the cap is reached.</small>
             </label>
+            <AutomationPriorityField value={priority} onChange={setPriority} />
             <div className="field-grid field-spaced">
               <label className="field">
                 <span>Active from <em>optional</em></span>
@@ -1418,6 +1466,8 @@ function AutomationBuilderV1({
                 <li>{followUps.filter((followUp) => followUp.text.trim()).length} follow-up nudge{followUps.filter((followUp) => followUp.text.trim()).length === 1 ? "" : "s"} scheduled after the flow</li>
               )}
               {dailyLimit && <li>Daily send limit: {dailyLimit}</li>}
+              <li>Priority: {priority || "0"}</li>
+              <ChannelReviewItem provider={channel} connectionName={facebookPages.find((page) => page.pageId === facebookPageId)?.pageName} />
               {(scheduleStart || scheduleEnd) && (
                 <li>Active {scheduleStart ? `from ${scheduleStart}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${scheduleEnd}` : ""}</li>
               )}
@@ -2269,6 +2319,7 @@ export function AutomationBuilder({
   initialDefinition,
   initialInstagramAccountId,
   initialFacebookPageId,
+  initialPriority,
   onSaved,
   variant,
 }: AutomationBuilderProps & { variant?: "campaign" | "classic" }) {
@@ -2280,6 +2331,7 @@ export function AutomationBuilder({
         initialDefinition={initialDefinition}
         initialInstagramAccountId={initialInstagramAccountId}
         initialFacebookPageId={initialFacebookPageId}
+        initialPriority={initialPriority}
         onSaved={onSaved}
       />
     );
@@ -2291,6 +2343,7 @@ export function AutomationBuilder({
         initialName={initialName}
         initialInstagramAccountId={initialInstagramAccountId}
         initialFacebookPageId={initialFacebookPageId}
+        initialPriority={initialPriority}
         onSaved={onSaved}
       />
     );

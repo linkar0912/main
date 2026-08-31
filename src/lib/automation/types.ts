@@ -60,7 +60,7 @@ export type FlowCondition =
   | { type: "media_is"; mediaIds: string[] };
 
 export type FlowAction =
-  | { type: "private_reply"; text: string }
+  | { type: "private_reply"; text: string; /** Alternate replies rotated deterministically by the runner. */ textVariants?: string[] }
   | { type: "send_text"; text: string }
   | { type: "send_link"; text: string; url: string }
   | { type: "send_button"; text: string; buttonLabel: string; url: string }

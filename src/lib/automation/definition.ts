@@ -123,7 +123,11 @@ const condition = z.discriminatedUnion("type", [
 ]);
 
 const action = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("private_reply"), text: z.string().trim().min(1).max(1_000) }),
+  z.object({
+    type: z.literal("private_reply"),
+    text: z.string().trim().min(1).max(1_000),
+    textVariants: z.array(z.string().trim().min(1).max(1_000)).max(4).optional(),
+  }),
   z.object({ type: z.literal("send_text"), text: z.string().trim().min(1).max(1_000) }),
   z.object({ type: z.literal("send_link"), text: z.string().trim().min(1).max(1_000), url: link }),
   z.object({
@@ -423,6 +427,12 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
           match: parsed.trigger.match,
           keywords: normalizeKeywords(parsed.trigger.keywords),
           mediaIds: parsed.trigger.mediaIds.map((mediaId) => mediaId.trim()).filter(Boolean),
+          ...(parsed.trigger.mode ? { mode: parsed.trigger.mode } : {}),
+          ...(parsed.trigger.negativeKeywords && parsed.trigger.negativeKeywords.length > 0
+            ? { negativeKeywords: normalizeKeywords(parsed.trigger.negativeKeywords) }
+            : {}),
+          ...(parsed.trigger.replyPerMedia ? { replyPerMedia: parsed.trigger.replyPerMedia } : {}),
+          ...(parsed.trigger.replyOncePerUser ? { replyOncePerUser: true } : {}),
         }
       : parsed.trigger.type === "message"
         ? {
@@ -452,6 +462,15 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
           type: item.type,
           text: item.text.trim(),
           replies: item.replies.filter(Boolean),
+        };
+      }
+      if (item.type === "private_reply") {
+        return {
+          type: item.type,
+          text: item.text.trim(),
+          ...(item.textVariants && item.textVariants.length > 0
+            ? { textVariants: item.textVariants.map((text) => text.trim()).filter(Boolean) }
+            : {}),
         };
       }
       return { ...item, text: item.text.trim() };

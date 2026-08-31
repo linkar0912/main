@@ -698,6 +698,8 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .template-channel-runway label { align-items: center; display: flex; gap: 8px; }
 .template-channel-runway select { min-width: 190px; padding: 6px 28px 6px 9px; }
 .template-channel-step, .template-channel-runway label span, .template-channel-surface { color: var(--subtle); font-size: .7rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.channel-selector { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 18px 0; }
+.channel-selector .field-wide { margin: 0; }
 .template-picker-layout { display: flex; flex: 1; min-height: 0; }
 .template-picker { display: flex; flex-direction: column; height: min(86vh, 820px); }
 .template-picker-categories {

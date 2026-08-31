@@ -227,7 +227,7 @@ describe("AutomationBuilder", () => {
     // Preview should now be the Facebook layout, not the Instagram phone shell.
     const preview = screen.getAllByLabelText(/test preview/i)[0] as HTMLElement;
     expect(preview.querySelector(".facebook-preview")).toBeTruthy();
-    expect(screen.getByText("Public comment reply")).toBeTruthy();
+    expect(screen.getByText("Public Page reply")).toBeTruthy();
     expect(preview.querySelector(".ig-device")).toBeNull();
 
     // Walk through the wizard and save; the request should carry the
@@ -241,6 +241,90 @@ describe("AutomationBuilder", () => {
     expect(body.provider).toBe("FACEBOOK");
     expect(body.facebookPageId).toBe("12345");
     expect(body.instagramAccountId).toBeNull();
+  });
+
+  it("persists the complete Facebook Page comment policy", async () => {
+    const fetchMock = stubFetch({
+      facebookPages: { data: [
+        { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+      ] },
+    });
+    const definition: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "comment", match: "keyword", keywords: ["price"], mediaIds: ["post_1"] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Thanks for asking." }],
+    };
+
+    render(
+      <AutomationBuilder
+        initialDefinition={definition}
+        initialName="Page pricing"
+        initialFacebookPageId="12345"
+        initialPriority={4}
+      />,
+    );
+
+    expect((await screen.findByLabelText("Facebook Page") as HTMLSelectElement).value).toBe("12345");
+    fireEvent.change(screen.getByLabelText("Keyword logic"), { target: { value: "all" } });
+    fireEvent.change(screen.getByLabelText("Exclude keywords"), { target: { value: "scam, spam" } });
+    fireEvent.click(screen.getByLabelText("Reply once per person"));
+    fireEvent.click(screen.getByRole("button", { name: "Add reply variation" }));
+    fireEvent.change(screen.getByLabelText("Public Page reply variation 2"), { target: { value: "Happy to help." } });
+    fireEvent.change(screen.getByLabelText("Priority"), { target: { value: "9" } });
+    fireEvent.change(screen.getByLabelText("Daily send limit"), { target: { value: "250" } });
+
+    for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save automation/i }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
+    const request = findRequest(fetchMock, (url) => url === "/api/automations");
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      provider: "FACEBOOK",
+      facebookPageId: "12345",
+      priority: 9,
+      definition: {
+        trigger: {
+          type: "comment",
+          mode: "all",
+          negativeKeywords: ["scam", "spam"],
+          replyOncePerUser: true,
+          mediaIds: ["post_1"],
+        },
+        actions: [{ type: "private_reply", text: "Thanks for asking.", textVariants: ["Happy to help."] }],
+        dailySendLimit: 250,
+      },
+    });
+  });
+
+  it("asks before leaving a configured Facebook target and preserves it when cancelled", async () => {
+    stubFetch({
+      facebookPages: { data: [
+        { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+      ] },
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(
+      <AutomationBuilder
+        initialName="Page replies"
+        initialFacebookPageId="12345"
+        initialDefinition={{
+          version: 1,
+          trigger: { type: "comment", match: "keyword", keywords: ["help"], mediaIds: [] },
+          conditions: [],
+          actions: [{ type: "private_reply", text: "We can help." }],
+        }}
+      />,
+    );
+
+    const channel = await screen.findByLabelText("Channel") as HTMLSelectElement;
+    expect(channel.value).toBe("FACEBOOK");
+    fireEvent.change(channel, { target: { value: "INSTAGRAM" } });
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/selected Facebook Page/i));
+    expect(channel.value).toBe("FACEBOOK");
+    expect((screen.getByLabelText("Facebook Page") as HTMLSelectElement).value).toBe("12345");
   });
 
   it("shows lead webhook and custom-question controls without fulfillment email", () => {

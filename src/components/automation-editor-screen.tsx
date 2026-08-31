@@ -49,6 +49,8 @@ export function AutomationEditorScreen({ automationId }: { automationId: string 
             initialName={automation.name}
             initialDefinition={automation.definition}
             initialInstagramAccountId={automation.instagramAccountId}
+            initialFacebookPageId={automation.facebookPageId}
+            initialPriority={automation.priority}
           />
         )}
       </div>
