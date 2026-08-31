@@ -453,12 +453,12 @@ git commit -m "feat(admin): build integrations command center"
 
 ## Phase Completion Gate
 
-- [ ] Run: `pnpm prisma validate && pnpm vitest run src/lib/admin/operations src/lib/admin/integrations app/api/admin/operations app/api/admin/integrations src/components/admin/operations src/components/admin/integrations`
-- [ ] Run: `pnpm test`
-- [ ] Run: `pnpm typecheck`
-- [ ] Run: `pnpm lint`
-- [ ] Confirm no admin DTO or audit fixture contains credentials, raw provider payloads, or message bodies.
-- [ ] Confirm delivery/webhook retry tests prove one logical provider send under concurrent replay.
-- [ ] Confirm every write route rejects non-owner and AAL1 identities and requires reason plus idempotency.
-- [ ] Confirm owner workspace resources cannot be selected by bulk actions.
-- [ ] Mark every completed checkbox in this file before starting the system/deletion phase.
+- [x] Run: `pnpm prisma validate && pnpm vitest run src/lib/admin/operations src/lib/admin/integrations app/api/admin/operations app/api/admin/integrations src/components/admin/operations src/components/admin/integrations`
+- [x] Run: `pnpm test`
+- [x] Run: `pnpm typecheck`
+- [x] Run: `pnpm lint`
+- [x] Confirm no admin DTO or audit fixture contains credentials, raw provider payloads, or message bodies.
+- [x] Confirm delivery/webhook retry tests prove one logical provider send under concurrent replay.
+- [x] Confirm every write route rejects non-owner and AAL1 identities and requires reason plus idempotency.
+- [x] Confirm owner workspace resources cannot be selected by bulk actions.
+- [x] Mark every completed checkbox in this file before starting the system/deletion phase.
