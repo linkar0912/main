@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
+import { getRuntimeMode } from "@/src/lib/health";
 import { loadProfilePictureUrl } from "@/src/lib/meta/profile-picture";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
@@ -34,6 +35,13 @@ export async function GET(request: Request) {
             planName: entitlements.planName,
             igAvatarUrl,
             platformOwner: env.platformOwnerUserIds.includes(session.userId.toLowerCase()),
+            // Read at request time (never baked into the image build) so the
+            // help centre can render statically and still show Coolify's value.
+            supportEmail: env.supportEmail,
+            // Config-only, no I/O. Home and Settings used to call /api/health
+            // for this one field, paying a Redis connect plus a `SELECT 1` on
+            // every mount and every window focus.
+            mode: getRuntimeMode(),
         },
     });
 }

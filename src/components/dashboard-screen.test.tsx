@@ -22,8 +22,6 @@ function stubDashboardFetch() {
     const url = String(input);
     if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
     if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [{}] }) } as Response;
-    if (url.includes("/api/contacts")) return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
-    if (url.includes("/api/health")) return { ok: true, json: async () => ({ mode: "configured" }) } as Response;
     if (url.includes("/api/insights")) return { ok: true, json: async () => ({ timeseries: { sentPerDay, participantsPerDay } }) } as Response;
     throw new Error(`Unexpected fetch to ${url}`);
   }));
@@ -35,8 +33,6 @@ function stubEmptyDashboardFetch() {
     const url = String(input);
     if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
     if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [{}] }) } as Response;
-    if (url.includes("/api/contacts")) return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
-    if (url.includes("/api/health")) return { ok: true, json: async () => ({ mode: "configured" }) } as Response;
     if (url.includes("/api/insights")) {
       const days = Array.from({ length: 14 }, (_, index) => ({ day: `2026-08-${String(index + 1).padStart(2, "0")}`, count: 0 }));
       return { ok: true, json: async () => ({ timeseries: { sentPerDay: days, participantsPerDay: days }, capturedEmails: 0, optedOut: 0 }) } as Response;
@@ -67,8 +63,6 @@ describe("DashboardScreen onboarding", () => {
       if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
       if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [] }) } as Response;
       if (url.includes("/api/facebook/connection")) return { ok: true, json: async () => ({ data: [{ id: "fb_1", pageId: "page_1", pageName: "Linkar Page", status: "CONNECTED", connectedAt: "2026-08-30T00:00:00.000Z" }] }) } as Response;
-      if (url.includes("/api/contacts")) return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
-      if (url.includes("/api/health")) return { ok: true, json: async () => ({ mode: "configured" }) } as Response;
       if (url.includes("/api/insights")) return { ok: true, json: async () => ({ timeseries: {} }) } as Response;
       throw new Error(`Unexpected fetch to ${url}`);
     }));
@@ -90,12 +84,6 @@ describe("DashboardScreen onboarding", () => {
       }
       if (url.includes("/api/meta/connection")) {
         return { ok: true, json: async () => ({ data: [] }) } as Response;
-      }
-      if (url.includes("/api/contacts")) {
-        return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
-      }
-      if (url.includes("/api/health")) {
-        return { ok: true, json: async () => ({ mode: "configured" }) } as Response;
       }
       if (url.includes("/api/insights")) {
         return { ok: true, json: async () => ({ timeseries: {} }) } as Response;
@@ -143,8 +131,6 @@ describe("DashboardScreen onboarding", () => {
       const url = String(input);
       if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
       if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [{}] }) } as Response;
-      if (url.includes("/api/contacts")) return { ok: true, json: async () => ({ data: { count: 0 } }) } as Response;
-      if (url.includes("/api/health")) return { ok: true, json: async () => ({ mode: "configured" }) } as Response;
       if (url.includes("/api/insights")) return { ok: true, json: async () => ({ timeseries: {} }) } as Response;
       throw new Error(`Unexpected fetch to ${url}`);
     }));

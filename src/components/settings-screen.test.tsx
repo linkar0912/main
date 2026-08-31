@@ -54,7 +54,7 @@ describe("SettingsScreen webhook health panel", () => {
       "/api/meta/connection": { data: [{ id: "connection_1", igUserId: "ig_1", username: "creator", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" }] },
       "/api/facebook/connection": { data: [] },
       "/api/facebook/connection/health": { data: [] },
-      "/api/health": { mode: "configured" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
     });
 
     await act(async () => { render(<SettingsScreen />); });
@@ -78,7 +78,7 @@ describe("SettingsScreen webhook health panel", () => {
       "/api/meta/connection": { data: [{ id: "connection_1", igUserId: "ig_1", username: "creator", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" }] },
       "/api/facebook/connection": { data: [] },
       "/api/facebook/connection/health": { data: [] },
-      "/api/health": { mode: "configured" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
     });
 
     await act(async () => { render(<SettingsScreen />); });
@@ -94,7 +94,7 @@ describe("SettingsScreen webhook health panel", () => {
       "/api/meta/connection": { data: [] },
       "/api/facebook/connection": { data: [] },
       "/api/facebook/connection/health": { data: [] },
-      "/api/health": { mode: "demo" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "demo" } },
     });
 
     await act(async () => { render(<SettingsScreen />); });
@@ -109,7 +109,7 @@ describe("SettingsScreen webhook health panel", () => {
       "/api/meta/connection": { data: [] },
       "/api/facebook/connection": { data: [] },
       "/api/facebook/connection/health": { data: [] },
-      "/api/health": { mode: "configured" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
       "/api/workspace/messaging": { data: null },
     });
 
@@ -131,7 +131,7 @@ describe("SettingsScreen webhook health panel", () => {
       "/api/meta/connection": { data: [] },
       "/api/facebook/connection": { data: [] },
       "/api/facebook/connection/health": { data: [] },
-      "/api/health": { mode: "configured" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
     });
 
     await act(async () => { render(<SettingsScreen />); });
@@ -145,7 +145,7 @@ describe("SettingsScreen webhook health panel", () => {
       "/api/meta/connection": { data: [] },
       "/api/facebook/connection": { data: [] },
       "/api/facebook/connection/health": { data: [] },
-      "/api/health": { mode: "configured" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
     });
 
     await act(async () => { render(<SettingsScreen />); });
@@ -195,7 +195,7 @@ describe("SettingsScreen webhook health panel", () => {
           missingFields: [],
         }],
       },
-      "/api/health": { mode: "configured" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
     });
 
     await act(async () => { render(<SettingsScreen />); });
@@ -222,7 +222,7 @@ describe("SettingsScreen webhook health panel", () => {
       ] },
       "/api/facebook/connection": { data: [] },
       "/api/facebook/connection/health": { data: [] },
-      "/api/health": { mode: "configured" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
     });
 
     await act(async () => { render(<SettingsScreen />); });
@@ -246,7 +246,7 @@ describe("SettingsScreen webhook health panel", () => {
         id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED",
         requiredFields: ["feed"], subscribedFields: ["feed"], missingFields: [],
       }] },
-      "/api/health": { mode: "configured" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
     });
 
     await act(async () => { render(<SettingsScreen />); });
@@ -269,7 +269,7 @@ describe("SettingsScreen webhook health panel", () => {
         id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED",
         requiredFields: ["feed"], subscribedFields: [], missingFields: ["feed"],
       }] },
-      "/api/health": { mode: "configured" },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
     });
 
     await act(async () => { render(<SettingsScreen />); });

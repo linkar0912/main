@@ -5,8 +5,11 @@
 
 .root {
   --marketing-canvas: #ffffff;
-  --marketing-raised: #f2f2ee;
-  --marketing-panel: #f7f6ef;
+  /* Raised and panel were warm creams (#f2f2ee / #f7f6ef). They are white now;
+     separation comes from --marketing-border hairlines and shadows instead of a
+     tinted fill, so add a border to any new surface that needs an edge. */
+  --marketing-raised: #ffffff;
+  --marketing-panel: #ffffff;
   --marketing-inverse: #101116;
   --marketing-on-inverse: #f4f4f5;
   --marketing-text: #050505;

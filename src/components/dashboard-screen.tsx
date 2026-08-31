@@ -130,6 +130,21 @@ function displayNameFromEmail(email: string): string {
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
+function DemoBanner() {
+  const { mode } = useAccountIdentity();
+  if (mode !== "demo") return null;
+  return (
+    <div className="demo-banner">
+      <span className="signal-dot" />
+      <div>
+        <strong>You’re in demo mode.</strong>
+        <span> Explore the builder with sample data. </span>
+        <Link href="/settings">Connect account <ArrowUpRight size={13} /></Link>
+      </div>
+    </div>
+  );
+}
+
 function DashboardGreeting() {
   const { email } = useAccountIdentity();
   return (
@@ -230,25 +245,17 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
 
 export function DashboardScreen() {
   const { automations, loading } = useAutomations();
-  const [demoMode, setDemoMode] = useState(false);
-  const [capturedCount, setCapturedCount] = useState<number | null>(null);
   const [insights, setInsights] = useState<InsightsPayload | null>(null);
   const [hasConnection, setHasConnection] = useState<boolean | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     function refresh() {
-      fetch("/api/health")
-        .then((response) => response.json())
-        .then((health: { mode?: string }) => setDemoMode(health.mode === "demo"))
-        .catch(() => undefined);
-      fetch("/api/contacts")
-        .then((response) => (response.ok ? response.json() : null))
-        .then((payload: { data?: { count: number } } | null) =>
-          setCapturedCount(payload?.data?.count ?? 0)
-        )
-        .catch(() => undefined);
-      fetch("/api/insights")
+      // Deliberately not fetching /api/contacts for the captured-lead count:
+      // /api/insights already returns it as capturedEmails off the same
+      // countCapturedContacts() query, and the contacts route pages in 50
+      // contact rows on top. One fewer authenticated round trip per load.
+      fetch("/api/insights?include=overview")
         .then((response) => (response.ok ? response.json() : null))
         .then((payload: InsightsPayload | null) => setInsights(payload))
         .catch(() => undefined);
@@ -279,7 +286,7 @@ export function DashboardScreen() {
   const reachedTotal = sumPoints(participantsPerDay);
   const sentDelta = halfWindowDelta(sentPerDay);
   const reachedDelta = halfWindowDelta(participantsPerDay);
-  const capturedTotal = capturedCount ?? insights?.capturedEmails ?? 0;
+  const capturedTotal = insights?.capturedEmails ?? 0;
   const optedOutTotal = insights?.optedOut ?? 0;
   // Gate on `insights` having resolved: before it does every total reads zero,
   // and claiming "no activity yet" to an established account would be a lie.
@@ -300,16 +307,7 @@ export function DashboardScreen() {
   return (
     <AppShell>
       <div className="page-wrap">
-        {demoMode ? (
-          <div className="demo-banner">
-            <span className="signal-dot" />
-            <div>
-              <strong>You’re in demo mode.</strong>
-              <span> Explore the builder with sample data. </span>
-              <Link href="/settings">Connect account <ArrowUpRight size={13} /></Link>
-            </div>
-          </div>
-        ) : null}
+        <DemoBanner />
 
         <DashboardGreeting />
 

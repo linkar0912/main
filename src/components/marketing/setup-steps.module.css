@@ -50,10 +50,10 @@
 .revealCard[data-enhanced="true"]:not([data-visible="true"]) { transform: translateY(48px); }
 
 .card {
-  display: flex;
-  min-block-size: 680px;
+  display: grid;
+  align-content: start;
+  block-size: 100%;
   padding: clamp(24px, 3vw, 40px);
-  flex-direction: column;
   background: var(--marketing-raised);
   border: 1px solid var(--marketing-border);
   border-radius: 32px;
@@ -88,12 +88,10 @@
 
 .illustration {
   display: grid;
-  min-block-size: 300px;
-  margin: auto 0 0;
-  align-content: end;
+  align-content: start;
+  margin: clamp(24px, 2.6vw, 34px) 0 0;
 }
 
-.illustration svg { inline-size: 100%; block-size: auto; }
 .illustration figcaption {
   display: flex;
   align-items: center;
@@ -107,17 +105,267 @@
 }
 .illustration figcaption > span { inline-size: 8px; block-size: 8px; background: #fff100; border-radius: 99px; }
 
-.previewFrame { fill: #050505; }
-.shield { fill: #fff100; }
-.shieldCheck { stroke: #050505; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
-.rule { stroke: rgb(255 255 255 / 42%); stroke-width: 4; stroke-linecap: round; }
-.voltDot { fill: #fff100; }
-.magentaDot { fill: #fa0cf7; }
-.lightCard { fill: #ffffff; }
-.connector { stroke: #fff100; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 10 8; }
-.cardLine { stroke: #050505; stroke-width: 4; stroke-linecap: round; }
+/* A fragment of a real Linkar screen. Built from the marketing surface tokens so
+   it themes with the page instead of being a fixed-colour picture of the app. */
+.panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+  background: var(--marketing-canvas);
+  border: 1px solid var(--marketing-border);
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 8%);
+}
+
+.panelHead {
+  display: grid;
+  gap: 4px;
+}
+
+.eyebrow {
+  display: flex;
+  gap: 5px;
+  color: var(--marketing-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .58rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.eyebrow i,
+.rowMeta i {
+  font-style: normal;
+  opacity: .55;
+}
+
+.panelHead strong {
+  font-size: .86rem;
+  font-weight: 750;
+  letter-spacing: -.015em;
+}
+
+.channelRow,
+.automationRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.channelAvatar {
+  display: grid;
+  inline-size: 32px;
+  block-size: 32px;
+  flex: 0 0 auto;
+  background: var(--marketing-raised);
+  border: 1px solid var(--marketing-border);
+  border-radius: 9px;
+  place-items: center;
+}
+
+.channelId {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.channelId strong {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.rowMeta {
+  display: flex;
+  gap: 5px;
+  color: var(--marketing-muted);
+  font-size: .65rem;
+  font-weight: 600;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .58rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: var(--marketing-raised);
+  border: 1px solid var(--marketing-border);
+  border-radius: 999px;
+}
+
+.liveDot {
+  inline-size: 7px;
+  block-size: 7px;
+  flex: 0 0 auto;
+  background: #fff100;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #fff100 26%, transparent);
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding-block-start: 2px;
+  border-block-start: 1px solid var(--marketing-border);
+}
+
+.fieldChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-block-start: 6px;
+  color: var(--marketing-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .6rem;
+  font-weight: 650;
+}
+
+.tick {
+  display: grid;
+  inline-size: 14px;
+  block-size: 14px;
+  flex: 0 0 auto;
+  color: #050505;
+  background: #fff100;
+  border-radius: 50%;
+  place-items: center;
+}
+
+.tick svg {
+  inline-size: 8px;
+  block-size: auto;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+}
+
+.field > span:first-child {
+  color: var(--marketing-muted);
+  font-size: .64rem;
+  font-weight: 700;
+}
+
+.select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  font-size: .74rem;
+  font-weight: 650;
+  background: var(--marketing-raised);
+  border: 1px solid var(--marketing-border);
+  border-radius: 9px;
+}
+
+.select i {
+  display: grid;
+  inline-size: 13px;
+  flex: 0 0 auto;
+  color: var(--marketing-muted);
+}
+
+.select i svg {
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.keywords span {
+  padding: 5px 10px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .62rem;
+  font-weight: 700;
+  border-radius: 999px;
+}
+
+.keywords > span:not(.keywordAdd) {
+  color: #050505;
+  background: #fff100;
+}
+
+.keywordAdd {
+  color: var(--marketing-muted);
+  background: var(--marketing-raised);
+  border: 1px dashed var(--marketing-border);
+}
+
+.connector {
+  inline-size: 6px;
+  block-size: 22px;
+  margin-block: -6px -4px;
+  margin-inline-start: 12px;
+  fill: none;
+  stroke: var(--marketing-muted);
+  stroke-width: 2;
+  stroke-dasharray: 4 5;
+  stroke-linecap: round;
+}
+
+.actionRow {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  background: var(--marketing-raised);
+  border: 1px solid var(--marketing-border);
+  border-radius: 11px;
+}
+
+.actionRow strong {
+  font-size: .76rem;
+  font-weight: 700;
+}
+
+.toggle {
+  inline-size: 40px;
+  block-size: auto;
+  flex: 0 0 auto;
+}
+
 .switchTrack { fill: #fa0cf7; }
-.switchKnob { fill: #fff100; }
+.switchKnob { fill: #ffffff; }
+
+.statRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-block-start: 11px;
+  border-block-start: 1px solid var(--marketing-border);
+}
+
+.statRow > span {
+  display: grid;
+  gap: 1px;
+  color: var(--marketing-muted);
+  font-size: .6rem;
+  font-weight: 650;
+}
+
+.statRow > span strong {
+  color: var(--marketing-text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.statRow .statusPill { margin-inline-start: auto; }
 
 .revealCard[data-visible="true"] .connector { animation: connector-draw 420ms cubic-bezier(.43,.195,.02,1) both; }
 .revealCard[data-visible="true"] .switchKnob { animation: switch-on 400ms cubic-bezier(.43,.195,.02,1) both; }
@@ -128,9 +376,8 @@
 @media (min-width: 768px) and (max-width: 1023px) {
   .section { padding: 112px 32px; }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-  .card { min-block-size: 560px; }
   .revealCard:last-child { grid-column: span 2; }
-  .revealCard:last-child .card { display: grid; min-block-size: 420px; grid-template-columns: minmax(0, 1fr) minmax(260px, .9fr); column-gap: 32px; }
+  .revealCard:last-child .card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .9fr); column-gap: 32px; }
   .revealCard:last-child .number,
   .revealCard:last-child h3,
   .revealCard:last-child .description { grid-column: 1; }
@@ -141,8 +388,7 @@
   .section { padding: 88px 20px; }
   .header h2 { font-size: var(--marketing-section-title-size); }
   .steps { grid-template-columns: 1fr; gap: 20px; margin-top: 48px; }
-  .card { min-block-size: 520px; padding: 28px 24px; }
-  .illustration { min-block-size: 220px; }
+  .card { padding: 28px 24px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -30,6 +30,26 @@ describe("HelpScreen search", () => {
     expect(screen.queryByText("What is a follow gate?")).toBeNull();
   });
 
+  it("falls back to the support email on the shell bootstrap when no prop is passed", async () => {
+    // This is what lets /help be a static client page: the runtime SUPPORT_EMAIL
+    // arrives on the bootstrap payload the sidebar already fetches, so the route
+    // needs no force-dynamic server render of its own.
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/workspace/bootstrap")) {
+        return {
+          ok: true,
+          json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free", supportEmail: "runtime@linkar.in" } }),
+        } as Response;
+      }
+      throw new Error(`Unexpected fetch to ${String(input)}`);
+    }));
+
+    render(<HelpScreen />);
+
+    const link = await screen.findByRole("link", { name: /runtime@linkar\.in/ });
+    expect(link.getAttribute("href")).toBe("mailto:runtime@linkar.in");
+  });
+
   it("documents Facebook Page public replies separately from Instagram DMs", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).includes("/api/account")) {

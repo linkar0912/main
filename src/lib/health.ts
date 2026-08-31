@@ -58,6 +58,18 @@ async function getDependencyState(configured: boolean, checker: HealthChecker): 
   }
 }
 
+/**
+ * Whether the deployment is wired to real infrastructure. Derived purely from
+ * configuration, with no database or Redis I/O, so surfaces that only need the
+ * badge (Home's demo banner, Settings' environment card) can read it off the
+ * workspace bootstrap instead of calling /api/health - which opens a fresh
+ * Redis connection and runs a `SELECT 1` on every single call.
+ */
+export function getRuntimeMode(): Health["mode"] {
+  const { databaseUrl, redisUrl } = getServerEnv();
+  return databaseUrl || redisUrl ? "configured" : "demo";
+}
+
 function integrationState(appId?: string, appSecret?: string): IntegrationState {
   return appId && appSecret ? "configured" : "not_configured";
 }
@@ -75,7 +87,7 @@ export async function getHealth(checkers: HealthCheckers = {}): Promise<Health> 
       : database === "ok" && redis === "ok"
         ? "ok"
         : "degraded",
-    mode: databaseUrl || redisUrl ? "configured" : "demo",
+    mode: databaseUrl || redisUrl ? "configured" : "demo",  // same rule as getRuntimeMode()
     // BUILD_COMMIT is baked into the image at build time and is authoritative.
     // SOURCE_COMMIT is supplied by the operator and has gone stale in
     // production before, so it is only a fallback for images built without it.

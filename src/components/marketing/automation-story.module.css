@@ -57,10 +57,11 @@
   transform: translateY(0);
 }
 
+/* Mono is Linkar's voice. It appears on the section's own furniture and on the
+   automation notes inside the phone - never on Instagram's UI, which uses the
+   system stack below. Whose surface you are reading is encoded in the type. */
 .sequence,
-.status,
-.cardLabel,
-.frameBar,
+.autoNote,
 .queueFlag,
 .figcaption {
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -144,7 +145,29 @@
   transform: translateY(0);
 }
 
+/* ---------------------------------------------------------------------------
+   The device
+   --------------------------------------------------------------------------- */
+
 .sceneFrame {
+  /* Instagram's real interface palette. Scoped to the frame so every screen
+     inside inherits one set of values and nothing leaks into the marketing
+     page around it. */
+  --ig-ink: #000000;
+  --ig-secondary: #737373;
+  --ig-tertiary: #a8a8a8;
+  --ig-hairline: #dbdbdb;
+  --ig-bubble: #efefef;
+  --ig-blue: #0095f6;
+  --ig-red: #ed4956;
+  --ig-sent: linear-gradient(135deg, #4b6ef5, #a02bd6);
+  --ig-story-ring: linear-gradient(45deg, #fdcb52 8%, #f56040 32%, #c13584 58%, #5851db 82%, #405de6);
+  /* Instagram is a native app, so its UI is set in the platform stack. Using
+     the marketing display face in here would break the illusion on sight. */
+  --ig-font: -apple-system, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --linkar-volt: #fff100;
+  --linkar-magenta: #fa0cf7;
+
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0;
@@ -154,8 +177,8 @@
   aspect-ratio: 9 / 19;
   padding: 0;
   overflow: hidden;
-  color: #111111;
-  background: #fafafa;
+  color: var(--ig-ink);
+  background: #ffffff;
   border: 9px solid #090909;
   border-radius: 52px;
   box-shadow:
@@ -166,8 +189,7 @@
 .phoneChrome {
   position: relative;
   z-index: 2;
-  background: rgb(255 255 255 / 96%);
-  border-bottom: 1px solid #e4e4e4;
+  background: #ffffff;
 }
 
 .phoneStatusBar {
@@ -177,7 +199,7 @@
   align-items: center;
   min-block-size: 42px;
   padding-inline: 18px;
-  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-family: var(--ig-font);
   font-size: .68rem;
   font-weight: 750;
 }
@@ -255,369 +277,6 @@
   border-radius: 1px;
 }
 
-.socialHeader {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 10px;
-  min-block-size: 56px;
-  padding: 8px 15px 10px;
-}
-
-.socialAvatar {
-  display: grid;
-  inline-size: 34px;
-  block-size: 34px;
-  padding: 2px;
-  color: #ffffff;
-  font-size: .75rem;
-  font-weight: 800;
-  background: linear-gradient(135deg, #ffb000, #fa0cf7 55%, #6840ff);
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px #fa0cf7;
-  place-items: center;
-}
-
-.socialIdentity {
-  display: grid;
-  gap: 2px;
-}
-
-.socialIdentity strong {
-  font-size: .72rem;
-}
-
-.socialIdentity small {
-  color: #777777;
-  font-size: .55rem;
-}
-
-.socialMenu {
-  font-size: 1rem;
-  letter-spacing: .08em;
-}
-
-.sceneBody {
-  position: relative;
-  display: grid;
-  align-content: center;
-  min-block-size: 0;
-  padding: 14px;
-  overflow: hidden;
-}
-
-.sceneTopline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-block-end: 28px;
-  color: #747474;
-  font-size: .66rem;
-  font-weight: 700;
-}
-
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: .56rem;
-  font-weight: 650;
-  letter-spacing: .025em;
-}
-
-.statusDot {
-  inline-size: 7px;
-  block-size: 7px;
-  flex: 0 0 auto;
-  background: #fff100;
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px rgb(255 241 0 / 13%);
-}
-
-.status[data-current-action="true"] .statusDot {
-  background: #fa0cf7;
-  box-shadow: 0 0 0 4px rgb(250 12 247 / 16%);
-}
-
-.card {
-  color: #050505;
-  background: #ffffff;
-  border-radius: 20px;
-  border: 1px solid #e4e4e4;
-  box-shadow: 0 9px 24px rgb(0 0 0 / 10%);
-}
-
-.card p {
-  margin: 5px 0 0;
-  font-size: clamp(.86rem, 1.15vw, 1rem);
-  font-weight: 650;
-  line-height: 1.42;
-}
-
-.cardLabel {
-  display: block;
-  color: rgb(5 5 5 / 48%);
-  font-size: .58rem;
-  font-weight: 650;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-}
-
-.commentCard {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 14px;
-  align-items: center;
-  inline-size: 100%;
-  padding: 12px;
-}
-
-.avatar {
-  display: grid;
-  inline-size: 38px;
-  block-size: 38px;
-  color: #ffffff;
-  font-weight: 800;
-  background: #050505;
-  border-radius: 50%;
-  place-items: center;
-}
-
-.replyCard {
-  inline-size: 88%;
-  margin-inline-start: auto;
-  padding: 14px;
-  background: linear-gradient(135deg, #f4e7ff, #ffffff 72%);
-  border-color: #ead8f5;
-}
-
-.connector {
-  inline-size: 28px;
-  block-size: 34px;
-  margin-inline-start: 36%;
-  fill: none;
-  stroke: #fa0cf7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2;
-}
-
-.questionCard,
-.memoryCard,
-.timelineCard,
-.checkinCard,
-.signalCard,
-.queueCard {
-  padding: 22px;
-}
-
-.questionCard {
-  inline-size: min(88%, 460px);
-}
-
-.answerChip {
-  display: inline-block;
-  margin-block-start: 20px;
-  padding: 9px 13px;
-  color: #ffffff;
-  font-size: .72rem;
-  font-weight: 750;
-  background: #050505;
-  border-radius: 999px;
-}
-
-.memoryCard {
-  inline-size: min(86%, 440px);
-  margin-inline-start: auto;
-}
-
-.savedField {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 5px 16px;
-  margin-block-start: 14px;
-  padding: 14px;
-  background: #f2f2f2;
-  border-radius: 12px;
-}
-
-.savedField > span:first-child {
-  color: rgb(5 5 5 / 52%);
-  font-size: .66rem;
-}
-
-.savedField strong {
-  grid-row: 2;
-  font-size: .82rem;
-}
-
-.savedField .status {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  color: #050505;
-}
-
-.timelineCard {
-  position: relative;
-  inline-size: min(86%, 440px);
-  margin-inline: auto;
-}
-
-.timelineEvent {
-  display: grid;
-  grid-template-columns: 13px 1fr;
-  gap: 13px;
-  align-items: start;
-  margin-block-start: 20px;
-}
-
-.timelineEvent strong {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .7rem;
-}
-
-.timelineEvent p {
-  margin-block-start: 2px;
-}
-
-.timelineDot {
-  inline-size: 11px;
-  block-size: 11px;
-  margin-block-start: 3px;
-  background: #050505;
-  border-radius: 50%;
-}
-
-.timelineEvent[data-current="true"] .timelineDot {
-  background: #fa0cf7;
-  box-shadow: 0 0 0 5px rgb(250 12 247 / 15%);
-}
-
-.timelineLine {
-  inline-size: 2px;
-  block-size: 44px;
-  margin: 4px 0 -14px 5px;
-  background: #050505;
-}
-
-.checkinCard {
-  inline-size: min(78%, 400px);
-  margin: 22px 0 0 auto;
-  background: #fff100;
-}
-
-.signalCard {
-  inline-size: min(62%, 330px);
-}
-
-.connectorAcross {
-  inline-size: 90px;
-  block-size: 28px;
-  margin: 22px auto;
-  fill: none;
-  stroke: #fff100;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2;
-}
-
-.queueCard {
-  position: relative;
-  inline-size: min(88%, 460px);
-  margin-inline-start: auto;
-}
-
-.queueFlag {
-  position: absolute;
-  inset-block-start: -12px;
-  inset-inline-end: 18px;
-  padding: 7px 10px;
-  color: #050505;
-  font-size: .58rem;
-  font-weight: 650;
-  background: #fff100;
-  border-radius: 999px;
-}
-
-.queueCard strong {
-  display: block;
-  margin-block-start: 9px;
-  font-size: .9rem;
-}
-
-.contextLines {
-  display: grid;
-  gap: 7px;
-  margin-block-start: 18px;
-}
-
-.contextLines span {
-  block-size: 7px;
-  background: #e7e7e7;
-  border-radius: 999px;
-}
-
-.contextLines span:nth-child(2) { inline-size: 82%; }
-.contextLines span:nth-child(3) { inline-size: 58%; }
-
-.mobileScene {
-  display: none;
-}
-
-.socialPost {
-  margin: -14px -14px 14px;
-  background: #ffffff;
-  border-bottom: 1px solid #e8e8e8;
-}
-
-.socialPostVisual {
-  display: grid;
-  align-content: end;
-  min-block-size: 150px;
-  padding: 18px;
-  color: #ffffff;
-  background:
-    radial-gradient(circle at 78% 24%, rgb(255 255 255 / 20%), transparent 24%),
-    linear-gradient(145deg, #101010 12%, #5f2ce0 55%, #fa0cf7);
-}
-
-.socialPostVisual span {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .52rem;
-  font-weight: 700;
-  letter-spacing: .12em;
-}
-
-.socialPostVisual strong {
-  max-inline-size: 14ch;
-  margin-block-start: 8px;
-  font-size: 1.25rem;
-  line-height: .96;
-  letter-spacing: -.045em;
-}
-
-.socialActions {
-  display: grid;
-  grid-template-columns: auto auto auto 1fr;
-  gap: 12px;
-  padding: 9px 12px 4px;
-  font-size: 1.15rem;
-}
-
-.socialActions span:last-child {
-  justify-self: end;
-}
-
-.socialPost > p {
-  padding: 0 12px 10px;
-  margin: 0;
-  font-size: .62rem;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
 .homeIndicator {
   position: relative;
   z-index: 3;
@@ -629,147 +288,695 @@
   border-radius: 999px;
 }
 
-.commentsSheet {
+/* ---------------------------------------------------------------------------
+   The app: one screen per chapter, each laid out as navigation bar,
+   scroll region, composer - the shape every Instagram screen actually has.
+   --------------------------------------------------------------------------- */
+
+.sceneBody {
   display: grid;
-  margin: -14px;
-  background: #ffffff;
-  border-radius: 18px 18px 0 0;
-  box-shadow: 0 -10px 28px rgb(0 0 0 / 10%);
-}
-
-.commentsTitle {
-  display: grid;
-  grid-template-columns: 28px 1fr 28px;
-  align-items: center;
-  min-block-size: 46px;
-  padding-inline: 10px;
-  border-bottom: 1px solid #ededed;
-  text-align: center;
-}
-
-.commentsTitle > span {
-  font-size: 1.25rem;
-}
-
-.commentsTitle > span:last-child {
-  justify-self: end;
-  font-size: 1rem;
-}
-
-.commentsTitle strong {
-  font-size: .74rem;
-}
-
-.commentRow {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: start;
-  padding: 13px 14px 11px;
-}
-
-.commentCopy p {
-  margin: 0;
-  font-size: .68rem;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-block-size: 0;
+  overflow: hidden;
+  font-family: var(--ig-font);
+  font-size: 15px;
   line-height: 1.35;
+  background: #ffffff;
 }
 
-.commentCopy p strong {
-  margin-inline-end: 5px;
-}
-
-.commentCopy > span {
+.icon {
   display: block;
-  margin-block-start: 5px;
-  color: #777777;
-  font-size: .55rem;
-  font-weight: 650;
+  flex: 0 0 auto;
 }
 
-.commentHeart {
-  margin-block-start: 4px;
-  font-size: 1rem;
-}
-
-.automationNotice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 9px 14px;
-  color: #6f6f6f;
-  background: #faf5ff;
-  border-block: 1px solid #efdffc;
-  font-size: .54rem;
-  font-weight: 650;
-}
-
-.dmPreview {
+/* Story-ring avatar. The gradient ring is the single most recognizable object
+   in Instagram's UI, so it is drawn properly: gradient, white gap, photo. */
+.ring {
   display: grid;
-  gap: 10px;
-  margin: 12px 14px;
-  padding: 12px;
-  background: linear-gradient(145deg, #f0e4ff, #ffffff 72%);
-  border: 1px solid #e9d7fa;
-  border-radius: 16px 16px 5px 16px;
-}
-
-.dmIdentity {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.dmIdentity > span:last-child {
-  display: grid;
-  gap: 1px;
-}
-
-.dmIdentity strong {
-  font-size: .62rem;
-}
-
-.dmIdentity small {
-  color: #777777;
-  font-size: .5rem;
-}
-
-.dmAvatar {
-  display: grid;
-  inline-size: 26px;
-  block-size: 26px;
-  color: #ffffff;
-  font-size: .58rem;
-  font-weight: 800;
-  background: linear-gradient(135deg, #ffb000, #fa0cf7 55%, #6840ff);
+  inline-size: 32px;
+  block-size: 32px;
+  flex: 0 0 auto;
+  padding: 2px;
+  background: var(--ig-story-ring);
   border-radius: 50%;
   place-items: center;
 }
 
-.dmPreview > p {
-  margin: 0;
-  font-size: .67rem;
+.ring[data-size="sm"] {
+  inline-size: 27px;
+  block-size: 27px;
+  padding: 1.5px;
+}
+
+.ring[data-size="lg"] {
+  inline-size: 58px;
+  block-size: 58px;
+  padding: 2.5px;
+}
+
+.ring[data-plain="true"] {
+  padding: 0;
+  background: none;
+}
+
+.ringInner {
+  display: grid;
+  inline-size: 100%;
+  block-size: 100%;
+  color: #ffffff;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .01em;
+  background: linear-gradient(150deg, #2b2b31, #08080a);
+  border: 1.5px solid #ffffff;
+  border-radius: 50%;
+  place-items: center;
+}
+
+.ring[data-plain="true"] .ringInner {
+  border: 0;
+  background: linear-gradient(150deg, #8d8d96, #55555e);
+}
+
+.appBar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-block-size: 48px;
+  padding: 6px 12px;
+  border-block-end: 1px solid var(--ig-hairline);
+}
+
+.appBar[data-thread="true"] {
+  gap: 7px;
+  padding-inline-start: 6px;
+}
+
+.threadBack {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.appBarId {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 1px;
+  min-inline-size: 0;
+}
+
+.appBarId strong {
+  font-size: .78rem;
   font-weight: 650;
-  line-height: 1.38;
+  letter-spacing: -.01em;
+}
+
+.appBarId small {
+  color: var(--ig-secondary);
+  font-size: .64rem;
+  font-weight: 400;
+}
+
+.threadTools {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 14px;
+}
+
+.screen {
+  position: relative;
+  min-block-size: 0;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+/* --- Screen 01: feed post with the comment sheet raised over it ------------ */
+
+.screen[data-screen="feed"] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #ffffff;
+}
+
+.post {
+  display: grid;
+}
+
+.postMedia {
+  display: grid;
+  align-content: end;
+  min-block-size: 132px;
+  padding: 14px 15px;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 78% 22%, rgb(255 255 255 / 18%), transparent 26%),
+    linear-gradient(145deg, #101010 10%, #5f2ce0 56%, #fa0cf7);
+}
+
+.postMedia span {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .5rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  opacity: .85;
+}
+
+.postMedia strong {
+  max-inline-size: 15ch;
+  margin-block-start: 6px;
+  font-size: 1.16rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+.postActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 13px 5px;
+}
+
+.postActionGroup {
+  display: flex;
+  gap: 14px;
+}
+
+.postLikes {
+  margin: 0;
+  padding-inline: 13px;
+  font-size: .7rem;
+  font-weight: 650;
+}
+
+.postCaption {
+  margin: 3px 0 9px;
+  padding-inline: 13px;
+  font-size: .69rem;
+  font-weight: 400;
+  line-height: 1.32;
   overflow-wrap: anywhere;
 }
 
-.addComment {
+.postCaption strong {
+  margin-inline-end: 4px;
+  font-weight: 650;
+}
+
+/* The comment sheet is a bottom sheet over the post, which is exactly what
+   tapping the comment icon opens - grip handle, hairline title bar, list. */
+.sheet {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
+  align-content: start;
+  min-block-size: 0;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -1px 0 var(--ig-hairline), 0 -14px 30px rgb(0 0 0 / 12%);
+}
+
+.sheetGrip {
+  justify-self: center;
+  inline-size: 36px;
+  block-size: 4px;
+  margin-block: 7px 3px;
+  background: var(--ig-hairline);
+  border-radius: 999px;
+}
+
+.sheetBar {
+  display: flex;
   align-items: center;
-  min-block-size: 42px;
-  padding-inline: 14px;
-  color: #8a8a8a;
-  border-top: 1px solid #ededed;
+  justify-content: space-between;
+  min-block-size: 38px;
+  padding-inline: 13px;
+  border-block-end: 1px solid var(--ig-hairline);
+}
+
+.sheetBar strong {
+  font-size: .76rem;
+  font-weight: 650;
+}
+
+.commentRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px 10px;
+}
+
+.commentCopy {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 5px;
+  min-inline-size: 0;
+  font-size: .69rem;
+  line-height: 1.32;
+}
+
+.commentCopy strong {
+  margin-inline-end: 4px;
+  font-weight: 650;
+}
+
+.commentMeta {
+  display: flex;
+  gap: 6px;
+  color: var(--ig-secondary);
+  font-size: .61rem;
+  font-weight: 500;
+}
+
+.commentMeta i {
+  font-style: normal;
+  opacity: .6;
+}
+
+.commentHeart {
+  display: grid;
+  margin-block-start: 3px;
+  color: var(--ig-ink);
+  place-items: center;
+}
+
+/* The private reply lands in the inbox, not under the post, so it is drawn as
+   Instagram's message row: avatar, name, preview, unread dot. */
+.inboxRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border-block-start: 1px solid var(--ig-hairline);
+}
+
+.inboxCopy {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.inboxCopy strong {
+  font-size: .71rem;
+  font-weight: 650;
+}
+
+.inboxCopy > span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ig-secondary);
+  font-size: .655rem;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.unread {
+  inline-size: 8px;
+  block-size: 8px;
+  flex: 0 0 auto;
+  background: var(--ig-blue);
+  border-radius: 50%;
+}
+
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-block-size: 44px;
+  padding: 7px 12px;
+  border-block-start: 1px solid var(--ig-hairline);
+}
+
+.composerField {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  color: var(--ig-tertiary);
+  font-size: .69rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composerField[data-thread="true"] {
+  padding: 8px 13px;
+  border: 1px solid var(--ig-hairline);
+  border-radius: 999px;
+}
+
+.composerIcon {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  color: var(--ig-ink);
+}
+
+.composerCamera {
+  display: grid;
+  inline-size: 27px;
+  block-size: 27px;
+  flex: 0 0 auto;
+  color: #ffffff;
+  background: var(--ig-blue);
+  border-radius: 50%;
+  place-items: center;
+}
+
+.composerSend {
+  flex: 0 0 auto;
+  color: var(--ig-blue);
+  font-size: .72rem;
+  font-weight: 650;
+}
+
+/* --- Screens 02-04: one direct-message thread, advancing ------------------ */
+
+.screen[data-screen="thread"] {
+  display: grid;
+  align-content: end;
+  gap: 7px;
+  justify-items: start;
+  padding: 12px 12px 10px;
+}
+
+/* Instagram's conversation intro. */
+.threadIntro {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  justify-self: center;
+  padding-block: 10px 16px;
+  text-align: center;
+}
+
+.threadIntro .ring {
+  margin-block-end: 7px;
+}
+
+.ring[data-size="lg"] .ringInner {
+  font-size: 1.1rem;
+  border-width: 2px;
+}
+
+.threadIntro strong {
+  font-size: .8rem;
+  font-weight: 650;
+}
+
+.threadIntroMeta {
+  display: flex;
+  gap: 5px;
+  color: var(--ig-secondary);
+  font-size: .62rem;
+}
+
+.threadIntroMeta i {
+  font-style: normal;
+  opacity: .6;
+}
+
+.threadIntroCta {
+  margin-block-start: 8px;
+  padding: 6px 13px;
+  font-size: .65rem;
+  font-weight: 650;
+  background: var(--ig-bubble);
+  border-radius: 8px;
+}
+
+.dayMark {
+  display: flex;
+  gap: 6px;
+  justify-self: center;
+  margin: 6px 0;
+  color: var(--ig-secondary);
+  font-family: var(--ig-font);
+  font-size: .6rem;
+  font-weight: 650;
+}
+
+.dayMark i {
+  font-style: normal;
+  opacity: .6;
+}
+
+.bubbleIn,
+.bubbleOut,
+.bubblePending {
+  max-inline-size: 78%;
+  margin: 0;
+  padding: 9px 13px;
+  font-size: .7rem;
+  line-height: 1.36;
+  border-radius: 19px;
+  overflow-wrap: anywhere;
+}
+
+.bubbleIn {
+  color: var(--ig-ink);
+  background: var(--ig-bubble);
+  border-end-start-radius: 6px;
+}
+
+.bubbleOut {
+  justify-self: end;
+  color: #ffffff;
+  background: var(--ig-sent);
+  border-end-end-radius: 6px;
+}
+
+/* Instagram's quoted-comment block above a private reply: a left rule, the
+   attribution, then the comment itself. */
+.quoted {
+  display: grid;
+  gap: 1px;
+  max-inline-size: 78%;
+  padding-inline-start: 9px;
+  border-inline-start: 2px solid var(--ig-hairline);
+}
+
+.quoted span {
+  color: var(--ig-secondary);
+  font-size: .59rem;
+  font-weight: 500;
+}
+
+.quoted strong {
+  color: var(--ig-secondary);
+  font-size: .67rem;
+  font-weight: 650;
+}
+
+/* A `send_button` message: Instagram stacks it as a tappable card. */
+.linkCard {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-inline-size: 82%;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid var(--ig-hairline);
+  border-radius: 15px;
+  border-end-start-radius: 6px;
+}
+
+.linkCardMedia {
+  inline-size: 30px;
+  block-size: 30px;
+  flex: 0 0 auto;
+  background: linear-gradient(145deg, #101010, #5f2ce0 60%, #fa0cf7);
+  border-radius: 8px;
+}
+
+.linkCardCopy {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 1px;
+  min-inline-size: 0;
+}
+
+.linkCardCopy strong {
+  font-size: .68rem;
+  font-weight: 650;
+}
+
+.linkCardCopy small {
+  color: var(--ig-secondary);
   font-size: .58rem;
 }
 
-.addComment > span:first-child,
-.addComment > span:last-child {
+.linkCardCta {
+  flex: 0 0 auto;
+  color: var(--ig-blue);
+  font-size: .64rem;
+  font-weight: 650;
+}
+
+/* A scheduled message has not been sent, so it must not look sent: outlined in
+   Instagram's hairline instead of filled with the sent gradient. */
+.bubblePending {
+  display: grid;
+  gap: 8px;
+  justify-self: end;
+  justify-items: end;
+  color: var(--ig-secondary);
+  background: #ffffff;
+  border: 1px dashed color-mix(in srgb, var(--linkar-magenta) 45%, var(--ig-hairline));
+  border-end-end-radius: 6px;
+}
+
+.pendingTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ig-ink);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .55rem;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+/* Instagram renders quick replies as outlined pills on the receiving side; the
+   one the person taps is echoed back as their own message underneath. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  align-self: stretch;
+  margin-block-start: 1px;
+}
+
+.chips span {
+  padding: 7px 12px;
+  color: var(--ig-blue);
+  font-size: .655rem;
+  font-weight: 650;
+  border: 1px solid color-mix(in srgb, var(--ig-blue) 45%, #ffffff);
+  border-radius: 999px;
+}
+
+.chips span[data-picked="true"] {
+  color: #ffffff;
+  background: var(--ig-blue);
+  border-color: var(--ig-blue);
+}
+
+.queue {
+  display: grid;
+  position: relative;
+  gap: 5px;
+  align-self: stretch;
+  margin-block-start: 8px;
+  padding: 13px 14px;
+  background: #ffffff;
+  border: 1px solid var(--ig-hairline);
+  border-inline-start: 3px solid var(--linkar-volt);
+  border-radius: 6px 14px 14px 6px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 7%);
+}
+
+.queueFlag {
+  position: absolute;
+  inset-block-start: -9px;
+  inset-inline-end: 12px;
+  padding: 4px 9px;
   color: #050505;
-  font-size: .95rem;
+  font-size: .53rem;
+  font-weight: 650;
+  letter-spacing: .03em;
+  background: var(--linkar-volt);
+  border-radius: 999px;
+}
+
+.queue strong {
+  font-size: .76rem;
+  font-weight: 650;
+}
+
+.queueMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: var(--ig-secondary);
+  font-size: .62rem;
+}
+
+.queueMeta i {
+  font-style: normal;
+  opacity: .55;
+}
+
+/* --- The Linkar layer ----------------------------------------------------- */
+
+/* Set as one of Instagram's own centred system notes, because that is what it
+   is: a quiet line of provenance on someone else's surface. The volt dot and
+   the product glyph are the only Linkar colour inside the phone, which is why
+   the eye lands on them. */
+.autoNote {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: center;
+  align-self: center;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin: 5px 0;
+  padding: 4px 10px;
+  color: var(--ig-secondary);
+  font-size: .5rem;
+  font-weight: 650;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  background: #fafafa;
+  border: 1px solid var(--ig-hairline);
+  border-radius: 999px;
+}
+
+.autoNoteLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autoNoteDetail {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding-inline-start: 6px;
+  color: var(--ig-ink);
+  border-inline-start: 1px solid var(--ig-hairline);
+}
+
+.autoNoteDetail::before {
+  inline-size: 5px;
+  block-size: 5px;
+  flex: 0 0 auto;
+  background: var(--linkar-volt);
+  border-radius: 50%;
+  content: "";
+}
+
+.autoNote:not([data-current-action="true"]) {
+  opacity: .62;
+}
+
+/* The beat the current chapter is about. */
+.autoNote[data-current-action="true"] {
+  color: #050505;
+  background: #ffffff;
+  border-color: color-mix(in srgb, var(--linkar-magenta) 42%, #ffffff);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--linkar-magenta) 16%, transparent);
+}
+
+.autoNote[data-current-action="true"] .autoNoteDetail::before {
+  background: var(--linkar-magenta);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--linkar-magenta) 18%, transparent);
+}
+
+.mobileScene {
+  display: none;
 }
 
 .semanticSummary {
@@ -861,7 +1068,7 @@
     display: grid;
     grid-row: 1 / span 3;
     grid-column: 2;
-    min-block-size: 430px;
+    justify-self: center;
   }
 
   .stage {
@@ -875,14 +1082,6 @@
   .controlRoom,
   .figcaption {
     display: none;
-  }
-
-  .sceneFrame {
-    min-block-size: 430px;
-  }
-
-  .sceneBody {
-    padding: 0;
   }
 }
 
@@ -935,8 +1134,8 @@
 
   .mobileScene {
     display: grid;
-    inline-size: 100%;
-    min-block-size: 380px;
+    justify-self: center;
+    inline-size: min(100%, 300px);
     margin-block-start: 28px;
   }
 
@@ -954,35 +1153,34 @@
   }
 
   .sceneFrame {
-    min-block-size: 380px;
-    border-radius: 24px;
+    border-width: 7px;
+    border-radius: 42px;
   }
 
-  .frameBar {
-    min-block-size: 50px;
+  /* The phone is ~85px shorter here than on tablet, and a thread pinned to its
+     composer overflows upward - which crops the intro avatar mid-circle and
+     reads as a bug rather than as a scrolled thread. Compact the intro instead
+     of letting it be cut. */
+  .threadIntro {
+    gap: 2px;
+    padding-block: 4px 10px;
   }
 
-  .sceneBody {
-    padding: 0;
+  .ring[data-size="lg"] {
+    inline-size: 44px;
+    block-size: 44px;
   }
 
-  .sceneTopline {
-    margin-block-end: 18px;
+  .ring[data-size="lg"] .ringInner {
+    font-size: .82rem;
   }
 
-  .commentCard,
-  .replyCard,
-  .questionCard,
-  .memoryCard,
-  .timelineCard,
-  .checkinCard,
-  .signalCard,
-  .queueCard {
-    inline-size: 92%;
+  .threadIntroCta {
+    display: none;
   }
 
-  .card {
-    padding: 16px;
+  .dayMark {
+    margin-block: 2px;
   }
 }
 
@@ -1003,7 +1201,7 @@
   }
 
   .chapter {
-    grid-template-columns: minmax(0, .75fr) minmax(360px, 1fr);
+    grid-template-columns: minmax(0, .75fr) minmax(340px, 1fr);
     column-gap: clamp(32px, 5vw, 80px);
     min-block-size: auto;
     max-inline-size: none;
@@ -1024,7 +1222,7 @@
     display: grid;
     grid-row: 1 / span 3;
     grid-column: 2;
-    min-block-size: 430px;
+    justify-self: center;
   }
 
   .stage {
@@ -1059,9 +1257,5 @@
   .mobileScene {
     grid-row: auto;
     grid-column: 1;
-  }
-
-  .mobileScene {
-    min-block-size: 380px;
   }
 }

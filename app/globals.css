@@ -482,7 +482,7 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
   width: 30px;
 }
 .brand-name { white-space: nowrap; }
-.brand { align-items: center; display: inline-flex; font-size: 1rem; font-weight: 800; gap: 9px; letter-spacing: -.03em; }
+.brand { align-items: center; display: inline-flex; font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif; font-size: 1rem; font-weight: 800; gap: 9px; letter-spacing: -.03em; }
 
 .workspace-chip {
   align-items: center;
@@ -1429,7 +1429,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .review-link-grid a:hover { background: var(--hover-wash); color: var(--ink); }
 
 /* Profile account overview and primary/supporting columns */
-.profile-overview { display: grid; gap: var(--space-5); margin-bottom: var(--space-5); }
+.profile-overview { display: grid; gap: var(--space-5); }
 .profile-overview-main { align-items: center; display: flex; gap: var(--space-4); min-width: 0; }
 .profile-overview-identity { align-items: center; display: flex; gap: var(--space-4); min-width: 0; }
 .profile-overview-identity .account-summary-id .eyebrow { margin-bottom: 4px; }
@@ -1444,7 +1444,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .profile-fact dd[data-tone="accent"] { color: var(--accent-text); }
 .profile-fact dd[data-tone="ok"] { color: var(--leaf); }
 .profile-fact dd[data-tone="warn"] { color: var(--honey); }
-.profile-layout { align-items: start; display: grid; gap: var(--space-5); grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); }
+.profile-layout { align-items: start; display: grid; gap: var(--space-5); grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); margin-top: var(--space-5); }
 .profile-main, .profile-side { display: grid; gap: var(--space-5); min-width: 0; }
 .profile-main > .panel, .profile-side > .panel { margin-bottom: 0; }
 .profile-side { position: sticky; top: 24px; }
@@ -2349,7 +2349,10 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .root-loading-logo {
   animation: pulse 1.4s ease-in-out infinite alternate;
   color: var(--ink-strong);
-  font-size: 1.25rem;
+  font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -.03em;
 }
 .skeleton-block {
   animation: shimmer 1.6s linear infinite;

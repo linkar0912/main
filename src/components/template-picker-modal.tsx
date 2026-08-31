@@ -40,7 +40,7 @@ export const TEMPLATE_EXAMPLES: Record<string, string> = {
   "story-mention-reply": "They mention you in a story → thank-you DM",
   "default-reply": "Anything unmatched → “Got it! Someone will reply soon.”",
   "main-menu": "“MENU” → tappable list of everything you offer",
-  "comment-catch-all": "Any comment on any post → instant private reply",
+  "comment-catch-all": "Comment anything (no keyword) → instant private reply",
   "referral-welcome": "Tap from an ad/ref link → warm welcome DM",
   "optin-confirmation": "Opt-in tap → “Done! Here is what you asked for.”",
   "giveaway-entry": "DM “enter” → “You are in. Here are the rules.”",

@@ -23,7 +23,7 @@ import { StatusBadge } from "./status-badge";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
-import { clearWorkspaceDataCache, getInstagramConnections, getFacebookPages, type FacebookPageSummary } from "@/src/lib/client/workspace-data";
+import { clearWorkspaceDataCache, getInstagramConnections, getFacebookPages, getWorkspaceBootstrap, type FacebookPageSummary } from "@/src/lib/client/workspace-data";
 
 type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string; profilePictureUrl?: string | null };
 type ConnectionHealth = {
@@ -181,18 +181,17 @@ export function SettingsScreen() {
     void Promise.all([
       getInstagramConnections(),
       getFacebookPages(),
-      fetch("/api/health"),
+      getWorkspaceBootstrap().catch(() => null),
       fetch("/api/meta/connection/health"),
       fetch("/api/facebook/connection/health"),
-    ]).then(async ([connectionData, fbPages, healthResponse, connectionHealthResponse, fbHealthResponse]) => {
-      const healthPayload = (await healthResponse.json()) as { mode?: "demo" | "configured" };
+    ]).then(async ([connectionData, fbPages, bootstrap, connectionHealthResponse, fbHealthResponse]) => {
       const connectionHealthPayload = (await connectionHealthResponse.json()) as { data?: ConnectionHealth[] };
       const fbHealthPayload = (await fbHealthResponse.json().catch(() => ({ data: [] }))) as {
         data?: Array<{ id: string; pageId: string; pageName: string; status: ConnectionStatus; checkError?: string; subscribedFields: string[]; missingFields: string[]; requiredFields: string[] }>;
       };
       setConnections(connectionData);
       setFacebookPages(fbPages);
-      setMode(healthPayload.mode ?? "demo");
+      setMode(bootstrap?.mode ?? "demo");
       setHealth(connectionHealthPayload.data?.[0] ?? null);
       setFacebookHealth(fbHealthPayload.data?.[0] ?? null);
     }).catch(() => undefined);

@@ -4,22 +4,23 @@ Linkar's identity is a direct study of ManyChat's real, live brand (not a
 vague "creator tool" vibe): near-black ink, one hot-magenta signature
 interaction color, a bright yellow secondary block color, chunky friendly
 type, uppercase mono buttons, pill-shaped confidence, and a faint graph-paper
-texture behind hero panels. The concept behind the mark: **every conversation
-answered instantly** - a chat bubble carrying a lightning bolt.
+texture behind hero panels.
 
-## Logo - the Spark
+## Logo - the wordmark
 
-`src/components/linkar-mark.tsx` renders the brand mark: a rounded speech
-bubble (`currentColor`) with a Volt bolt inside. Because the bubble inherits
-text color it works on light and dark surfaces; the bolt is always Volt.
-This mark is Linkar's own - it does not borrow ManyChat's "m" glyph.
+Linkar has no icon mark. The brand signs itself with the **wordmark alone**:
+`PRODUCT_NAME` set in the display face (Bricolage Grotesque, weight 800, tight
+negative tracking), which is what the sidebar brand, the mobile topbar, and the
+loading splash all render.
 
-- Use `LinkarMark` in **brand spots**: sidebar wordmark, mobile topbar, auth
-  hero + cards, loading skeleton.
-- Use `InstagramGlyph` only where the icon literally means Instagram
-  (connections, public page, help content).
-- Clear space: keep at least the height of the bolt around the mark.
-- Never recolor the bolt; never place the mark on clashing hues.
+There was previously a bubble-and-bolt glyph in
+`src/components/linkar-mark.tsx`; it was removed, along with the component, and
+no icon should be reintroduced without a deliberate decision here first.
+
+- Use the wordmark in **brand spots**: sidebar brand, mobile topbar, auth hero
+  + cards, loading splash.
+- Use `InstagramGlyph` / `FacebookGlyph` only where the icon literally means
+  that channel (connections, public page, help content).
 
 ## Color
 

@@ -74,6 +74,16 @@ describe("premade automation templates", () => {
     }
   });
 
+  it("offers a keyword-free comment recipe, recommended, for “anyone comments anything → they get a reply”", () => {
+    const catchAll = getTemplateById("comment-catch-all")!;
+    expect(catchAll.setup!.definition.trigger).toMatchObject({ type: "comment", match: "any", keywords: [] });
+    // Surfaced under "Recommended" rather than buried in "More templates":
+    // replying to every comment is one of the two things people arrive wanting.
+    expect(catchAll.popular).toBe(true);
+    // The title has to say what it does without the reader opening it.
+    expect(catchAll.title.toLowerCase()).toContain("anything");
+  });
+
   it("fires the ad-referral recipe on the referral trigger, with no keyword fields it doesn't need", () => {
     const referral = getTemplateById("referral-welcome")!;
     expect(referral.setup!.definition.trigger).toEqual({ type: "referral" });

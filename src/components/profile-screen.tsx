@@ -14,12 +14,19 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { AppShell } from "./app-shell";
+import { AppShell, useAccountIdentity } from "./app-shell";
 import { FacebookGlyph } from "./facebook-glyph";
 import { InstagramGlyph } from "./instagram-glyph";
+import { Skeleton } from "./skeleton";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { formatDate } from "@/src/lib/format-date";
-import { getFacebookPages, getInstagramConnections, type FacebookPageSummary } from "@/src/lib/client/workspace-data";
+import {
+  getAccountProfile,
+  getFacebookPages,
+  getInstagramConnections,
+  type AccountProfile,
+  type FacebookPageSummary,
+} from "@/src/lib/client/workspace-data";
 
 type Connection = {
   id: string;
@@ -30,11 +37,19 @@ type Connection = {
   profilePictureUrl?: string | null;
 };
 
+/**
+ * Every field is optional: the route renders `<ProfileScreen />` with no props
+ * so /profile stays a static client page (instant shell, exactly like
+ * /automations) instead of a force-dynamic server page that blocks the whole
+ * navigation on a Supabase getUser() round trip. Passing props still works and
+ * short-circuits the client fetch, which keeps the component testable and
+ * leaves the door open for a server-rendered caller.
+ */
 type ProfileScreenProps = {
-  email: string;
-  memberSince: string | null;
-  emailVerified: boolean;
-  role: MemberRole;
+  email?: string;
+  memberSince?: string | null;
+  emailVerified?: boolean;
+  role?: MemberRole;
 };
 
 function initialsOf(email: string): string {
@@ -61,6 +76,10 @@ function roleLabel(role: MemberRole): string {
   return role.charAt(0) + role.slice(1).toLowerCase();
 }
 
+function planLabel(plan: string): string {
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
 function savedMessageFor(saved: string | null): string {
   if (saved === "password") return "Password updated. Use it next time you sign in.";
   if (saved === "verification-sent") return "Verification email sent - check your inbox.";
@@ -76,7 +95,25 @@ function accountErrorFor(error: string | null): string {
   return "";
 }
 
-export function ProfileScreen({ email, memberSince, emailVerified, role }: ProfileScreenProps) {
+export function ProfileScreen(props: ProfileScreenProps = {}) {
+  return (
+    <AppShell>
+      <ProfileBody {...props} />
+    </AppShell>
+  );
+}
+
+function ProfileBody({
+  email: emailProp,
+  memberSince: memberSinceProp,
+  emailVerified: emailVerifiedProp,
+  role: roleProp,
+}: ProfileScreenProps) {
+  // The sidebar already fetched email/role/plan for its own chip; reading them
+  // from that shared context means the profile header paints without waiting
+  // for a second round trip of its own.
+  const identity = useAccountIdentity();
+  const [account, setAccount] = useState<AccountProfile | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [facebookPages, setFacebookPages] = useState<FacebookPageSummary[]>([]);
   const [dismissed, setDismissed] = useState(false);
@@ -95,15 +132,44 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
     return () => clearTimeout(timer);
   }, [savedMessage]);
 
+  // memberSince and emailVerified are the only two facts the shell bootstrap
+  // doesn't already carry, so they - and nothing else - wait on /api/account.
+  const serverSupplied = emailProp !== undefined;
   useEffect(() => {
+    if (serverSupplied) return;
+    let mounted = true;
+    getAccountProfile()
+      .then((data) => {
+        if (mounted) setAccount(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, [serverSupplied]);
+
+  useEffect(() => {
+    let mounted = true;
     void Promise.all([
       getInstagramConnections().catch(() => []),
       getFacebookPages().catch(() => []),
     ]).then(([instagram, facebook]) => {
+      if (!mounted) return;
       setConnections(instagram);
       setFacebookPages(facebook);
     });
+    return () => {
+      mounted = false;
+    };
   }, []);
+
+  const email = emailProp ?? account?.email ?? identity.email;
+  const role: MemberRole | null = roleProp ?? account?.role ?? (identity.role || null);
+  const memberSince = serverSupplied ? memberSinceProp ?? null : account?.memberSince ?? null;
+  // null means "not known yet" - claiming Unverified (and offering the resend
+  // form) before the answer arrives would be wrong for a verified account.
+  const emailVerified: boolean | null = emailVerifiedProp ?? account?.emailVerified ?? null;
+  const plan = account?.planName ?? (identity.plan ? planLabel(identity.plan) : "Free");
 
   const connection = connections[0];
   const facebookPage = facebookPages[0];
@@ -111,183 +177,192 @@ export function ProfileScreen({ email, memberSince, emailVerified, role }: Profi
   const avatar = connection?.profilePictureUrl ?? undefined;
 
   return (
-    <AppShell>
-      <div className="page-wrap profile-wrap">
-        <header className="page-header">
-          <div>
-            <p className="eyebrow">Account</p>
-            <h1>My Profile</h1>
-            <p className="muted page-lede">Your identity, security, and connected Instagram and Facebook channels in one place.</p>
-          </div>
-        </header>
+    <div className="page-wrap profile-wrap">
+      <header className="page-header">
+        <div>
+          <p className="eyebrow">Account</p>
+          <h1>My Profile</h1>
+          <p className="muted page-lede">Your identity, security, and connected Instagram and Facebook channels in one place.</p>
+        </div>
+      </header>
 
-        {savedMessage && (
-          <div className="notice-banner notice-success" role="status">
-            <BadgeCheck size={17} />
-            <p>{savedMessage}</p>
-          </div>
-        )}
-        {accountError && (
-          <div className="notice-banner notice-warning" role="alert">
-            <p>{accountError}</p>
-          </div>
-        )}
+      {savedMessage && (
+        <div className="notice-banner notice-success" role="status">
+          <BadgeCheck size={17} />
+          <p>{savedMessage}</p>
+        </div>
+      )}
+      {accountError && (
+        <div className="notice-banner notice-warning" role="alert">
+          <p>{accountError}</p>
+        </div>
+      )}
 
-        <section className="panel profile-card profile-overview" aria-label="Account overview">
-          <div className="profile-overview-main">
-            <div className="profile-overview-identity">
-              {avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
-                <img className="avatar avatar-large is-photo" src={avatar} alt="" />
+      <section className="panel profile-card profile-overview" aria-label="Account overview">
+        <div className="profile-overview-main">
+          <div className="profile-overview-identity">
+            {avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+              <img className="avatar avatar-large is-photo" src={avatar} alt="" />
+            ) : email ? (
+              <span className="avatar avatar-large" aria-hidden>{initialsOf(email)}</span>
+            ) : (
+              <Skeleton style={{ borderRadius: "50%", flex: "0 0 76px", height: 76, width: 76 }} />
+            )}
+            <div className="account-summary-id">
+              <p className="eyebrow">Personal details</p>
+              {email ? (
+                <>
+                  <h2>{displayNameFromEmail(email)}</h2>
+                  <small>{email}</small>
+                </>
               ) : (
-                <span className="avatar avatar-large" aria-hidden>{initialsOf(email)}</span>
+                <>
+                  <Skeleton style={{ height: 24, marginBottom: 6, width: 190 }} />
+                  <Skeleton style={{ height: 13, width: 220 }} />
+                </>
               )}
-              <div className="account-summary-id">
-                <p className="eyebrow">Personal details</p>
-                <h2>{displayNameFromEmail(email)}</h2>
-                <small>{email}</small>
-                <span className="account-summary-meta">
-                  {memberSince ? `Joined ${formatDate(memberSince)}` : "Workspace member"}
-                </span>
-              </div>
+              <span className="account-summary-meta">
+                {memberSince ? `Joined ${formatDate(memberSince)}` : "Workspace member"}
+              </span>
             </div>
           </div>
-          <dl className="profile-facts">
-            <div className="profile-fact">
-              <dt>Role</dt>
-              <dd data-tone="accent">{roleLabel(role)}</dd>
+        </div>
+        <dl className="profile-facts">
+          <div className="profile-fact">
+            <dt>Role</dt>
+            <dd data-tone="accent">{role ? roleLabel(role) : <Skeleton style={{ height: 15, width: 62 }} />}</dd>
+          </div>
+          <div className="profile-fact">
+            <dt>Plan</dt>
+            <dd>{plan}</dd>
+          </div>
+          <div className="profile-fact">
+            <dt>Email status</dt>
+            <dd data-tone={emailVerified === null ? undefined : emailVerified ? "ok" : "warn"}>
+              {emailVerified === null ? "Checking…" : emailVerified ? "Verified" : "Unverified"}
+            </dd>
+          </div>
+        </dl>
+        {emailVerified === false && (
+          <form action="/api/account" method="post" className="account-verify-row">
+            <input type="hidden" name="action" value="resend-verification" />
+            <p className="muted">Confirm your email to keep full access to your workspace.</p>
+            <button className="button button-secondary" type="submit">
+              Resend verification email
+            </button>
+          </form>
+        )}
+      </section>
+
+      <div className="profile-layout">
+        <main className="profile-main">
+          <section className="panel profile-card profile-security-card" aria-label="Security">
+            <div className="panel-heading">
+              <div><p className="eyebrow">Security</p><h2>Password &amp; sessions</h2></div>
+              <ShieldCheck size={21} />
             </div>
-            <div className="profile-fact">
-              <dt>Plan</dt>
-              <dd>Free</dd>
-            </div>
-            <div className="profile-fact">
-              <dt>Email status</dt>
-              <dd data-tone={emailVerified ? "ok" : "warn"}>
-                {emailVerified ? "Verified" : "Unverified"}
-              </dd>
-            </div>
-          </dl>
-          {!emailVerified && (
-            <form action="/api/account" method="post" className="account-verify-row">
-              <input type="hidden" name="action" value="resend-verification" />
-              <p className="muted">Confirm your email to keep full access to your workspace.</p>
+            <p className="muted profile-section-lede">Use a unique password and control every active session from one place.</p>
+            <form action="/api/account" method="post" className="account-form">
+              <input type="hidden" name="action" value="change-password" />
+              <div className="account-form-grid">
+                <label className="field">
+                  <span>Current password</span>
+                  <input name="currentPassword" type="password" autoComplete="current-password" required />
+                </label>
+                <label className="field">
+                  <span>New password</span>
+                  <input name="newPassword" type="password" autoComplete="new-password" minLength={12} required />
+                </label>
+              </div>
+              <p className="muted account-form-hint">
+                At least 12 characters. Changing your password keeps your other devices signed in.
+              </p>
               <button className="button button-secondary" type="submit">
-                Resend verification email
+                <KeyRound size={15} /> Update password
               </button>
             </form>
-          )}
-        </section>
-
-        <div className="profile-layout">
-          <main className="profile-main">
-            <section className="panel profile-card profile-security-card" aria-label="Security">
-              <div className="panel-heading">
-                <div><p className="eyebrow">Security</p><h2>Password &amp; sessions</h2></div>
-                <ShieldCheck size={21} />
+            <div className="account-session-row">
+              <div>
+                <strong>Sign out everywhere</strong>
+                <p className="muted">Invalidates every session across all your devices - including this one.</p>
               </div>
-              <p className="muted profile-section-lede">Use a unique password and control every active session from one place.</p>
-              <form action="/api/account" method="post" className="account-form">
-                <input type="hidden" name="action" value="change-password" />
-                <div className="account-form-grid">
-                  <label className="field">
-                    <span>Current password</span>
-                    <input name="currentPassword" type="password" autoComplete="current-password" required />
-                  </label>
-                  <label className="field">
-                    <span>New password</span>
-                    <input name="newPassword" type="password" autoComplete="new-password" minLength={12} required />
-                  </label>
-                </div>
-                <p className="muted account-form-hint">
-                  At least 12 characters. Changing your password keeps your other devices signed in.
-                </p>
+              <form action="/api/account" method="post">
+                <input type="hidden" name="action" value="logout-all" />
                 <button className="button button-secondary" type="submit">
-                  <KeyRound size={15} /> Update password
+                  <LogOut size={15} /> Sign out all
                 </button>
               </form>
-              <div className="account-session-row">
-                <div>
-                  <strong>Sign out everywhere</strong>
-                  <p className="muted">Invalidates every session across all your devices - including this one.</p>
+            </div>
+          </section>
+        </main>
+        <aside className="profile-side" aria-label="Profile supporting information">
+          <section className="panel profile-card profile-channels-card" aria-label="Connected channels">
+            <div className="panel-heading">
+              <div><p className="eyebrow">Active channels</p><h2>Connected channels</h2></div>
+              <Link2 size={19} />
+            </div>
+            <div className="profile-channel-list">
+              {connection ? (
+                <div className="connection-card">
+                  {connection.profilePictureUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
+                    <img
+                      className="avatar avatar-connection is-photo"
+                      src={connection.profilePictureUrl}
+                      alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
+                    />
+                  ) : (
+                    <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
+                  )}
+                  <div className="connection-card-id">
+                    <strong>@{connection.username}</strong>
+                    <span className="connection-status">
+                      <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
+                      {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
+                      {" · "}
+                      {formatDate(connection.connectedAt)}
+                    </span>
+                  </div>
                 </div>
-                <form action="/api/account" method="post">
-                  <input type="hidden" name="action" value="logout-all" />
-                  <button className="button button-secondary" type="submit">
-                    <LogOut size={15} /> Sign out all
-                  </button>
-                </form>
-              </div>
-            </section>
-          </main>
-          <aside className="profile-side" aria-label="Profile supporting information">
-            <section className="panel profile-card profile-channels-card" aria-label="Connected channels">
-              <div className="panel-heading">
-                <div><p className="eyebrow">Active channels</p><h2>Connected channels</h2></div>
-                <Link2 size={19} />
-              </div>
-              <div className="profile-channel-list">
-                {connection ? (
-                  <div className="connection-card">
-                    {connection.profilePictureUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
-                      <img
-                        className="avatar avatar-connection is-photo"
-                        src={connection.profilePictureUrl}
-                        alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
-                      />
-                    ) : (
-                      <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
-                    )}
-                    <div className="connection-card-id">
-                      <strong>@{connection.username}</strong>
-                      <span className="connection-status">
-                        <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
-                        {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
-                        {" · "}
-                        {formatDate(connection.connectedAt)}
-                      </span>
-                    </div>
+              ) : (
+                <p className="muted connection-empty">No Instagram account connected yet.</p>
+              )}
+              {facebookPage ? (
+                <div className="connection-card">
+                  <span className="avatar avatar-connection" aria-hidden><FacebookGlyph size={20} brand /></span>
+                  <div className="connection-card-id">
+                    <strong>{facebookPage.pageName}</strong>
+                    <span className="connection-status">
+                      <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
+                      Facebook Page
+                      {" · "}
+                      {facebookPage.status === "CONNECTED" ? "Connected" : facebookPage.status === "EXPIRED" ? "Token expired" : "Disconnected"}
+                    </span>
                   </div>
-                ) : (
-                  <p className="muted connection-empty">No Instagram account connected yet.</p>
-                )}
-                {facebookPage ? (
-                  <div className="connection-card">
-                    <span className="avatar avatar-connection" aria-hidden><FacebookGlyph size={20} brand /></span>
-                    <div className="connection-card-id">
-                      <strong>{facebookPage.pageName}</strong>
-                      <span className="connection-status">
-                        <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
-                        Facebook Page
-                        {" · "}
-                        {facebookPage.status === "CONNECTED" ? "Connected" : facebookPage.status === "EXPIRED" ? "Token expired" : "Disconnected"}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="muted connection-empty">No Facebook Page connected yet.</p>
-                )}
-              </div>
-              <Link className={`button ${hasChannel ? "button-secondary" : "button-primary"} button-block`} href="/settings">
-                <Link2 size={15} /> {hasChannel ? "Manage channels" : "Connect a channel"}
-              </Link>
-            </section>
-            <section className="panel profile-card" aria-label="Workspace links">
-              <div className="panel-heading">
-                <div><p className="eyebrow">Quick access</p><h2>Workspace links</h2></div>
-                <Users size={19} strokeWidth={1.8} />
-              </div>
-              <nav className="related-links">
-                <Link href="/settings">Team &amp; invitations <ArrowUpRight size={13} /></Link>
-                <Link href="/help">Help centre <CircleHelp size={13} /></Link>
-                <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
-                <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
-              </nav>
-            </section>
-          </aside>
-        </div>
+                </div>
+              ) : (
+                <p className="muted connection-empty">No Facebook Page connected yet.</p>
+              )}
+            </div>
+            <Link className={`button ${hasChannel ? "button-secondary" : "button-primary"} button-block`} href="/settings">
+              <Link2 size={15} /> {hasChannel ? "Manage channels" : "Connect a channel"}
+            </Link>
+          </section>
+          <section className="panel profile-card" aria-label="Workspace links">
+            <div className="panel-heading">
+              <div><p className="eyebrow">Quick access</p><h2>Workspace links</h2></div>
+              <Users size={19} strokeWidth={1.8} />
+            </div>
+            <nav className="related-links">
+              <Link href="/settings">Team &amp; invitations <ArrowUpRight size={13} /></Link>
+              <Link href="/help">Help centre <CircleHelp size={13} /></Link>
+              <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
+              <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
+            </nav>
+          </section>
+        </aside>
       </div>
-    </AppShell>
+    </div>
   );
 }

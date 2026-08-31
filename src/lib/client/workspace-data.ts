@@ -7,6 +7,34 @@ export type WorkspaceBootstrap = {
   planName?: string;
   igAvatarUrl?: string | null;
   platformOwner: boolean;
+  /**
+   * Runtime SUPPORT_EMAIL, carried on the shell payload so the help centre can
+   * render as a static client page instead of a force-dynamic server page that
+   * blocks every navigation on a fresh server round trip.
+   */
+  supportEmail?: string;
+  /**
+   * "demo" when the deployment has no database or Redis configured. Config-only
+   * on the server, so reading it here costs nothing - unlike /api/health, which
+   * probes both dependencies on every call.
+   */
+  mode?: "demo" | "configured";
+};
+
+/**
+ * The signed-in person's own account record. Separate from the shell bootstrap
+ * because it needs a Supabase getUser() round trip for memberSince /
+ * emailVerified, which no other page should have to wait on.
+ */
+export type AccountProfile = {
+  id: string;
+  email: string;
+  workspaceId: string;
+  role: MemberRole;
+  plan: string;
+  planName?: string;
+  memberSince: string | null;
+  emailVerified: boolean;
 };
 
 export type InstagramConnectionSummary = {
@@ -29,6 +57,7 @@ export type FacebookPageSummary = {
 type ClientCache<T> = { value?: T; pending?: Promise<T>; fetcher?: typeof fetch };
 
 const bootstrapCache: ClientCache<WorkspaceBootstrap> = {};
+const accountProfileCache: ClientCache<AccountProfile> = {};
 const connectionsCache: ClientCache<InstagramConnectionSummary[]> = {};
 const facebookPagesCache: ClientCache<FacebookPageSummary[]> = {};
 
@@ -67,6 +96,10 @@ export function getWorkspaceBootstrap(): Promise<WorkspaceBootstrap> {
   return cachedRequest(bootstrapCache, "/api/workspace/bootstrap");
 }
 
+export function getAccountProfile(): Promise<AccountProfile> {
+  return cachedRequest(accountProfileCache, "/api/account");
+}
+
 export function getInstagramConnections(): Promise<InstagramConnectionSummary[]> {
   return cachedRequest(connectionsCache, "/api/meta/connection");
 }
@@ -99,5 +132,8 @@ export function clearWorkspaceDataCache(scope: "connections" | "all" = "all"): v
     bootstrapCache.value = undefined;
     bootstrapCache.pending = undefined;
     bootstrapCache.fetcher = undefined;
+    accountProfileCache.value = undefined;
+    accountProfileCache.pending = undefined;
+    accountProfileCache.fetcher = undefined;
   }
 }

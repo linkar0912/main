@@ -6,7 +6,7 @@
 - CSS: `src/components/marketing/marketing-header.module.css`
 - Test: `src/components/marketing/marketing-header.test.tsx`
 
-This is a focused client component because it owns scroll state and the mobile dialog. It reuses `src/components/linkar-mark.tsx`.
+This is a focused client component because it owns scroll state and the mobile dialog.
 
 ## Linkar copy and destinations
 
@@ -58,7 +58,7 @@ While the menu is open, the header cannot hide, background scroll is locked, and
 
 ## Assets
 
-- `LinkarMark` plus a text wordmark; no image asset.
+- Text wordmark only; no icon mark and no image asset.
 - Menu glyph is authored with CSS lines or a local inline SVG with no imported mark.
 
 ## Focus behavior

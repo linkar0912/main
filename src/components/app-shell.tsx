@@ -48,9 +48,15 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 export type AccountIdentity = { email: string; plan: string; role: "OWNER" | "ADMIN" | "MEMBER" };
-type AccountIdentityState = Omit<AccountIdentity, "role"> & { role: AccountIdentity["role"] | "" };
+type AccountIdentityState = Omit<AccountIdentity, "role"> & {
+  role: AccountIdentity["role"] | "";
+  /** Runtime SUPPORT_EMAIL from the shell bootstrap; "" until it resolves. */
+  supportEmail: string;
+  /** "" until the bootstrap resolves, so callers can tell "unknown" from "live". */
+  mode: "demo" | "configured" | "";
+};
 
-const AccountIdentityContext = createContext<AccountIdentityState>({ email: "", plan: "free", role: "" });
+const AccountIdentityContext = createContext<AccountIdentityState>({ email: "", plan: "free", role: "", supportEmail: "", mode: "" });
 
 export function useAccountIdentity(): AccountIdentityState {
   return useContext(AccountIdentityContext);
@@ -78,6 +84,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<AccountIdentity["role"] | "">("");
   const [plan, setPlan] = useState("free");
+  const [supportEmail, setSupportEmail] = useState("");
+  const [mode, setMode] = useState<AccountIdentityState["mode"]>("");
   const [igAvatarUrl, setIgAvatarUrl] = useState("");
   const [platformOwner, setPlatformOwner] = useState(false);
   const [identityError, setIdentityError] = useState("");
@@ -102,6 +110,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         setEmail(data.email ?? "");
         setRole(data.role ?? "");
         setPlan(data.plan ?? "free");
+        setSupportEmail(data.supportEmail ?? "");
+        setMode(data.mode ?? "");
         setIgAvatarUrl(data.igAvatarUrl ?? "");
         setPlatformOwner(data.platformOwner ?? false);
         setIdentityError("");
@@ -126,6 +136,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           setEmail(data.email ?? "");
           setRole(data.role ?? "");
           setPlan(data.plan ?? "free");
+          setSupportEmail(data.supportEmail ?? "");
+          setMode(data.mode ?? "");
           setIgAvatarUrl(data.igAvatarUrl ?? "");
           setPlatformOwner(data.platformOwner ?? false);
           setIdentityError("");
@@ -173,7 +185,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   }, [drawerOpen]);
 
   return (
-    <AccountIdentityContext.Provider value={{ email, role, plan }}>
+    <AccountIdentityContext.Provider value={{ email, role, plan, supportEmail, mode }}>
       <div className="app-frame">
       <header className="mobile-topbar" inert={drawerOpen}>
         <button

@@ -1,3 +1,4 @@
+import { InstagramGlyph } from "../instagram-glyph";
 import { Reveal } from "./reveal";
 import styles from "./setup-steps.module.css";
 
@@ -33,48 +34,148 @@ const setupSteps: readonly SetupStep[] = [
   },
 ];
 
+/**
+ * Setup happens in Linkar, not on Instagram, so these three previews are
+ * fragments of the app's own screens - the Settings connection card, the
+ * builder's trigger step, the automations list with its live toggle. Someone who
+ * has used the product should recognize each one; someone who has not should be
+ * able to tell what the step will actually look like.
+ */
+
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m6 9.5 6 6 6-6" />
+    </svg>
+  );
+}
+
+function TickIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12.5 10 17.5 19 7" />
+    </svg>
+  );
+}
+
+/** Step 01 - the Instagram connections card from Settings. */
+function ConnectPreview() {
+  return (
+    <div className={styles.panel}>
+      <div className={styles.panelHead}>
+        <span className={styles.eyebrow}>Instagram connections</span>
+        <strong>1 account connected</strong>
+      </div>
+      <div className={styles.channelRow}>
+        <span className={styles.channelAvatar} aria-hidden="true">
+          <InstagramGlyph size={17} brand />
+        </span>
+        <span className={styles.channelId}>
+          <strong>@brand.acct</strong>
+          <span className={styles.rowMeta}>Professional account</span>
+        </span>
+        <span className={styles.statusPill}>
+          <i className={styles.liveDot} />
+          Connected
+        </span>
+      </div>
+      <div className={styles.fieldGrid}>
+        {["comments", "messages", "mentions", "postbacks"].map((field) => (
+          <span className={styles.fieldChip} key={field}>
+            <i className={styles.tick}><TickIcon /></i>
+            {field}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Step 02 - the builder's trigger step, wired to its first action. */
+function TriggerPreview() {
+  return (
+    <div className={styles.panel}>
+      <div className={styles.panelHead}>
+        <span className={styles.eyebrow}>Step 01<i>·</i>Trigger</span>
+        <strong>When should Linkar listen?</strong>
+      </div>
+      <label className={styles.field}>
+        <span>Trigger source</span>
+        <span className={styles.select}>
+          Post &amp; Reel comments
+          <i><ChevronIcon /></i>
+        </span>
+      </label>
+      <label className={styles.field}>
+        <span>Match mode</span>
+        <span className={styles.select}>
+          A keyword
+          <i><ChevronIcon /></i>
+        </span>
+      </label>
+      <div className={styles.keywords}>
+        <span>guide</span>
+        <span>pdf</span>
+        <span className={styles.keywordAdd}>+</span>
+      </div>
+      {/* The builder's step rail, dropping from the trigger into its action. */}
+      <svg className={styles.connector} viewBox="0 0 6 24" fill="none" aria-hidden="true">
+        <path d="M3 1v22" />
+      </svg>
+      <div className={styles.actionRow}>
+        <span className={styles.eyebrow}>Step 02<i>·</i>Action</span>
+        <strong>Private reply</strong>
+      </div>
+    </div>
+  );
+}
+
+/** Step 03 - the automations list row, switched on. */
+function PublishPreview() {
+  return (
+    <div className={styles.panel}>
+      <div className={styles.automationRow}>
+        <span className={styles.channelAvatar} aria-hidden="true">
+          <InstagramGlyph size={17} brand />
+        </span>
+        <span className={styles.channelId}>
+          <strong>Lead magnet from comments</strong>
+          <span className={styles.rowMeta}>Comment replies<i>·</i>2 actions</span>
+        </span>
+        <svg className={styles.toggle} viewBox="0 0 44 24" aria-hidden="true">
+          <rect className={styles.switchTrack} x="0" y="0" width="44" height="24" rx="12" />
+          <circle className={styles.switchKnob} cx="32" cy="12" r="9" />
+        </svg>
+      </div>
+      <div className={styles.statRow}>
+        <span><strong>1,284</strong>replies sent</span>
+        <span><strong>0</strong>failed</span>
+        <span className={styles.statusPill} data-live="true">
+          <i className={styles.liveDot} />
+          Active
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const previews: Record<SetupStep["id"], () => React.JSX.Element> = {
+  connect: ConnectPreview,
+  trigger: TriggerPreview,
+  publish: PublishPreview,
+};
+
 function SetupIllustration({ step }: { step: SetupStep }) {
   const label = step.id === "connect"
     ? "Protected Linkar connection preview"
     : step.id === "trigger"
       ? "Linkar trigger preview"
       : "Published Linkar flow preview";
+  const Preview = previews[step.id];
 
   return (
     <figure className={`${styles.illustration} ${styles[step.id]}`} aria-label={label}>
-      {step.id === "connect" ? (
-        <svg viewBox="0 0 320 250" fill="none" aria-hidden="true">
-          <rect x="31" y="24" width="258" height="196" rx="22" className={styles.previewFrame} />
-          <path d="M160 56 205 76v42c0 34-19 58-45 70-26-12-45-36-45-70V76l45-20Z" className={styles.shield} />
-          <path d="m140 116 13 13 28-31" className={styles.shieldCheck} />
-          <path d="M72 176h176" className={styles.rule} />
-          <circle cx="88" cy="176" r="8" className={styles.voltDot} />
-          <circle cx="232" cy="176" r="8" className={styles.voltDot} />
-        </svg>
-      ) : null}
-      {step.id === "trigger" ? (
-        <svg viewBox="0 0 320 250" fill="none" aria-hidden="true">
-          <rect x="31" y="24" width="258" height="196" rx="22" className={styles.previewFrame} />
-          <rect x="58" y="60" width="82" height="42" rx="12" className={styles.lightCard} />
-          <rect x="180" y="148" width="82" height="42" rx="12" className={styles.lightCard} />
-          <path d="M140 81h38c18 0 22 20 22 37v30" className={styles.connector} />
-          <circle cx="160" cy="81" r="10" className={styles.magentaDot} />
-          <circle cx="200" cy="148" r="10" className={styles.voltDot} />
-          <path d="M77 81h44M199 169h44" className={styles.cardLine} />
-        </svg>
-      ) : null}
-      {step.id === "publish" ? (
-        <svg viewBox="0 0 320 250" fill="none" aria-hidden="true">
-          <rect x="31" y="24" width="258" height="196" rx="22" className={styles.previewFrame} />
-          <path d="M80 101h160" className={styles.rule} />
-          <path d="M80 148h160" className={styles.rule} />
-          <rect x="188" y="63" width="59" height="31" rx="16" className={styles.switchTrack} />
-          <circle cx="226" cy="79" r="11" className={styles.switchKnob} />
-          <circle cx="80" cy="101" r="9" className={styles.voltDot} />
-          <circle cx="160" cy="148" r="9" className={styles.magentaDot} />
-          <circle cx="240" cy="148" r="9" className={styles.voltDot} />
-        </svg>
-      ) : null}
+      <div aria-hidden="true"><Preview /></div>
       <figcaption><span aria-hidden="true" />{step.status}</figcaption>
     </figure>
   );

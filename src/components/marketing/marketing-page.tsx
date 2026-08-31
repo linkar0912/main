@@ -23,10 +23,13 @@ export function MarketingPage() {
         <ProofRail />
         <ManifestoSection />
         <AutomationStory />
-        <ChannelShowcase />
         <SurfaceRunway />
         <BeforeAfterSection />
         <WorkflowGallery />
+        {/* Supported channels reads as reference, not persuasion, so it sits
+            after the mechanism sections and directly above Setup - whose first
+            step is "connect your professional account". */}
+        <ChannelShowcase />
         <SetupSteps />
         <FaqSection />
         <FinalCta />

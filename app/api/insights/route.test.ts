@@ -63,6 +63,27 @@ describe("GET /api/insights", () => {
     expect(mocks.countParticipantsPerDay).not.toHaveBeenCalled();
   });
 
+  it("include=overview returns the dashboard's fields and skips the ones it never renders", async () => {
+    mocks.countParticipantsPerDay.mockResolvedValue([{ day: "2026-08-31", count: 3 }]);
+    mocks.countExecutionsSentPerDay.mockResolvedValue([{ day: "2026-08-31", count: 5 }]);
+    mocks.countCapturedContacts.mockResolvedValue(11);
+    mocks.countSuppressedContacts.mockResolvedValue(2);
+
+    const response = await GET(new Request("http://localhost/api/insights?include=overview"));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      timeseries: { days: 14, participantsPerDay: [{ day: "2026-08-31", count: 3 }], sentPerDay: [{ day: "2026-08-31", count: 5 }] },
+      capturedEmails: 11,
+      optedOut: 2,
+    });
+    // Home shows neither the funnel, per-post performance, nor plan usage, so
+    // those three queries must not run for it.
+    expect(mocks.countParticipantsByState).not.toHaveBeenCalled();
+    expect(mocks.countParticipantsByMedia).not.toHaveBeenCalled();
+    expect(mocks.countParticipantsCreatedSince).not.toHaveBeenCalled();
+  });
+
   it("returns 404 before analytics queries for a foreign automation", async () => {
     mocks.getAutomation.mockResolvedValue(null);
     const response = await GET(new Request("http://localhost/api/insights?automationId=foreign"));

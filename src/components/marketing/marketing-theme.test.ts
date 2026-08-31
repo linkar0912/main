@@ -10,8 +10,11 @@ describe("marketing theme contract", () => {
     const css = cssFile("./marketing-page.module.css");
 
     expect(css).toMatch(/--marketing-canvas:\s*#ffffff/);
-    expect(css).toMatch(/--marketing-raised:\s*#f2f2ee/);
-    expect(css).toMatch(/--marketing-panel:\s*#f7f6ef/);
+    // Light surfaces are white, not the warm creams (#f2f2ee / #f7f6ef) they
+    // used to be. Anything that needs an edge in light mode has to draw one
+    // with --marketing-border rather than relying on a tinted fill.
+    expect(css).toMatch(/--marketing-raised:\s*#ffffff/);
+    expect(css).toMatch(/--marketing-panel:\s*#ffffff/);
     expect(css).toMatch(/--marketing-inverse:\s*#101116/);
     expect(css).toMatch(/--marketing-on-inverse:\s*#f4f4f5/);
     expect(css).toMatch(/\[data-theme="dark"\][\s\S]*--marketing-canvas:\s*#101116/);

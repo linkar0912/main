@@ -203,11 +203,12 @@ export const basicAutomationTemplates: PremadeTemplate[] = [
   },
   {
     id: "comment-catch-all",
-    title: "Respond to every comment",
-    description: "Every comment on your posts and Reels gets an instant private reply - perfect for launches and high-volume moments when you can’t keep up manually.",
+    title: "Comment anything, get a reply",
+    description: "No keyword needed - anyone who comments anything at all on your posts and Reels gets an instant private reply. The catch-all for launches and high-volume moments when you can’t keep up manually.",
     icon: "megaphone",
+    popular: true,
     setup: {
-      name: "Respond to every comment",
+      name: "Comment anything, get a reply",
       definition: {
         version: 1,
         trigger: { type: "comment", match: "any", keywords: [], mediaIds: [] },

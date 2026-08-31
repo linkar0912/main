@@ -142,10 +142,10 @@ describe("WorkflowGallery", () => {
     expect(stylesheet).toContain("padding: clamp(120px, 11vw, 176px) clamp(32px, 4.45vw, 72px);");
     expect(stylesheet).toContain("grid-column: 1 / span 4;");
     expect(stylesheet).toContain("grid-column: 5 / -1;");
-    expect(stylesheet).toContain("min-block-size: 600px;");
+    expect(stylesheet).toContain("min-block-size: 440px;");
     expect(stylesheet).toContain("@media (min-width: 768px) and (max-width: 1023px)");
     expect(stylesheet).toContain("grid-template-columns: 280px minmax(0, 1fr);");
-    expect(stylesheet).toContain("min-block-size: 520px;");
+    expect(stylesheet).toContain("min-block-size: 420px;");
     expect(stylesheet).toContain("@media (max-width: 767px)");
     expect(stylesheet).toContain("padding: 88px 20px;");
     expect(stylesheet).toContain("min-block-size: 76px;");

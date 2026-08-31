@@ -23,14 +23,23 @@
   align-items: stretch;
 }
 
+/* Content-driven, not a 620px floor with the list shoved to the bottom by a
+   180px margin. The two cards still match each other's height because the grid
+   row stretches them; the copy just stops leaving a hole in the middle. */
 .manual,
 .linkar {
-  min-block-size: 620px;
+  display: grid;
+  align-content: start;
   padding: clamp(32px, 4vw, 56px);
   border-radius: 32px;
 }
 
-.manual { background: var(--marketing-panel); }
+/* The panel fill used to be this card's only edge. Now that light surfaces are
+   white, it needs a real one - the dark Linkar card beside it draws its own. */
+.manual {
+  background: var(--marketing-panel);
+  border: 1px solid var(--marketing-border);
+}
 
 .linkar {
   position: relative;
@@ -41,9 +50,9 @@
 
 .linkar::after {
   position: absolute;
-  inset: auto -48px -48px auto;
-  inline-size: 154px;
-  block-size: 154px;
+  inset: auto -54px -54px auto;
+  inline-size: 132px;
+  block-size: 132px;
   content: "";
   background: #fa0cf7;
   border-radius: 50% 0 0;
@@ -64,7 +73,7 @@
 .manual ul,
 .linkar ol {
   padding: 0;
-  margin: 180px 0 0;
+  margin: clamp(32px, 4vw, 52px) 0 0;
   list-style: none;
 }
 
@@ -161,7 +170,7 @@
   .section { padding: 112px 32px; }
   .section header h2 { margin-bottom: 56px; }
   .comparison { gap: 32px; }
-  .manual, .linkar { min-block-size: 560px; padding: 40px 32px; }
+  .manual, .linkar { padding: 40px 32px; }
   .manual ul, .linkar ol { margin-top: 130px; }
 }
 
@@ -169,7 +178,7 @@
   .section { padding: 88px 20px; }
   .section header h2 { margin-bottom: 48px; font-size: var(--marketing-section-title-size); }
   .comparison { grid-template-columns: 1fr; gap: 0; }
-  .manual, .linkar { min-block-size: 420px; padding: 32px 24px; border-radius: 32px; }
+  .manual, .linkar { padding: 32px 24px; border-radius: 32px; }
   .manual ul, .linkar ol { margin-top: 88px; }
   .divider { inline-size: 100%; block-size: 1px; transform: scaleX(0); transform-origin: left; }
   .section[data-visible="true"] .divider { transform: scaleX(1); }

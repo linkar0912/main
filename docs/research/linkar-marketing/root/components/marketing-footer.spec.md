@@ -60,7 +60,7 @@ Links change color over `220ms`. The oversized wordmark uses the shared one-time
 
 ## Assets
 
-- Reuse `src/components/linkar-mark.tsx` for the brand mark.
+- Text wordmark only; there is no icon mark.
 - No raster media. No external URL, social logo, imported brand asset, or remote reference is allowed.
 
 ## Focus behavior
