@@ -91,18 +91,18 @@
 
 **Files/Systems:** Coolify service `alzmminzroqpaftmprqt6lny`, Supabase URL configuration, Meta app review URLs.
 
-- [ ] **Step 1: Set Coolify runtime URLs**
+- [x] **Step 1: Set Coolify runtime URLs**
 
   Set `APP_URL=https://app.linkar.in` and `PUBLIC_SITE_URL=https://linkar.in`; preserve all existing secrets and callback values.
 
-- [ ] **Step 2: Deploy the updated image/configuration**
+- [x] **Step 2: Deploy the updated image/configuration**
 
   Deploy through Coolify only after the local tests and compose validation pass.
 
-- [ ] **Step 3: Verify host behavior**
+- [x] **Step 3: Verify host behavior**
 
   Confirm `linkar.in/` returns the marketing page, `app.linkar.in/` enters the app dashboard/login flow, marketing/legal paths canonicalize to the root host, app paths canonicalize to the app host, and both health endpoints remain 200.
 
-- [ ] **Step 4: Report any remaining independent infrastructure state**
+- [x] **Step 4: Report any remaining independent infrastructure state**
 
   Preserve the excluded orphan PostgreSQL resource; do not delete it as part of this change.
