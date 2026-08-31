@@ -11,7 +11,8 @@
   font-family: var(--font-display, ui-sans-serif, sans-serif);
   font-size: var(--marketing-section-title-size);
   font-weight: 850;
-  line-height: .9;
+  line-height: 1.04;
+  text-wrap: balance;
   letter-spacing: -.07em;
   text-align: center;
 }

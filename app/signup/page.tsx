@@ -27,7 +27,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                         </p>
                     </div>
                 </main>
-                <MarketingFooter hideWordmark />
+                <MarketingFooter />
             </div>
         );
     }
@@ -73,7 +73,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                     </p>
                 </div>
             </main>
-            <MarketingFooter hideWordmark />
+            <MarketingFooter />
         </div>
     );
 }

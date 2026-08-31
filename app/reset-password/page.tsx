@@ -16,7 +16,7 @@ function Card({ children }: Readonly<{ children: React.ReactNode }>) {
                     {children}
                 </div>
             </main>
-            <MarketingFooter hideWordmark />
+            <MarketingFooter />
         </div>
     );
 }

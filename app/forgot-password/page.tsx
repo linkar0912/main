@@ -36,7 +36,7 @@ export default async function ForgotPasswordPage({
                     <p className="auth-page-foot">Remembered it? <Link href="/login">Back to login</Link></p>
                 </div>
             </main>
-            <MarketingFooter hideWordmark />
+            <MarketingFooter />
         </div>
     );
 }

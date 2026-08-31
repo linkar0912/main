@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Reveal } from "./reveal";
 import styles from "./marketing-footer.module.css";
 
 const columns = [
@@ -41,16 +40,19 @@ const columns = [
 ] as const;
 
 type MarketingFooterProps = {
-  /** When set, omits the giant "LINKAR" wordmark (it dominates the footer on
-      short pages like the auth screens). Defaults to false (homepage). */
-  hideWordmark?: boolean;
-  /** Keeps the same navigation and legal content while removing the oversized
-      homepage wordmark and vertical stage on utility pages. */
+  /** Drops the tall vertical stage on utility pages while keeping the same
+      navigation and legal content. */
   compact?: boolean;
 };
 
-/** The complete, route-safe footer for the public marketing page. */
-export function MarketingFooter({ hideWordmark = false, compact = false }: MarketingFooterProps = {}) {
+/**
+ * The complete, route-safe footer for the public marketing page.
+ *
+ * There used to be a 22rem "LINKAR" wordmark stamped across the bottom, with a
+ * `hideWordmark` prop so every page except the homepage could opt out of it.
+ * It is gone, and the footer no longer reserves the ~900px of height it needed.
+ */
+export function MarketingFooter({ compact = false }: MarketingFooterProps = {}) {
   const year = new Date().getFullYear();
 
   return (
@@ -84,12 +86,6 @@ export function MarketingFooter({ hideWordmark = false, compact = false }: Marke
           <p>© {year} Linkar.</p>
           <p>Linkar uses Meta’s supported Instagram and Facebook interfaces. Availability and limits depend on the connected account, Page, and platform policies.</p>
         </div>
-
-        {hideWordmark || compact ? null : (
-          <Reveal as="p" className={styles.wordmark} aria-hidden="true" data-reduced-motion-state="visible">
-            LINKAR
-          </Reveal>
-        )}
       </div>
     </footer>
   );

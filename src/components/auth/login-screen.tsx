@@ -51,7 +51,7 @@ export function LoginScreen({ nextPath, error }: LoginScreenProps) {
           </p>
         </div>
       </main>
-      <MarketingFooter hideWordmark />
+      <MarketingFooter />
     </div>
   );
 }

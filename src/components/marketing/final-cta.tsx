@@ -36,6 +36,7 @@ export function FinalCta() {
     >
       <div className={styles.frame}>
         <Reveal as="div" className={styles.copy} data-reduced-motion-state="visible">
+          <p className={styles.kicker}>Get started</p>
           <h2 id="final-cta-title" className={styles.title}>
             Give every promising conversation a next step.
           </h2>

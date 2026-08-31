@@ -1,15 +1,13 @@
 .footer {
-  min-block-size: 900px;
-  padding: 96px clamp(32px, 4.45vw, 72px) 24px;
+  padding: 96px clamp(32px, 4.45vw, 72px) 40px;
   overflow: hidden;
   color: var(--marketing-on-inverse, #f4f4f5);
   background: var(--marketing-inverse, #101116);
 }
 
-.frame { inline-size: min(100%, 1440px); min-block-size: 780px; margin-inline: auto; }
+.frame { inline-size: min(100%, 1440px); margin-inline: auto; }
 
-.compact { min-block-size: 0; padding-block-start: 72px; }
-.compact .frame { min-block-size: 0; }
+.compact { padding-block-start: 72px; }
 .compact .legalLine { margin-block-start: 72px; }
 
 .topGrid {
@@ -38,55 +36,28 @@
 .legalLine p { margin: 0; }
 .legalLine p:first-child { flex: 0 0 auto; }
 
-.wordmark {
-  margin: 64px 0 -20px;
-  color: var(--marketing-on-inverse, #f4f4f5);
-  font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(9rem, 22vw, 22rem);
-  font-weight: 900;
-  letter-spacing: -.08em;
-  line-height: .72;
-  text-align: center;
-  white-space: nowrap;
-  opacity: .35;
-}
-
-.wordmark[data-enhanced="true"]:not([data-visible="true"]) { opacity: 0; transform: translateY(48px); }
-.wordmark[data-enhanced="true"] { transition: opacity 700ms cubic-bezier(.22,.61,.21,1), transform 700ms cubic-bezier(.22,.61,.21,1); }
-.wordmark[data-visible="true"] { opacity: .35; transform: translateY(0); }
-
 @media (min-width: 768px) and (max-width: 1023px) {
-  .footer { min-block-size: 820px; padding: 88px 32px 20px; }
-  .frame { min-block-size: 700px; }
+  .footer { padding: 88px 32px 32px; }
   .topGrid { display: block; }
   .brand { max-inline-size: 52ch; }
   .navigation { margin-block-start: 64px; }
   .legalLine { margin-block-start: 88px; }
-  .wordmark { font-size: clamp(7rem, 21vw, 13rem); }
 }
 
 @media (max-width: 767px) {
-  .footer { min-block-size: 760px; padding: 72px 20px 16px; }
-  .frame { min-block-size: 680px; }
+  .footer { padding: 72px 20px 28px; }
   .topGrid { display: block; padding-block-start: 24px; }
   .brand { max-inline-size: 32ch; }
   .navigation { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px 20px; margin-block-start: 56px; }
   .column a { min-block-size: 44px; }
   .legalLine { display: grid; gap: 20px; margin-block-start: 72px; }
-  .wordmark { margin-block-start: 64px; font-size: clamp(5.25rem, 26vw, 8rem); letter-spacing: -.07em; }
-  .compact { min-block-size: 0; padding-block-start: 56px; }
-  .compact .frame { min-block-size: 0; }
+  .compact { padding-block-start: 56px; }
   .compact .legalLine { margin-block-start: 56px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .column a,
-  .wordmark,
-  .wordmark[data-enhanced="true"],
-  .wordmark[data-enhanced="true"]:not([data-visible="true"]) {
+  .column a {
     transition: none;
     transform: none;
   }
-  .wordmark[data-enhanced="true"]:not([data-visible="true"]),
-  .wordmark[data-visible="true"] { opacity: .35; }
 }
