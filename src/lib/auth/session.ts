@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { getRepository } from "../repository-provider";
+import type { AutomationRepository } from "../repository";
 
 export type AppSession = {
   userId: string;
@@ -16,6 +17,37 @@ export type GetValidatedSessionOptions = {
     input: ApplicationSessionValidationInput,
   ) => boolean | Promise<boolean>;
 };
+
+type ApplicationAccessRepository = Pick<
+  AutomationRepository,
+  "listWorkspaceMembershipsByUserId" | "findWorkspaceIdByMemberEmail" | "bindMemberUserId" | "getApplicationAccessState"
+>;
+
+export async function assertApplicationAccess(
+  userId: string,
+  email: string,
+  issuedAt: number | null,
+  repository: ApplicationAccessRepository = getRepository(),
+): Promise<{ workspaceId: string; email: string } | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const memberships = await repository.listWorkspaceMembershipsByUserId(userId);
+  let membership = memberships[0];
+
+  if (!membership) {
+    const workspaceId = await repository.findWorkspaceIdByMemberEmail(normalizedEmail);
+    if (!workspaceId) return null;
+    const bound = await repository.bindMemberUserId(workspaceId, normalizedEmail, userId);
+    if (!bound) return null;
+    membership = { id: "backfilled", workspaceId, email: normalizedEmail, role: "MEMBER", userId };
+  }
+
+  const access = await repository.getApplicationAccessState(userId, membership.workspaceId);
+  if (!access || access.userStatus !== "ACTIVE" || access.workspaceStatus !== "ACTIVE") return null;
+  if (access.sessionInvalidBefore) {
+    if (issuedAt === null || issuedAt * 1000 < Date.parse(access.sessionInvalidBefore)) return null;
+  }
+  return { workspaceId: membership.workspaceId, email: membership.email.toLowerCase() };
+}
 
 /**
  * Verifies the Supabase session cookie and resolves it to this app's
@@ -41,10 +73,13 @@ export async function getValidatedSession(
   const { data, error } = await supabase.auth.getClaims();
   if (error || !data?.claims?.sub || !data.claims.email) return null;
 
-  const workspaceId = await getRepository().findWorkspaceIdByMemberEmail(data.claims.email);
-  if (!workspaceId) return null;
+  const userId = String(data.claims.sub);
+  const email = String(data.claims.email);
+  const issuedAt = typeof data.claims.iat === "number" ? data.claims.iat : null;
+  const access = await assertApplicationAccess(userId, email, issuedAt);
+  if (!access) return null;
 
-  const session = { userId: data.claims.sub, email: data.claims.email, workspaceId };
+  const session = { userId, email: access.email, workspaceId: access.workspaceId };
   const allowed = await (options.validateApplicationSession?.({
     ...session,
     claims: data.claims as Record<string, unknown>,

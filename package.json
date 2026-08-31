@@ -8,6 +8,7 @@
     "check:branding": "node scripts/check-branding.mjs",
     "check:compose": "docker compose --env-file .env.production.example -f docker-compose.production.yml config --quiet",
     "preflight:instagram-ownership": "node scripts/preflight-instagram-ownership.mjs",
+    "backfill:member-user-ids": "node scripts/backfill-member-user-ids.mjs",
     "deploy:coolify": "node scripts/coolify-deploy.mjs",
     "dev": "next dev",
     "build": "prisma generate && next build && pnpm build:worker",

@@ -74,6 +74,11 @@ export async function processFlowFollowUp(
     });
   };
 
+  if (await repository.getWorkspaceStatus(job.workspaceId) !== "ACTIVE") {
+    await skip("Workspace is not active", "SUPPRESSED");
+    return;
+  }
+
   const automation = await repository.getAutomation(job.workspaceId, job.automationId);
   if (!automation || automation.status !== "ACTIVE") {
     await skip("Automation is not active", "SUPPRESSED");

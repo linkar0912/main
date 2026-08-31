@@ -55,6 +55,11 @@ export async function processBroadcastSend(
   if (!persisted || persisted.broadcastId !== job.broadcastId || persisted.workspaceId !== job.workspaceId) {
     throw new Error("Broadcast delivery record is missing or does not match the job");
   }
+  if (await repository.getWorkspaceStatus(job.workspaceId) !== "ACTIVE") {
+    await markKnownBroadcastOutcome(repository, job, "Workspace is not active", "SUPPRESSED");
+    await repository.reconcileBroadcastCounters(job.workspaceId, job.broadcastId);
+    return;
+  }
 
   const contact = await repository.getContact(job.workspaceId, job.igAccountId, job.igScopedUserId);
   if (!contact || contact.suppressedAt) {

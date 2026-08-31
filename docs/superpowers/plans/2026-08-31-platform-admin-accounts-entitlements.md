@@ -111,7 +111,7 @@ git commit -m "feat(admin): add account lifecycle controls"
 - Produces command: `pnpm backfill:member-user-ids`.
 - Produces: `assertApplicationAccess(userId, issuedAt): Promise<{ workspaceId; email }>`.
 
-- [ ] **Step 1: Write failing backfill and access tests**
+- [x] **Step 1: Write failing backfill and access tests**
 
 ```ts
 it("matches every normalized membership to its Supabase user and is idempotent", async () => {
@@ -131,27 +131,27 @@ it("rejects tokens issued before sessionInvalidBefore", async () => {
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run scripts/backfill-member-user-ids.test.ts src/lib/auth/session.test.ts src/lib/queue.test.ts`
 
 Expected: FAIL because access-state enforcement is missing.
 
-- [ ] **Step 3: Implement paginated Auth backfill**
+- [x] **Step 3: Implement paginated Auth backfill**
 
 Use `createSupabaseAdminClient().auth.admin.listUsers({ page, perPage: 1000 })`, normalize email, reject duplicate Auth emails, update every null `WorkspaceMember.userId` matched by membership ID, and print counts without printing email addresses. Exit nonzero on ambiguous matches.
 
-- [ ] **Step 4: Enforce lifecycle in HTTP and worker boundaries**
+- [x] **Step 4: Enforce lifecycle in HTTP and worker boundaries**
 
 `getValidatedSession()` uses the stable `sub` first and falls back to normalized email only for not-yet-backfilled sessions. It checks `PlatformUserControl`, workspace status, and JWT `iat`. `getPlatformOwnerSession()` applies the same user-control and stale-session checks after allowlist validation, so a deployment-level recovery action can suspend or revoke an owner session without making email/metadata authoritative. Webhook handlers may acknowledge suspended-workspace events but must not enqueue work. Worker processors re-check workspace status before provider dispatch.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm vitest run scripts/backfill-member-user-ids.test.ts src/lib/auth/session.test.ts src/lib/admin/authorization.test.ts src/lib/queue.test.ts src/lib/automation/runner.test.ts && pnpm typecheck`
 
 Expected: tests pass and no secrets/PII appear in output fixtures.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/backfill-member-user-ids.mjs scripts/backfill-member-user-ids.test.ts package.json src/lib/auth/session.ts src/lib/auth/session.test.ts src/lib/admin/authorization.ts src/lib/admin/authorization.test.ts proxy.ts src/worker.ts src/lib/queue.test.ts src/lib/automation/runner.test.ts

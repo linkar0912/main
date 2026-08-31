@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   enqueueFacebookEvents: vi.fn(),
   processNormalizedFacebookEvent: vi.fn(),
+  findWorkspaceByFacebookPage: vi.fn(),
+  getWorkspaceStatus: vi.fn(),
 }));
 
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({
@@ -25,7 +27,10 @@ vi.mock("@/src/lib/facebook/runner", () => ({
   isRetryableFacebookError: (error: unknown) => Boolean((error as { retryable?: boolean })?.retryable),
   RetryableFacebookError: class extends Error {},
 }));
-vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({}) }));
+vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({
+  findWorkspaceByFacebookPage: mocks.findWorkspaceByFacebookPage,
+  getWorkspaceStatus: mocks.getWorkspaceStatus,
+}) }));
 vi.mock("@/src/lib/facebook/client", () => ({
   FacebookClient: class { postCommentReply = vi.fn(); },
   FacebookApiError: class extends Error {},
@@ -52,6 +57,8 @@ describe("POST /api/facebook/webhook", () => {
   beforeEach(() => {
     mocks.enqueueFacebookEvents.mockReset().mockResolvedValue(0);
     mocks.processNormalizedFacebookEvent.mockReset().mockResolvedValue({ sent: 1, matched: 1, skipped: 0, failed: 0 });
+    mocks.findWorkspaceByFacebookPage.mockReset().mockResolvedValue({ workspaceId: "workspace_1" });
+    mocks.getWorkspaceStatus.mockReset().mockResolvedValue("ACTIVE");
   });
 
   it("returns 503 when the inline runner has a retryable failure", async () => {
@@ -72,6 +79,16 @@ describe("POST /api/facebook/webhook", () => {
     mocks.enqueueFacebookEvents.mockResolvedValue(1);
     const response = await POST(new Request("http://localhost/api/facebook/webhook", { method: "POST", body: "{}" }));
     expect(response.status).toBe(200);
+    expect(mocks.processNormalizedFacebookEvent).not.toHaveBeenCalled();
+  });
+
+  it("acknowledges but does not enqueue an event for a suspended workspace", async () => {
+    mocks.getWorkspaceStatus.mockResolvedValue("SUSPENDED");
+
+    const response = await POST(new Request("http://localhost/api/facebook/webhook", { method: "POST", body: "{}" }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.enqueueFacebookEvents).toHaveBeenCalledWith([]);
     expect(mocks.processNormalizedFacebookEvent).not.toHaveBeenCalled();
   });
 });

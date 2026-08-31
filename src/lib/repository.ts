@@ -541,6 +541,11 @@ export type ApplicationAccessState = {
   sessionInvalidBefore: string | null;
 };
 
+export type PlatformUserControlState = {
+  status: PlatformUserStatus;
+  sessionInvalidBefore: string | null;
+};
+
 export type InvitationRecord = {
   id: string;
   workspaceId: string;
@@ -571,7 +576,9 @@ export interface AutomationRepository {
   findWorkspaceIdByMemberUserId(userId: string): Promise<string | null>;
   bindMemberUserId(workspaceId: string, email: string, userId: string): Promise<boolean>;
   setWorkspaceLifecycle(workspaceId: string, change: WorkspaceLifecycleChange): Promise<boolean>;
+  getWorkspaceStatus(workspaceId: string): Promise<WorkspaceStatus | null>;
   getApplicationAccessState(userId: string, workspaceId: string): Promise<ApplicationAccessState | null>;
+  getPlatformUserControlState(userId: string): Promise<PlatformUserControlState>;
   getMemberRole(workspaceId: string, email: string): Promise<MemberRole | null>;
   addMember(workspaceId: string, email: string, role: MemberRole, userId?: string): Promise<{ created: boolean }>;
   updateMemberRole(workspaceId: string, email: string, role: MemberRole): Promise<boolean>;

@@ -196,6 +196,10 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return true;
     },
 
+    async getWorkspaceStatus(workspaceId) {
+      return workspaceLifecycle.get(workspaceId)?.status ?? "ACTIVE";
+    },
+
     async getApplicationAccessState(userId, workspaceId) {
       const isMember = [...membersByEmail.values()].some(
         (member) => member.workspaceId === workspaceId && member.userId === userId,
@@ -203,6 +207,10 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       const lifecycle = workspaceLifecycle.get(workspaceId);
       if (!isMember || !lifecycle) return null;
       return { userStatus: "ACTIVE", workspaceStatus: lifecycle.status, sessionInvalidBefore: null };
+    },
+
+    async getPlatformUserControlState() {
+      return { status: "ACTIVE", sessionInvalidBefore: null };
     },
 
     async getMemberRole(workspaceId, email) {

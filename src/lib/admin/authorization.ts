@@ -2,6 +2,7 @@ import "server-only";
 
 import { getServerEnv } from "@/src/lib/env";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import { getRepository } from "@/src/lib/repository-provider";
 
 export type PlatformOwnerIdentity = {
   userId: string;
@@ -51,11 +52,23 @@ async function getVerifiedClaims(): Promise<Record<string, unknown>> {
 }
 
 export async function getPlatformOwnerIdentity(): Promise<PlatformOwnerIdentity> {
-  const claims = await getVerifiedClaims();
-  return authorizePlatformOwner(claims, getServerEnv().platformOwnerUserIds, false);
+  return getAuthorizedOwner(false);
 }
 
 export async function getPlatformOwnerSession(): Promise<PlatformOwnerIdentity> {
+  return getAuthorizedOwner(true);
+}
+
+async function getAuthorizedOwner(requireAal2: boolean): Promise<PlatformOwnerIdentity> {
   const claims = await getVerifiedClaims();
-  return authorizePlatformOwner(claims, getServerEnv().platformOwnerUserIds, true);
+  const owner = authorizePlatformOwner(claims, getServerEnv().platformOwnerUserIds, requireAal2);
+  const control = await getRepository().getPlatformUserControlState(owner.userId);
+  if (control.status !== "ACTIVE") throw new PlatformOwnerAuthError(403, "forbidden");
+  if (control.sessionInvalidBefore) {
+    const issuedAt = typeof claims.iat === "number" ? claims.iat * 1000 : Number.NaN;
+    if (!Number.isFinite(issuedAt) || issuedAt < Date.parse(control.sessionInvalidBefore)) {
+      throw new PlatformOwnerAuthError(401, "unauthorized");
+    }
+  }
+  return owner;
 }

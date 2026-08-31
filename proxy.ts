@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { safeNextPath } from "@/src/lib/auth/session";
+import { assertApplicationAccess, safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
 
@@ -42,7 +42,14 @@ export async function proxy(request: NextRequest) {
   });
 
   const { data, error } = await supabase.auth.getClaims();
-  if (!error && data?.claims?.sub) return response;
+  if (!error && data?.claims?.sub && data.claims.email) {
+    const access = await assertApplicationAccess(
+      String(data.claims.sub),
+      String(data.claims.email),
+      typeof data.claims.iat === "number" ? data.claims.iat : null,
+    ).catch(() => null);
+    if (access) return response;
+  }
 
   const login = new URL("/login", env.appUrl);
   // safeNextPath rejects off-site paths ("//evil.example") and control

@@ -595,6 +595,11 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return result.count === 1;
     },
 
+    async getWorkspaceStatus(workspaceId) {
+      const workspace = await client.workspace.findUnique({ where: { id: workspaceId }, select: { status: true } });
+      return (workspace?.status as WorkspaceStatus | undefined) ?? null;
+    },
+
     async getApplicationAccessState(userId, workspaceId) {
       const member = await client.workspaceMember.findFirst({
         where: { userId, workspaceId },
@@ -609,6 +614,17 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         userStatus: userControl?.status ?? "ACTIVE",
         workspaceStatus: member.workspace.status as WorkspaceStatus,
         sessionInvalidBefore: userControl?.sessionInvalidBefore?.toISOString() ?? null,
+      };
+    },
+
+    async getPlatformUserControlState(userId) {
+      const control = await client.platformUserControl.findUnique({
+        where: { userId },
+        select: { status: true, sessionInvalidBefore: true },
+      });
+      return {
+        status: control?.status ?? "ACTIVE",
+        sessionInvalidBefore: control?.sessionInvalidBefore?.toISOString() ?? null,
       };
     },
 

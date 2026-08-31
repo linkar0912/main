@@ -5,6 +5,7 @@ const OWNER_ID = "11111111-1111-4111-8111-111111111111";
 const mocks = vi.hoisted(() => ({
   getClaims: vi.fn(),
   getServerEnv: vi.fn(),
+  getPlatformUserControlState: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -13,6 +14,9 @@ vi.mock("@/src/lib/supabase/server", () => ({
 }));
 vi.mock("@/src/lib/env", () => ({
   getServerEnv: mocks.getServerEnv,
+}));
+vi.mock("@/src/lib/repository-provider", () => ({
+  getRepository: () => ({ getPlatformUserControlState: mocks.getPlatformUserControlState }),
 }));
 
 const {
@@ -28,6 +32,7 @@ const ownerClaims = {
   session_id: "session-1",
   aal: "aal2",
   user_metadata: { admin: false },
+  iat: Math.floor(Date.parse("2026-08-31T10:01:00.000Z") / 1000),
 };
 
 describe("authorizePlatformOwner", () => {
@@ -71,6 +76,7 @@ describe("owner authorization DAL", () => {
     mocks.getClaims.mockReset();
     mocks.getServerEnv.mockReset();
     mocks.getServerEnv.mockReturnValue({ platformOwnerUserIds: [OWNER_ID] });
+    mocks.getPlatformUserControlState.mockReset().mockResolvedValue({ status: "ACTIVE", sessionInvalidBefore: null });
   });
 
   it("uses verified Supabase claims for an AAL1 owner identity", async () => {
@@ -91,5 +97,22 @@ describe("owner authorization DAL", () => {
     mocks.getClaims.mockResolvedValue({ data: null, error: { message: "invalid jwt" } });
 
     await expect(getPlatformOwnerIdentity()).rejects.toMatchObject({ status: 401, code: "unauthorized" });
+  });
+
+  it("rejects a suspended allowlisted owner", async () => {
+    mocks.getClaims.mockResolvedValue({ data: { claims: ownerClaims }, error: null });
+    mocks.getPlatformUserControlState.mockResolvedValue({ status: "SUSPENDED", sessionInvalidBefore: null });
+
+    await expect(getPlatformOwnerSession()).rejects.toMatchObject({ status: 403, code: "forbidden" });
+  });
+
+  it("rejects an allowlisted owner session issued before invalidation", async () => {
+    mocks.getClaims.mockResolvedValue({ data: { claims: ownerClaims }, error: null });
+    mocks.getPlatformUserControlState.mockResolvedValue({
+      status: "ACTIVE",
+      sessionInvalidBefore: "2026-08-31T10:02:00.000Z",
+    });
+
+    await expect(getPlatformOwnerSession()).rejects.toMatchObject({ status: 401, code: "unauthorized" });
   });
 });

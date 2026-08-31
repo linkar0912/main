@@ -888,6 +888,9 @@ export async function processNormalizedEvent(
 ): Promise<RunnerResult | CampaignRunnerResult> {
   const mapping = await repository.findWorkspaceByInstagramAccount(event.accountId);
   if (!mapping) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  if (await repository.getWorkspaceStatus(mapping.workspaceId) !== "ACTIVE") {
+    return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  }
 
   // Persist a compact summary for the workspace activity inbox. Idempotent per
   // event id, and never allowed to break event processing.

@@ -64,6 +64,41 @@ function createRunnerClient(overrides: Partial<AutomationRunnerClient> = {}): Au
 }
 
 describe("automation runner", () => {
+  it("does not dispatch work for a suspended workspace", async () => {
+    const key = randomBytes(32).toString("hex");
+    const repository = createMemoryRepository([{
+      id: "automation_suspended",
+      workspaceId: "workspace_suspended",
+      name: "Suspended delivery",
+      status: "ACTIVE",
+      version: 1,
+      priority: 0,
+      definition: flow,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(1).toISOString(),
+    }]);
+    await repository.ensureWorkspace("workspace_suspended", "owner@example.com", "user-1");
+    await repository.upsertConnection({
+      workspaceId: "workspace_suspended",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", key),
+      status: "CONNECTED",
+    });
+    await repository.setWorkspaceLifecycle("workspace_suspended", {
+      status: "SUSPENDED",
+      reason: "abuse review",
+      actorUserId: "platform-owner",
+      at: "2026-08-31T10:00:00.000Z",
+    });
+    const client = createRunnerClient();
+
+    await expect(processNormalizedEvent(event, repository, { client, tokenEncryptionKey: key }))
+      .resolves.toEqual({ matched: 0, sent: 0, skipped: 0, failed: 0 });
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+    expect(await repository.listRecentWebhookEvents("workspace_suspended", 10)).toEqual([]);
+  });
+
   it("delivers a matching action and deduplicates the webhook event", async () => {
     const key = randomBytes(32).toString("hex");
     const repository = createMemoryRepository([

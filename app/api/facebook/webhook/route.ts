@@ -52,16 +52,22 @@ export async function POST(request: Request) {
   }
 
   const events = normalizeFacebookWebhook(payload);
-  const enqueued = await enqueueFacebookEvents(events);
+  const repository = getRepository();
+  const runnableEvents = (await Promise.all(events.map(async (event) => {
+    const mapping = await repository.findWorkspaceByFacebookPage(event.pageId);
+    if (!mapping) return null;
+    return await repository.getWorkspaceStatus(mapping.workspaceId) === "ACTIVE" ? event : null;
+  }))).filter((event): event is (typeof events)[number] => event !== null);
+  const enqueued = await enqueueFacebookEvents(runnableEvents);
   let retryableFailure = false;
-  if (events.length > 0 && enqueued === 0) {
+  if (runnableEvents.length > 0 && enqueued === 0) {
     // No Redis queue: fall back to inline processing. Sequential keeps the
     // total wall time low and avoids blowing past Meta's per-Page rate
     // limits, which trigger redeliveries on timeout.
     const client = env.facebookAppId ? new FacebookClient({ apiVersion: env.facebookApiVersion }) : undefined;
-    for (const event of events) {
+    for (const event of runnableEvents) {
       try {
-        await processNormalizedFacebookEvent(event, getRepository(), {
+        await processNormalizedFacebookEvent(event, repository, {
           client,
           tokenEncryptionKey: env.facebookTokenEncryptionKey ?? env.metaTokenEncryptionKey,
         });

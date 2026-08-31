@@ -73,6 +73,18 @@ export async function processLeadDelivery(
   options: LeadDeliveryOptions = {},
 ): Promise<DeliveryExecutionResult> {
   const record = assertDelivery(job, await repository.getOutboundDelivery(job.deliveryKey));
+  if (await repository.getWorkspaceStatus(job.workspaceId) !== "ACTIVE") {
+    const owner = `lead_guard:${job.deliveryKey}`;
+    const claim = await repository.claimOutboundDelivery(
+      job.deliveryKey,
+      owner,
+      new Date(Date.now() + 30_000).toISOString(),
+    );
+    if (claim.claimed) {
+      await repository.failOutboundDelivery(job.deliveryKey, owner, "Workspace is not active", false, "SUPPRESSED");
+    }
+    return { status: "FAILED", retryable: false, error: "Workspace is not active" };
+  }
   if (job.kind === "LEAD_EMAIL") {
     return executeOutboundDelivery({
       deliveryKey: record.deliveryKey,

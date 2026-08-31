@@ -88,6 +88,9 @@ export async function processNormalizedFacebookEvent(
 ): Promise<FacebookRunnerResult> {
   const mapping = await repository.findWorkspaceByFacebookPage(event.pageId);
   if (!mapping) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  if (await repository.getWorkspaceStatus(mapping.workspaceId) !== "ACTIVE") {
+    return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  }
 
   // Persist a compact activity-inbox summary. Same idempotency contract as
   // the IG path: never throw, never block event processing.

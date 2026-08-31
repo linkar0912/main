@@ -62,6 +62,7 @@ export async function processDueSequences(
   };
 
   for (const { enrollment, sequence, contact } of due) {
+    if (await repository.getWorkspaceStatus(enrollment.workspaceId) !== "ACTIVE") continue;
     result.processed += 1;
 
     // Quiet hours: hold the step (keep it due) until the window reopens.
