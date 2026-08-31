@@ -3,6 +3,28 @@ import { ButtonRoll } from "./button-roll";
 import { Reveal } from "./reveal";
 import styles from "./final-cta.module.css";
 
+/**
+ * The builder's review step, which is the one screen in the product this page
+ * had not shown yet - and the right one for a closing CTA, because it is the
+ * moment just before a flow goes live. The three readiness lines are what
+ * "ready to publish" actually means, rather than three decorative dots.
+ */
+function PlaneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 4 3 10.6l6.6 2.3M21 4l-6.5 16-3.6-6.4M21 4 9.9 12.9" />
+    </svg>
+  );
+}
+
+function TickIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12.5 10 17.5 19 7" />
+    </svg>
+  );
+}
+
 /** A quiet, static conversion moment after the FAQ. */
 export function FinalCta() {
   return (
@@ -44,24 +66,26 @@ export function FinalCta() {
               Ready to publish
             </span>
           </div>
+          <p className={styles.reviewEyebrow}>Review<i>·</i>Step 05</p>
+          <p className={styles.reviewName}>Price list responder</p>
+
           <div className={styles.commentCard}>
-            <span className={styles.cardLabel}>COMMENT</span>
+            <span className={styles.cardLabel}>Comment trigger</span>
             <strong>price</strong>
           </div>
           <div className={styles.flowLine} aria-hidden="true" />
-          <ol className={styles.flowSteps}>
-            <li>
-              <span className={styles.stepDot} aria-hidden="true" />
-              <span>Trigger ready</span>
-            </li>
-            <li>
-              <span className={styles.stepDot} aria-hidden="true" />
-              <span>Reply shaped</span>
-            </li>
-            <li>
-              <span className={styles.stepDot} aria-hidden="true" />
-              <span>Handoff clear</span>
-            </li>
+          <div className={styles.actionRow}>
+            <span className={styles.actionIcon} aria-hidden="true"><PlaneIcon /></span>
+            <span className={styles.actionCopy}>
+              <span className={styles.actionKind}>Private reply</span>
+              <strong>Sends the price list</strong>
+            </span>
+          </div>
+
+          <ol className={styles.checks}>
+            <li><i aria-hidden="true"><TickIcon /></i>Trigger ready</li>
+            <li><i aria-hidden="true"><TickIcon /></i>Reply shaped</li>
+            <li><i aria-hidden="true"><TickIcon /></i>Handoff clear</li>
           </ol>
           <figcaption>One clear path from signal to useful response.</figcaption>
         </Reveal>

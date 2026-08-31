@@ -130,19 +130,45 @@
 .figureStatus { display: inline-flex; align-items: center; gap: 8px; color: #fff100; }
 .statusDot { inline-size: 8px; block-size: 8px; border-radius: 50%; background: #fff100; }
 
+.reviewEyebrow {
+  display: flex;
+  gap: 6px;
+  margin: 28px 0 0;
+  color: rgb(255 255 255 / 62%);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .6rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.reviewEyebrow i {
+  font-style: normal;
+  opacity: .55;
+}
+
+.reviewName {
+  margin: 8px 0 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: 1.35rem;
+  font-weight: 850;
+  letter-spacing: -.035em;
+  line-height: 1.05;
+}
+
 .commentCard {
   display: flex;
-  margin-block-start: 48px;
-  padding: 24px;
+  margin-block-start: 20px;
+  padding: 18px 20px;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   color: #050505;
   background: #ffffff;
-  border-radius: 18px;
+  border-radius: 16px;
 }
 
 .cardLabel {
-  color: rgb(5 5 5 / 54%);
+  color: rgb(5 5 5 / 62%);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: .64rem;
   font-weight: 800;
@@ -151,36 +177,98 @@
 
 .commentCard strong {
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(2rem, 4vw, 3.4rem);
+  font-size: clamp(1.7rem, 3.2vw, 2.5rem);
   font-weight: 800;
-  letter-spacing: -.06em;
+  letter-spacing: -.055em;
   line-height: .9;
 }
 
+/* The rail between the trigger and the action it runs. */
 .flowLine {
   inline-size: 2px;
-  block-size: 42px;
-  margin: 0 0 0 34px;
-  background: #fff100;
+  block-size: 22px;
+  margin: 0 0 0 30px;
+  background: repeating-linear-gradient(to bottom, #fff100 0 4px, transparent 4px 8px);
 }
 
-.flowSteps {
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 14px;
+}
+
+.actionIcon {
   display: grid;
-  gap: 14px;
+  inline-size: 30px;
+  block-size: 30px;
+  flex: 0 0 auto;
+  color: #050505;
+  background: #fff100;
+  border-radius: 50%;
+  place-items: center;
+}
+
+.actionIcon svg { inline-size: 16px; block-size: auto; }
+
+.actionCopy {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.actionKind {
+  color: rgb(255 255 255 / 62%);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.actionCopy strong {
+  font-size: .92rem;
+  font-weight: 750;
+  letter-spacing: -.015em;
+}
+
+/* What "ready to publish" actually means. */
+.checks {
+  display: grid;
+  gap: 9px;
   padding: 0;
-  margin: 0;
+  margin: 22px 0 0;
   list-style: none;
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
-  font-size: .9rem;
-  font-weight: 700;
+  font-size: .86rem;
+  font-weight: 650;
 }
 
-.flowSteps li { display: flex; align-items: center; gap: 12px; }
-.stepDot { inline-size: 12px; block-size: 12px; border: 3px solid #fff100; border-radius: 50%; }
+.checks li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checks i {
+  display: grid;
+  inline-size: 17px;
+  block-size: 17px;
+  flex: 0 0 auto;
+  color: #050505;
+  background: #fff100;
+  border-radius: 50%;
+  place-items: center;
+}
+
+.checks i svg { inline-size: 10px; block-size: auto; }
 
 .figure figcaption {
   margin-block-start: auto;
-  padding-block-start: 32px;
+  padding-block-start: 26px;
   color: rgb(255 255 255 / 58%);
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .8rem;
@@ -208,7 +296,7 @@
   .figure[data-enhanced="true"]:not([data-visible="true"]),
   .figure.figure[data-visible="true"] { transform: none; }
   .figureHeader { align-items: flex-start; flex-direction: column; }
-  .commentCard { margin-block-start: 32px; }
+  .reviewEyebrow { margin-block-start: 24px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
