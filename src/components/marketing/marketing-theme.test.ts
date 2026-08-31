@@ -38,6 +38,8 @@ describe("marketing theme contract", () => {
       "./surface-runway.module.css",
       "./before-after-section.module.css",
       "./workflow-gallery.module.css",
+      "./insights-showcase.module.css",
+      "./safety-ledger.module.css",
       "./setup-steps.module.css",
       "./final-cta.module.css",
     ];

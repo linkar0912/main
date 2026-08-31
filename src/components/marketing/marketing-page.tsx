@@ -4,10 +4,12 @@ import { ChannelShowcase } from "./channel-showcase";
 import { FaqSection } from "./faq-section";
 import { FinalCta } from "./final-cta";
 import { HeroSection } from "./hero-section";
+import { InsightsShowcase } from "./insights-showcase";
 import { ManifestoSection } from "./manifesto-section";
 import { MarketingFooter } from "./marketing-footer";
 import { MarketingHeader } from "./marketing-header";
 import { ProofRail } from "./proof-rail";
+import { SafetyLedger } from "./safety-ledger";
 import { SetupSteps } from "./setup-steps";
 import { SurfaceRunway } from "./surface-runway";
 import { WorkflowGallery } from "./workflow-gallery";
@@ -26,11 +28,17 @@ export function MarketingPage() {
         <SurfaceRunway />
         <BeforeAfterSection />
         <WorkflowGallery />
+        {/* Build, run, then see: insights close the product story before the
+            page moves on to reference and setup. */}
+        <InsightsShowcase />
         {/* Supported channels reads as reference, not persuasion, so it sits
             after the mechanism sections and directly above Setup - whose first
             step is "connect your professional account". */}
         <ChannelShowcase />
         <SetupSteps />
+        {/* Objection handling, so it lands once someone wants the thing and
+            immediately before the questions section. */}
+        <SafetyLedger />
         <FaqSection />
         <FinalCta />
       </main>
