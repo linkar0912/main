@@ -81,6 +81,7 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 function mapAutomation(record: {
   id: string;
   workspaceId: string;
+  provider: "INSTAGRAM" | "FACEBOOK";
   instagramAccountId: string | null;
   facebookPageId: string | null;
   name: string;
@@ -891,6 +892,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         data: {
           id: createId("automation"),
           workspaceId,
+          provider: input.provider ?? (input.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
           name: input.name.trim(),
           definition: input.definition,
           version: input.definition.version,
@@ -909,9 +911,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       // null-handling: the route layer rejects dual-pins, but a PATCH that clears
       // one channel must implicitly clear the other so a single request can never
       // leave the automation pinned to two channels.
-      const { boundMediaId, instagramAccountId, facebookPageId, definition, ...rest } = patch;
+      const { boundMediaId, instagramAccountId, facebookPageId, provider, definition, ...rest } = patch;
       const data: Record<string, unknown> = {
         ...rest,
+        ...(provider ? { provider } : {}),
         ...(definition ? { version: definition.version } : {}),
       };
       if (boundMediaId !== undefined) data.boundMediaId = boundMediaId ?? null;

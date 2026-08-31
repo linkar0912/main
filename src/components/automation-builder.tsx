@@ -643,7 +643,8 @@ function AutomationBuilderV1({
       // could keep both visible as a clear "either/or" picker; the current UX
       // toggles the channel explicitly so the saved payload never carries a
       // pair of pins.
-      const body: { name: string; definition: FlowDefinitionV1; instagramAccountId?: string | null; facebookPageId?: string | null } = {
+      const body: { provider: "INSTAGRAM" | "FACEBOOK"; name: string; definition: FlowDefinitionV1; instagramAccountId?: string | null; facebookPageId?: string | null } = {
+        provider: facebookPageId ? "FACEBOOK" : "INSTAGRAM",
         name,
         definition: buildDefinition(),
       };
@@ -1703,7 +1704,12 @@ function AutomationBuilderV2({
       const response = await fetch(savedAutomationId ? `/api/automations/${savedAutomationId}` : "/api/automations", {
         method: savedAutomationId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, definition: buildDefinition(), instagramAccountId: instagramAccountId || null }),
+        body: JSON.stringify({
+          provider: "INSTAGRAM",
+          name,
+          definition: buildDefinition(),
+          instagramAccountId: instagramAccountId || null,
+        }),
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: { id: string }; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");

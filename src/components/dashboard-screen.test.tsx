@@ -120,6 +120,7 @@ describe("DashboardScreen onboarding", () => {
     automationState.automations = [{
       id: "automation_draft",
       workspaceId: "workspace_1",
+      provider: "INSTAGRAM",
       name: "Story welcome",
       status: "DRAFT",
       version: 1, priority: 0,

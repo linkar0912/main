@@ -13,6 +13,11 @@ enum AutomationStatus {
   PAUSED
 }
 
+enum AutomationProvider {
+  INSTAGRAM
+  FACEBOOK
+}
+
 enum ConnectionStatus {
   CONNECTED
   DISCONNECTED
@@ -293,6 +298,7 @@ model InstagramConnection {
 model Automation {
   id                String                       @id
   workspaceId       String
+  provider          AutomationProvider
   // Instagram account (igUserId) this automation is pinned to. Null = the
   // automation answers events from every connected account in the workspace.
   instagramAccountId String?
@@ -319,6 +325,7 @@ model Automation {
 
   @@index([workspaceId, status])
   @@index([workspaceId, priority])
+  @@index([workspaceId, provider])
 }
 
 model AutomationParticipant {

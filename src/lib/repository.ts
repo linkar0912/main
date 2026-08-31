@@ -1,6 +1,7 @@
 import type { FlowDefinition, MediaSnapshot } from "./automation/types";
 
 export type AutomationStatus = "DRAFT" | "ACTIVE" | "PAUSED";
+export type AutomationProvider = "INSTAGRAM" | "FACEBOOK";
 export type ConnectionStatus = "CONNECTED" | "DISCONNECTED" | "EXPIRED";
 export type ExecutionStatus = "PROCESSING" | "SENT" | "SKIPPED" | "FAILED";
 export type ExecutionDispatchStatus = "CLAIMED" | "DISPATCHING";
@@ -33,6 +34,7 @@ export type ParticipantState =
 export type AutomationRecord = {
   id: string;
   workspaceId: string;
+  provider: AutomationProvider;
   /** igUserId this automation is pinned to; undefined = all connected accounts. */
   instagramAccountId?: string;
   /** Facebook Page this automation is pinned to. Mutually exclusive with
@@ -235,6 +237,9 @@ export type AutomationDailySendCounterRecord = {
 };
 
 export type CreateAutomationInput = {
+  /** Required at API boundaries. Optional only for legacy repository callers,
+   * which are deterministically treated as Instagram unless Page-pinned. */
+  provider?: AutomationProvider;
   name: string;
   definition: FlowDefinition;
   instagramAccountId?: string;
@@ -243,6 +248,7 @@ export type CreateAutomationInput = {
 };
 
 export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "status" | "definition" | "activatedAt" | "priority">> & {
+  provider?: AutomationProvider;
   boundMediaId?: string | null;
   /** Pin/unpin the automation: a string pins it to that account, null unpins it. */
   instagramAccountId?: string | null;

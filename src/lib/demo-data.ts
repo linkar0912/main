@@ -16,6 +16,7 @@ const demoAutomations: AutomationRecord[] = [
   {
     id: "automation_guide",
     workspaceId: DEMO_WORKSPACE_ID,
+    provider: "INSTAGRAM",
     name: "Send the creator guide",
     status: "ACTIVE",
     version: 1,
@@ -27,6 +28,7 @@ const demoAutomations: AutomationRecord[] = [
   {
     id: "automation_price",
     workspaceId: DEMO_WORKSPACE_ID,
+    provider: "INSTAGRAM",
     name: "Answer pricing DMs",
     status: "PAUSED",
     version: 1,

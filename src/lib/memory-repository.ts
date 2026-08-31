@@ -94,8 +94,16 @@ function validateQuotaRequest(utcDate: string, amount: number, limit: number): v
   if (limit < amount) throw new Error("limit must be greater than or equal to amount");
 }
 
-export function createMemoryRepository(seed: AutomationRecord[] = []): AutomationRepository {
-  const automations = new Map(seed.map((automation) => [automation.id, copy(automation)]));
+type LegacyAutomationSeed = Omit<AutomationRecord, "provider"> & { provider?: AutomationRecord["provider"] };
+
+export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): AutomationRepository {
+  const automations = new Map(seed.map((automation) => {
+    const normalized: AutomationRecord = {
+      ...copy(automation),
+      provider: automation.provider ?? (automation.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
+    };
+    return [normalized.id, normalized];
+  }));
   const connections = new Map<string, InstagramConnectionRecord>();
   const facebookPages = new Map<string, FacebookPageConnectionRecord>();
   const facebookReplyRecipients = new Map<string, {
@@ -444,6 +452,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       const automation: AutomationRecord = {
         id: createId("automation"),
         workspaceId,
+        provider: input.provider ?? (input.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
         name: input.name.trim(),
         status: "DRAFT",
         version: input.definition.version,
@@ -461,7 +470,7 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
     async updateAutomation(workspaceId, id, patch: UpdateAutomationInput) {
       const current = automations.get(id);
       if (!current || current.workspaceId !== workspaceId) return null;
-      const { boundMediaId, instagramAccountId, facebookPageId, ...rest } = patch;
+      const { boundMediaId, instagramAccountId, facebookPageId, provider, ...rest } = patch;
       // Mutual exclusion: clearing one channel implicitly unpins the other so
       // a single PATCH never leaves an automation pinned to two channels at
       // once. The route layer also rejects explicit dual-pins; this is the
@@ -471,6 +480,8 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       const updated: AutomationRecord = {
         ...current,
         ...rest,
+        provider: provider
+          ?? (facebookPageId ? "FACEBOOK" : instagramAccountId ? "INSTAGRAM" : current.provider),
         ...(boundMediaId === undefined ? {} : { boundMediaId: boundMediaId ?? undefined }),
         ...(instagramAccountId === undefined
           ? clearingFacebook

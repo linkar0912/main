@@ -28,9 +28,11 @@ export async function POST(request: Request, context: RouteContext) {
   const suffix = " (copy)";
   const name = trimmed.length + suffix.length <= 120 ? `${trimmed}${suffix}` : `${trimmed.slice(0, 120 - suffix.length)}${suffix}`;
   const copy = await repository.createAutomation(session.workspaceId, {
+    provider: original.provider,
     name,
     definition: original.definition,
     ...(original.instagramAccountId ? { instagramAccountId: original.instagramAccountId } : {}),
+    ...(original.facebookPageId ? { facebookPageId: original.facebookPageId } : {}),
   });
   return NextResponse.json({ data: copy }, { status: 201 });
 }

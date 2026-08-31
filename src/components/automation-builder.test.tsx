@@ -237,7 +237,8 @@ describe("AutomationBuilder", () => {
     fireEvent.click(screen.getByRole("button", { name: /save automation/i }));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST").length).toBe(1));
     const createRequest = findRequest(fetchMock, (url) => url === "/api/automations");
-    const body = JSON.parse(String(createRequest.body)) as { facebookPageId?: string; instagramAccountId?: string | null };
+    const body = JSON.parse(String(createRequest.body)) as { provider?: string; facebookPageId?: string; instagramAccountId?: string | null };
+    expect(body.provider).toBe("FACEBOOK");
     expect(body.facebookPageId).toBe("12345");
     expect(body.instagramAccountId).toBeNull();
   });
@@ -681,6 +682,7 @@ describe("AutomationBuilder", () => {
     const request = findRequest(fetchMock, (url) => url === "/api/automations");
     const body = JSON.parse(String(request.body));
     expect(body).toMatchObject({
+      provider: "INSTAGRAM",
       name: "Reel drop",
       definition: {
         version: 2,

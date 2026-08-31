@@ -58,6 +58,7 @@ const definition: FlowDefinitionV2 = {
 const automation: AutomationRecord = {
   id: "automation_campaign",
   workspaceId: "workspace_a",
+  provider: "INSTAGRAM",
   name: "Follow-gated guide",
   status: "ACTIVE",
   version: 2,

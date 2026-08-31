@@ -6,6 +6,7 @@ import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
 import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
 import type { UpdateAutomationInput } from "@/src/lib/repository";
 import { toReadableValidationError } from "@/src/lib/validation-error";
+import { parseAutomationTarget } from "@/src/lib/automation/channel-target";
 
 export const runtime = "nodejs";
 
@@ -24,43 +25,52 @@ export async function PATCH(request: Request, context: RouteContext) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
-  let body: { name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
+  let body: { provider?: unknown; name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
   try {
-    body = (await request.json()) as { name?: unknown; status?: unknown; definition?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
+    body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
   }
   const patch: UpdateAutomationInput = {};
 
-  const instagramAccountId = await resolveInstagramAccountId(session.workspaceId, body.instagramAccountId);
+  let parsedTarget;
+  try {
+    parsedTarget = parseAutomationTarget(body, { requirePin: false });
+  } catch {
+    return NextResponse.json({ error: "invalid_channel_target" }, { status: 400 });
+  }
+
+  const instagramAccountId = parsedTarget?.provider === "INSTAGRAM"
+    ? await resolveInstagramAccountId(session.workspaceId, parsedTarget.instagramAccountId)
+    : undefined;
   // resolveInstagramAccountId collapses the caller-supplied value into three
   // buckets: undefined (untouched, do not write), null (unpin), or a real
   // connected igUserId. A null result with a non-null/non-empty input means
   // the caller asked to pin something that is not a CONNECTED connection of
   // this workspace, which is the only user-facing error case worth
   // distinguishing from a no-op unpin.
-  const askedToUnpin = body.instagramAccountId === null || body.instagramAccountId === "";
-  if (instagramAccountId === null && !askedToUnpin) {
+  if (parsedTarget?.provider === "INSTAGRAM" && !instagramAccountId) {
     return NextResponse.json({ error: "That Instagram account is not connected to this workspace" }, { status: 400 });
   }
   if (instagramAccountId !== undefined) patch.instagramAccountId = instagramAccountId;
 
-  const facebookPageId = await resolveFacebookPageId(session.workspaceId, body.facebookPageId);
-  const askedToUnpinPage = body.facebookPageId === null || body.facebookPageId === "";
-  if (facebookPageId === null && !askedToUnpinPage) {
+  const facebookPageId = parsedTarget?.provider === "FACEBOOK"
+    ? await resolveFacebookPageId(session.workspaceId, parsedTarget.facebookPageId)
+    : undefined;
+  if (parsedTarget?.provider === "FACEBOOK" && !facebookPageId) {
     return NextResponse.json({ error: "That Facebook Page is not connected to this workspace" }, { status: 400 });
   }
   if (facebookPageId !== undefined) patch.facebookPageId = facebookPageId;
 
-  // Reject explicit dual-pinning in a single PATCH. A PATCH that clears one
-  // channel implicitly clears the other (handled at the repository layer),
-  // but setting both to real values would leave the automation in a
-  // dispatchable conflict, so the route layer rejects the request.
-  if (
-    (patch.instagramAccountId && patch.facebookPageId)
-    || (instagramAccountId && facebookPageId)
-  ) {
-    return NextResponse.json({ error: "An automation pins to either Instagram or a Facebook Page, not both" }, { status: 400 });
+  if (parsedTarget) {
+    patch.provider = parsedTarget.provider;
+    if (parsedTarget.provider === "INSTAGRAM") {
+      patch.instagramAccountId = instagramAccountId;
+      patch.facebookPageId = null;
+    } else {
+      patch.facebookPageId = facebookPageId;
+      patch.instagramAccountId = null;
+    }
   }
 
   if (body.name !== undefined) {

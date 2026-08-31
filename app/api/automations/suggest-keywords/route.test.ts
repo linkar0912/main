@@ -6,6 +6,7 @@ function automation(keywords: string[]): AutomationRecord {
   return {
     id: "automation_1",
     workspaceId: "workspace_a",
+    provider: "INSTAGRAM",
     name: "Flow",
     status: "ACTIVE",
     version: 1,

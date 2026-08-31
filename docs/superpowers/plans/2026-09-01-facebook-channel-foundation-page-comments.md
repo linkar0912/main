@@ -40,17 +40,17 @@
 - Produces: `Automation.provider: AutomationProvider`
 - Consumes on new writes: `{ provider, instagramAccountId?, facebookPageId? }`
 
-- [ ] **Step 1: Write failing provider and pin tests**
+- [x] **Step 1: Write failing provider and pin tests**
 
 Add cases proving that existing Facebook-pinned records infer `FACEBOOK`, existing Instagram and unpinned records infer `INSTAGRAM`, and new requests reject a missing pin, two pins, or a provider/pin mismatch. Add a compatibility case proving an existing unpinned Instagram record can still update its name.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm vitest run src/lib/automation/account-scoping.test.ts app/api/automations/route.test.ts`
 
 Expected: FAIL because `Automation.provider` and provider-aware request validation do not exist.
 
-- [ ] **Step 3: Add the enum, deterministic backfill, and constraints**
+- [x] **Step 3: Add the enum, deterministic backfill, and constraints**
 
 The migration must add a non-null indexed provider and backfill before applying the default:
 
@@ -70,11 +70,11 @@ ALTER TABLE "Automation" ADD CONSTRAINT "Automation_provider_pin_check" CHECK (
 
 Keep the Instagram side permissive for legacy unpinned rows; service validation requires the pin only for new records.
 
-- [ ] **Step 4: Make create, update, duplicate, and restore retain provider identity**
+- [x] **Step 4: Make create, update, duplicate, and restore retain provider identity**
 
 Centralize request parsing in `parseAutomationTarget()` and use it in both routes and repository writes. Reject failures with stable code `invalid_channel_target` and HTTP 400.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `pnpm prisma validate && pnpm prisma generate && pnpm vitest run src/lib/automation/account-scoping.test.ts app/api/automations/route.test.ts app/api/automations/[id]/duplicate/route.test.ts && pnpm typecheck`
 

@@ -94,11 +94,13 @@ describe("automation account scoping", () => {
   it("persists a pin on create and can pin or unpin through updates", async () => {
     const repository = createMemoryRepository();
     const created = await repository.createAutomation("workspace_a", {
+      provider: "INSTAGRAM",
       name: "Scoped flow",
       definition: dmFlow,
       instagramAccountId: "ig_1",
     });
     expect(created.instagramAccountId).toBe("ig_1");
+    expect(created.provider).toBe("INSTAGRAM");
 
     const unpinned = await repository.updateAutomation("workspace_a", created.id, { instagramAccountId: null });
     expect(unpinned?.instagramAccountId).toBeUndefined();
@@ -114,11 +116,12 @@ describe("automation account scoping", () => {
   it("deletes automations pinned to an account whose data is deleted, keeping sibling automations", async () => {
     const repository = createMemoryRepository();
     const pinned = await repository.createAutomation("workspace_a", {
+      provider: "INSTAGRAM",
       name: "Pinned flow",
       definition: dmFlow,
       instagramAccountId: "ig_target",
     });
-    const unpinned = await repository.createAutomation("workspace_a", { name: "Unpinned flow", definition: dmFlow });
+    const unpinned = await repository.createAutomation("workspace_a", { provider: "INSTAGRAM", name: "Unpinned flow", definition: dmFlow });
     await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_target", username: "target", accessTokenEncrypted: "t", status: "CONNECTED" });
     await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_sibling", username: "sibling", accessTokenEncrypted: "s", status: "CONNECTED" });
 
@@ -128,5 +131,39 @@ describe("automation account scoping", () => {
     expect(remaining.map((automation) => automation.id)).toEqual([unpinned.id]);
     expect(remaining[0].id).not.toBe(pinned.id);
     expect(await repository.listConnections("workspace_a")).toHaveLength(1);
+  });
+
+  it("derives provider identity for legacy seeded records and retains it on rename", async () => {
+    const repository = createMemoryRepository([
+      {
+        id: "facebook_legacy",
+        workspaceId: "workspace_a",
+        facebookPageId: "page_1",
+        name: "Legacy Page flow",
+        status: "DRAFT",
+        version: 1,
+        priority: 0,
+        definition: { version: 1, trigger: { type: "comment", match: "any", keywords: [], mediaIds: [] }, conditions: [], actions: [{ type: "private_reply", text: "Hello" }] },
+        createdAt: new Date(1).toISOString(),
+        updatedAt: new Date(1).toISOString(),
+      },
+      {
+        id: "instagram_legacy",
+        workspaceId: "workspace_a",
+        name: "Legacy unpinned flow",
+        status: "DRAFT",
+        version: 1,
+        priority: 0,
+        definition: dmFlow,
+        createdAt: new Date(1).toISOString(),
+        updatedAt: new Date(1).toISOString(),
+      },
+    ]);
+
+    expect((await repository.getAutomation("workspace_a", "facebook_legacy"))?.provider).toBe("FACEBOOK");
+    expect((await repository.getAutomation("workspace_a", "instagram_legacy"))?.provider).toBe("INSTAGRAM");
+
+    const renamed = await repository.updateAutomation("workspace_a", "instagram_legacy", { name: "Renamed legacy flow" });
+    expect(renamed).toMatchObject({ name: "Renamed legacy flow", provider: "INSTAGRAM" });
   });
 });
