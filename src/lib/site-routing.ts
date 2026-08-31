@@ -94,6 +94,34 @@ export function resolveHostRedirect(hostname: string, pathname: string): HostRed
   return null;
 }
 
+/**
+ * Whether a link target is served by the marketing host. The homepage and its
+ * in-page anchors count, as do the public legal/support pages.
+ */
+export function isMarketingPath(href: string): boolean {
+  const pathname = href.split("#", 1)[0] || "/";
+  if (pathname === "/") return true;
+  return MARKETING_ROUTE_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix));
+}
+
+/**
+ * Absolutises a marketing-bound link for a page that is not served from the
+ * marketing host.
+ *
+ * The auth screens (/login, /signup, /forgot-password, /reset-password) run on
+ * the app host but render the marketing header and footer, whose links are all
+ * root-relative. On the app host "/#product" resolves to app.linkar.in/, which
+ * the proxy sends to /dashboard, which is gated - so every marketing link in
+ * the header bounced the visitor straight back to the login page they were
+ * already on. Pointing them at the marketing origin fixes that without
+ * changing anything on the marketing host, where relative links are correct
+ * and keep client-side navigation.
+ */
+export function marketingHref(href: string, siteOrigin?: string): string {
+  if (!siteOrigin || !href.startsWith("/") || !isMarketingPath(href)) return href;
+  return `${siteOrigin.replace(/\/+$/, "")}${href}`;
+}
+
 export function applicationOriginForPath(pathname: string, origins: { appUrl: string; adminUrl: string }): string {
   return matchesPathPrefix(pathname, "/admin") ? origins.adminUrl : origins.appUrl;
 }

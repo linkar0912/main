@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { MarketingHeader } from "@/src/components/marketing/marketing-header";
 import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
 import { OAuthButtons } from "@/src/components/auth/oauth-buttons";
+import { getServerEnv } from "@/src/lib/env";
 
 type LoginScreenProps = {
   nextPath: string;
@@ -10,9 +11,13 @@ type LoginScreenProps = {
 };
 
 export function LoginScreen({ nextPath, error }: LoginScreenProps) {
+  // This screen is served from the app host, so the marketing chrome needs the
+  // marketing origin or its links resolve against the app host and bounce back
+  // here (app.linkar.in/ -> /dashboard -> /login).
+  const { publicSiteUrl } = getServerEnv();
   return (
     <div data-header-tone="light">
-      <MarketingHeader />
+      <MarketingHeader siteOrigin={publicSiteUrl} />
       <main className="auth-page-section" data-login-layout="conversation-desk" data-auth-tone="editorial">
         <div className="auth-page-frame">
           <h1>Keep the right conversations moving.</h1>
@@ -51,7 +56,7 @@ export function LoginScreen({ nextPath, error }: LoginScreenProps) {
           </p>
         </div>
       </main>
-      <MarketingFooter />
+      <MarketingFooter siteOrigin={publicSiteUrl} />
     </div>
   );
 }

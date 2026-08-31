@@ -2,21 +2,32 @@ import Link from "next/link";
 import { KeyRound } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { MarketingHeader } from "@/src/components/marketing/marketing-header";
+import { getServerEnv } from "@/src/lib/env";
 import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+
+// force-dynamic is required, not vestigial: the marketing chrome needs
+// publicSiteUrl, which is read from the environment at request time so Coolify's
+// value is used rather than whatever the Docker image was built with. Without
+// this the page is prerendered, getServerEnv() runs during the build, and env
+// validation fails there. /login and /signup are force-dynamic for the same
+// reason.
+export const dynamic = "force-dynamic";
 
 export const metadata = { title: `Set a new password · ${PRODUCT_NAME}` };
 
 function Card({ children }: Readonly<{ children: React.ReactNode }>) {
+    // Served from the app host; see the note on the other auth screens.
+    const { publicSiteUrl } = getServerEnv();
     return (
         <div data-header-tone="light">
-            <MarketingHeader />
+            <MarketingHeader siteOrigin={publicSiteUrl} />
             <main className="auth-page-section" data-auth-tone="editorial">
                 <div className="auth-page-frame">
                     {children}
                 </div>
             </main>
-            <MarketingFooter />
+            <MarketingFooter siteOrigin={publicSiteUrl} />
         </div>
     );
 }

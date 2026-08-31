@@ -6,6 +6,7 @@ import { FacebookGlyph } from "../facebook-glyph";
 import { InstagramGlyph } from "../instagram-glyph";
 import { ButtonRoll } from "./button-roll";
 import { ThemeToggle } from "../theme-toggle";
+import { marketingHref } from "@/src/lib/site-routing";
 import styles from "./marketing-header.module.css";
 
 const navigationItems = [
@@ -56,6 +57,13 @@ const accountItems = [
 ] as const;
 
 type MarketingHeaderProps = {
+  /**
+   * Absolute origin of the marketing host. Pass it on pages served from another
+   * host - the auth screens run on the app host - so the header's marketing
+   * links leave that host instead of resolving against it. Omit it on the
+   * marketing site itself, where relative links are correct.
+   */
+  siteOrigin?: string;
   /** When set, pins the header surface (skips the scroll-driven flip). */
   forceSurface?: "solid" | "hero";
 };
@@ -63,7 +71,7 @@ type MarketingHeaderProps = {
 type DesktopPanel = "solutions" | "resources" | null;
 
 /** Floating marketing header with primary and account navigation, and a mobile sheet. */
-export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
+export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderProps = {}) {
   const headerRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -207,7 +215,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
         <div className={styles.leftRail}>
           <Link
             className={styles.wordmark}
-            href="/#top"
+            href={marketingHref("/#top", siteOrigin)}
             aria-label="Linkar home"
           >
             Linkar
@@ -220,7 +228,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
 
         <nav className={styles.primaryNavigation} aria-label="Primary">
           <ul>
-            <li><Link href={navigationItems[0].href}>{navigationItems[0].label}</Link></li>
+            <li><Link href={marketingHref(navigationItems[0].href, siteOrigin)}>{navigationItems[0].label}</Link></li>
             <li className={styles.solutionsTrigger}>
               <button
                 ref={solutionsButtonRef}
@@ -234,7 +242,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
                 Solutions <span className={styles.solutionsCaret} aria-hidden="true" />
               </button>
             </li>
-            <li><Link href={navigationItems[1].href}>{navigationItems[1].label}</Link></li>
+            <li><Link href={marketingHref(navigationItems[1].href, siteOrigin)}>{navigationItems[1].label}</Link></li>
             <li className={styles.solutionsTrigger}>
               <button
                 ref={resourcesButtonRef}
@@ -258,7 +266,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
                 <Link className={styles.getStarted} href="/signup" prefetch={false}><ButtonRoll label="Get started" /></Link>
               </li>
               <li>
-                <Link className={styles.login} href="/login">Sign in</Link>
+                <Link className={styles.login} href="/login" prefetch={false}>Sign in</Link>
               </li>
             </ul>
           </nav>
@@ -300,7 +308,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
                 <ul>
                   {[...mobileNavigationItems, ...accountItems].map((item) => (
                     <li key={item.label}>
-                      <Link href={item.href} onClick={() => closeMenu(false)}>{item.label}</Link>
+                      <Link href={marketingHref(item.href, siteOrigin)} onClick={() => closeMenu(false)}>{item.label}</Link>
                     </li>
                   ))}
                 </ul>
@@ -325,12 +333,12 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
             <nav id="marketing-solutions" className={styles.solutionsPanel} aria-label="Solutions">
               <section className={styles.solutionsColumn} aria-labelledby="solutions-channel-title">
                 <p id="solutions-channel-title" className={styles.solutionsEyebrow}>By channel</p>
-                <Link className={styles.channelLink} href="/#channels" aria-label="Instagram" onClick={() => setActivePanel(null)}>
+                <Link className={styles.channelLink} href={marketingHref("/#channels", siteOrigin)} aria-label="Instagram" onClick={() => setActivePanel(null)}>
                   <span className={styles.channelIcon} data-channel="instagram" aria-hidden="true"><InstagramGlyph size={27} brand /></span>
                   <span><strong>Instagram</strong><small>Private replies and DMs</small></span>
                   <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
                 </Link>
-                <Link className={styles.channelLink} href="/#channels" aria-label="Facebook Pages" onClick={() => setActivePanel(null)}>
+                <Link className={styles.channelLink} href={marketingHref("/#channels", siteOrigin)} aria-label="Facebook Pages" onClick={() => setActivePanel(null)}>
                   <span className={styles.channelIcon} data-channel="facebook" aria-hidden="true"><FacebookGlyph size={27} brand /></span>
                   <span><strong>Facebook Pages</strong><small>Public comment replies</small></span>
                   <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
@@ -341,7 +349,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
                 <ul className={styles.useCaseList}>
                   {useCaseItems.map((item, index) => (
                     <li key={item.label} style={{ "--solution-index": index } as CSSProperties}>
-                      <Link href={item.href} onClick={() => setActivePanel(null)}>
+                      <Link href={marketingHref(item.href, siteOrigin)} onClick={() => setActivePanel(null)}>
                         <span><strong>{item.label}</strong><small>{item.detail}</small></span>
                         <span className={styles.linkArrow} aria-hidden="true">&#8594;</span>
                       </Link>
@@ -358,7 +366,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
                   <ul className={`${styles.useCaseList} ${styles.resourceList}`}>
                     {group.items.map((item, index) => (
                       <li key={item.label} style={{ "--solution-index": index } as CSSProperties}>
-                        <Link href={item.href} onClick={() => setActivePanel(null)}>
+                        <Link href={marketingHref(item.href, siteOrigin)} onClick={() => setActivePanel(null)}>
                           <strong>{item.label}</strong>
                           <span className={styles.linkArrow} aria-hidden="true">&#8594;</span>
                         </Link>

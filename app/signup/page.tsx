@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MarketingHeader } from "@/src/components/marketing/marketing-header";
+import { getServerEnv } from "@/src/lib/env";
 import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
 import { OAuthButtons } from "@/src/components/auth/oauth-buttons";
 import { safeNextPath } from "@/src/lib/auth/session";
@@ -11,6 +12,10 @@ type SignupPageProps = {
 };
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
+    // Served from the app host, so the marketing chrome needs the marketing
+    // origin; a relative link would resolve against the app host and bounce
+    // straight back to /login.
+    const { publicSiteUrl } = getServerEnv();
     const params = await searchParams;
     const nextPath = safeNextPath(params.next || "/automations");
     const invite = typeof params.invite === "string" && params.invite.length <= 512 ? params.invite : "";
@@ -18,7 +23,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     if (params.sent === "1") {
         return (
             <div data-header-tone="light">
-                <MarketingHeader />
+                <MarketingHeader siteOrigin={publicSiteUrl} />
                 <main className="auth-page-section" data-auth-tone="editorial">
                     <div className="auth-page-frame">
                         <h1>Check your email</h1>
@@ -27,7 +32,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                         </p>
                     </div>
                 </main>
-                <MarketingFooter />
+                <MarketingFooter siteOrigin={publicSiteUrl} />
             </div>
         );
     }
@@ -48,7 +53,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 
     return (
         <div data-header-tone="light">
-            <MarketingHeader />
+            <MarketingHeader siteOrigin={publicSiteUrl} />
             <main className="auth-page-section" data-auth-tone="editorial">
                 <div className="auth-page-frame">
                     <h1>{invite ? "Almost there." : "Create your account."}</h1>
@@ -73,7 +78,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                     </p>
                 </div>
             </main>
-            <MarketingFooter />
+            <MarketingFooter siteOrigin={publicSiteUrl} />
         </div>
     );
 }
