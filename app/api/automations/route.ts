@@ -5,6 +5,8 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
 import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
 import { toReadableValidationError } from "@/src/lib/validation-error";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 
 export const runtime = "nodejs";
 
@@ -46,7 +48,13 @@ export async function POST(request: Request) {
     if (instagramAccountId && facebookPageId) {
       return NextResponse.json({ error: "An automation pins to either Instagram or a Facebook Page, not both" }, { status: 400 });
     }
-    const automation = await getRepository().createAutomation(session.workspaceId, {
+    const repository = getRepository();
+    await getEntitlementService().assertEntitled(
+      session.workspaceId,
+      "automations",
+      (await repository.listAutomations(session.workspaceId)).length,
+    );
+    const automation = await repository.createAutomation(session.workspaceId, {
       name,
       definition,
       ...(instagramAccountId ? { instagramAccountId } : {}),
@@ -54,6 +62,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ data: automation }, { status: 201 });
   } catch (error) {
+    const entitlementResponse = entitlementErrorResponse(error);
+    if (entitlementResponse) return entitlementResponse;
     return NextResponse.json({ error: toReadableValidationError(error, "Invalid automation") }, { status: 400 });
   }
 }

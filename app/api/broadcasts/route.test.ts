@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   failOutboundDelivery: vi.fn(),
   reconcileBroadcastCounters: vi.fn(),
   enqueueBroadcastSends: vi.fn(),
+  assertEntitled: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
@@ -36,6 +37,10 @@ vi.mock("@/src/lib/queue", () => ({
   enqueueBroadcastSends: mocks.enqueueBroadcastSends,
   isQueueConfigured: () => true,
 }));
+vi.mock("@/src/lib/entitlements/service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/src/lib/entitlements/service")>()),
+  getEntitlementService: () => ({ assertEntitled: mocks.assertEntitled }),
+}));
 
 const { GET, POST } = await import("./route");
 
@@ -53,6 +58,7 @@ describe("/api/broadcasts session validation", () => {
     mocks.failOutboundDelivery.mockReset().mockResolvedValue(true);
     mocks.reconcileBroadcastCounters.mockReset().mockResolvedValue({ total: 2, sent: 0, failed: 1, skipped: 0, pending: 1 });
     mocks.enqueueBroadcastSends.mockReset();
+    mocks.assertEntitled.mockReset().mockResolvedValue(undefined);
   });
 
   it("rejects a revoked session before listing broadcasts", async () => {
@@ -97,5 +103,20 @@ describe("/api/broadcasts session validation", () => {
     expect(mocks.failOutboundDelivery).toHaveBeenCalledTimes(1);
     expect(mocks.reconcileBroadcastCounters).toHaveBeenCalledWith("workspace_1", "broadcast_1");
     expect(mocks.incrementBroadcastCounters).not.toHaveBeenCalled();
+  });
+
+  it("returns the literal broadcast-feature contract", async () => {
+    const { EntitlementError } = await import("@/src/lib/entitlements/service");
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.assertEntitled.mockRejectedValue(new EntitlementError("entitlement_required", "broadcasts"));
+
+    const response = await POST(new Request("http://localhost/api/broadcasts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Update", text: "Hello", segment: "all_contacts" }),
+    }));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "entitlement_required", capability: "broadcasts" });
   });
 });

@@ -28,6 +28,7 @@ export function createMemoryEntitlementRepository(seed: {
     overrides: seed.overrides ?? {},
   };
   const reservations = new Set<string>();
+  const reservationUsageKeys = new Map<string, string>();
   const usage = new Map<string, number>();
 
   return {
@@ -40,8 +41,16 @@ export function createMemoryEntitlementRepository(seed: {
       if (reservations.has(input.deliveryKey)) return { reserved: true, used, limit: input.limit };
       if (input.limit !== null && used >= input.limit) return { reserved: false, used, limit: input.limit };
       reservations.add(input.deliveryKey);
+      reservationUsageKeys.set(input.deliveryKey, usageKey);
       usage.set(usageKey, used + 1);
       return { reserved: true, used: used + 1, limit: input.limit };
+    },
+    async releaseMonthlyDelivery(deliveryKey) {
+      const usageKey = reservationUsageKeys.get(deliveryKey);
+      if (!usageKey || !reservations.delete(deliveryKey)) return false;
+      reservationUsageKeys.delete(deliveryKey);
+      usage.set(usageKey, Math.max(0, (usage.get(usageKey) ?? 0) - 1));
+      return true;
     },
   };
 }

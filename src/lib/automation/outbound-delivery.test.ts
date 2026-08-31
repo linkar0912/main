@@ -20,7 +20,13 @@ const request = {
   kind: "CLASSIC_ACTION" as const,
   payload: { text: "Original message" },
   claimLeaseMs: 30_000,
+  entitlementService: {
+    reserveMonthlyDelivery: vi.fn(),
+    releaseMonthlyDelivery: vi.fn(),
+  },
 };
+const { entitlementService: _entitlementService, ...persistedRequest } = request;
+void _entitlementService;
 
 describe("outbound delivery coordinator", () => {
   let repository: AutomationRepository;
@@ -28,10 +34,12 @@ describe("outbound delivery coordinator", () => {
   beforeEach(() => {
     repository = createMemoryRepository();
     vi.mocked(getRepository).mockReturnValue(repository);
+    request.entitlementService.reserveMonthlyDelivery.mockReset().mockResolvedValue({ reserved: true, used: 1, limit: 100 });
+    request.entitlementService.releaseMonthlyDelivery.mockReset().mockResolvedValue(true);
   });
 
   it("skips the provider for an existing SENT delivery", async () => {
-    await repository.ensureOutboundDelivery(request);
+    await repository.ensureOutboundDelivery(persistedRequest);
     await repository.claimOutboundDelivery(request.deliveryKey, "seed_owner", "2026-08-23T10:05:00.000Z");
     await repository.completeOutboundDelivery(
       request.deliveryKey,
@@ -77,6 +85,32 @@ describe("outbound delivery coordinator", () => {
     });
     expect(send).toHaveBeenCalledTimes(1);
     expect((await repository.getOutboundDelivery(request.deliveryKey))?.state).toBe("UNKNOWN");
+    expect(request.entitlementService.releaseMonthlyDelivery).not.toHaveBeenCalled();
+  });
+
+  it("does not call the provider when the monthly delivery limit is exhausted", async () => {
+    request.entitlementService.reserveMonthlyDelivery.mockResolvedValue({ reserved: false, used: 100, limit: 100 });
+    const send = vi.fn();
+
+    await expect(executeOutboundDelivery(request, send)).resolves.toEqual({
+      status: "FAILED",
+      retryable: false,
+      error: "Monthly delivery limit reached",
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("leaves a retryable ledger outcome when usage metering is unavailable", async () => {
+    request.entitlementService.reserveMonthlyDelivery.mockRejectedValue(new Error("usage database unavailable"));
+    const send = vi.fn();
+
+    await expect(executeOutboundDelivery(request, send)).resolves.toEqual({
+      status: "FAILED",
+      retryable: true,
+      error: "Delivery usage could not be reserved",
+    });
+    expect(send).not.toHaveBeenCalled();
+    expect(await repository.getOutboundDelivery(request.deliveryKey)).toMatchObject({ state: "FAILED", retryable: true });
   });
 
   it.each([
@@ -93,10 +127,11 @@ describe("outbound delivery coordinator", () => {
       state: "FAILED",
       retryable,
     });
+    expect(request.entitlementService.releaseMonthlyDelivery).toHaveBeenCalledWith(request.deliveryKey);
   });
 
   it("sends the first persisted payload after an automation edit", async () => {
-    await repository.ensureOutboundDelivery(request);
+    await repository.ensureOutboundDelivery(persistedRequest);
     const send = vi.fn().mockResolvedValue({ id: "provider_1" });
 
     await executeOutboundDelivery({

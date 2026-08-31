@@ -9,6 +9,7 @@ import { sealSecret } from "@/src/lib/security/secrets";
 import { clearProfilePictureCache } from "@/src/lib/meta/profile-picture";
 import { getRepository } from "@/src/lib/repository-provider";
 import { InstagramAccountOwnershipError } from "@/src/lib/repository";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
 
 export const runtime = "nodejs";
 
@@ -57,6 +58,12 @@ export async function GET(request: Request) {
   }
 
   try {
+    const repository = getRepository();
+    await getEntitlementService().assertEntitled(
+      responseState.workspaceId,
+      "instagram",
+      (await repository.listConnections(responseState.workspaceId)).length,
+    );
     const token = await exchangeInstagramCode(code, env);
     const tokenExpiresAt = token.expiresIn
       ? new Date(Date.now() + token.expiresIn * 1_000).toISOString()
@@ -91,7 +98,7 @@ export async function GET(request: Request) {
         error: subscription.error,
       });
     }
-    await getRepository().upsertConnection({
+    await repository.upsertConnection({
       workspaceId: responseState.workspaceId,
       igUserId: profile.id,
       username: profile.username,
@@ -113,6 +120,8 @@ export async function GET(request: Request) {
     else if (error instanceof MetaOAuthError) status = "token-exchange";
     else if (error instanceof MetaApiError && error.message.includes("profile")) status = "profile-fetch";
     else if (error instanceof InstagramAccountOwnershipError) status = "already-connected";
+    else if (error instanceof Error && error.message === "entitlement_required") status = "plan-required";
+    else if (error instanceof Error && error.message === "limit_reached") status = "limit-reached";
     return withoutStateCookie(settingsRedirect(env, status));
   }
 }

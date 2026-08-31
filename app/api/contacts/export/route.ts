@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 
 export const runtime = "nodejs";
 
@@ -13,6 +15,13 @@ function csvCell(value: string | undefined): string {
 export async function GET(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    await getEntitlementService().assertEntitled(session.workspaceId, "exports", 0);
+  } catch (error) {
+    return entitlementErrorResponse(error)
+      ?? NextResponse.json({ error: "entitlement_check_failed" }, { status: 500 });
+  }
 
   const rows = await getRepository().listCapturedContacts(session.workspaceId, 10_000);
   const header = ["email", "instagram_account_id", "captured_at"];

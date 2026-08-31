@@ -245,7 +245,7 @@ git commit -m "feat(plans): add enforceable workspace entitlements"
 **Interfaces:**
 - Produces consistent `403 { error: "entitlement_required", capability }` and `409 { error: "limit_reached", capability, used, limit }` responses.
 
-- [ ] **Step 1: Add one failing behavior test per guarded capability**
+- [x] **Step 1: Add one failing behavior test per guarded capability**
 
 ```ts
 it("rejects a fourth automation on a three-automation plan", async () => {
@@ -258,23 +258,23 @@ it("rejects a fourth automation on a three-automation plan", async () => {
 
 Repeat with literal expected payloads for members, Instagram, Facebook, sequences, broadcasts, tracked links, exports, and monthly delivery reservations.
 
-- [ ] **Step 2: Run all affected tests and verify RED**
+- [x] **Step 2: Run all affected tests and verify RED**
 
 Run: `pnpm vitest run app/api/team app/api/automations/route.test.ts app/api/sequences app/api/broadcasts app/api/links app/api/meta/connection app/api/facebook/connection app/api/contacts/export src/lib/automation/outbound-delivery.test.ts`
 
 Expected: new tests fail because routes do not call EntitlementService.
 
-- [ ] **Step 3: Add minimal guards to each write boundary**
+- [x] **Step 3: Add minimal guards to each write boundary**
 
 Count current resources from the repository, resolve entitlements once per request, and call `assertEntitled` before mutation. Reserve monthly delivery immediately before durable provider dispatch; release only for known-not-sent terminal outcomes.
 
-- [ ] **Step 4: Verify GREEN and full automation safety**
+- [x] **Step 4: Verify GREEN and full automation safety**
 
 Run: `pnpm vitest run app/api/team app/api/automations app/api/sequences app/api/broadcasts app/api/links app/api/meta app/api/facebook app/api/contacts/export src/lib/automation && pnpm typecheck`
 
 Expected: tests pass and delivery-idempotency tests remain green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/api/team app/api/automations app/api/sequences app/api/broadcasts app/api/links app/api/meta app/api/facebook app/api/contacts/export src/lib/automation

@@ -3,6 +3,8 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 import { isSafeOutboundUrl } from "@/src/lib/security/outbound-url";
 import { logger } from "@/src/lib/logger";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 
 export const runtime = "nodejs";
 
@@ -98,6 +100,7 @@ export async function POST(request: Request) {
 
   const repository = getRepository();
   try {
+    await getEntitlementService().assertEntitled(session.workspaceId, "tracked_links", 0);
     const link = await repository.createTrackedLink(session.workspaceId, {
       slug,
       destination,
@@ -113,6 +116,8 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ data: link });
   } catch (error) {
+    const entitlementResponse = entitlementErrorResponse(error);
+    if (entitlementResponse) return entitlementResponse;
     if (error instanceof Error && error.message.includes("already used")) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

@@ -7,6 +7,8 @@ import { FACEBOOK_PAGE_SELECTION_COOKIE, readFacebookPageSelection } from "@/src
 import { sealSecret } from "@/src/lib/security/secrets";
 import { getRepository } from "@/src/lib/repository-provider";
 import { FacebookPageOwnershipError } from "@/src/lib/repository";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 
 export const runtime = "nodejs";
 
@@ -25,6 +27,17 @@ export async function POST(request: Request) {
     ? readFacebookPageSelection(sealed, env.facebookTokenEncryptionKey, session.workspaceId)
     : null;
   if (!selection) return NextResponse.json({ error: "Facebook Page selection expired" }, { status: 410 });
+  const repository = getRepository();
+  try {
+    await getEntitlementService().assertEntitled(
+      session.workspaceId,
+      "facebook",
+      (await repository.listFacebookPages(session.workspaceId)).length,
+    );
+  } catch (error) {
+    return entitlementErrorResponse(error)
+      ?? NextResponse.json({ error: "entitlement_check_failed" }, { status: 500 });
+  }
   const page = (await listFacebookPages(selection.userAccessToken, env.facebookApiVersion))
     .find((candidate) => candidate.id === body.pageId);
   if (!page) return NextResponse.json({ error: "Facebook Page is not available to this account" }, { status: 403 });
@@ -33,7 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: subscription.error ?? "Facebook webhook subscription failed" }, { status: 502 });
   }
   try {
-    await getRepository().upsertFacebookPage({
+    await repository.upsertFacebookPage({
       workspaceId: session.workspaceId,
       pageId: page.id,
       pageName: page.name,

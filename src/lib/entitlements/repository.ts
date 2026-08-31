@@ -1,5 +1,3 @@
-import "server-only";
-
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/src/lib/prisma";
@@ -20,6 +18,7 @@ export interface EntitlementRepository {
     deliveryKey: string;
     limit: number | null;
   }): Promise<MonthlyReservationResult>;
+  releaseMonthlyDelivery(deliveryKey: string): Promise<boolean>;
 }
 
 function mapPlan(plan: {
@@ -99,6 +98,23 @@ export function createPrismaEntitlementRepository(client = prisma): EntitlementR
         }
       }
       throw new Error("monthly_reservation_retry_exhausted");
+    },
+
+    async releaseMonthlyDelivery(deliveryKey) {
+      return client.$transaction(async (transaction) => {
+        const reservation = await transaction.workspaceUsageReservation.findUnique({ where: { deliveryKey } });
+        if (!reservation) return false;
+        await transaction.workspaceUsageReservation.delete({ where: { deliveryKey } });
+        await transaction.workspaceUsagePeriod.updateMany({
+          where: {
+            workspaceId: reservation.workspaceId,
+            periodStart: reservation.periodStart,
+            deliveriesReserved: { gt: 0 },
+          },
+          data: { deliveriesReserved: { decrement: 1 } },
+        });
+        return true;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     },
   };
 }

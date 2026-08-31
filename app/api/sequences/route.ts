@@ -3,6 +3,8 @@ import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { parseSequenceInput } from "@/src/lib/automation/sequence";
 import { toReadableValidationError } from "@/src/lib/validation-error";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 
 export const runtime = "nodejs";
 
@@ -28,6 +30,11 @@ export async function POST(request: Request) {
   try {
     const input = parseSequenceInput(await request.json());
     const repository = getRepository();
+    await getEntitlementService().assertEntitled(
+      session.workspaceId,
+      "sequences",
+      (await repository.listSequences(session.workspaceId)).length,
+    );
     if (input.sourceAutomationId) {
       const source = await repository.getAutomation(session.workspaceId, input.sourceAutomationId);
       if (!source) return NextResponse.json({ error: "Source automation not found" }, { status: 400 });
@@ -35,6 +42,8 @@ export async function POST(request: Request) {
     const record = await repository.createSequence(session.workspaceId, input);
     return NextResponse.json({ data: record }, { status: 201 });
   } catch (error) {
+    const entitlementResponse = entitlementErrorResponse(error);
+    if (entitlementResponse) return entitlementResponse;
     return NextResponse.json({ error: toReadableValidationError(error, "Invalid sequence") }, { status: 400 });
   }
 }

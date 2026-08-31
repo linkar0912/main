@@ -18,6 +18,10 @@ export type DeliveryExecutionRequest<
   payload: TPayload;
   claimLeaseMs: number;
   repository?: AutomationRepository;
+  entitlementService?: {
+    reserveMonthlyDelivery(workspaceId: string, deliveryKey: string): Promise<{ reserved: boolean; used: number; limit: number | null }>;
+    releaseMonthlyDelivery(deliveryKey: string): Promise<boolean>;
+  };
 };
 
 export type DeliveryExecutionResult =
@@ -90,6 +94,7 @@ export async function executeOutboundDelivery<
   const {
     claimLeaseMs,
     repository: suppliedRepository,
+    entitlementService: suppliedEntitlementService,
     ...deliveryInput
   } = request;
   const repository = suppliedRepository ?? getRepository();
@@ -101,6 +106,22 @@ export async function executeOutboundDelivery<
   const leaseUntil = new Date(Date.now() + claimLeaseMs).toISOString();
   const claim = await repository.claimOutboundDelivery(request.deliveryKey, owner, leaseUntil);
   if (!claim.claimed) return existingResult(claim.record) ?? { status: "BUSY" };
+
+  const entitlementService = suppliedEntitlementService
+    ?? (await import("../entitlements/service")).getEntitlementService();
+  let reservation: Awaited<ReturnType<typeof entitlementService.reserveMonthlyDelivery>>;
+  try {
+    reservation = await entitlementService.reserveMonthlyDelivery(request.workspaceId, request.deliveryKey);
+  } catch {
+    const error = "Delivery usage could not be reserved";
+    await repository.failOutboundDelivery(request.deliveryKey, owner, error, true, "RETRYABLE_REJECTION");
+    return { status: "FAILED", retryable: true, error };
+  }
+  if (!reservation.reserved) {
+    const error = "Monthly delivery limit reached";
+    await repository.failOutboundDelivery(request.deliveryKey, owner, error, false, "SUPPRESSED");
+    return { status: "FAILED", retryable: false, error };
+  }
 
   let providerResult: { id?: string; message_id?: string };
   try {
@@ -115,6 +136,7 @@ export async function executeOutboundDelivery<
     }
 
     const retryable = classification === "KNOWN_RETRYABLE";
+    await entitlementService.releaseMonthlyDelivery(request.deliveryKey).catch(() => false);
     await repository.failOutboundDelivery(
       request.deliveryKey,
       owner,

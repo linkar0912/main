@@ -1,30 +1,36 @@
 import { NextResponse } from "next/server";
 import { getServerEnv } from "@/src/lib/env";
-import { getValidatedSession } from "@/src/lib/auth/session";
+import { getValidatedSession, type AppSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 import { hashToken, createRawToken } from "@/src/lib/auth/tokens";
 import { sendEmail } from "@/src/lib/mailer";
 import type { MemberRole } from "@/src/lib/repository";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 
 export const runtime = "nodejs";
 
 const INVITABLE_ROLES = new Set(["ADMIN", "MEMBER"]);
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 
-async function requireManager(request: Request) {
+type ManagerGuard =
+    | { ok: true; session: AppSession; role: "OWNER" | "ADMIN" }
+    | { ok: false; error: NextResponse };
+
+async function requireManager(request: Request): Promise<ManagerGuard> {
     const session = await getValidatedSession(request);
-    if (!session) return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
+    if (!session) return { ok: false, error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
     const repository = getRepository();
     const role = await repository.getMemberRole(session.workspaceId, session.email);
     if (role !== "OWNER" && role !== "ADMIN") {
-        return { error: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
+        return { ok: false, error: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
     }
-    return { session, role };
+    return { ok: true, session, role };
 }
 
 export async function GET(request: Request) {
     const guard = await requireManager(request);
-    if ("error" in guard) return guard.error;
+    if (!guard.ok) return guard.error;
     const repository = getRepository();
     const [members, invitations] = await Promise.all([
         repository.listMembers(guard.session.workspaceId),
@@ -36,10 +42,10 @@ export async function GET(request: Request) {
     });
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<NextResponse> {
     const env = getServerEnv();
     const guard = await requireManager(request);
-    if ("error" in guard) return guard.error;
+    if (!guard.ok) return guard.error;
 
     const body = await request.json().catch(() => null) as { email?: string; role?: string } | null;
     const email = String(body?.email ?? "").trim().toLowerCase();
@@ -56,6 +62,18 @@ export async function POST(request: Request) {
     const members = await repository.listMembers(guard.session.workspaceId);
     if (members.some((member) => member.email === email)) {
         return NextResponse.json({ error: "already_member" }, { status: 409 });
+    }
+
+    const invitations = await repository.listInvitations(guard.session.workspaceId);
+    try {
+        await getEntitlementService().assertEntitled(
+            guard.session.workspaceId,
+            "members",
+            members.length + invitations.length,
+        );
+    } catch (error) {
+        return entitlementErrorResponse(error)
+            ?? NextResponse.json({ error: "entitlement_check_failed" }, { status: 500 });
     }
 
     const raw = createRawToken();
@@ -80,7 +98,7 @@ You will need to create an account with this exact email address.`,
 
 export async function DELETE(request: Request) {
     const guard = await requireManager(request);
-    if ("error" in guard) return guard.error;
+    if (!guard.ok) return guard.error;
     const id = new URL(request.url).searchParams.get("id") ?? "";
     const revoked = await getRepository().revokeInvitation(guard.session.workspaceId, id);
     return revoked

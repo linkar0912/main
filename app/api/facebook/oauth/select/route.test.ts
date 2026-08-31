@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   readSelection: vi.fn(),
   upsertFacebookPage: vi.fn(),
   deleteCookie: vi.fn(),
+  assertEntitled: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
@@ -40,7 +41,11 @@ vi.mock("@/src/lib/security/secrets", () => ({
 }));
 
 vi.mock("@/src/lib/repository-provider", () => ({
-  getRepository: () => ({ upsertFacebookPage: mocks.upsertFacebookPage }),
+  getRepository: () => ({ upsertFacebookPage: mocks.upsertFacebookPage, listFacebookPages: mocks.listFacebookPages }),
+}));
+vi.mock("@/src/lib/entitlements/service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/src/lib/entitlements/service")>()),
+  getEntitlementService: () => ({ assertEntitled: mocks.assertEntitled }),
 }));
 
 const { POST } = await import("./route");
@@ -68,6 +73,7 @@ describe("POST /api/facebook/oauth/select", () => {
     mocks.subscribe.mockReset().mockResolvedValue({ subscribed: true });
     mocks.upsertFacebookPage.mockReset();
     mocks.deleteCookie.mockReset();
+    mocks.assertEntitled.mockReset().mockResolvedValue(undefined);
   });
 
   it("returns a specific conflict when the selected Page belongs to another workspace", async () => {
@@ -80,5 +86,16 @@ describe("POST /api/facebook/oauth/select", () => {
       error: "This Facebook Page is already connected to another workspace",
       code: "already-connected",
     });
+  });
+
+  it("returns the literal Facebook-feature contract before subscribing", async () => {
+    const { EntitlementError } = await import("@/src/lib/entitlements/service");
+    mocks.assertEntitled.mockRejectedValue(new EntitlementError("entitlement_required", "facebook"));
+
+    const response = await POST(selectRequest());
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "entitlement_required", capability: "facebook" });
+    expect(mocks.subscribe).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,6 @@
 import { createPrismaEntitlementRepository, type EntitlementRepository, type MonthlyReservationResult } from "./repository";
+import { createMemoryEntitlementRepository } from "./memory-repository";
+import { getServerEnv } from "@/src/lib/env";
 import {
   EntitlementOverridesSchema,
   type EffectiveEntitlements,
@@ -73,12 +75,36 @@ export function createEntitlementService(repository: EntitlementRepository, now:
     });
   }
 
-  return { getEffectiveEntitlements, assertEntitled, reserveMonthlyDelivery };
+  async function releaseMonthlyDelivery(deliveryKey: string): Promise<boolean> {
+    return repository.releaseMonthlyDelivery(deliveryKey);
+  }
+
+  return { getEffectiveEntitlements, assertEntitled, reserveMonthlyDelivery, releaseMonthlyDelivery };
 }
 
 let productionService: ReturnType<typeof createEntitlementService> | undefined;
 
 export function getEntitlementService() {
-  productionService ??= createEntitlementService(createPrismaEntitlementRepository());
+  productionService ??= createEntitlementService(
+    getServerEnv().databaseUrl
+      ? createPrismaEntitlementRepository()
+      : createMemoryEntitlementRepository({
+        plan: {
+          memberLimit: null,
+          automationLimit: null,
+          instagramConnectionLimit: null,
+          facebookConnectionLimit: null,
+          sequenceLimit: null,
+          monthlyBroadcastLimit: null,
+          monthlyDeliveryLimit: null,
+          sequencesEnabled: true,
+          broadcastsEnabled: true,
+          trackedLinksEnabled: true,
+          teamEnabled: true,
+          facebookEnabled: true,
+          exportsEnabled: true,
+        },
+      }),
+  );
   return productionService;
 }

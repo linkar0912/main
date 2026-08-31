@@ -3,6 +3,9 @@ import { buildInstagramAuthorizeUrl } from "@/src/lib/meta/oauth";
 import { createOAuthState, META_OAUTH_STATE_COOKIE } from "@/src/lib/meta/oauth-state";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { NextResponse } from "next/server";
+import { getRepository } from "@/src/lib/repository-provider";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 
 export const runtime = "nodejs";
 
@@ -19,6 +22,16 @@ export async function GET(request: Request) {
     return NextResponse.redirect(login);
   }
   if (!env.metaAppId) return settingsRedirect(env, "missing-config");
+  try {
+    await getEntitlementService().assertEntitled(
+      session.workspaceId,
+      "instagram",
+      (await getRepository().listConnections(session.workspaceId)).length,
+    );
+  } catch (error) {
+    return entitlementErrorResponse(error)
+      ?? NextResponse.json({ error: "entitlement_check_failed" }, { status: 500 });
+  }
 
   const state = createOAuthState(session.workspaceId, env.authSessionSecret);
   const response = NextResponse.redirect(

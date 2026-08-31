@@ -6,6 +6,8 @@ import { isQuietNow, msUntilQuietEnd } from "@/src/lib/messaging-window";
 import { z } from "zod";
 import { deliveryKeys } from "@/src/lib/automation/outbound-delivery";
 import { createId } from "@/src/lib/id";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse, utcMonthStart } from "@/src/lib/entitlements/http";
 
 export const runtime = "nodejs";
 
@@ -41,6 +43,14 @@ export async function POST(request: Request) {
   }
 
   const repository = getRepository();
+  try {
+    const broadcastsThisMonth = (await repository.listBroadcasts(session.workspaceId, 10_000))
+      .filter((broadcast) => broadcast.createdAt >= utcMonthStart()).length;
+    await getEntitlementService().assertEntitled(session.workspaceId, "broadcasts", broadcastsThisMonth);
+  } catch (error) {
+    return entitlementErrorResponse(error)
+      ?? NextResponse.json({ error: "entitlement_check_failed" }, { status: 500 });
+  }
   const recipients = await repository.listBroadcastRecipients(session.workspaceId, input.segment, MAX_BROADCAST_RECIPIENTS);
 
   // Delivery needs the queue. Checked before the broadcast row is created, because a
