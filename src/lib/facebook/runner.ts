@@ -1,4 +1,5 @@
 import type { FacebookNormalizedEvent } from "./types";
+import { createHash } from "node:crypto";
 import { FacebookClient, FacebookApiError } from "./client";
 import { unsealSecret } from "../security/secrets";
 import { logger } from "../logger";
@@ -9,6 +10,8 @@ import {
   releaseDailySendSlots,
   type SendLimitReservation,
 } from "../automation/send-limits";
+import { findMatchedKeyword, matchesTrigger, resolveReplyForMedia } from "../automation/match";
+import { validateDefinitionForTarget } from "../automation/channels/registry";
 
 /**
  * Result shape parallel to the Instagram runner's RunnerResult so the
@@ -65,6 +68,27 @@ function buildTemplateVars(event: FacebookNormalizedEvent): Record<string, strin
     keyword: "",
     media: event.postId,
   };
+}
+
+function stableVariantIndex(key: string, length: number): number {
+  const digest = createHash("sha256").update(key).digest();
+  return digest.readUInt32BE(0) % length;
+}
+
+export function selectFacebookReplyText(definition: FlowDefinitionV1, commentId: string): string | null {
+  const action = definition.actions.find((candidate) => candidate.type === "private_reply");
+  if (!action || action.type !== "private_reply") return null;
+  const replies = [action.text, ...(action.textVariants ?? [])].map((text) => text.trim()).filter(Boolean);
+  return replies.length > 0 ? replies[stableVariantIndex(commentId, replies.length)]! : null;
+}
+
+function classifyFacebookFailure(error: unknown): string {
+  if (!(error instanceof FacebookApiError)) return "facebook_delivery_failed";
+  if (error.graphCode === 10 || error.graphCode === 200 || error.graphCode === 299 || error.status === 403) {
+    return "permission_missing";
+  }
+  if (error.graphCode === 190 || error.status === 401) return "connection_unhealthy";
+  return "facebook_api_error";
 }
 
 function renderFacebookText(text: string, vars: Record<string, string>): string {
@@ -124,11 +148,30 @@ export async function processNormalizedFacebookEvent(
     .sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
 
   const result: FacebookRunnerResult = { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  let winnerSelected = false;
 
   for (const automation of automations) {
+    const channelIssues = validateDefinitionForTarget(automation.definition, { provider: "FACEBOOK", surface: "COMMENT" });
+    if (channelIssues.length > 0) {
+      const invalidDedupeKey = `${automation.id}:${event.id}`;
+      if (!(await repository.hasExecution(mapping.workspaceId, invalidDedupeKey))) {
+        await repository.recordExecution({
+          workspaceId: mapping.workspaceId,
+          automationId: automation.id,
+          externalEventId: event.id,
+          dedupeKey: invalidDedupeKey,
+          status: "FAILED",
+          reason: "invalid_channel_definition",
+        });
+        result.failed += 1;
+      }
+      continue;
+    }
     if (automation.definition.version !== 1) continue;
     const definition = automation.definition as FlowDefinitionV1;
     if (!matchesFacebookTrigger(definition, event)) continue;
+    if (winnerSelected) continue;
+    winnerSelected = true;
 
     result.matched += 1;
     const dedupeKey = `${automation.id}:${event.id}`;
@@ -213,8 +256,9 @@ export async function processNormalizedFacebookEvent(
 
     let sent = false;
     try {
-      const action = pickFirstPublicReply(definition);
-      if (!action) {
+      const trigger = definition.trigger.type === "comment" ? definition.trigger : null;
+      const selectedReply = trigger ? resolveReplyForMedia(trigger, event.postId) ?? selectFacebookReplyText(definition, event.commentId) : null;
+      if (!selectedReply) {
         await repository.completeExecution(mapping.workspaceId, dedupeKey, {
           status: "SKIPPED",
           reason: "no public reply configured",
@@ -231,7 +275,8 @@ export async function processNormalizedFacebookEvent(
         continue;
       }
       const vars = buildTemplateVars(event);
-      const text = renderFacebookText(action.text, vars);
+      if (trigger?.match === "keyword") vars.keyword = findMatchedKeyword(event.text, trigger.keywords) ?? "";
+      const text = renderFacebookText(selectedReply, vars);
       const connection = pageConnection(mapping.page, options.tokenEncryptionKey);
       const sendResult = await options.client.postCommentReply(connection, event.commentId, text);
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
@@ -256,7 +301,7 @@ export async function processNormalizedFacebookEvent(
       }
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "FAILED",
-        reason: error instanceof Error ? error.message : "Facebook delivery failed",
+        reason: classifyFacebookFailure(error),
       });
       result.failed += 1;
     } finally {
@@ -273,40 +318,16 @@ export async function processNormalizedFacebookEvent(
 }
 
 function matchesFacebookTrigger(definition: FlowDefinitionV1, event: FacebookNormalizedEvent): boolean {
-  const trigger = definition.trigger;
-  if (trigger.type !== "comment") return false;
-  if (trigger.mediaIds.length > 0 && !trigger.mediaIds.includes(event.postId)) return false;
-  const text = event.text.toLowerCase();
-  if (trigger.match === "any") return true;
-  if (trigger.match === "keyword") {
-    if (trigger.keywords.length === 0) return false;
-    const mode = trigger.mode ?? "any";
-    if (mode === "exact") {
-      return trigger.keywords.some((kw) => kw.toLowerCase() === text.trim());
-    }
-    if (mode === "regex") {
-      return trigger.keywords.some((pattern) => {
-        try {
-          return new RegExp(pattern, "i").test(event.text);
-        } catch {
-          return false;
-        }
-      });
-    }
-    if (mode === "all") {
-      return trigger.keywords.every((kw) => text.includes(kw.toLowerCase()));
-    }
-    // "any" or "contains" both fall through to a substring check.
-    return trigger.keywords.some((kw) => text.includes(kw.toLowerCase()));
-  }
-  return false;
-}
-
-function pickFirstPublicReply(definition: FlowDefinitionV1): { text: string } | null {
-  // Keep the serialized legacy action type for backward compatibility; the
-  // Facebook product surface and delivery semantics are public comment reply.
-  const action = definition.actions.find((candidate) => candidate.type === "private_reply");
-  return action ? { text: action.text } : null;
+  return matchesTrigger(definition, {
+    id: event.id,
+    accountId: event.pageId,
+    type: "comment.created",
+    text: event.text,
+    commentId: event.commentId,
+    mediaId: event.postId,
+    senderUsername: event.senderName,
+    timestamp: event.timestamp,
+  });
 }
 
 async function reserveSlots(

@@ -255,25 +255,25 @@ git commit -m "feat(automation): complete Facebook Page builder"
 - Test: `src/lib/facebook/webhooks.test.ts`
 - Test: `src/lib/facebook/client.test.ts`
 
-- [ ] **Step 1: Add failing end-to-end runner cases**
+- [x] **Step 1: Add failing end-to-end runner cases**
 
 Use signed fixtures to prove post scoping, include/exclude keywords, every-comment mode, deterministic reply-variant selection per comment ID, Page-authored suppression, nested-reply suppression, reply-once, schedule, priority, daily limit, deduplication, and public nested-reply delivery.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm vitest run src/lib/facebook/runner.test.ts src/lib/facebook/webhooks.test.ts src/lib/facebook/client.test.ts`
 
 Expected: reply variants and one or more scope/condition cases fail.
 
-- [ ] **Step 3: Reuse shared policy services and keep delivery provider-specific**
+- [x] **Step 3: Reuse shared policy services and keep delivery provider-specific**
 
 Normalize only top-level visitor comments. Resolve active Page-pinned comment automations, evaluate shared matching/schedule/limits/claims, select a stable variant from `commentId`, then call `FacebookClient.postCommentReply(commentId, text)`. Record the chosen text and provider-safe Graph error code in activity; never record the token.
 
-- [ ] **Step 4: Add stable failure classification**
+- [x] **Step 4: Add stable failure classification**
 
 Map permission drift to `permission_missing`, disconnected Pages to `connection_unhealthy`, and unsupported definitions to `invalid_channel_definition`. A failing Page automation must not affect Instagram jobs.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `pnpm vitest run src/lib/facebook/runner.test.ts src/lib/facebook/webhooks.test.ts src/lib/facebook/client.test.ts src/lib/automation/runner.test.ts src/lib/automation/match.test.ts && pnpm typecheck`
 

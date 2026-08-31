@@ -7,18 +7,21 @@ export class FacebookApiError extends Error {
   readonly status: number;
   readonly retryable: boolean;
   readonly responseReceived: boolean;
+  readonly graphCode?: number;
 
   constructor(
     message: string,
     status: number,
     responseReceived = status > 0,
     retryable = status === 0 || status === 408 || status === 429 || status >= 500,
+    graphCode?: number,
   ) {
     super(message);
     this.name = "FacebookApiError";
     this.status = status;
     this.responseReceived = responseReceived;
     this.retryable = retryable;
+    this.graphCode = graphCode;
   }
 }
 
@@ -83,6 +86,7 @@ export class FacebookClient {
         response.status,
         true,
         isTransientFacebookError(error, response.status),
+        typeof error.code === "number" ? error.code : undefined,
       );
     }
     return data;

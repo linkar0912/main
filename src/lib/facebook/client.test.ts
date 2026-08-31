@@ -48,6 +48,7 @@ describe("FacebookClient", () => {
       message: "Invalid OAuth",
       status: 400,
       retryable: false,
+      graphCode: 190,
     });
   });
 
