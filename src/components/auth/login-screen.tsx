@@ -41,10 +41,10 @@ export function LoginScreen({ nextPath, error }: LoginScreenProps) {
           </form>
 
           <p className="auth-page-foot">
-            New here? <Link href={`/signup?next=${encodeURIComponent(nextPath)}`}>Create an account</Link>
+            New here? <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} prefetch={false}>Create an account</Link>
           </p>
           <p className="auth-page-foot">
-            <Link href="/forgot-password" className="auth-page-foot-link">
+            <Link href="/forgot-password" className="auth-page-foot-link" prefetch={false}>
               Forgot your password?
               <ArrowRight size={13} aria-hidden="true" />
             </Link>

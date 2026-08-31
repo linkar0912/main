@@ -255,7 +255,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
           <nav className={styles.accountNavigation} aria-label="Account">
             <ul>
               <li>
-                <Link className={styles.getStarted} href="/signup"><ButtonRoll label="Get started" /></Link>
+                <Link className={styles.getStarted} href="/signup" prefetch={false}><ButtonRoll label="Get started" /></Link>
               </li>
               <li>
                 <Link className={styles.login} href="/login">Sign in</Link>
@@ -264,7 +264,7 @@ export function MarketingHeader({ forceSurface }: MarketingHeaderProps = {}) {
           </nav>
           <ThemeToggle className={styles.themeToggle} />
           <div className={styles.mobileActions}>
-            <Link className={styles.mobileGetStarted} href="/signup"><ButtonRoll label="Get started" /></Link>
+            <Link className={styles.mobileGetStarted} href="/signup" prefetch={false}><ButtonRoll label="Get started" /></Link>
             <button
             ref={openerRef}
             className={styles.menuButton}
