@@ -21,6 +21,7 @@ import { processLeadDelivery } from "./lib/automation/lead-delivery";
 import { processFlowFollowUp, type FlowFollowUpRunnerOptions } from "./lib/automation/followup-runner";
 import type { FlowFollowUpJob } from "./lib/queue";
 import { createWorkerHealthServer, workerHealthPort } from "./lib/worker-health";
+import { reconcileUsageReservations } from "./lib/admin/system/usage-reconciliation";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 
@@ -41,6 +42,14 @@ if (!env.redisUrl) {
   const worker = new Worker(
     WEBHOOK_QUEUE_NAME,
     async (job) => {
+      if (job.name === "admin-maintenance") {
+        const action = (job.data as { action?: string }).action;
+        if (action === "delivery_reconciliation") {
+          return reconcileExpiredDeliveryClaims(getRepository(), new Date().toISOString(), 100);
+        }
+        if (action === "usage_reconciliation") return reconcileUsageReservations();
+        throw new Error("unknown_admin_maintenance_action");
+      }
       if (job.name === "lead-delivery") {
         const result = await processLeadDelivery(
           job.data as LeadDeliveryJob,

@@ -19,6 +19,21 @@ export type WebhookQueueCounts = {
 // job into memory; page through instead so data-deletion sweeps stay cheap even
 // with thousands of completed/failed jobs retained.
 const JOB_SCAN_PAGE_SIZE = 500;
+export const ADMIN_QUEUE_NAMES = ["webhooks"] as const;
+export type AdminQueueName = typeof ADMIN_QUEUE_NAMES[number];
+
+export type AdminQueueSnapshot = {
+  name: AdminQueueName;
+  configured: boolean;
+  paused: boolean | null;
+  waiting: number;
+  active: number;
+  delayed: number;
+  completed: number;
+  failed: number;
+  oldestWaitingAgeMs: number | null;
+  lastFailedCode: string | null;
+};
 
 export function createWebhookJobId(event: NormalizedEvent): string {
   // BullMQ deduplicates enqueues by jobId, so the id MUST be stable per
@@ -62,6 +77,51 @@ function getWebhookQueue(): Queue | null {
   globalForQueue.linkarWebhookRedis = redis;
   globalForQueue.linkarWebhookQueue = queue;
   return queue;
+}
+
+function adminQueue(name: string): Queue | null {
+  if (!ADMIN_QUEUE_NAMES.includes(name as AdminQueueName)) throw new Error("unknown_queue");
+  return getWebhookQueue();
+}
+
+function safeFailureCode(reason?: string): string | null {
+  if (!reason) return null;
+  const candidate = reason.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 64);
+  return /^[A-Z][A-Z0-9_]{1,63}$/.test(candidate) ? candidate : "ERROR_RECORDED";
+}
+
+export async function getAdminQueueSnapshot(name: AdminQueueName): Promise<AdminQueueSnapshot> {
+  const queue = adminQueue(name);
+  if (!queue) return { name, configured: false, paused: null, waiting: 0, active: 0, delayed: 0, completed: 0, failed: 0, oldestWaitingAgeMs: null, lastFailedCode: null };
+  const [counts, paused, oldest, failed] = await Promise.all([
+    queue.getJobCounts("waiting", "active", "delayed", "completed", "failed"),
+    queue.isPaused(),
+    queue.getJobs(["waiting"], 0, 0, true),
+    queue.getJobs(["failed"], 0, 0),
+  ]);
+  const oldestTimestamp = oldest[0]?.timestamp;
+  return { name, configured: true, paused, waiting: counts.waiting ?? 0, active: counts.active ?? 0, delayed: counts.delayed ?? 0, completed: counts.completed ?? 0, failed: counts.failed ?? 0, oldestWaitingAgeMs: oldestTimestamp ? Math.max(0, Date.now() - oldestTimestamp) : null, lastFailedCode: safeFailureCode(failed[0]?.failedReason) };
+}
+
+export async function setAdminQueuePaused(name: string, paused: boolean): Promise<{ name: AdminQueueName; paused: boolean }> {
+  const queue = adminQueue(name); if (!queue) throw new Error("queue_unavailable");
+  if (paused) await queue.pause(); else await queue.resume();
+  return { name: name as AdminQueueName, paused };
+}
+
+export async function retryAdminQueueJobs(name: string, jobIds: string[]): Promise<{ retried: string[] }> {
+  if (jobIds.length < 1 || jobIds.length > 100) throw new Error("invalid_job_batch");
+  const queue = adminQueue(name); if (!queue) throw new Error("queue_unavailable"); const jobs = await Promise.all(jobIds.map((id) => queue.getJob(id)));
+  if (jobs.some((job) => !job)) throw new Error("job_not_found");
+  for (const job of jobs) { if (await job!.getState() !== "failed") throw new Error("job_not_failed"); }
+  await Promise.all(jobs.map((job) => job!.retry("failed")));
+  return { retried: jobIds };
+}
+
+export async function enqueueAdminMaintenance(action: "delivery_reconciliation" | "usage_reconciliation"): Promise<boolean> {
+  const queue = getWebhookQueue(); if (!queue) return false;
+  await queue.add("admin-maintenance", { action }, { jobId: `admin-maintenance:${action}`, removeOnComplete: true, removeOnFail: 100, attempts: 2, backoff: { type: "fixed", delay: 5_000 } });
+  return true;
 }
 
 async function findJobsByAccount(queue: Queue, igUserId: string, includeActive: boolean): Promise<Job[]> {

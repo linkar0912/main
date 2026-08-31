@@ -36,6 +36,37 @@ enum AdminAuditPhase {
   FAILURE
 }
 
+enum AdminDeletionTargetKind {
+  USER
+  WORKSPACE
+}
+
+enum AdminDeletionJobState {
+  QUEUED
+  RUNNING
+  CANCELLING
+  CANCELLED
+  COMPLETED
+  FAILED
+}
+
+enum AdminDeletionStageKind {
+  VALIDATE
+  CANCEL_WORK
+  DISCONNECT_PROVIDERS
+  DELETE_TENANT_DATA
+  MARK_IRREVERSIBLE
+  DELETE_AUTH_USER
+  FINALIZE
+}
+
+enum AdminDeletionStageState {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 enum ExecutionStatus {
   PROCESSING
   SENT
@@ -644,4 +675,51 @@ model AdminAuditEvent {
   @@unique([requestId, phase])
   @@index([createdAt, id])
   @@index([workspaceId, createdAt])
+}
+
+model AdminDeletionJob {
+  id                   String                     @id
+  targetKind           AdminDeletionTargetKind
+  targetId             String
+  state                AdminDeletionJobState      @default(QUEUED)
+  impact               Json
+  impactVersion        Int
+  impactDigest         String
+  version              Int                        @default(1)
+  requestedByUserId    String
+  requestedByEmail     String
+  reason               String
+  idempotencyKey       String                     @unique
+  includeAuthUsers     Boolean                    @default(false)
+  currentStage         AdminDeletionStageKind?
+  progress             Int                        @default(0)
+  attempts             Int                        @default(0)
+  cancelRequestedAt    DateTime?
+  cancelledAt          DateTime?
+  cancelledByUserId    String?
+  irreversibleAt       DateTime?
+  terminalErrorCode    String?
+  createdAt            DateTime                   @default(now())
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  updatedAt            DateTime                   @updatedAt
+  stages               AdminDeletionStage[]
+
+  @@index([state, createdAt])
+  @@index([targetKind, targetId, state])
+}
+
+model AdminDeletionStage {
+  jobId        String
+  stage        AdminDeletionStageKind
+  state        AdminDeletionStageState @default(PENDING)
+  attempts     Int                     @default(0)
+  safeErrorCode String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  updatedAt    DateTime                @updatedAt
+  job          AdminDeletionJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, stage])
+  @@index([state, updatedAt])
 }

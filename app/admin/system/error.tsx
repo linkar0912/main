@@ -1,0 +1,1 @@
+"use client"; export default function ErrorPage({ reset }: { reset: () => void }) { return <main className="page-wrap"><div className="empty-state"><h1>System snapshot unavailable</h1><p>No runtime state was changed.</p><button className="button button-secondary" onClick={reset}>Retry snapshot</button></div></main>; }
