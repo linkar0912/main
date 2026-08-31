@@ -1,0 +1,13 @@
+import { z } from "zod";
+import { adminJson, adminRouteError, runAuditedAdminMutation } from "@/src/lib/admin/http";
+import { consumeAdminChallenge, createAdminChallenge } from "@/src/lib/admin/challenges";
+import { executeAdminIntegration, IntegrationActionSchema, loadAdminIntegration } from "@/src/lib/admin/integrations/service";
+import { requireAdminRead, requireAdminWrite } from "@/src/lib/admin/request-guard";
+const Provider = z.enum(["instagram", "facebook"]);
+export async function GET(request: Request, context: RouteContext<"/api/admin/integrations/[provider]/[id]">) { try { await requireAdminRead(request); const { provider: raw, id } = await context.params; return adminJson({ data: await loadAdminIntegration(Provider.parse(raw), id) }); } catch (error) { return adminRouteError(error, "integration_unavailable"); } }
+export async function PATCH(request: Request, context: RouteContext<"/api/admin/integrations/[provider]/[id]">) { try { const { provider: raw, id } = await context.params; const provider = Provider.parse(raw); const input = IntegrationActionSchema.parse(await request.json()); const actionName = input.action === "prepare_disconnect" ? "integration.prepare_disconnect" : `integration.${input.action}`; const guard = await requireAdminWrite(request, { action: actionName, targetType: `${provider}_connection`, targetId: id });
+    if (input.action === "prepare_disconnect") { const confirmationPhrase = `DISCONNECT ${provider.toUpperCase()} ${id}`; const challenge = await runAuditedAdminMutation(guard, () => createAdminChallenge({ userId: guard.owner.userId, sessionId: guard.owner.sessionId, action: "integration.disconnect", targetType: `${provider}_connection`, targetId: id, expectedVersion: String(input.version), confirmation: confirmationPhrase }), { summarize: () => ({ id, provider, challengeCreated: true }) }); return adminJson({ data: { ...challenge, confirmationPhrase } }); }
+    if (input.action === "disconnect") await consumeAdminChallenge({ userId: guard.owner.userId, sessionId: guard.owner.sessionId, action: "integration.disconnect", targetType: `${provider}_connection`, targetId: id, expectedVersion: String(input.version), confirmation: input.confirmation, token: input.challengeToken });
+    const providerAction = z.enum(["refresh_token", "mark_expired", "repair_subscription", "disconnect"]).parse(input.action);
+    return adminJson({ data: await runAuditedAdminMutation(guard, () => executeAdminIntegration(provider, id, providerAction, input.version)) });
+  } catch (error) { return adminRouteError(error, "integration_command_failed"); } }

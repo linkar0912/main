@@ -39,7 +39,7 @@
 - Produces `AdminOperationPage<T> { items: T[]; nextCursor: string | null }`.
 - Produces detail DTOs with workspace name/id, operational state, safe error summary, timestamps, and related-resource counts.
 
-- [ ] **Step 1: Write failing pagination and redaction tests**
+- [x] **Step 1: Write failing pagination and redaction tests**
 
 ```ts
 it("paginates deterministically when rows share a timestamp", async () => {
@@ -55,27 +55,27 @@ it("never returns credentials or raw provider payloads", async () => {
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/cursor.test.ts src/lib/admin/operations/repository.test.ts`
 
 Expected: FAIL because the admin operations repository does not exist.
 
-- [ ] **Step 3: Implement opaque cursor helpers and strict query validation**
+- [x] **Step 3: Implement opaque cursor helpers and strict query validation**
 
 Reuse the signed, versioned HMAC cursor codec from the accounts phase with ISO timestamp and ID payloads; reject malformed, tampered, unknown-version, or future cursors with `400 invalid_cursor`. Clamp `limit` to 100 and reject invalid date/status/provider filters.
 
-- [ ] **Step 4: Implement explicit Prisma projections**
+- [x] **Step 4: Implement explicit Prisma projections**
 
 Add `list/get` methods for `Automation`, `AutomationSequence`, `Broadcast`, `AutomationContact`, `TrackedLink`, `OutboundDelivery`, and `WebhookEvent`. Use `select` rather than `include`, join only workspace display identity and safe relation counts, and escape `%`/`_` in case-insensitive search terms.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm vitest run src/lib/admin/cursor.test.ts src/lib/admin/operations/repository.test.ts && pnpm typecheck`
 
 Expected: pagination, filter, not-found, and redaction tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/admin/cursor.ts src/lib/admin/cursor.test.ts src/lib/admin/operations
@@ -97,7 +97,7 @@ git commit -m "feat(admin): add cross-tenant operations repository"
 - `GET /api/admin/operations/:kind/:id` returns a safe detail DTO and allowed actions.
 - `PATCH` accepts `{ action, reason, input }` through a discriminated Zod union.
 
-- [ ] **Step 1: Write failing authorization and validation tests**
+- [x] **Step 1: Write failing authorization and validation tests**
 
 ```ts
 it.each(["anonymous", "member", "owner-aal1"])("rejects %s mutation access", async (identity) => {
@@ -111,27 +111,27 @@ it("rejects an action not allowed for the operation kind", async () => {
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run app/api/admin/operations src/lib/admin/operations/service.test.ts`
 
 Expected: FAIL because the API and command service do not exist.
 
-- [ ] **Step 3: Implement one guarded route boundary**
+- [x] **Step 3: Implement one guarded route boundary**
 
 Await Next.js 16 dynamic `params`, call `requirePlatformOwner({ aal: "aal2" })` for PATCH and the owner read guard for GET, require `X-Idempotency-Key` and reason, then dispatch only to a typed command service. Normalize errors to `400`, `401`, `403`, `404`, `409`, and `503` without stack traces.
 
-- [ ] **Step 4: Write the audit envelope around command execution**
+- [x] **Step 4: Write the audit envelope around command execution**
 
 Store actor, action, target type/id, workspace ID, reason, request origin, result, and redacted before/after summaries. Replaying an idempotency key returns the stored status/body and does not execute or audit twice.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm vitest run app/api/admin/operations src/lib/admin/operations/service.test.ts && pnpm typecheck`
 
 Expected: all route, authorization, validation, idempotency, and audit tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/api/admin/operations src/lib/admin/operations
@@ -155,7 +155,7 @@ git commit -m "feat(admin): expose guarded operations APIs"
 - Sequence actions: `update`, `activate`, `pause`, `archive`.
 - Admin edits use the same validated payload schemas as customer writes and create an immutable version when behavior changes.
 
-- [ ] **Step 1: Write failing transition and version tests**
+- [x] **Step 1: Write failing transition and version tests**
 
 ```ts
 it("creates a new immutable automation version for an owner edit", async () => {
@@ -169,23 +169,23 @@ it.each([["ARCHIVED", "activate"], ["DRAFT", "pause"]])("rejects invalid %s -> %
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/operations/automation-commands.test.ts src/lib/automation-versions.test.ts`
 
 Expected: FAIL because cross-tenant commands are absent.
 
-- [ ] **Step 3: Implement domain-level commands**
+- [x] **Step 3: Implement domain-level commands**
 
 Lock the target row in a short transaction, re-check workspace status and entitlements, validate current-to-next transitions, write before/after summaries, and increment versions atomically. Version restore copies validated version content into a new head version; it never mutates historical rows.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `pnpm vitest run src/lib/admin/operations/automation-commands.test.ts src/lib/automation-versions.test.ts app/api/automations && pnpm typecheck`
 
 Expected: transitions, concurrency, restoration, and audit summaries pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/admin/operations src/lib/repository.ts src/lib/prisma.ts src/lib/memory-repository.ts src/lib/automation-versions.test.ts
@@ -207,7 +207,7 @@ git commit -m "feat(admin): control automations and sequences"
 - Contact actions: `update`, `suppress`, `unsuppress`, `assign_automation`, `delete`, `export_one`.
 - Tracked-link actions: `update_destination`, `disable`, `enable`, `delete`.
 
-- [ ] **Step 1: Write failing safety tests**
+- [x] **Step 1: Write failing safety tests**
 
 ```ts
 it("cancels only unsent broadcast deliveries", async () => {
@@ -221,27 +221,27 @@ it("blocks unsafe link protocols", async () => {
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/operations/content-commands.test.ts src/lib/tracked-links.test.ts`
 
 Expected: FAIL because admin content commands do not exist.
 
-- [ ] **Step 3: Implement guarded commands**
+- [x] **Step 3: Implement guarded commands**
 
 Broadcast retry selects failed terminal recipients without a recorded provider message ID, creates retryable work with the original logical send key, and leaves successful sends untouched. Contact suppression prevents future dispatch; deletion checks linked execution/delivery history and performs the existing privacy-safe deletion path rather than cascading blindly. Link edits allow only `https:` and explicitly approved development `http:` hosts.
 
-- [ ] **Step 4: Implement safe single-contact export**
+- [x] **Step 4: Implement safe single-contact export**
 
 Return a streamed CSV with a fixed column list, UTF-8 content type, attachment filename, and formula-injection escaping for cells starting with `=`, `+`, `-`, `@`, tab, or carriage return. Do not export provider payloads or secrets.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm vitest run src/lib/admin/operations/content-commands.test.ts src/lib/tracked-links.test.ts app/api/broadcasts app/api/contacts app/api/links && pnpm typecheck`
 
 Expected: partial-cancel, safe retry, suppression, deletion, URL validation, and export tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/admin/operations src/lib/tracked-links.ts src/lib/tracked-links.test.ts
@@ -264,7 +264,7 @@ git commit -m "feat(admin): control broadcasts contacts and links"
 - Delivery actions: `retry`, `cancel_pending`, `release_stale_claim`.
 - Webhook actions: `reprocess`.
 
-- [ ] **Step 1: Write failing idempotency and stale-claim tests**
+- [x] **Step 1: Write failing idempotency and stale-claim tests**
 
 ```ts
 it("does not retry a delivery with a provider receipt", async () => {
@@ -280,23 +280,23 @@ it("releases only claims older than the configured lease", async () => {
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/operations/recovery-commands.test.ts src/lib/automation/outbound-delivery.test.ts src/lib/automation/delivery-reconciliation.test.ts src/lib/queue.test.ts`
 
 Expected: FAIL because owner recovery commands do not exist.
 
-- [ ] **Step 3: Implement state-machine-safe recovery**
+- [x] **Step 3: Implement state-machine-safe recovery**
 
 Use conditional updates containing current state/version. Retry reuses the original outbound delivery ID and provider idempotency key. Cancel affects only pending/retryable records. Claim release requires an expired lease and returns the delivery to its prior retryable state. Webhook reprocessing verifies the stored event is valid and unsupported/poison events cannot be looped indefinitely; increment an admin reprocess counter and cap it.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `pnpm vitest run src/lib/admin/operations/recovery-commands.test.ts src/lib/automation/outbound-delivery.test.ts src/lib/automation/delivery-reconciliation.test.ts src/lib/queue.test.ts && pnpm typecheck`
 
 Expected: duplicate-send, active-lease, poison-event, and concurrent-command tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/admin/operations/recovery-commands.ts src/lib/admin/operations/recovery-commands.test.ts src/lib/automation src/lib/queue.ts src/lib/queue.test.ts
@@ -317,31 +317,31 @@ git commit -m "feat(admin): add durable delivery recovery controls"
 - Create: `src/components/admin/shared/filter-bar.tsx`
 - Create: `src/components/admin/shared/reason-dialog.tsx`
 
-- [ ] **Step 1: Write failing interaction tests**
+- [x] **Step 1: Write failing interaction tests**
 
 Cover keyboard-accessible tab switching, URL-synchronized filters, cursor navigation, empty/error/loading states, detail drawer focus return, explicit reason requirement, action-specific warnings, conflict refresh, and a successful audited command notification.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/components/admin/operations/operations-console.test.tsx`
 
 Expected: FAIL because the UI does not exist.
 
-- [ ] **Step 3: Implement the Linkar Volt operations console**
+- [x] **Step 3: Implement the Linkar Volt operations console**
 
 Use the existing admin shell and tokens: dense but readable table, seven operation tabs, workspace/status/provider/date filters, compact state badges, monospace IDs, and a right-side detail drawer. Keep every action inside a labeled menu/dialog; do not rely on color alone. Generate a UUID idempotency key per deliberate action and preserve it across transport retries.
 
-- [ ] **Step 4: Add safe live refresh**
+- [x] **Step 4: Add safe live refresh**
 
 Refresh only while the page is visible, pause during an open mutation dialog, preserve filters/cursor, announce changed result counts through a polite live region, and never apply an action to stale row state without server conflict checking.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm vitest run src/components/admin/operations/operations-console.test.tsx && pnpm typecheck && pnpm lint`
 
 Expected: interaction and accessibility tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/admin/operations src/components/admin/operations src/components/admin/shared
@@ -366,7 +366,7 @@ git commit -m "feat(admin): build operations command center"
 - Returns derived connection health: provider, workspace, status, token expiry bucket, webhook/subscription drift, last success/error timestamps, and allowed actions.
 - Integration actions: `refresh_token`, `mark_expired`, `repair_subscription`, `disconnect`.
 
-- [ ] **Step 1: Write failing redaction and repair tests**
+- [x] **Step 1: Write failing redaction and repair tests**
 
 ```ts
 it("returns token age without returning token material", async () => {
@@ -383,27 +383,27 @@ it("repairs only subscriptions missing from the provider", async () => {
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/admin/integrations/service.test.ts src/lib/meta/token-refresh.test.ts src/lib/meta/webhooks.test.ts src/lib/facebook/webhooks.test.ts`
 
 Expected: FAIL because admin integration orchestration is missing.
 
-- [ ] **Step 3: Implement health derivation and commands**
+- [x] **Step 3: Implement health derivation and commands**
 
 Read encrypted credentials only inside existing provider clients. Token refresh uses provider-supported refresh/exchange semantics, stores the replacement atomically, and redacts errors. Mark-expired is a local reversible status command. Subscription repair first reads provider state and applies only the missing expected fields. Disconnect calls existing deauthorization cleanup and is challenge-protected.
 
-- [ ] **Step 4: Handle provider failure safely**
+- [x] **Step 4: Handle provider failure safely**
 
 Map provider timeouts/rate limits to retryable `503` responses with no automatic UI loop. Preserve the previous usable credential if refresh fails. Audit requested action and summarized outcome without storing response bodies.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm vitest run src/lib/admin/integrations src/lib/meta src/lib/facebook && pnpm typecheck`
 
 Expected: refresh, expiry, drift, repair, disconnect, error mapping, and redaction tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/admin/integrations src/lib/meta src/lib/facebook
@@ -424,27 +424,27 @@ git commit -m "feat(admin): add integration health and repair controls"
 - Modify: `app/admin/workspaces/[workspaceId]/page.tsx`
 - Modify: `src/components/admin/workspace-detail-screen.tsx`
 
-- [ ] **Step 1: Write failing route and UI tests**
+- [x] **Step 1: Write failing route and UI tests**
 
 Test provider/status/expiry/drift filters, secret redaction at the JSON boundary, detail health history, workspace deep links, reason dialogs, refresh/repair confirmations, and challenge-protected disconnect.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run app/api/admin/integrations src/components/admin/integrations/integrations-console.test.tsx src/components/admin/workspaces`
 
 Expected: FAIL because integration routes and UI do not exist.
 
-- [ ] **Step 3: Implement guarded routes and command UI**
+- [x] **Step 3: Implement guarded routes and command UI**
 
 Use the same authorization, idempotency, reason, challenge, audit, pagination, filter, and error contracts as operations. Display derived health, expiry window, drift, last activity, and workspace owner—not credentials. Add an Integrations section to workspace detail with deep links into the filtered console.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `pnpm vitest run app/api/admin/integrations src/components/admin/integrations src/components/admin/workspaces && pnpm typecheck && pnpm lint`
 
 Expected: route, redaction, interaction, and linkage tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/api/admin/integrations app/admin/integrations src/components/admin/integrations app/admin/workspaces src/components/admin/workspaces

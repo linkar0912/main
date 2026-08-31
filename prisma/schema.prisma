@@ -251,6 +251,7 @@ model InstagramConnection {
   tokenExpiresAt       DateTime?
   status               ConnectionStatus @default(CONNECTED)
   connectedAt          DateTime         @default(now())
+  version              Int              @default(1)
   workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   // One professional account has exactly one owning workspace.
@@ -278,6 +279,7 @@ model Automation {
   priority          Int                          @default(0)
   createdAt         DateTime                     @default(now())
   updatedAt         DateTime                     @updatedAt
+  archivedAt        DateTime?
   workspace         Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   executions        AutomationExecution[]
   participants      AutomationParticipant[]
@@ -359,6 +361,8 @@ model TrackedLink {
   conversionUrl      String?
   // Free-form context for the activity inbox. Limited to 240 chars in the API.
   notes              String?
+  version            Int      @default(1)
+  disabledAt         DateTime?
   createdByUserId    String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -419,6 +423,7 @@ model AutomationContact {
   fields               Json?
   awaitingFields       Json?
   suppressedAt         DateTime?
+  version              Int                  @default(1)
   lastSeenAt           DateTime             @default(now())
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
@@ -438,6 +443,8 @@ model AutomationSequence {
   status             String               @default("DRAFT") // DRAFT | ACTIVE | PAUSED
   steps              Json // SequenceStep[]
   sourceAutomationId String?
+  version            Int                  @default(1)
+  archivedAt         DateTime?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   workspace          Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -480,6 +487,8 @@ model Broadcast {
   skipped     Int       @default(0)
   createdAt   DateTime  @default(now())
   completedAt DateTime?
+  version     Int       @default(1)
+  cancelledAt DateTime?
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, createdAt])
@@ -530,6 +539,7 @@ model OutboundDelivery {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   sentAt               DateTime?
+  version              Int       @default(1)
   workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([state, claimExpiresAt])
@@ -555,6 +565,8 @@ model WebhookEvent {
   payload         Json
   receivedAt      DateTime  @default(now())
   processedAt     DateTime?
+  version         Int       @default(1)
+  adminReprocessCount Int    @default(0)
   workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, providerEventId])
@@ -575,6 +587,7 @@ model FacebookPageConnection {
   tokenExpiresAt       DateTime?
   status               ConnectionStatus @default(CONNECTED)
   connectedAt          DateTime         @default(now())
+  version              Int              @default(1)
   workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   // One Facebook Page has exactly one owning workspace.

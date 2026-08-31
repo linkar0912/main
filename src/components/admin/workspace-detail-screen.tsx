@@ -111,6 +111,7 @@ export function WorkspaceDetailScreen({ workspace, entitlement, plans = [] }: { 
           {workspace.facebookConnections?.map((item) => <div className="admin-record-row" key={item.id}><span><strong>{item.pageName}</strong><small>Facebook · {item.pageId}</small></span><span className="status-pill">{item.status}</span></div>)}
           {!workspace.instagramConnections?.length && !workspace.facebookConnections?.length ? <p className="muted">No provider connections.</p> : null}
         </div>
+        <Link className="button button-secondary button-small" href={`/admin/integrations?workspaceId=${encodeURIComponent(workspace.id)}`}>Open integration health</Link>
       </section>
 
       <section id="controls" className="panel admin-detail-section admin-danger-panel">

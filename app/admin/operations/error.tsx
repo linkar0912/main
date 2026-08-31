@@ -1,0 +1,1 @@
+"use client"; export default function ErrorPage({ reset }: { reset: () => void }) { return <main className="page-wrap"><div className="empty-state"><h1>Operations unavailable</h1><p>A bounded data query failed. No action was executed.</p><button className="button button-secondary" onClick={reset}>Try again</button></div></main>; }

@@ -1,0 +1,6 @@
+import { z } from "zod";
+import { adminJson, adminRouteError } from "@/src/lib/admin/http";
+import { getAdminIntegrationsRepository } from "@/src/lib/admin/integrations/repository";
+import { requireAdminRead } from "@/src/lib/admin/request-guard";
+const Query = z.object({ provider: z.enum(["instagram", "facebook"]).optional(), workspaceId: z.string().min(1).max(128).optional(), status: z.enum(["CONNECTED", "DISCONNECTED", "EXPIRED"]).optional(), expiry: z.enum(["expired", "within_24_hours", "within_7_days", "within_30_days", "later", "unknown"]).optional(), text: z.string().trim().min(1).max(120).optional() }).strict();
+export async function GET(request: Request) { try { await requireAdminRead(request); const url = new URL(request.url); const filter = Query.parse({ provider: url.searchParams.get("provider") ?? undefined, workspaceId: url.searchParams.get("workspaceId") ?? undefined, status: url.searchParams.get("status") ?? undefined, expiry: url.searchParams.get("expiry") ?? undefined, text: url.searchParams.get("text") ?? undefined }); return adminJson({ data: await getAdminIntegrationsRepository().list(filter) }); } catch (error) { return adminRouteError(error, "integrations_unavailable"); } }

@@ -1,0 +1,7 @@
+import { AdminRouteGuard } from "@/src/components/admin/admin-route-guard";
+import { OperationsConsole } from "@/src/components/admin/operations/operations-console";
+import { AdminOperationFilterSchema, OperationKindSchema } from "@/src/lib/admin/operations/query-schema";
+import { getAdminOperationsRepository } from "@/src/lib/admin/operations/repository";
+type Params = Promise<Record<string, string | string[] | undefined>>;
+async function Data({ searchParams }: { searchParams: Params }) { const raw = await searchParams; const one = (key: string) => typeof raw[key] === "string" ? raw[key] : undefined; const kind = OperationKindSchema.catch("automation").parse(one("kind")); const filter = AdminOperationFilterSchema.parse({ workspaceId: one("workspaceId"), status: one("status"), text: one("text"), provider: one("provider"), from: one("from"), to: one("to"), cursor: one("cursor") ?? null, limit: 25 }); const filters = Object.fromEntries(Object.entries({ kind, workspaceId: filter.workspaceId, status: filter.status, text: filter.text, provider: filter.provider, from: filter.from, to: filter.to }).filter(([, value]) => value)) as Record<string, string>; return <OperationsConsole kind={kind} page={await getAdminOperationsRepository().list(kind, filter)} filters={filters} />; }
+export default function OperationsPage({ searchParams }: { searchParams: Params }) { return <AdminRouteGuard><Data searchParams={searchParams} /></AdminRouteGuard>; }
