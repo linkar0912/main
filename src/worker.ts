@@ -22,6 +22,7 @@ import { processFlowFollowUp, type FlowFollowUpRunnerOptions } from "./lib/autom
 import type { FlowFollowUpJob } from "./lib/queue";
 import { createWorkerHealthServer, workerHealthPort } from "./lib/worker-health";
 import { reconcileUsageReservations } from "./lib/admin/system/usage-reconciliation";
+import { processAdminDeletion } from "./lib/admin/deletion/processor";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 
@@ -50,6 +51,7 @@ if (!env.redisUrl) {
         if (action === "usage_reconciliation") return reconcileUsageReservations();
         throw new Error("unknown_admin_maintenance_action");
       }
+      if (job.name === "admin-deletion") return processAdminDeletion((job.data as { jobId: string }).jobId);
       if (job.name === "lead-delivery") {
         const result = await processLeadDelivery(
           job.data as LeadDeliveryJob,

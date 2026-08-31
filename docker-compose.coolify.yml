@@ -17,6 +17,7 @@ x-application-environment: &application-environment
   SOURCE_COMMIT: ${SOURCE_COMMIT:-main}
   WORKER_HEALTH_PORT: ${WORKER_HEALTH_PORT:-3001}
   AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:?AUTH_SESSION_SECRET is required}
+  PLATFORM_OWNER_USER_IDS: ${PLATFORM_OWNER_USER_IDS:?PLATFORM_OWNER_USER_IDS is required}
   DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
   REDIS_URL: redis://:${VALKEY_PASSWORD:?VALKEY_PASSWORD is required}@valkey:6379/0
   # Both channels are part of the App Review submission, so a missing app id or
@@ -39,7 +40,7 @@ x-application-environment: &application-environment
   FACEBOOK_TOKEN_ENCRYPTION_KEY: ${FACEBOOK_TOKEN_ENCRYPTION_KEY:-}
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://linkar.in/api/auth/oauth/google/callback}
+  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://app.linkar.in/api/auth/oauth/google/callback}
   FOLLOW_GATED_CAMPAIGNS_ENABLED: ${FOLLOW_GATED_CAMPAIGNS_ENABLED:-false}
   TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
   WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
@@ -68,7 +69,9 @@ services:
     pull_policy: always
     command: ["./node_modules/.bin/next", "start"]
     restart: unless-stopped
-    environment: *application-environment
+    environment:
+      <<: *application-environment
+      WORKER_HEALTH_URL: http://worker:3001/health
     expose:
       - "3000"
     depends_on:

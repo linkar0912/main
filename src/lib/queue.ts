@@ -124,6 +124,40 @@ export async function enqueueAdminMaintenance(action: "delivery_reconciliation" 
   return true;
 }
 
+export async function enqueueAdminDeletion(jobId: string): Promise<boolean> {
+  const queue = getWebhookQueue();
+  if (!queue) return false;
+  const existing = await queue.getJob(`admin-deletion:${jobId}`);
+  if (existing) {
+    if (await existing.getState() === "failed") await existing.retry("failed");
+    return true;
+  }
+  await queue.add("admin-deletion", { jobId }, {
+    jobId: `admin-deletion:${jobId}`,
+    attempts: 8,
+    backoff: { type: "exponential", delay: 5_000 },
+    removeOnComplete: 1_000,
+    removeOnFail: 5_000,
+  });
+  return true;
+}
+
+export async function deleteQueuedWorkspaceEvents(workspaceId: string): Promise<void> {
+  const queue = getWebhookQueue();
+  if (!queue) return;
+  const states: JobType[] = ["waiting", "delayed", "prioritized", "waiting-children", "failed", "completed"];
+  let start = 0;
+  for (;;) {
+    const page = await queue.getJobs(states, start, start + JOB_SCAN_PAGE_SIZE - 1);
+    const matches = page.filter((job) => job?.data?.workspaceId === workspaceId);
+    await Promise.all(matches.map((job) => job.remove()));
+    if (page.length < JOB_SCAN_PAGE_SIZE) break;
+    start += JOB_SCAN_PAGE_SIZE - matches.length;
+  }
+  const active = await queue.getJobs(["active"], 0, JOB_SCAN_PAGE_SIZE - 1);
+  if (active.some((job) => job?.data?.workspaceId === workspaceId)) throw new Error("workspace_jobs_active");
+}
+
 async function findJobsByAccount(queue: Queue, igUserId: string, includeActive: boolean): Promise<Job[]> {
   const states: JobType[] = [
     "waiting",

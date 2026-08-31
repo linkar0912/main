@@ -1,0 +1,6 @@
+import { adminRouteError, runAuditedAdminMutation } from "@/src/lib/admin/http";
+import { requireAdminWrite } from "@/src/lib/admin/request-guard";
+import { exportAdminAuditEvents } from "@/src/lib/admin/audit/repository";
+import { createAuditCsv } from "@/src/lib/admin/audit/export";
+
+export async function POST(request: Request) { try { const input = await request.json() as { actor?: string; action?: string; phase?: "ATTEMPT" | "SUCCESS" | "FAILURE"; from?: string; to?: string }; const context = await requireAdminWrite(request, { action: "audit.export", targetType: "audit", targetId: "filtered" }); const result = await runAuditedAdminMutation(context, async () => { const rows = await exportAdminAuditEvents(input); if (rows.length > 10_000) throw Object.assign(new Error("export_too_large"), { status: 422, code: "export_too_large" }); return { csv: createAuditCsv(rows), rowCount: rows.length }; }, { summarize: (value) => ({ rowCount: value.rowCount, filters: input }) }); return new Response(result.csv, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="linkar-audit-${new Date().toISOString().slice(0, 10)}.csv"`, "cache-control": "private, no-store" } }); } catch (error) { return adminRouteError(error, "audit_export_failed"); } }

@@ -2476,3 +2476,16 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   align-items: center;
   gap: 4px;
 }
+
+/* Owner command-center extensions: destructive workflows and audit inspection. */
+.admin-system-links { display: flex; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-5) var(--space-7) 0; }
+.admin-deletion-wizard { display: grid; gap: var(--space-4); margin-bottom: var(--space-6); }
+.admin-impact-preview { background: var(--surface-soft); border: 1px solid var(--line-strong); border-radius: var(--radius-md); display: grid; gap: var(--space-3); padding: var(--space-5); }
+.admin-impact-preview code { overflow-wrap: anywhere; }
+.admin-command-message { font-weight: 700; margin: 0; }
+.admin-audit-export { align-items: end; display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: flex-end; margin-bottom: var(--space-4); }
+.admin-audit-export label { min-width: min(100%, 320px); }
+.data-table td small { color: var(--muted); display: block; font-size: .7rem; overflow-wrap: anywhere; }
+.data-table details { max-width: 360px; }
+.data-table pre { font-size: .68rem; max-height: 240px; overflow: auto; white-space: pre-wrap; }
+@media (max-width: 720px) { .admin-system-links { padding: var(--space-4) var(--space-4) 0; } }
