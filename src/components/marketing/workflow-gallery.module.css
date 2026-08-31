@@ -96,12 +96,14 @@
 
 /* The panels are absolutely stacked so they can crossfade, so the stage keeps a
    floor - otherwise the page would jump every time you pick a flow with a
-   different number of steps. 440px is what four steps need, not the 600px plus
-   1.32 aspect-ratio it used to reserve. */
+   different number of steps. It has to clear the *tallest* flow: at 440px the
+   four-step Lead qualifier overflowed its row and the last card crossed the
+   footer's rule. 560 clears the four-step flow with room to spare rather
+   than sitting on the exact measurement, which a font fallback would break. */
 .stage {
   position: relative;
   grid-column: 5 / -1;
-  min-block-size: 440px;
+  min-block-size: 576px;
 }
 
 .panel {
@@ -170,8 +172,10 @@
 
 .builderBody {
   display: grid;
-  align-content: center;
+  align-content: safe center;
   min-block-size: 0;
+  padding-block-end: 10px;
+  overflow: hidden;
 }
 
 .workflowTitle {
@@ -185,6 +189,10 @@
 
 /* Numbered markers on a connected spine: the builder's own step rail. */
 .steps {
+  --rail-column: 34px;
+  --rail-marker: 30px;
+
+  position: relative;
   display: grid;
   gap: 0;
   padding: 0;
@@ -194,20 +202,24 @@
 
 .step {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: var(--rail-column) minmax(0, 1fr);
   column-gap: 14px;
 }
 
 .stepRail {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-/* The spine, drawn between markers rather than through them. */
+/* Runs from this marker's centre to the next marker's top edge. Both ends sit
+   behind an opaque marker, so a dash landing mid-phase is never visible. */
 .step:not(:last-child) .stepRail::after {
+  position: absolute;
+  inset-block: calc(var(--rail-marker) / 2) 0;
+  inset-inline-start: calc(50% - 1px);
   inline-size: 2px;
-  flex: 1 1 auto;
   background: repeating-linear-gradient(
     to bottom,
     var(--marketing-border) 0 5px,
@@ -217,9 +229,11 @@
 }
 
 .stepMarker {
+  position: relative;
+  z-index: 1;
   display: grid;
-  inline-size: 30px;
-  block-size: 30px;
+  inline-size: var(--rail-marker);
+  block-size: var(--rail-marker);
   color: var(--marketing-text);
   font-size: .6rem;
   font-weight: 800;
@@ -247,11 +261,17 @@
   display: grid;
   gap: 5px;
   min-inline-size: 0;
-  margin-block-end: 12px;
+  margin-block-end: 14px;
   padding: 11px 14px;
   background: var(--marketing-raised);
   border: 1px solid var(--marketing-border);
   border-radius: 13px;
+}
+
+/* Trailing margin on the last card is what tipped the body past the footer's
+   rule; the spacing between steps is all that margin is for. */
+.step:last-child .stepCard {
+  margin-block-end: 0;
 }
 
 .stepKind {
@@ -342,7 +362,7 @@
     grid-column: auto;
     min-inline-size: 0;
     inline-size: 100%;
-    min-block-size: 420px;
+    min-block-size: 470px;
     aspect-ratio: auto;
   }
   .panel,
@@ -381,9 +401,10 @@
   .preview { min-block-size: 360px; block-size: auto; }
   .builderFrame { min-block-size: 360px; padding: 18px; }
   .workflowTitle { margin-block: 14px 18px; }
-  .step { grid-template-columns: 28px minmax(0, 1fr); column-gap: 11px; }
-  .stepMarker { inline-size: 26px; block-size: 26px; font-size: .55rem; }
-  .stepCard { margin-block-end: 10px; padding: 10px 12px; }
+  .steps { --rail-column: 28px; --rail-marker: 26px; }
+  .step { column-gap: 11px; }
+  .stepMarker { font-size: .55rem; }
+  .stepCard { margin-block-end: 12px; padding: 10px 12px; }
   .stepName { font-size: .76rem; }
 }
 

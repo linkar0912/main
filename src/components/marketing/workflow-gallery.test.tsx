@@ -136,16 +136,38 @@ describe("WorkflowGallery", () => {
     expect(section.querySelector("[data-transition-state='leaving']")).toBeNull();
   });
 
+  it("connects the step rail between markers and keeps the last card off the footer rule", () => {
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/workflow-gallery.module.css"), "utf8");
+
+    // Each segment runs from its own marker's centre to the next marker's top
+    // edge, so both ends finish behind an opaque marker. A single spine down the
+    // whole column cannot know where the last marker's centre is - the final row
+    // is only as tall as its card - and left a dashed tail hanging past it.
+    expect(stylesheet).toContain('.step:not(:last-child) .stepRail::after');
+    expect(stylesheet).toContain("inset-block: calc(var(--rail-marker) / 2) 0;");
+    expect(stylesheet).toMatch(/\.stepMarker \{[^}]*z-index: 1;/);
+    // The rail geometry is derived from the marker size, so the mobile override
+    // only has to restate the two custom properties.
+    expect(stylesheet).toContain("--rail-column: 28px; --rail-marker: 26px;");
+
+    // The panels are absolutely stacked, so nothing stops a too-tall body from
+    // painting across the footer's border. Trailing card margin is dropped,
+    // there is padding above the rule, and `safe center` plus overflow:hidden
+    // make a future overflow clip instead of overlap.
+    expect(stylesheet).toContain(".step:last-child .stepCard {");
+    expect(stylesheet).toMatch(/\.builderBody \{[\s\S]*?align-content: safe center;[\s\S]*?padding-block-end: 10px;[\s\S]*?overflow: hidden;[\s\S]*?\}/);
+  });
+
   it("keeps the contract's desktop, tablet, mobile, and motion values in the local stylesheet", () => {
     const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/workflow-gallery.module.css"), "utf8");
 
     expect(stylesheet).toContain("padding: clamp(120px, 11vw, 176px) clamp(32px, 4.45vw, 72px);");
     expect(stylesheet).toContain("grid-column: 1 / span 4;");
     expect(stylesheet).toContain("grid-column: 5 / -1;");
-    expect(stylesheet).toContain("min-block-size: 440px;");
+    expect(stylesheet).toContain("min-block-size: 576px;");
     expect(stylesheet).toContain("@media (min-width: 768px) and (max-width: 1023px)");
     expect(stylesheet).toContain("grid-template-columns: 280px minmax(0, 1fr);");
-    expect(stylesheet).toContain("min-block-size: 420px;");
+    expect(stylesheet).toContain("min-block-size: 470px;");
     expect(stylesheet).toContain("@media (max-width: 767px)");
     expect(stylesheet).toContain("padding: 88px 20px;");
     expect(stylesheet).toContain("min-block-size: 76px;");
