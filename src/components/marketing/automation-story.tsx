@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { storyChapters, type StoryChapter } from "./marketing-content";
+import { Reveal } from "./reveal";
 import styles from "./automation-story.module.css";
 
 type AutomationStoryProps = {
@@ -155,6 +156,19 @@ function LinkCard() {
   );
 }
 
+/**
+ * Instagram's typing bubble. It only ever appears on the incoming side, because
+ * Instagram never shows you your own typing - and on these screens the incoming
+ * side is linkar.studio, so this is the automation composing its reply.
+ */
+function TypingBubble() {
+  return (
+    <span className={styles.typing} aria-hidden="true">
+      <i /><i /><i />
+    </span>
+  );
+}
+
 /** Feed navigation bar: the account whose post is being commented on. */
 function FeedAppBar() {
   return (
@@ -299,6 +313,7 @@ function QualifyScene() {
         <QuotedComment />
         <p className={styles.bubbleIn}>The quick guide is ready. What would you like to improve first?</p>
         <LinkCard />
+        <TypingBubble />
         <p className={styles.bubbleIn}>More replies or better leads?</p>
         {/* Chips stay untapped: the echoed message below is what names the
             answer, exactly as Instagram resolves a quick reply. */}
@@ -356,6 +371,7 @@ function HandoffScene() {
         <AutomationNote detail="Goal saved">Answer stored</AutomationNote>
         <p className={styles.dayMark}>Yesterday<i>·</i>9:41</p>
         <p className={styles.bubbleOut}>How is the guide fitting the way you qualify new leads?</p>
+        <TypingBubble />
         <p className={styles.bubbleIn}>Project details received</p>
         <AutomationNote detail="Automation paused" active>Handed to you</AutomationNote>
         {/* Deliberately not dressed as Instagram: the queue is Linkar's own
@@ -407,7 +423,8 @@ function FrameBar() {
 
 function MobileScene({ scene }: { scene: StoryChapter["scene"] }) {
   return (
-    <div
+    <Reveal
+      as="div"
       className={`${styles.sceneFrame} ${styles.mobileScene}`}
       data-flow-scene={scene}
       data-scene-frame
@@ -418,7 +435,7 @@ function MobileScene({ scene }: { scene: StoryChapter["scene"] }) {
       <FrameBar />
       <SceneBody scene={scene} />
       <span className={styles.homeIndicator} />
-    </div>
+    </Reveal>
   );
 }
 

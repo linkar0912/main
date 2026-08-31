@@ -975,6 +975,159 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--linkar-magenta) 18%, transparent);
 }
 
+
+/* ---------------------------------------------------------------------------
+   Motion: the conversation arrives instead of being there already.
+
+   Each message fades and slides into place on a per-position delay, so a screen
+   assembles the way a thread actually fills - incoming from the left, outgoing
+   from the right, the typing bubble resolving into the message it precedes.
+
+   It plays through once per activation rather than looping. A perpetual loop
+   had to fade messages back out, and because each one leaves on its own offset
+   you were left watching half-ghosted bubbles sitting above solid ones, which
+   read as a rendering fault rather than a replay. On the desktop stage every
+   scene re-triggers as it becomes active, so scrolling the story is what drives
+   the motion; what keeps a settled screen alive is the small stuff that has a
+   reason to keep moving - typing dots, an unread badge, a queued send.
+
+   Only opacity, transform, and one small collapsing box animate, so this stays
+   off the main thread.
+   --------------------------------------------------------------------------- */
+
+@keyframes chatIn {
+  from { opacity: 0; transform: translateY(10px) scale(.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes chatInLeft {
+  from { opacity: 0; transform: translate(-12px, 6px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes chatInRight {
+  from { opacity: 0; transform: translate(12px, 6px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Shows, holds, then collapses into the message that follows - including the
+   thread's row gap, so nothing is left behind as a hole. */
+@keyframes typingLife {
+  0% { opacity: 0; block-size: 0; margin-block-end: -7px; transform: translate(-10px, 4px) scale(.96); }
+  16%, 66% { opacity: 1; block-size: 30px; margin-block-end: 0; transform: none; }
+  100% { opacity: 0; block-size: 0; margin-block-end: -7px; transform: scale(.95); }
+}
+
+@keyframes typingDot {
+  0%, 60%, 100% { opacity: .35; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+
+@keyframes unreadPulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ig-blue) 50%, transparent); }
+  70% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--ig-blue) 0%, transparent); }
+}
+
+@keyframes pendingBreathe {
+  0%, 100% { border-color: color-mix(in srgb, var(--linkar-magenta) 28%, var(--ig-hairline)); }
+  50% { border-color: color-mix(in srgb, var(--linkar-magenta) 72%, var(--ig-hairline)); }
+}
+
+.typing {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  block-size: 30px;
+  padding-inline: 14px;
+  overflow: hidden;
+  background: var(--ig-bubble);
+  border-radius: 19px;
+  border-end-start-radius: 6px;
+}
+
+.typing i {
+  inline-size: 6px;
+  block-size: 6px;
+  background: var(--ig-secondary);
+  border-radius: 50%;
+  opacity: .35;
+}
+
+/* The stage's active scene and the inline phones are the two triggers. */
+.desktopScene[data-active="true"] .screen > *,
+.mobileScene[data-visible="true"] .screen > *,
+.desktopScene[data-active="true"] .sheet > *,
+.mobileScene[data-visible="true"] .sheet > * {
+  animation: chatIn 560ms cubic-bezier(.22, .61, .21, 1) var(--d, 0ms) both;
+}
+
+.desktopScene[data-active="true"] .screen > .bubbleIn,
+.mobileScene[data-visible="true"] .screen > .bubbleIn,
+.desktopScene[data-active="true"] .screen > .linkCard,
+.mobileScene[data-visible="true"] .screen > .linkCard,
+.desktopScene[data-active="true"] .screen > .quoted,
+.mobileScene[data-visible="true"] .screen > .quoted {
+  animation-name: chatInLeft;
+}
+
+.desktopScene[data-active="true"] .screen > .bubbleOut,
+.mobileScene[data-visible="true"] .screen > .bubbleOut,
+.desktopScene[data-active="true"] .screen > .chips,
+.mobileScene[data-visible="true"] .screen > .chips {
+  animation-name: chatInRight;
+}
+
+.desktopScene[data-active="true"] .screen > .typing,
+.mobileScene[data-visible="true"] .screen > .typing {
+  display: inline-flex;
+  animation: typingLife 900ms cubic-bezier(.22, .61, .21, 1) var(--d, 0ms) both;
+}
+
+.desktopScene[data-active="true"] .typing i,
+.mobileScene[data-visible="true"] .typing i {
+  animation: typingDot 1s ease-in-out var(--dot-d, 0ms) infinite;
+}
+
+.typing i:nth-child(2) { --dot-d: 140ms; }
+.typing i:nth-child(3) { --dot-d: 280ms; }
+
+/* An unread badge and a queued send are the two things that genuinely keep
+   moving after a screen has settled. */
+.desktopScene[data-active="true"] .unread,
+.mobileScene[data-visible="true"] .unread {
+  animation: unreadPulse 2.6s ease-out infinite;
+}
+
+.desktopScene[data-active="true"] .bubblePending,
+.mobileScene[data-visible="true"] .bubblePending {
+  animation:
+    chatInRight 560ms cubic-bezier(.22, .61, .21, 1) var(--d, 0ms) both,
+    pendingBreathe 3s ease-in-out calc(var(--d, 0ms) + 560ms) infinite;
+}
+
+/* Position offsets. The gated shorthand above outranks a bare nth-child rule
+   and would reset animation-delay, so the offset travels as a custom property
+   the shorthand reads instead. */
+.screen > *:nth-child(1) { --d: 100ms; }
+.screen > *:nth-child(2) { --d: 480ms; }
+.screen > *:nth-child(3) { --d: 860ms; }
+.screen > *:nth-child(4) { --d: 1240ms; }
+.screen > *:nth-child(5) { --d: 1620ms; }
+.screen > *:nth-child(6) { --d: 2000ms; }
+.screen > *:nth-child(7) { --d: 2380ms; }
+.screen > *:nth-child(8) { --d: 2760ms; }
+.screen > *:nth-child(9) { --d: 3140ms; }
+.screen > *:nth-child(10) { --d: 3520ms; }
+
+/* The comment sheet's rows sit a level in, so they queue behind the post
+   rather than restarting the count. */
+.sheet > *:nth-child(1) { --d: 620ms; }
+.sheet > *:nth-child(2) { --d: 900ms; }
+.sheet > *:nth-child(3) { --d: 1380ms; }
+.sheet > *:nth-child(4) { --d: 1900ms; }
+.sheet > *:nth-child(5) { --d: 2420ms; }
+
 .mobileScene {
   display: none;
 }
@@ -1157,6 +1310,8 @@
     border-radius: 42px;
   }
 
+
+
   /* The phone is ~85px shorter here than on tablet, and a thread pinned to its
      composer overflows upward - which crops the intro avatar mid-circle and
      reads as a bug rather than as a scrolled thread. Compact the intro instead
@@ -1185,6 +1340,24 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* No replay at all - every message rests where it lands. */
+  .desktopScene .screen > *,
+  .mobileScene .screen > *,
+  .desktopScene .sheet > *,
+  .mobileScene .sheet > *,
+  .typing,
+  .typing i,
+  .unread,
+  .bubblePending {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+
+  .typing {
+    display: none;
+  }
+
   .header,
   .storyGrid {
     max-inline-size: none;

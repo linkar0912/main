@@ -66,15 +66,31 @@ describe("SurfaceRunway", () => {
     const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/surface-runway.module.css"), "utf8");
 
     expect(stylesheet).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
-    expect(stylesheet).not.toContain("transform:");
     expect(stylesheet).not.toContain("position: sticky");
     expect(stylesheet).not.toContain("320vh");
+    // The guard is specifically against the scroll-driven filmstrip returning:
+    // the track must not be transformed, and no progress variable may drive it.
+    // Keyframe transforms elsewhere in the file are the fragment motion.
+    expect(stylesheet).not.toContain("--runway-progress");
+    expect(stylesheet).not.toContain("--runway-travel");
+    expect(stylesheet.match(/\n\.track \{([\s\S]*?)\n\}/)?.[1]).not.toContain("transform");
 
     const tabletRule = stylesheet.match(/@media \(min-width: 768px\) and \(max-width: 1023px\) \{([\s\S]*?)\n\}/)?.[1];
     expect(tabletRule).toContain(".track { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 0; }");
 
     const mobileRule = stylesheet.match(/@media \(max-width: 767px\) \{([\s\S]*?)\n\}/)?.[1];
     expect(mobileRule).toContain(".track { grid-template-columns: 1fr; gap: 20px; padding: 0; }");
+  });
+
+  it("gates the fragment motion on the reveal and disables it entirely for reduced motion", () => {
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/surface-runway.module.css"), "utf8");
+
+    expect(stylesheet).toContain('.preview[data-visible="true"] .surface > *');
+    expect(stylesheet).toMatch(/animation:\s*rowIn[^;]*var\(--d, 0ms\)/);
+
+    const reducedMotion = stylesheet.slice(stylesheet.indexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(reducedMotion).toContain("animation: none !important;");
+    expect(reducedMotion).toContain("display: none;");
   });
 
   it("sizes cards from their content instead of reserving a fixed block of empty space", () => {

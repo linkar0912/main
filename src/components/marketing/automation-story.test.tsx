@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -187,6 +189,28 @@ describe("AutomationStory", () => {
     expect(addEventListener).not.toHaveBeenCalledWith("scroll", expect.any(Function), expect.anything());
     expect(addEventListener).not.toHaveBeenCalledWith("resize", expect.any(Function), expect.anything());
     expect(frames.requestAnimationFrame).not.toHaveBeenCalled();
+  });
+
+  it("gates the chat motion on visibility and disables it entirely for reduced motion", () => {
+    const stylesheet = readFileSync(
+      path.join(process.cwd(), "src/components/marketing/automation-story.module.css"),
+      "utf8",
+    );
+
+    // Nothing animates until a scene is the active one on the stage, or the
+    // inline phone has been scrolled to - otherwise four threads would be
+    // replaying off-screen at once.
+    expect(stylesheet).toContain('.desktopScene[data-active="true"] .screen > *');
+    expect(stylesheet).toContain('.mobileScene[data-visible="true"] .screen > *');
+
+    // Offsets travel as a custom property, because the gated shorthand outranks
+    // a bare nth-child rule and would reset animation-delay to zero.
+    expect(stylesheet).toMatch(/animation:\s*chatIn[^;]*var\(--d, 0ms\)/);
+    expect(stylesheet).toContain(".screen > *:nth-child(1) { --d: 100ms; }");
+
+    const reducedMotion = stylesheet.slice(stylesheet.indexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(reducedMotion).toContain("animation: none !important;");
+    expect(reducedMotion).toMatch(/\.typing \{\s*display: none;/);
   });
 
   it("removes listeners, cancels pending work, and cleans media listeners", () => {

@@ -63,6 +63,14 @@ function CommentSurface() {
   );
 }
 
+/**
+ * Instagram's typing bubble. Incoming side only - Instagram never shows you
+ * your own typing.
+ */
+function TypingBubble() {
+  return <span className={styles.typing} aria-hidden="true"><i /><i /><i /></span>;
+}
+
 /** DM triggers: an incoming phrase and the reply it shapes. */
 function MessageSurface() {
   return (
@@ -73,6 +81,7 @@ function MessageSurface() {
         <span>Active now</span>
       </div>
       <div className={styles.thread}>
+        <TypingBubble />
         <span className={styles.bubbleIn}>Do you ship to Pune?</span>
         <span className={styles.bubbleOut}>Yes - 2 to 4 days across India.</span>
         <span className={styles.chip}>See delivery info</span>
