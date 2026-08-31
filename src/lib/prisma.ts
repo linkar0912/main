@@ -41,6 +41,7 @@ import type {
   MessagingWindow,
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
+  WorkspaceStatus,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
@@ -508,17 +509,24 @@ function bucketCountsByDay(timestamps: string[], days: number): { day: string; c
 
 export function createPrismaRepository(client = prisma): AutomationRepository {
   return {
-    async ensureWorkspace(workspaceId, ownerEmail) {
+    async ensureWorkspace(workspaceId, ownerEmail, ownerUserId) {
+      const email = ownerEmail.toLowerCase();
       await client.workspace.upsert({
         where: { id: workspaceId },
         create: {
           id: workspaceId,
           name: "Linkar workspace",
           slug: `linkar-${workspaceId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40)}`,
-          members: { create: { id: createId("member"), email: ownerEmail, role: "OWNER" } },
+          members: { create: { id: createId("member"), email, role: "OWNER", userId: ownerUserId } },
         },
         update: {},
       });
+      if (ownerUserId) {
+        await client.workspaceMember.updateMany({
+          where: { workspaceId, email, userId: null },
+          data: { userId: ownerUserId },
+        });
+      }
     },
 
     async listMembers(workspaceId): Promise<MemberRecord[]> {
@@ -531,7 +539,77 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         workspaceId: record.workspaceId,
         email: record.email,
         role: record.role as MemberRole,
+        userId: record.userId ?? undefined,
       }));
+    },
+
+    async listWorkspaceMembershipsByUserId(userId) {
+      const records = await client.workspaceMember.findMany({
+        where: { userId },
+        orderBy: [{ workspaceId: "asc" }, { id: "asc" }],
+      });
+      return records.map((record) => ({
+        id: record.id,
+        workspaceId: record.workspaceId,
+        email: record.email,
+        role: record.role as MemberRole,
+        userId: record.userId ?? undefined,
+      }));
+    },
+
+    async findWorkspaceIdByMemberUserId(userId) {
+      const member = await client.workspaceMember.findFirst({
+        where: { userId },
+        orderBy: { workspaceId: "asc" },
+        select: { workspaceId: true },
+      });
+      return member?.workspaceId ?? null;
+    },
+
+    async bindMemberUserId(workspaceId, email, userId) {
+      try {
+        const result = await client.workspaceMember.updateMany({
+          where: { workspaceId, email: email.toLowerCase(), OR: [{ userId: null }, { userId }] },
+          data: { userId },
+        });
+        return result.count === 1;
+      } catch (error) {
+        if ((error as { code?: string }).code === "P2002") return false;
+        throw error;
+      }
+    },
+
+    async setWorkspaceLifecycle(workspaceId, change) {
+      const result = await client.workspace.updateMany({
+        where: { id: workspaceId },
+        data: {
+          status: change.status,
+          suspendedAt: change.status === "SUSPENDED" ? new Date(change.at) : null,
+          suspendedReason: change.status === "SUSPENDED" ? change.reason : null,
+          suspendedByUserId: change.status === "SUSPENDED" ? change.actorUserId : null,
+          deletionScheduledAt: change.status === "DELETION_PENDING" && change.deletionScheduledAt
+            ? new Date(change.deletionScheduledAt)
+            : null,
+        },
+      });
+      return result.count === 1;
+    },
+
+    async getApplicationAccessState(userId, workspaceId) {
+      const member = await client.workspaceMember.findFirst({
+        where: { userId, workspaceId },
+        select: { workspace: { select: { status: true } } },
+      });
+      if (!member) return null;
+      const userControl = await client.platformUserControl.findUnique({
+        where: { userId },
+        select: { status: true, sessionInvalidBefore: true },
+      });
+      return {
+        userStatus: userControl?.status ?? "ACTIVE",
+        workspaceStatus: member.workspace.status as WorkspaceStatus,
+        sessionInvalidBefore: userControl?.sessionInvalidBefore?.toISOString() ?? null,
+      };
     },
 
     async getMemberRole(workspaceId, email) {
@@ -542,10 +620,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return (record?.role as MemberRole | undefined) ?? null;
     },
 
-    async addMember(workspaceId, email, role) {
+    async addMember(workspaceId, email, role, userId) {
       try {
         await client.workspaceMember.create({
-          data: { id: createId("member"), workspaceId, email: email.toLowerCase(), role },
+          data: { id: createId("member"), workspaceId, email: email.toLowerCase(), role, userId },
         });
         return { created: true };
       } catch (error) {
@@ -597,14 +675,14 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return record ? mapInvitation(record) : null;
     },
 
-    async acceptInvitation(id, nowIso) {
+    async acceptInvitation(id, nowIso, userId) {
       const accepted = await client.workspaceInvitation.updateMany({
         where: { id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date(nowIso) } },
         data: { acceptedAt: new Date(nowIso) },
       });
       if (accepted.count !== 1) return null;
       const record = await client.workspaceInvitation.findUniqueOrThrow({ where: { id } });
-      await this.addMember(record.workspaceId, record.email, record.role as MemberRole);
+      await this.addMember(record.workspaceId, record.email, record.role as MemberRole, userId);
       return mapInvitation(record);
     },
 

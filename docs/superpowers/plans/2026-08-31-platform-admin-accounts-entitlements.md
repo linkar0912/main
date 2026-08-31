@@ -39,7 +39,7 @@
 - Adds `PlatformUserControl` keyed by `userId`.
 - Produces `getApplicationAccessState(userId, workspaceId): ApplicationAccessState { userStatus; workspaceStatus; sessionInvalidBefore }`.
 
-- [ ] **Step 1: Write failing repository lifecycle tests**
+- [x] **Step 1: Write failing repository lifecycle tests**
 
 ```ts
 it("binds a Supabase user id to a workspace membership", async () => {
@@ -57,13 +57,13 @@ it("suspends and restores a workspace without deleting tenant data", async () =>
 });
 ```
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `pnpm vitest run src/lib/repository.test.ts src/lib/auth/provision-workspace.test.ts src/lib/auth/invitations.test.ts`
 
 Expected: FAIL because stable user IDs and lifecycle methods do not exist.
 
-- [ ] **Step 3: Add schema and migration**
+- [x] **Step 3: Add schema and migration**
 
 Add the lifecycle fields from the spec to `Workspace`; add `userId String?`, `@@unique([workspaceId, userId])`, and `@@index([userId])` to `WorkspaceMember`; add `PlatformUserControl` with status, suspension fields, `sessionInvalidBefore`, and `updatedAt`.
 
@@ -76,17 +76,17 @@ ALTER TABLE "PlatformUserControl" ENABLE ROW LEVEL SECURITY;
 CREATE INDEX "Workspace_status_createdAt_idx" ON "Workspace"("status", "createdAt");
 ```
 
-- [ ] **Step 4: Update repository and provisioning contracts**
+- [x] **Step 4: Update repository and provisioning contracts**
 
 Change `ensureWorkspace(workspaceId, ownerEmail, ownerUserId?)`, bind user ID during signup/OAuth/invitation acceptance, and preserve normalized email. Add lifecycle methods to both Prisma and memory repositories.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `pnpm prisma validate && pnpm prisma generate && pnpm vitest run src/lib/repository.test.ts src/lib/auth/provision-workspace.test.ts src/lib/auth/invitations.test.ts`
 
 Expected: schema and tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add prisma/schema.prisma prisma/migrations/20260831130000_admin_account_controls/migration.sql src/lib/repository.ts src/lib/memory-repository.ts src/lib/repository.test.ts src/lib/auth/provision-workspace.ts src/lib/auth/invitations.ts src/lib/auth

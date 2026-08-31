@@ -72,6 +72,6 @@ export async function GET(request: NextRequest) {
     return oauthErrorRedirect();
   }
 
-  await completeOAuthSignIn({ email: data.user.email, inviteRaw: decoded.invite ?? "", repository });
+  await completeOAuthSignIn({ email: data.user.email, userId: data.user.id, inviteRaw: decoded.invite ?? "", repository });
   return withoutStateCookie(NextResponse.redirect(new URL(decoded.next, env.appUrl), 303));
 }

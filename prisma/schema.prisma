@@ -19,6 +19,17 @@ enum ConnectionStatus {
   EXPIRED
 }
 
+enum WorkspaceStatus {
+  ACTIVE
+  SUSPENDED
+  DELETION_PENDING
+}
+
+enum PlatformUserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
 enum AdminAuditPhase {
   ATTEMPT
   SUCCESS
@@ -118,6 +129,11 @@ model Workspace {
   quietStartHour     Int?
   quietEndHour       Int?
   timezone           String?
+  status             WorkspaceStatus         @default(ACTIVE)
+  suspendedAt        DateTime?
+  suspendedReason    String?
+  suspendedByUserId  String?
+  deletionScheduledAt DateTime?
   members            WorkspaceMember[]
   connections        InstagramConnection[]
   facebookPages      FacebookPageConnection[]
@@ -130,6 +146,8 @@ model Workspace {
   broadcasts         Broadcast[]
   outboundDeliveries OutboundDelivery[]
   trackedLinks       TrackedLink[]
+
+  @@index([status, createdAt])
 }
 
 model WorkspaceMember {
@@ -137,10 +155,25 @@ model WorkspaceMember {
   workspaceId String
   email       String
   role        String
+  userId      String?
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, email])
+  @@unique([workspaceId, userId])
   @@index([workspaceId])
+  @@index([userId])
+}
+
+model PlatformUserControl {
+  userId               String             @id
+  status               PlatformUserStatus @default(ACTIVE)
+  suspendedAt          DateTime?
+  suspendedReason      String?
+  suspendedByUserId    String?
+  sessionInvalidBefore DateTime?
+  updatedAt            DateTime           @updatedAt
+
+  @@index([status, updatedAt])
 }
 
 model InstagramConnection {

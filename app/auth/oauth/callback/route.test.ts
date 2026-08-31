@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   exchangeCodeForSession: vi.fn(),
   findWorkspaceIdByMemberEmail: vi.fn(),
+  findWorkspaceIdByMemberUserId: vi.fn(),
+  bindMemberUserId: vi.fn(),
   findInvitationByTokenHash: vi.fn(),
   ensureWorkspace: vi.fn(),
   acceptInvitation: vi.fn(),
@@ -17,6 +19,8 @@ vi.mock("@/src/lib/supabase/server", () => ({
 vi.mock("@/src/lib/repository-provider", () => ({
   getRepository: () => ({
     findWorkspaceIdByMemberEmail: mocks.findWorkspaceIdByMemberEmail,
+    findWorkspaceIdByMemberUserId: mocks.findWorkspaceIdByMemberUserId,
+    bindMemberUserId: mocks.bindMemberUserId,
     findInvitationByTokenHash: mocks.findInvitationByTokenHash,
     ensureWorkspace: mocks.ensureWorkspace,
     acceptInvitation: mocks.acceptInvitation,
@@ -36,10 +40,12 @@ function location(response: Response): string {
 
 beforeEach(() => {
   mocks.exchangeCodeForSession.mockReset().mockResolvedValue({
-    data: { user: { email: "person@example.com" } },
+    data: { user: { id: "user-oauth", email: "person@example.com" } },
     error: null,
   });
   mocks.findWorkspaceIdByMemberEmail.mockReset().mockResolvedValue(null);
+  mocks.findWorkspaceIdByMemberUserId.mockReset().mockResolvedValue(null);
+  mocks.bindMemberUserId.mockReset().mockResolvedValue(true);
   mocks.findInvitationByTokenHash.mockReset().mockResolvedValue(null);
   mocks.ensureWorkspace.mockReset();
   mocks.acceptInvitation.mockReset();
@@ -78,21 +84,21 @@ describe("GET /auth/oauth/callback", () => {
       expiresAt: new Date(Date.now() + 3_600_000).toISOString(), createdAt: new Date().toISOString(),
     });
     const response = await GET(callbackRequest("?code=abc&next=/automations&invite=raw-token"));
-    expect(mocks.acceptInvitation).toHaveBeenCalledWith("inv_1", expect.any(String));
+    expect(mocks.acceptInvitation).toHaveBeenCalledWith("inv_1", expect.any(String), "user-oauth");
     expect(mocks.ensureWorkspace).not.toHaveBeenCalled();
     expect(location(response)).toBe("http://localhost:3000/automations");
   });
 
   it("provisions a fresh workspace for a first-time OAuth sign-in with no invite", async () => {
     const response = await GET(callbackRequest("?code=abc&next=/automations"));
-    expect(mocks.ensureWorkspace).toHaveBeenCalledWith("workspace_fixed", "person@example.com");
+    expect(mocks.ensureWorkspace).toHaveBeenCalledWith("workspace_fixed", "person@example.com", "user-oauth");
     expect(location(response)).toBe("http://localhost:3000/automations");
   });
 
   it("falls back to a fresh workspace when the invite token is invalid, rather than blocking sign-in", async () => {
     mocks.findInvitationByTokenHash.mockResolvedValue(null);
     const response = await GET(callbackRequest("?code=abc&next=/automations&invite=bogus"));
-    expect(mocks.ensureWorkspace).toHaveBeenCalledWith("workspace_fixed", "person@example.com");
+    expect(mocks.ensureWorkspace).toHaveBeenCalledWith("workspace_fixed", "person@example.com", "user-oauth");
     expect(mocks.acceptInvitation).not.toHaveBeenCalled();
     expect(location(response)).toBe("http://localhost:3000/automations");
   });

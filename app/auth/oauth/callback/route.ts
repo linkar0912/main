@@ -30,6 +30,6 @@ export async function GET(request: Request) {
   if (error || !data.user?.email) {
     return NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303);
   }
-  await completeOAuthSignIn({ email: data.user.email, inviteRaw, repository });
+  await completeOAuthSignIn({ email: data.user.email, userId: data.user.id, inviteRaw, repository });
   return NextResponse.redirect(new URL(next, env.appUrl), 303);
 }

@@ -521,6 +521,24 @@ export type MemberRecord = {
   workspaceId: string;
   email: string;
   role: MemberRole;
+  userId?: string;
+};
+
+export type WorkspaceStatus = "ACTIVE" | "SUSPENDED" | "DELETION_PENDING";
+export type PlatformUserStatus = "ACTIVE" | "SUSPENDED";
+
+export type WorkspaceLifecycleChange = {
+  status: WorkspaceStatus;
+  reason: string;
+  actorUserId: string;
+  at: string;
+  deletionScheduledAt?: string;
+};
+
+export type ApplicationAccessState = {
+  userStatus: PlatformUserStatus;
+  workspaceStatus: WorkspaceStatus;
+  sessionInvalidBefore: string | null;
 };
 
 export type InvitationRecord = {
@@ -547,16 +565,21 @@ export type ParticipantFunnelCounts = {
 };
 
 export interface AutomationRepository {
-  ensureWorkspace(workspaceId: string, ownerEmail: string): Promise<void>;
+  ensureWorkspace(workspaceId: string, ownerEmail: string, ownerUserId?: string): Promise<void>;
   listMembers(workspaceId: string): Promise<MemberRecord[]>;
+  listWorkspaceMembershipsByUserId(userId: string): Promise<MemberRecord[]>;
+  findWorkspaceIdByMemberUserId(userId: string): Promise<string | null>;
+  bindMemberUserId(workspaceId: string, email: string, userId: string): Promise<boolean>;
+  setWorkspaceLifecycle(workspaceId: string, change: WorkspaceLifecycleChange): Promise<boolean>;
+  getApplicationAccessState(userId: string, workspaceId: string): Promise<ApplicationAccessState | null>;
   getMemberRole(workspaceId: string, email: string): Promise<MemberRole | null>;
-  addMember(workspaceId: string, email: string, role: MemberRole): Promise<{ created: boolean }>;
+  addMember(workspaceId: string, email: string, role: MemberRole, userId?: string): Promise<{ created: boolean }>;
   updateMemberRole(workspaceId: string, email: string, role: MemberRole): Promise<boolean>;
   removeMember(workspaceId: string, email: string): Promise<boolean>;
   createInvitation(input: CreateInvitationInput): Promise<InvitationRecord>;
   listInvitations(workspaceId: string): Promise<InvitationRecord[]>;
   findInvitationByTokenHash(tokenHash: string): Promise<InvitationRecord | null>;
-  acceptInvitation(id: string, now: string): Promise<InvitationRecord | null>;
+  acceptInvitation(id: string, now: string, userId?: string): Promise<InvitationRecord | null>;
   revokeInvitation(workspaceId: string, id: string): Promise<boolean>;
   countParticipantsByState(workspaceId: string, automationId?: string): Promise<Record<string, number>>;
   /** Returns the number of participants for one sender on a single automation (for once-per-user). */

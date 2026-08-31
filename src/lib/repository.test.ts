@@ -66,6 +66,51 @@ describe("memory repository", () => {
     ]);
   });
 
+  it("binds a Supabase user id to a workspace membership", async () => {
+    const repository = createMemoryRepository();
+
+    await repository.ensureWorkspace(
+      "workspace_identity",
+      "Owner@Linkar.in",
+      "11111111-1111-4111-8111-111111111111",
+    );
+
+    expect(await repository.listWorkspaceMembershipsByUserId("11111111-1111-4111-8111-111111111111"))
+      .toContainEqual(expect.objectContaining({
+        workspaceId: "workspace_identity",
+        email: "owner@linkar.in",
+        role: "OWNER",
+      }));
+  });
+
+  it("suspends and restores a workspace without deleting tenant data", async () => {
+    const repository = createMemoryRepository();
+    const userId = "22222222-2222-4222-8222-222222222222";
+    await repository.ensureWorkspace("workspace_lifecycle", "member@linkar.in", userId);
+    const automation = await repository.createAutomation("workspace_lifecycle", {
+      name: "Keep me",
+      definition,
+    });
+
+    await repository.setWorkspaceLifecycle("workspace_lifecycle", {
+      status: "SUSPENDED",
+      reason: "abuse review",
+      actorUserId: "owner-id",
+      at: "2026-08-31T10:00:00.000Z",
+    });
+    expect(await repository.getApplicationAccessState(userId, "workspace_lifecycle"))
+      .toMatchObject({ userStatus: "ACTIVE", workspaceStatus: "SUSPENDED" });
+    expect(await repository.getAutomation("workspace_lifecycle", automation.id)).not.toBeNull();
+
+    await repository.setWorkspaceLifecycle("workspace_lifecycle", {
+      status: "ACTIVE",
+      reason: "review complete",
+      actorUserId: "owner-id",
+      at: "2026-08-31T11:00:00.000Z",
+    });
+    expect((await repository.getApplicationAccessState(userId, "workspace_lifecycle"))?.workspaceStatus).toBe("ACTIVE");
+  });
+
   it("lists automations newest-updated first with a deterministic ID tie-breaker", async () => {
     const base = {
       workspaceId: "workspace_a",

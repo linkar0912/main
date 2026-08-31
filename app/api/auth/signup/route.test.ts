@@ -43,7 +43,7 @@ function location(response: Response): string {
 }
 
 beforeEach(() => {
-  mocks.signUp.mockReset().mockResolvedValue({ data: { user: { identities: [{ id: "identity_1" }] }, session: { id: "sess_1" } }, error: null });
+  mocks.signUp.mockReset().mockResolvedValue({ data: { user: { id: "user-signup", identities: [{ id: "identity_1" }] }, session: { id: "sess_1" } }, error: null });
   mocks.findInvitationByTokenHash.mockReset().mockResolvedValue(null);
   mocks.ensureWorkspace.mockReset();
   mocks.acceptInvitation.mockReset();
@@ -84,20 +84,20 @@ describe("POST /api/auth/signup", () => {
     const response = await POST(signupRequest({
       email: "invited@example.com", password: "long-enough-password", invite: "raw-token", next: "/automations",
     }, "203.0.113.4"));
-    expect(mocks.acceptInvitation).toHaveBeenCalledWith("inv_1", expect.any(String));
+    expect(mocks.acceptInvitation).toHaveBeenCalledWith("inv_1", expect.any(String), "user-signup");
     expect(mocks.ensureWorkspace).not.toHaveBeenCalled();
     expect(location(response)).toBe("http://localhost:3000/automations");
   });
 
   it("provisions a fresh workspace when there is no invite", async () => {
     const response = await POST(signupRequest({ email: "fresh@example.com", password: "long-enough-password" }, "203.0.113.5"));
-    expect(mocks.ensureWorkspace).toHaveBeenCalledWith("workspace_fixed", "fresh@example.com");
+    expect(mocks.ensureWorkspace).toHaveBeenCalledWith("workspace_fixed", "fresh@example.com", "user-signup");
     expect(mocks.acceptInvitation).not.toHaveBeenCalled();
     expect(response.status).toBe(303);
   });
 
   it("sends to /signup?sent=1 when Supabase requires email confirmation", async () => {
-    mocks.signUp.mockResolvedValue({ data: { user: { identities: [{ id: "identity_1" }] }, session: null }, error: null });
+    mocks.signUp.mockResolvedValue({ data: { user: { id: "user-signup", identities: [{ id: "identity_1" }] }, session: null }, error: null });
     const response = await POST(signupRequest({ email: "fresh@example.com", password: "long-enough-password" }, "203.0.113.6"));
     expect(location(response)).toContain("/signup?sent=1");
   });

@@ -12,15 +12,22 @@ import { provisionWorkspace } from "@/src/lib/auth/provision-workspace";
  */
 export async function completeOAuthSignIn(params: {
   email: string;
+  userId: string;
   inviteRaw: string;
   repository: Pick<
     AutomationRepository,
-    "findWorkspaceIdByMemberEmail" | "findInvitationByTokenHash" | "ensureWorkspace" | "acceptInvitation"
+    "findWorkspaceIdByMemberEmail" | "findWorkspaceIdByMemberUserId" | "bindMemberUserId" |
+    "findInvitationByTokenHash" | "ensureWorkspace" | "acceptInvitation"
   >;
 }): Promise<string> {
   const email = params.email.toLowerCase();
+  const stableWorkspaceId = await params.repository.findWorkspaceIdByMemberUserId(params.userId);
+  if (stableWorkspaceId) return stableWorkspaceId;
   const existingWorkspaceId = await params.repository.findWorkspaceIdByMemberEmail(email);
-  if (existingWorkspaceId) return existingWorkspaceId;
+  if (existingWorkspaceId) {
+    await params.repository.bindMemberUserId(existingWorkspaceId, email, params.userId);
+    return existingWorkspaceId;
+  }
 
   // First time this email has signed in. An invalid or missing invite both
   // fall through to a fresh workspace rather than blocking sign-in - unlike
@@ -29,6 +36,7 @@ export async function completeOAuthSignIn(params: {
   const resolution = await resolveInvitation({ inviteRaw: params.inviteRaw, email, repository: params.repository });
   return provisionWorkspace({
     email,
+    userId: params.userId,
     invitation: resolution.status === "valid" ? resolution.invitation : null,
     repository: params.repository,
   });

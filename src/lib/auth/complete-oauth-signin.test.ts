@@ -8,7 +8,7 @@ describe("completeOAuthSignIn", () => {
     const repository = createMemoryRepository();
     await repository.ensureWorkspace("ws_existing", "person@example.com");
 
-    const workspaceId = await completeOAuthSignIn({ email: "person@example.com", inviteRaw: "", repository });
+    const workspaceId = await completeOAuthSignIn({ email: "person@example.com", userId: "user-existing", inviteRaw: "", repository });
 
     expect(workspaceId).toBe("ws_existing");
   });
@@ -27,6 +27,7 @@ describe("completeOAuthSignIn", () => {
 
     const workspaceId = await completeOAuthSignIn({
       email: "invited@example.com",
+      userId: "user-invited",
       inviteRaw: "raw-token",
       repository,
     });
@@ -40,7 +41,7 @@ describe("completeOAuthSignIn", () => {
   it("provisions a fresh workspace for a first-time sign-in with no invite", async () => {
     const repository = createMemoryRepository();
 
-    const workspaceId = await completeOAuthSignIn({ email: "fresh@example.com", inviteRaw: "", repository });
+    const workspaceId = await completeOAuthSignIn({ email: "fresh@example.com", userId: "user-fresh", inviteRaw: "", repository });
 
     expect(await repository.findWorkspaceIdByMemberEmail("fresh@example.com")).toBe(workspaceId);
   });
@@ -48,7 +49,7 @@ describe("completeOAuthSignIn", () => {
   it("falls back to a fresh workspace when the invite token is invalid, rather than blocking sign-in", async () => {
     const repository = createMemoryRepository();
 
-    const workspaceId = await completeOAuthSignIn({ email: "fresh@example.com", inviteRaw: "bogus", repository });
+    const workspaceId = await completeOAuthSignIn({ email: "fresh@example.com", userId: "user-fresh", inviteRaw: "bogus", repository });
 
     expect(await repository.findWorkspaceIdByMemberEmail("fresh@example.com")).toBe(workspaceId);
   });

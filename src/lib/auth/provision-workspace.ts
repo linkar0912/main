@@ -9,15 +9,16 @@ import type { AutomationRepository, InvitationRecord } from "@/src/lib/repositor
  */
 export async function provisionWorkspace(params: {
   email: string;
+  userId: string;
   invitation: InvitationRecord | null;
   repository: Pick<AutomationRepository, "ensureWorkspace" | "acceptInvitation">;
 }): Promise<string> {
   if (params.invitation) {
-    await params.repository.acceptInvitation(params.invitation.id, new Date().toISOString());
+    await params.repository.acceptInvitation(params.invitation.id, new Date().toISOString(), params.userId);
     return params.invitation.workspaceId;
   }
 
   const workspaceId = createId("workspace");
-  await params.repository.ensureWorkspace(workspaceId, params.email);
+  await params.repository.ensureWorkspace(workspaceId, params.email, params.userId);
   return workspaceId;
 }

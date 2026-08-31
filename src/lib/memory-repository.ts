@@ -42,6 +42,7 @@ import type {
   MessagingWindow,
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
+  WorkspaceStatus,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
@@ -125,14 +126,22 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
   const memberWorkspacesByEmail = new Map<string, string>();
   const membersByEmail = new Map<string, MemberRecord>();
   const invitationsById = new Map<string, InvitationRecord>();
+  const workspaceLifecycle = new Map<string, {
+    status: WorkspaceStatus;
+    suspendedAt?: string;
+    suspendedReason?: string;
+    suspendedByUserId?: string;
+    deletionScheduledAt?: string;
+  }>();
   // Keyed by `${workspaceId}:${providerEventId}` so replays stay idempotent.
   const webhookEvents = new Map<string, WebhookEventRecord & { workspaceId: string }>();
 
   return {
-    async ensureWorkspace(workspaceId, ownerEmail) {
+    async ensureWorkspace(workspaceId, ownerEmail, ownerUserId) {
       if (!ownerEmail) return;
       const email = ownerEmail.toLowerCase();
       memberWorkspacesByEmail.set(email, workspaceId);
+      workspaceLifecycle.set(workspaceId, workspaceLifecycle.get(workspaceId) ?? { status: "ACTIVE" });
       const key = `${workspaceId}:${email}`;
       if (!membersByEmail.has(key)) {
         membersByEmail.set(key, {
@@ -140,7 +149,10 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
           workspaceId,
           email,
           role: "OWNER",
+          userId: ownerUserId,
         });
+      } else if (ownerUserId) {
+        membersByEmail.set(key, { ...membersByEmail.get(key)!, userId: ownerUserId });
       }
     },
 
@@ -148,14 +160,59 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return copy([...membersByEmail.values()].filter((member) => member.workspaceId === workspaceId));
     },
 
+    async listWorkspaceMembershipsByUserId(userId) {
+      return copy([...membersByEmail.values()].filter((member) => member.userId === userId));
+    },
+
+    async findWorkspaceIdByMemberUserId(userId) {
+      return [...membersByEmail.values()].find((member) => member.userId === userId)?.workspaceId ?? null;
+    },
+
+    async bindMemberUserId(workspaceId, email, userId) {
+      const key = `${workspaceId}:${email.toLowerCase()}`;
+      const member = membersByEmail.get(key);
+      if (!member) return false;
+      const collision = [...membersByEmail.values()].some(
+        (candidate) => candidate.workspaceId === workspaceId && candidate.userId === userId && candidate.id !== member.id,
+      );
+      if (collision) return false;
+      membersByEmail.set(key, { ...member, userId });
+      return true;
+    },
+
+    async setWorkspaceLifecycle(workspaceId, change) {
+      if (!workspaceLifecycle.has(workspaceId)) return false;
+      workspaceLifecycle.set(workspaceId, {
+        status: change.status,
+        ...(change.status === "SUSPENDED" ? {
+          suspendedAt: change.at,
+          suspendedReason: change.reason,
+          suspendedByUserId: change.actorUserId,
+        } : {}),
+        ...(change.status === "DELETION_PENDING" && change.deletionScheduledAt
+          ? { deletionScheduledAt: change.deletionScheduledAt }
+          : {}),
+      });
+      return true;
+    },
+
+    async getApplicationAccessState(userId, workspaceId) {
+      const isMember = [...membersByEmail.values()].some(
+        (member) => member.workspaceId === workspaceId && member.userId === userId,
+      );
+      const lifecycle = workspaceLifecycle.get(workspaceId);
+      if (!isMember || !lifecycle) return null;
+      return { userStatus: "ACTIVE", workspaceStatus: lifecycle.status, sessionInvalidBefore: null };
+    },
+
     async getMemberRole(workspaceId, email) {
       return membersByEmail.get(`${workspaceId}:${email.toLowerCase()}`)?.role ?? null;
     },
 
-    async addMember(workspaceId, email, role: MemberRole) {
+    async addMember(workspaceId, email, role: MemberRole, userId) {
       const key = `${workspaceId}:${email.toLowerCase()}`;
       if (membersByEmail.has(key)) return { created: false };
-      membersByEmail.set(key, { id: createId("member"), workspaceId, email: email.toLowerCase(), role });
+      membersByEmail.set(key, { id: createId("member"), workspaceId, email: email.toLowerCase(), role, userId });
       memberWorkspacesByEmail.set(email.toLowerCase(), workspaceId);
       return { created: true };
     },
@@ -191,12 +248,12 @@ export function createMemoryRepository(seed: AutomationRecord[] = []): Automatio
       return record ? copy(record) : null;
     },
 
-    async acceptInvitation(id, nowIso) {
+    async acceptInvitation(id, nowIso, userId) {
       const record = invitationsById.get(id);
       if (!record || record.acceptedAt || record.revokedAt || record.expiresAt <= nowIso) return null;
       const accepted: InvitationRecord = { ...record, acceptedAt: nowIso };
       invitationsById.set(id, accepted);
-      await this.addMember(record.workspaceId, record.email, record.role);
+      await this.addMember(record.workspaceId, record.email, record.role, userId);
       return copy(accepted);
     },
 

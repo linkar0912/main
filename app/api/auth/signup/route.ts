@@ -82,6 +82,7 @@ export async function POST(request: Request) {
 
     await provisionWorkspace({
         email,
+        userId: data.user!.id,
         invitation: invitationResolution.status === "valid" ? invitationResolution.invitation : null,
         repository,
     });

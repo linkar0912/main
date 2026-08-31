@@ -135,17 +135,16 @@ export async function loadAdminOverview(sources: AdminOverviewSources = producti
 
 const productionSources: AdminOverviewSources = {
   async loadCounts() {
-    const [workspaces, users, instagram, facebook, activeAutomations] = await Promise.all([
-      prisma.workspace.count(),
-      prisma.$queryRaw<Array<{ count: bigint }>>`SELECT COUNT(DISTINCT lower("email")) AS "count" FROM "WorkspaceMember"`,
+    const [activeWorkspaces, suspendedWorkspaces, users, instagram, facebook, activeAutomations] = await Promise.all([
+      prisma.workspace.count({ where: { status: "ACTIVE" } }),
+      prisma.workspace.count({ where: { status: { in: ["SUSPENDED", "DELETION_PENDING"] } } }),
+      prisma.$queryRaw<Array<{ count: bigint }>>`SELECT COUNT(DISTINCT COALESCE("userId", lower("email"))) AS "count" FROM "WorkspaceMember"`,
       prisma.instagramConnection.count({ where: { status: "CONNECTED" } }),
       prisma.facebookPageConnection.count({ where: { status: "CONNECTED" } }),
       prisma.automation.count({ where: { status: "ACTIVE" } }),
     ]);
     return {
-      // Workspace lifecycle lands in the accounts phase. Until then every
-      // persisted workspace is active and the suspended total is truthfully 0.
-      workspaces: { active: workspaces, suspended: 0 },
+      workspaces: { active: activeWorkspaces, suspended: suspendedWorkspaces },
       users: { active: Number(users[0]?.count ?? 0) },
       connections: { instagram, facebook },
       automations: { active: activeAutomations },
