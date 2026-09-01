@@ -66,4 +66,25 @@ describe("EntitlementService", () => {
       new EntitlementError("limit_reached", "automations", 3, 3),
     );
   });
+
+  it("caches entitlement configuration for 30 seconds without caching usage", async () => {
+    const repository = createMemoryEntitlementRepository({
+      plan: { monthlyDeliveryLimit: 25 },
+    });
+    const entitlementRead = vi.spyOn(repository, "getWorkspaceEntitlement");
+    let timestamp = Date.parse("2026-08-31T10:00:00.000Z");
+    const service = createEntitlementService(repository, () => new Date(timestamp), 30_000);
+
+    await expect(service.getMonthlyDeliveryLimit("w1")).resolves.toBe(25);
+    await expect(service.getMonthlyDeliveryLimit("w1")).resolves.toBe(25);
+    expect(entitlementRead).toHaveBeenCalledOnce();
+
+    timestamp += 30_001;
+    await expect(service.getMonthlyDeliveryLimit("w1")).resolves.toBe(25);
+    expect(entitlementRead).toHaveBeenCalledTimes(2);
+
+    await service.reserveMonthlyDelivery("w1", "delivery_1");
+    await service.reserveMonthlyDelivery("w1", "delivery_2");
+    expect(entitlementRead).toHaveBeenCalledTimes(2);
+  });
 });

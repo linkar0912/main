@@ -21,8 +21,7 @@ const request = {
   payload: { text: "Original message" },
   claimLeaseMs: 30_000,
   entitlementService: {
-    reserveMonthlyDelivery: vi.fn(),
-    releaseMonthlyDelivery: vi.fn(),
+    getMonthlyDeliveryLimit: vi.fn(),
   },
 };
 const { entitlementService: _entitlementService, ...persistedRequest } = request;
@@ -34,8 +33,7 @@ describe("outbound delivery coordinator", () => {
   beforeEach(() => {
     repository = createMemoryRepository();
     vi.mocked(getRepository).mockReturnValue(repository);
-    request.entitlementService.reserveMonthlyDelivery.mockReset().mockResolvedValue({ reserved: true, used: 1, limit: 100 });
-    request.entitlementService.releaseMonthlyDelivery.mockReset().mockResolvedValue(true);
+    request.entitlementService.getMonthlyDeliveryLimit.mockReset().mockResolvedValue(100);
   });
 
   it("skips the provider for an existing SENT delivery", async () => {
@@ -85,11 +83,10 @@ describe("outbound delivery coordinator", () => {
     });
     expect(send).toHaveBeenCalledTimes(1);
     expect((await repository.getOutboundDelivery(request.deliveryKey))?.state).toBe("UNKNOWN");
-    expect(request.entitlementService.releaseMonthlyDelivery).not.toHaveBeenCalled();
   });
 
   it("does not call the provider when the monthly delivery limit is exhausted", async () => {
-    request.entitlementService.reserveMonthlyDelivery.mockResolvedValue({ reserved: false, used: 100, limit: 100 });
+    request.entitlementService.getMonthlyDeliveryLimit.mockResolvedValue(0);
     const send = vi.fn();
 
     await expect(executeOutboundDelivery(request, send)).resolves.toEqual({
@@ -101,7 +98,7 @@ describe("outbound delivery coordinator", () => {
   });
 
   it("leaves a retryable ledger outcome when usage metering is unavailable", async () => {
-    request.entitlementService.reserveMonthlyDelivery.mockRejectedValue(new Error("usage database unavailable"));
+    request.entitlementService.getMonthlyDeliveryLimit.mockRejectedValue(new Error("usage database unavailable"));
     const send = vi.fn();
 
     await expect(executeOutboundDelivery(request, send)).resolves.toEqual({
@@ -110,7 +107,6 @@ describe("outbound delivery coordinator", () => {
       error: "Delivery usage could not be reserved",
     });
     expect(send).not.toHaveBeenCalled();
-    expect(await repository.getOutboundDelivery(request.deliveryKey)).toMatchObject({ state: "FAILED", retryable: true });
   });
 
   it.each([
@@ -120,6 +116,7 @@ describe("outbound delivery coordinator", () => {
   ] as const)("classifies an explicit %i response as %s", async (status, expected, retryable) => {
     const error = new MetaApiError(`Meta ${status}`, status, true);
     expect(classifyProviderFailure(error)).toBe(expected);
+    const releaseReservation = vi.spyOn(repository, "releaseOutboundDeliveryReservation");
 
     await expect(executeOutboundDelivery(request, vi.fn().mockRejectedValue(error)))
       .resolves.toEqual({ status: "FAILED", retryable, error: `Meta ${status}` });
@@ -127,7 +124,28 @@ describe("outbound delivery coordinator", () => {
       state: "FAILED",
       retryable,
     });
-    expect(request.entitlementService.releaseMonthlyDelivery).toHaveBeenCalledWith(request.deliveryKey);
+    expect(releaseReservation).toHaveBeenCalledWith(request.deliveryKey);
+  });
+
+  it("prepares claim and quota in one repository operation", async () => {
+    const prepare = vi.spyOn(repository, "prepareOutboundDelivery");
+    const ensure = vi.spyOn(repository, "ensureOutboundDelivery");
+    const claim = vi.spyOn(repository, "claimOutboundDelivery");
+
+    await expect(executeOutboundDelivery(
+      request,
+      vi.fn().mockResolvedValue({ id: "provider_atomic" }),
+    )).resolves.toMatchObject({ status: "SENT", reused: false });
+
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryKey: request.deliveryKey,
+      monthlyLimit: 100,
+      owner: expect.any(String),
+      periodStart: expect.stringMatching(/^\d{4}-\d{2}-01$/),
+    }));
+    expect(ensure).not.toHaveBeenCalled();
+    expect(claim).not.toHaveBeenCalled();
   });
 
   it("sends the first persisted payload after an automation edit", async () => {

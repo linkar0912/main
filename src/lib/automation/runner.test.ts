@@ -120,7 +120,7 @@ describe("automation runner", () => {
         version: 1, priority: 0,
         definition: {
           ...flow,
-          trigger: { ...flow.trigger, keywords: ["pricing"] },
+          trigger: { type: "comment", match: "keyword", keywords: ["pricing"], mediaIds: [] },
         },
         createdAt: new Date(1).toISOString(),
         updatedAt: new Date(1).toISOString(),

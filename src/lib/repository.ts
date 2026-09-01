@@ -229,6 +229,19 @@ export type OutboundDeliveryClaimResult =
   | { claimed: true; record: OutboundDeliveryRecord }
   | { claimed: false; record: OutboundDeliveryRecord };
 
+export type PrepareOutboundDeliveryInput = EnsureOutboundDeliveryInput & {
+  owner: string;
+  leaseUntil: string;
+  periodStart: string;
+  monthlyLimit: number | null;
+};
+
+export type PrepareOutboundDeliveryResult =
+  | { status: "CLAIMED"; record: OutboundDeliveryRecord }
+  | { status: "TERMINAL"; record: OutboundDeliveryRecord }
+  | { status: "BUSY"; record: OutboundDeliveryRecord }
+  | { status: "QUOTA_REJECTED"; record: OutboundDeliveryRecord };
+
 export type AutomationDailySendCounterRecord = {
   automationId: string;
   utcDate: string;
@@ -720,6 +733,10 @@ export interface AutomationRepository {
   listRecentOutboundFailures(workspaceId: string, limit: number): Promise<OutboundDeliveryRecord[]>;
   ensureOutboundDelivery(input: EnsureOutboundDeliveryInput): Promise<OutboundDeliveryRecord>;
   getOutboundDelivery(deliveryKey: string): Promise<OutboundDeliveryRecord | null>;
+  /** Atomically creates/claims the delivery and reserves its monthly usage slot. */
+  prepareOutboundDelivery(input: PrepareOutboundDeliveryInput): Promise<PrepareOutboundDeliveryResult>;
+  /** Releases an idempotent monthly reservation after a known provider rejection. */
+  releaseOutboundDeliveryReservation(deliveryKey: string): Promise<boolean>;
   claimOutboundDelivery(
     deliveryKey: string,
     owner: string,
