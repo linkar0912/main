@@ -82,13 +82,17 @@ describe("POST /api/facebook/webhook", () => {
     expect(mocks.processNormalizedFacebookEvent).not.toHaveBeenCalled();
   });
 
-  it("acknowledges but does not enqueue an event for a suspended workspace", async () => {
-    mocks.getWorkspaceStatus.mockResolvedValue("SUSPENDED");
+  it("enqueues every signed normalized event without database prefiltering", async () => {
+    mocks.enqueueFacebookEvents.mockResolvedValue(1);
 
     const response = await POST(new Request("http://localhost/api/facebook/webhook", { method: "POST", body: "{}" }));
 
     expect(response.status).toBe(200);
-    expect(mocks.enqueueFacebookEvents).toHaveBeenCalledWith([]);
+    expect(mocks.enqueueFacebookEvents).toHaveBeenCalledWith([
+      expect.objectContaining({ id: "evt_1", pageId: "page_1" }),
+    ]);
+    expect(mocks.findWorkspaceByFacebookPage).not.toHaveBeenCalled();
+    expect(mocks.getWorkspaceStatus).not.toHaveBeenCalled();
     expect(mocks.processNormalizedFacebookEvent).not.toHaveBeenCalled();
   });
 });

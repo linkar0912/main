@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { NormalizedEvent } from "./automation/types";
 import {
   createLeadDeliveryJobId,
+  createFacebookEventJobOptions,
+  createInstagramEventJobOptions,
+  QUEUE_PRIORITY,
   createWebhookJobId,
   enqueueLeadDelivery,
   enqueueWebhookEvents,
@@ -38,6 +41,29 @@ describe("webhook queue", () => {
   it("uses a deterministic BullMQ-safe lead delivery id", () => {
     expect(createLeadDeliveryJobId("lead:key:1")).toBe(createLeadDeliveryJobId("lead:key:1"));
     expect(createLeadDeliveryJobId("lead:key:1")).not.toContain(":");
+  });
+
+  it("prioritizes realtime events and stamps their ingestion time", () => {
+    expect(createInstagramEventJobOptions(event, 1_725_000_000_000)).toEqual({
+      data: { ...event, linkarIngestedAt: 1_725_000_000_000 },
+      options: expect.objectContaining({
+        jobId: createWebhookJobId(event),
+        priority: QUEUE_PRIORITY.REALTIME,
+      }),
+    });
+
+    const facebookEvent = {
+      id: "facebook_1",
+      pageId: "page_1",
+      postId: "post_1",
+      commentId: "comment_1",
+      text: "guide",
+      timestamp: 1,
+    };
+    expect(createFacebookEventJobOptions(facebookEvent, 1_725_000_000_100)).toEqual({
+      data: { ...facebookEvent, linkarIngestedAt: 1_725_000_000_100 },
+      options: expect.objectContaining({ priority: QUEUE_PRIORITY.REALTIME }),
+    });
   });
 
   it("reports that durable lead queuing is unavailable without Redis", async () => {
