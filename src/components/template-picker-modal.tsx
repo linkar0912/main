@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   AtSign,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   LayoutGrid,
   Link2,
   MessageCircle,
@@ -15,6 +17,8 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { FacebookGlyph } from "./facebook-glyph";
+import { InstagramGlyph } from "./instagram-glyph";
 import { basicAutomationTemplates, getCompatibleTemplates, triggerLabel, type PremadeTemplate, type TemplateTriggerType } from "@/src/lib/automation/templates";
 
 const CATEGORY_ICONS: Record<TemplateTriggerType, typeof MessageCircle> = {
@@ -216,20 +220,65 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <div className="template-channel-runway" aria-label="Automation channel">
-          <span className="template-channel-step">1 · Channel</span>
-          <button type="button" className={provider === "INSTAGRAM" ? "is-active" : ""} onClick={() => { setProvider("INSTAGRAM"); setCategory(null); }}>Instagram</button>
-          <button type="button" className={provider === "FACEBOOK" ? "is-active" : ""} onClick={() => { setProvider("FACEBOOK"); setCategory(null); }}>Facebook</button>
+        <div
+          className="template-channel-runway"
+          data-provider={provider.toLowerCase()}
+          style={provider === "FACEBOOK" ? {
+            "--channel-color": "#1877F2",
+            "--channel-rail": "linear-gradient(90deg, #1877F2, #65A4F7)",
+          } as CSSProperties : undefined}
+          aria-label="Automation channel"
+        >
+          <div className="template-channel-choice">
+            <span className="template-channel-context-label">Build for</span>
+            <div className="template-channel-switch" role="group" aria-label="Choose a channel">
+              <button
+                type="button"
+                className={`template-channel-option is-instagram ${provider === "INSTAGRAM" ? "is-active" : ""}`}
+                aria-label="Instagram"
+                aria-pressed={provider === "INSTAGRAM"}
+                onClick={() => { setProvider("INSTAGRAM"); setCategory(null); }}
+              >
+                <span className="template-channel-brand-mark"><InstagramGlyph size={19} brand /></span>
+                <span>Instagram</span>
+              </button>
+              <button
+                type="button"
+                className={`template-channel-option is-facebook ${provider === "FACEBOOK" ? "is-active" : ""}`}
+                aria-label="Facebook"
+                aria-pressed={provider === "FACEBOOK"}
+                onClick={() => { setProvider("FACEBOOK"); setCategory(null); }}
+              >
+                <span className="template-channel-brand-mark"><FacebookGlyph size={19} brand /></span>
+                <span>Facebook</span>
+              </button>
+            </div>
+          </div>
+
+          <span className="template-channel-flow" aria-hidden="true"><span /><ChevronRight size={14} /></span>
+
           {provider === "FACEBOOK" && (
-            <label>
-              <span>2 · Page</span>
-              <select aria-label="Facebook Page" value={facebookPageId} onChange={(event) => setFacebookPageId(event.target.value)}>
-                <option value="">Select a connected Page</option>
-                {facebookPages.map((page) => <option key={page.pageId} value={page.pageId}>{page.pageName}</option>)}
-              </select>
+            <label className="template-channel-destination">
+              <span className="template-channel-context-label">Connected Page</span>
+              <span className="template-channel-select-shell">
+                <FacebookGlyph size={16} />
+                <select aria-label="Facebook Page" value={facebookPageId} onChange={(event) => setFacebookPageId(event.target.value)}>
+                  <option value="">Select a connected Page</option>
+                  {facebookPages.map((page) => <option key={page.pageId} value={page.pageId}>{page.pageName}</option>)}
+                </select>
+                <ChevronDown className="template-channel-select-chevron" size={16} aria-hidden="true" />
+              </span>
             </label>
           )}
-          <span className="template-channel-surface">{provider === "FACEBOOK" ? "3 · Page comments" : "Instagram comments & messages"}</span>
+
+          {provider === "FACEBOOK" && <span className="template-channel-flow" aria-hidden="true"><span /><ChevronRight size={14} /></span>}
+
+          <div className="template-channel-surface">
+            <span>
+              <small>Automation surface</small>
+              <strong>{provider === "FACEBOOK" ? "Page comments" : "Comments & messages"}</strong>
+            </span>
+          </div>
         </div>
 
         <div className="template-picker-layout">

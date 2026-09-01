@@ -15,6 +15,33 @@ describe("TemplatePickerModal", () => {
     vi.unstubAllGlobals();
   });
 
+  it("presents each channel as a branded, accessible workflow context", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: [{ pageId: "page_1", pageName: "Linkar Demo", status: "CONNECTED" }] }),
+    })));
+    render(<TemplatePickerModal onClose={() => {}} />);
+
+    const runway = screen.getByLabelText("Automation channel");
+    const instagram = within(runway).getByRole("button", { name: "Instagram" });
+    const facebook = within(runway).getByRole("button", { name: "Facebook" });
+
+    expect(instagram.getAttribute("aria-pressed")).toBe("true");
+    expect(facebook.getAttribute("aria-pressed")).toBe("false");
+    expect(runway.querySelector('[data-brand-logo="instagram"]')).toBeTruthy();
+    expect(runway.querySelector('[data-brand-logo="facebook"]')).toBeTruthy();
+    expect(runway.querySelector(".template-channel-surface-icon")).toBeNull();
+    expect(within(runway).getByText("Comments & messages")).toBeTruthy();
+
+    fireEvent.click(facebook);
+
+    expect(instagram.getAttribute("aria-pressed")).toBe("false");
+    expect(facebook.getAttribute("aria-pressed")).toBe("true");
+    expect(await within(runway).findByText("Connected Page")).toBeTruthy();
+    expect(runway.querySelector(".template-channel-select-chevron")).toBeTruthy();
+    expect(within(runway).getByText("Page comments")).toBeTruthy();
+  });
+
   it("switches to a connected Facebook Page and shows only compatible Page-comment recipes", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,

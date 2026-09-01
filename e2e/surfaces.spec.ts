@@ -23,13 +23,36 @@ test("builder wraps the preview in a phone shell with status bar and updated bad
 });
 
 test("template picker tiles show example flows and search narrows them", async ({ page }) => {
+  await page.route("**/api/facebook/connection", (route) => route.fulfill({
+    json: { data: [{ id: "page_record_1", pageId: "page_1", pageName: "Linkar Demo Page", status: "CONNECTED" }] },
+  }));
   await page.goto("/automations");
   await page.getByRole("button", { name: "New automation" }).click();
 
   const dialog = page.getByRole("dialog");
+  const channel = dialog.getByLabel("Automation channel");
+  await expect(channel.locator(".template-channel-switch")).toHaveCSS("border-top-width", "0px");
+  await expect(channel.getByRole("button", { name: "Instagram" })).toHaveAttribute("aria-pressed", "true");
+  await expect(channel.locator('[data-brand-logo="instagram"]')).toBeVisible();
   await expect(dialog.getByText("Follow-gated Reel campaign")).toBeVisible();
   await expect(dialog.locator(".template-example").first()).toBeVisible();
   await expect(dialog.locator(".template-picker-tile-icon")).toHaveCount(0);
+
+  if (process.env.VISUAL_REVIEW) await dialog.screenshot({ path: "/tmp/linkar-template-channel-instagram.png" });
+
+  await channel.getByRole("button", { name: "Facebook" }).click();
+  await expect(channel.getByRole("button", { name: "Facebook" })).toHaveAttribute("aria-pressed", "true");
+  await expect(channel.getByText("Connected Page", { exact: true })).toBeVisible();
+  await channel.getByLabel("Facebook Page").selectOption("page_1");
+
+  if (process.env.VISUAL_REVIEW) await dialog.screenshot({ path: "/tmp/linkar-template-channel-facebook.png" });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(channel).toHaveCSS("flex-direction", "column");
+  if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-template-channel-mobile.png", fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  await channel.getByRole("button", { name: "Instagram" }).click();
 
   await dialog.getByLabel("Search templates").fill("story");
   await expect(dialog.getByText(/Story Mention Reply/)).toBeVisible();
