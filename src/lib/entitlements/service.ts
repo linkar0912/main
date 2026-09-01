@@ -39,14 +39,30 @@ function currentPeriodStart(now: Date): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
 }
 
-export function createEntitlementService(repository: EntitlementRepository, now: () => Date = () => new Date()) {
+export function createEntitlementService(
+  repository: EntitlementRepository,
+  now: () => Date = () => new Date(),
+  cacheTtlMs = 30_000,
+) {
+  const entitlementCache = new Map<string, { expiresAt: number; value: EffectiveEntitlements }>();
+
   async function getEffectiveEntitlements(workspaceId: string): Promise<EffectiveEntitlements> {
+    const cached = entitlementCache.get(workspaceId);
+    const timestamp = now().getTime();
+    if (cached && cached.expiresAt > timestamp) return cached.value;
+
     const config = await repository.getWorkspaceEntitlement(workspaceId);
     if (!config) throw new Error("workspace_entitlement_missing");
     const parsed = EntitlementOverridesSchema.safeParse(config.overrides);
     if (!parsed.success) throw new Error("invalid_entitlement_overrides");
     const { key, name, ...defaults } = config.plan;
-    return { planKey: key, planName: name, ...defaults, ...parsed.data };
+    const value = { planKey: key, planName: name, ...defaults, ...parsed.data };
+    entitlementCache.set(workspaceId, { expiresAt: timestamp + cacheTtlMs, value });
+    return value;
+  }
+
+  async function getMonthlyDeliveryLimit(workspaceId: string): Promise<number | null> {
+    return (await getEffectiveEntitlements(workspaceId)).monthlyDeliveryLimit;
   }
 
   async function assertEntitled(
@@ -79,7 +95,13 @@ export function createEntitlementService(repository: EntitlementRepository, now:
     return repository.releaseMonthlyDelivery(deliveryKey);
   }
 
-  return { getEffectiveEntitlements, assertEntitled, reserveMonthlyDelivery, releaseMonthlyDelivery };
+  return {
+    getEffectiveEntitlements,
+    getMonthlyDeliveryLimit,
+    assertEntitled,
+    reserveMonthlyDelivery,
+    releaseMonthlyDelivery,
+  };
 }
 
 let productionService: ReturnType<typeof createEntitlementService> | undefined;

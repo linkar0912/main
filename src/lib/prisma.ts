@@ -868,6 +868,13 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapParticipant);
     },
 
+    async hasPausedParticipant(workspaceId, instagramAccountId, igScopedUserId) {
+      return Boolean(await client.automationParticipant.findFirst({
+        where: { workspaceId, instagramAccountId, igScopedUserId, pausedAt: { not: null } },
+        select: { id: true },
+      }));
+    },
+
     async findWorkspaceIdByMemberEmail(email) {
       const member = await client.workspaceMember.findFirst({
         where: { email: email.toLowerCase() },
@@ -880,6 +887,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       const records = await client.automation.findMany({
         where: { workspaceId },
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      });
+      return records.map(mapAutomation);
+    },
+
+    async listActiveAutomationsForInstagramAccount(workspaceId, instagramAccountId) {
+      const records = await client.automation.findMany({
+        where: {
+          workspaceId,
+          status: "ACTIVE",
+          provider: "INSTAGRAM",
+          OR: [{ instagramAccountId: null }, { instagramAccountId }],
+        },
+        orderBy: [{ priority: "desc" }, { name: "asc" }, { id: "asc" }],
       });
       return records.map(mapAutomation);
     },
@@ -1241,6 +1261,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       }
     },
 
+    async recordExecutions(inputs) {
+      if (inputs.length === 0) return 0;
+      const result = await client.automationExecution.createMany({
+        data: inputs.map((input) => ({
+          id: createId("execution"),
+          ...input,
+          dispatchStatus: input.dispatchStatus ?? "CLAIMED",
+        })),
+        skipDuplicates: true,
+      });
+      return result.count;
+    },
+
     async claimExecution(input) {
       try {
         await client.automationExecution.create({
@@ -1440,6 +1473,129 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async getOutboundDelivery(deliveryKey) {
       const record = await client.outboundDelivery.findUnique({ where: { deliveryKey } });
       return record ? mapOutboundDelivery(record) : null;
+    },
+
+    async prepareOutboundDelivery(input) {
+      const { owner, leaseUntil, periodStart, monthlyLimit, ...deliveryInput } = input;
+      const periodStartDate = new Date(`${periodStart}T00:00:00.000Z`);
+      return client.$transaction(async (transaction) => {
+        const existing = await transaction.outboundDelivery.upsert({
+          where: { deliveryKey: input.deliveryKey },
+          create: {
+            id: createId("delivery"),
+            ...deliveryInput,
+            payload: deliveryInput.payload as Prisma.InputJsonValue,
+          },
+          update: {},
+        });
+
+        if (
+          existing.state === "SENT"
+          || existing.state === "UNKNOWN"
+          || (existing.state === "FAILED" && !existing.retryable)
+        ) {
+          return { status: "TERMINAL" as const, record: mapOutboundDelivery(existing) };
+        }
+        if (existing.state === "CLAIMED") {
+          return { status: "BUSY" as const, record: mapOutboundDelivery(existing) };
+        }
+
+        const [claimed] = await transaction.outboundDelivery.updateManyAndReturn({
+          where: {
+            deliveryKey: input.deliveryKey,
+            OR: [{ state: "PENDING" }, { state: "FAILED", retryable: true }],
+          },
+          data: {
+            state: "CLAIMED",
+            retryable: false,
+            resultCode: null,
+            claimOwner: owner,
+            claimExpiresAt: new Date(leaseUntil),
+            attemptCount: { increment: 1 },
+            lastError: null,
+          },
+        });
+        if (!claimed) {
+          const winner = await transaction.outboundDelivery.findUniqueOrThrow({
+            where: { deliveryKey: input.deliveryKey },
+          });
+          return {
+            status: winner.state === "CLAIMED" ? "BUSY" as const : "TERMINAL" as const,
+            record: mapOutboundDelivery(winner),
+          };
+        }
+
+        await transaction.workspaceUsagePeriod.upsert({
+          where: {
+            workspaceId_periodStart: {
+              workspaceId: claimed.workspaceId,
+              periodStart: periodStartDate,
+            },
+          },
+          create: { workspaceId: claimed.workspaceId, periodStart: periodStartDate },
+          update: {},
+        });
+        const inserted = await transaction.$queryRaw<Array<{ deliveryKey: string }>>(Prisma.sql`
+          INSERT INTO "WorkspaceUsageReservation" ("deliveryKey", "workspaceId", "periodStart")
+          VALUES (${input.deliveryKey}, ${claimed.workspaceId}, ${periodStartDate})
+          ON CONFLICT ("deliveryKey") DO NOTHING
+          RETURNING "deliveryKey"
+        `);
+        if (inserted.length === 0) {
+          return { status: "CLAIMED" as const, record: mapOutboundDelivery(claimed) };
+        }
+
+        const usage = await transaction.workspaceUsagePeriod.updateMany({
+          where: {
+            workspaceId: claimed.workspaceId,
+            periodStart: periodStartDate,
+            ...(monthlyLimit === null ? {} : { deliveriesReserved: { lt: monthlyLimit } }),
+          },
+          data: { deliveriesReserved: { increment: 1 } },
+        });
+        if (usage.count === 1) {
+          return { status: "CLAIMED" as const, record: mapOutboundDelivery(claimed) };
+        }
+
+        await transaction.workspaceUsageReservation.delete({
+          where: { deliveryKey: input.deliveryKey },
+        });
+        const rejected = await transaction.outboundDelivery.update({
+          where: { deliveryKey: input.deliveryKey },
+          data: {
+            state: "FAILED",
+            retryable: false,
+            resultCode: "SUPPRESSED",
+            claimOwner: null,
+            claimExpiresAt: null,
+            lastError: "Monthly delivery limit reached",
+          },
+        });
+        return { status: "QUOTA_REJECTED" as const, record: mapOutboundDelivery(rejected) };
+      });
+    },
+
+    async releaseOutboundDeliveryReservation(deliveryKey) {
+      return client.$transaction(async (transaction) => {
+        const [reservation] = await transaction.$queryRaw<Array<{
+          workspaceId: string;
+          periodStart: Date;
+        }>>(Prisma.sql`
+          DELETE FROM "WorkspaceUsageReservation"
+          WHERE "deliveryKey" = ${deliveryKey}
+          RETURNING "workspaceId", "periodStart"
+        `);
+        if (!reservation) return false;
+        await transaction.workspaceUsagePeriod.updateMany({
+          where: {
+            workspaceId: reservation.workspaceId,
+            periodStart: reservation.periodStart,
+            deliveriesReserved: { gt: 0 },
+          },
+          data: { deliveriesReserved: { decrement: 1 } },
+        });
+        return true;
+      });
     },
 
     async claimOutboundDelivery(deliveryKey, owner, leaseUntil) {

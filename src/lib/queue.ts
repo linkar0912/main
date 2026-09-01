@@ -7,6 +7,16 @@ import type { FacebookNormalizedEvent } from "./facebook/types";
 
 export const WEBHOOK_QUEUE_NAME = "linkar-webhooks";
 
+export const QUEUE_PRIORITY = {
+  REALTIME: 1,
+  INTERACTIVE: 5,
+  BULK: 10,
+  MAINTENANCE: 20,
+} as const;
+
+export type QueuedInstagramEvent = NormalizedEvent & { linkarIngestedAt: number };
+export type QueuedFacebookEvent = FacebookNormalizedEvent & { linkarIngestedAt: number };
+
 export type WebhookQueueCounts = {
   state: "ok" | "not_configured" | "error";
   waiting: number;
@@ -50,6 +60,34 @@ export function createFacebookWebhookJobId(event: FacebookNormalizedEvent): stri
   // use pageId instead of accountId because Facebook webhooks are scoped to
   // Page objects, not user accounts.
   return createHash("sha256").update(`${event.pageId}\0${event.id}`).digest("base64url");
+}
+
+export function createInstagramEventJobOptions(event: NormalizedEvent, ingestedAt = Date.now()) {
+  return {
+    data: { ...event, linkarIngestedAt: ingestedAt } satisfies QueuedInstagramEvent,
+    options: {
+      jobId: createWebhookJobId(event),
+      priority: QUEUE_PRIORITY.REALTIME,
+      attempts: 3,
+      backoff: { type: "exponential" as const, delay: 1_000, jitter: 0.5 },
+      removeOnComplete: 1_000,
+      removeOnFail: 5_000,
+    },
+  };
+}
+
+export function createFacebookEventJobOptions(event: FacebookNormalizedEvent, ingestedAt = Date.now()) {
+  return {
+    data: { ...event, linkarIngestedAt: ingestedAt } satisfies QueuedFacebookEvent,
+    options: {
+      jobId: createFacebookWebhookJobId(event),
+      priority: QUEUE_PRIORITY.REALTIME,
+      attempts: 3,
+      backoff: { type: "exponential" as const, delay: 1_000, jitter: 0.5 },
+      removeOnComplete: 1_000,
+      removeOnFail: 5_000,
+    },
+  };
 }
 
 export type LeadDeliveryJob = {
@@ -120,7 +158,7 @@ export async function retryAdminQueueJobs(name: string, jobIds: string[]): Promi
 
 export async function enqueueAdminMaintenance(action: "delivery_reconciliation" | "usage_reconciliation"): Promise<boolean> {
   const queue = getWebhookQueue(); if (!queue) return false;
-  await queue.add("admin-maintenance", { action }, { jobId: `admin-maintenance:${action}`, removeOnComplete: true, removeOnFail: 100, attempts: 2, backoff: { type: "fixed", delay: 5_000 } });
+  await queue.add("admin-maintenance", { action }, { jobId: `admin-maintenance:${action}`, priority: QUEUE_PRIORITY.MAINTENANCE, removeOnComplete: true, removeOnFail: 100, attempts: 2, backoff: { type: "fixed", delay: 5_000 } });
   return true;
 }
 
@@ -134,6 +172,7 @@ export async function enqueueAdminDeletion(jobId: string): Promise<boolean> {
   }
   await queue.add("admin-deletion", { jobId }, {
     jobId: `admin-deletion:${jobId}`,
+    priority: QUEUE_PRIORITY.MAINTENANCE,
     attempts: getServerEnv().deletionJobAttempts,
     backoff: { type: "exponential", delay: getServerEnv().deletionJobBackoffMs },
     removeOnComplete: 1_000,
@@ -197,15 +236,10 @@ export async function enqueueWebhookEvents(events: NormalizedEvent[]): Promise<n
   if (!queue) return 0;
 
   await Promise.all(
-    events.map((event) =>
-      queue.add("instagram-event", event, {
-        jobId: createWebhookJobId(event),
-        attempts: 3,
-        backoff: { type: "exponential", delay: 1_000, jitter: 0.5 },
-        removeOnComplete: 1_000,
-        removeOnFail: 5_000,
-      }),
-    ),
+    events.map((event) => {
+      const job = createInstagramEventJobOptions(event);
+      return queue.add("instagram-event", job.data, job.options);
+    }),
   );
   return events.length;
 }
@@ -221,15 +255,10 @@ export async function enqueueFacebookEvents(events: FacebookNormalizedEvent[]): 
   const queue = getWebhookQueue();
   if (!queue) return 0;
   await Promise.all(
-    events.map((event) =>
-      queue.add("facebook-event", event, {
-        jobId: createFacebookWebhookJobId(event),
-        attempts: 3,
-        backoff: { type: "exponential", delay: 1_000, jitter: 0.5 },
-        removeOnComplete: 1_000,
-        removeOnFail: 5_000,
-      }),
-    ),
+    events.map((event) => {
+      const job = createFacebookEventJobOptions(event);
+      return queue.add("facebook-event", job.data, job.options);
+    }),
   );
   return events.length;
 }
@@ -239,6 +268,7 @@ export async function enqueueLeadDelivery(job: LeadDeliveryJob): Promise<boolean
   if (!queue) return false;
   await queue.add("lead-delivery", job, {
     jobId: createLeadDeliveryJobId(job.deliveryKey),
+    priority: QUEUE_PRIORITY.BULK,
     attempts: 3,
     backoff: { type: "exponential", delay: 1_000 },
     removeOnComplete: 1_000,
@@ -273,6 +303,7 @@ export async function enqueueFlowFollowUps(jobs: FlowFollowUpJob[]): Promise<num
     jobs.map((job) =>
       queue.add("flow-followup", job, {
         jobId: createFlowFollowUpJobId(job.deliveryKey),
+        priority: QUEUE_PRIORITY.INTERACTIVE,
         delay: Math.max(0, Math.min(job.delayMinutes, 10_080)) * 60_000,
         attempts: 3,
         backoff: { type: "exponential", delay: 60_000 },
@@ -338,6 +369,7 @@ export async function enqueueBroadcastSends(
         job,
         {
           jobId: `broadcast:${job.broadcastId}:${job.igAccountId}:${job.igScopedUserId}`,
+          priority: QUEUE_PRIORITY.BULK,
           delay: baseDelayMs + Math.min(index, 600) * 1_000,
           attempts: 2,
           backoff: { type: "fixed", delay: 5_000 },

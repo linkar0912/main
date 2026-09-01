@@ -66,4 +66,29 @@ describe("FacebookClient", () => {
       expect((err as FacebookApiError).retryable).toBe(true);
     }
   });
+
+  it("aborts provider requests at the configured deadline", async () => {
+    const fetcher = vi.fn<typeof fetch>((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        reject(new DOMException("Aborted", "AbortError"));
+      });
+    }));
+    const client = new FacebookClient({
+      apiVersion: "v25.0",
+      fetcher,
+      requestTimeoutMs: 5,
+    });
+
+    await expect(client.postCommentReply(
+      { pageId: "page_1", accessToken: "secret" },
+      "comment_1",
+      "hello",
+    )).rejects.toMatchObject({
+      name: "FacebookApiError",
+      status: 0,
+      responseReceived: false,
+      retryable: true,
+    });
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
 });

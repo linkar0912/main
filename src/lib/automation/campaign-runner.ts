@@ -18,6 +18,7 @@ import type { ParticipantPatch } from "../repository";
 import { unsealSecret } from "../security/secrets";
 import { releaseDailySendSlots, renderTemplate, reserveDailySendSlots } from "./send-limits";
 import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
+import type { DeliveryTimingObserver } from "./delivery-timing";
 
 const RECHECK_COOLDOWN_MS = 10_000;
 const MAX_RECHECKS = 10;
@@ -66,6 +67,7 @@ export type CampaignRunnerOptions = {
   interactionSecret?: string;
   finalAttempt?: boolean;
   dispatchLeaseMs?: number;
+  timingObserver?: DeliveryTimingObserver;
 };
 
 export type CampaignMapping = {
@@ -473,6 +475,7 @@ type DeliveryContext = {
   interactionSecret: string;
   finalAttempt: boolean;
   dispatchLeaseMs: number;
+  timingObserver?: DeliveryTimingObserver;
 };
 
 type GuardedDeliverySpec = {
@@ -506,7 +509,7 @@ type GuardedDeliverySpec = {
 async function guardedDelivery(
   participant: AutomationParticipantRecord,
   spec: GuardedDeliverySpec,
-  ctx: Pick<DeliveryContext, "client" | "connection" | "repository" | "finalAttempt" | "dispatchLeaseMs">,
+  ctx: Pick<DeliveryContext, "client" | "connection" | "repository" | "finalAttempt" | "dispatchLeaseMs" | "timingObserver">,
 ): Promise<AutomationParticipantRecord> {
   const { repository } = ctx;
   for (; ;) {
@@ -584,6 +587,7 @@ async function guardedDelivery(
       payload: spec.payload,
       claimLeaseMs: ctx.dispatchLeaseMs,
       repository,
+      timingObserver: ctx.timingObserver,
     }, async (payload) => {
       sentIds = await spec.send(payload);
       return { id: sentIds.messageId };
@@ -882,6 +886,8 @@ async function sendCooldownNotice(
   );
   if (prepared.kind !== "send") return;
 
+  const providerStartedAt = performance.now();
+  ctx.timingObserver?.providerStarted();
   try {
     const response = await ctx.client.sendQuickReply(
       ctx.connection,
@@ -900,6 +906,8 @@ async function sendCooldownNotice(
     await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "SENT", response.message_id);
   } catch {
     await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "FAILED", undefined, "Meta cooldown notice failed");
+  } finally {
+    ctx.timingObserver?.providerFinished(performance.now() - providerStartedAt);
   }
 }
 
@@ -1066,6 +1074,7 @@ export async function processExistingCampaignParticipant(
     interactionSecret: options.interactionSecret,
     finalAttempt: options.finalAttempt === true,
     dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
+    timingObserver: options.timingObserver,
   };
 
   if (participant.publicReplyStatus !== "SENT" && participant.publicReplyStatus !== "SKIPPED") {
@@ -1311,6 +1320,7 @@ export async function processPendingCampaignInteraction(
       interactionSecret: options.interactionSecret,
       finalAttempt: options.finalAttempt === true,
       dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
+      timingObserver: options.timingObserver,
     });
     if (resumed.state === "LINK_SENT") {
       return { handled: true, result: handledResult(resumed.id, { sent: 1 }) };
@@ -1360,6 +1370,7 @@ export async function processPendingCampaignInteraction(
           interactionSecret: options.interactionSecret,
           finalAttempt: options.finalAttempt === true,
           dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
+          timingObserver: options.timingObserver,
         });
       }
       return { handled: true, result: handledResult(participant.id) };
@@ -1398,6 +1409,7 @@ export async function processPendingCampaignInteraction(
     interactionSecret: options.interactionSecret,
     finalAttempt: options.finalAttempt === true,
     dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
+    timingObserver: options.timingObserver,
   };
 
   // Ungated campaigns deliver straight after the opt-in tap - no follower

@@ -38,6 +38,7 @@ export type ServerEnv = {
   trustedProxyHops: number;
   workerConcurrency: number;
   dispatchLeaseMs: number;
+  providerRequestTimeoutMs: number;
   adminChallengeTtlSeconds: number;
   deletionJobAttempts: number;
   deletionJobBackoffMs: number;
@@ -69,6 +70,12 @@ function integerEnv(name: string, value: string | undefined, fallback: number): 
     // from the error log without re-deriving it from the environment dump.
     throw new Error(`${name} must be a non-negative integer (got "${value}")`);
   }
+  return parsed;
+}
+
+function positiveIntegerEnv(name: string, value: string | undefined, fallback: number): number {
+  const parsed = integerEnv(name, value, fallback);
+  if (parsed === 0) throw new Error(`${name} must be a positive integer`);
   return parsed;
 }
 
@@ -133,6 +140,15 @@ export function getServerEnv(): ServerEnv {
   if (!/^v\d+\.\d+$/.test(facebookApiVersion)) {
     throw new Error(`FACEBOOK_API_VERSION must look like "v25.0" (got "${facebookApiVersion}")`);
   }
+  const providerRequestTimeoutMs = positiveIntegerEnv(
+    "PROVIDER_REQUEST_TIMEOUT_MS",
+    process.env.PROVIDER_REQUEST_TIMEOUT_MS,
+    10_000,
+  );
+  const dispatchLeaseMs = integerEnv("DISPATCH_LEASE_MS", process.env.DISPATCH_LEASE_MS, 30_000);
+  if (dispatchLeaseMs < providerRequestTimeoutMs + 5_000) {
+    throw new Error("DISPATCH_LEASE_MS must be at least PROVIDER_REQUEST_TIMEOUT_MS + 5000");
+  }
 
   return {
     appName: process.env.APP_NAME ?? "Linkar",
@@ -184,7 +200,8 @@ export function getServerEnv(): ServerEnv {
     ),
     trustedProxyHops: integerEnv("TRUSTED_PROXY_HOPS", process.env.TRUSTED_PROXY_HOPS, 0),
     workerConcurrency: integerEnv("WORKER_CONCURRENCY", process.env.WORKER_CONCURRENCY, 5),
-    dispatchLeaseMs: integerEnv("DISPATCH_LEASE_MS", process.env.DISPATCH_LEASE_MS, 30_000),
+    dispatchLeaseMs,
+    providerRequestTimeoutMs,
     adminChallengeTtlSeconds: integerEnv("ADMIN_CHALLENGE_TTL_SECONDS", process.env.ADMIN_CHALLENGE_TTL_SECONDS, 600),
     deletionJobAttempts: integerEnv("DELETION_JOB_ATTEMPTS", process.env.DELETION_JOB_ATTEMPTS, 8),
     deletionJobBackoffMs: integerEnv("DELETION_JOB_BACKOFF_MS", process.env.DELETION_JOB_BACKOFF_MS, 5_000),

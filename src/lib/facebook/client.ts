@@ -29,6 +29,7 @@ type FacebookClientOptions = {
   apiVersion: string;
   baseUrl?: string;
   fetcher?: typeof fetch;
+  requestTimeoutMs?: number;
 };
 
 const TRANSIENT_FACEBOOK_CODES = new Set([1, 2, 4, 17, 32, 341, 613]);
@@ -49,11 +50,16 @@ export class FacebookClient {
   private readonly apiVersion: string;
   private readonly baseUrl: string;
   private readonly fetcher: typeof fetch;
+  private readonly requestTimeoutMs: number;
 
   constructor(options: FacebookClientOptions) {
     this.apiVersion = options.apiVersion;
     this.baseUrl = options.baseUrl ?? "https://graph.facebook.com";
     this.fetcher = options.fetcher ?? fetch;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
+    if (!Number.isInteger(this.requestTimeoutMs) || this.requestTimeoutMs <= 0) {
+      throw new Error("Facebook request timeout must be a positive integer");
+    }
   }
 
   private async request(
@@ -66,9 +72,12 @@ export class FacebookClient {
       response = await this.fetcher(url, {
         ...init,
         headers: { authorization: `Bearer ${accessToken}`, ...init.headers },
+        signal: init.signal ?? AbortSignal.timeout(this.requestTimeoutMs),
       });
-    } catch {
-      throw new FacebookApiError("Facebook network request failed", 0, false);
+    } catch (error) {
+      const timedOut = error instanceof DOMException
+        && (error.name === "AbortError" || error.name === "TimeoutError");
+      throw new FacebookApiError(timedOut ? "Facebook request timed out" : "Facebook network request failed", 0, false);
     }
     let data: Record<string, unknown>;
     try {

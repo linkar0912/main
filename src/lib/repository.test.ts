@@ -134,6 +134,67 @@ describe("memory repository", () => {
     ]);
   });
 
+  it("lists only active Instagram automations applicable to one account", async () => {
+    const base = {
+      workspaceId: "workspace_a",
+      status: "ACTIVE" as const,
+      version: 1,
+      definition,
+      createdAt: "2026-08-21T08:00:00.000Z",
+      updatedAt: "2026-08-21T08:00:00.000Z",
+    };
+    const repository = createMemoryRepository([
+      { ...base, id: "unpinned", name: "Unpinned", provider: "INSTAGRAM", priority: 0 },
+      { ...base, id: "high_priority", name: "High priority", provider: "INSTAGRAM", instagramAccountId: "ig_1", priority: 10 },
+      { ...base, id: "sibling", name: "Sibling", provider: "INSTAGRAM", instagramAccountId: "ig_2", priority: 20 },
+      { ...base, id: "draft", name: "Draft", provider: "INSTAGRAM", status: "DRAFT", priority: 30 },
+      { ...base, id: "facebook", name: "Facebook", provider: "FACEBOOK", facebookPageId: "page_1", priority: 40 },
+    ]);
+
+    expect((await repository.listActiveAutomationsForInstagramAccount("workspace_a", "ig_1")).map((item) => item.id))
+      .toEqual(["high_priority", "unpinned"]);
+  });
+
+  it("checks handoff pause state for the exact sender", async () => {
+    const repository = createMemoryRepository();
+    const { record } = await repository.createParticipant({
+      ...participantInput,
+      igScopedUserId: "person_1",
+    });
+    await repository.pauseParticipant(
+      record.id,
+      "manual handoff",
+      "member_1",
+      "2026-08-21T10:00:00.000Z",
+    );
+
+    expect(await repository.hasPausedParticipant("workspace_a", "ig_123", "person_1")).toBe(true);
+    expect(await repository.hasPausedParticipant("workspace_a", "ig_123", "person_2")).toBe(false);
+    expect(await repository.hasPausedParticipant("workspace_b", "ig_123", "person_1")).toBe(false);
+  });
+
+  it("records skipped execution outcomes in one duplicate-safe batch", async () => {
+    const repository = createMemoryRepository();
+    const first = {
+      workspaceId: "workspace_a",
+      automationId: "automation_1",
+      externalEventId: "event_1",
+      dedupeKey: "automation_1:event_1",
+      status: "SKIPPED" as const,
+      reason: "trigger did not match",
+    };
+    const second = {
+      ...first,
+      automationId: "automation_2",
+      dedupeKey: "automation_2:event_1",
+    };
+
+    expect(await repository.recordExecutions([first, first, second])).toBe(2);
+    expect(await repository.recordExecutions([first, second])).toBe(0);
+    expect(await repository.hasExecution("workspace_a", first.dedupeKey)).toBe(true);
+    expect(await repository.hasExecution("workspace_a", second.dedupeKey)).toBe(true);
+  });
+
   it("creates, lists, and updates automations within a workspace", async () => {
     const repository = createMemoryRepository();
     const created = await repository.createAutomation("workspace_a", {

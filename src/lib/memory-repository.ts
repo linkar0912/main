@@ -117,6 +117,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
   }>();
   const executions = new Map<string, ExecutionRecord>();
   const outboundDeliveries = new Map<string, OutboundDeliveryRecord>();
+  const outboundUsageReservations = new Map<string, string>();
+  const outboundMonthlyUsage = new Map<string, number>();
   const automationDailySendCounters = new Map<string, number>();
   const deletionRequests = new Map<string, DataDeletionRequestRecord>();
   const participants = new Map<string, AutomationParticipantRecord>();
@@ -436,6 +438,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       );
     },
 
+    async hasPausedParticipant(workspaceId, instagramAccountId, igScopedUserId) {
+      return [...participants.values()].some((participant) =>
+        participant.workspaceId === workspaceId
+        && participant.instagramAccountId === instagramAccountId
+        && participant.igScopedUserId === igScopedUserId
+        && Boolean(participant.pausedAt));
+    },
+
     async findWorkspaceIdByMemberEmail(email) {
       return memberWorkspacesByEmail.get(email.toLowerCase()) ?? null;
     },
@@ -445,6 +455,18 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         [...automations.values()]
           .filter((automation) => automation.workspaceId === workspaceId)
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)),
+      );
+    },
+
+    async listActiveAutomationsForInstagramAccount(workspaceId, instagramAccountId) {
+      return copy(
+        [...automations.values()]
+          .filter((automation) =>
+            automation.workspaceId === workspaceId
+            && automation.status === "ACTIVE"
+            && automation.provider === "INSTAGRAM"
+            && (automation.instagramAccountId === undefined || automation.instagramAccountId === instagramAccountId))
+          .sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
       );
     },
 
@@ -775,6 +797,25 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return { created: true, record: copy(record) };
     },
 
+    async recordExecutions(inputs) {
+      let created = 0;
+      for (const input of inputs) {
+        const existing = [...executions.values()].some(
+          (record) => record.workspaceId === input.workspaceId && record.dedupeKey === input.dedupeKey,
+        );
+        if (existing) continue;
+        const record: ExecutionRecord = {
+          id: createId("execution"),
+          createdAt: now(),
+          ...input,
+          dispatchStatus: input.dispatchStatus ?? "CLAIMED",
+        };
+        executions.set(record.id, record);
+        created += 1;
+      }
+      return created;
+    },
+
     async claimExecution(input) {
       const existing = [...executions.values()].some(
         (record) => record.workspaceId === input.workspaceId && record.dedupeKey === input.dedupeKey,
@@ -980,6 +1021,85 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     async getOutboundDelivery(deliveryKey) {
       const record = outboundDeliveries.get(deliveryKey);
       return record ? copy(record) : null;
+    },
+
+    async prepareOutboundDelivery(input) {
+      const { owner, leaseUntil, periodStart, monthlyLimit, ...deliveryInput } = input;
+      validateUtcDate(periodStart);
+      if (monthlyLimit !== null && (!Number.isInteger(monthlyLimit) || monthlyLimit < 0)) {
+        throw new Error("monthlyLimit must be a non-negative integer or null");
+      }
+
+      let existing = outboundDeliveries.get(input.deliveryKey);
+      if (!existing) {
+        const timestamp = now();
+        existing = {
+          ...copy(deliveryInput),
+          id: createId("delivery"),
+          state: "PENDING",
+          retryable: false,
+          attemptCount: 0,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        outboundDeliveries.set(input.deliveryKey, existing);
+      }
+      if (
+        existing.state === "SENT"
+        || existing.state === "UNKNOWN"
+        || (existing.state === "FAILED" && !existing.retryable)
+      ) {
+        return { status: "TERMINAL" as const, record: existing };
+      }
+      if (existing.state === "CLAIMED") {
+        return { status: "BUSY" as const, record: existing };
+      }
+
+      const claimed: OutboundDeliveryRecord = {
+        ...existing,
+        state: "CLAIMED",
+        retryable: false,
+        resultCode: undefined,
+        claimOwner: owner,
+        claimExpiresAt: leaseUntil,
+        attemptCount: existing.attemptCount + 1,
+        lastError: undefined,
+        updatedAt: now(),
+      };
+      outboundDeliveries.set(input.deliveryKey, claimed);
+
+      if (outboundUsageReservations.has(input.deliveryKey)) {
+        return { status: "CLAIMED" as const, record: copy(claimed) };
+      }
+
+      const usageKey = `${existing.workspaceId}:${periodStart}`;
+      const used = outboundMonthlyUsage.get(usageKey) ?? 0;
+      if (monthlyLimit !== null && used >= monthlyLimit) {
+        const rejected: OutboundDeliveryRecord = {
+          ...claimed,
+          state: "FAILED",
+          retryable: false,
+          resultCode: "SUPPRESSED",
+          claimOwner: undefined,
+          claimExpiresAt: undefined,
+          lastError: "Monthly delivery limit reached",
+          updatedAt: now(),
+        };
+        outboundDeliveries.set(input.deliveryKey, rejected);
+        return { status: "QUOTA_REJECTED" as const, record: copy(rejected) };
+      }
+
+      outboundUsageReservations.set(input.deliveryKey, usageKey);
+      outboundMonthlyUsage.set(usageKey, used + 1);
+      return { status: "CLAIMED" as const, record: copy(claimed) };
+    },
+
+    async releaseOutboundDeliveryReservation(deliveryKey) {
+      const usageKey = outboundUsageReservations.get(deliveryKey);
+      if (!usageKey) return false;
+      outboundUsageReservations.delete(deliveryKey);
+      outboundMonthlyUsage.set(usageKey, Math.max(0, (outboundMonthlyUsage.get(usageKey) ?? 0) - 1));
+      return true;
     },
 
     async claimOutboundDelivery(deliveryKey, owner, leaseUntil) {

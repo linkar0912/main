@@ -50,13 +50,17 @@ describe("POST /api/meta/webhook", () => {
     expect(response.status).toBe(200);
   });
 
-  it("acknowledges but does not enqueue an event for a suspended workspace", async () => {
-    mocks.getWorkspaceStatus.mockResolvedValue("SUSPENDED");
+  it("enqueues every signed normalized event without database prefiltering", async () => {
+    mocks.enqueueWebhookEvents.mockResolvedValue(1);
 
     const response = await POST(new Request("http://localhost/api/meta/webhook", { method: "POST", body: "{}" }));
 
     expect(response.status).toBe(200);
-    expect(mocks.enqueueWebhookEvents).toHaveBeenCalledWith([]);
+    expect(mocks.enqueueWebhookEvents).toHaveBeenCalledWith([
+      expect.objectContaining({ id: "event_1", accountId: "ig_1" }),
+    ]);
+    expect(mocks.findWorkspaceByInstagramAccount).not.toHaveBeenCalled();
+    expect(mocks.getWorkspaceStatus).not.toHaveBeenCalled();
     expect(mocks.processNormalizedEvent).not.toHaveBeenCalled();
   });
 });

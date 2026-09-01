@@ -39,22 +39,17 @@ export async function POST(request: Request) {
   }
 
   const events = normalizeWebhook(payload);
-  const repository = getRepository();
-  const runnableEvents = (await Promise.all(events.map(async (event) => {
-    const mapping = await repository.findWorkspaceByInstagramAccount(event.accountId);
-    if (!mapping) return null;
-    return await repository.getWorkspaceStatus(mapping.workspaceId) === "ACTIVE" ? event : null;
-  }))).filter((event): event is (typeof events)[number] => event !== null);
-  const enqueued = await enqueueWebhookEvents(runnableEvents);
+  const enqueued = await enqueueWebhookEvents(events);
   let retryableFailure = false;
-  if (runnableEvents.length > 0 && enqueued === 0) {
+  if (events.length > 0 && enqueued === 0) {
     // No Redis queue configured (demo/self-hosted without REDIS_URL): fall back to
     // processing inline. Process sequentially - each event can make several Meta API
     // calls, and fanning out concurrently risks blowing past Meta's webhook timeout,
     // which triggers redeliveries. The response stays minimal so internal delivery
     // details never leak to the caller.
+    const repository = getRepository();
     const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
-    for (const event of runnableEvents) {
+    for (const event of events) {
       try {
         await processNormalizedEvent(event, repository, {
           client,

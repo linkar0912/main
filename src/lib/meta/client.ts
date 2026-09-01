@@ -4,6 +4,7 @@ type MetaClientOptions = {
   apiVersion: string;
   baseUrl?: string;
   fetcher?: typeof fetch;
+  requestTimeoutMs?: number;
 };
 
 export class MetaApiError extends Error {
@@ -104,6 +105,7 @@ export class MetaClient {
   private readonly apiVersion: string;
   private readonly baseUrl: string;
   private readonly fetcher: typeof fetch;
+  private readonly requestTimeoutMs: number;
 
   constructor(options: MetaClientOptions) {
     if (options.apiVersion !== INSTAGRAM_LOGIN_API_VERSION) {
@@ -112,6 +114,10 @@ export class MetaClient {
     this.apiVersion = options.apiVersion;
     this.baseUrl = options.baseUrl ?? "https://graph.instagram.com";
     this.fetcher = options.fetcher ?? fetch;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
+    if (!Number.isInteger(this.requestTimeoutMs) || this.requestTimeoutMs <= 0) {
+      throw new Error("Meta request timeout must be a positive integer");
+    }
   }
 
   async replyToComment(connection: MetaConnection, commentId: string, text: string): Promise<{ id: string }> {
@@ -284,9 +290,12 @@ export class MetaClient {
       response = await this.fetcher(url, {
         ...init,
         headers: { authorization: `Bearer ${accessToken}`, ...init.headers },
+        signal: init.signal ?? AbortSignal.timeout(this.requestTimeoutMs),
       });
-    } catch {
-      throw new MetaApiError("Meta network request failed", 0, false);
+    } catch (error) {
+      const timedOut = error instanceof DOMException
+        && (error.name === "AbortError" || error.name === "TimeoutError");
+      throw new MetaApiError(timedOut ? "Meta request timed out" : "Meta network request failed", 0, false);
     }
     let data: Record<string, unknown>;
     try {

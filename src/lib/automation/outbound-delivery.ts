@@ -6,6 +6,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "../repository";
+import type { DeliveryTimingObserver } from "./delivery-timing";
 
 export type ProviderFailureClass =
   | "KNOWN_RETRYABLE"
@@ -18,9 +19,9 @@ export type DeliveryExecutionRequest<
   payload: TPayload;
   claimLeaseMs: number;
   repository?: AutomationRepository;
+  timingObserver?: DeliveryTimingObserver;
   entitlementService?: {
-    reserveMonthlyDelivery(workspaceId: string, deliveryKey: string): Promise<{ reserved: boolean; used: number; limit: number | null }>;
-    releaseMonthlyDelivery(deliveryKey: string): Promise<boolean>;
+    getMonthlyDeliveryLimit(workspaceId: string): Promise<number | null>;
   };
 };
 
@@ -67,6 +68,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function currentPeriodStart(now: Date): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
 function existingResult(record: OutboundDeliveryRecord): DeliveryExecutionResult | null {
   if (record.state === "SENT") {
     return {
@@ -95,37 +100,41 @@ export async function executeOutboundDelivery<
     claimLeaseMs,
     repository: suppliedRepository,
     entitlementService: suppliedEntitlementService,
+    timingObserver,
     ...deliveryInput
   } = request;
   const repository = suppliedRepository ?? getRepository();
-  const ensured = await repository.ensureOutboundDelivery(deliveryInput);
-  const terminal = existingResult(ensured);
-  if (terminal) return terminal;
-
   const owner = createId("delivery_claim");
   const leaseUntil = new Date(Date.now() + claimLeaseMs).toISOString();
-  const claim = await repository.claimOutboundDelivery(request.deliveryKey, owner, leaseUntil);
-  if (!claim.claimed) return existingResult(claim.record) ?? { status: "BUSY" };
-
   const entitlementService = suppliedEntitlementService
     ?? (await import("../entitlements/service")).getEntitlementService();
-  let reservation: Awaited<ReturnType<typeof entitlementService.reserveMonthlyDelivery>>;
+  let preparation: Awaited<ReturnType<typeof repository.prepareOutboundDelivery>>;
   try {
-    reservation = await entitlementService.reserveMonthlyDelivery(request.workspaceId, request.deliveryKey);
+    const monthlyLimit = await entitlementService.getMonthlyDeliveryLimit(request.workspaceId);
+    preparation = await repository.prepareOutboundDelivery({
+      ...deliveryInput,
+      owner,
+      leaseUntil,
+      periodStart: currentPeriodStart(new Date()),
+      monthlyLimit,
+    });
   } catch {
     const error = "Delivery usage could not be reserved";
-    await repository.failOutboundDelivery(request.deliveryKey, owner, error, true, "RETRYABLE_REJECTION");
     return { status: "FAILED", retryable: true, error };
   }
-  if (!reservation.reserved) {
-    const error = "Monthly delivery limit reached";
-    await repository.failOutboundDelivery(request.deliveryKey, owner, error, false, "SUPPRESSED");
-    return { status: "FAILED", retryable: false, error };
+  if (preparation.status === "TERMINAL") {
+    return existingResult(preparation.record) ?? { status: "BUSY" };
+  }
+  if (preparation.status === "BUSY") return { status: "BUSY" };
+  if (preparation.status === "QUOTA_REJECTED") {
+    return { status: "FAILED", retryable: false, error: "Monthly delivery limit reached" };
   }
 
   let providerResult: { id?: string; message_id?: string };
+  const providerStartedAt = performance.now();
+  timingObserver?.providerStarted();
   try {
-    providerResult = await send(claim.record.payload as TPayload);
+    providerResult = await send(preparation.record.payload as TPayload);
   } catch (error) {
     const message = errorMessage(error);
     const classification = classifyProviderFailure(error);
@@ -136,7 +145,7 @@ export async function executeOutboundDelivery<
     }
 
     const retryable = classification === "KNOWN_RETRYABLE";
-    await entitlementService.releaseMonthlyDelivery(request.deliveryKey).catch(() => false);
+    await repository.releaseOutboundDeliveryReservation(request.deliveryKey).catch(() => false);
     await repository.failOutboundDelivery(
       request.deliveryKey,
       owner,
@@ -145,6 +154,8 @@ export async function executeOutboundDelivery<
       retryable ? "RETRYABLE_REJECTION" : "PROVIDER_REJECTED",
     ).catch(() => false);
     return { status: "FAILED", retryable, error: message };
+  } finally {
+    timingObserver?.providerFinished(performance.now() - providerStartedAt);
   }
 
   const providerMessageId = providerResult.id ?? providerResult.message_id;

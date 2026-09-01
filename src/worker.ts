@@ -8,8 +8,7 @@ import { getRepository } from "./lib/repository-provider";
 import { WEBHOOK_QUEUE_NAME } from "./lib/queue";
 import { processNormalizedEvent } from "./lib/automation/runner";
 import { processNormalizedFacebookEvent } from "./lib/facebook/runner";
-import type { NormalizedEvent } from "./lib/automation/types";
-import type { FacebookNormalizedEvent } from "./lib/facebook/types";
+import type { QueuedFacebookEvent, QueuedInstagramEvent } from "./lib/queue";
 import { refreshInstagramToken } from "./lib/meta/oauth";
 import { refreshExpiringInstagramTokens } from "./lib/meta/token-refresh";
 import { sweepStaleParticipants } from "./lib/automation/participant-retention";
@@ -23,8 +22,36 @@ import type { FlowFollowUpJob } from "./lib/queue";
 import { createWorkerHealthServer, workerHealthPort } from "./lib/worker-health";
 import { reconcileUsageReservations } from "./lib/admin/system/usage-reconciliation";
 import { processAdminDeletion } from "./lib/admin/deletion/processor";
+import { createDeliveryTiming } from "./lib/automation/delivery-timing";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
+
+async function processTimedRealtimeJob<T>(
+  jobId: string | undefined,
+  channel: "instagram" | "facebook",
+  ingestedAt: number,
+  operation: (timing: ReturnType<typeof createDeliveryTiming>) => Promise<T>,
+): Promise<T> {
+  const timing = createDeliveryTiming(ingestedAt);
+  timing.workerStarted();
+  let outcome: "completed" | "failed" = "completed";
+  let errorCode: string | undefined;
+  try {
+    return await operation(timing);
+  } catch (error) {
+    outcome = "failed";
+    errorCode = error instanceof Error ? error.name : "UnknownError";
+    throw error;
+  } finally {
+    logger.info("Realtime automation timing", {
+      jobId: jobId ?? "unknown",
+      channel,
+      outcome,
+      ...(errorCode ? { errorCode } : {}),
+      ...timing.snapshot(),
+    });
+  }
+}
 
 const env = getServerEnv();
 
@@ -65,7 +92,10 @@ if (!env.redisUrl) {
       }
       if (job.name === "broadcast-send") {
         const payload = job.data as BroadcastSendJob;
-        const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+        const client = env.metaAppId ? new MetaClient({
+          apiVersion: env.metaApiVersion,
+          requestTimeoutMs: env.providerRequestTimeoutMs,
+        }) : undefined;
         const options: BroadcastRunnerOptions = {
           client,
           tokenEncryptionKey: env.metaTokenEncryptionKey,
@@ -76,7 +106,10 @@ if (!env.redisUrl) {
       }
       if (job.name === "flow-followup") {
         const payload = job.data as FlowFollowUpJob;
-        const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+        const client = env.metaAppId ? new MetaClient({
+          apiVersion: env.metaApiVersion,
+          requestTimeoutMs: env.providerRequestTimeoutMs,
+        }) : undefined;
         const options: FlowFollowUpRunnerOptions = {
           client,
           tokenEncryptionKey: env.metaTokenEncryptionKey,
@@ -87,33 +120,43 @@ if (!env.redisUrl) {
       }
 
       if (job.name === "facebook-event") {
-        const event = job.data as FacebookNormalizedEvent;
-        const client = env.facebookAppId ? new FacebookClient({ apiVersion: env.facebookApiVersion }) : undefined;
-        return processNormalizedFacebookEvent(event, getRepository(), {
-          client,
-          tokenEncryptionKey: env.facebookTokenEncryptionKey ?? env.metaTokenEncryptionKey,
-        });
+        const { linkarIngestedAt, ...event } = job.data as QueuedFacebookEvent;
+        const client = env.facebookAppId ? new FacebookClient({
+          apiVersion: env.facebookApiVersion,
+          requestTimeoutMs: env.providerRequestTimeoutMs,
+        }) : undefined;
+        return processTimedRealtimeJob(job.id, "facebook", linkarIngestedAt, (timing) =>
+          processNormalizedFacebookEvent(event, getRepository(), {
+            client,
+            tokenEncryptionKey: env.facebookTokenEncryptionKey ?? env.metaTokenEncryptionKey,
+            timingObserver: timing,
+          }));
       }
 
-      const event = job.data as NormalizedEvent;
-      const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
-      return processNormalizedEvent(event, getRepository(), {
-        client,
-        tokenEncryptionKey: env.metaTokenEncryptionKey,
-        interactionSecret: env.metaAppSecret,
-        campaignsEnabled: env.followGatedCampaignsEnabled,
-        finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
-        dispatchLeaseMs: env.dispatchLeaseMs,
-      });
+      const { linkarIngestedAt, ...event } = job.data as QueuedInstagramEvent;
+      const client = env.metaAppId ? new MetaClient({
+        apiVersion: env.metaApiVersion,
+        requestTimeoutMs: env.providerRequestTimeoutMs,
+      }) : undefined;
+      return processTimedRealtimeJob(job.id, "instagram", linkarIngestedAt, (timing) =>
+        processNormalizedEvent(event, getRepository(), {
+          client,
+          tokenEncryptionKey: env.metaTokenEncryptionKey,
+          interactionSecret: env.metaAppSecret,
+          campaignsEnabled: env.followGatedCampaignsEnabled,
+          finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
+          dispatchLeaseMs: env.dispatchLeaseMs,
+          timingObserver: timing,
+        }));
     },
     { connection: redis, concurrency: env.workerConcurrency },
   );
 
   worker.on("completed", (job) => {
-    logger.info("Processed Instagram event", { jobId: job.id });
+    logger.info("Processed queue job", { jobId: job.id, jobName: job.name });
   });
   worker.on("failed", (job, error) => {
-    logger.error("Instagram event failed", { jobId: job?.id ?? "unknown", error: error.message });
+    logger.error("Queue job failed", { jobId: job?.id ?? "unknown", jobName: job?.name ?? "unknown", error: error.message });
   });
 
   // Drain in-flight jobs on shutdown so deploys don't kill deliveries mid-Meta-call.
@@ -187,7 +230,10 @@ if (!env.redisUrl) {
   // then every 15 minutes - granular enough for hour-level step delays.
   const runSequenceSweep = async () => {
     const repository = getRepository();
-    const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+    const client = env.metaAppId ? new MetaClient({
+      apiVersion: env.metaApiVersion,
+      requestTimeoutMs: env.providerRequestTimeoutMs,
+    }) : undefined;
     const result = await processDueSequences(repository, {
       client,
       tokenEncryptionKey: env.metaTokenEncryptionKey ?? undefined,
