@@ -868,6 +868,13 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapParticipant);
     },
 
+    async hasPausedParticipant(workspaceId, instagramAccountId, igScopedUserId) {
+      return Boolean(await client.automationParticipant.findFirst({
+        where: { workspaceId, instagramAccountId, igScopedUserId, pausedAt: { not: null } },
+        select: { id: true },
+      }));
+    },
+
     async findWorkspaceIdByMemberEmail(email) {
       const member = await client.workspaceMember.findFirst({
         where: { email: email.toLowerCase() },
@@ -880,6 +887,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       const records = await client.automation.findMany({
         where: { workspaceId },
         orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      });
+      return records.map(mapAutomation);
+    },
+
+    async listActiveAutomationsForInstagramAccount(workspaceId, instagramAccountId) {
+      const records = await client.automation.findMany({
+        where: {
+          workspaceId,
+          status: "ACTIVE",
+          provider: "INSTAGRAM",
+          OR: [{ instagramAccountId: null }, { instagramAccountId }],
+        },
+        orderBy: [{ priority: "desc" }, { name: "asc" }, { id: "asc" }],
       });
       return records.map(mapAutomation);
     },
@@ -1239,6 +1259,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         if (!record) throw error;
         return { created: false, record: mapExecution(record) };
       }
+    },
+
+    async recordExecutions(inputs) {
+      if (inputs.length === 0) return 0;
+      const result = await client.automationExecution.createMany({
+        data: inputs.map((input) => ({
+          id: createId("execution"),
+          ...input,
+          dispatchStatus: input.dispatchStatus ?? "CLAIMED",
+        })),
+        skipDuplicates: true,
+      });
+      return result.count;
     },
 
     async claimExecution(input) {

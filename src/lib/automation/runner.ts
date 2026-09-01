@@ -1,7 +1,13 @@
 import { evaluateFlow } from "./engine";
 import type { EvaluationContext, ExecutionAction, NormalizedEvent } from "./types";
 import { unsealSecret } from "../security/secrets";
-import type { AutomationContactRecord, AutomationRepository, InstagramConnectionRecord } from "../repository";
+import type {
+  AutomationContactRecord,
+  AutomationRecord,
+  AutomationRepository,
+  InstagramConnectionRecord,
+  RecordExecutionInput,
+} from "../repository";
 import { MetaApiError } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
 import { notifyWorkspaceManagers } from "../notifications";
@@ -443,6 +449,7 @@ async function queueOrDeliverLead(
 async function processOptOut(
   event: NormalizedEvent,
   mapping: WorkspaceMapping,
+  contact: AutomationContactRecord | null,
   repository: AutomationRepository,
   options: RunnerOptions,
 ): Promise<RunnerResult | null> {
@@ -451,8 +458,7 @@ async function processOptOut(
   const wantsOut = dmSideText && isOptOutCommand(event.text);
   if (!wantsOut) return null;
 
-  const existing = await repository.getContact(mapping.workspaceId, event.accountId, event.recipientId);
-  if (existing?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 }; // already opted out - stay silent
+  if (contact?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 }; // already opted out - stay silent
 
   // First-ever interaction may be the opt-out itself; make sure a row exists.
   await repository.touchContact(mapping.workspaceId, event.accountId, event.recipientId, new Date(event.timestamp).toISOString());
@@ -487,6 +493,8 @@ async function processOptOut(
 async function processEmailCaptureReply(
   event: NormalizedEvent,
   mapping: WorkspaceMapping,
+  contact: AutomationContactRecord | null,
+  automations: AutomationRecord[],
   repository: AutomationRepository,
   options: RunnerOptions,
 ): Promise<RunnerResult | null> {
@@ -495,16 +503,14 @@ async function processEmailCaptureReply(
   if (!event.recipientId) return null;
   const senderId = event.recipientId;
 
-  const contact = await repository.getContact(mapping.workspaceId, event.accountId, senderId);
   if (!contact) return null;
   if (contact.state === "AWAITING_FIELD" && contact.awaitingAutomationId) {
-    return processFieldAnswer(event, mapping, contact, repository, options);
+    const automation = automations.find((item) => item.id === contact.awaitingAutomationId);
+    return processFieldAnswer(event, mapping, contact, automation, repository, options);
   }
   if (contact.state !== "AWAITING_EMAIL" || !contact.awaitingAutomationId) return null;
 
-  const automation = (await repository.listAutomations(mapping.workspaceId)).find(
-    (item) => item.id === contact.awaitingAutomationId,
-  );
+  const automation = automations.find((item) => item.id === contact.awaitingAutomationId);
   if (
     !automation
     || automation.status !== "ACTIVE"
@@ -519,8 +525,6 @@ async function processEmailCaptureReply(
 
   const emailCapture = automation.definition.emailCapture;
   const dedupeKey = `${automation.id}:${event.id}:email-reply`;
-  if (await repository.hasExecution(mapping.workspaceId, dedupeKey)) return null;
-
   const claimed = await repository.claimExecution({
     workspaceId: mapping.workspaceId,
     automationId: automation.id,
@@ -689,13 +693,11 @@ async function processFieldAnswer(
   event: NormalizedEvent,
   mapping: WorkspaceMapping,
   contact: AutomationContactRecord,
+  automation: AutomationRecord | undefined,
   repository: AutomationRepository,
   options: RunnerOptions,
 ): Promise<RunnerResult> {
   const senderId = event.recipientId!;
-  const automation = (await repository.listAutomations(mapping.workspaceId)).find(
-    (item) => item.id === contact.awaitingAutomationId,
-  );
   if (
     !automation
     || automation.status !== "ACTIVE"
@@ -708,8 +710,6 @@ async function processFieldAnswer(
 
   const emailCapture = automation.definition.emailCapture;
   const dedupeKey = `${automation.id}:${event.id}:field-answer`;
-  if (await repository.hasExecution(mapping.workspaceId, dedupeKey)) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
-
   const claimed = await repository.claimExecution({
     workspaceId: mapping.workspaceId,
     automationId: automation.id,
@@ -894,8 +894,7 @@ export async function processNormalizedEvent(
 
   // Persist a compact summary for the workspace activity inbox. Idempotent per
   // event id, and never allowed to break event processing.
-  try {
-    await repository.recordWebhookEvent(mapping.workspaceId, {
+  void repository.recordWebhookEvent(mapping.workspaceId, {
       providerEventId: event.id,
       eventType: event.type,
       receivedAt: new Date().toISOString(),
@@ -907,48 +906,50 @@ export async function processNormalizedEvent(
         ...(event.commentId ? { commentId: event.commentId } : {}),
         text: (event.text ?? "").slice(0, 500),
       },
-    });
-  } catch (error) {
+    }).catch((error) => {
     logger.warn("Failed to persist webhook activity", {
       eventId: event.id,
       error: error instanceof Error ? error.message : String(error),
     });
-  }
+  });
 
-  const automations = (await repository.listAutomations(mapping.workspaceId))
-    .filter(
-      (automation) =>
-        automation.status === "ACTIVE"
-        // Account-scoped automations only answer events on their own account;
-        // unpinned automations keep answering for every connected account.
-        && (automation.instagramAccountId === undefined || automation.instagramAccountId === event.accountId),
-    )
-    // Priority first so the most-specific flow wins when several match.
-    .sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
+  const automations = await repository.listActiveAutomationsForInstagramAccount(
+    mapping.workspaceId,
+    event.accountId,
+  );
 
   // Opt-outs win over everything: a STOP-style reply permanently suppresses the
   // sender and is answered once. Suppressed senders are invisible to every engine
   // (classic, campaign, capture, comments) from here on.
+  const contact = event.recipientId
+    ? await repository.getContact(mapping.workspaceId, event.accountId, event.recipientId)
+    : null;
   if (event.recipientId) {
-    const optOut = await processOptOut(event, mapping, repository, options);
+    const optOut = await processOptOut(event, mapping, contact, repository, options);
     if (optOut) return optOut;
 
-    const contact = await repository.getContact(mapping.workspaceId, event.accountId, event.recipientId);
     if (contact?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
     // Human handoff: if any active participant for this sender is paused, the
     // runner stays silent. The teammate can resume from the contact modal.
-    const paused = await repository.listPausedParticipantsByWorkspace(mapping.workspaceId, 50);
-    const isPaused = paused.some((participant) => (
-      participant.instagramAccountId === event.accountId
-      && participant.igScopedUserId === event.recipientId
-    ));
+    const isPaused = await repository.hasPausedParticipant(
+      mapping.workspaceId,
+      event.accountId,
+      event.recipientId,
+    );
     if (isPaused) return { matched: 0, sent: 0, skipped: 1, failed: 0 };
   }
 
   // Email-capture conversations take precedence over everything else: a DM carrying
   // someone's email address must never also fire a keyword autoresponder or campaign.
   if (options.client && options.tokenEncryptionKey) {
-    const captured = await processEmailCaptureReply(event, mapping, repository, options);
+    const captured = await processEmailCaptureReply(
+      event,
+      mapping,
+      contact,
+      automations,
+      repository,
+      options,
+    );
     if (captured) return captured;
   }
 
@@ -1007,89 +1008,77 @@ export async function processNormalizedEvent(
   }
 
   const result: RunnerResult = { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  const skippedExecutions: RecordExecutionInput[] = [];
 
-  for (const automation of automations) {
-    if (automation.definition.version !== 1) continue;
+  try {
+    for (const automation of automations) {
+      if (automation.definition.version !== 1) continue;
 
-    const dedupeKey = `${automation.id}:${event.id}`;
-    if (await repository.hasExecution(mapping.workspaceId, dedupeKey)) continue;
-
-    // "Reply once per person" short-circuit. The runner still writes a SKIPPED
-    // execution row so the activity inbox explains why nothing went out.
-    if (
-      automation.definition.trigger.type === "comment"
-      && automation.definition.trigger.replyOncePerUser
-      && event.recipientId
-    ) {
-      const prior = await repository.countParticipantsBySender(
-        automation.id,
-        event.accountId,
-        event.recipientId,
-      );
-      if (prior > 0) {
-        await repository.recordExecution({
+      const dedupeKey = `${automation.id}:${event.id}`;
+      const evaluation = evaluateFlow(automation.definition, event, evaluationContext);
+      if (evaluation.status === "skipped") {
+        skippedExecutions.push({
           workspaceId: mapping.workspaceId,
           automationId: automation.id,
           externalEventId: event.id,
           dedupeKey,
           status: "SKIPPED",
-          reason: "replyOncePerUser is set and this sender already triggered this flow",
+          reason: evaluation.reason,
+        });
+        continue;
+      }
+
+      const claimed = await repository.claimExecution({
+        workspaceId: mapping.workspaceId,
+        automationId: automation.id,
+        externalEventId: event.id,
+        dedupeKey,
+      });
+      if (!claimed) continue;
+
+      result.matched += 1;
+
+      // "Reply once per person" short-circuit. The claimed execution row is
+      // completed as SKIPPED so the activity inbox explains why nothing went out.
+      if (
+        automation.definition.trigger.type === "comment"
+        && automation.definition.trigger.replyOncePerUser
+        && event.recipientId
+      ) {
+        const prior = await repository.countParticipantsBySender(
+          automation.id,
+          event.accountId,
+          event.recipientId,
+        );
+        if (prior > 0) {
+          await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+            status: "SKIPPED",
+            reason: "replyOncePerUser is set and this sender already triggered this flow",
+          });
+          result.skipped += 1;
+          continue;
+        }
+      }
+
+      if (!options.client) {
+        await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+          status: "SKIPPED",
+          reason: "Meta delivery is disabled in demo mode",
         });
         result.skipped += 1;
         continue;
       }
-    }
 
-    const evaluation = evaluateFlow(automation.definition, event, evaluationContext);
-    if (evaluation.status === "skipped") {
-      await repository.recordExecution({
-        workspaceId: mapping.workspaceId,
-        automationId: automation.id,
-        externalEventId: event.id,
-        dedupeKey,
-        status: "SKIPPED",
-        reason: evaluation.reason,
-      });
-      result.skipped += 1;
-      continue;
-    }
+      if (!options.tokenEncryptionKey) {
+        await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+          status: "FAILED",
+          reason: "Token encryption key is not configured",
+        });
+        result.failed += 1;
+        continue;
+      }
 
-    result.matched += 1;
-    if (!options.client) {
-      await repository.recordExecution({
-        workspaceId: mapping.workspaceId,
-        automationId: automation.id,
-        externalEventId: event.id,
-        dedupeKey,
-        status: "SKIPPED",
-        reason: "Meta delivery is disabled in demo mode",
-      });
-      result.skipped += 1;
-      continue;
-    }
-
-    if (!options.tokenEncryptionKey) {
-      await repository.recordExecution({
-        workspaceId: mapping.workspaceId,
-        automationId: automation.id,
-        externalEventId: event.id,
-        dedupeKey,
-        status: "FAILED",
-        reason: "Token encryption key is not configured",
-      });
-      result.failed += 1;
-      continue;
-    }
-
-    const claimed = await repository.claimExecution({
-      workspaceId: mapping.workspaceId,
-      automationId: automation.id,
-      externalEventId: event.id,
-      dedupeKey,
-    });
-    if (!claimed) continue;
-
-    // Email-collection follow-up: append the prompt (or, when the triggering message
+      // Email-collection follow-up: append the prompt (or, when the triggering message
     // already contains an address, the confirmation) after this flow's own actions.
     // Comment flows are excluded - they may only send a single private reply.
     const templateVars = buildTemplateVars(event, evaluation.matchedKeyword);
@@ -1101,7 +1090,6 @@ export async function processNormalizedEvent(
       && automation.definition.trigger.type !== "comment"
       && senderId
     ) {
-      const contact = await repository.getContact(mapping.workspaceId, event.accountId, senderId);
       if (!contact?.email) {
         const embeddedEmail = extractEmailAddress(event.text);
         if (embeddedEmail) {
@@ -1266,6 +1254,19 @@ export async function processNormalizedEvent(
         reason: error instanceof Error ? error.message : "Meta delivery failed",
       });
       result.failed += 1;
+    }
+    }
+  } finally {
+    if (skippedExecutions.length > 0) {
+      try {
+        result.skipped += await repository.recordExecutions(skippedExecutions);
+      } catch (error) {
+        logger.warn("Failed to persist skipped automation outcomes", {
+          eventId: event.id,
+          count: skippedExecutions.length,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 

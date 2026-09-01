@@ -650,8 +650,12 @@ export interface AutomationRepository {
   ): Promise<number>;
   /** Returns the most recent paused participants for SLA dashboards. */
   listPausedParticipantsByWorkspace(workspaceId: string, limit: number): Promise<AutomationParticipantRecord[]>;
+  /** Hot-path handoff check for one exact Instagram sender. */
+  hasPausedParticipant(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<boolean>;
   findWorkspaceIdByMemberEmail(email: string): Promise<string | null>;
   listAutomations(workspaceId: string): Promise<AutomationRecord[]>;
+  /** Active Instagram automations that are unpinned or pinned to this account. */
+  listActiveAutomationsForInstagramAccount(workspaceId: string, instagramAccountId: string): Promise<AutomationRecord[]>;
   getAutomation(workspaceId: string, id: string): Promise<AutomationRecord | null>;
   createAutomation(workspaceId: string, input: CreateAutomationInput): Promise<AutomationRecord>;
   updateAutomation(
@@ -700,6 +704,8 @@ export interface AutomationRepository {
   getDataDeletionRequest(confirmationCode: string): Promise<DataDeletionRequestRecord | null>;
   upsertConnection(input: Omit<InstagramConnectionRecord, "id" | "connectedAt">): Promise<InstagramConnectionRecord>;
   recordExecution(input: RecordExecutionInput): Promise<RecordExecutionResult>;
+  /** Inserts execution outcomes in one duplicate-safe batch. */
+  recordExecutions(inputs: RecordExecutionInput[]): Promise<number>;
   claimExecution(input: ClaimExecutionInput): Promise<boolean>;
   claimExecutionDispatch(input: ClaimExecutionDispatchInput): Promise<boolean>;
   getExecution(workspaceId: string, dedupeKey: string): Promise<ExecutionRecord | null>;

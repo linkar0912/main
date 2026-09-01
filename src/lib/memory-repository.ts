@@ -436,6 +436,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       );
     },
 
+    async hasPausedParticipant(workspaceId, instagramAccountId, igScopedUserId) {
+      return [...participants.values()].some((participant) =>
+        participant.workspaceId === workspaceId
+        && participant.instagramAccountId === instagramAccountId
+        && participant.igScopedUserId === igScopedUserId
+        && Boolean(participant.pausedAt));
+    },
+
     async findWorkspaceIdByMemberEmail(email) {
       return memberWorkspacesByEmail.get(email.toLowerCase()) ?? null;
     },
@@ -445,6 +453,18 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         [...automations.values()]
           .filter((automation) => automation.workspaceId === workspaceId)
           .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)),
+      );
+    },
+
+    async listActiveAutomationsForInstagramAccount(workspaceId, instagramAccountId) {
+      return copy(
+        [...automations.values()]
+          .filter((automation) =>
+            automation.workspaceId === workspaceId
+            && automation.status === "ACTIVE"
+            && automation.provider === "INSTAGRAM"
+            && (automation.instagramAccountId === undefined || automation.instagramAccountId === instagramAccountId))
+          .sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
       );
     },
 
@@ -773,6 +793,25 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       };
       executions.set(record.id, record);
       return { created: true, record: copy(record) };
+    },
+
+    async recordExecutions(inputs) {
+      let created = 0;
+      for (const input of inputs) {
+        const existing = [...executions.values()].some(
+          (record) => record.workspaceId === input.workspaceId && record.dedupeKey === input.dedupeKey,
+        );
+        if (existing) continue;
+        const record: ExecutionRecord = {
+          id: createId("execution"),
+          createdAt: now(),
+          ...input,
+          dispatchStatus: input.dispatchStatus ?? "CLAIMED",
+        };
+        executions.set(record.id, record);
+        created += 1;
+      }
+      return created;
     },
 
     async claimExecution(input) {

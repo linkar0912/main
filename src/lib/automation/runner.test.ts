@@ -99,6 +99,146 @@ describe("automation runner", () => {
     expect(await repository.listRecentWebhookEvents("workspace_suspended", 10)).toEqual([]);
   });
 
+  it("uses one targeted automation read and batches non-matching outcomes", async () => {
+    const key = randomBytes(32).toString("hex");
+    const repository = createMemoryRepository([
+      {
+        id: "automation_match",
+        workspaceId: "workspace_a",
+        name: "Matching guide",
+        status: "ACTIVE",
+        version: 1, priority: 10,
+        definition: flow,
+        createdAt: new Date(1).toISOString(),
+        updatedAt: new Date(1).toISOString(),
+      },
+      {
+        id: "automation_skip",
+        workspaceId: "workspace_a",
+        name: "Different keyword",
+        status: "ACTIVE",
+        version: 1, priority: 0,
+        definition: {
+          ...flow,
+          trigger: { ...flow.trigger, keywords: ["pricing"] },
+        },
+        createdAt: new Date(1).toISOString(),
+        updatedAt: new Date(1).toISOString(),
+      },
+    ]);
+    await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", key),
+      status: "CONNECTED",
+    });
+    const targetedRead = vi.spyOn(repository, "listActiveAutomationsForInstagramAccount");
+    const broadRead = vi.spyOn(repository, "listAutomations");
+    const preflightDedupe = vi.spyOn(repository, "hasExecution");
+    const batchWrite = vi.spyOn(repository, "recordExecutions");
+
+    await expect(processNormalizedEvent(event, repository, {
+      client: createRunnerClient(),
+      tokenEncryptionKey: key,
+    })).resolves.toEqual({ matched: 1, sent: 1, skipped: 1, failed: 0 });
+
+    expect(targetedRead).toHaveBeenCalledOnce();
+    expect(targetedRead).toHaveBeenCalledWith("workspace_a", "ig_1");
+    expect(broadRead).not.toHaveBeenCalled();
+    expect(preflightDedupe).not.toHaveBeenCalled();
+    expect(batchWrite).toHaveBeenCalledOnce();
+    expect(batchWrite).toHaveBeenCalledWith([
+      expect.objectContaining({
+        automationId: "automation_skip",
+        dedupeKey: "automation_skip:comment_1",
+        status: "SKIPPED",
+      }),
+    ]);
+  });
+
+  it("does not wait for webhook activity persistence before provider delivery", async () => {
+    const key = randomBytes(32).toString("hex");
+    const repository = createMemoryRepository([{
+      id: "automation_fast_path",
+      workspaceId: "workspace_a",
+      name: "Fast path",
+      status: "ACTIVE",
+      version: 1, priority: 0,
+      definition: flow,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(1).toISOString(),
+    }]);
+    await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", key),
+      status: "CONNECTED",
+    });
+    let persistenceSettled = false;
+    vi.spyOn(repository, "recordWebhookEvent").mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      persistenceSettled = true;
+    });
+    const sendPrivateReply = vi.fn().mockImplementation(async () => {
+      expect(persistenceSettled).toBe(false);
+      return { message_id: "message_fast" };
+    });
+
+    await expect(processNormalizedEvent(event, repository, {
+      client: createRunnerClient({ sendPrivateReply }),
+      tokenEncryptionKey: key,
+    })).resolves.toEqual({ matched: 1, sent: 1, skipped: 0, failed: 0 });
+
+    expect(sendPrivateReply).toHaveBeenCalledOnce();
+  });
+
+  it("loads a conversational contact only once per event", async () => {
+    const key = randomBytes(32).toString("hex");
+    const captureFlow: FlowDefinition = {
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Here is the guide" }],
+      emailCapture: {
+        promptText: "What is your email?",
+        confirmationText: "You are in!",
+      },
+    };
+    const repository = createMemoryRepository([{
+      id: "automation_capture",
+      workspaceId: "workspace_a",
+      name: "Capture",
+      status: "ACTIVE",
+      version: 1, priority: 0,
+      definition: captureFlow,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(1).toISOString(),
+    }]);
+    await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", key),
+      status: "CONNECTED",
+    });
+    await repository.touchContact("workspace_a", "ig_1", "person_1", new Date(1).toISOString());
+    const contactRead = vi.spyOn(repository, "getContact");
+
+    await processNormalizedEvent({
+      ...event,
+      id: "message_contact_once",
+      type: "message.received",
+      text: "guide",
+    }, repository, {
+      client: createRunnerClient(),
+      tokenEncryptionKey: key,
+    });
+
+    expect(contactRead).toHaveBeenCalledOnce();
+  });
+
   it("delivers a matching action and deduplicates the webhook event", async () => {
     const key = randomBytes(32).toString("hex");
     const repository = createMemoryRepository([
