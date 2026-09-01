@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
+import { ContextHelpLink } from "./context-help-link";
+import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 import { InstagramGlyph } from "./instagram-glyph";
 import { FacebookGlyph } from "./facebook-glyph";
 import { StatusBadge } from "./status-badge";
@@ -305,7 +307,7 @@ export function SettingsScreen() {
   return (
     <AppShell>
       <div className="page-wrap settings-wrap">
-        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage Instagram and Facebook connections, delivery defaults, team access, and account safeguards.</p></div></header>
+        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage Instagram and Facebook connections, delivery defaults, team access, and account safeguards.</p></div><div className="header-actions"><CopyDiagnosticsButton /><ContextHelpLink topic="connecting-instagram" /></div></header>
 
         <section className="settings-summary" aria-label="Workspace summary">
           <div className="settings-summary-intro">

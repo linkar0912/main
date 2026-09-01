@@ -388,6 +388,22 @@ export type ContactTimelineEntry = {
   detail?: string;
 };
 
+export type HelpSearchRecord = {
+  id: string;
+  workspaceId: string;
+  query: string;
+  resultCount: number;
+  createdAt: string;
+};
+
+export type HelpFeedbackRecord = {
+  id: string;
+  workspaceId: string;
+  articleKey: string;
+  helpful: boolean;
+  createdAt: string;
+};
+
 /** Per-variant A/B performance for one campaign. */
 export type VariantPerformance = {
   variant: string;
@@ -943,4 +959,14 @@ export interface AutomationRepository {
   recordWebhookEvent(workspaceId: string, input: RecordWebhookEventInput): Promise<void>;
   listRecentWebhookEvents(workspaceId: string, limit: number, eventType?: string): Promise<WebhookEventRecord[]>;
   deleteOldWebhookEvents(before: string): Promise<number>;
+  recordHelpSearch(
+    workspaceId: string,
+    input: Omit<HelpSearchRecord, "id" | "workspaceId">,
+  ): Promise<HelpSearchRecord>;
+  listHelpSearches(workspaceId: string, limit: number): Promise<HelpSearchRecord[]>;
+  recordHelpFeedback(
+    workspaceId: string,
+    input: Omit<HelpFeedbackRecord, "id" | "workspaceId">,
+  ): Promise<HelpFeedbackRecord>;
+  listHelpFeedback(workspaceId: string, limit: number): Promise<HelpFeedbackRecord[]>;
 }

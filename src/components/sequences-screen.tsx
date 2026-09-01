@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Play, Plus, RotateCw, Trash2 } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { AutomationSectionNav } from "./automation-section-nav";
+import { ContextHelpLink } from "./context-help-link";
 
 type SequenceStepView = { id: string; delayHours: number; text: string };
 type SequenceRow = {
@@ -197,6 +198,7 @@ export function SequencesScreen() {
               DM - STOP suppression respected everywhere.
             </p>
           </div>
+          <div className="header-actions"><ContextHelpLink topic="sequences" /></div>
         </header>
 
         <div className="section-layout">

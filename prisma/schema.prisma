@@ -179,6 +179,8 @@ model Workspace {
   participants       AutomationParticipant[]
   executions         AutomationExecution[]
   webhookEvents      WebhookEvent[]
+  helpSearches       HelpSearchEvent[]
+  helpFeedback       HelpArticleFeedback[]
   contacts           AutomationContact[]
   sequences          AutomationSequence[]
   broadcasts         Broadcast[]
@@ -190,6 +192,28 @@ model Workspace {
 
   @@index([status, createdAt])
   @@index([updatedAt, id])
+}
+
+model HelpSearchEvent {
+  id          String    @id
+  workspaceId String
+  query       String    @db.VarChar(120)
+  resultCount Int
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}
+
+model HelpArticleFeedback {
+  id          String    @id
+  workspaceId String
+  articleKey  String    @db.VarChar(160)
+  helpful     Boolean
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, articleKey, createdAt])
 }
 
 model PlanDefinition {

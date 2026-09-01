@@ -43,9 +43,12 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
   WorkspaceStatus,
+  HelpSearchRecord,
+  HelpFeedbackRecord,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
+import { normalizeHelpQuery } from "./help-search";
 
 function now(): string {
   return new Date().toISOString();
@@ -143,6 +146,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
   }>();
   // Keyed by `${workspaceId}:${providerEventId}` so replays stay idempotent.
   const webhookEvents = new Map<string, WebhookEventRecord & { workspaceId: string }>();
+  const helpSearches = new Map<string, HelpSearchRecord>();
+  const helpFeedback = new Map<string, HelpFeedbackRecord>();
 
   return {
     async ensureWorkspace(workspaceId, ownerEmail, ownerUserId) {
@@ -1595,6 +1600,48 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         count += 1;
       }
       return count;
+    },
+
+    async recordHelpSearch(workspaceId, input) {
+      const id = createId("help_search");
+      const record: HelpSearchRecord = {
+        id,
+        workspaceId,
+        query: normalizeHelpQuery(input.query),
+        resultCount: Math.max(0, Math.trunc(input.resultCount)),
+        createdAt: input.createdAt,
+      };
+      helpSearches.set(id, record);
+      return copy(record);
+    },
+
+    async listHelpSearches(workspaceId, limit) {
+      return [...helpSearches.values()]
+        .filter((record) => record.workspaceId === workspaceId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
+        .slice(0, limit)
+        .map(copy);
+    },
+
+    async recordHelpFeedback(workspaceId, input) {
+      const id = createId("help_feedback");
+      const record: HelpFeedbackRecord = {
+        id,
+        workspaceId,
+        articleKey: input.articleKey.trim().slice(0, 160),
+        helpful: input.helpful,
+        createdAt: input.createdAt,
+      };
+      helpFeedback.set(id, record);
+      return copy(record);
+    },
+
+    async listHelpFeedback(workspaceId, limit) {
+      return [...helpFeedback.values()]
+        .filter((record) => record.workspaceId === workspaceId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
+        .slice(0, limit)
+        .map(copy);
     },
 
     async deleteContactsByWorkspaceIds(workspaceIds) {

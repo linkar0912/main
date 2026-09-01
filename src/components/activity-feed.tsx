@@ -10,9 +10,12 @@ import {
   Send,
   UserCheck,
 } from "lucide-react";
+import { ContactDetailModal } from "./contact-detail-modal";
 
 type ActivityEntry = {
   id: string;
+  channel: "instagram" | "facebook";
+  contactId?: string;
   type: string;
   label: string;
   at: string;
@@ -80,6 +83,8 @@ export function ActivityFeed() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
+  const [channel, setChannel] = useState<"all" | "instagram" | "facebook">("all");
+  const [openContactId, setOpenContactId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,7 +111,11 @@ export function ActivityFeed() {
     return byType;
   }, [entries]);
 
-  const groups = useMemo(() => groupByDay(entries), [entries]);
+  const visibleEntries = useMemo(
+    () => channel === "all" ? entries : entries.filter((entry) => entry.channel === channel),
+    [channel, entries],
+  );
+  const groups = useMemo(() => groupByDay(visibleEntries), [visibleEntries]);
 
   if (!loaded) {
     return (
@@ -119,7 +128,7 @@ export function ActivityFeed() {
   if (error) return <p className="form-error" role="alert">{error}</p>;
 
   return (
-    <section aria-label="Recent social activity">
+    <section aria-label="Unified social inbox">
       {entries.length > 0 && (
         <div className="inbox-stat-strip" aria-hidden={filter !== ""}>
           {FILTERS.slice(1).map(({ value, label }) => {
@@ -137,8 +146,21 @@ export function ActivityFeed() {
 
       <div className="list-intro">
         <p className="muted">
-          {entries.length} event{entries.length === 1 ? "" : "s"} in the last stretch
+          {visibleEntries.length} event{visibleEntries.length === 1 ? "" : "s"} in this view
         </p>
+        <div className="filter-chips" role="group" aria-label="Filter inbox by channel">
+          {(["all", "instagram", "facebook"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={`filter-chip ${channel === value ? "is-on" : ""}`}
+              aria-pressed={channel === value}
+              onClick={() => setChannel(value)}
+            >
+              {value === "all" ? "All channels" : value === "instagram" ? "Instagram" : "Facebook"}
+            </button>
+          ))}
+        </div>
         <div className="filter-chips" role="group" aria-label="Filter activity by type">
           {FILTERS.map(({ value, label }) => (
             <button
@@ -154,7 +176,7 @@ export function ActivityFeed() {
         </div>
       </div>
 
-      {entries.length === 0 ? (
+      {visibleEntries.length === 0 ? (
         <div className="empty-state">
           <span className="empty-icon"><Inbox size={20} /></span>
           <h3>Nothing here yet</h3>
@@ -171,6 +193,13 @@ export function ActivityFeed() {
                   const Icon = meta.icon;
                   return (
                     <li key={entry.id}>
+                      {entry.contactId ? (
+                        <button
+                          className="inbox-conversation-button"
+                          type="button"
+                          aria-label={`Open conversation with ${entry.from ?? "Instagram contact"}`}
+                          onClick={() => setOpenContactId(entry.contactId!)}
+                        >
                       <div className={`inbox-type-icon tone-${meta.tone}`} aria-hidden>
                         <Icon size={15} strokeWidth={2} />
                       </div>
@@ -186,6 +215,22 @@ export function ActivityFeed() {
                         </div>
                         {entry.summary && <p className="muted inbox-summary">{entry.summary}</p>}
                       </div>
+                        </button>
+                      ) : (
+                        <div className="inbox-static-entry">
+                          <div className={`inbox-type-icon tone-${meta.tone}`} aria-hidden>
+                            <Icon size={15} strokeWidth={2} />
+                          </div>
+                          <div className="inbox-body">
+                            <div className="inbox-row">
+                              <span className="inbox-label">{entry.label}</span>
+                              {entry.from && <span className="inbox-from is-id">{entry.from}</span>}
+                              <time className="inbox-time" dateTime={entry.at}>{formatTime(entry.at)}</time>
+                            </div>
+                            {entry.summary && <p className="muted inbox-summary">{entry.summary}</p>}
+                          </div>
+                        </div>
+                      )}
                     </li>
                   );
                 })}
@@ -194,6 +239,7 @@ export function ActivityFeed() {
           ))}
         </div>
       )}
+      {openContactId && <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} />}
     </section>
   );
 }

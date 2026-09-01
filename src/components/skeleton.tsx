@@ -225,6 +225,20 @@ export function SettingsSkeleton() {
   );
 }
 
+export function ContactsSkeleton() {
+  return (
+    <AppShellSkeletonFrame>
+      <div className="page-wrap">
+        <PageHeaderSkeleton titleWidth={170} ledeWidth={420} />
+        <Skeleton style={{ height: 76, borderRadius: 14, marginBottom: 20 }} />
+        <div className="skeleton-stack" style={{ gap: 1 }}>
+          {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} style={{ height: 72 }} />)}
+        </div>
+      </div>
+    </AppShellSkeletonFrame>
+  );
+}
+
 /**
  * Profile skeleton - 2-column grid matching the profile-screen layout (large
  * profile card on the left, stacked connection / quick-access cards on the
@@ -247,20 +261,14 @@ export function ProfileSkeleton() {
   );
 }
 
-/**
- * Help skeleton - hero block (matches the .help-hero panel: heading + lede +
- * search bar) followed by FAQ cards arranged in topic groups.
- */
+/** Help skeleton - compact search followed by FAQ cards arranged in topic groups. */
 export function HelpSkeleton() {
   return (
     <AppShellSkeletonFrame>
       <div className="page-wrap">
         <PageHeaderSkeleton titleWidth={140} ledeWidth={340} />
-        <div className="help-hero" aria-hidden style={{ marginBottom: 24 }}>
-          <Skeleton style={{ height: 12, width: 90, marginBottom: 8 }} />
-          <Skeleton style={{ height: 32, width: 240, marginBottom: 8 }} />
-          <Skeleton style={{ height: 14, width: 460, marginBottom: 16 }} />
-          <Skeleton style={{ height: 44, borderRadius: 8, width: "100%", maxWidth: 560 }} />
+        <div className="help-search-shell" aria-hidden style={{ marginBottom: 24 }}>
+          <Skeleton style={{ height: 50, borderRadius: 12, width: "100%" }} />
         </div>
         <div className="help-topic-groups">
           <div className="help-topic-group">

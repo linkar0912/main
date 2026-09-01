@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   CircleHelp,
@@ -15,12 +15,15 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  ThumbsDown,
+  ThumbsUp,
   Workflow,
   Wrench,
 } from "lucide-react";
 import { AppShell, useAccountIdentity } from "./app-shell";
 import { FacebookGlyph } from "./facebook-glyph";
 import { InstagramGlyph } from "./instagram-glyph";
+import { helpArticleMatchesQuery, normalizeHelpQuery } from "@/src/lib/help-search";
 
 type Topic = {
   id: string;
@@ -276,7 +279,7 @@ const TOPICS: Topic[] = [
           <>
             Yes. Save as a draft, use the test preview in the builder to see the exact rendered
             messages, and check the review step&apos;s plain-English summary of what will fire. Once
-            it&apos;s live, <Link href="/activity">Activity</Link> shows every real execution.
+            it&apos;s live, <Link href="/activity">Inbox</Link> shows every real execution.
           </>
         ),
       },
@@ -383,9 +386,9 @@ const TOPICS: Topic[] = [
         q: "Where do captured contacts live?",
         a: (
           <>
-            On <Link href="/activity">Activity</Link> and the contact detail view, with an export when
-            your plan allows it. A contact can also be handed off to a human, which stops automated
-            messages to that person while you take over.
+            On <Link href="/contacts">Contacts</Link>, where you can search, filter, export, assign,
+            and add notes. Open a contact from <Link href="/activity">Inbox</Link> to see its history
+            or hand the conversation to a person, which pauses automation while your team takes over.
           </>
         ),
       },
@@ -461,12 +464,12 @@ const TOPICS: Topic[] = [
   },
   {
     id: "insights",
-    title: "Activity & insights",
+    title: "Inbox & insights",
     blurb: "The event feed, per-automation runs, the funnel, tracked links, and failure diagnosis.",
     icon: Inbox,
     articles: [
       {
-        q: "What does the Activity page show?",
+        q: "What does the Inbox show?",
         a: (
           <>
             Every comment, DM, story mention, and link tap across your connected accounts, newest
@@ -563,7 +566,7 @@ const TOPICS: Topic[] = [
             match what was written (and no negative keyword vetoed it); the post is inside the
             automation&apos;s post scope; the daily send limit and activation window haven&apos;t closed
             it; and quiet hours aren&apos;t holding the send.{" "}
-            <Link href="/activity">Activity</Link> gives the outcome of each execution.
+            <Link href="/activity">Inbox</Link> gives the outcome of each execution.
           </>
         ),
       },
@@ -659,11 +662,6 @@ const TOPICS: Topic[] = [
   },
 ];
 
-function topicMetadataMatchesQuery(topic: Topic, query: string): boolean {
-  const haystack = [topic.title, topic.blurb].join(" ").toLowerCase();
-  return haystack.includes(query.toLowerCase());
-}
-
 /**
  * `supportEmail` is optional: /help renders `<HelpScreen />` with no props so
  * the route stays a static client page instead of a force-dynamic server page
@@ -687,6 +685,17 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
   const [query, setQuery] = useState("");
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
   const [openArticle, setOpenArticle] = useState<string | null>(null);
+  const [feedbackState, setFeedbackState] = useState<Record<string, "saving" | "sent" | "error">>({});
+  const trackedNoResults = useRef(new Set<string>());
+
+  useEffect(() => {
+    const requestedTopic = new URLSearchParams(window.location.search).get("topic");
+    if (requestedTopic && TOPICS.some((topic) => topic.id === requestedTopic)) {
+      const timer = window.setTimeout(() => setActiveTopicId(requestedTopic), 0);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, []);
 
   function selectTopic(id: string | null) {
     setActiveTopicId(id);
@@ -701,9 +710,11 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
       return TOPICS
         .map((topic) => ({
           ...topic,
-          articles: topic.articles.filter((article) =>
-            topicMetadataMatchesQuery(topic, query) || article.q.toLowerCase().includes(query.toLowerCase())
-          ),
+          articles: topic.articles.filter((article) => helpArticleMatchesQuery(
+            topic,
+            { question: article.q, answer: article.a },
+            query,
+          )),
         }))
         .filter((topic) => topic.articles.length > 0);
     }
@@ -715,6 +726,38 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
   const activeTopic = TOPICS.find((topic) => topic.id === activeTopicId) ?? null;
   const totalArticles = TOPICS.reduce((sum, topic) => sum + topic.articles.length, 0);
 
+  useEffect(() => {
+    const normalized = normalizeHelpQuery(query);
+    if (!normalized || visibleTopics.length > 0 || trackedNoResults.current.has(normalized)) return;
+    const timer = window.setTimeout(() => {
+      trackedNoResults.current.add(normalized);
+      void fetch("/api/help/analytics", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "search", query: normalized, resultCount: 0 }),
+      }).catch(() => {
+        trackedNoResults.current.delete(normalized);
+      });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [query, visibleTopics.length]);
+
+  async function submitFeedback(articleKey: string, helpful: boolean) {
+    if (feedbackState[articleKey] === "saving" || feedbackState[articleKey] === "sent") return;
+    setFeedbackState((current) => ({ ...current, [articleKey]: "saving" }));
+    try {
+      const response = await fetch("/api/help/analytics", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "feedback", articleKey, helpful }),
+      });
+      if (!response.ok) throw new Error("feedback failed");
+      setFeedbackState((current) => ({ ...current, [articleKey]: "sent" }));
+    } catch {
+      setFeedbackState((current) => ({ ...current, [articleKey]: "error" }));
+    }
+  }
+
   return (
     <div className="page-wrap narrow-wrap">
       <header className="page-header">
@@ -725,13 +768,7 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
         </div>
       </header>
 
-      <section className="help-hero" aria-label="Search help articles">
-        <p className="help-kicker">Help centre</p>
-        <h1>How can we help?</h1>
-        <p className="help-lede">
-          Browse {totalArticles} short guides across {TOPICS.length} topics. Everything is written for
-          creators, not engineers.
-        </p>
+      <section className="help-search-shell" aria-label="Search help articles">
         <form
           className="help-search"
           role="search"
@@ -739,6 +776,7 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
             event.preventDefault();
           }}
         >
+          <Search aria-hidden size={20} strokeWidth={1.9} />
           <input
             type="search"
             value={query}
@@ -749,9 +787,6 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
             placeholder="Search guides - e.g. keywords, reconnect, quiet hours…"
             aria-label="Search help articles"
           />
-          <button type="submit" aria-label="Run search">
-            <Search size={17} />
-          </button>
         </form>
       </section>
 
@@ -808,7 +843,37 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
                             {article.q}
                             <CircleHelp className="faq-chevron" size={16} />
                           </button>
-                          {open && <div className="faq-answer">{article.a}</div>}
+                          {open && (
+                            <div className="faq-answer">
+                              {article.a}
+                              <div className="help-feedback" aria-label="Article feedback">
+                                {feedbackState[key] === "sent" ? (
+                                  <p role="status">Thanks for the feedback.</p>
+                                ) : (
+                                  <>
+                                    <span>Was this helpful?</span>
+                                    <button
+                                      type="button"
+                                      aria-label="Yes, this was helpful"
+                                      disabled={feedbackState[key] === "saving"}
+                                      onClick={() => void submitFeedback(key, true)}
+                                    >
+                                      <ThumbsUp size={14} /> Yes
+                                    </button>
+                                    <button
+                                      type="button"
+                                      aria-label="No, this was not helpful"
+                                      disabled={feedbackState[key] === "saving"}
+                                      onClick={() => void submitFeedback(key, false)}
+                                    >
+                                      <ThumbsDown size={14} /> No
+                                    </button>
+                                    {feedbackState[key] === "error" ? <em role="alert">Could not save feedback.</em> : null}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}

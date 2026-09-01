@@ -27,20 +27,27 @@ export async function GET(request: Request) {
   const typeFilter = params.get("type") ?? undefined;
 
   const events = await getRepository().listRecentWebhookEvents(session.workspaceId, limit, typeFilter || undefined);
-  return NextResponse.json({
-    data: events.map((event) => {
+  const data = await Promise.all(events.map(async (event) => {
       const payload = event.payload as Record<string, unknown>;
+      const channel = event.eventType.startsWith("facebook.") ? "facebook" : "instagram";
       const username = typeof payload.senderUsername === "string" ? payload.senderUsername : undefined;
       const senderName = typeof payload.senderName === "string" ? payload.senderName : undefined;
       const text = typeof payload.text === "string" ? payload.text : "";
+      const accountId = typeof payload.accountId === "string" ? payload.accountId : undefined;
+      const senderId = typeof payload.recipientId === "string" ? payload.recipientId : undefined;
+      const contact = channel === "instagram" && accountId && senderId
+        ? await getRepository().getContact(session.workspaceId, accountId, senderId)
+        : null;
       return {
         id: event.id,
+        channel,
+        contactId: contact?.id,
         providerEventId: event.providerEventId,
         type: event.eventType,
         label: EVENT_LABELS[event.eventType] ?? event.eventType,
         at: event.receivedAt,
-        account: typeof payload.accountId === "string"
-          ? payload.accountId
+        account: accountId
+          ? accountId
           : typeof payload.pageId === "string"
             ? payload.pageId
             : undefined,
@@ -53,6 +60,6 @@ export async function GET(request: Request) {
               : undefined,
         summary: text.length > 0 ? (text.length > 120 ? `${text.slice(0, 120)}…` : text) : undefined,
       };
-    }),
-  });
+    }));
+  return NextResponse.json({ data });
 }

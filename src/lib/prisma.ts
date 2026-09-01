@@ -47,6 +47,7 @@ import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwn
 import type { EmailCaptureField } from "./automation/types";
 import { toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
+import { normalizeHelpQuery } from "./help-search";
 
 function mapInvitation(record: {
   id: string;
@@ -2115,6 +2116,50 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async deleteOldWebhookEvents(before) {
       const result = await client.webhookEvent.deleteMany({ where: { receivedAt: { lt: new Date(before) } } });
       return result.count;
+    },
+
+    async recordHelpSearch(workspaceId, input) {
+      const record = await client.helpSearchEvent.create({
+        data: {
+          id: createId("help_search"),
+          workspaceId,
+          query: normalizeHelpQuery(input.query),
+          resultCount: Math.max(0, Math.trunc(input.resultCount)),
+          createdAt: new Date(input.createdAt),
+        },
+      });
+      return { ...record, createdAt: record.createdAt.toISOString() };
+    },
+
+    async listHelpSearches(workspaceId, limit) {
+      const records = await client.helpSearchEvent.findMany({
+        where: { workspaceId },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        take: limit,
+      });
+      return records.map((record) => ({ ...record, createdAt: record.createdAt.toISOString() }));
+    },
+
+    async recordHelpFeedback(workspaceId, input) {
+      const record = await client.helpArticleFeedback.create({
+        data: {
+          id: createId("help_feedback"),
+          workspaceId,
+          articleKey: input.articleKey.trim().slice(0, 160),
+          helpful: input.helpful,
+          createdAt: new Date(input.createdAt),
+        },
+      });
+      return { ...record, createdAt: record.createdAt.toISOString() };
+    },
+
+    async listHelpFeedback(workspaceId, limit) {
+      const records = await client.helpArticleFeedback.findMany({
+        where: { workspaceId },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        take: limit,
+      });
+      return records.map((record) => ({ ...record, createdAt: record.createdAt.toISOString() }));
     },
 
     async deleteContactsByWorkspaceIds(workspaceIds) {

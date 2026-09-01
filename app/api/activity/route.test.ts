@@ -39,11 +39,42 @@ describe("GET /api/activity", () => {
 
     expect(response.status).toBe(200);
     expect(body.data[0]).toMatchObject({
+      channel: "facebook",
       type: "facebook.comment.created",
       label: "Facebook Page comment",
       account: "page_1",
       from: "Taylor",
       summary: "Interested",
+    });
+  });
+
+  it("links Instagram inbox activity to the matching contact", async () => {
+    const contact = await repository.touchContact(
+      "workspace_1",
+      "ig_account_1",
+      "person_1",
+      "2026-08-30T06:00:00.000Z",
+    );
+    await repository.recordWebhookEvent("workspace_1", {
+      providerEventId: "instagram_event_1",
+      eventType: "message.received",
+      receivedAt: "2026-08-30T06:01:00.000Z",
+      payload: {
+        accountId: "ig_account_1",
+        recipientId: "person_1",
+        senderUsername: "taylor",
+        text: "Can a person help me?",
+      },
+    });
+
+    const response = await GET(new Request("http://localhost/api/activity"));
+    const body = await response.json();
+
+    expect(body.data[0]).toMatchObject({
+      channel: "instagram",
+      contactId: contact.record.id,
+      from: "@taylor",
+      summary: "Can a person help me?",
     });
   });
 });

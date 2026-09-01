@@ -1,7 +1,7 @@
 import { AppShell } from "@/src/components/app-shell";
 import { ActivityFeed } from "@/src/components/activity-feed";
 
-export const metadata = { title: "Activity · Linkar" };
+export const metadata = { title: "Inbox · Linkar" };
 
 export default function ActivityPage() {
   return (
@@ -9,11 +9,11 @@ export default function ActivityPage() {
       <div className="page-wrap">
         <header className="page-header">
           <div>
-            <p className="eyebrow">Workspace / Activity</p>
-            <h1>Activity</h1>
+            <p className="eyebrow">Workspace / Inbox</p>
+            <h1>Inbox</h1>
             <p className="muted page-lede">
-              Every comment, DM, story mention, and link tap across your connected accounts -
-              newest first. Automations react to these in real time.
+              One live stream for Instagram conversations and Facebook Page activity. Open an
+              Instagram contact to review history, update ownership, or hand it to a person.
             </p>
           </div>
         </header>

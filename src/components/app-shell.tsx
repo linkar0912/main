@@ -14,6 +14,7 @@ import {
   Settings,
   ShieldCheck,
   UserRound,
+  UsersRound,
   Workflow,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
@@ -27,7 +28,8 @@ const workspaceNavigation = [
   { href: "/automations", label: "Automations", icon: Workflow },
   { href: "/automations/sequences", label: "Sequences", icon: ListOrdered },
   { href: "/automations/broadcasts", label: "Broadcasts", icon: Megaphone },
-  { href: "/activity", label: "Activity", icon: Inbox },
+  { href: "/contacts", label: "Contacts", icon: UsersRound },
+  { href: "/activity", label: "Inbox", icon: Inbox },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

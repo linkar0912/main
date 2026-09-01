@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Megaphone } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { AutomationSectionNav } from "./automation-section-nav";
+import { ContextHelpLink } from "./context-help-link";
 
 type BroadcastRow = {
   id: string;
@@ -88,6 +89,7 @@ export function BroadcastsScreen() {
               One-off DMs to a contact segment - paced ~1/second, STOP contacts skipped automatically.
             </p>
           </div>
+          <div className="header-actions"><ContextHelpLink topic="sequences" /></div>
         </header>
 
         <div className="section-layout">
