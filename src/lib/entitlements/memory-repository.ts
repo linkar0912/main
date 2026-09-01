@@ -7,7 +7,7 @@ const FREE_PLAN: PlanEntitlements = {
   memberLimit: 2,
   automationLimit: 3,
   instagramConnectionLimit: 1,
-  facebookConnectionLimit: 0,
+  facebookConnectionLimit: 1,
   sequenceLimit: 0,
   monthlyBroadcastLimit: 0,
   monthlyDeliveryLimit: 100,
@@ -15,7 +15,7 @@ const FREE_PLAN: PlanEntitlements = {
   broadcastsEnabled: false,
   trackedLinksEnabled: false,
   teamEnabled: false,
-  facebookEnabled: false,
+  facebookEnabled: true,
   exportsEnabled: false,
 };
 

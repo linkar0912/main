@@ -5,6 +5,16 @@ import { createMemoryEntitlementRepository } from "./memory-repository";
 import { createEntitlementService, EntitlementError } from "./service";
 
 describe("EntitlementService", () => {
+  it("allows one Facebook Page on the default free plan", async () => {
+    const service = createEntitlementService(createMemoryEntitlementRepository());
+
+    await expect(service.assertEntitled("w1", "facebook", 0)).resolves.toBeUndefined();
+    await expect(service.getEffectiveEntitlements("w1")).resolves.toMatchObject({
+      facebookEnabled: true,
+      facebookConnectionLimit: 1,
+    });
+  });
+
   it("resolves strict workspace overrides over plan defaults", async () => {
     const repository = createMemoryEntitlementRepository({
       plan: {
