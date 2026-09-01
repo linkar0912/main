@@ -101,6 +101,31 @@ describe("Meta message payloads", () => {
     )).rejects.toMatchObject({ status: 400, responseReceived: true });
   });
 
+  it("aborts provider requests at the configured deadline", async () => {
+    const fetcher = vi.fn<typeof fetch>((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        reject(new DOMException("Aborted", "AbortError"));
+      });
+    }));
+    const client = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher,
+      requestTimeoutMs: 5,
+    });
+
+    await expect(client.sendDirectMessage(
+      { igUserId: "ig_1", accessToken: "secret" },
+      "person_1",
+      { type: "text", text: "hello" },
+    )).rejects.toMatchObject({
+      name: "MetaApiError",
+      status: 0,
+      responseReceived: false,
+      retryable: true,
+    });
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("subscribes the professional account to the campaign webhook fields", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
     const client = new MetaClient({ apiVersion: "v25.0", fetcher });

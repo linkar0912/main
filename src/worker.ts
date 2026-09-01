@@ -65,7 +65,10 @@ if (!env.redisUrl) {
       }
       if (job.name === "broadcast-send") {
         const payload = job.data as BroadcastSendJob;
-        const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+        const client = env.metaAppId ? new MetaClient({
+          apiVersion: env.metaApiVersion,
+          requestTimeoutMs: env.providerRequestTimeoutMs,
+        }) : undefined;
         const options: BroadcastRunnerOptions = {
           client,
           tokenEncryptionKey: env.metaTokenEncryptionKey,
@@ -76,7 +79,10 @@ if (!env.redisUrl) {
       }
       if (job.name === "flow-followup") {
         const payload = job.data as FlowFollowUpJob;
-        const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+        const client = env.metaAppId ? new MetaClient({
+          apiVersion: env.metaApiVersion,
+          requestTimeoutMs: env.providerRequestTimeoutMs,
+        }) : undefined;
         const options: FlowFollowUpRunnerOptions = {
           client,
           tokenEncryptionKey: env.metaTokenEncryptionKey,
@@ -88,7 +94,10 @@ if (!env.redisUrl) {
 
       if (job.name === "facebook-event") {
         const event = job.data as FacebookNormalizedEvent;
-        const client = env.facebookAppId ? new FacebookClient({ apiVersion: env.facebookApiVersion }) : undefined;
+        const client = env.facebookAppId ? new FacebookClient({
+          apiVersion: env.facebookApiVersion,
+          requestTimeoutMs: env.providerRequestTimeoutMs,
+        }) : undefined;
         return processNormalizedFacebookEvent(event, getRepository(), {
           client,
           tokenEncryptionKey: env.facebookTokenEncryptionKey ?? env.metaTokenEncryptionKey,
@@ -96,7 +105,10 @@ if (!env.redisUrl) {
       }
 
       const event = job.data as NormalizedEvent;
-      const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+      const client = env.metaAppId ? new MetaClient({
+        apiVersion: env.metaApiVersion,
+        requestTimeoutMs: env.providerRequestTimeoutMs,
+      }) : undefined;
       return processNormalizedEvent(event, getRepository(), {
         client,
         tokenEncryptionKey: env.metaTokenEncryptionKey,
@@ -187,7 +199,10 @@ if (!env.redisUrl) {
   // then every 15 minutes - granular enough for hour-level step delays.
   const runSequenceSweep = async () => {
     const repository = getRepository();
-    const client = env.metaAppId ? new MetaClient({ apiVersion: env.metaApiVersion }) : undefined;
+    const client = env.metaAppId ? new MetaClient({
+      apiVersion: env.metaApiVersion,
+      requestTimeoutMs: env.providerRequestTimeoutMs,
+    }) : undefined;
     const result = await processDueSequences(repository, {
       client,
       tokenEncryptionKey: env.metaTokenEncryptionKey ?? undefined,

@@ -41,3 +41,33 @@ describe("platform owner environment", () => {
     );
   });
 });
+
+describe("provider request environment", () => {
+  it("defaults provider requests to ten seconds with a safe dispatch lease", () => {
+    vi.stubEnv("PROVIDER_REQUEST_TIMEOUT_MS", "");
+    vi.stubEnv("DISPATCH_LEASE_MS", "");
+
+    expect(getServerEnv()).toMatchObject({
+      providerRequestTimeoutMs: 10_000,
+      dispatchLeaseMs: 30_000,
+    });
+  });
+
+  it("requires a positive provider timeout", () => {
+    vi.stubEnv("PROVIDER_REQUEST_TIMEOUT_MS", "0");
+
+    expect(() => getServerEnv()).toThrow("PROVIDER_REQUEST_TIMEOUT_MS must be a positive integer");
+  });
+
+  it("keeps the dispatch lease at least five seconds beyond the provider deadline", () => {
+    vi.stubEnv("PROVIDER_REQUEST_TIMEOUT_MS", "10000");
+    vi.stubEnv("DISPATCH_LEASE_MS", "14999");
+
+    expect(() => getServerEnv()).toThrow(
+      "DISPATCH_LEASE_MS must be at least PROVIDER_REQUEST_TIMEOUT_MS + 5000",
+    );
+
+    vi.stubEnv("DISPATCH_LEASE_MS", "15000");
+    expect(getServerEnv().dispatchLeaseMs).toBe(15_000);
+  });
+});
