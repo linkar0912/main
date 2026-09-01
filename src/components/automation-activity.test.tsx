@@ -218,4 +218,57 @@ describe("AutomationActivity", () => {
     expect(screen.getByText(/do not open a Messenger conversation/i)).toBeTruthy();
     expect(document.body.textContent).not.toContain("token");
   });
+
+  it("names the stage a participant is currently sitting at", async () => {
+    // Five bare dots gave no clue which stage stalled; the caption says it.
+    stubFetch([participant({ state: "FOLLOW_REQUIRED", followStatus: false })]);
+    render(<AutomationActivity automationId="automation_1" />);
+
+    const journey = await screen.findByLabelText("Participant journey");
+    expect(journey.textContent).toContain("Follow");
+    expect(screen.getByText("Follow", { selector: ".journey-caption" })).toBeTruthy();
+  });
+
+  it("says a completed journey is complete rather than naming a stage", async () => {
+    stubFetch([participant({
+      state: "LINK_SENT",
+      followStatus: true,
+      finalDeliveryStatus: "SENT",
+      finalDeliveredAt: "2026-08-20T09:00:00.000Z",
+    })]);
+    render(<AutomationActivity automationId="automation_1" />);
+
+    expect(await screen.findByText("Complete", { selector: ".journey-caption" })).toBeTruthy();
+  });
+
+  it("keeps the state badge and its delivery line in one status cell", async () => {
+    // These were two adjacent grid columns saying overlapping things, which is
+    // what left the wide dead gap between them.
+    stubFetch([participant({
+      state: "LINK_SENT",
+      followStatus: true,
+      finalDeliveryStatus: "SENT",
+      finalDeliveredAt: "2026-08-20T09:00:00.000Z",
+    })]);
+    const { container } = render(<AutomationActivity automationId="automation_1" />);
+
+    await screen.findByText(/link sent/i);
+    const status = container.querySelector(".row-status");
+    expect(status).toBeTruthy();
+    // participantStateLabel lowercases; the capitals are CSS text-transform.
+    expect(status?.textContent).toMatch(/link sent/i);
+    expect(status?.textContent).toMatch(/delivered/i);
+  });
+
+  it("offers delivery details as a labelled disclosure, not a bare heading", async () => {
+    stubFetch([participant()]);
+    const { container } = render(<AutomationActivity automationId="automation_1" />);
+
+    await screen.findByText(/follow required/i);
+    const summary = container.querySelector("details.row-detail > summary");
+    expect(summary).toBeTruthy();
+    expect(summary?.textContent).toContain("Delivery details");
+    // A chevron the reader can see, so the strip reads as expandable.
+    expect(summary?.querySelector(".row-detail-chevron")).toBeTruthy();
+  });
 });

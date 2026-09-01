@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   Check,
+  ChevronRight,
   Clock,
   ExternalLink,
   Minus,
@@ -215,17 +216,24 @@ function FunnelStrip({ summary }: { summary: ParticipantFunnelSummary }) {
 
 function JourneyTrack({ participant }: { participant: ParticipantActivitySummary }) {
   const states = journeyStepStates(participant);
+  // Five bare dots told the reader nothing about *which* stage stalled. One
+  // caption naming the live stage does, and stays compact enough for the row.
+  const stalledAt = states.findIndex((state) => state !== "done");
+  const caption = stalledAt === -1 ? "Complete" : JOURNEY_STEPS[stalledAt];
   return (
-    <ol className="journey-steps" aria-label="Participant journey">
-      {JOURNEY_STEPS.map((label, index) => (
-        <li key={label} className={`is-${states[index]}`} title={label}>
-          <span className="journey-step">
-            <span className="journey-dot" aria-hidden="true" />
-            <span className="journey-label sr-only">{label}</span>
-          </span>
-        </li>
-      ))}
-    </ol>
+    <div className="journey-cell">
+      <ol className="journey-steps" aria-label="Participant journey">
+        {JOURNEY_STEPS.map((label, index) => (
+          <li key={label} className={`is-${states[index]}`} title={label}>
+            <span className="journey-step">
+              <span className="journey-dot" aria-hidden="true" />
+              <span className="journey-label sr-only">{label}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <span className={`journey-caption${stalledAt === -1 ? " is-complete" : ""}`}>{caption}</span>
+    </div>
   );
 }
 
@@ -279,10 +287,12 @@ function ActivityRow({
           {participant.matchedKeyword ? `“${participant.matchedKeyword}”` : "Any comment"}
         </span>
         <JourneyTrack participant={participant} />
-        <ParticipantStateBadge state={participant.state} />
-        <span className={`delivery-cell tone-${statusTone(participant.finalDeliveryStatus)}`}>
-          {deliveryLabel(participant)}
-        </span>
+        <div className="row-status">
+          <ParticipantStateBadge state={participant.state} />
+          <span className={`delivery-cell tone-${statusTone(participant.finalDeliveryStatus)}`}>
+            {deliveryLabel(participant)}
+          </span>
+        </div>
         <div className="row-actions">
           {participant.state === "FAILED" && onRetry && (
             <button type="button" className="icon-button" onClick={onRetry} disabled={retrying} title="Retry delivery">
@@ -297,7 +307,10 @@ function ActivityRow({
         </div>
       </div>
       <details className="row-detail">
-        <summary className="row-detail-toggle">Delivery details</summary>
+        <summary className="row-detail-toggle">
+          <ChevronRight size={13} className="row-detail-chevron" aria-hidden="true" />
+          Delivery details
+        </summary>
         <dl className="activity-diagnostics">
           <Diagnostic label="Public reply" tone={statusTone(participant.publicReplyStatus)} detail={publicReplyDetail} />
           <Diagnostic label="Opening DM" tone={statusTone(participant.openingStatus)} detail={openingDetail} />
@@ -320,7 +333,6 @@ function ActivityTableHead() {
       <span>Trigger</span>
       <span>Journey</span>
       <span>Status</span>
-      <span>Delivery</span>
       <span className="col-actions">Actions</span>
     </div>
   );

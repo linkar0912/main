@@ -1136,7 +1136,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
    content (badges, the journey track) forces columns wider than the page,
    pushing content out under the sticky sidebar. Shared between the header
    row and each data row so their columns stay aligned. */
-.activity-table-head, .activity-row-grid { align-items: center; display: grid; gap: var(--space-3); grid-template-columns: minmax(150px, 1.3fr) minmax(90px, .7fr) minmax(120px, .9fr) 116px 140px 76px; }
+.activity-table-head, .activity-row-grid { align-items: center; display: grid; gap: var(--space-3); grid-template-columns: minmax(150px, 1.25fr) minmax(88px, .6fr) minmax(120px, .8fr) minmax(140px, 1fr) 76px; }
 .activity-table-head { color: var(--subtle); font-size: .64rem; font-weight: 800; letter-spacing: .07em; padding: 0 var(--space-4) var(--space-2); text-transform: uppercase; }
 .activity-table-head .col-actions { text-align: right; }
 
@@ -1236,9 +1236,15 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 
 .row-actions { align-items: center; display: flex; gap: 4px; justify-content: flex-end; }
 
-.row-detail { border-top: 1px solid var(--line); }
-.row-detail[open] { border-top-color: var(--line-strong); }
-.row-detail-toggle { color: var(--subtle); cursor: pointer; font-size: .64rem; font-weight: 700; letter-spacing: .04em; list-style: none; padding: 8px var(--space-4); text-transform: uppercase; transition: color var(--speed); }
+.row-detail[open] { border-top: 1px solid var(--line); }
+.row-detail-toggle { align-items: center; color: var(--muted); cursor: pointer; display: flex; font-size: var(--type-meta); font-weight: 650; gap: 6px; list-style: none; padding: 7px var(--space-4); transition: color var(--speed); }
+.row-detail-chevron { flex: 0 0 auto; transition: transform var(--speed); }
+.row-detail[open] .row-detail-chevron { transform: rotate(90deg); }
+.journey-cell { display: grid; gap: 5px; justify-items: start; min-width: 0; }
+/* Five bare dots never said which stage a participant was stuck at. */
+.journey-caption { color: var(--muted); font-size: var(--type-meta); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.journey-caption.is-complete { color: var(--leaf); }
+.row-status { display: grid; gap: 4px; justify-items: start; min-width: 0; }
 .row-detail-toggle::-webkit-details-marker { display: none; }
 .row-detail-toggle:hover { color: var(--slate); }
 .row-detail[open] .row-detail-toggle { color: var(--slate); }

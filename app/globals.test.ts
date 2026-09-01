@@ -133,4 +133,14 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.stat-value-row\s*{[^}]*align-items:\s*baseline/);
     expect(css).not.toMatch(/\.stat-value-row\s*{[^}]*margin-top/);
   });
+
+  // Every participant row carried a full-width uppercase "DELIVERY DETAILS"
+  // strip with the disclosure marker hidden and no chevron, so a working
+  // accordion read as an empty section header and doubled each row's height.
+  it("keeps the delivery-details disclosure reading as a control", () => {
+    expect(css).toMatch(/\.row-detail-toggle\s*{[^}]*display:\s*flex/);
+    expect(css).not.toMatch(/\.row-detail-toggle\s*{[^}]*text-transform:\s*uppercase/);
+    expect(css).toMatch(/\.row-detail\[open\]\s*\.row-detail-chevron\s*{[^}]*rotate\(90deg\)/);
+    expect(css).toMatch(/\.journey-caption\s*{/);
+  });
 });
