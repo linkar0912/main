@@ -6,6 +6,7 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
 } from "../repository";
+import type { DeliveryTimingObserver } from "./delivery-timing";
 
 export type ProviderFailureClass =
   | "KNOWN_RETRYABLE"
@@ -18,6 +19,7 @@ export type DeliveryExecutionRequest<
   payload: TPayload;
   claimLeaseMs: number;
   repository?: AutomationRepository;
+  timingObserver?: DeliveryTimingObserver;
   entitlementService?: {
     getMonthlyDeliveryLimit(workspaceId: string): Promise<number | null>;
   };
@@ -98,6 +100,7 @@ export async function executeOutboundDelivery<
     claimLeaseMs,
     repository: suppliedRepository,
     entitlementService: suppliedEntitlementService,
+    timingObserver,
     ...deliveryInput
   } = request;
   const repository = suppliedRepository ?? getRepository();
@@ -128,6 +131,8 @@ export async function executeOutboundDelivery<
   }
 
   let providerResult: { id?: string; message_id?: string };
+  const providerStartedAt = performance.now();
+  timingObserver?.providerStarted();
   try {
     providerResult = await send(preparation.record.payload as TPayload);
   } catch (error) {
@@ -149,6 +154,8 @@ export async function executeOutboundDelivery<
       retryable ? "RETRYABLE_REJECTION" : "PROVIDER_REJECTED",
     ).catch(() => false);
     return { status: "FAILED", retryable, error: message };
+  } finally {
+    timingObserver?.providerFinished(performance.now() - providerStartedAt);
   }
 
   const providerMessageId = providerResult.id ?? providerResult.message_id;

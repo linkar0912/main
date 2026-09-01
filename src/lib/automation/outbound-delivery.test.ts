@@ -148,6 +148,23 @@ describe("outbound delivery coordinator", () => {
     expect(claim).not.toHaveBeenCalled();
   });
 
+  it("reports provider timing without exposing the payload", async () => {
+    const timingObserver = {
+      providerStarted: vi.fn(),
+      providerFinished: vi.fn(),
+    };
+
+    await executeOutboundDelivery(
+      { ...request, timingObserver },
+      vi.fn().mockResolvedValue({ id: "provider_timed" }),
+    );
+
+    expect(timingObserver.providerStarted).toHaveBeenCalledOnce();
+    expect(timingObserver.providerFinished).toHaveBeenCalledWith(expect.any(Number));
+    expect(timingObserver.providerFinished.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(0);
+    expect(JSON.stringify(timingObserver.providerFinished.mock.calls)).not.toContain("Original message");
+  });
+
   it("sends the first persisted payload after an automation edit", async () => {
     await repository.ensureOutboundDelivery(persistedRequest);
     const send = vi.fn().mockResolvedValue({ id: "provider_1" });

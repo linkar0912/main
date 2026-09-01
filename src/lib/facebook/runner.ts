@@ -12,6 +12,7 @@ import {
 } from "../automation/send-limits";
 import { findMatchedKeyword, matchesTrigger, resolveReplyForMedia } from "../automation/match";
 import { validateDefinitionForTarget } from "../automation/channels/registry";
+import type { DeliveryTimingObserver } from "../automation/delivery-timing";
 
 /**
  * Result shape parallel to the Instagram runner's RunnerResult so the
@@ -29,6 +30,7 @@ export type FacebookRunnerClient = FacebookClient;
 export type FacebookRunnerOptions = {
   client?: FacebookClient;
   tokenEncryptionKey?: string;
+  timingObserver?: DeliveryTimingObserver;
 };
 
 const REPLY_CLAIM_LEASE_MS = 5 * 60 * 1_000;
@@ -278,7 +280,14 @@ export async function processNormalizedFacebookEvent(
       if (trigger?.match === "keyword") vars.keyword = findMatchedKeyword(event.text, trigger.keywords) ?? "";
       const text = renderFacebookText(selectedReply, vars);
       const connection = pageConnection(mapping.page, options.tokenEncryptionKey);
-      const sendResult = await options.client.postCommentReply(connection, event.commentId, text);
+      const providerStartedAt = performance.now();
+      options.timingObserver?.providerStarted();
+      let sendResult: Awaited<ReturnType<FacebookClient["postCommentReply"]>>;
+      try {
+        sendResult = await options.client.postCommentReply(connection, event.commentId, text);
+      } finally {
+        options.timingObserver?.providerFinished(performance.now() - providerStartedAt);
+      }
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SENT",
         reason: `reply:${text.slice(0, 160)}`,

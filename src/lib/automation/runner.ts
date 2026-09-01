@@ -34,6 +34,7 @@ import {
   type DeliveryExecutionResult,
 } from "./outbound-delivery";
 import { processLeadDelivery } from "./lead-delivery";
+import type { DeliveryTimingObserver } from "./delivery-timing";
 
 export type AutomationRunnerClient = CampaignRunnerClient;
 
@@ -175,6 +176,7 @@ async function executeActionDelivery(
     action: ExecutionAction;
     claimLeaseMs: number;
     dailySendLimit?: number;
+    timingObserver?: DeliveryTimingObserver;
   },
   client: AutomationRunnerClient,
   connection: MetaConnection,
@@ -206,6 +208,7 @@ async function executeActionDelivery(
       payload: { ...request.action },
       claimLeaseMs: request.claimLeaseMs,
       repository,
+      timingObserver: request.timingObserver,
     }, async (payload) => ({
       id: await sendAction(client, connection, payload as ExecutionAction),
     }));
@@ -563,6 +566,7 @@ async function processEmailCaptureReply(
           action: { type: "send_text", recipientId: senderId, text: renderTemplate(fieldQueue[0].question, vars) },
           claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
           dailySendLimit: automation.definition.dailySendLimit,
+          timingObserver: options.timingObserver,
         }, options.client, connection);
         const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
         followUpDelivered = true;
@@ -593,6 +597,7 @@ async function processEmailCaptureReply(
           action: { type: "send_text", recipientId: senderId, text: renderTemplate(emailCapture.confirmationText, vars) },
         claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
         dailySendLimit: automation.definition.dailySendLimit,
+        timingObserver: options.timingObserver,
       }, options.client, connection);
       const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
       followUpDelivered = true;
@@ -646,6 +651,7 @@ async function processEmailCaptureReply(
       },
       claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
       dailySendLimit: automation.definition.dailySendLimit,
+      timingObserver: options.timingObserver,
     }, options.client, connection);
     const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
     followUpDelivered = true;
@@ -765,6 +771,7 @@ async function processFieldAnswer(
         action: { type: "send_text", recipientId: senderId, text: renderTemplate(current.question, vars) },
         claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
         dailySendLimit: automation.definition.dailySendLimit,
+        timingObserver: options.timingObserver,
       }, options.client, connection);
       const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
       followUpDelivered = true;
@@ -807,6 +814,7 @@ async function processFieldAnswer(
       action: { type: "send_text", recipientId: senderId, text: outgoing },
       claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
       dailySendLimit: automation.definition.dailySendLimit,
+      timingObserver: options.timingObserver,
     }, options.client, connection);
     const providerMessageId = requireSentDelivery(delivery, options.finalAttempt);
     followUpDelivered = true;
@@ -1131,6 +1139,7 @@ export async function processNormalizedEvent(
           action,
           claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
           dailySendLimit: automation.definition.dailySendLimit,
+          timingObserver: options.timingObserver,
         }, options.client, connection);
         providerMessageId = requireSentDelivery(delivery, options.finalAttempt) ?? providerMessageId;
       }
