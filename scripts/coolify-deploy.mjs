@@ -7,7 +7,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
-import https from "node:https";
+import { pathToFileURL } from "node:url";
+import { fetchFollowingRedirects } from "./http-follow-redirects.mjs";
 
 const REPO = "linkar0912/main";
 const WORKFLOW = "Build production container";
@@ -66,18 +67,8 @@ function coolifyRequest(env, { method, path }) {
   });
 }
 
-function fetchPublic(path) {
-  return new Promise((resolve, reject) => {
-    const url = `https://${readEnvLocal().publicDomain}${path}`;
-    https.get(url, { rejectUnauthorized: false, timeout: 15_000 }, (res) => {
-      let body = "";
-      res.on("data", (chunk) => (body += chunk));
-      res.on("end", () => resolve({ status: res.statusCode, body }));
-    }).on("error", reject).on("timeout", function () {
-      this.destroy();
-      reject(new Error("request timed out"));
-    });
-  });
+function fetchPublic(env, path) {
+  return fetchFollowingRedirects(`https://${env.publicDomain}${path}`);
 }
 
 function sleep(ms) {
@@ -182,7 +173,7 @@ async function step4_pollStatus(env) {
   );
 }
 
-async function step5_verifyExternally(beforeCss) {
+async function step5_verifyExternally(env, beforeCss) {
   console.log("\n[5/5] Verifying from outside the container…");
   // Step 4 already confirmed Coolify's internal healthcheck passed, but there's
   // a real gap - observed anywhere from ~0s to ~2.5 minutes in practice -
@@ -194,7 +185,7 @@ async function step5_verifyExternally(beforeCss) {
   let healthBody;
   let lastRawBody = "";
   for (let attempt = 1; attempt <= EXTERNAL_POLL_MAX_ATTEMPTS; attempt += 1) {
-    const health = await fetchPublic("/api/health").catch(() => ({ body: "" }));
+    const health = await fetchPublic(env, "/api/health").catch(() => ({ body: "" }));
     lastRawBody = health.body;
     try {
       const parsed = JSON.parse(health.body);
@@ -218,7 +209,7 @@ async function step5_verifyExternally(beforeCss) {
   }
   console.log(`  ✓ /api/health: ok (database: ${healthBody.dependencies?.database}, redis: ${healthBody.dependencies?.redis})`);
 
-  const loginPage = await fetchPublic("/login");
+  const loginPage = await fetchPublic(env, "/login");
   const afterCss = cssAssetPath(loginPage.body);
   if (afterCss && beforeCss && afterCss !== beforeCss) {
     console.log(`  ✓ shipped a new build asset (${beforeCss} → ${afterCss}).`);
@@ -244,15 +235,17 @@ async function main() {
   await step1_verifyBuildIsGreen(headSha);
   step2_checkMigrations(headSha, migrationsBackedUp);
 
-  const before = await fetchPublic("/login").catch(() => ({ body: "" }));
+  const before = await fetchPublic(env, "/login").catch(() => ({ body: "" }));
   const beforeCss = cssAssetPath(before.body);
 
   await step3_restart(env);
   await step4_pollStatus(env);
-  await step5_verifyExternally(beforeCss);
+  await step5_verifyExternally(env, beforeCss);
 
   writeFileSync(STATE_FILE, JSON.stringify({ lastDeployedSha: headSha, deployedAt: new Date().toISOString() }, null, 2));
   console.log(`\n✓ Deploy complete. ${headSha.slice(0, 7)} is live at https://${env.publicDomain}\n`);
 }
 
-main().catch((error) => fail("Unexpected error", error.stack ?? String(error)));
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => fail("Unexpected error", error.stack ?? String(error)));
+}
