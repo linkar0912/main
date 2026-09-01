@@ -96,4 +96,41 @@ describe("workspace palette contract", () => {
     expect(css).not.toMatch(/\.facebook-settings-card::before/);
     expect(css).not.toMatch(/\.settings-summary-intro\s*{[^}]*border-top/);
   });
+
+  // Hovering used to slide a flat grey slab in behind rows and controls - the
+  // automation row, every sidebar link, the icon buttons. It read as cheap and
+  // it fought the accent-soft fill that marks the *active* nav item. Hover now
+  // signals with colour and border only; the neutral fill tokens are banned
+  // from :hover so the slab cannot creep back one rule at a time.
+  it("never paints a neutral grey panel on hover", () => {
+    const hoverRules = css.match(/[^{}]*:hover[^{]*{[^}]*}/g) ?? [];
+    expect(hoverRules.length).toBeGreaterThan(0);
+    const greyFilled = hoverRules.filter((rule) =>
+      /background(-color)?:\s*var\(--(hover-wash|surface-soft|surface-sunk)\)/.test(rule),
+    );
+    expect(greyFilled).toEqual([]);
+    // The token existed only to fill those hovers, so it goes with them.
+    expect(css).not.toMatch(/--hover-wash/);
+  });
+
+  // The delivery-issue rows previously leaned on .activity-row, which boxed only
+  // the badge line and left the explanation hanging outside the border, and on
+  // .sequence-status, whose neutral slate fill made a retryable warning look
+  // inert. Both surfaces now share one row treatment with real status colour.
+  it("gives delivery failures their own danger and warning treatment", () => {
+    expect(css).toMatch(/\.failure-list\s*{/);
+    expect(css).toMatch(/\.failure-row\s*{[^}]*display:\s*grid/);
+    expect(css).toMatch(/\.activity-summary\s*{/);
+    expect(css).toMatch(/\.failure-badge\s*{[^}]*var\(--danger/);
+    expect(css).toMatch(/\.failure-state\[data-state="failed"\]\s*{[^}]*var\(--honey-soft\)/);
+    expect(css).toMatch(/\.failure-state\[data-state="failed"\]\s*{[^}]*var\(--warning-ink\)/);
+  });
+
+  // 743 and its delta pill used to float in a half-empty tile: the block set a
+  // 6px flex gap and the value row added another 7px margin on top, then
+  // centre-aligned a small pill against a 1.85rem number.
+  it("sits the stat value and its delta pill on one baseline", () => {
+    expect(css).toMatch(/\.stat-value-row\s*{[^}]*align-items:\s*baseline/);
+    expect(css).not.toMatch(/\.stat-value-row\s*{[^}]*margin-top/);
+  });
 });

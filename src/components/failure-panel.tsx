@@ -2,7 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { humanizeProviderError } from "@/src/lib/format/provider-error";
+import { DeliveryIssueRow } from "./delivery-issue-row";
 
 type Failure = {
   id: string;
@@ -10,7 +10,6 @@ type Failure = {
   state: "FAILED";
   recipientId?: string;
   lastError?: string;
-  resultCode?: string;
   attemptCount: number;
   updatedAt: string;
 };
@@ -40,6 +39,11 @@ function friendlyKind(kind: string): string {
     default:
       return kind;
   }
+}
+
+function detailLine(failure: Failure): string {
+  const attempt = `Attempt ${failure.attemptCount}`;
+  return failure.recipientId ? `${attempt} · recipient ${failure.recipientId}` : attempt;
 }
 
 /**
@@ -94,24 +98,14 @@ export function FailurePanel() {
   return (
     <ul className="failure-list" aria-label="Recent failed deliveries">
       {failures.map((failure) => (
-        <li key={failure.id}>
-          <div className="activity-row">
-            <span>
-              <span className="status-badge failure-badge">{friendlyKind(failure.kind)}</span>
-              {failure.resultCode ? ` · ${failure.resultCode}` : ""}
-            </span>
-            <time dateTime={failure.updatedAt}>{formatDate(failure.updatedAt)}</time>
-          </div>
-          {failure.lastError && (() => {
-            const humanized = humanizeProviderError(failure.lastError);
-            return (
-              <p className="muted activity-summary" title={humanized.translated ? humanized.raw : undefined}>
-                {humanized.text}
-              </p>
-            );
-          })()}
-          {failure.recipientId && <p className="muted activity-summary">recipient {failure.recipientId}</p>}
-        </li>
+        <DeliveryIssueRow
+          key={failure.id}
+          label={friendlyKind(failure.kind)}
+          lastError={failure.lastError}
+          detail={detailLine(failure)}
+          timestamp={failure.updatedAt}
+          timeLabel={formatDate(failure.updatedAt)}
+        />
       ))}
     </ul>
   );

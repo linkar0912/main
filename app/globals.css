@@ -31,7 +31,6 @@
      than a deliberate accent. */
   --surface-soft: #f5f5f4;
   --surface-sunk: #eeeeec;
-  --hover-wash: #efefed;
 
   /* Magenta is the interactive accent: links, focus rings, active data. */
   --accent: #fa0cf7;
@@ -157,7 +156,6 @@ html {
   --panel: #1c1d24;
   --surface-soft: #212229;
   --surface-sunk: #25262e;
-  --hover-wash: #25262e;
   --accent-soft: #3a1538;
   --accent-line: #8f2f8a;
   --accent-text: #ff79fd;
@@ -319,7 +317,7 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
 .button-primary { background: var(--ink); color: var(--white); }
 .button-primary:hover { background: var(--ink-strong); box-shadow: var(--shadow-lift); }
 .button-secondary { background: var(--panel); border-color: var(--line-strong); color: var(--ink); }
-.button-secondary:hover { background: var(--surface-soft); border-color: var(--subtle); color: var(--ink-strong); }
+.button-secondary:hover { border-color: var(--subtle); color: var(--ink-strong); }
 .button-small { font-size: var(--type-meta); min-height: 36px; padding: 0 var(--space-4); }
 .plan-tag, .sidebar-label {
   font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace;
@@ -354,9 +352,9 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
   transition: background var(--speed), color var(--speed), border-color var(--speed);
   width: 40px;
 }
-.icon-button:hover { background: var(--hover-wash); color: var(--slate); }
+.icon-button:hover { border-color: var(--line-strong); color: var(--slate); }
 .icon-button.icon-danger { color: var(--muted); }
-.icon-button.icon-danger:hover { background: var(--surface-sunk); border-color: var(--line-strong); color: var(--ink); }
+.icon-button.icon-danger:hover { border-color: var(--line-strong); color: var(--ink); }
 
 /* ── Fields & forms ────────────────────────────────────────────────────── */
 .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
@@ -551,7 +549,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   transition: background var(--speed), color var(--speed);
 }
 .sidebar-link svg { color: var(--muted); transition: color var(--speed), transform var(--speed); }
-.sidebar-link:hover { background: var(--hover-wash); color: var(--ink); }
+.sidebar-link:hover { color: var(--ink); }
 .sidebar-link:hover svg { color: var(--ink); transform: translateY(-1px); }
 .sidebar-link.is-active {
   background: var(--volt);
@@ -576,7 +574,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   padding: 9px var(--space-3);
   transition: background var(--speed), color var(--speed);
 }
-.signout-button:hover { background: var(--surface-sunk); color: var(--ink); }
+.signout-button:hover { color: var(--ink); }
 
 /* ── Main column ───────────────────────────────────────────────────────── */
 .main-content {
@@ -730,7 +728,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   padding: 4px 10px 4px 6px;
   transition: background var(--speed), border-color var(--speed), color var(--speed), box-shadow var(--speed);
 }
-.template-channel-option:hover { background: var(--hover-wash); color: var(--ink); }
+.template-channel-option:hover { color: var(--ink); }
 .template-channel-option:focus-visible { outline: 2px solid var(--channel-color); outline-offset: 2px; }
 .template-channel-option.is-active {
   background: color-mix(in srgb, var(--channel-color) 9%, var(--panel));
@@ -843,7 +841,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   text-align: left;
   transition: background var(--speed), color var(--speed);
 }
-.template-picker-category:hover { background: var(--hover-wash); color: var(--ink); }
+.template-picker-category:hover { color: var(--ink); }
 .template-picker-category.is-active { background: var(--accent-soft); color: var(--accent-text); font-weight: 750; }
 .template-picker-count { color: var(--subtle); font-size: .74rem; font-weight: 700; margin-left: auto; }
 .template-picker-category.is-active .template-picker-count { color: var(--accent-text); }
@@ -924,7 +922,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
    Magenta is reserved for the delta pills' real up/down signal, nothing else. */
 .stat-row { border-top: 1px solid var(--line); display: grid; gap: var(--space-5); grid-template-columns: repeat(2, minmax(0, 1fr)); margin: var(--space-5) 0 var(--space-4); padding-top: var(--space-5); }
 .stat-label { align-items: center; color: var(--muted); display: flex; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace; font-size: .66rem; font-weight: 700; gap: 7px; letter-spacing: .06em; text-transform: uppercase; }
-.stat-value-row { align-items: center; display: flex; flex-wrap: wrap; gap: 9px; margin-top: 7px; }
+.stat-value-row { align-items: baseline; display: flex; flex-wrap: wrap; gap: 9px; }
 .stat-value-row strong { font-size: 1.85rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
 /* Neutral by default. `NeutralPill` renders a bare `.delta-pill` with no
    data-dir, so a green base rule painted "all time" and "respected" as if they
@@ -1002,8 +1000,7 @@ a.setup-row:hover .setup-cta, button.setup-row:hover .setup-cta { color: var(--i
 
 /* Automations list rows */
 .automation-list { display: grid; }
-.automation-row { align-items: center; border-bottom: 1px solid var(--line); display: flex; gap: 13px; min-height: 75px; padding: var(--space-3) 0; transition: background var(--speed); }
-.automation-row:hover { background: var(--surface-soft); }
+.automation-row { align-items: center; border-bottom: 1px solid var(--line); display: flex; gap: 13px; min-height: 75px; padding: var(--space-3) 0; }
 .automation-row:last-child { border-bottom: 0; }
 .automation-icon { align-items: center; background: var(--accent-soft); border-radius: 10px; color: var(--accent-text); display: flex; flex: 0 0 38px; height: 38px; justify-content: center; }
 .automation-copy { flex: 1; min-width: 0; }
@@ -1034,7 +1031,7 @@ a.setup-row:hover .setup-cta, button.setup-row:hover .setup-cta { color: var(--i
 .empty-state p { font-size: .8rem; margin-bottom: var(--space-5); }
 .list-intro { align-items: center; display: flex; justify-content: space-between; margin: -8px 0 var(--space-4); }
 .list-count { align-items: center; color: var(--slate); display: flex; font-size: .78rem; font-weight: 750; gap: var(--space-2); }
-.full-list-panel { padding: var(--space-4) 0 var(--space-6); }
+.full-list-panel { padding: var(--space-4) 0; }
 .loading-line { animation: pulse 1.2s ease-in-out infinite alternate; background: var(--surface-sunk); border-radius: 6px; height: 54px; margin: 10px 0; }
 .loading-line.short { width: 72%; }
 
@@ -1044,7 +1041,7 @@ a.setup-row:hover .setup-cta, button.setup-row:hover .setup-cta { color: var(--i
 .section-nav { display: flex; flex-direction: column; gap: 4px; position: sticky; top: 24px; }
 .section-nav-link { align-items: center; border-radius: var(--radius-sm); color: var(--slate); display: flex; font-size: var(--type-body); font-weight: 650; gap: 10px; padding: 11px var(--space-3); transition: background var(--speed), color var(--speed); }
 button.section-nav-link { background: transparent; border: 0; font: inherit; text-align: left; width: 100%; }
-a.section-nav-link:hover, button.section-nav-link:hover { background: var(--hover-wash); color: var(--ink); }
+a.section-nav-link:hover, button.section-nav-link:hover { color: var(--ink); }
 .section-nav-link.is-active { background: var(--accent-soft); color: var(--accent-text); font-weight: 750; }
 /* button.section-nav-link:hover's element-type selector otherwise out-specifies
    this, so hovering the already-active tab knocked it back to the plain hover
@@ -1064,9 +1061,6 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .captured-email-address { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .82rem; font-weight: 650; overflow-wrap: anywhere; }
 .captured-emails time { color: var(--muted); flex-shrink: 0; font-size: .74rem; }
 .broadcast-form { border-bottom: 1px solid var(--line); margin-bottom: var(--space-2); padding-bottom: var(--space-4); display: grid; gap: var(--space-3); }
-.broadcast-list { display: flex; flex-direction: column; }
-.broadcast-list li { align-items: center; border-top: 1px solid var(--line); display: flex; gap: var(--space-3); padding: 9px 2px; }
-.broadcast-list li:first-child { border-top: 0; }
 .sequence-step-row { border: 1px solid var(--line); border-radius: 10px; padding: var(--space-3) var(--space-4); }
 .sequence-step-head { align-items: center; display: flex; gap: var(--space-2); justify-content: space-between; margin-bottom: 6px; }
 .sequence-step-head strong { font-size: .85rem; }
@@ -1153,6 +1147,57 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .activity-roster { display: grid; gap: var(--space-2); grid-template-columns: minmax(0, 1fr); }
 
 .activity-row { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); transition: border-color var(--speed), box-shadow var(--speed); }
+
+/* Delivery failures - shared by the workspace failure panel and the
+   per-automation diagnostics, which had drifted into two different layouts.
+   One border per issue, the human explanation leading, and status + time
+   parked in a right-hand meta column so a long sentence never collides with
+   the timestamp the way it did when both sat inline. */
+.failure-list { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
+.failure-row {
+  align-items: start;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 12px var(--space-4);
+}
+.failure-row-icon { color: var(--danger); margin-top: 1px; }
+.failure-row-body { display: grid; gap: 3px; min-width: 0; }
+/* .activity-summary is shared with the contact, version and tracked-link
+   panels, where it pairs with .muted - equal specificity, so a colour here
+   would win on source order and un-mute all three. Colour stays scoped. */
+.activity-summary { line-height: 1.45; }
+.failure-row .activity-summary { color: var(--ink); font-size: var(--type-body); margin: 0; }
+.failure-row-detail { color: var(--muted); font-size: var(--type-meta); }
+.failure-row-meta { display: grid; gap: 5px; justify-items: end; }
+.failure-badge {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-line);
+  border-radius: 99px;
+  color: var(--danger);
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .03em;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+.failure-state {
+  border-radius: 5px;
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: .07em;
+  padding: 3px 7px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* A retry that has not run out of attempts is a warning, not a dead end. */
+.failure-state[data-state="FAILED"] { background: var(--honey-soft); color: var(--warning-ink); }
+.failure-state[data-state="UNKNOWN"] { background: var(--grape-soft); color: var(--grape); }
+.failure-row-time { color: var(--muted); font-size: var(--type-meta); white-space: nowrap; }
+
 .activity-row:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
 .activity-row-grid { padding: 11px var(--space-4); }
 /* Deliberately stacked, not wrap-dependent: a badge + variant chip + relative
@@ -1378,7 +1423,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   padding: 9px var(--space-3);
   transition: background var(--speed), color var(--speed);
 }
-.theme-toggle:hover { background: var(--hover-wash); color: var(--ink); }
+.theme-toggle:hover { color: var(--ink); }
 .ig-post-header { align-items: center; display: flex; gap: 9px; padding: 10px 14px; }
 .ig-post-header strong { font-size: .74rem; }
 .ig-post-media { align-items: center; background: #0d0d0d; color: #4a4a4a; display: flex; flex: 1; justify-content: center; min-height: 0; overflow: hidden; }
@@ -1567,7 +1612,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .review-links h2 { margin: 0; }
 .review-link-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
 .review-link-grid a { align-items: center; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--slate); display: inline-flex; font-size: .72rem; font-weight: 650; gap: 5px; padding: 8px 10px; transition: background var(--speed), color var(--speed); }
-.review-link-grid a:hover { background: var(--hover-wash); color: var(--ink); }
+.review-link-grid a:hover { color: var(--ink); }
 
 /* Profile account overview and primary/supporting columns */
 .profile-overview { display: grid; gap: var(--space-5); }
@@ -2038,7 +2083,6 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   text-align: left;
   width: 100%;
 }
-.faq-question:hover { background: var(--hover-wash); }
 .faq-chevron {
   background: var(--surface-soft);
   border-radius: 999px;

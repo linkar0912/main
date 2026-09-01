@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { formatDateTime } from "@/src/lib/format-date";
-import { humanizeProviderError } from "@/src/lib/format/provider-error";
+import { DeliveryIssueRow } from "./delivery-issue-row";
 
 type DeliveryProblem = {
   kind: string;
@@ -40,25 +40,18 @@ export function DeliveryDiagnostics() {
         <div className="list-count"><AlertTriangle size={17} /><span>Delivery issues</span></div>
       </div>
       <p className="muted">Recent sends that need attention or are waiting for an automatic retry.</p>
-      <ul className="broadcast-list">
+      <ul className="failure-list">
         {problems.map((problem, index) => (
-          <li key={`${problem.kind}:${problem.updatedAt}:${index}`}>
-            <div className="automation-copy">
-              <div className="automation-title">
-                <strong>{kindLabel(problem.kind)}</strong>
-                <em className="sequence-status" data-status={problem.state}>
-                  {problem.state === "UNKNOWN" ? "Needs review" : "Retry pending"}
-                </em>
-              </div>
-              {problem.lastError ? (() => {
-                const humanized = humanizeProviderError(problem.lastError);
-                return <p title={humanized.translated ? humanized.raw : undefined}>{humanized.text}</p>;
-              })() : (
-                <p>No provider detail was returned.</p>
-              )}
-              <small className="muted">Attempt {problem.attemptCount} · {formatDateTime(problem.updatedAt)}</small>
-            </div>
-          </li>
+          <DeliveryIssueRow
+            key={`${problem.kind}:${problem.updatedAt}:${index}`}
+            label={kindLabel(problem.kind)}
+            lastError={problem.lastError}
+            detail={`Attempt ${problem.attemptCount}`}
+            timestamp={problem.updatedAt}
+            timeLabel={formatDateTime(problem.updatedAt)}
+            state={problem.state}
+            stateLabel={problem.state === "UNKNOWN" ? "Needs review" : "Retry pending"}
+          />
         ))}
       </ul>
     </section>
