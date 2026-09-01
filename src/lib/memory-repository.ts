@@ -1,4 +1,5 @@
 import { createId } from "./id";
+import { tallyVariantPerformance } from "./insights/variant-performance";
 import type {
   AutomationRecord,
   AutomationParticipantRecord,
@@ -1557,17 +1558,19 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async countParticipantsByVariant(workspaceId, automationId) {
-      const buckets = new Map<string, { participants: number; delivered: number; clicked: number }>();
-      for (const participant of participants.values()) {
-        if (participant.workspaceId !== workspaceId || participant.automationId !== automationId) continue;
-        const variant = participant.variantLabel ?? "A";
-        const bucket = buckets.get(variant) ?? { participants: 0, delivered: 0, clicked: 0 };
-        bucket.participants += 1;
-        if (participant.finalDeliveryStatus === "SENT") bucket.delivered += 1;
-        if (participant.deliveryClickedAt) bucket.clicked += 1;
-        buckets.set(variant, bucket);
-      }
-      return [...buckets.entries()].map(([variant, b]) => ({ variant, ...b })).sort((a, b) => a.variant.localeCompare(b.variant));
+      // Shares the Prisma path's tally so the two implementations cannot drift:
+      // this one already normalized before bucketing, which is why the suite
+      // never caught the duplicate-"Variant A" bug in the SQL path.
+      const mine = [...participants.values()].filter(
+        (participant) => participant.workspaceId === workspaceId && participant.automationId === automationId,
+      );
+      const counts = (matches: typeof mine) =>
+        matches.map((participant) => ({ variantLabel: participant.variantLabel ?? null, count: 1 }));
+      return tallyVariantPerformance({
+        participants: counts(mine),
+        delivered: counts(mine.filter((participant) => participant.finalDeliveryStatus === "SENT")),
+        clicked: counts(mine.filter((participant) => participant.deliveryClickedAt)),
+      });
     },
 
     async recordWebhookEvent(workspaceId, input) {

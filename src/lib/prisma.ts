@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { createId } from "./id";
+import { tallyVariantPerformance } from "./insights/variant-performance";
 import type {
   AutomationRecord,
   AutomationParticipantRecord,
@@ -2050,33 +2051,26 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async countParticipantsByVariant(workspaceId, automationId) {
+      const groupByVariant = (where: Record<string, unknown>) =>
+        client.automationParticipant.groupBy({
+          by: ["variantLabel"],
+          where: { workspaceId, automationId, ...where },
+          _count: { _all: true },
+        });
       const [rows, deliveredRows, clickedRows] = await Promise.all([
-        client.automationParticipant.groupBy({
-          by: ["variantLabel"],
-          where: { workspaceId, automationId },
-          _count: { _all: true },
-        }),
-        client.automationParticipant.groupBy({
-          by: ["variantLabel"],
-          where: { workspaceId, automationId, finalDeliveryStatus: "SENT" },
-          _count: { _all: true },
-        }),
-        client.automationParticipant.groupBy({
-          by: ["variantLabel"],
-          where: { workspaceId, automationId, deliveryClickedAt: { not: null } },
-          _count: { _all: true },
-        }),
+        groupByVariant({}),
+        groupByVariant({ finalDeliveryStatus: "SENT" }),
+        groupByVariant({ deliveryClickedAt: { not: null } }),
       ]);
-      const deliveredByVariant = new Map(deliveredRows.map((row) => [row.variantLabel ?? "A", row._count._all]));
-      const clickedByVariant = new Map(clickedRows.map((row) => [row.variantLabel ?? "A", row._count._all]));
-      return rows
-        .map((row) => ({
-          variant: row.variantLabel ?? "A",
-          participants: row._count._all,
-          delivered: deliveredByVariant.get(row.variantLabel ?? "A") ?? 0,
-          clicked: clickedByVariant.get(row.variantLabel ?? "A") ?? 0,
-        }))
-        .sort((a, b) => a.variant.localeCompare(b.variant));
+      // NULL and 'A' are distinct groups here; tallyVariantPerformance folds
+      // them together before summing, which the old inline mapping did not.
+      const toCounts = (grouped: typeof rows) =>
+        grouped.map((row) => ({ variantLabel: row.variantLabel, count: row._count._all }));
+      return tallyVariantPerformance({
+        participants: toCounts(rows),
+        delivered: toCounts(deliveredRows),
+        clicked: toCounts(clickedRows),
+      });
     },
 
     async recordWebhookEvent(workspaceId, input) {
