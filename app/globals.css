@@ -889,7 +889,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .page-lede { color: var(--muted); font-size: var(--type-lede); margin-bottom: 0; max-width: 590px; }
 .eyebrow { color: var(--subtle); font-size: var(--type-meta); font-weight: 800; letter-spacing: .15em; margin-bottom: 9px; text-transform: uppercase; }
 .muted { color: var(--muted); }
-.header-actions { display: flex; gap: 10px; }
+.header-actions { display: flex; flex-shrink: 0; gap: 10px; }
 .home-greeting { align-items: center; margin-bottom: var(--space-7); }
 .home-greeting h1 { font-size: var(--type-page-title); letter-spacing: -.04em; margin-bottom: 8px; }
 
@@ -2646,6 +2646,11 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 }
 
 @media (max-width: 820px) {
+  .page-header { align-items: flex-start; flex-direction: column; gap: var(--space-4); }
+  .header-actions { flex-wrap: wrap; width: 100%; }
+  .automation-row { align-items: flex-start; flex-wrap: wrap; gap: var(--space-2); }
+  .automation-copy { flex: 1 1 calc(100% - 52px); min-width: 0; }
+  .automation-actions { flex: 1 0 100%; justify-content: flex-end; padding-left: 44px; }
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metric-card { padding: var(--space-4); }
   .metric-card strong { font-size: 1.9rem; }

@@ -83,6 +83,8 @@ describe("workspace palette contract", () => {
   });
 
   it("contains mobile rows and preserves readable actions", () => {
+    expect(css).toMatch(/\.header-actions\s*{[^}]*flex-shrink:\s*0/);
+    expect(css).toMatch(/@media \(max-width:\s*820px\)[\s\S]*?\.automation-row\s*{[^}]*flex-wrap:\s*wrap/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.settings-hero\s*{[^}]*align-items:\s*stretch[^}]*flex-direction:\s*column/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.automation-row\s*{[^}]*flex-wrap:\s*wrap/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.wizard-progress-label\s*{[^}]*display:\s*inline/);
