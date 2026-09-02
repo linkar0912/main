@@ -142,9 +142,9 @@ test("classic builder creates a keyword autoresponder", async ({ page }) => {
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByLabel("Message text").fill("Here is the pricing you asked for.");
-  await nextUntil(page, "Save automation");
-  await page.getByRole("button", { name: "Save automation" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved to your workspace.");
+  await nextUntil(page, "Save & activate");
+  await page.getByRole("button", { name: "Save & activate" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved and activated.");
 
   await page.goto("/automations");
   await expect(page.getByText(/DM contains price/).first()).toBeVisible();
@@ -164,9 +164,9 @@ test("basic template gallery sets up a ready-to-edit automation", async ({ page 
   await expect(page.getByRole("heading", { name: /Build a reply flow/i })).toBeVisible();
   await expect(page.getByLabel("Automation name")).toHaveValue("Conversation starters");
 
-  await nextUntil(page, "Save automation");
-  await page.getByRole("button", { name: "Save automation" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved to your workspace.");
+  await nextUntil(page, "Save & activate");
+  await page.getByRole("button", { name: "Save & activate" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved and activated.");
 
   await page.goto("/automations");
   await expect(page.getByText("Conversation starters").first()).toBeVisible();
@@ -195,9 +195,9 @@ test("guided builder saves an automation", async ({ page }) => {
 
   await page.goto(`/automations/${data.id}/edit`);
   await expect(page.getByRole("heading", { name: "Tune this automation" })).toBeVisible();
-  await nextUntil(page, "Save changes");
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved to your workspace.");
+  await nextUntil(page, "Save & activate");
+  await page.getByRole("button", { name: "Save & activate" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved and activated.");
 });
 
 test("guided builder creates a follow-gated Reel campaign", async ({ page }) => {

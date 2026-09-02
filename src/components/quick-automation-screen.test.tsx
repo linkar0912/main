@@ -56,6 +56,8 @@ describe("QuickAutomationScreen", () => {
 
   it("shows Reels only, then reveals every compatible comment flow", async () => {
     stubFetch();
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
     render(<QuickAutomationScreen />);
 
     const reel = await screen.findByRole("button", { name: /select reel giveaway reel/i });
@@ -68,6 +70,7 @@ describe("QuickAutomationScreen", () => {
     expect(screen.getByRole("button", { name: /follow-gated reel campaign/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /auto-dm links from comments/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /conversation starters/i })).toBeNull();
+    expect(scrollIntoView).toHaveBeenCalled();
   });
 
   it("routes the selected Reel and flow into the existing builder", async () => {

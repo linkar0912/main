@@ -3,6 +3,10 @@ import { expect, test } from "@playwright/test";
 const routes = [
   "/dashboard",
   "/automations",
+  "/quick-automation",
+  "/insights",
+  "/contacts",
+  "/activity",
   "/automations/sequences",
   "/automations/broadcasts",
   "/settings",
@@ -67,12 +71,33 @@ test.beforeEach(async ({ page }) => {
       }],
     },
   }));
+  await page.route("**/api/facebook/connection", (route) => route.fulfill({ json: { data: [] } }));
+  await page.route("**/api/meta/media", (route) => route.fulfill({
+    json: {
+      data: [{
+        id: "reel_responsive",
+        caption: "Responsive launch Reel",
+        mediaType: "VIDEO",
+        mediaProductType: "REELS",
+        permalink: "https://www.instagram.com/reel/responsive/",
+        thumbnailUrl: "https://cdn.example/responsive.jpg",
+        timestamp: "2026-08-22T00:00:00.000Z",
+      }],
+      paging: {},
+    },
+  }));
   await page.route("**/api/insights", (route) => route.fulfill({
     json: {
+      funnel: { COMMENT_MATCHED: 5, OPENING_SENT: 4, OPTED_IN: 3, FOLLOW_VERIFIED: 2, LINK_SENT: 2 },
       timeseries: {
+        days: 14,
         sentPerDay: dailyPoints,
         participantsPerDay: dailyPoints.map((point) => ({ ...point, count: Math.max(1, point.count - 2) })),
       },
+      mediaPerformance: [{ mediaId: "reel_responsive", matched: 5, delivered: 4, clicked: 2 }],
+      capturedEmails: 3,
+      optedOut: 1,
+      usage: { participantsThisMonth: 5, monthlyLimit: null },
     },
   }));
 });

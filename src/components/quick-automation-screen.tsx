@@ -2,7 +2,7 @@
 
 import { ArrowRight, Check, Film, RefreshCw, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { basicAutomationTemplates } from "@/src/lib/automation/templates";
 import { AppShell } from "./app-shell";
 
@@ -45,6 +45,7 @@ export function QuickAutomationScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const flowStageRef = useRef<HTMLElement>(null);
 
   const loadPage = useCallback(async (after?: string, signal?: AbortSignal) => {
     const url = after ? `/api/meta/media?after=${encodeURIComponent(after)}` : "/api/meta/media";
@@ -74,6 +75,11 @@ export function QuickAutomationScreen() {
   }, [loadPage]);
 
   const selectedReel = useMemo(() => reels.find((reel) => reel.id === selectedId), [reels, selectedId]);
+
+  useEffect(() => {
+    if (!selectedReel) return;
+    flowStageRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [selectedReel]);
 
   async function retry() {
     setLoading(true);
@@ -185,7 +191,7 @@ export function QuickAutomationScreen() {
         </section>
 
         {selectedReel && (
-          <section className="quick-automation-stage quick-flow-stage" aria-labelledby="choose-flow-heading">
+          <section ref={flowStageRef} className="quick-automation-stage quick-flow-stage" aria-labelledby="choose-flow-heading">
             <div className="quick-stage-heading">
               <span className="quick-stage-number">2</span>
               <div><h2 id="choose-flow-heading">Choose what happens next</h2><p>Each flow opens ready for the Reel you selected.</p></div>
