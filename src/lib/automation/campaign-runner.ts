@@ -18,11 +18,13 @@ import type { ParticipantPatch } from "../repository";
 import { unsealSecret } from "../security/secrets";
 import { releaseDailySendSlots, renderTemplate, reserveDailySendSlots } from "./send-limits";
 import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
+import { checkSendRateLimit, type SendRateLimitBucket } from "./send-rate-limiter";
+import { MESSAGING_WINDOW_MS } from "../messaging-window";
 import type { DeliveryTimingObserver } from "./delivery-timing";
 
 const RECHECK_COOLDOWN_MS = 10_000;
 const MAX_RECHECKS = 10;
-const MESSAGE_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
 const DEFAULT_DISPATCH_LEASE_MS = 30_000;
 
 const INTERACTION_EVENT_TYPES = new Set<NormalizedEvent["type"]>([
@@ -506,6 +508,18 @@ type GuardedDeliverySpec = {
   failureReason: string;
 };
 
+/**
+ * Which per-account send ceiling a campaign action counts against. Keyed off
+ * the Graph call the action's `send` actually makes: public_reply posts a
+ * comment reply, opening_reply uses the comments-to-private-reply endpoint
+ * (the one documented 750/hour limit), and everything else is an ordinary DM.
+ */
+function actionRateLimitBucket(action: string): SendRateLimitBucket {
+  if (action === "public_reply") return "comment_reply";
+  if (action === "opening_reply") return "private_reply";
+  return "direct_message";
+}
+
 async function guardedDelivery(
   participant: AutomationParticipantRecord,
   spec: GuardedDeliverySpec,
@@ -573,6 +587,28 @@ async function guardedDelivery(
         spec.onLimit?.(reason) ?? spec.onFailure(reason),
       );
       return limited ?? currentParticipant(participant, repository);
+    }
+
+    // Per-account send ceiling, checked only when Meta is actually about to be
+    // called. Distinct from the daily send limit above, which is a product
+    // setting: this one exists to keep the connected account under Meta's own
+    // throttling. A reserved slot is given back and the dispatch lease
+    // released so the participant is retried rather than spending its budget.
+    if (needsProviderAttempt) {
+      const rateLimit = await checkSendRateLimit(
+        ctx.connection.igUserId,
+        actionRateLimitBucket(spec.action),
+      );
+      if (!rateLimit.allowed) {
+        if (reservation?.allowed) {
+          await releaseDailySendSlots({ repository, automationId: participant.automationId }, reservation);
+        }
+        await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+        if (spec.onRetryablePending) {
+          await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
+        }
+        throw new MetaApiError("Send rate limit reached for this Instagram account", 429, true);
+      }
     }
 
     let sentIds: { messageId?: string; recipientId?: string } = {};
@@ -817,7 +853,7 @@ async function promptForFollow(
     followStatus: false,
     followCheckedAt: new Date(event.timestamp).toISOString(),
     followCheckError: undefined,
-    messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+    messagingWindowExpiresAt: new Date(event.timestamp + MESSAGING_WINDOW_MS).toISOString(),
     recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
   });
 
@@ -1009,7 +1045,7 @@ async function verifyAndDeliver(
       followStatus: true,
       followCheckedAt: new Date(event.timestamp).toISOString(),
       followCheckError: undefined,
-      messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+      messagingWindowExpiresAt: new Date(event.timestamp + MESSAGING_WINDOW_MS).toISOString(),
       finalDeliveryStatus: "PENDING",
     },
   );
@@ -1029,7 +1065,7 @@ async function deliverWithoutFollowGate(
     followStatus: true,
     followCheckedAt: new Date(event.timestamp).toISOString(),
     followCheckError: undefined,
-    messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+    messagingWindowExpiresAt: new Date(event.timestamp + MESSAGING_WINDOW_MS).toISOString(),
     finalDeliveryStatus: "PENDING",
   });
   if (!verified) return currentParticipant(participant, ctx.repository);
@@ -1336,7 +1372,7 @@ export async function processPendingCampaignInteraction(
       const optedIn = await repository.transitionParticipant(participant.id, ["OPENING_SENT"], {
         state: "OPTED_IN",
         igScopedUserId: event.recipientId,
-        messagingWindowExpiresAt: new Date(event.timestamp + MESSAGE_WINDOW_MS).toISOString(),
+        messagingWindowExpiresAt: new Date(event.timestamp + MESSAGING_WINDOW_MS).toISOString(),
       });
       if (!optedIn) return { handled: true, result: handledResult(participant.id) };
       participant = optedIn;

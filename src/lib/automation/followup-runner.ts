@@ -5,6 +5,8 @@ import { MetaApiError } from "../meta/client";
 import { logger } from "../logger";
 import type { FlowFollowUpJob } from "../queue";
 import { executeOutboundDelivery } from "./outbound-delivery";
+import { isWithinMessagingWindow } from "../messaging-window";
+import { checkSendRateLimit } from "./send-rate-limiter";
 
 export type FlowFollowUpRunnerOptions = {
   client?: {
@@ -18,9 +20,6 @@ export type FlowFollowUpRunnerOptions = {
   finalAttempt?: boolean;
   claimLeaseMs?: number;
 };
-
-/** Meta's human-agent messaging window: DMs are only deliverable within 24h of the person's last message. */
-const MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1_000;
 
 async function markKnownOutcome(
   repository: AutomationRepository,
@@ -90,8 +89,7 @@ export async function processFlowFollowUp(
     await skip("Recipient is suppressed", "SUPPRESSED");
     return;
   }
-  const lastTouchMs = contact?.lastSeenAt ? Date.parse(contact.lastSeenAt) : Number.NaN;
-  if (!Number.isFinite(lastTouchMs) || Date.now() >= lastTouchMs + MESSAGING_WINDOW_MS) {
+  if (!isWithinMessagingWindow(contact?.lastSeenAt)) {
     await skip("The 24-hour messaging window has closed", "WINDOW_CLOSED");
     return;
   }
@@ -105,6 +103,11 @@ export async function processFlowFollowUp(
   if (!mapping || mapping.workspaceId !== job.workspaceId) {
     await skip("Instagram account mapping is unavailable", "PROVIDER_REJECTED");
     return;
+  }
+
+  const rateLimit = await checkSendRateLimit(mapping.connection.igUserId, "direct_message");
+  if (!rateLimit.allowed) {
+    throw new MetaApiError("Send rate limit reached for this Instagram account", 429, true);
   }
 
   const connection: MetaConnection = {

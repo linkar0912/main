@@ -1015,17 +1015,30 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         }
         await transaction.automationContact.deleteMany({ where: { instagramAccountId: igUserId } });
         await transaction.automationParticipant.deleteMany({ where: { instagramAccountId: igUserId } });
+        // Every message ever sent to/for this account - never covered before,
+        // so a "delete my data" request left DM payloads and recipient IDs
+        // behind indefinitely.
+        await transaction.outboundDelivery.deleteMany({ where: { instagramAccountId: igUserId } });
         await transaction.instagramConnection.deleteMany({ where: { igUserId } });
         for (const workspaceId of workspaceIds) {
           const remainingConnections = await transaction.instagramConnection.count({ where: { workspaceId } });
           if (remainingConnections > 0) continue;
+          // AutomationContact/AutomationParticipant/AutomationSequence/Broadcast are
+          // Instagram-only concepts in this schema (their unique constraints require
+          // instagramAccountId), so workspace-wide deletion is safe here. Automation
+          // and AutomationExecution are not - a workspace can also have Facebook Page
+          // automations, and those must survive an Instagram-only deletion request,
+          // mirroring how beginFacebookDataDeletion already scopes by facebookPageId.
+          // Filtered on `provider`, not `instagramAccountId` presence - a null
+          // instagramAccountId means "applies to every connected Instagram account
+          // in the workspace" (see the field comment above), not "not Instagram".
           await transaction.automationContact.deleteMany({ where: { workspaceId } });
           await transaction.automationParticipant.deleteMany({ where: { workspaceId } });
-          await transaction.automationExecution.deleteMany({ where: { workspaceId } });
+          await transaction.automationExecution.deleteMany({ where: { workspaceId, automation: { provider: "INSTAGRAM" } } });
           await transaction.webhookEvent.deleteMany({ where: { workspaceId } });
           await transaction.automationSequence.deleteMany({ where: { workspaceId } });
           await transaction.broadcast.deleteMany({ where: { workspaceId } });
-          await transaction.automation.deleteMany({ where: { workspaceId } });
+          await transaction.automation.deleteMany({ where: { workspaceId, provider: "INSTAGRAM" } });
         }
         return transaction.dataDeletionRequest.create({
           data: {

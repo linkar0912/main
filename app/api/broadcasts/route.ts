@@ -16,7 +16,13 @@ const MAX_BROADCAST_RECIPIENTS = 500;
 const broadcastSchema = z.object({
   name: z.string().trim().min(1).max(120),
   text: z.string().trim().min(1).max(1_000),
-  segment: z.enum(["all_contacts", "captured_email", "inactive_7d", "inactive_30d"]),
+  // inactive_7d / inactive_30d are intentionally NOT creatable: they select
+  // contacts whose last inbound message is 7+ or 30+ days old, which is exactly
+  // the set Meta's 24-hour messaging window forbids DMing. Every recipient would
+  // be skipped as WINDOW_CLOSED, so the segment could only ever send zero
+  // messages while looking like a working feature. Historical rows keep their
+  // stored value for display.
+  segment: z.enum(["all_contacts", "captured_email"]),
   // Optional ISO timestamp. When in the future, jobs are enqueued with a matching
   // BullMQ delay instead of fanning out immediately (quiet hours still apply).
   scheduleStart: z.string().datetime({ offset: true }).optional(),

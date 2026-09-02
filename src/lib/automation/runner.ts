@@ -20,6 +20,7 @@ import {
   renderTemplate,
   type SendLimitReservation,
 } from "./send-limits";
+import { checkSendRateLimit } from "./send-rate-limiter";
 import {
   processCampaignEvent,
   processExistingCampaignParticipant,
@@ -156,6 +157,18 @@ function personalizeAction(action: ExecutionAction, vars: Record<string, string 
 
 const DEFAULT_DELIVERY_CLAIM_LEASE_MS = 30_000;
 const DAILY_LIMIT_ERROR = "daily_send_limit_reached";
+const PROVIDER_RATE_LIMIT_ERROR = "provider_rate_limited";
+
+/**
+ * Meta only accepts a private reply within 7 days of the comment it answers
+ * (docs: Instagram Platform > Private Replies). Past that the Graph call is
+ * rejected outright, so attempting it burns retry budget and adds a failed
+ * send against the account for no possible benefit. Webhooks are normally
+ * near-real-time, but a drained queue backlog, a long outage, or an admin
+ * replay can all surface a comment far older than that.
+ */
+const PRIVATE_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
+const PRIVATE_REPLY_EXPIRED_ERROR = "private_reply_window_expired";
 
 class DailySendLimitError extends Error {
   constructor() {
@@ -177,6 +190,8 @@ async function executeActionDelivery(
     claimLeaseMs: number;
     dailySendLimit?: number;
     timingObserver?: DeliveryTimingObserver;
+    /** Timestamp of the event that triggered this action; gates private replies. */
+    sourceEventTimestamp?: number;
   },
   client: AutomationRunnerClient,
   connection: MetaConnection,
@@ -194,6 +209,26 @@ async function executeActionDelivery(
     }, 1);
     if (!reservation.allowed) {
       return { status: "FAILED", retryable: false, error: DAILY_LIMIT_ERROR };
+    }
+
+    // Comments-to-private-reply is the one Meta limit we have confirmed from
+    // primary docs (750/hour per Instagram account). Checked here, before the
+    // provider call, so a burst never spends its 3 retry attempts against a
+    // ceiling we already know it will hit - see send-rate-limiter.ts.
+    if (request.action.type === "private_reply") {
+      // Terminal, not retryable: the window only ever gets further past due.
+      if (
+        request.sourceEventTimestamp !== undefined
+        && Date.now() - request.sourceEventTimestamp > PRIVATE_REPLY_WINDOW_MS
+      ) {
+        await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation);
+        return { status: "FAILED", retryable: false, error: PRIVATE_REPLY_EXPIRED_ERROR };
+      }
+      const rateLimit = await checkSendRateLimit(connection.igUserId, "private_reply");
+      if (!rateLimit.allowed) {
+        await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation);
+        return { status: "FAILED", retryable: true, error: PROVIDER_RATE_LIMIT_ERROR };
+      }
     }
   }
 
@@ -1019,6 +1054,13 @@ export async function processNormalizedEvent(
   const skippedExecutions: RecordExecutionInput[] = [];
 
   try {
+    // Meta permits exactly one private reply per comment ("Only one message can
+    // be sent to the commenter"), so a comment event has a single winning
+    // automation - the Facebook runner already works this way via
+    // winnerSelected. Without this, two flows whose keywords both match one
+    // comment each sent their own private reply to the same person.
+    let commentWinnerSelected = false;
+
     for (const automation of automations) {
       if (automation.definition.version !== 1) continue;
 
@@ -1036,6 +1078,18 @@ export async function processNormalizedEvent(
         continue;
       }
 
+      if (event.type === "comment.created" && commentWinnerSelected) {
+        skippedExecutions.push({
+          workspaceId: mapping.workspaceId,
+          automationId: automation.id,
+          externalEventId: event.id,
+          dedupeKey,
+          status: "SKIPPED",
+          reason: "another automation already replied to this comment (Meta allows one private reply per comment)",
+        });
+        continue;
+      }
+
       const claimed = await repository.claimExecution({
         workspaceId: mapping.workspaceId,
         automationId: automation.id,
@@ -1043,6 +1097,9 @@ export async function processNormalizedEvent(
         dedupeKey,
       });
       if (!claimed) continue;
+      // Claimed, so this automation owns the comment. Set the flag only now - a
+      // lost claim (already processed elsewhere) must not burn the winner slot.
+      if (event.type === "comment.created") commentWinnerSelected = true;
 
       result.matched += 1;
 
@@ -1140,6 +1197,7 @@ export async function processNormalizedEvent(
           claimLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
           dailySendLimit: automation.definition.dailySendLimit,
           timingObserver: options.timingObserver,
+          sourceEventTimestamp: event.timestamp,
         }, options.client, connection);
         providerMessageId = requireSentDelivery(delivery, options.finalAttempt) ?? providerMessageId;
       }

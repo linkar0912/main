@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FacebookPageOwnershipError } from "@/src/lib/repository";
+import { FacebookOAuthError } from "@/src/lib/facebook/oauth";
 
 const mocks = vi.hoisted(() => ({
   getValidatedSession: vi.fn(),
@@ -31,7 +32,8 @@ vi.mock("@/src/lib/facebook/page-selection", () => ({
   readFacebookPageSelection: mocks.readSelection,
 }));
 
-vi.mock("@/src/lib/facebook/oauth", () => ({
+vi.mock("@/src/lib/facebook/oauth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/src/lib/facebook/oauth")>()),
   listFacebookPages: mocks.listFacebookPages,
   subscribeFacebookPageToWebhooks: mocks.subscribe,
 }));
@@ -88,7 +90,11 @@ describe("POST /api/facebook/oauth/select", () => {
     });
   });
 
-  it("returns the literal Facebook-feature contract before subscribing", async () => {
+  it("returns the literal Facebook-feature contract without persisting the Page", async () => {
+    // The entitlement recheck now runs immediately before the write (not
+    // before the Graph API calls) to narrow the TOCTOU race window - so it
+    // no longer blocks subscribe from happening, but it must still block the
+    // actual connection from being persisted.
     const { EntitlementError } = await import("@/src/lib/entitlements/service");
     mocks.assertEntitled.mockRejectedValue(new EntitlementError("entitlement_required", "facebook"));
 
@@ -96,6 +102,30 @@ describe("POST /api/facebook/oauth/select", () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: "entitlement_required", capability: "facebook" });
+    expect(mocks.upsertFacebookPage).not.toHaveBeenCalled();
+  });
+
+  it("returns a readable error instead of crashing when Graph rejects the page listing", async () => {
+    // The entitlement recheck runs after this call now, so the shared
+    // listFacebookPages mock only needs to fail once here.
+    mocks.listFacebookPages.mockRejectedValue(new FacebookOAuthError("rate limited", 429));
+
+    const response = await POST(selectRequest());
+
+    expect(response.status).toBe(502);
+    const body = await response.json() as { error: string };
+    expect(body.error).toMatch(/temporarily unavailable/i);
     expect(mocks.subscribe).not.toHaveBeenCalled();
+  });
+
+  it("returns a readable error instead of crashing when Graph rejects the webhook subscription call", async () => {
+    mocks.subscribe.mockRejectedValue(new FacebookOAuthError("invalid page token", 400));
+
+    const response = await POST(selectRequest());
+
+    expect(response.status).toBe(502);
+    const body = await response.json() as { error: string };
+    expect(body.error).toMatch(/reconnect and try again/i);
+    expect(mocks.upsertFacebookPage).not.toHaveBeenCalled();
   });
 });

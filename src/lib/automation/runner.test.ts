@@ -13,6 +13,11 @@ const flow: FlowDefinition = {
   actions: [{ type: "private_reply", text: "Here is the guide" }],
 };
 
+// A comment that just arrived. Meta only accepts a private reply within 7 days
+// of the comment, so this must be a live timestamp rather than a placeholder -
+// with `timestamp: 1` (epoch) every private reply here is correctly refused.
+const RECENT_COMMENT_AT = Date.now();
+
 const event: NormalizedEvent = {
   id: "comment_1",
   accountId: "ig_1",
@@ -20,7 +25,7 @@ const event: NormalizedEvent = {
   text: "guide",
   commentId: "comment_1",
   recipientId: "person_1",
-  timestamp: 1,
+  timestamp: RECENT_COMMENT_AT,
 };
 
 const campaignDefinition: FlowDefinitionV2 = {
@@ -330,7 +335,7 @@ describe("automation runner", () => {
       type: "message.received" as const,
       text: "hello",
       recipientId: "person_1",
-      timestamp: 1,
+      timestamp: RECENT_COMMENT_AT,
     };
 
     await expect(processNormalizedEvent(message, repository, {
@@ -383,7 +388,7 @@ describe("automation runner", () => {
       type: "message.received" as const,
       text: "hello",
       recipientId: `person_${id}`,
-      timestamp: 1,
+      timestamp: RECENT_COMMENT_AT,
     });
 
     await Promise.all([
@@ -782,5 +787,96 @@ describe("automation runner", () => {
       "workspace_a",
       `legacy_invalid_campaign_payload:${interactionId}`,
     )).toBe(false);
+  });
+
+  it("refuses a private reply to a comment older than Meta's 7-day window", async () => {
+    const key = randomBytes(32).toString("hex");
+    const repository = createMemoryRepository([{
+      id: "automation_stale_comment",
+      workspaceId: "workspace_a",
+      name: "Stale comment",
+      status: "ACTIVE",
+      version: 1,
+      priority: 0,
+      definition: flow,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(1).toISOString(),
+    }]);
+    await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", key),
+      status: "CONNECTED",
+    });
+    const client = createRunnerClient();
+    // 8 days old: Meta rejects the private reply outright, so we must not spend
+    // an API call (or a failed-send signal against the account) attempting it.
+    const staleEvent = {
+      ...event,
+      id: "comment_stale",
+      commentId: "comment_stale",
+      timestamp: Date.now() - 8 * 24 * 60 * 60 * 1_000,
+    };
+
+    const result = await processNormalizedEvent(staleEvent, repository, {
+      client,
+      tokenEncryptionKey: key,
+    });
+
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+    expect(result.sent).toBe(0);
+  });
+
+  it("sends only one private reply when two automations match the same comment", async () => {
+    const key = randomBytes(32).toString("hex");
+    const commentFlow: FlowDefinition = {
+      version: 1,
+      trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "here you go" }],
+    };
+    const repository = createMemoryRepository([
+      {
+        id: "automation_first",
+        workspaceId: "workspace_a",
+        name: "First",
+        status: "ACTIVE",
+        version: 1,
+        priority: 0,
+        definition: commentFlow,
+        createdAt: new Date(1).toISOString(),
+        updatedAt: new Date(1).toISOString(),
+      },
+      {
+        id: "automation_second",
+        workspaceId: "workspace_a",
+        name: "Second",
+        status: "ACTIVE",
+        version: 1,
+        priority: 1,
+        definition: commentFlow,
+        createdAt: new Date(1).toISOString(),
+        updatedAt: new Date(1).toISOString(),
+      },
+    ]);
+    await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", key),
+      status: "CONNECTED",
+    });
+    const client = createRunnerClient();
+
+    // Meta permits exactly one private reply per comment - the second matching
+    // flow must stand down rather than DM the same person again.
+    await processNormalizedEvent({
+      ...event,
+      id: "comment_shared",
+      commentId: "comment_shared",
+    }, repository, { client, tokenEncryptionKey: key });
+
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
   });
 });

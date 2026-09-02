@@ -277,4 +277,72 @@ describe("SettingsScreen webhook health panel", () => {
     expect(await screen.findByText("Some fields need a reconnect")).toBeTruthy();
     expect(screen.getByText(/Reconnect the Page/)).toBeTruthy();
   });
+
+  it("shows a retry-able error instead of blanking the section when the initial load fails, and recovers on retry", async () => {
+    let shouldFail = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        if (shouldFail) throw new Error("network down");
+        return { ok: true, json: async () => ({ data: [] }) } as unknown as Response;
+      }),
+    );
+
+    await act(async () => { render(<SettingsScreen />); });
+
+    expect(await screen.findByText(/Could not load your connections/)).toBeTruthy();
+
+    shouldFail = false;
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Retry" })); });
+
+    expect(await screen.findByText("No account connected")).toBeTruthy();
+    expect(screen.queryByText(/Could not load your connections/)).toBeNull();
+  });
+
+  it("distinguishes a team-fetch network failure from an actual permissions error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/team/invitations")) throw new Error("network down");
+        if (url.includes("/api/workspace/bootstrap")) {
+          return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } }) } as unknown as Response;
+        }
+        return { ok: true, json: async () => ({ data: [] }) } as unknown as Response;
+      }),
+    );
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Team/ }));
+
+    expect(await screen.findByText(/Could not load team settings/)).toBeTruthy();
+    // The permissions copy is reserved for an actual 403 from the API, not a
+    // fetch that never got a response at all.
+    expect(screen.queryByText("Only workspace owners and admins can manage the team.")).toBeNull();
+  });
+
+  it("shows webhook health separately for each connected Instagram account", async () => {
+    stubFetch({
+      "/api/meta/connection/health": {
+        data: [
+          { id: "connection_1", username: "creator_one", status: "CONNECTED", requiredFields: ["comments", "messages"], subscribedFields: ["comments", "messages"], missingFields: [] },
+          { id: "connection_2", username: "creator_two", status: "CONNECTED", requiredFields: ["comments", "messages"], subscribedFields: ["comments"], missingFields: ["messages"] },
+        ],
+      },
+      "/api/meta/connection": {
+        data: [
+          { id: "connection_1", igUserId: "ig_1", username: "creator_one", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" },
+          { id: "connection_2", igUserId: "ig_2", username: "creator_two", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" },
+        ],
+      },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+
+    expect(await screen.findByText("@creator_one: All caught up")).toBeTruthy();
+    expect(await screen.findByText("@creator_two: Some fields need a reconnect")).toBeTruthy();
+  });
 });

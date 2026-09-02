@@ -70,6 +70,10 @@
      only reaches 3.4:1 as body copy on a dark panel, so warning sentences get
      their own token that is contrast-checked against the page in both themes. */
   --warning-ink: #8a5a09;
+  /* Success/"connected" *text*, same reasoning as --warning-ink: --leaf is
+     tuned to sit on --leaf-soft as an icon/fill, not as pill or badge text on
+     a dark panel. */
+  --success-ink: var(--leaf);
   /* Skeleton shimmer. Previously hardcoded light grays with no dark-mode
      counterpart, so every route-level loading screen flashed near-white on the
      dark canvas before the real page swapped in. */
@@ -171,6 +175,7 @@ html {
   --danger-soft: #3a1512;
   --danger-line: #6b2b25;
   --warning-ink: #e3ab4d;
+  --success-ink: #4ade80;
   --skeleton-base: #25262e;
   --skeleton-sheen: #303139;
   --shadow: 0 1px 2px rgba(0, 0, 0, .45);
@@ -1016,13 +1021,13 @@ a.setup-row:hover .setup-cta, button.setup-row:hover .setup-cta { color: var(--i
 }
 .row-divider { color: var(--subtle); padding: 0 4px; }
 .status-badge { border: 1px solid; border-radius: 99px; display: inline-flex; font-size: .62rem; font-weight: 800; letter-spacing: .03em; padding: 3px 8px; text-transform: capitalize; }
-.status-active, .status-connected { background: var(--green-soft); border-color: var(--green-line); color: var(--green); }
+.status-active, .status-connected { background: var(--green-soft); border-color: var(--green-line); color: var(--success-ink); }
 .status-paused, .status-disconnected { background: var(--surface-soft); border-color: var(--line-strong); color: var(--muted); }
 .status-draft { background: transparent; border-color: var(--line-strong); border-style: dashed; color: var(--muted); }
 .status-follow_required { background: var(--amber-soft); border-color: var(--amber-line); color: var(--amber); }
 .status-expired, .status-failed { background: var(--danger-soft); border-color: var(--danger-line); color: var(--danger); }
 .status-comment_matched, .status-opening_sent { background: var(--surface-soft); border-color: var(--line-strong); color: var(--slate); }
-.status-opted_in, .status-follow_verified, .status-link_sent { background: var(--green-soft); border-color: var(--green-line); color: var(--green); }
+.status-opted_in, .status-follow_verified, .status-link_sent { background: var(--green-soft); border-color: var(--green-line); color: var(--success-ink); }
 .row-link { color: var(--subtle); padding: 8px 0 8px 5px; }
 .list-more { border-top: 1px solid var(--line); justify-content: center; padding-top: var(--space-4); width: 100%; }
 .empty-state { align-items: center; color: var(--muted); display: flex; flex-direction: column; min-height: 230px; justify-content: center; padding: var(--space-6); text-align: center; }
@@ -1580,12 +1585,33 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 
 /* Settings */
 .connection-list { display: grid; gap: 10px; list-style: none; margin: 0 0 var(--space-4); padding: 0; }
-.connection-row { align-items: center; display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 0; padding: 14px var(--space-4); }
-.connection-avatar { align-items: center; background: var(--accent-soft); border-radius: 50%; color: var(--accent-text); display: inline-flex; flex-shrink: 0; font-size: .78rem; font-weight: 750; height: 38px; justify-content: center; width: 38px; }
+.connection-row { align-items: center; display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: 0; padding: var(--space-3) var(--space-4); }
+/* Thin brand-colored ring around the avatar - the fastest way to tell an
+   Instagram row from a Facebook row without repeating the platform name. */
+/* Facebook's literal brand blue is set inline on the element (see
+   FacebookGlyph.tsx for the same rule) rather than here - the workspace
+   palette contract (globals.test.ts) forbids legacy Meta blue in the shared
+   stylesheet so it can't quietly leak into the app's own token system. */
+.connection-avatar-ring { border-radius: 50%; display: inline-flex; flex: 0 0 auto; padding: 2px; }
+.connection-avatar-ring[data-brand="instagram"] { background: linear-gradient(135deg, #FFDC80 0%, #F56040 30%, #C13584 60%, #5851DB 85%, #405DE6 100%); }
+.connection-avatar { align-items: center; background: var(--accent-soft); border: 2px solid var(--panel); border-radius: 50%; color: var(--accent-text); display: inline-flex; flex-shrink: 0; font-size: .76rem; font-weight: 750; height: 36px; justify-content: center; width: 36px; }
 .connection-avatar.is-photo { object-fit: cover; }
-.connection-copy { display: grid; gap: 2px; min-width: 0; }
-.connection-copy small { color: var(--muted); font-size: var(--type-meta); overflow-wrap: anywhere; }
-.connection-row .button { margin-left: auto; }
+.connection-copy { display: grid; gap: 3px; min-width: 0; }
+.connection-copy strong { font-size: .92rem; }
+.connection-copy small { color: var(--muted); font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace; font-size: var(--type-meta); overflow-wrap: anywhere; }
+.connection-actions { align-items: center; display: flex; gap: var(--space-3); margin-left: auto; }
+/* Same dot+label device as the `mode-orb` environment indicator and the
+   webhook-health strip above - one consistent way this page shows state,
+   instead of a filled pill fighting the Disconnect button for weight.
+   Named `.connection-state` (not `.connection-status`) - that name was
+   already taken by an unrelated indicator on the profile page and the two
+   were silently colliding in the cascade. */
+.connection-state { align-items: center; color: var(--muted); display: inline-flex; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace; font-size: var(--type-meta); font-weight: 750; gap: 7px; letter-spacing: .03em; text-transform: uppercase; }
+.connection-state-dot { background: var(--line-strong); border-radius: 50%; flex: 0 0 8px; height: 8px; width: 8px; }
+.connection-state[data-status="connected"] { color: var(--success-ink); }
+.connection-state[data-status="connected"] .connection-state-dot { background: var(--success-ink); box-shadow: 0 0 0 3px var(--leaf-soft); }
+.connection-state[data-status="expired"] { color: var(--danger); }
+.connection-state[data-status="expired"] .connection-state-dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
 .settings-hero { align-items: center; display: flex; gap: var(--space-4); margin-bottom: var(--space-4); }
 .settings-icon { align-items: center; background: var(--accent-soft); border-radius: 11px; color: var(--accent-text); display: flex; flex: 0 0 48px; height: 48px; justify-content: center; width: 48px; }
 .settings-avatar { border-radius: 11px; flex: 0 0 48px; height: 48px; object-fit: cover; width: 48px; }
@@ -1780,11 +1806,17 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .channel-settings-card .settings-action .button { justify-content: center; min-height: 48px; width: 100%; }
 .channel-settings-card .connection-list,
 .channel-settings-card > .form-error,
-.channel-settings-card > .settings-copy:has(.field),
+.channel-settings-card .page-picker,
 .channel-settings-card .channel-health { grid-column: 1 / -1; }
 .channel-settings-card .connection-list { border-top: 1px solid var(--line); margin: var(--space-2) 0 0; padding-top: var(--space-4); }
+/* The Facebook Page picker was living in `.settings-copy`, a class meant for
+   the eyebrow/heading/lede text block, so it had no defined gap between the
+   field and the button - own class, own rhythm, same divider-transition
+   device as the connection list and health strip above it. */
+.page-picker { border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--space-4); margin: var(--space-2) 0 0; padding-top: var(--space-4); }
+.page-picker .field { max-width: 420px; }
 .settings-wrap .connection-row {
-  background: var(--surface-soft);
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   box-shadow: none;
@@ -1793,12 +1825,33 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .settings-wrap .connection-copy { min-width: 140px; }
 .settings-wrap .connection-copy small { overflow-wrap: anywhere; white-space: normal; }
 .settings-wrap .connection-row .button { background: var(--panel); }
-.channel-health { background: var(--surface-soft); border: 1px solid var(--line); border-radius: var(--radius-md); margin-top: var(--space-2); padding: var(--space-4); }
-.channel-health .panel-heading { margin-bottom: var(--space-3); }
-.channel-health .panel-heading h2 { font-size: var(--type-card-title); line-height: 1.25; }
-.channel-health .panel-heading > svg { color: var(--accent-text); flex: 0 0 auto; }
-.channel-health .check-list { gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: var(--space-3); }
-.channel-health > .muted { font-size: var(--type-body); line-height: 1.55; margin: var(--space-3) 0 0; }
+/* A flush strip using the same divider-transition device the card already
+   uses between its header and the connection list (border-top + space-4
+   padding-top, flush to the card's own left edge) - not a second box stacked
+   tight under the connection-row box, which is what read as misaligned. */
+.channel-health { align-items: flex-start; border-top: 1px solid var(--line); display: flex; gap: var(--space-4); margin: var(--space-2) 0 0; padding-top: var(--space-4); }
+.health-orb { border-radius: 50%; flex: 0 0 11px; height: 11px; margin-top: 3px; width: 11px; }
+.health-orb[data-state="ok"] { background: var(--success-ink); box-shadow: 0 0 0 4px var(--leaf-soft); }
+.health-orb[data-state="warn"] { background: var(--warning-ink); box-shadow: 0 0 0 4px var(--honey-soft); }
+.health-orb[data-state="error"] { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+.health-copy { display: grid; gap: 9px; min-width: 0; }
+.health-copy > strong { font-size: var(--type-body); line-height: 1.3; }
+.health-fields { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.health-fields li {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: var(--type-meta);
+  font-weight: 750;
+  letter-spacing: .02em;
+  padding: 5px 11px;
+  text-transform: uppercase;
+}
+.health-fields li[data-live="true"] { background: var(--leaf-soft); border-color: var(--leaf-line); color: var(--success-ink); }
+.channel-health > .health-copy > .muted { font-size: var(--type-body); line-height: 1.55; margin: 0; }
 .settings-wrap .settings-grid { gap: var(--space-5); margin-bottom: var(--space-5); }
 .settings-wrap .settings-grid > *:nth-child(even) { border-left: 1px solid var(--line); padding-left: var(--space-6); }
 .settings-wrap .settings-panel { min-height: 0; }
@@ -1997,12 +2050,12 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .channel-settings-card .settings-action,
   .channel-settings-card .connection-list,
   .channel-settings-card > .form-error,
-  .channel-settings-card > .settings-copy:has(.field),
+  .channel-settings-card .page-picker,
   .channel-settings-card .channel-health { grid-column: 1 / -1; }
   .settings-wrap .connection-row { align-items: flex-start; }
   .settings-wrap .connection-row .connection-copy { flex-basis: calc(100% - 64px); }
-  .settings-wrap .connection-row .button { margin-left: 0; width: 100%; }
-  .channel-health .check-list { grid-template-columns: 1fr; }
+  .settings-wrap .connection-row .connection-actions { margin-left: 0; width: 100%; }
+  .settings-wrap .connection-row .connection-actions .button { flex: 1; }
   .settings-wrap .settings-grid { grid-template-columns: 1fr; }
   .settings-wrap .settings-grid > *:nth-child(even) { border-left: 1px solid var(--line); padding-left: var(--space-5); }
   .settings-wrap .review-links { padding: var(--space-5); }
@@ -2498,7 +2551,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .settings-hero { align-items: stretch; flex-direction: column; }
   .settings-action { margin-left: 0; width: 100%; }
   .settings-action.button { width: 100%; }
-  .connection-row .button { margin-left: 0; width: 100%; }
+  .connection-row .connection-actions { flex-wrap: wrap; margin-left: 0; width: 100%; }
+  .connection-row .connection-actions .button { flex: 1; }
   .review-link-grid { justify-content: flex-start; }
   .list-intro { align-items: flex-start; flex-direction: column; gap: 5px; }
   .invite-form { align-items: stretch; flex-direction: column; }

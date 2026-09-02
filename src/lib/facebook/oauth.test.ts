@@ -31,9 +31,10 @@ describe("buildFacebookAuthorizeUrl", () => {
       facebookAppId: "app-1",
       facebookRedirectUri: "https://app.example.com/api/facebook/oauth/callback",
       facebookScopes: ["pages_show_list"],
+      facebookApiVersion: "v25.0",
     }));
     expect(url.origin).toBe("https://www.facebook.com");
-    expect(url.pathname).toBe("/v18.0/dialog/oauth");
+    expect(url.pathname).toBe("/v25.0/dialog/oauth");
     expect(url.searchParams.get("client_id")).toBe("app-1");
     expect(url.searchParams.get("redirect_uri")).toBe("https://app.example.com/api/facebook/oauth/callback");
     expect(url.searchParams.get("state")).toBe("state-xyz");
@@ -45,6 +46,7 @@ describe("buildFacebookAuthorizeUrl", () => {
       facebookAppId: "",
       facebookRedirectUri: "https://x",
       facebookScopes: [],
+      facebookApiVersion: "v25.0",
     })).toThrow("Facebook app is not configured");
   });
 });

@@ -8,9 +8,10 @@ import { getServerEnv } from "@/src/lib/env";
 type LoginScreenProps = {
   nextPath: string;
   error?: string;
+  notice?: string;
 };
 
-export function LoginScreen({ nextPath, error }: LoginScreenProps) {
+export function LoginScreen({ nextPath, error, notice }: LoginScreenProps) {
   // This screen is served from the app host, so the marketing chrome needs the
   // marketing origin or its links resolve against the app host and bounce back
   // here (app.linkar.in/ -> /dashboard -> /login).
@@ -25,6 +26,7 @@ export function LoginScreen({ nextPath, error }: LoginScreenProps) {
             Pick up where your flows left off, with every useful next step close at hand.
           </p>
 
+          {notice && <p role="status">{notice}</p>}
           {error && <p className="form-error" role="alert">{error}</p>}
 
           <OAuthButtons next={nextPath} />

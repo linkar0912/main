@@ -77,3 +77,32 @@ export function toMessagingWindow(
   if (!timezone) return null;
   return { startHour: quietStartHour, endHour: quietEndHour, timezone };
 }
+
+/**
+ * Meta's standard messaging window: an automated DM is only deliverable within
+ * 24 hours of the person's last inbound message. Sending outside it - without
+ * one of Meta's approved message tags, which Linkar does not use anywhere - is
+ * a Platform Policy violation and is the single fastest way to get a connected
+ * professional account rate-limited, restricted, or banned.
+ *
+ * This is distinct from the quiet-hours window above: quiet hours are a
+ * courtesy the workspace owner configures, this one is a hard platform rule.
+ * Every DM-side send path must gate on it, so the constant and the predicate
+ * live here rather than being re-declared per runner.
+ */
+export const MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
+/**
+ * True when a DM to this contact is still inside Meta's 24-hour window.
+ *
+ * A missing or unparseable timestamp reads as "closed" on purpose: we cannot
+ * prove an inbound message opened the window, and guessing in the permissive
+ * direction is what risks the account.
+ */
+export function isWithinMessagingWindow(
+  lastInboundAtIso: string | undefined,
+  now: number = Date.now(),
+): boolean {
+  const lastInboundMs = lastInboundAtIso ? Date.parse(lastInboundAtIso) : Number.NaN;
+  return Number.isFinite(lastInboundMs) && now < lastInboundMs + MESSAGING_WINDOW_MS;
+}

@@ -1,4 +1,5 @@
 import type { FacebookConnection, FacebookSendResult } from "./types";
+import { withAppSecretProof } from "./appsecret-proof";
 
 /** Error class parallel to `MetaApiError` so the runner can classify FB calls
  * the same way it classifies IG calls (retryable vs not, transient vs
@@ -30,6 +31,11 @@ type FacebookClientOptions = {
   baseUrl?: string;
   fetcher?: typeof fetch;
   requestTimeoutMs?: number;
+  /**
+   * App secret used to sign each call with `appsecret_proof`. Optional so demo
+   * mode and tests can run unsigned, but it should always be set in production.
+   */
+  appSecret?: string;
 };
 
 const TRANSIENT_FACEBOOK_CODES = new Set([1, 2, 4, 17, 32, 341, 613]);
@@ -51,12 +57,14 @@ export class FacebookClient {
   private readonly baseUrl: string;
   private readonly fetcher: typeof fetch;
   private readonly requestTimeoutMs: number;
+  private readonly appSecret?: string;
 
   constructor(options: FacebookClientOptions) {
     this.apiVersion = options.apiVersion;
     this.baseUrl = options.baseUrl ?? "https://graph.facebook.com";
     this.fetcher = options.fetcher ?? fetch;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
+    this.appSecret = options.appSecret;
     if (!Number.isInteger(this.requestTimeoutMs) || this.requestTimeoutMs <= 0) {
       throw new Error("Facebook request timeout must be a positive integer");
     }
@@ -67,6 +75,9 @@ export class FacebookClient {
     accessToken: string,
     init: RequestInit = {},
   ): Promise<Record<string, unknown>> {
+    // Signed here rather than per call site so any endpoint added later is
+    // covered automatically.
+    withAppSecretProof(url, accessToken, this.appSecret);
     let response: Response;
     try {
       response = await this.fetcher(url, {

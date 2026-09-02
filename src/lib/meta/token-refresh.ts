@@ -1,6 +1,7 @@
 import type { AutomationRepository } from "../repository";
 import { sealSecret, unsealSecret } from "../security/secrets";
 import { notifyWorkspaceManagers } from "../notifications";
+import { logger } from "../logger";
 import { MetaOAuthError } from "./oauth";
 
 type RefreshResult = { accessToken: string; expiresIn?: number };
@@ -33,10 +34,22 @@ export async function refreshExpiringInstagramTokens(
       );
       refreshed += 1;
     } catch (error) {
-      if (
+      const expired =
         (connection.tokenExpiresAt && connection.tokenExpiresAt <= now.toISOString()) ||
-        (error instanceof MetaOAuthError && !error.retryable)
-      ) {
+        (error instanceof MetaOAuthError && !error.retryable);
+      // Previously only counted, never logged with the actual cause - a batch
+      // failing for a code defect (bad response shape, a bug here) looked
+      // identical in the logs to ordinary token expiry, with zero diagnostic
+      // trail to tell them apart.
+      logger.warn("Instagram token refresh failed", {
+        connectionId: connection.id,
+        workspaceId: connection.workspaceId,
+        igUserId: connection.igUserId,
+        markedExpired: Boolean(expired),
+        error: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
+      if (expired) {
         await repository.updateConnectionStatus(connection.id, "EXPIRED");
         void notifyWorkspaceManagers(
           connection.workspaceId,

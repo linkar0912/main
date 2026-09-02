@@ -764,6 +764,39 @@ describe("memory repository", () => {
     });
   });
 
+  it("does not delete a workspace's Facebook Page automations when its last Instagram account is deleted", async () => {
+    const repository = createMemoryRepository();
+    const igAutomation = await repository.createAutomation("workspace_a", { name: "IG guide delivery", definition });
+    const fbAutomation = await repository.createAutomation("workspace_a", { name: "FB comment reply", definition, facebookPageId: "page_1" });
+    await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_123", username: "creator", accessTokenEncrypted: "sealed-token", status: "CONNECTED" });
+    await repository.recordExecution({ workspaceId: "workspace_a", automationId: igAutomation.id, externalEventId: "comment_1", dedupeKey: "dedupe_ig", status: "SENT" });
+    await repository.recordExecution({ workspaceId: "workspace_a", automationId: fbAutomation.id, externalEventId: "comment_2", dedupeKey: "dedupe_fb", status: "SENT" });
+
+    await repository.beginInstagramDataDeletion("ig_123", "linkar_delete_456", "signed-request-hash-2");
+
+    const remaining = await repository.listAutomations("workspace_a");
+    expect(remaining.map((automation) => automation.id)).toEqual([fbAutomation.id]);
+    expect(await repository.hasExecution("workspace_a", "dedupe_ig")).toBe(false);
+    expect(await repository.hasExecution("workspace_a", "dedupe_fb")).toBe(true);
+  });
+
+  it("purges outbound message deliveries for the deleted Instagram account", async () => {
+    const repository = createMemoryRepository();
+    await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_123", username: "creator", accessTokenEncrypted: "sealed-token", status: "CONNECTED" });
+    await repository.ensureOutboundDelivery({
+      deliveryKey: "delivery_1",
+      workspaceId: "workspace_a",
+      instagramAccountId: "ig_123",
+      recipientId: "recipient_1",
+      kind: "CLASSIC_ACTION",
+      payload: { text: "Here's the guide" },
+    });
+
+    await repository.beginInstagramDataDeletion("ig_123", "linkar_delete_789", "signed-request-hash-3");
+
+    expect(await repository.getOutboundDelivery("delivery_1")).toBeNull();
+  });
+
   it("expires non-terminal participants whose messaging window has closed, leaving terminal and still-open ones untouched", async () => {
     const repository = createMemoryRepository();
     const { record: closedWindow } = await repository.createParticipant({

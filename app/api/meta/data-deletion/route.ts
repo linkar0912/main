@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   }
   if (!existing && !isFreshDeletionRequest(payload)) return new Response("Expired signed request", { status: 403 });
 
-  const confirmationCode = existing?.confirmationCode ?? createDeletionConfirmationCode();
+  let confirmationCode = existing?.confirmationCode ?? createDeletionConfirmationCode();
   if (!existing) {
     try {
       await repository.beginInstagramDataDeletion(payload.user_id, confirmationCode, signedRequestHash);
@@ -41,6 +41,7 @@ export async function POST(request: Request) {
       // the winner's confirmation code instead of failing the request.
       const winner = await repository.findDataDeletionByRequestHash(signedRequestHash);
       if (!winner) throw error;
+      confirmationCode = winner.confirmationCode;
     }
   }
   await deleteQueuedInstagramEvents(payload.user_id);

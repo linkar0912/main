@@ -111,19 +111,55 @@ describe("sequences repository + scheduler", () => {
     const idlePass = await processDueSequenceSends(repository, client);
     expect(idlePass.sent).toBe(0);
 
-    // Jump past step two's 48-hour delay: it delivers, then the enrollment completes.
+    // Jump past step two's 48-hour delay. The step is now due, but the contact
+    // last messaged 49h ago, so Meta's 24-hour messaging window has closed:
+    // delivering here would be an unsolicited automated DM. The enrollment is
+    // cancelled instead of sent.
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.now() + 49 * 3_600_000));
     try {
-      const finalPass = await processDueSequenceSends(repository, client);
-      expect(finalPass.sent).toBe(1);
-      expect(client.sendDirectMessage.mock.calls[1][2].text).toBe("Two days later");
+      const closedPass = await processDueSequenceSends(repository, client);
+      expect(closedPass).toMatchObject({ sent: 0, cancelled: 1 });
+      expect(client.sendDirectMessage.mock.calls).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
 
+    // countEnrollmentsBySequence excludes CANCELLED, so the window-closed
+    // enrollment drops out of the active count rather than lingering as due
+    // work that would re-attempt a policy-violating DM on every sweep.
     const counts = await repository.countEnrollmentsBySequence("workspace_a");
-    expect(counts.find((entry) => entry.sequenceId === sequence.id)?.count ?? 0).toBe(1); // still enrolled, COMPLETED state counts as non-cancelled history
+    expect(counts.find((entry) => entry.sequenceId === sequence.id)?.count ?? 0).toBe(0);
+  });
+
+  it("delivers a due step when the contact re-opened the 24-hour messaging window", async () => {
+    const repository = await seed();
+    const contact = (await repository.getContact("workspace_a", "ig_1", "lead_1"))!;
+    const sequence = await repository.createSequence("workspace_a", {
+      name: "Nurture",
+      status: "ACTIVE",
+      steps: [
+        { id: "s1", delayHours: 0, text: "Day zero tip" },
+        { id: "s2", delayHours: 48, text: "Two days later" },
+      ],
+    });
+    await repository.enrollContactInSequence("workspace_a", sequence.id, contact.id, 0, new Date().toISOString());
+
+    const client = dmClient();
+    expect(await processDueSequenceSends(repository, client)).toMatchObject({ sent: 1 });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.now() + 49 * 3_600_000));
+    try {
+      // The person messaged the account again, which re-opens the window - the
+      // queued step is now deliverable and must not be cancelled.
+      await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+      const finalPass = await processDueSequenceSends(repository, client);
+      expect(finalPass).toMatchObject({ sent: 1, cancelled: 0 });
+      expect(client.sendDirectMessage.mock.calls[1][2].text).toBe("Two days later");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("pauses keep steps undelivered until reactivated", async () => {

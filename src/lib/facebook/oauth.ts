@@ -1,4 +1,10 @@
 import type { ServerEnv } from "../env";
+import { withAppSecretProof } from "./appsecret-proof";
+
+// Matches MetaClient's default (../meta/client.ts) - every fetch in this file
+// previously had no signal at all, so a stalled graph.facebook.com response
+// during connect, page listing, or Page selection would hang indefinitely.
+const REQUEST_TIMEOUT_MS = 10_000;
 
 /**
  * Errors raised while exchanging or refreshing Facebook Login tokens. Mirrors
@@ -11,7 +17,16 @@ export class FacebookOAuthError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = "FacebookOAuthError";
-    this.retryable = status === 429 || status >= 500;
+    this.retryable = status === 0 || status === 429 || status >= 500;
+  }
+}
+
+async function fetchWithTimeout(fetcher: typeof fetch, url: string | URL, init: RequestInit = {}): Promise<Response> {
+  try {
+    return await fetcher(url, { ...init, signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch (error) {
+    const timedOut = error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError");
+    throw new FacebookOAuthError(timedOut ? "Facebook request timed out" : "Facebook network request failed", 0);
   }
 }
 
@@ -44,10 +59,14 @@ type FacebookOAuthConfig = Pick<
  */
 export function buildFacebookAuthorizeUrl(
   state: string,
-  config: Pick<FacebookOAuthConfig, "facebookAppId" | "facebookRedirectUri" | "facebookScopes">,
+  config: Pick<FacebookOAuthConfig, "facebookAppId" | "facebookRedirectUri" | "facebookScopes" | "facebookApiVersion">,
 ): string {
   if (!config.facebookAppId) throw new Error("Facebook app is not configured");
-  const url = new URL("https://www.facebook.com/v18.0/dialog/oauth");
+  // Pinned to the same configured version as every Graph call in this file. This
+  // was hardcoded to v18.0, which is past Meta's 2-year Graph API sunset: once
+  // Meta retires it the login dialog starts failing for every new connect, and
+  // an app pointing at an unsupported version is a needless App Review flag.
+  const url = new URL(`https://www.facebook.com/${config.facebookApiVersion}/dialog/oauth`);
   url.searchParams.set("client_id", config.facebookAppId);
   url.searchParams.set("redirect_uri", config.facebookRedirectUri);
   url.searchParams.set("response_type", "code");
@@ -88,7 +107,7 @@ export async function exchangeFacebookCode(
     code,
   });
   const shortLived = await jsonOrThrow(
-    await fetcher(`https://graph.facebook.com/${config.facebookApiVersion}/oauth/access_token`, {
+    await fetchWithTimeout(fetcher, `https://graph.facebook.com/${config.facebookApiVersion}/oauth/access_token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: shortBody,
@@ -99,7 +118,8 @@ export async function exchangeFacebookCode(
   // Upgrade to a long-lived user token. Scopes are inherited from the
   // short-lived token and are enforced server-side on subsequent API calls.
   const longLived = await jsonOrThrow(
-    await fetcher(
+    await fetchWithTimeout(
+      fetcher,
       `https://graph.facebook.com/${config.facebookApiVersion}/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(config.facebookAppId)}&client_secret=${encodeURIComponent(config.facebookAppSecret)}&fb_exchange_token=${encodeURIComponent(shortToken)}`,
     ),
   );
@@ -132,12 +152,14 @@ export async function listFacebookPages(
   userAccessToken: string,
   apiVersion: string,
   fetcher: typeof fetch = fetch,
+  appSecret?: string,
 ): Promise<FacebookPageSummary[]> {
   const url = new URL(`https://graph.facebook.com/${apiVersion}/me/accounts`);
   url.searchParams.set("fields", "id,name,access_token,category");
   url.searchParams.set("limit", "100");
+  withAppSecretProof(url, userAccessToken, appSecret);
   const payload = await jsonOrThrow(
-    await fetcher(url, { headers: { authorization: `Bearer ${userAccessToken}` } }),
+    await fetchWithTimeout(fetcher, url, { headers: { authorization: `Bearer ${userAccessToken}` } }),
   );
   const data = Array.isArray(payload.data) ? payload.data : [];
   const pages: FacebookPageSummary[] = [];
@@ -160,9 +182,11 @@ export async function validateFacebookPermissions(
   userAccessToken: string,
   apiVersion: string,
   fetcher: typeof fetch = fetch,
+  appSecret?: string,
 ): Promise<void> {
   const url = new URL(`https://graph.facebook.com/${apiVersion}/me/permissions`);
-  const payload = await jsonOrThrow(await fetcher(url, {
+  withAppSecretProof(url, userAccessToken, appSecret);
+  const payload = await jsonOrThrow(await fetchWithTimeout(fetcher, url, {
     headers: { authorization: `Bearer ${userAccessToken}` },
   }));
   const granted = new Set(
@@ -179,10 +203,12 @@ export async function getFacebookUserId(
   userAccessToken: string,
   apiVersion: string,
   fetcher: typeof fetch = fetch,
+  appSecret?: string,
 ): Promise<string> {
   const url = new URL(`https://graph.facebook.com/${apiVersion}/me`);
   url.searchParams.set("fields", "id");
-  const payload = await jsonOrThrow(await fetcher(url, {
+  withAppSecretProof(url, userAccessToken, appSecret);
+  const payload = await jsonOrThrow(await fetchWithTimeout(fetcher, url, {
     headers: { authorization: `Bearer ${userAccessToken}` },
   }));
   if (typeof payload.id !== "string" || !payload.id) throw new FacebookOAuthError("Meta did not return a Facebook user id", 502);
@@ -201,11 +227,13 @@ export async function subscribeFacebookPageToWebhooks(
   pageAccessToken: string,
   apiVersion: string,
   fetcher: typeof fetch = fetch,
+  appSecret?: string,
 ): Promise<{ subscribed: boolean; error?: string }> {
   const url = new URL(`https://graph.facebook.com/${apiVersion}/${pageId}/subscribed_apps`);
   url.searchParams.set("subscribed_fields", "feed");
+  withAppSecretProof(url, pageAccessToken, appSecret);
   const payload = await jsonOrThrow(
-    await fetcher(url, {
+    await fetchWithTimeout(fetcher, url, {
       method: "POST",
       headers: { authorization: `Bearer ${pageAccessToken}` },
     }),
@@ -220,10 +248,12 @@ export async function readFacebookPageWebhookSubscription(
   apiVersion: string,
   appId: string,
   fetcher: typeof fetch = fetch,
+  appSecret?: string,
 ): Promise<string[]> {
   const url = new URL(`https://graph.facebook.com/${apiVersion}/${pageId}/subscribed_apps`);
   url.searchParams.set("fields", "subscribed_fields");
-  const payload = await jsonOrThrow(await fetcher(url, {
+  withAppSecretProof(url, pageAccessToken, appSecret);
+  const payload = await jsonOrThrow(await fetchWithTimeout(fetcher, url, {
     headers: { authorization: `Bearer ${pageAccessToken}` },
   }));
   const fields = new Set<string>();
@@ -243,9 +273,11 @@ export async function unsubscribeFacebookPageFromWebhooks(
   pageAccessToken: string,
   apiVersion: string,
   fetcher: typeof fetch = fetch,
+  appSecret?: string,
 ): Promise<boolean> {
   const url = new URL(`https://graph.facebook.com/${apiVersion}/${pageId}/subscribed_apps`);
-  const payload = await jsonOrThrow(await fetcher(url, {
+  withAppSecretProof(url, pageAccessToken, appSecret);
+  const payload = await jsonOrThrow(await fetchWithTimeout(fetcher, url, {
     method: "DELETE",
     headers: { authorization: `Bearer ${pageAccessToken}` },
   }));

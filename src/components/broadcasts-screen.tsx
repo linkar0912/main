@@ -17,7 +17,7 @@ type BroadcastRow = {
   skipped: number;
 };
 
-type Segment = "all_contacts" | "captured_email" | "inactive_7d" | "inactive_30d";
+type Segment = "all_contacts" | "captured_email";
 
 /** One-off DM blasts to a contact segment - its own tab, not a footnote on My Automations. */
 export function BroadcastsScreen() {
@@ -110,15 +110,11 @@ export function BroadcastsScreen() {
                   <select value={segment} onChange={(e) => setSegment(e.target.value as Segment)}>
                     <option value="captured_email">Leads with a captured email</option>
                     <option value="all_contacts">All known contacts</option>
-                    <option value="inactive_7d">Win-back: quiet 7+ days</option>
-                    <option value="inactive_30d">Win-back: quiet 30+ days</option>
                   </select>
-                  {(segment === "inactive_7d" || segment === "inactive_30d") && (
-                    <small className="muted">
-                      Win-back DMs only land if the person messaged you within Meta&apos;s last 24 hours -
-                      everyone else is skipped, never spammed.
-                    </small>
-                  )}
+                  <small className="muted">
+                    Only people who messaged you in the last 24 hours receive a DM - Meta&apos;s
+                    messaging window. Everyone else is skipped, never spammed.
+                  </small>
                 </label>
               </div>
               <label className="field field-spaced">

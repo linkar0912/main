@@ -3,10 +3,21 @@ import { z } from "zod";
 /**
  * Validation for timed drip campaigns (sequences). Steps are ordered messages, each
  * delivered `delayHours` after the previous one; step 0 goes out right on enrollment.
+ *
+ * `delayHours` is capped below 24 because Meta only accepts an automated DM within
+ * 24 hours of the person's last inbound message. A step scheduled 24h or more after
+ * the previous one can therefore never deliver - the sequence runner cancels the
+ * enrollment when the window has shut - so the old 90-day ceiling let owners build
+ * drip campaigns that looked fine and silently never sent. Long-horizon nurture has
+ * to move to a channel without a messaging window (e.g. email).
  */
+const MAX_STEP_DELAY_HOURS = 23;
+
 const stepSchema = z.object({
   id: z.string().trim().min(1),
-  delayHours: z.number().int().min(0).max(24 * 90),
+  delayHours: z.number().int().min(0).max(MAX_STEP_DELAY_HOURS, {
+    message: `delayHours must be ${MAX_STEP_DELAY_HOURS} or less - Meta's 24-hour messaging window makes longer gaps undeliverable`,
+  }),
   text: z.string().trim().min(1).max(1_000),
 });
 

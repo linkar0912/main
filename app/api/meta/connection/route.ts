@@ -55,7 +55,23 @@ export async function DELETE(request: Request) {
     });
   }
   await getRepository().expireParticipantsByInstagramAccount(connection.igUserId, "Instagram account disconnected");
-  await getRepository().deleteConnection(session.workspaceId, connection.id);
+  try {
+    await getRepository().deleteConnection(session.workspaceId, connection.id);
+  } catch (error) {
+    // Participants are already expired at this point (by design - see the test
+    // "expires participants before deleting the connection record"), so a
+    // failure here leaves the connection row showing CONNECTED with automations
+    // that will never fire again. Surface that clearly instead of letting an
+    // unhandled exception fall through as an opaque 500 with no diagnostic
+    // trail and no signal to the caller that a retry is needed.
+    logger.warn("Connection row survives as CONNECTED after its participants were already expired", {
+      connectionId: connection.id,
+      igUserId: connection.igUserId,
+      workspaceId: session.workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return Response.json({ error: "Disconnected the account's automations, but could not remove the connection. Try disconnecting again." }, { status: 500 });
+  }
   clearProfilePictureCache(connection.igUserId);
   return Response.json({ disconnected: true, remoteUnsubscribed });
 }

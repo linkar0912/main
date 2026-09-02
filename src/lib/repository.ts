@@ -499,10 +499,17 @@ export type BroadcastSegment =
   // Win-back: contacts Meta's 24h window has almost certainly closed on. Delivery
   // attempts will mostly be skipped unless the person messaged again recently -
   // these segments exist so owners can see and prune the inactive tail.
+  // Legacy, not creatable - see broadcastSegmentCutoff below.
   | "inactive_7d"
   | "inactive_30d";
 
 /** Cutoff instant for a win-back segment: contacts last seen before it qualify. */
+/**
+ * Recipient cutoff for a segment. The two `inactive_*` values are legacy: they
+ * remain in the union so broadcasts created before they were withdrawn still
+ * read back, but the API no longer accepts them for new blasts because every
+ * recipient they select is outside Meta's 24-hour messaging window.
+ */
 export function broadcastSegmentCutoff(segment: BroadcastSegment, now: Date): Date | null {
   const days = segment === "inactive_7d" ? 7 : segment === "inactive_30d" ? 30 : 0;
   return days === 0 ? null : new Date(now.getTime() - days * 24 * 60 * 60 * 1_000);

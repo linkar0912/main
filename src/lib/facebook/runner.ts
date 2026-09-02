@@ -13,6 +13,7 @@ import {
 import { findMatchedKeyword, matchesTrigger, resolveReplyForMedia } from "../automation/match";
 import { validateDefinitionForTarget } from "../automation/channels/registry";
 import type { DeliveryTimingObserver } from "../automation/delivery-timing";
+import { checkSendRateLimit } from "../automation/send-rate-limiter";
 
 /**
  * Result shape parallel to the Instagram runner's RunnerResult so the
@@ -192,6 +193,17 @@ export async function processNormalizedFacebookEvent(
       });
       result.skipped += 1;
       continue;
+    }
+
+    // Per-Page send ceiling, checked before any claim or slot reservation so
+    // there is nothing to unwind. Meta throttles Pages dynamically off
+    // engagement, so a public reply storm on a viral post is a real
+    // restriction risk. Thrown (not skipped) so the reply is retried and still
+    // lands once the window rolls over, matching how transient Graph failures
+    // are handled below.
+    const rateLimit = await checkSendRateLimit(mapping.page.pageId, "comment_reply");
+    if (!rateLimit.allowed) {
+      throw new RetryableFacebookError("Send rate limit reached for this Facebook Page");
     }
 
     const replyOnce = definition.trigger.type === "comment"

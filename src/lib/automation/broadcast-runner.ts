@@ -5,6 +5,8 @@ import { MetaApiError } from "../meta/client";
 import { logger } from "../logger";
 import type { BroadcastSendJob } from "../queue";
 import { executeOutboundDelivery } from "./outbound-delivery";
+import { isWithinMessagingWindow } from "../messaging-window";
+import { checkSendRateLimit } from "./send-rate-limiter";
 
 export type BroadcastRunnerOptions = {
   client?: {
@@ -68,6 +70,24 @@ export async function processBroadcastSend(
     return;
   }
 
+  // Meta's 24-hour messaging window. This runner previously declared
+  // WINDOW_CLOSED in its result-code union but never actually checked the
+  // window, so a blast delivered to every non-suppressed contact regardless of
+  // when they last messaged the account - including the inactive_7d and
+  // inactive_30d segments, which by construction select only contacts whose
+  // window closed 7+ or 30+ days ago. That is an unsolicited automated DM in
+  // Meta's terms and is exactly what gets a professional account restricted.
+  if (!isWithinMessagingWindow(contact.lastSeenAt)) {
+    await markKnownBroadcastOutcome(
+      repository,
+      job,
+      "The 24-hour messaging window has closed",
+      "WINDOW_CLOSED",
+    );
+    await repository.reconcileBroadcastCounters(job.workspaceId, job.broadcastId);
+    return;
+  }
+
   const mapping = await repository.findWorkspaceByInstagramAccount(job.igAccountId);
   if (!mapping || mapping.workspaceId !== job.workspaceId) {
     await markKnownBroadcastOutcome(
@@ -84,6 +104,14 @@ export async function processBroadcastSend(
     await markKnownBroadcastOutcome(repository, job, "Meta delivery is disabled", "SUPPRESSED");
     await repository.reconcileBroadcastCounters(job.workspaceId, job.broadcastId);
     return;
+  }
+
+  // Per-account send ceiling. A blast fans out up to 500 recipients at once, so
+  // this is the path most likely to trip Meta's own throttling; retry rather
+  // than fail so the recipient is picked up in the next window.
+  const rateLimit = await checkSendRateLimit(mapping.connection.igUserId, "direct_message");
+  if (!rateLimit.allowed) {
+    throw new MetaApiError("Send rate limit reached for this Instagram account", 429, true);
   }
 
   const connection: MetaConnection = {

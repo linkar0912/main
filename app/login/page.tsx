@@ -4,7 +4,7 @@ import { safeNextPath } from "@/src/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 type LoginPageProps = {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; reset?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -19,6 +19,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         : params.error === "oauth"
           ? "Something went wrong signing in. Please try again."
           : "";
+  const notice = params.reset === "1" ? "Your password has been reset. Sign in with your new password." : "";
 
-  return <LoginScreen nextPath={nextPath} error={error} />;
+  return <LoginScreen nextPath={nextPath} error={error} notice={notice} />;
 }

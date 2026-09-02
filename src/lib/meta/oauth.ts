@@ -3,13 +3,28 @@ import type { MetaTokenResult } from "./types";
 
 type OAuthConfig = Pick<ServerEnv, "metaAppId" | "metaAppSecret" | "metaRedirectUri" | "metaApiVersion" | "metaScopes">;
 
+// Matches MetaClient's default (client.ts) - these fetch calls previously had
+// no signal at all, so a stalled api.instagram.com/graph.instagram.com
+// response would hang the interactive OAuth callback (and, worse, block the
+// sequential token-refresh loop in token-refresh.ts) indefinitely.
+const REQUEST_TIMEOUT_MS = 10_000;
+
 export class MetaOAuthError extends Error {
   readonly retryable: boolean;
 
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = "MetaOAuthError";
-    this.retryable = status === 429 || status >= 500;
+    this.retryable = status === 0 || status === 429 || status >= 500;
+  }
+}
+
+async function fetchWithTimeout(fetcher: typeof fetch, url: string, init: RequestInit = {}): Promise<Response> {
+  try {
+    return await fetcher(url, { ...init, signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch (error) {
+    const timedOut = error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError");
+    throw new MetaOAuthError(timedOut ? "Meta request timed out" : "Meta network request failed", 0);
   }
 }
 
@@ -60,7 +75,7 @@ export async function exchangeInstagramCode(
     code,
   });
   const shortLived = await jsonOrThrow(
-    await fetcher("https://api.instagram.com/oauth/access_token", {
+    await fetchWithTimeout(fetcher, "https://api.instagram.com/oauth/access_token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body,
@@ -83,7 +98,8 @@ export async function exchangeInstagramCode(
     if (missing.length > 0) throw new InstagramPermissionError();
   }
 
-  const longLivedResponse = await fetcher(
+  const longLivedResponse = await fetchWithTimeout(
+    fetcher,
     `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(config.metaAppSecret)}&access_token=${encodeURIComponent(shortToken)}`,
   );
   const longLived = await jsonOrThrow(longLivedResponse);
@@ -101,7 +117,8 @@ export async function refreshInstagramToken(
   token: string,
   fetcher: typeof fetch = fetch,
 ): Promise<{ accessToken: string; expiresIn?: number }> {
-  const response = await fetcher(
+  const response = await fetchWithTimeout(
+    fetcher,
     `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`,
   );
   const payload = await jsonOrThrow(response);

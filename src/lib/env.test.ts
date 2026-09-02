@@ -42,6 +42,32 @@ describe("platform owner environment", () => {
   });
 });
 
+describe("token encryption key environment", () => {
+  const validKey = "a".repeat(64);
+
+  it("rejects a malformed META_TOKEN_ENCRYPTION_KEY instead of booting with garbage", () => {
+    vi.stubEnv("META_TOKEN_ENCRYPTION_KEY", "not-64-hex-chars");
+    expect(() => getServerEnv()).toThrow("META_TOKEN_ENCRYPTION_KEY must be 64 hex characters when set");
+  });
+
+  it("accepts a valid META_TOKEN_ENCRYPTION_KEY", () => {
+    vi.stubEnv("META_TOKEN_ENCRYPTION_KEY", validKey);
+    expect(getServerEnv().metaTokenEncryptionKey).toBe(validKey);
+  });
+
+  it("rejects a malformed META_TOKEN_ENCRYPTION_KEY even when it's only reached via the Facebook fallback", () => {
+    vi.stubEnv("FACEBOOK_TOKEN_ENCRYPTION_KEY", "");
+    vi.stubEnv("META_TOKEN_ENCRYPTION_KEY", "not-64-hex-chars");
+    expect(() => getServerEnv()).toThrow("META_TOKEN_ENCRYPTION_KEY must be 64 hex characters when set");
+  });
+
+  it("falls back to the (valid) Meta key for Facebook when no dedicated key is set", () => {
+    vi.stubEnv("FACEBOOK_TOKEN_ENCRYPTION_KEY", "");
+    vi.stubEnv("META_TOKEN_ENCRYPTION_KEY", validKey);
+    expect(getServerEnv().facebookTokenEncryptionKey).toBe(validKey);
+  });
+});
+
 describe("provider request environment", () => {
   it("defaults provider requests to ten seconds with a safe dispatch lease", () => {
     vi.stubEnv("PROVIDER_REQUEST_TIMEOUT_MS", "");

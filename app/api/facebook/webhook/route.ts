@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     // total wall time low and avoids blowing past Meta's per-Page rate
     // limits, which trigger redeliveries on timeout.
     const repository = getRepository();
-    const client = env.facebookAppId ? new FacebookClient({ apiVersion: env.facebookApiVersion }) : undefined;
+    const client = env.facebookAppId ? new FacebookClient({ apiVersion: env.facebookApiVersion, appSecret: env.facebookAppSecret }) : undefined;
     for (const event of events) {
       try {
         await processNormalizedFacebookEvent(event, repository, {

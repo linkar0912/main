@@ -714,6 +714,12 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       for (const [id, connection] of connections.entries()) {
         if (connection.igUserId === igUserId) connections.delete(id);
       }
+      // Every message ever sent to/for this account - never covered before, so
+      // a "delete my data" request left DM payloads and recipient IDs behind
+      // indefinitely.
+      for (const [key, delivery] of outboundDeliveries.entries()) {
+        if (delivery.instagramAccountId === igUserId) outboundDeliveries.delete(key);
+      }
       // Automations pinned to the deleted account can never fire again; remove
       // them even when sibling connections keep the workspace alive.
       for (const [id, automation] of automations.entries()) {
@@ -737,8 +743,23 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         }
         for (const [id, sequence] of sequences.entries()) if (sequence.workspaceId === workspaceId) sequences.delete(id);
         for (const [id, broadcast] of broadcasts.entries()) if (broadcast.workspaceId === workspaceId) broadcasts.delete(id);
-        for (const [id, automation] of automations.entries()) if (automation.workspaceId === workspaceId) automations.delete(id);
-        for (const [id, execution] of executions.entries()) if (execution.workspaceId === workspaceId) executions.delete(id);
+        // Scoped to provider === "INSTAGRAM", not just workspaceId - a workspace can
+        // also have Facebook Page automations, and those must survive an
+        // Instagram-only deletion request. (instagramAccountId being null does NOT
+        // mean "not Instagram" - it means "applies to every connected Instagram
+        // account in the workspace"; `provider` is the real channel discriminator.)
+        // Capture which automation IDs are removed here so the execution sweep
+        // below can key off that instead of a live map lookup (the automation row
+        // is already gone by the time executions are swept).
+        const deletedInstagramAutomationIds = new Set<string>();
+        for (const [id, automation] of automations.entries()) {
+          if (automation.workspaceId !== workspaceId || automation.provider !== "INSTAGRAM") continue;
+          automations.delete(id);
+          deletedInstagramAutomationIds.add(id);
+        }
+        for (const [id, execution] of executions.entries()) {
+          if (execution.workspaceId === workspaceId && deletedInstagramAutomationIds.has(execution.automationId)) executions.delete(id);
+        }
       }
       const timestamp = now();
       const record: DataDeletionRequestRecord = {
@@ -1398,7 +1419,12 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         tags: [],
         score: 0,
         leadStatus: "NEW",
-        lastSeenAt: seenAt > timestamp ? seenAt : timestamp,
+        // Honour the caller's timestamp verbatim, exactly as the Prisma
+        // repository does. This used to floor a new contact's lastSeenAt at
+        // now(), which the update path above never did - so a contact created
+        // from a backdated webhook read as "just seen", and any 24-hour
+        // messaging-window check against it silently passed.
+        lastSeenAt: seenAt,
         createdAt: timestamp,
         updatedAt: timestamp,
       };

@@ -5,6 +5,9 @@ import { createMemoryRepository } from "../memory-repository";
 import { sealSecret } from "../security/secrets";
 import { processNormalizedEvent, type AutomationRunnerClient } from "./runner";
 
+// Comments must be < 7 days old for Meta to accept a private reply.
+const RECENT_COMMENT_AT = Date.now();
+
 const TOKEN_KEY = "a".repeat(64);
 
 vi.mock("../queue", async (importOriginal) => ({
@@ -71,7 +74,7 @@ describe("personalization tokens and follow-up scheduling", () => {
       mediaId: "media_9",
       recipientId: "person_1",
       senderUsername: "ravi",
-      timestamp: 1,
+      timestamp: RECENT_COMMENT_AT,
     };
 
     const result = await processNormalizedEvent(event, repository, {
@@ -101,7 +104,7 @@ describe("personalization tokens and follow-up scheduling", () => {
       type: "message.received",
       text: "hello",
       recipientId: "person_2",
-      timestamp: 1,
+      timestamp: RECENT_COMMENT_AT,
     };
 
     await processNormalizedEvent(event, repository, { client, tokenEncryptionKey: TOKEN_KEY });
@@ -128,7 +131,7 @@ describe("personalization tokens and follow-up scheduling", () => {
       type: "message.received",
       text: "offer",
       recipientId: "person_3",
-      timestamp: 1,
+      timestamp: RECENT_COMMENT_AT,
     };
 
     const result = await processNormalizedEvent(event, repository, {
@@ -163,7 +166,7 @@ describe("personalization tokens and follow-up scheduling", () => {
       type: "message.received",
       text: "hi",
       recipientId: "person_4",
-      timestamp: 1,
+      timestamp: RECENT_COMMENT_AT,
     }, repository, { client, tokenEncryptionKey: TOKEN_KEY });
 
     expect(vi.mocked(enqueueFlowFollowUps)).not.toHaveBeenCalled();

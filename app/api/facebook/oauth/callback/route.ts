@@ -65,9 +65,9 @@ export async function GET(request: Request) {
     const tokenExpiresAt = token.expiresIn
       ? new Date(Date.now() + token.expiresIn * 1_000).toISOString()
       : undefined;
-    await validateFacebookPermissions(token.accessToken, env.facebookApiVersion);
-    const facebookUserId = await getFacebookUserId(token.accessToken, env.facebookApiVersion);
-    const pages: FacebookPageSummary[] = await listFacebookPages(token.accessToken, env.facebookApiVersion);
+    await validateFacebookPermissions(token.accessToken, env.facebookApiVersion, undefined, env.facebookAppSecret);
+    const facebookUserId = await getFacebookUserId(token.accessToken, env.facebookApiVersion, undefined, env.facebookAppSecret);
+    const pages: FacebookPageSummary[] = await listFacebookPages(token.accessToken, env.facebookApiVersion, undefined, env.facebookAppSecret);
     if (pages.length === 0) {
       return withoutStateCookie(settingsRedirect(env, "no-pages"));
     }

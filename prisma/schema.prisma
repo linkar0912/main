@@ -541,7 +541,7 @@ model Broadcast {
   workspaceId String
   name        String
   text        String
-  segment     String // all_contacts | captured_email
+  segment     String // all_contacts | captured_email (legacy rows may hold inactive_7d/inactive_30d)
   status      String    @default("PENDING") // PENDING | RUNNING | COMPLETED
   total       Int       @default(0)
   sent        Int       @default(0)

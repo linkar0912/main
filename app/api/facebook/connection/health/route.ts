@@ -52,6 +52,8 @@ export async function GET(request: Request) {
         accessToken,
         env.facebookApiVersion,
         facebookAppId,
+        undefined,
+        env.facebookAppSecret,
       );
       return {
         id: page.id,

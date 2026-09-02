@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  AlertTriangle,
   Check,
   Clock,
   ExternalLink,
@@ -13,7 +12,6 @@ import {
   ShieldCheck,
   UserPlus,
   Users,
-  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
@@ -21,7 +19,6 @@ import { ContextHelpLink } from "./context-help-link";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 import { InstagramGlyph } from "./instagram-glyph";
 import { FacebookGlyph } from "./facebook-glyph";
-import { StatusBadge } from "./status-badge";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
@@ -49,10 +46,34 @@ const WEBHOOK_FIELD_LABELS: Record<string, string> = {
   messaging_referral: "Referrals",
 };
 
+function ConnectionStatusTag({ status }: { status: ConnectionStatus }) {
+  return (
+    <span className="connection-state" data-status={status.toLowerCase()}>
+      <span className="connection-state-dot" aria-hidden="true" />
+      {status.charAt(0) + status.slice(1).toLowerCase()}
+    </span>
+  );
+}
+
+type FacebookHealth = {
+  id: string;
+  pageId: string;
+  pageName: string;
+  status: ConnectionStatus;
+  checkError?: string;
+  subscribedFields: string[];
+  missingFields: string[];
+  requiredFields: string[];
+};
+
 export function SettingsScreen() {
   const router = useRouter();
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [health, setHealth] = useState<ConnectionHealth | null>(null);
+  // One entry per connected account, matched by id at render time - a
+  // workspace with more than one connected Instagram account or Facebook Page
+  // previously only ever saw health for whichever the API happened to list
+  // first (`data?.[0]`), silently hiding the others' status entirely.
+  const [health, setHealth] = useState<ConnectionHealth[]>([]);
   const [mode, setMode] = useState<"demo" | "configured">("demo");
   // useSearchParams (not a window.location initializer) so the server and the
   // first client render agree on this value - no hydration mismatch to fix up.
@@ -60,14 +81,7 @@ export function SettingsScreen() {
   const metaState = searchParams.get("meta") ?? "";
   const facebookState = searchParams.get("facebook") ?? "";
   const [facebookPages, setFacebookPages] = useState<FacebookPageSummary[]>([]);
-  const [facebookHealth, setFacebookHealth] = useState<{
-    pageId: string;
-    pageName: string;
-    status: ConnectionStatus;
-    checkError?: string;
-    subscribedFields: string[];
-    missingFields: string[];
-  } | null>(null);
+  const [facebookHealth, setFacebookHealth] = useState<FacebookHealth[]>([]);
   const [facebookBusyId, setFacebookBusyId] = useState("");
   const [facebookError, setFacebookError] = useState("");
   const [facebookChoices, setFacebookChoices] = useState<Array<{ id: string; name: string; category?: string }>>([]);
@@ -79,6 +93,9 @@ export function SettingsScreen() {
   const [team, setTeam] = useState<TeamOverview | null>(null);
   const [teamManageable, setTeamManageable] = useState(true);
   const [teamError, setTeamError] = useState("");
+  const [teamLoadError, setTeamLoadError] = useState("");
+  const [connectionsLoadError, setConnectionsLoadError] = useState("");
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("MEMBER");
   const [inviteBusy, setInviteBusy] = useState(false);
@@ -106,7 +123,12 @@ export function SettingsScreen() {
 
   useEffect(() => {
     if (facebookState !== "select-page") return;
-    void fetch("/api/facebook/oauth/pages")
+    // Aborted (not just abandoned) if facebookState changes or the component
+    // unmounts before this resolves - otherwise a slow response could still
+    // call setFacebookChoices/setFacebookError after the picker it's for is
+    // long gone.
+    const controller = new AbortController();
+    void fetch("/api/facebook/oauth/pages", { signal: controller.signal })
       .then(async (response) => {
         const payload = await response.json() as { data?: Array<{ id: string; name: string; category?: string }>; error?: string };
         if (!response.ok) throw new Error(payload.error ?? "Could not load Facebook Pages");
@@ -114,7 +136,11 @@ export function SettingsScreen() {
         setFacebookChoices(choices);
         setSelectedFacebookPageId(choices[0]?.id ?? "");
       })
-      .catch((error) => setFacebookError(error instanceof Error ? error.message : "Could not load Facebook Pages"));
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setFacebookError(error instanceof Error ? error.message : "Could not load Facebook Pages");
+      });
+    return () => controller.abort();
   }, [facebookState]);
 
   async function connectSelectedFacebookPage() {
@@ -129,9 +155,21 @@ export function SettingsScreen() {
       });
       const payload = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Could not connect Facebook Page");
+      // router.push only swaps the URL - it doesn't remount this component, so
+      // the connections/health fetched on initial mount would otherwise stay
+      // stale and still show "No Page connected" until a manual reload.
+      clearWorkspaceDataCache("connections");
+      const [fbPages, fbHealthResponse] = await Promise.all([
+        getFacebookPages(),
+        fetch("/api/facebook/connection/health"),
+      ]);
+      const fbHealthPayload = (await fbHealthResponse.json().catch(() => ({ data: [] }))) as { data?: FacebookHealth[] };
+      setFacebookPages(fbPages);
+      setFacebookHealth(fbHealthPayload.data ?? []);
       router.push("/settings?facebook=connected");
     } catch (error) {
       setFacebookError(error instanceof Error ? error.message : "Could not connect Facebook Page");
+    } finally {
       setFacebookSelectionBusy(false);
     }
   }
@@ -160,7 +198,11 @@ export function SettingsScreen() {
   }
 
   async function disconnect(id: string) {
-    if (disconnectingId) return;
+    // Scoped to this connection, not "is any disconnect in flight" - a
+    // workspace with multiple Instagram accounts should be able to
+    // disconnect one while another disconnect is still finishing, matching
+    // how disconnectFacebook already behaves.
+    if (disconnectingId === id) return;
     setDisconnectingId(id);
     setDisconnectError("");
     try {
@@ -172,6 +214,7 @@ export function SettingsScreen() {
       if (!response.ok) throw new Error("Could not disconnect Instagram");
       clearWorkspaceDataCache("connections");
       setConnections((current) => current.filter((connection) => connection.id !== id));
+      setHealth((current) => current.filter((entry) => entry.id !== id));
     } catch (error) {
       setDisconnectError(error instanceof Error ? error.message : "Could not disconnect Instagram");
     } finally {
@@ -179,34 +222,71 @@ export function SettingsScreen() {
     }
   }
 
-  useEffect(() => {
-    void Promise.all([
-      getInstagramConnections(),
-      getFacebookPages(),
-      getWorkspaceBootstrap().catch(() => null),
-      fetch("/api/meta/connection/health"),
-      fetch("/api/facebook/connection/health"),
-    ]).then(async ([connectionData, fbPages, bootstrap, connectionHealthResponse, fbHealthResponse]) => {
+  /**
+   * Fetches connection state without touching the loading/error flags up front.
+   * Split out from loadConnectionsData so the mount effect can call it without
+   * a synchronous setState in the effect body (which cascades renders); the
+   * initial state already is "loading, no error", so the reset those flags
+   * would perform is a no-op on mount and only matters for the Retry path.
+   */
+  async function fetchConnectionsData() {
+    try {
+      const [connectionData, fbPages, bootstrap, connectionHealthResponse, fbHealthResponse] = await Promise.all([
+        getInstagramConnections(),
+        getFacebookPages(),
+        getWorkspaceBootstrap().catch(() => null),
+        fetch("/api/meta/connection/health"),
+        fetch("/api/facebook/connection/health"),
+      ]);
       const connectionHealthPayload = (await connectionHealthResponse.json()) as { data?: ConnectionHealth[] };
-      const fbHealthPayload = (await fbHealthResponse.json().catch(() => ({ data: [] }))) as {
-        data?: Array<{ id: string; pageId: string; pageName: string; status: ConnectionStatus; checkError?: string; subscribedFields: string[]; missingFields: string[]; requiredFields: string[] }>;
-      };
+      const fbHealthPayload = (await fbHealthResponse.json().catch(() => ({ data: [] }))) as { data?: FacebookHealth[] };
       setConnections(connectionData);
       setFacebookPages(fbPages);
       setMode(bootstrap?.mode ?? "demo");
-      setHealth(connectionHealthPayload.data?.[0] ?? null);
-      setFacebookHealth(fbHealthPayload.data?.[0] ?? null);
-    }).catch(() => undefined);
+      setHealth(connectionHealthPayload.data ?? []);
+      setFacebookHealth(fbHealthPayload.data ?? []);
+    } catch {
+      // A network blip here previously left the page silently showing "No
+      // account connected" / "No Page connected" - indistinguishable from
+      // actually having no connections, which reads as "your accounts got
+      // disconnected" rather than "something failed to load."
+      setConnectionsLoadError("Could not load your connections. Check your connection and try again.");
+    } finally {
+      setConnectionsLoading(false);
+    }
+  }
+
+  /** Retry entry point: clears the previous outcome, then refetches. */
+  async function loadConnectionsData() {
+    setConnectionsLoading(true);
+    setConnectionsLoadError("");
+    await fetchConnectionsData();
+  }
+
+  useEffect(() => {
+    // Called from inside an async callback rather than directly in the effect
+    // body: the state updates all happen after an await, and this is the shape
+    // the sibling effects in this file already use.
+    void (async () => { await fetchConnectionsData(); })();
   }, []);
 
   useEffect(() => {
     void fetch("/api/team/invitations").then(async (response) => {
       if (!response.ok) {
+        // A real permissions signal (403) from the API, not a fetch failure -
+        // safe to distinguish because reaching this branch means the request
+        // itself succeeded.
         setTeamManageable(false);
         return;
       }
       setTeam(await response.json() as TeamOverview);
-    }).catch(() => setTeamManageable(false));
+    }).catch(() => {
+      // Unlike the branch above, this is a fetch that never got a response at
+      // all (network failure) - reporting it as "you're not an owner/admin"
+      // would mislead even the actual workspace owner into thinking they'd
+      // lost access over what might just be a dropped connection.
+      setTeamLoadError("Could not load team settings. Check your connection and try again.");
+    });
   }, []);
 
   async function refreshTeam() {
@@ -291,6 +371,7 @@ export function SettingsScreen() {
       if (!response.ok) throw new Error("Could not disconnect Facebook Page");
       clearWorkspaceDataCache("connections");
       setFacebookPages((current) => current.filter((page) => page.id !== id));
+      setFacebookHealth((current) => current.filter((entry) => entry.id !== id));
     } catch (error) {
       setFacebookError(error instanceof Error ? error.message : "Could not disconnect Facebook Page");
     } finally {
@@ -351,6 +432,12 @@ export function SettingsScreen() {
           <div className="section-content">
             {section === "connections" && (
               <div className="settings-overview-grid">
+                {connectionsLoadError && (
+                  <div className="notice-banner notice-warning" role="alert" style={{ gridColumn: "1 / -1" }}>
+                    <LockKeyhole size={17} />
+                    <p>{connectionsLoadError} <button className="text-link" type="button" onClick={() => void loadConnectionsData()}>Retry</button></p>
+                  </div>
+                )}
                 <section className="settings-hero panel settings-card channel-settings-card instagram-settings-card" data-channel-card="instagram">
                   {connections[0]?.profilePictureUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value here.
@@ -368,62 +455,79 @@ export function SettingsScreen() {
                     <ul className="connection-list">
                       {connections.map((connection) => (
                         <li className="panel connection-row" key={connection.id}>
-                          {connection.profilePictureUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
-                            <img
-                              className="connection-avatar is-photo"
-                              src={connection.profilePictureUrl}
-                              alt={`@${connection.username} profile picture`}
-                            />
-                          ) : (
-                            <span className="connection-avatar">@{connection.username.slice(0, 2).toUpperCase()}</span>
-                          )}
+                          <span className="connection-avatar-ring" data-brand="instagram">
+                            {connection.profilePictureUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+                              <img
+                                className="connection-avatar is-photo"
+                                src={connection.profilePictureUrl}
+                                alt={`@${connection.username} profile picture`}
+                              />
+                            ) : (
+                              <span className="connection-avatar">@{connection.username.slice(0, 2).toUpperCase()}</span>
+                            )}
+                          </span>
                           <div className="connection-copy">
                             <strong>@{connection.username}</strong>
                             <small>Connected {formatDate(connection.connectedAt)} · ID {connection.igUserId}</small>
                           </div>
-                          <StatusBadge status={connection.status} />
-                          <button
-                            className="button button-secondary"
-                            type="button"
-                            disabled={disconnectingId === connection.id}
-                            onClick={() => void disconnect(connection.id)}
-                          >
-                            {disconnectingId === connection.id ? "Disconnecting…" : "Disconnect"}
-                          </button>
+                          <div className="connection-actions">
+                            <ConnectionStatusTag status={connection.status} />
+                            <button
+                              className="button button-secondary button-small"
+                              type="button"
+                              disabled={disconnectingId === connection.id}
+                              onClick={() => void disconnect(connection.id)}
+                            >
+                              {disconnectingId === connection.id ? "Disconnecting…" : "Disconnect"}
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ul>
                   )}
                   {disconnectError && <p className="form-error" role="alert">{disconnectError}</p>}
-                  {connections.length > 0 && health && (
-                    <div className="channel-health" data-channel-health="instagram" aria-label="Webhook health">
-                    <div className="panel-heading">
-                      <div><p className="eyebrow">Webhook health</p><h2>{health.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>
-                      {health.missingFields.length === 0 ? <ShieldCheck size={21} /> : <AlertTriangle size={21} />}
-                    </div>
-                    {health.checkError ? (
-                      <p className="muted">Could not check with Meta right now: {health.checkError}</p>
-                    ) : (
-                      <ul className="check-list">
-                        {health.requiredFields.map((field) => {
-                          const subscribed = !health.missingFields.includes(field);
-                          return (
-                            <li key={field}>
-                              {subscribed ? <Check size={16} /> : <X size={16} />}
-                              {WEBHOOK_FIELD_LABELS[field] ?? field}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    {(health.missingFields.length > 0 || health.checkError) && (
-                      <p className="muted">
-                        Reconnect Instagram to refresh the subscription. <a className="text-link" href="/api/meta/oauth/start">Reconnect <ExternalLink size={15} /></a>
-                      </p>
-                    )}
-                    </div>
-                  )}
+                  {connections.length > 0 && connections.map((connection) => {
+                    const accountHealth = health.find((entry) => entry.id === connection.id);
+                    if (!accountHealth) return null;
+                    return (
+                      <div
+                        className="channel-health"
+                        data-channel-health="instagram"
+                        aria-label={connections.length > 1 ? `Webhook health for @${connection.username}` : "Webhook health"}
+                        key={connection.id}
+                      >
+                        <span
+                          className="health-orb"
+                          data-state={accountHealth.checkError ? "error" : accountHealth.missingFields.length === 0 ? "ok" : "warn"}
+                          aria-hidden="true"
+                        />
+                        <div className="health-copy">
+                          <strong>
+                            {connections.length > 1 ? `@${connection.username}: ` : ""}
+                            {accountHealth.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}
+                          </strong>
+                          {accountHealth.checkError ? (
+                            <p className="muted">Could not check with Meta right now: {accountHealth.checkError}</p>
+                          ) : (
+                            <ul className="health-fields">
+                              {accountHealth.requiredFields.map((field) => {
+                                const subscribed = !accountHealth.missingFields.includes(field);
+                                return (
+                                  <li key={field} data-live={subscribed}>{WEBHOOK_FIELD_LABELS[field] ?? field}</li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                          {(accountHealth.missingFields.length > 0 || accountHealth.checkError) && (
+                            <p className="muted">
+                              Reconnect Instagram to refresh the subscription. <a className="text-link" href="/api/meta/oauth/start">Reconnect <ExternalLink size={15} /></a>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </section>
 
                 <section className="settings-hero panel settings-card channel-settings-card facebook-settings-card" data-channel-card="facebook">
@@ -431,7 +535,7 @@ export function SettingsScreen() {
                   <div className="settings-copy"><p className="eyebrow">Facebook Pages</p><h2>{facebookPages.length === 0 ? "No Page connected" : `${facebookPages.length} Page${facebookPages.length === 1 ? "" : "s"} connected`}</h2><p>{facebookPages.length > 0 ? "Connected Pages can deliver comment-reply automations on public posts." : "Connect a Facebook Page to auto-reply to comments with the same flows you use on Instagram."}</p></div>
                   <div className="settings-action"><a className="button button-primary" href="/api/facebook/oauth/start">{facebookPages.length > 0 ? "Connect another Page" : "Connect Facebook Page"} <ExternalLink size={15} /></a></div>
                   {facebookState === "select-page" && (
-                    <div className="settings-copy">
+                    <div className="page-picker">
                       <label className="field">
                         <span>Choose Facebook Page</span>
                         <select
@@ -458,48 +562,68 @@ export function SettingsScreen() {
                     <ul className="connection-list">
                       {facebookPages.map((page) => (
                         <li className="panel connection-row" key={page.id}>
-                          <span className="connection-avatar" aria-hidden="true">{(page.pageName ?? "?").slice(0, 2).toUpperCase()}</span>
+                          {/* Facebook's literal brand blue is set inline (matches FacebookGlyph.tsx) rather than
+                              in globals.css - the workspace palette contract (globals.test.ts) forbids legacy
+                              Meta blue in the shared stylesheet. */}
+                          <span className="connection-avatar-ring" data-brand="facebook" style={{ background: "#1877F2" }}>
+                            <span className="connection-avatar" aria-hidden="true">{(page.pageName ?? "?").slice(0, 2).toUpperCase()}</span>
+                          </span>
                           <div className="connection-copy">
                             <strong>{page.pageName}</strong>
                             <small>Connected {formatDate(page.connectedAt)} · Page ID {page.pageId}</small>
                           </div>
-                          <StatusBadge status={page.status} />
-                          <button
-                            className="button button-secondary"
-                            type="button"
-                            disabled={facebookBusyId === page.id}
-                            onClick={() => void disconnectFacebook(page.id)}
-                          >
-                            {facebookBusyId === page.id ? "Disconnecting…" : "Disconnect"}
-                          </button>
+                          <div className="connection-actions">
+                            <ConnectionStatusTag status={page.status} />
+                            <button
+                              className="button button-secondary button-small"
+                              type="button"
+                              disabled={facebookBusyId === page.id}
+                              onClick={() => void disconnectFacebook(page.id)}
+                            >
+                              {facebookBusyId === page.id ? "Disconnecting…" : "Disconnect"}
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ul>
                   )}
                   {facebookError && <p className="form-error" role="alert">{facebookError}</p>}
-                  {facebookPages.length > 0 && facebookHealth && (
-                    <div className="channel-health" data-channel-health="facebook" aria-label="Facebook webhook health">
-                    <div className="panel-heading">
-                      <div><p className="eyebrow">Facebook webhook health</p><h2>{facebookHealth.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}</h2></div>
-                      {facebookHealth.missingFields.length === 0 ? <ShieldCheck size={21} /> : <AlertTriangle size={21} />}
-                    </div>
-                    {facebookHealth.checkError ? (
-                      <p className="muted">Could not check with Meta right now: {facebookHealth.checkError}</p>
-                    ) : (
-                      <ul className="check-list">
-                        <li>
-                          <Check size={16} />
-                          Feed (Page posts + comments)
-                        </li>
-                      </ul>
-                    )}
-                    {(facebookHealth.missingFields.length > 0 || facebookHealth.checkError) && (
-                      <p className="muted">
-                        Reconnect the Page to refresh the subscription. <a className="text-link" href="/api/facebook/oauth/start">Reconnect <ExternalLink size={15} /></a>
-                      </p>
-                    )}
-                    </div>
-                  )}
+                  {facebookPages.length > 0 && facebookPages.map((page) => {
+                    const pageHealth = facebookHealth.find((entry) => entry.id === page.id);
+                    if (!pageHealth) return null;
+                    return (
+                      <div
+                        className="channel-health"
+                        data-channel-health="facebook"
+                        aria-label={facebookPages.length > 1 ? `Facebook webhook health for ${page.pageName}` : "Facebook webhook health"}
+                        key={page.id}
+                      >
+                        <span
+                          className="health-orb"
+                          data-state={pageHealth.checkError ? "error" : pageHealth.missingFields.length === 0 ? "ok" : "warn"}
+                          aria-hidden="true"
+                        />
+                        <div className="health-copy">
+                          <strong>
+                            {facebookPages.length > 1 ? `${page.pageName}: ` : ""}
+                            {pageHealth.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}
+                          </strong>
+                          {pageHealth.checkError ? (
+                            <p className="muted">Could not check with Meta right now: {pageHealth.checkError}</p>
+                          ) : (
+                            <ul className="health-fields">
+                              <li data-live="true">Feed (Page posts + comments)</li>
+                            </ul>
+                          )}
+                          {(pageHealth.missingFields.length > 0 || pageHealth.checkError) && (
+                            <p className="muted">
+                              Reconnect the Page to refresh the subscription. <a className="text-link" href="/api/facebook/oauth/start">Reconnect <ExternalLink size={15} /></a>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </section>
               </div>
             )}
@@ -557,6 +681,7 @@ export function SettingsScreen() {
               <section className="panel settings-panel settings-card" aria-label="Team">
                 <div className="panel-heading"><div><p className="eyebrow">Team</p><h2>Members & invitations</h2></div><Users size={21} /></div>
                 {teamError && <p className="form-error" role="alert">{teamError}</p>}
+                {teamLoadError && <p className="form-error" role="alert">{teamLoadError}</p>}
                 {teamManageable && team ? (
                   <>
                     <ul className="team-list">
@@ -584,7 +709,7 @@ export function SettingsScreen() {
                     </form>
                     <p className="muted">Invitations expire after 7 days and must be accepted with the invited email address.</p>
                   </>
-                ) : (
+                ) : teamLoadError ? null : (
                   <p className="muted">Only workspace owners and admins can manage the team.</p>
                 )}
               </section>

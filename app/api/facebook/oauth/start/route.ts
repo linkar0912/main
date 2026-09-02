@@ -43,6 +43,7 @@ export async function GET(request: Request) {
       facebookAppId: env.facebookAppId,
       facebookRedirectUri: env.facebookRedirectUri,
       facebookScopes: env.facebookScopes,
+      facebookApiVersion: env.facebookApiVersion,
     }),
   );
   response.cookies.set({

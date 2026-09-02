@@ -39,6 +39,13 @@ export type ServerEnv = {
   workerConcurrency: number;
   dispatchLeaseMs: number;
   providerRequestTimeoutMs: number;
+  // Meta caps private replies to comments on posts/Reels at 750 calls/hour per
+  // Instagram professional account (confirmed against Meta's own Business
+  // Messaging docs, Sept 2026 - re-verify before changing, Meta revises these).
+  // Scoped per account, not per app, since that's how Meta enforces it.
+  privateReplyRateLimitPerHour: number;
+  directMessageRateLimitPerHour: number;
+  commentReplyRateLimitPerHour: number;
   adminChallengeTtlSeconds: number;
   deletionJobAttempts: number;
   deletionJobBackoffMs: number;
@@ -117,6 +124,11 @@ export function getServerEnv(): ServerEnv {
   const facebookApiVersion = process.env.FACEBOOK_API_VERSION ?? "v25.0";
   const googleRedirectUri =
     process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:3000/api/auth/oauth/google/callback";
+  // Every other secret-shaped var below goes through optionalHexEncryptionKey
+  // to fail fast on a malformed value; this one didn't, so a bad key silently
+  // booted and only broke at the first real user's OAuth callback, with an
+  // error that read like a random server error rather than a config problem.
+  const metaTokenEncryptionKey = optionalHexEncryptionKey(process.env.META_TOKEN_ENCRYPTION_KEY, "META_TOKEN_ENCRYPTION_KEY");
 
   // Fail fast on malformed values instead of discovering them at request time.
   // Demo mode is unaffected: every validated value has a valid default.
@@ -140,6 +152,23 @@ export function getServerEnv(): ServerEnv {
   if (!/^v\d+\.\d+$/.test(facebookApiVersion)) {
     throw new Error(`FACEBOOK_API_VERSION must look like "v25.0" (got "${facebookApiVersion}")`);
   }
+  // The webhook verify token is what stops a stranger from completing Meta's
+  // subscription handshake against this deployment. It ships with a "change-me"
+  // placeholder for local/demo use, so fail fast rather than let that reach
+  // production - but only when the channel is actually configured, so a
+  // deployment that runs neither Meta channel is unaffected.
+  const PLACEHOLDER_VERIFY_TOKEN = "change-me";
+  if (process.env.NODE_ENV === "production") {
+    if (process.env.META_APP_ID && (process.env.META_VERIFY_TOKEN ?? PLACEHOLDER_VERIFY_TOKEN) === PLACEHOLDER_VERIFY_TOKEN) {
+      throw new Error("META_VERIFY_TOKEN must be set to a non-placeholder value in production");
+    }
+    if (
+      process.env.FACEBOOK_APP_ID
+      && (process.env.FACEBOOK_VERIFY_TOKEN ?? process.env.META_VERIFY_TOKEN ?? PLACEHOLDER_VERIFY_TOKEN) === PLACEHOLDER_VERIFY_TOKEN
+    ) {
+      throw new Error("FACEBOOK_VERIFY_TOKEN must be set to a non-placeholder value in production");
+    }
+  }
   const providerRequestTimeoutMs = positiveIntegerEnv(
     "PROVIDER_REQUEST_TIMEOUT_MS",
     process.env.PROVIDER_REQUEST_TIMEOUT_MS,
@@ -160,7 +189,7 @@ export function getServerEnv(): ServerEnv {
     redisUrl: process.env.REDIS_URL,
     metaAppId: process.env.META_APP_ID || undefined,
     metaAppSecret: process.env.META_APP_SECRET || undefined,
-    metaTokenEncryptionKey: process.env.META_TOKEN_ENCRYPTION_KEY || undefined,
+    metaTokenEncryptionKey,
     metaRedirectUri,
     metaVerifyToken: process.env.META_VERIFY_TOKEN ?? "change-me",
     metaApiVersion,
@@ -178,7 +207,7 @@ export function getServerEnv(): ServerEnv {
     facebookTokenEncryptionKey: optionalHexEncryptionKey(
       process.env.FACEBOOK_TOKEN_ENCRYPTION_KEY,
       "FACEBOOK_TOKEN_ENCRYPTION_KEY",
-    ) ?? (process.env.META_TOKEN_ENCRYPTION_KEY || undefined),
+    ) ?? metaTokenEncryptionKey,
     facebookRedirectUri,
     facebookVerifyToken: process.env.FACEBOOK_VERIFY_TOKEN ?? process.env.META_VERIFY_TOKEN ?? "change-me",
     facebookApiVersion,
@@ -202,6 +231,24 @@ export function getServerEnv(): ServerEnv {
     workerConcurrency: integerEnv("WORKER_CONCURRENCY", process.env.WORKER_CONCURRENCY, 5),
     dispatchLeaseMs,
     providerRequestTimeoutMs,
+    privateReplyRateLimitPerHour: integerEnv(
+      "PRIVATE_REPLY_RATE_LIMIT_PER_HOUR",
+      process.env.PRIVATE_REPLY_RATE_LIMIT_PER_HOUR,
+      750,
+    ),
+    // Self-imposed per-account ceilings, not documented Meta figures - see the
+    // comment on bucketLimit in automation/send-rate-limiter.ts. Set to 0 to
+    // disable a bucket.
+    directMessageRateLimitPerHour: integerEnv(
+      "DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR",
+      process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR,
+      250,
+    ),
+    commentReplyRateLimitPerHour: integerEnv(
+      "COMMENT_REPLY_RATE_LIMIT_PER_HOUR",
+      process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR,
+      250,
+    ),
     adminChallengeTtlSeconds: integerEnv("ADMIN_CHALLENGE_TTL_SECONDS", process.env.ADMIN_CHALLENGE_TTL_SECONDS, 600),
     deletionJobAttempts: integerEnv("DELETION_JOB_ATTEMPTS", process.env.DELETION_JOB_ATTEMPTS, 8),
     deletionJobBackoffMs: integerEnv("DELETION_JOB_BACKOFF_MS", process.env.DELETION_JOB_BACKOFF_MS, 5_000),

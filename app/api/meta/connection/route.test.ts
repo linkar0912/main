@@ -163,4 +163,27 @@ describe("DELETE /api/meta/connection", () => {
     expireSpy.mockRestore();
     deleteSpy.mockRestore();
   });
+
+  it("returns a clear error instead of an unhandled exception when deleteConnection fails after participants are already expired", async () => {
+    const connection = await repository.upsertConnection({
+      workspaceId: "workspace_1",
+      igUserId: "ig_fails",
+      username: "creator3",
+      accessTokenEncrypted: "sealed-token-3",
+      status: "CONNECTED",
+    });
+    const deleteSpy = vi.spyOn(repository, "deleteConnection").mockRejectedValue(new Error("database is unreachable"));
+
+    const response = await DELETE(deleteRequest({ id: connection.id }));
+
+    expect(response.status).toBe(500);
+    const body = await response.json() as { error: string };
+    expect(body.error).toMatch(/could not remove the connection/i);
+    // The connection row is still there (deleteConnection failed), so the
+    // caller can see the account still needs attention rather than the request
+    // silently vanishing into a generic crash.
+    expect(await repository.listConnections("workspace_1")).toHaveLength(1);
+
+    deleteSpy.mockRestore();
+  });
 });

@@ -19,7 +19,7 @@ vi.mock("@/src/lib/repository-provider", () => ({
 }));
 
 vi.mock("@/src/lib/env", () => ({
-  getServerEnv: () => ({ facebookTokenEncryptionKey: "a".repeat(64), facebookApiVersion: "v25.0" }),
+  getServerEnv: () => ({ facebookTokenEncryptionKey: "a".repeat(64), facebookApiVersion: "v25.0", facebookAppSecret: "fb-app-secret" }),
 }));
 
 vi.mock("@/src/lib/security/secrets", () => ({ unsealSecret: () => "page-token" }));
@@ -84,7 +84,9 @@ describe("DELETE /api/facebook/connection", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ disconnected: true, remoteUnsubscribed: true });
     expect(mocks.deleteFacebookPage).toHaveBeenCalledWith("ws_1", "rec_1");
-    expect(mocks.unsubscribe).toHaveBeenCalledWith("p_1", "page-token", "v25.0");
+    // The app secret must reach the Graph helper so the call can carry
+    // appsecret_proof; the undefined slot is the injectable fetcher.
+    expect(mocks.unsubscribe).toHaveBeenCalledWith("p_1", "page-token", "v25.0", undefined, "fb-app-secret");
   });
 
   it("removes the local connection when Meta cannot unsubscribe an expired Page token", async () => {

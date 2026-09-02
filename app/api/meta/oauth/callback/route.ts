@@ -59,11 +59,6 @@ export async function GET(request: Request) {
 
   try {
     const repository = getRepository();
-    await getEntitlementService().assertEntitled(
-      responseState.workspaceId,
-      "instagram",
-      (await repository.listConnections(responseState.workspaceId)).length,
-    );
     const token = await exchangeInstagramCode(code, env);
     const tokenExpiresAt = token.expiresIn
       ? new Date(Date.now() + token.expiresIn * 1_000).toISOString()
@@ -98,6 +93,19 @@ export async function GET(request: Request) {
         error: subscription.error,
       });
     }
+    // Deliberately checked here, immediately before the write, rather than at
+    // the top of the handler before the Meta network round-trips above - that
+    // used to leave a multi-second window where two concurrent connects could
+    // both read the same pre-connection count and both pass. This is a
+    // narrowing mitigation, not a full fix: the read-then-write gap here is
+    // still not atomic without a DB-level lock or reservation row, but it
+    // shrinks the race window from "the whole OAuth exchange" to "one
+    // in-process count query."
+    await getEntitlementService().assertEntitled(
+      responseState.workspaceId,
+      "instagram",
+      (await repository.listConnections(responseState.workspaceId)).length,
+    );
     await repository.upsertConnection({
       workspaceId: responseState.workspaceId,
       igUserId: profile.id,

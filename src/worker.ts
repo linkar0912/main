@@ -124,6 +124,7 @@ if (!env.redisUrl) {
         const client = env.facebookAppId ? new FacebookClient({
           apiVersion: env.facebookApiVersion,
           requestTimeoutMs: env.providerRequestTimeoutMs,
+          appSecret: env.facebookAppSecret,
         }) : undefined;
         return processTimedRealtimeJob(job.id, "facebook", linkarIngestedAt, (timing) =>
           processNormalizedFacebookEvent(event, getRepository(), {

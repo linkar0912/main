@@ -14,6 +14,13 @@ test-results/
 .env.*.local
 .env.production
 .env.production.*
+# Ad-hoc backups of local env files (.env.local.bak-*, .env.bak, ...). The
+# existing patterns above only match names ending in .local/.production, so a
+# file like ".env.local.bak-before-prod-preview" was tracked as untracked-but-
+# committable and held live app secrets.
+.env*.bak*
+.env.*.bak*
+*.env.bak
 !.env.example
 !.env.production.example
 *.log

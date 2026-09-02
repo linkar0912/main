@@ -2,8 +2,9 @@ import { unsealSecret } from "../security/secrets";
 import type { AutomationRepository, MessagingWindow } from "../repository";
 import type { MetaConnection } from "../meta/types";
 import { logger } from "../logger";
-import { isQuietNow, msUntilQuietEnd } from "../messaging-window";
+import { isQuietNow, isWithinMessagingWindow, msUntilQuietEnd } from "../messaging-window";
 import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
+import { checkSendRateLimit } from "./send-rate-limiter";
 
 export type SequenceRunnerClient = {
   sendDirectMessage: (
@@ -82,6 +83,22 @@ export async function processDueSequences(
       continue;
     }
 
+    // Meta's 24-hour messaging window. Sequence steps are scheduled in hours
+    // (delayHours), so any step at 24h or beyond lands outside the window by
+    // definition, and even a short step lands outside it whenever the contact
+    // stopped replying. There is nothing to retry once the window shuts - the
+    // enrollment is cancelled rather than held, so it cannot resume into a
+    // policy-violating DM days later.
+    if (!isWithinMessagingWindow(contact.lastSeenAt)) {
+      await repository.cancelEnrollmentsForContact(contact.id);
+      logger.info("Sequence enrollment cancelled: 24-hour messaging window closed", {
+        enrollmentId: enrollment.id,
+        workspaceId: enrollment.workspaceId,
+      });
+      result.cancelled += 1;
+      continue;
+    }
+
     const step = sequence.steps[enrollment.currentStepIndex];
     if (!step) {
       await repository.advanceSequenceEnrollment(enrollment.id, sequence.steps.length, null);
@@ -93,6 +110,18 @@ export async function processDueSequences(
     if (!mapping || mapping.workspaceId !== enrollment.workspaceId) {
       await repository.cancelEnrollmentsForContact(contact.id);
       result.cancelled += 1;
+      continue;
+    }
+
+    // Per-account send ceiling; hold the step (keep it due) rather than
+    // burning it, so a busy account resumes the sequence instead of skipping.
+    const rateLimit = await checkSendRateLimit(mapping.connection.igUserId, "direct_message");
+    if (!rateLimit.allowed) {
+      await repository.advanceSequenceEnrollment(
+        enrollment.id,
+        enrollment.currentStepIndex,
+        new Date(Date.now() + rateLimit.retryAfterMs).toISOString(),
+      );
       continue;
     }
 
