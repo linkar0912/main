@@ -620,7 +620,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       }
       for (const [id, automation] of automations.entries()) {
         if (automation.facebookPageId && removedPageIds.has(automation.facebookPageId)) {
-          automations.set(id, { ...automation, facebookPageId: undefined });
+          automations.set(id, { ...automation, facebookPageId: undefined, status: "PAUSED", version: automation.version + 1 });
         }
       }
     },
@@ -633,7 +633,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       // is preserved - the user can repin or delete it explicitly.
       for (const [aid, automation] of automations.entries()) {
         if (automation.workspaceId === workspaceId && automation.facebookPageId === page.pageId) {
-          automations.set(aid, { ...automation, facebookPageId: undefined });
+          automations.set(aid, { ...automation, facebookPageId: undefined, status: "PAUSED", version: automation.version + 1 });
         }
       }
       return true;

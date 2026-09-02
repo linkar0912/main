@@ -776,6 +776,32 @@ describe("memory repository", () => {
     expect(await repository.listConnections("workspace_b")).toHaveLength(1);
   });
 
+  it("pauses and unpins Facebook automations when their Page is disconnected", async () => {
+    const repository = createMemoryRepository();
+    const page = await repository.upsertFacebookPage({
+      workspaceId: "workspace_a",
+      pageId: "page_1",
+      pageName: "Myhishob",
+      accessTokenEncrypted: "sealed-token",
+      status: "CONNECTED",
+    });
+    const automation = await repository.createAutomation("workspace_a", {
+      name: "Facebook comment reply",
+      definition,
+      provider: "FACEBOOK",
+      facebookPageId: "page_1",
+    });
+    await repository.updateAutomation("workspace_a", automation.id, { status: "ACTIVE" });
+
+    expect(await repository.deleteFacebookPage("workspace_a", page.id)).toBe(true);
+    expect(await repository.listFacebookPages("workspace_a")).toEqual([]);
+    expect(await repository.getAutomation("workspace_a", automation.id)).toMatchObject({
+      provider: "FACEBOOK",
+      facebookPageId: undefined,
+      status: "PAUSED",
+    });
+  });
+
   it("deletes Instagram-derived workspace data and persists a confirmation status", async () => {
     const repository = createMemoryRepository();
     const automation = await repository.createAutomation("workspace_a", { name: "Guide delivery", definition });

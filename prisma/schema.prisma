@@ -326,8 +326,8 @@ model Automation {
   // Instagram account (igUserId) this automation is pinned to. Null = the
   // automation answers events from every connected account in the workspace.
   instagramAccountId String?
-  // Facebook Page this automation is pinned to. Mutually exclusive with
-  // instagramAccountId: an automation pins to exactly one channel.
+  // Facebook Page this automation is pinned to. A disconnected Page leaves
+  // its Facebook automation paused and unpinned until the user selects a Page.
   facebookPageId     String?
   name              String
   status            AutomationStatus             @default(DRAFT)

@@ -1157,7 +1157,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         if (pageIds.length > 0) {
           await transaction.automation.updateMany({
             where: { facebookPageId: { in: pageIds } },
-            data: { facebookPageId: null },
+            data: { facebookPageId: null, status: "PAUSED", version: { increment: 1 } },
           });
         }
         await transaction.facebookPageConnection.deleteMany({ where: { facebookUserId } });
@@ -1171,7 +1171,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         if (!page) return false;
         await transaction.automation.updateMany({
           where: { workspaceId, facebookPageId: page.pageId },
-          data: { facebookPageId: null },
+          data: { facebookPageId: null, status: "PAUSED", version: { increment: 1 } },
         });
         await transaction.facebookPageConnection.delete({ where: { id } });
         return true;
