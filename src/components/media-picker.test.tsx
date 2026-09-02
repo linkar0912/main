@@ -133,6 +133,23 @@ describe("MediaPicker", () => {
     expect(unselected?.getAttribute("aria-checked")).toBe("false");
   });
 
+  it("hydrates snapshots for a Reel preselected by Quick Automation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [reel, post], paging: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ControlledPicker initialIds={["media_1"]} />);
+
+    await waitFor(() => {
+      const state = JSON.parse(screen.getByTestId("picker-state").textContent ?? "{}") as {
+        ids: string[];
+        snapshots: MediaSnapshot[];
+      };
+      expect(state.ids).toEqual(["media_1"]);
+      expect(state.snapshots[0]?.id).toBe("media_1");
+      expect(state.snapshots[0]?.mediaProductType).toBe("REELS");
+    });
+  });
+
   it("supports selecting multiple items by mouse and reports immutable snapshots", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [reel, post], paging: {} }));
     vi.stubGlobal("fetch", fetchMock);

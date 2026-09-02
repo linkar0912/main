@@ -65,6 +65,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
   // (e.g. it lives on a later page) still has a snapshot to fall back to when some other
   // item is toggled. Kept up to date as real pages load so the data stays fresh.
   const knownSnapshots = useRef(new Map<string, MediaSnapshot>(initialSnapshots.map((snapshot) => [snapshot.id, snapshot])));
+  const reportedSnapshotIds = useRef(new Set(initialSnapshots.map((snapshot) => snapshot.id)));
 
   async function loadPage(after?: string) {
     const url = after ? `/api/meta/media?after=${encodeURIComponent(after)}` : "/api/meta/media";
@@ -78,6 +79,18 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
     for (const media of payload.data ?? []) {
       itemsById.current.set(media.id, media);
       knownSnapshots.current.set(media.id, toSnapshot(media));
+    }
+    // A Reel chosen on the Quick Automation screen reaches this component as
+    // an id in the URL, before the builder knows its durable media snapshot.
+    // Hydrate that snapshot as soon as its page arrives so saving immediately
+    // cannot persist an id with an empty `mediaSnapshots` array.
+    const newlyHydrated = selectedIds.filter((id) => knownSnapshots.current.has(id) && !reportedSnapshotIds.current.has(id));
+    if (newlyHydrated.length > 0) {
+      const snapshots = selectedIds
+        .map((id) => knownSnapshots.current.get(id))
+        .filter((value): value is MediaSnapshot => Boolean(value));
+      newlyHydrated.forEach((id) => reportedSnapshotIds.current.add(id));
+      onChange(selectedIds, snapshots);
     }
     setItems([...itemsById.current.values()]);
     setCursor(payload.paging?.after);
