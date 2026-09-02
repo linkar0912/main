@@ -530,6 +530,13 @@ describe("AutomationBuilder", () => {
     expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("false");
   });
 
+  it("preselects a Reel passed in from Quick Automation", async () => {
+    stubFetch({ media: { data: [reel], paging: {} } });
+    render(<AutomationBuilder variant="campaign" initialMediaIds={["media_1"]} />);
+
+    await waitFor(() => expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("true"));
+  });
+
   it("carries selected media snapshots into the submitted definition without transient URLs", async () => {
     const fetchMock = stubFetch({ media: { data: [reel], paging: {} } });
     render(<AutomationBuilder />);

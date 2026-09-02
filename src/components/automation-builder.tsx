@@ -36,6 +36,7 @@ type AutomationBuilderProps = {
   initialDefinition?: FlowDefinition;
   initialInstagramAccountId?: string;
   initialFacebookPageId?: string;
+  initialMediaIds?: string[];
   initialPriority?: number;
   onSaved?: (automation: unknown) => void;
 };
@@ -200,6 +201,7 @@ function AutomationBuilderV1({
   initialDefinition = defaultDefinitionV1,
   initialInstagramAccountId = "",
   initialFacebookPageId = "",
+  initialMediaIds = [],
   initialPriority = 0,
   onSaved,
 }: {
@@ -208,6 +210,7 @@ function AutomationBuilderV1({
   initialDefinition?: FlowDefinitionV1;
   initialInstagramAccountId?: string;
   initialFacebookPageId?: string;
+  initialMediaIds?: string[];
   initialPriority?: number;
   onSaved?: (automation: unknown) => void;
 }) {
@@ -244,7 +247,9 @@ function AutomationBuilderV1({
     initialDefinition.trigger.type === "comment" && Boolean(initialDefinition.trigger.replyOncePerUser),
   );
   const [mediaIds, setMediaIds] = useState(
-    initialDefinition.trigger.type === "comment" ? commaSeparated(initialDefinition.trigger.mediaIds) : "",
+    initialDefinition.trigger.type === "comment"
+      ? commaSeparated([...new Set([...initialDefinition.trigger.mediaIds, ...initialMediaIds])])
+      : "",
   );
   const [conditionType, setConditionType] = useState<"" | FlowCondition["type"]>(
     initialDefinition.conditions[0]?.type ?? "",
@@ -1594,19 +1599,23 @@ function AutomationBuilderV2({
   initialName = "",
   initialDefinition = defaultDefinitionV2,
   initialInstagramAccountId = "",
+  initialMediaIds = [],
   onSaved,
 }: {
   automationId?: string;
   initialName?: string;
   initialDefinition?: FlowDefinitionV2;
   initialInstagramAccountId?: string;
+  initialMediaIds?: string[];
   onSaved?: (automation: unknown) => void;
 }) {
   const [name, setName] = useState(initialName);
   const [instagramAccountId, setInstagramAccountId] = useState(initialInstagramAccountId);
   const [savedAutomationId, setSavedAutomationId] = useState(automationId);
   const [source, setSource] = useState<MediaSource>(initialDefinition.trigger.source);
-  const [mediaIds, setMediaIds] = useState<string[]>(initialDefinition.trigger.mediaIds);
+  const [mediaIds, setMediaIds] = useState<string[]>(
+    [...new Set([...initialDefinition.trigger.mediaIds, ...initialMediaIds])],
+  );
   const [mediaSnapshots, setMediaSnapshots] = useState<MediaSnapshot[]>(initialDefinition.trigger.mediaSnapshots);
   const [match, setMatch] = useState<"keyword" | "any">(initialDefinition.trigger.match);
   const [keywords, setKeywords] = useState(commaSeparated(initialDefinition.trigger.keywords));
@@ -2348,6 +2357,7 @@ export function AutomationBuilder({
   initialDefinition,
   initialInstagramAccountId,
   initialFacebookPageId,
+  initialMediaIds,
   initialPriority,
   onSaved,
   variant,
@@ -2360,6 +2370,7 @@ export function AutomationBuilder({
         initialDefinition={initialDefinition}
         initialInstagramAccountId={initialInstagramAccountId}
         initialFacebookPageId={initialFacebookPageId}
+        initialMediaIds={initialMediaIds}
         initialPriority={initialPriority}
         onSaved={onSaved}
       />
@@ -2372,6 +2383,7 @@ export function AutomationBuilder({
         initialName={initialName}
         initialInstagramAccountId={initialInstagramAccountId}
         initialFacebookPageId={initialFacebookPageId}
+        initialMediaIds={initialMediaIds}
         initialPriority={initialPriority}
         onSaved={onSaved}
       />
@@ -2383,6 +2395,7 @@ export function AutomationBuilder({
       initialName={initialName}
       initialDefinition={initialDefinition as FlowDefinitionV2 | undefined}
       initialInstagramAccountId={initialInstagramAccountId}
+      initialMediaIds={initialMediaIds}
       onSaved={onSaved}
     />
   );

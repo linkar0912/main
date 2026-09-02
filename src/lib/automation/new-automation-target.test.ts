@@ -32,4 +32,11 @@ describe("parseNewAutomationTarget", () => {
       }),
     ).toEqual({});
   });
+
+  it("returns a trimmed stable media id for Reel preselection", () => {
+    expect(parseNewAutomationTarget({ media: " reel_1 " })).toEqual({
+      initialMediaIds: ["reel_1"],
+    });
+    expect(parseNewAutomationTarget({ media: "   " })).toEqual({});
+  });
 });

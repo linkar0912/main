@@ -12,6 +12,7 @@ type NewAutomationPageProps = {
     provider?: string;
     surface?: string;
     connection?: string;
+    media?: string;
   }>;
 };
 
@@ -41,6 +42,7 @@ export default async function NewAutomationPage({ searchParams }: NewAutomationP
           initialName={setup?.name}
           initialDefinition={setup?.definition}
           initialFacebookPageId={target.initialFacebookPageId}
+          initialMediaIds={target.initialMediaIds}
         />
       </div>
     </AppShell>
