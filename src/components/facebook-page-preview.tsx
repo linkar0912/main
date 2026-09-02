@@ -1,18 +1,9 @@
 "use client";
 
-import { useId } from "react";
+import type { CSSProperties } from "react";
+import { BatteryFull, Globe2, Heart, MessageCircle, MoreHorizontal, Send, Signal, ThumbsUp, Wifi } from "lucide-react";
+import { FacebookGlyph } from "./facebook-glyph";
 
-/**
- * Minimal Page post + nested comment preview used by the automation builder
- * when an automation is pinned to a Facebook Page. We deliberately keep
- * this far smaller than the Instagram preview: Facebook comment-reply v1
- * has a single action (a public nested comment) and no DM/DM-bubble chrome.
- *
- * Visual: a Page header with the page name and avatar, a post body, the
- * original comment, and the bot's nested reply rendered under it. The
- * "Test preview - not sent to Facebook" caption matches the IG preview's
- * contract so the user knows this is local-only.
- */
 export type FacebookPagePreviewProps = {
   pageName: string;
   pageAvatarUrl?: string;
@@ -23,52 +14,50 @@ export type FacebookPagePreviewProps = {
   replyText: string;
 };
 
-export function FacebookPagePreview({
-  pageName,
-  pageAvatarUrl,
-  posterName,
-  postBody,
-  commentAuthor,
-  commentText,
-  replyText,
-}: FacebookPagePreviewProps) {
-  const headingId = useId();
+function PageAvatar({ pageName, pageAvatarUrl, small = false }: { pageName: string; pageAvatarUrl?: string; small?: boolean }) {
   return (
-    <div className="phone-frame" aria-labelledby={headingId}>
-      <div className="phone-status">
-        <span aria-hidden>9:41</span>
-        <span className="phone-status-meta" aria-hidden>5G · 100%</span>
+    <span className={`facebook-avatar${small ? " is-small" : ""}`} aria-hidden="true">
+      {pageAvatarUrl
+        // eslint-disable-next-line @next/next/no-img-element -- remote Meta avatar inside a fixed preview.
+        ? <img src={pageAvatarUrl} alt="" />
+        : <span className="facebook-avatar-fallback">{pageName.charAt(0).toUpperCase()}</span>}
+    </span>
+  );
+}
+
+/** A live Facebook Page post preview. It intentionally uses the same premium
+ * device treatment as Instagram while rendering Facebook's public comment
+ * model: Page post, triggering comment, then the Page's nested reply. */
+export function FacebookPagePreview({ pageName, pageAvatarUrl, posterName, postBody, commentAuthor, commentText, replyText }: FacebookPagePreviewProps) {
+  return (
+    <div className="facebook-preview" style={{ "--facebook-brand": "#1877F2" } as CSSProperties}>
+      <div className="facebook-device">
+        <span className="facebook-device-button facebook-device-silent" aria-hidden="true" />
+        <span className="facebook-device-button facebook-device-volume" aria-hidden="true" />
+        <span className="facebook-device-button facebook-device-power" aria-hidden="true" />
+        <div className="facebook-phone">
+          <div className="facebook-statusbar" aria-hidden="true"><span>9:41</span><span className="facebook-statusbar-island" /><span className="facebook-statusbar-icons"><Signal size={13} /><Wifi size={13} /><BatteryFull size={16} /></span></div>
+          <header className="facebook-appbar"><FacebookGlyph size={25} brand /><strong>facebook</strong><span className="facebook-appbar-actions"><span><MessageCircle size={15} /></span><span><MoreHorizontal size={16} /></span></span></header>
+          <article className="facebook-post">
+            <header className="facebook-post-head">
+              <PageAvatar pageName={pageName} pageAvatarUrl={pageAvatarUrl} />
+              <div><p className="facebook-page-name">{pageName}</p><p className="facebook-page-meta">2h · <Globe2 size={10} /></p></div>
+              <MoreHorizontal className="facebook-post-more" size={17} />
+            </header>
+            <p className="facebook-post-body">{postBody || "Your Facebook post"}</p>
+            <div className="facebook-post-media" aria-hidden="true"><FacebookGlyph size={42} /></div>
+            <div className="facebook-engagement"><span><i><ThumbsUp size={9} fill="currentColor" /></i><i><Heart size={9} fill="currentColor" /></i> 24</span><span>3 comments</span></div>
+            <div className="facebook-actions" aria-hidden="true"><span><ThumbsUp size={15} /> Like</span><span><MessageCircle size={15} /> Comment</span><span><Send size={15} /> Share</span></div>
+            <section className="facebook-comments" aria-label="Comments">
+              <div className="facebook-comment-row"><span className="facebook-person-avatar" aria-hidden="true" /><div className="facebook-comment-wrap"><div className="facebook-comment"><p className="facebook-comment-author">{commentAuthor}</p><p className="facebook-comment-text">{commentText || "any comment"}</p></div><span className="facebook-comment-meta">Like · Reply · 1m</span></div></div>
+              <div className="facebook-comment-row facebook-nested-reply" role="status"><PageAvatar pageName={pageName} pageAvatarUrl={pageAvatarUrl} small /><div className="facebook-comment-wrap"><div className="facebook-comment is-page"><p className="facebook-comment-author">{pageName} <span className="facebook-page-check">✓</span></p><p className="facebook-comment-text">{replyText || "Your public reply appears here."}</p></div><span className="facebook-comment-meta">Like · Reply · Just now</span></div></div>
+            </section>
+          </article>
+          <div className="facebook-homebar" aria-hidden="true" />
+        </div>
       </div>
-      <div className="phone-body facebook-preview">
-        <h2 id={headingId} className="phone-only-heading">Test preview</h2>
-        <p className="muted phone-preview-caption">Test preview, not sent to Facebook</p>
-        <article className="facebook-post">
-          <header className="facebook-post-head">
-            <span className="facebook-avatar" aria-hidden>
-              {pageAvatarUrl
-                ? // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
-                  <img src={pageAvatarUrl} alt="" />
-                : <span className="facebook-avatar-fallback">{pageName.charAt(0).toUpperCase()}</span>}
-            </span>
-            <div>
-              <p className="facebook-page-name">{pageName}</p>
-              <p className="facebook-page-meta">Page · 2h</p>
-            </div>
-          </header>
-          <p className="facebook-post-body">{postBody}</p>
-          <section className="facebook-comments" aria-label="Comments">
-            <div className="facebook-comment">
-              <p className="facebook-comment-author">{commentAuthor}</p>
-              <p className="facebook-comment-text">{commentText}</p>
-              <div className="facebook-nested-reply" role="status">
-                <p className="facebook-comment-author">{pageName}</p>
-                <p className="facebook-comment-text">{replyText || "Your reply shows up here."}</p>
-              </div>
-            </div>
-          </section>
-        </article>
-        <p className="muted phone-preview-foot">{posterName ? `Post by ${posterName}. ` : ""}Preview only. Nothing here is sent to Facebook.</p>
-      </div>
+      <p className="facebook-profile-meta"><span><FacebookGlyph size={14} brand /> Facebook Page</span><span className="facebook-preview-live"><i /> Live preview</span></p>
+      <p className="facebook-preview-note">Preview only. Nothing here is sent to Facebook.{posterName ? ` Post by ${posterName}.` : ""}</p>
     </div>
   );
 }

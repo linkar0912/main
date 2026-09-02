@@ -1482,6 +1482,58 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .ig-preview-tabs button.is-active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .ig-preview-tabs button:hover:not(.is-active) { border-color: var(--line-strong); color: var(--ink); }
 
+/* Facebook Page preview: the same physical device quality as Instagram, with
+   Facebook's public post and nested Page-reply interaction inside. */
+.facebook-preview { --facebook-brand: var(--accent); display: grid; justify-items: center; }
+.facebook-device { filter: drop-shadow(0 24px 38px rgba(18, 17, 22, .2)); padding: 9px; position: relative; width: min(100%, 314px); }
+.facebook-device::before { background: linear-gradient(145deg, #4b4b4f, #111114 42%, #38383d); border: 1px solid #59595f; border-radius: 44px; content: ""; inset: 0; position: absolute; }
+.facebook-phone { background: #f0f2f5; border: 2px solid #09090b; border-radius: 36px; color: #151619; display: flex; flex-direction: column; height: 594px; overflow: hidden; position: relative; }
+.facebook-device-button { background: #25252a; border-radius: 3px 0 0 3px; height: 34px; left: -2px; position: absolute; width: 4px; }
+.facebook-device-silent { top: 80px; }
+.facebook-device-volume { height: 65px; top: 130px; }
+.facebook-device-power { border-radius: 0 3px 3px 0; height: 84px; left: auto; right: -2px; top: 146px; }
+.facebook-statusbar { align-items: center; background: #fff; display: flex; flex: 0 0 31px; font-size: .62rem; font-weight: 750; justify-content: space-between; padding: 0 18px; position: relative; }
+.facebook-statusbar-island { background: #050507; border-radius: 99px; height: 18px; left: 50%; position: absolute; top: 6px; transform: translateX(-50%); width: 72px; }
+.facebook-statusbar-icons { align-items: center; display: flex; gap: 4px; }
+.facebook-appbar { align-items: center; background: #fff; border-bottom: 1px solid #e2e5e9; display: flex; flex: 0 0 46px; gap: 6px; padding: 7px 12px; }
+.facebook-appbar > strong { color: var(--facebook-brand); font-size: 1rem; letter-spacing: -.04em; }
+.facebook-appbar-actions { display: flex; gap: 6px; margin-left: auto; }
+.facebook-appbar-actions > span { align-items: center; background: #e4e6eb; border-radius: 50%; display: inline-flex; height: 28px; justify-content: center; width: 28px; }
+.facebook-post { background: #fff; display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: auto; }
+.facebook-post-head { align-items: center; display: flex; gap: 9px; padding: 12px 13px 7px; }
+.facebook-avatar { align-items: center; background: var(--facebook-brand); border-radius: 50%; color: #fff; display: inline-flex; flex: 0 0 34px; height: 34px; justify-content: center; overflow: hidden; }
+.facebook-avatar.is-small { flex-basis: 24px; height: 24px; width: 24px; }
+.facebook-avatar img { height: 100%; object-fit: cover; width: 100%; }
+.facebook-avatar-fallback { font-size: .8rem; font-weight: 800; }
+.facebook-page-name { font-size: .72rem; font-weight: 750; margin: 0; }
+.facebook-page-meta { align-items: center; color: #65676b; display: flex; font-size: .58rem; gap: 3px; margin: 1px 0 0; }
+.facebook-post-more { color: #65676b; margin-left: auto; }
+.facebook-post-body { font-size: .72rem; line-height: 1.45; margin: 0; min-height: 37px; padding: 1px 13px 10px; }
+.facebook-post-media { align-items: center; background: linear-gradient(135deg, color-mix(in srgb, var(--facebook-brand) 18%, #fff), #f5f7fa); color: var(--facebook-brand); display: flex; flex: 0 0 104px; justify-content: center; }
+.facebook-engagement { align-items: center; color: #65676b; display: flex; font-size: .58rem; justify-content: space-between; padding: 6px 13px; }
+.facebook-engagement > span:first-child { align-items: center; display: flex; }
+.facebook-engagement i { align-items: center; background: var(--facebook-brand); border: 1px solid #fff; border-radius: 50%; color: #fff; display: inline-flex; height: 15px; justify-content: center; margin-right: -3px; width: 15px; }
+.facebook-engagement i:nth-child(2) { background: var(--accent); margin-right: 6px; }
+.facebook-actions { border-bottom: 1px solid #e2e5e9; border-top: 1px solid #e2e5e9; color: #65676b; display: grid; font-size: .63rem; font-weight: 650; grid-template-columns: repeat(3, 1fr); margin: 0 13px; padding: 7px 0; }
+.facebook-actions span { align-items: center; display: flex; gap: 5px; justify-content: center; }
+.facebook-comments { display: grid; gap: 8px; padding: 11px 13px 16px; }
+.facebook-comment-row { align-items: flex-start; display: flex; gap: 7px; }
+.facebook-person-avatar { background: #d7dbe1; border-radius: 50%; flex: 0 0 24px; height: 24px; position: relative; }
+.facebook-person-avatar::after { background: #9ca2ab; border-radius: 50% 50% 44% 44%; content: ""; height: 11px; left: 6px; position: absolute; top: 6px; width: 12px; }
+.facebook-comment-wrap { display: grid; gap: 2px; min-width: 0; }
+.facebook-comment { background: #f0f2f5; border-radius: 13px; font-size: .66rem; line-height: 1.35; padding: 6px 9px; }
+.facebook-comment.is-page { box-shadow: inset 2px 0 var(--facebook-brand); }
+.facebook-comment-author { font-size: .62rem; font-weight: 750; margin: 0; }
+.facebook-comment-text { margin: 1px 0 0; overflow-wrap: anywhere; }
+.facebook-comment-meta { color: #65676b; font-size: .52rem; font-weight: 650; padding-left: 7px; }
+.facebook-nested-reply { margin-left: 31px; }
+.facebook-page-check { color: var(--facebook-brand); }
+.facebook-homebar { background: #151619; border-radius: 99px; bottom: 5px; height: 4px; left: 50%; position: absolute; transform: translateX(-50%); width: 92px; }
+.facebook-profile-meta { align-items: center; color: var(--muted); display: flex; font-size: .68rem; justify-content: space-between; margin: var(--space-4) 0 0; width: min(100%, 300px); }
+.facebook-profile-meta > span { align-items: center; display: flex; gap: 6px; }
+.facebook-preview-live i { background: var(--success); border-radius: 50%; height: 6px; width: 6px; }
+.facebook-preview-note { color: var(--muted); font-size: .65rem; line-height: 1.4; margin: 7px auto 0; max-width: 300px; text-align: center; }
+
 /* Wizard: one step visible at a time, Next/Back through the builder-footer actions */
 .wizard-progress { display: flex; gap: var(--space-2); margin-bottom: var(--space-6); overflow-x: auto; }
 .wizard-progress-step { align-items: center; background: transparent; border: 0; color: var(--muted); display: flex; flex: 1; gap: 8px; padding: 8px 0; white-space: nowrap; }
