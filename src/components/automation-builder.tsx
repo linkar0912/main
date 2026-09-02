@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -296,8 +296,8 @@ function AutomationBuilderV1({
   const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
   const [dailyLimit, setDailyLimit] = useState(initialDefinition.dailySendLimit ? String(initialDefinition.dailySendLimit) : "");
   const [priority, setPriority] = useState(String(initialPriority));
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [pendingIntent, setPendingIntent] = useState<"draft" | "activate" | null>(null);
+  const [savedIntent, setSavedIntent] = useState<"draft" | "activate" | null>(null);
   const [error, setError] = useState("");
   const [activeStep, setActiveStep] = useState(0);
   const [highestUnlockedStep, setHighestUnlockedStep] = useState(0);
@@ -618,10 +618,9 @@ function AutomationBuilderV1({
     };
   }
 
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function save(intent: "draft" | "activate") {
     setError("");
-    setSaved(false);
+    setSavedIntent(null);
     if (!name.trim()) {
       setError("Give this automation a name first.");
       return;
@@ -672,7 +671,7 @@ function AutomationBuilderV1({
       setError("The fulfillment email needs a subject and a message.");
       return;
     }
-    setSaving(true);
+    setPendingIntent(intent);
     try {
       // Mutually exclusive: the API rejects dual-pinning, so the client only
       // sends the field that the user actually selected. A future iteration
@@ -680,11 +679,12 @@ function AutomationBuilderV1({
       // toggles the channel explicitly so the saved payload never carries a
       // pair of pins.
       const parsedPriority = Number.parseInt(priority, 10);
-      const body: { provider: "INSTAGRAM" | "FACEBOOK"; name: string; definition: FlowDefinitionV1; priority?: number; instagramAccountId?: string | null; facebookPageId?: string | null } = {
+      const body: { provider: "INSTAGRAM" | "FACEBOOK"; name: string; definition: FlowDefinitionV1; priority?: number; status?: "DRAFT"; instagramAccountId?: string | null; facebookPageId?: string | null } = {
         provider: channel,
         name,
         definition: buildDefinition(),
         priority: Number.isFinite(parsedPriority) ? parsedPriority : 0,
+        ...(automationId && intent === "draft" ? { status: "DRAFT" as const } : {}),
       };
       if (channel === "FACEBOOK") {
         if (!facebookPageId) throw new Error("Select a connected Facebook Page before saving.");
@@ -699,14 +699,29 @@ function AutomationBuilderV1({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      const payload = (await response.json().catch(() => ({}))) as { data?: unknown; error?: string };
-      if (!response.ok) throw new Error(payload.error ?? "Could not save this automation");
-      setSaved(true);
-      onSaved?.(payload.data);
+      const payload = (await response.json().catch(() => ({}))) as { data?: { id?: string }; error?: string };
+      if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");
+      const savedId = payload.data.id ?? automationId;
+      if (intent === "activate") {
+        if (!savedId) throw new Error("Saved as a draft, but activation failed.");
+        const activateResponse = await fetch(`/api/automations/${savedId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: "ACTIVE" }),
+        });
+        const activatePayload = (await activateResponse.json().catch(() => ({}))) as { data?: unknown };
+        if (!activateResponse.ok || !activatePayload.data) {
+          throw new Error("Saved as a draft, but activation failed.");
+        }
+        onSaved?.(activatePayload.data);
+      } else {
+        onSaved?.(payload.data);
+      }
+      setSavedIntent(intent);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save this automation");
     } finally {
-      setSaving(false);
+      setPendingIntent(null);
     }
   }
 
@@ -741,7 +756,7 @@ function AutomationBuilderV1({
     .find((text) => Boolean(text));
 
   return (
-    <form className="builder-layout" onSubmit={save}>
+    <form className="builder-layout" onSubmit={(event) => { event.preventDefault(); void save("activate"); }}>
       <div className="builder-main">
         <div className="builder-intro">
           <div>
@@ -1485,7 +1500,11 @@ function AutomationBuilderV1({
         <div className="builder-footer">
           <div>
             {error && <p className="form-error" role="alert">{error}</p>}
-            {saved && <p className="form-success" role="status"><Check size={15} /> Saved to your workspace.</p>}
+            {savedIntent && (
+              <p className="form-success" role="status">
+                <Check size={15} /> {savedIntent === "activate" ? "Saved and activated." : "Saved to your workspace as a draft."}
+              </p>
+            )}
           </div>
           <div className="builder-actions">
             {clampedStep > 0 && (
@@ -1498,9 +1517,19 @@ function AutomationBuilderV1({
                 Next
               </button>
             ) : (
-              <button className="button button-primary" type="submit" disabled={saving}>
-                {saving ? "Saving…" : automationId ? "Save changes" : "Save automation"}
-              </button>
+              <>
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  disabled={pendingIntent !== null}
+                  onClick={() => void save("draft")}
+                >
+                  {pendingIntent === "draft" ? "Saving…" : "Save draft"}
+                </button>
+                <button className="button button-primary" type="submit" disabled={pendingIntent !== null}>
+                  {pendingIntent === "activate" ? "Activating…" : "Save & activate"}
+                </button>
+              </>
             )}
           </div>
         </div>

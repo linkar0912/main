@@ -8,6 +8,7 @@ type FetchOverrides = {
   media?: unknown;
   createResponse?: unknown;
   patchResponse?: unknown;
+  patchOk?: boolean;
   connection?: unknown;
   facebookPages?: unknown;
 };
@@ -28,7 +29,10 @@ function stubFetch(overrides: FetchOverrides = {}) {
       return { ok: true, json: async () => overrides.createResponse ?? { data: { id: "automation_new" } } } as Response;
     }
     if (init.method === "PATCH") {
-      return { ok: true, json: async () => overrides.patchResponse ?? { data: { id: "automation_new" } } } as Response;
+      return {
+        ok: overrides.patchOk ?? true,
+        json: async () => overrides.patchResponse ?? { data: { id: "automation_new" } },
+      } as Response;
     }
     throw new Error(`Unhandled fetch: ${url}`);
   });
@@ -114,7 +118,7 @@ describe("AutomationBuilder", () => {
 
     expect(screen.queryByText("Flow v1")).toBeNull();
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
 
     await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "PATCH").length).toBe(1));
     const request = findRequest(fetchMock, (url) => url === "/api/automations/automation_1");
@@ -161,7 +165,7 @@ describe("AutomationBuilder", () => {
     for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     expect(screen.getByText(/still points at example\.com/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
   });
 
@@ -176,7 +180,7 @@ describe("AutomationBuilder", () => {
     render(<AutomationBuilder initialDefinition={edited} initialName="Affiliate link" />);
 
     for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    expect(screen.getByRole("button", { name: /save/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /save draft/i })).toBeTruthy();
     expect(screen.queryByText(/still points at example\.com/i)).toBeNull();
   });
 
@@ -196,7 +200,7 @@ describe("AutomationBuilder", () => {
     fireEvent.click(screen.getByRole("button", { name: /add a follow-up nudge/i }));
     fireEvent.change(screen.getByLabelText(/nudge 1 message/i), { target: { value: "Still there?" } });
     for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
     const request = findRequest(fetchMock, (url) => url === "/api/automations");
@@ -234,13 +238,82 @@ describe("AutomationBuilder", () => {
     // facebookPageId and explicitly null the instagramAccountId so the API
     // does not see dual pins.
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /save automation/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST").length).toBe(1));
     const createRequest = findRequest(fetchMock, (url) => url === "/api/automations");
     const body = JSON.parse(String(createRequest.body)) as { provider?: string; facebookPageId?: string; instagramAccountId?: string | null };
     expect(body.provider).toBe("FACEBOOK");
     expect(body.facebookPageId).toBe("12345");
     expect(body.instagramAccountId).toBeNull();
+  });
+
+  it("lets a Facebook Page automation save as a draft or save and activate", async () => {
+    const fetchMock = stubFetch({
+      facebookPages: { data: [
+        { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+      ] },
+      createResponse: { data: { id: "automation_fb", status: "DRAFT" } },
+      patchResponse: { data: { id: "automation_fb", status: "ACTIVE" } },
+    });
+
+    render(
+      <AutomationBuilder
+        initialName="Page replies"
+        initialFacebookPageId="12345"
+        initialDefinition={{
+          version: 1,
+          trigger: { type: "comment", match: "keyword", keywords: ["help"], mediaIds: [] },
+          conditions: [],
+          actions: [{ type: "private_reply", text: "We can help." }],
+        }}
+      />,
+    );
+
+    for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    expect(screen.getByRole("button", { name: /save draft/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /save & activate/i }));
+
+    await waitFor(() => {
+      const activation = fetchMock.mock.calls.find(([url, init]) =>
+        String(url) === "/api/automations/automation_fb" &&
+        (init as RequestInit | undefined)?.method === "PATCH" &&
+        JSON.parse(String((init as RequestInit).body)).status === "ACTIVE",
+      );
+      expect(activation).toBeTruthy();
+    });
+    expect(await screen.findByText(/saved and activated/i)).toBeTruthy();
+  });
+
+  it("explains when a Facebook automation was saved but activation failed", async () => {
+    stubFetch({
+      facebookPages: { data: [
+        { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+      ] },
+      createResponse: { data: { id: "automation_fb", status: "DRAFT" } },
+      patchOk: false,
+      patchResponse: { error: "Meta activation unavailable" },
+    });
+
+    render(
+      <AutomationBuilder
+        initialName="Page replies"
+        initialFacebookPageId="12345"
+        initialDefinition={{
+          version: 1,
+          trigger: { type: "comment", match: "keyword", keywords: ["help"], mediaIds: [] },
+          conditions: [],
+          actions: [{ type: "private_reply", text: "We can help." }],
+        }}
+      />,
+    );
+
+    for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save & activate/i }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "Saved as a draft, but activation failed.",
+    );
   });
 
   it("persists the complete Facebook Page comment policy", async () => {
@@ -275,7 +348,7 @@ describe("AutomationBuilder", () => {
     fireEvent.change(screen.getByLabelText("Daily send limit"), { target: { value: "250" } });
 
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /save automation/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
     const request = findRequest(fetchMock, (url) => url === "/api/automations");
