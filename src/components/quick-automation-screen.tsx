@@ -64,14 +64,19 @@ export function QuickAutomationScreen() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadPage(undefined, controller.signal)
-      .catch((caught: unknown) => {
-        if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load your Reels");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
+    const timer = window.setTimeout(() => {
+      void loadPage(undefined, controller.signal)
+        .catch((caught: unknown) => {
+          if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load your Reels");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [loadPage]);
 
   const selectedReel = useMemo(() => reels.find((reel) => reel.id === selectedId), [reels, selectedId]);
@@ -171,7 +176,7 @@ export function QuickAutomationScreen() {
                     >
                       <span className="quick-reel-thumb">
                         {thumbnail
-                          ? <img src={thumbnail} alt="" />
+                          ? <img src={thumbnail} alt="" /> // eslint-disable-line @next/next/no-img-element -- Meta CDN thumbnail inside a fixed Reel picker.
                           : <span className="quick-reel-fallback"><Film size={28} /></span>}
                         <span className="quick-reel-type"><Film size={12} /> Reel</span>
                         {selected && <span className="quick-reel-check"><Check size={15} /></span>}

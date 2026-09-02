@@ -109,6 +109,9 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
       active = false;
     };
     // Only reload on mount; selection changes must not re-fetch the list.
+  // `loadPage` intentionally captures only the mount-time selection. Selection
+  // changes must never restart the media request or discard pagination state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Report display-only data (thumbnail URL, reel flag) upward for the phone preview.

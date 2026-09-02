@@ -77,22 +77,30 @@ export function InsightsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/insights");
+      const response = await fetch("/api/insights", { signal });
       const payload = (await response.json().catch(() => ({}))) as Partial<InsightsPayload> & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Could not load insights");
       setData(payload as InsightsPayload);
     } catch (caught: unknown) {
+      if (signal?.aborted) return;
       setError(caught instanceof Error ? caught.message : "Could not load insights");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => void load(controller.signal), 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [load]);
 
   const totals = useMemo(() => ({
     sent: sum(data?.timeseries.sentPerDay ?? []),
