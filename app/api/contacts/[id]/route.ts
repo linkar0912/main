@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/src/lib/auth/session";
+import { getServerEnv } from "@/src/lib/env";
+import { MetaClient } from "@/src/lib/meta/client";
+import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 import { getRepository } from "@/src/lib/repository-provider";
 import { LEAD_STATUSES, type LeadStatus } from "@/src/lib/repository";
 
@@ -28,11 +31,28 @@ export async function GET(
   const contact = await repository.getContactById(session.workspaceId, id);
   if (!contact) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
 
-  const timeline = await repository.getContactTimeline(session.workspaceId, id, MAX_TIMELINE_ENTRIES);
+  const [timeline, events] = await Promise.all([
+    repository.getContactTimeline(session.workspaceId, id, MAX_TIMELINE_ENTRIES),
+    repository.listRecentWebhookEvents(session.workspaceId, 500),
+  ]);
+  const env = getServerEnv();
+  const connections = env.metaTokenEncryptionKey
+    ? await repository.listConnections(session.workspaceId)
+    : [];
+  const usernames = await resolveInstagramUsernames({
+    identities: [contact],
+    events,
+    connections,
+    ...(env.metaTokenEncryptionKey ? {
+      client: new MetaClient({ apiVersion: env.metaApiVersion }),
+      tokenEncryptionKey: env.metaTokenEncryptionKey,
+    } : {}),
+  });
   return NextResponse.json({
     data: {
       contact: {
         id: contact.id,
+        instagramUsername: usernames.get(instagramIdentityKey(contact)),
         instagramAccountId: contact.instagramAccountId,
         igScopedUserId: contact.igScopedUserId,
         email: contact.email,

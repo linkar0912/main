@@ -13,6 +13,14 @@ describe("ActivityFeed", () => {
     vi.unstubAllGlobals();
   });
 
+  it("uses the page-shaped Inbox loader while activity is pending", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+
+    render(<ActivityFeed />);
+
+    expect(screen.getByLabelText("Loading inbox activity")).toBeTruthy();
+  });
+
   it("renders Facebook Page comment activity as a supported social event", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       data: [{

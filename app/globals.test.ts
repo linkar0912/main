@@ -145,4 +145,19 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.row-detail\[open\]\s*\.row-detail-chevron\s*{[^}]*rotate\(90deg\)/);
     expect(css).toMatch(/\.journey-caption\s*{/);
   });
+
+  it("uses separators only at meaningful section boundaries", () => {
+    expect(css).not.toMatch(/\.inbox-stat-strip\s*{[^}]*border/);
+    expect(css).not.toMatch(/\.inbox-controls\s*{[^}]*border/);
+    expect(css).not.toMatch(/\.inbox-list\s*{[^}]*border/);
+    expect(css).not.toMatch(/\.inbox-list li\s*{[^}]*border/);
+    expect(css).not.toMatch(/\.contact-row\s*{[^}]*border/);
+    expect(css).not.toMatch(/\.insights-metrics\s*{[^}]*border-block/);
+    expect(css).not.toMatch(/\.insights-journey li\s*{[^}]*border/);
+    expect(css).not.toMatch(/\.facebook-activity-header\s*{[^}]*border/);
+    expect(css).not.toMatch(/\.facebook-activity-row\s*{[^}]*border/);
+    expect(css).not.toMatch(/\.stat-block\s*{[^}]*border-left/);
+    expect(css).not.toMatch(/\.page-picker\s*{[^}]*border-top/);
+    expect(css).not.toMatch(/\.channel-health\s*{[^}]*border-top/);
+  });
 });

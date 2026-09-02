@@ -48,6 +48,12 @@ describe("AutomationList activity link", () => {
     cleanup();
   });
 
+  it("uses the shared automation list skeleton while loading", () => {
+    render(<AutomationList automations={[]} loading onStatusChange={async () => {}} />);
+
+    expect(screen.getByLabelText("Loading automations")).toBeTruthy();
+  });
+
   it("does not render an Activity link for a version-1 automation", () => {
     render(
       <AutomationList

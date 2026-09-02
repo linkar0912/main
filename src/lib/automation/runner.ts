@@ -996,9 +996,9 @@ export async function processNormalizedEvent(
     if (captured) return captured;
   }
 
-  // Contact registry touch - powers once-only first_contact greetings and email
-  // collection. Maintained only when an active classic flow actually needs it, so
-  // casual workspaces don't accumulate sender records they never use.
+  // Every legitimate inbound sender belongs in the workspace contact registry.
+  // Besides powering first-contact triggers and email capture, this is the source
+  // of truth for Contacts and for opening a conversation from Inbox.
   let evaluationContext: EvaluationContext = {};
   const needsContactTracking = automations.some(
     (automation) =>
@@ -1007,14 +1007,14 @@ export async function processNormalizedEvent(
         || Boolean(automation.definition.emailCapture)
         || Boolean(automation.definition.followUps?.length)),
   );
-  if (needsContactTracking && event.recipientId && CONTACT_TOUCH_EVENT_TYPES.includes(event.type)) {
+  if (event.recipientId && CONTACT_TOUCH_EVENT_TYPES.includes(event.type)) {
     const touch = await repository.touchContact(
       mapping.workspaceId,
       event.accountId,
       event.recipientId,
       new Date(event.timestamp).toISOString(),
     );
-    evaluationContext = { isNewContact: touch.created };
+    if (needsContactTracking) evaluationContext = { isNewContact: touch.created };
   }
 
   if (options.campaignsEnabled === true) {

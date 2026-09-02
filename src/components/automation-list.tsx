@@ -5,6 +5,7 @@ import { Activity, ArrowUpRight, Copy, History, Pause, Pencil, Play, Trash2, Wor
 import { useEffect, useState } from "react";
 import { CreateAutomationButton } from "./create-automation-button";
 import { AutomationVersionsModal } from "./automation-versions-modal";
+import { AutomationListContentSkeleton } from "./skeleton";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
 import { getInstagramConnections, getFacebookPages } from "@/src/lib/client/workspace-data";
@@ -216,7 +217,7 @@ export function AutomationList({
   }
 
   if (loading) {
-    return <div className="empty-state"><div className="loading-line" /><div className="loading-line short" /><div className="loading-line" /></div>;
+    return <AutomationListContentSkeleton />;
   }
   if (automations.length === 0) {
     return (

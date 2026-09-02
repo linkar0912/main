@@ -52,6 +52,18 @@ describe("InsightsScreen", () => {
     vi.unstubAllGlobals();
   });
 
+  it("uses the page-shaped Insights loader while data is pending", () => {
+    vi.stubGlobal("scrollTo", vi.fn());
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === "/api/insights") return new Promise<Response>(() => undefined);
+      return Promise.resolve(new Response(JSON.stringify({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } })));
+    }));
+
+    render(<InsightsScreen />);
+
+    expect(screen.getByLabelText("Loading insights data")).toBeTruthy();
+  });
+
   it("turns workspace insight data into a readable performance overview", async () => {
     vi.stubGlobal("scrollTo", vi.fn());
     vi.stubGlobal("fetch", stubFetch());
@@ -65,6 +77,40 @@ describe("InsightsScreen", () => {
     expect(screen.getByRole("table", { name: "Top content performance" })).toBeTruthy();
     expect(screen.getByText("reel_launch")).toBeTruthy();
     expect(screen.getByRole("link", { name: /export csv/i }).getAttribute("href")).toBe("/api/insights/export");
+  });
+
+  it("keeps the two detail headings free of a floating decorative icon", async () => {
+    vi.stubGlobal("scrollTo", vi.fn());
+    vi.stubGlobal("fetch", stubFetch());
+    const { container } = render(<InsightsScreen />);
+
+    await screen.findByRole("heading", { name: "Automation journey" });
+    expect(container.querySelector(".insights-journey .panel-heading > svg")).toBeNull();
+    expect(container.querySelectorAll(".insights-detail-heading")).toHaveLength(2);
+  });
+
+  it("renders every chart day once in chronological order when the series arrive unsorted", async () => {
+    vi.stubGlobal("scrollTo", vi.fn());
+    const datedInsights = {
+      ...insights,
+      timeseries: {
+        days: 10,
+        sentPerDay: [20, 22, 21, 24, 25, 26, 27, 28, 29]
+          .map((day) => ({ day: `2026-08-${day}`, count: day === 22 ? 9 : 0 })),
+        participantsPerDay: [29, 28, 27, 26, 25, 24, 23, 22, 21, 20]
+          .map((day) => ({ day: `2026-08-${day}`, count: day === 22 ? 1 : 0 })),
+      },
+    };
+    vi.stubGlobal("fetch", stubFetch(new Response(JSON.stringify(datedInsights))));
+    const { container } = render(<InsightsScreen />);
+
+    await screen.findByRole("img", { name: /daily replies sent and people reached/i });
+    const columns = [...container.querySelectorAll<HTMLElement>(".chart-column")];
+    expect(columns).toHaveLength(10);
+    expect(columns.map((column) => column.title.match(/\b(2[0-9])\b/)?.[1])).toEqual(
+      ["20", "21", "22", "23", "24", "25", "26", "27", "28", "29"],
+    );
+    expect(columns.every((column) => column.querySelector("small")?.textContent?.trim())).toBe(true);
   });
 
   it("offers a retry when insights cannot be loaded", async () => {

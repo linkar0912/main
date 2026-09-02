@@ -26,7 +26,10 @@ export type ParticipantActivitySummary = Pick<
   | "deliveryClickedAt"
   | "variantLabel"
   | "createdAt"
->;
+> & {
+  /** Public Instagram handle captured from the matching comment webhook. */
+  instagramUsername?: string;
+};
 
 /**
  * Counts surfaced in the campaign funnel sidebar on the activity screen.

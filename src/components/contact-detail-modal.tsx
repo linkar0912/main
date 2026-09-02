@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { InlineContentSkeleton } from "./skeleton";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 
 type ContactDetail = {
   id: string;
+  instagramUsername?: string;
   email?: string;
   state: string;
   tags: string[];
@@ -194,14 +196,14 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
       >
         {error && <p className="form-error" role="alert">{error}</p>}
         {!contact && !error && (
-          <div className="empty-state"><div className="loading-line" /><div className="loading-line short" /></div>
+          <InlineContentSkeleton label="Loading contact details" rows={4} />
         )}
         {contact && (
           <>
             <div className="list-intro">
               <div>
                 <p className="eyebrow">Contact</p>
-                <h2>{contact.email ?? `@${contact.id.slice(-6)}`}</h2>
+                <h2>{contact.instagramUsername ? `@${contact.instagramUsername.replace(/^@+/, "")}` : contact.email ?? "Instagram contact"}</h2>
                 <p className="muted">
                   First seen {formatDate(contact.createdAt)} · Last seen {formatDate(contact.lastSeenAt)}
                   {contact.suppressedAt ? " · Opted out" : ""}

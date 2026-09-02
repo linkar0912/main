@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { InlineContentSkeleton } from "./skeleton";
 import type { ParticipantState } from "@/src/lib/repository";
 import { formatDateTime, formatRelativeTime } from "@/src/lib/format-date";
 import {
@@ -36,6 +37,8 @@ export type FacebookPageActivitySummary = {
   connectionName: string;
   eventType: "comment.created";
   result: "PROCESSING" | "SENT" | "SKIPPED" | "FAILED";
+  authorName?: string;
+  commentPreview?: string;
   safeErrorCode?: string;
   replyPreview?: string;
   createdAt: string;
@@ -98,6 +101,7 @@ function matchesSearch(participant: ParticipantActivitySummary, query: string): 
   if (!needle) return true;
   const haystack = [
     participant.matchedKeyword ?? "",
+    participant.instagramUsername ?? "",
     participant.sourceMediaSnapshot.caption ?? "",
     participantStateLabel(participant.state),
   ]
@@ -237,12 +241,13 @@ function JourneyTrack({ participant }: { participant: ParticipantActivitySummary
   );
 }
 
-function ParticipantIdentity({ participant, position }: { participant: ParticipantActivitySummary; position: number }) {
+function ParticipantIdentity({ participant }: { participant: ParticipantActivitySummary }) {
+  const username = participant.instagramUsername?.trim().replace(/^@+/, "");
   return (
     <div className="row-identity">
       <span className="participant-badge">
         <UserRound size={12} strokeWidth={2.2} />
-        Person {position}
+        {username ? `@${username}` : "Instagram user"}
       </span>
       {(participant.variantLabel || participant.createdAt) && (
         <div className="row-identity-sub">
@@ -260,12 +265,10 @@ function ParticipantIdentity({ participant, position }: { participant: Participa
 
 function ActivityRow({
   participant,
-  position,
   onRetry,
   retrying,
 }: {
   participant: ParticipantActivitySummary;
-  position: number;
   onRetry?: () => void;
   retrying?: boolean;
 }) {
@@ -282,7 +285,7 @@ function ActivityRow({
   return (
     <article className="activity-row">
       <div className="activity-row-grid">
-        <ParticipantIdentity participant={participant} position={position} />
+        <ParticipantIdentity participant={participant} />
         <span className={`keyword-chip${participant.matchedKeyword ? "" : " is-any"}`}>
           {participant.matchedKeyword ? `“${participant.matchedKeyword}”` : "Any comment"}
         </span>
@@ -342,35 +345,52 @@ function FacebookPageActivityView({ activity }: { activity: FacebookPageActivity
   const [result, setResult] = useState("all");
   const connectionName = activity[0]?.connectionName ?? "Facebook Page";
   const visible = result === "all" ? activity : activity.filter((item) => item.result === result);
+  const filters = [
+    { key: "all", label: "All", count: activity.length },
+    { key: "SENT", label: "Sent", count: activity.filter((item) => item.result === "SENT").length },
+    { key: "SKIPPED", label: "Skipped", count: activity.filter((item) => item.result === "SKIPPED").length },
+    { key: "FAILED", label: "Failed", count: activity.filter((item) => item.result === "FAILED").length },
+  ];
   return (
     <div className="activity-list facebook-page-activity">
-      <div className="feed-toolbar" aria-label="Facebook Page activity filters">
-        <label className="field"><span>Provider</span><select aria-label="Provider filter" value="FACEBOOK" disabled><option value="FACEBOOK">Facebook</option></select></label>
-        <label className="field"><span>Surface</span><select aria-label="Surface filter" value="COMMENT" disabled><option value="COMMENT">Page comments</option></select></label>
-        <label className="field"><span>Page</span><select aria-label="Page filter" value={connectionName} disabled><option value={connectionName}>{connectionName}</option></select></label>
-        <label className="field"><span>Result</span><select aria-label="Result filter" value={result} onChange={(event) => setResult(event.target.value)}><option value="all">All results</option><option value="SENT">Sent</option><option value="SKIPPED">Skipped</option><option value="FAILED">Failed</option></select></label>
+      <header className="facebook-activity-header">
+        <div className="facebook-page-identity">
+          <span className="facebook-page-mark" aria-hidden="true">f</span>
+          <div><span className="eyebrow">Facebook page</span><strong>{connectionName}</strong></div>
+        </div>
+        <p>Public comment replies only. These replies do not open a Messenger conversation or grant messaging eligibility.</p>
+      </header>
+      <div className="filter-chips facebook-result-filters" aria-label="Facebook Page activity filters">
+        {filters.map((filter) => (
+          <button
+            className={`filter-chip${result === filter.key ? " is-on" : ""}`}
+            key={filter.key}
+            onClick={() => setResult(filter.key)}
+            type="button"
+          >
+            {filter.label}<span className="chip-count">{filter.count}</span>
+          </button>
+        ))}
       </div>
-      <p className="muted">Facebook Page replies are public comments. They do not open a Messenger conversation or grant messaging eligibility.</p>
       {activity.length === 0 ? (
         <div className="empty-state"><span className="empty-icon"><Radio size={22} /></span><h3>No Page activity yet.</h3><p>New matching Page comments will appear here after Linkar evaluates them.</p></div>
       ) : visible.length === 0 ? (
         <p className="muted feed-empty">No Page replies match this result.</p>
       ) : (
-        <div className="activity-groups">
+        <div className="facebook-activity-table">
+          <div className="facebook-activity-table-head" aria-hidden="true">
+            <span>Commenter</span><span>Comment</span><span>Public reply</span><span>Result</span><span>Time</span>
+          </div>
           {visible.map((item) => (
-            <article className="activity-row" key={item.id}>
-              <div className="activity-row-grid">
-                <span className="automation-account">Facebook</span>
-                <span className="keyword-chip is-any">Page comment</span>
-                <span>{item.connectionName}</span>
+            <article className="facebook-activity-row" key={item.id}>
+              <div className="facebook-commenter"><span className="facebook-person-mark" aria-hidden="true">{(item.authorName ?? "F").slice(0, 1)}</span><strong>{item.authorName ?? "Facebook user"}</strong></div>
+              <p>{item.commentPreview ?? "Comment content unavailable"}</p>
+              <p className="facebook-reply-preview">{item.replyPreview ?? "No reply sent"}</p>
+              <div className="facebook-result-cell">
                 <span className={`status-badge status-${item.result.toLowerCase()}`}>{statusBadgeLabel(item.result)}</span>
-                <time dateTime={item.createdAt}>{formatRelativeTime(item.createdAt)}</time>
+                {item.safeErrorCode && <small>{item.safeErrorCode.replaceAll("_", " ")}</small>}
               </div>
-              <div className="row-detail">
-                <strong>Public Page reply</strong>
-                {item.replyPreview && <p>{item.replyPreview}</p>}
-                {item.safeErrorCode && <p className="muted">Result code: {item.safeErrorCode}</p>}
-              </div>
+              <time dateTime={item.createdAt}>{formatRelativeTime(item.createdAt)}</time>
             </article>
           ))}
         </div>
@@ -519,13 +539,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
   if (error && !participants) return <p className="form-error" role="alert">{error}</p>;
 
   if (!participants) {
-    return (
-      <div className="empty-state">
-        <div className="loading-line" />
-        <div className="loading-line short" />
-        <div className="loading-line" />
-      </div>
-    );
+    return <InlineContentSkeleton label="Loading campaign activity" rows={4} />;
   }
 
   if (facebookActivity) return <FacebookPageActivityView activity={facebookActivity} />;
@@ -642,11 +656,10 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
                 </span>
               </header>
               <div className="activity-roster">
-                {group.participants.map((participant, index) => (
+                {group.participants.map((participant) => (
                   <ActivityRow
                     key={participant.id}
                     participant={participant}
-                    position={index + 1}
                     onRetry={() => void retryParticipant(participant.id)}
                     retrying={retryingId === participant.id}
                   />

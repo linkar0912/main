@@ -3,6 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DeliveryIssueRow } from "./delivery-issue-row";
+import { InlineContentSkeleton } from "./skeleton";
 
 type Failure = {
   id: string;
@@ -80,12 +81,7 @@ export function FailurePanel() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="empty-state">
-        <div className="loading-line" />
-        <div className="loading-line short" />
-      </div>
-    );
+    return <InlineContentSkeleton label="Loading delivery failures" rows={3} />;
   }
   if (error) return <p className="form-error" role="alert">{error}</p>;
   if (failures.length === 0) {

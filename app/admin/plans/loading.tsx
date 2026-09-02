@@ -1,2 +1,2 @@
-import { ScreenSkeleton } from "@/src/components/skeleton";
-export default function PlansLoading() { return <ScreenSkeleton />; }
+import { AdminDetailSkeleton } from "@/src/components/skeleton";
+export default function PlansLoading() { return <AdminDetailSkeleton />; }

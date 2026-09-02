@@ -217,6 +217,16 @@ export class MetaClient {
     return { isUserFollowingBusiness: data.is_user_follow_business };
   }
 
+  async getUserProfile(connection: MetaConnection, igScopedUserId: string): Promise<{ username: string }> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${igScopedUserId}`);
+    url.searchParams.set("fields", "username");
+    const data = asRecord(await this.request(url, connection.accessToken));
+    if (!data || typeof data.username !== "string" || !data.username.trim()) {
+      throw new MetaApiError("Meta did not return an Instagram username", 502);
+    }
+    return { username: data.username };
+  }
+
   async subscribeToWebhooks(connection: MetaConnection): Promise<WebhookSubscriptionResult> {
     const attempts: readonly (readonly string[])[] = [EXTENDED_WEBHOOK_FIELDS, CORE_WEBHOOK_FIELDS];
     let lastError = "Meta did not confirm any webhook subscription";

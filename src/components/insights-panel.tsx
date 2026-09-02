@@ -2,6 +2,7 @@
 
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
+import { InlineContentSkeleton } from "./skeleton";
 
 type InsightsPayload = {
   usage?: { participantsThisMonth: number; monthlyLimit: number | null };
@@ -30,12 +31,7 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
 
   if (error) return <p className="form-error" role="alert">{error}</p>;
   if (!insights) {
-    return (
-      <div className="empty-state">
-        <div className="loading-line" />
-        <div className="loading-line short" />
-      </div>
-    );
+    return <InlineContentSkeleton label="Loading automation insights" rows={2} />;
   }
 
   const usage = insights.usage;
@@ -137,4 +133,3 @@ function AbTestReport({ automationId }: { automationId: string }) {
     </section>
   );
 }
-

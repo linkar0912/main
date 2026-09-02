@@ -1,5 +1,5 @@
-import { ScreenSkeleton } from "@/src/components/skeleton";
+import { AdminDetailSkeleton } from "@/src/components/skeleton";
 
 export default function AdminSecurityLoading() {
-  return <ScreenSkeleton />;
+  return <AdminDetailSkeleton />;
 }

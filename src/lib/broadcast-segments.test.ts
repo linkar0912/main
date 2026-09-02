@@ -15,8 +15,6 @@ async function seedContact(
     accessTokenEncrypted: "sealed",
     status: "CONNECTED",
   });
-  await repository.touchContact("workspace_a", "ig_1", igScopedUserId, new Date().toISOString());
-  // Move lastSeenAt back with a second touch (updates take the given timestamp).
   await repository.touchContact("workspace_a", "ig_1", igScopedUserId, lastSeenAt);
 }
 

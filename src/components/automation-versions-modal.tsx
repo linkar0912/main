@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { History } from "lucide-react";
+import { InlineContentSkeleton } from "./skeleton";
 import type { FlowDefinition } from "@/src/lib/automation/types";
 
 type Version = {
@@ -88,7 +89,7 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
     }
   }
 
-  if (loading) return <div className="empty-state"><div className="loading-line" /><div className="loading-line short" /></div>;
+  if (loading) return <InlineContentSkeleton label="Loading automation history" rows={3} />;
   if (error) return <p className="form-error" role="alert">{error}</p>;
   if (versions.length === 0) {
     return (

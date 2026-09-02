@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   countParticipantFunnel: vi.fn(),
   listAutomationExecutions: vi.fn(),
   listFacebookPages: vi.fn(),
+  listRecentWebhookEvents: vi.fn(),
+  listConnections: vi.fn(),
+  getUserProfile: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
@@ -18,6 +21,20 @@ vi.mock("@/src/lib/auth/session", () => ({
 
 vi.mock("@/src/lib/repository-provider", () => ({
   getRepository: mocks.getRepository,
+}));
+
+vi.mock("@/src/lib/env", () => ({
+  getServerEnv: () => ({ metaApiVersion: "v25.0", metaTokenEncryptionKey: "test-key" }),
+}));
+
+vi.mock("@/src/lib/security/secrets", () => ({
+  unsealSecret: () => "access-token",
+}));
+
+vi.mock("@/src/lib/meta/client", () => ({
+  MetaClient: class {
+    getUserProfile = mocks.getUserProfile;
+  },
 }));
 
 const { GET } = await import("./route");
@@ -93,6 +110,9 @@ describe("GET /api/automations/[id]/activity", () => {
     mocks.countParticipantFunnel.mockReset();
     mocks.listAutomationExecutions.mockReset();
     mocks.listFacebookPages.mockReset();
+    mocks.listRecentWebhookEvents.mockReset();
+    mocks.listConnections.mockReset();
+    mocks.getUserProfile.mockReset();
     mocks.getValidatedSession.mockResolvedValue({ email: "owner@example.com", workspaceId: "workspace_a" });
     mocks.getRepository.mockReturnValue({
       getAutomation: mocks.getAutomation,
@@ -100,12 +120,16 @@ describe("GET /api/automations/[id]/activity", () => {
       countParticipantFunnel: mocks.countParticipantFunnel,
       listAutomationExecutions: mocks.listAutomationExecutions,
       listFacebookPages: mocks.listFacebookPages,
+      listRecentWebhookEvents: mocks.listRecentWebhookEvents,
+      listConnections: mocks.listConnections,
     });
     mocks.getAutomation.mockResolvedValue({ id: "automation_1", workspaceId: "workspace_a" });
     mocks.listParticipants.mockResolvedValue([]);
     mocks.countParticipantFunnel.mockResolvedValue({ commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 });
     mocks.listAutomationExecutions.mockResolvedValue([]);
     mocks.listFacebookPages.mockResolvedValue([]);
+    mocks.listRecentWebhookEvents.mockResolvedValue([]);
+    mocks.listConnections.mockResolvedValue([]);
   });
 
   function call(id = "automation_1") {
@@ -151,6 +175,16 @@ describe("GET /api/automations/[id]/activity", () => {
     // Repository already returns newest-first; the route must preserve that order.
     mocks.listParticipants.mockResolvedValue([newer, older]);
     mocks.countParticipantFunnel.mockResolvedValue({ commented: 20_001, openingSent: 15_000, optedIn: 12_000, followed: 8_000, linkSent: 6_000 });
+    mocks.listRecentWebhookEvents.mockResolvedValue([{
+      id: "webhook_must-not-escape",
+      providerEventId: "event_must-not-escape",
+      eventType: "comment.created",
+      receivedAt: "2026-08-21T08:00:00.000Z",
+      payload: {
+        commentId: "comment_must-not-escape",
+        senderUsername: "maya.creates",
+      },
+    }]);
 
     const response = await call();
     const body = await response.json();
@@ -161,6 +195,7 @@ describe("GET /api/automations/[id]/activity", () => {
       data: [
         {
           id: "participant_newer",
+          instagramUsername: "maya.creates",
           sourceMediaSnapshot: newer.sourceMediaSnapshot,
           matchedKeyword: "drop",
           state: "LINK_SENT",
@@ -174,6 +209,7 @@ describe("GET /api/automations/[id]/activity", () => {
         },
         {
           id: "participant_older",
+          instagramUsername: "maya.creates",
           sourceMediaSnapshot: older.sourceMediaSnapshot,
           matchedKeyword: "drop",
           state: "FOLLOW_REQUIRED",
@@ -188,6 +224,7 @@ describe("GET /api/automations/[id]/activity", () => {
       summary: { commented: 20_001, openingSent: 15_000, optedIn: 12_000, followed: 8_000, linkSent: 6_000 },
     });
     expect(mocks.countParticipantFunnel).toHaveBeenCalledWith("workspace_a", "automation_1");
+    expect(mocks.listRecentWebhookEvents).toHaveBeenCalledWith("workspace_a", 500, "comment.created");
     expect(mocks.listParticipants).toHaveBeenCalledTimes(1);
 
     const raw = JSON.stringify(body);
@@ -201,6 +238,30 @@ describe("GET /api/automations/[id]/activity", () => {
     expect(raw).not.toContain("workspaceId");
     expect(raw).not.toContain("webhook");
     expect(raw).not.toContain("payload");
+  });
+
+  it("resolves an older participant handle from Meta when its webhook is no longer retained", async () => {
+    const participant = makeParticipant();
+    mocks.listParticipants.mockResolvedValue([participant]);
+    mocks.listConnections.mockResolvedValue([{
+      id: "connection_1",
+      workspaceId: "workspace_a",
+      igUserId: "ig_must-not-escape",
+      username: "creator",
+      accessTokenEncrypted: "sealed-token",
+      status: "CONNECTED",
+      connectedAt: "2026-08-01T00:00:00.000Z",
+    }]);
+    mocks.getUserProfile.mockResolvedValue({ username: "maya.creates" });
+
+    const response = await call();
+    const body = await response.json();
+
+    expect(body.data[0].instagramUsername).toBe("maya.creates");
+    expect(mocks.getUserProfile).toHaveBeenCalledWith(
+      { igUserId: "ig_must-not-escape", accessToken: "access-token" },
+      "scoped_must-not-escape",
+    );
   });
 
   it("returns a sanitized Facebook Page activity DTO scoped to the saved Page", async () => {
@@ -235,6 +296,17 @@ describe("GET /api/automations/[id]/activity", () => {
         createdAt: "2026-09-01T00:00:00.000Z",
       },
     ]);
+    mocks.listRecentWebhookEvents.mockResolvedValue([{
+      id: "webhook_must-not-escape",
+      providerEventId: "event_must-not-escape",
+      eventType: "facebook.comment.created",
+      receivedAt: "2026-09-01T01:00:00.000Z",
+      payload: {
+        senderName: "Taylor Morgan",
+        text: "Please send me the details",
+        pageId: "page_1",
+      },
+    }]);
 
     const response = await call();
     const body = await response.json();
@@ -248,6 +320,8 @@ describe("GET /api/automations/[id]/activity", () => {
         connectionName: "Acme Page",
         eventType: "comment.created",
         result: "SENT",
+        authorName: "Taylor Morgan",
+        commentPreview: "Please send me the details",
         replyPreview: "Thanks for commenting!",
         createdAt: "2026-09-01T01:00:00.000Z",
       },
@@ -265,5 +339,6 @@ describe("GET /api/automations/[id]/activity", () => {
     const raw = JSON.stringify(body);
     expect(raw).not.toContain("must-not-escape");
     expect(mocks.listAutomationExecutions).toHaveBeenCalledWith("workspace_a", "automation_1", 100);
+    expect(mocks.listRecentWebhookEvents).toHaveBeenCalledWith("workspace_a", 500, "facebook.comment.created");
   });
 });

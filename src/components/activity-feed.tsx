@@ -11,6 +11,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { ContactDetailModal } from "./contact-detail-modal";
+import { ActivityContentSkeleton } from "./skeleton";
 
 type ActivityEntry = {
   id: string;
@@ -118,12 +119,7 @@ export function ActivityFeed() {
   const groups = useMemo(() => groupByDay(visibleEntries), [visibleEntries]);
 
   if (!loaded) {
-    return (
-      <div className="empty-state">
-        <div className="loading-line" />
-        <div className="loading-line short" />
-      </div>
-    );
+    return <ActivityContentSkeleton />;
   }
   if (error) return <p className="form-error" role="alert">{error}</p>;
 
@@ -131,24 +127,21 @@ export function ActivityFeed() {
     <section aria-label="Unified social inbox">
       {entries.length > 0 && (
         <div className="inbox-stat-strip" aria-hidden={filter !== ""}>
+          <div className="inbox-total"><strong>{entries.length}</strong><span>recent events</span></div>
           {FILTERS.slice(1).map(({ value, label }) => {
             const count = counts.get(value) ?? 0;
             if (count === 0) return null;
             return (
-              <div className="inbox-stat-tile" key={value}>
-                <strong>{count}</strong>
-                <span>{label}</span>
-              </div>
+              <span className="inbox-stat-tile" key={value}><strong>{count}</strong> {label}</span>
             );
           })}
         </div>
       )}
 
-      <div className="list-intro">
-        <p className="muted">
-          {visibleEntries.length} event{visibleEntries.length === 1 ? "" : "s"} in this view
-        </p>
-        <div className="filter-chips" role="group" aria-label="Filter inbox by channel">
+      <div className="inbox-controls">
+        <div className="inbox-filter-row">
+          <span className="inbox-filter-label">Channel</span>
+          <div className="filter-chips" role="group" aria-label="Filter inbox by channel">
           {(["all", "instagram", "facebook"] as const).map((value) => (
             <button
               key={value}
@@ -160,8 +153,11 @@ export function ActivityFeed() {
               {value === "all" ? "All channels" : value === "instagram" ? "Instagram" : "Facebook"}
             </button>
           ))}
+          </div>
         </div>
-        <div className="filter-chips" role="group" aria-label="Filter activity by type">
+        <div className="inbox-filter-row">
+          <span className="inbox-filter-label">Activity</span>
+          <div className="filter-chips" role="group" aria-label="Filter activity by type">
           {FILTERS.map(({ value, label }) => (
             <button
               key={value || "all"}
@@ -173,7 +169,9 @@ export function ActivityFeed() {
               {label}
             </button>
           ))}
+          </div>
         </div>
+        <p className="muted inbox-visible-count">{visibleEntries.length} event{visibleEntries.length === 1 ? "" : "s"} shown</p>
       </div>
 
       {visibleEntries.length === 0 ? (

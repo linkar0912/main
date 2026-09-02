@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
 import { AutomationBuilder } from "./automation-builder";
+import { InlineContentSkeleton } from "./skeleton";
 import type { AutomationRecord } from "@/src/lib/repository";
 
 export function AutomationEditorScreen({ automationId }: { automationId: string }) {
@@ -36,11 +37,7 @@ export function AutomationEditorScreen({ automationId }: { automationId: string 
       <div className="page-wrap builder-wrap">
         <Link className="back-link" href="/automations"><ArrowLeft size={16} /> Back to automations</Link>
         {loading && (
-          <div className="empty-state">
-            <div className="loading-line" />
-            <div className="loading-line short" />
-            <div className="loading-line" />
-          </div>
+          <InlineContentSkeleton label="Loading automation editor" rows={5} />
         )}
         {!loading && error && <p className="form-error" role="alert">{error}</p>}
         {!loading && !error && automation && (

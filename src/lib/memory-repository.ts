@@ -1403,7 +1403,12 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       if (existingId) {
         const existing = contacts.get(existingId);
         if (existing) {
-          const updated: AutomationContactRecord = { ...existing, lastSeenAt: seenAt, updatedAt: now() };
+          const updated: AutomationContactRecord = {
+            ...existing,
+            createdAt: seenAt < existing.createdAt ? seenAt : existing.createdAt,
+            lastSeenAt: seenAt > existing.lastSeenAt ? seenAt : existing.lastSeenAt,
+            updatedAt: now(),
+          };
           contacts.set(existingId, updated);
           return { created: false, record: copy(updated) };
         }
@@ -1425,7 +1430,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         // from a backdated webhook read as "just seen", and any 24-hour
         // messaging-window check against it silently passed.
         lastSeenAt: seenAt,
-        createdAt: timestamp,
+        createdAt: seenAt,
         updatedAt: timestamp,
       };
       contacts.set(record.id, record);
@@ -1698,7 +1703,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       });
       return copy(
         filtered
-          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id))
+          .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || a.id.localeCompare(b.id))
           .slice(0, options.limit),
       );
     },

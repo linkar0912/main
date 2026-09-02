@@ -55,6 +55,41 @@ describe("memory repository", () => {
     vi.useRealTimers();
   });
 
+  it("keeps reconciled contact chronology anchored to the actual interaction times", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-02T14:00:00.000Z"));
+    const repository = createMemoryRepository();
+
+    const created = await repository.touchContact(
+      "workspace_a",
+      "ig_123",
+      "person_1",
+      "2026-08-29T08:00:00.000Z",
+    );
+    await repository.touchContact(
+      "workspace_a",
+      "ig_123",
+      "person_1",
+      "2026-08-28T08:00:00.000Z",
+    );
+
+    const contact = await repository.getContactById("workspace_a", created.record.id);
+    expect(contact?.createdAt).toBe("2026-08-28T08:00:00.000Z");
+    expect(contact?.lastSeenAt).toBe("2026-08-29T08:00:00.000Z");
+  });
+
+  it("orders contacts by their latest interaction rather than reconciliation time", async () => {
+    vi.useFakeTimers();
+    const repository = createMemoryRepository();
+    vi.setSystemTime(new Date("2026-09-01T10:00:00.000Z"));
+    const recent = await repository.touchContact("workspace_a", "ig_123", "recent", "2026-09-01T09:00:00.000Z");
+    vi.setSystemTime(new Date("2026-09-02T10:00:00.000Z"));
+    const older = await repository.touchContact("workspace_a", "ig_123", "older", "2026-08-22T09:00:00.000Z");
+
+    const contacts = await repository.listContactsByLeadStatus("workspace_a", { limit: 10 });
+    expect(contacts.map((contact) => contact.id)).toEqual([recent.record.id, older.record.id]);
+  });
+
   it("creates an owner membership when provisioning a workspace", async () => {
     const repository = createMemoryRepository();
 

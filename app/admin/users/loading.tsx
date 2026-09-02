@@ -1,2 +1,2 @@
-import { ScreenSkeleton } from "@/src/components/skeleton";
-export default function UsersLoading() { return <ScreenSkeleton />; }
+import { AdminTableSkeleton } from "@/src/components/skeleton";
+export default function UsersLoading() { return <AdminTableSkeleton />; }

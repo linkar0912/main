@@ -2,6 +2,7 @@
 
 import { Copy, Link as LinkIcon, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { InlineContentSkeleton } from "./skeleton";
 
 type Link = {
   id: string;
@@ -244,10 +245,7 @@ export function TrackedLinksPanel() {
         </form>
       )}
       {loading ? (
-        <div className="empty-state">
-          <div className="loading-line" />
-          <div className="loading-line short" />
-        </div>
+        <InlineContentSkeleton label="Loading tracked links" rows={3} />
       ) : links.length === 0 ? (
         <p className="muted">
           <LinkIcon size={14} /> No tracked links yet. Add one to start counting clicks and tagging UTMs.
@@ -316,4 +314,3 @@ export function TrackedLinksPanel() {
     </div>
   );
 }
-

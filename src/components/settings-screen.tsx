@@ -431,26 +431,46 @@ export function SettingsScreen() {
 
           <div className="section-content">
             {section === "connections" && (
-              <div className="settings-overview-grid">
+              <div className="settings-connections-stack">
                 {connectionsLoadError && (
-                  <div className="notice-banner notice-warning" role="alert" style={{ gridColumn: "1 / -1" }}>
+                  <div className="notice-banner notice-warning" role="alert">
                     <LockKeyhole size={17} />
                     <p>{connectionsLoadError} <button className="text-link" type="button" onClick={() => void loadConnectionsData()}>Retry</button></p>
                   </div>
                 )}
-                <section className="settings-hero panel settings-card channel-settings-card instagram-settings-card" data-channel-card="instagram">
-                  {connections[0]?.profilePictureUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value here.
-                    <img
-                      className="settings-avatar"
-                      src={connections[0].profilePictureUrl}
-                      alt={connections[0].username ? `@${connections[0].username} profile picture` : "Instagram profile picture"}
-                    />
-                  ) : (
-                    <div className="settings-brand-icon"><InstagramGlyph size={30} brand /></div>
-                  )}
-                  <div className="settings-copy"><p className="eyebrow">Instagram connections</p><h2>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h2><p>{connections.length > 0 ? "Your connected accounts can receive comment and DM webhooks." : `Connect a professional account to start delivering ${PRODUCT_NAME} automations.`}</p></div>
-                  <div className="settings-action"><a className="button button-primary" href="/api/meta/oauth/start">{connections.length > 0 ? "Connect another account" : "Connect Instagram"} <ExternalLink size={15} /></a></div>
+                <section className="panel connected-channels-console" aria-labelledby="connected-channels-title">
+                  <header className="connected-channels-heading">
+                    <div>
+                      <h2 id="connected-channels-title">Connected channels</h2>
+                      <p>Manage the accounts that listen for comments and deliver replies.</p>
+                    </div>
+                    <span className="connected-channels-total" aria-label={`${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}>
+                      <span className="health-orb" data-state={connectedChannelCount > 0 ? "ok" : "warn"} aria-hidden="true" />
+                      {connectedChannelCount} live
+                    </span>
+                  </header>
+
+                  <div className="connected-channels-list">
+                <section className="channel-settings-card instagram-settings-card" data-channel-card="instagram" aria-labelledby="instagram-channel-title">
+                  <div className="channel-settings-header">
+                    <div className="channel-identity">
+                      {connections[0]?.profilePictureUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN; next/image adds no value here.
+                        <img
+                          className="settings-avatar"
+                          src={connections[0].profilePictureUrl}
+                          alt={connections[0].username ? `@${connections[0].username} profile picture` : "Instagram profile picture"}
+                        />
+                      ) : (
+                        <div className="settings-brand-icon"><InstagramGlyph size={27} brand /></div>
+                      )}
+                      <div className="settings-copy">
+                        <h3 id="instagram-channel-title">{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</h3>
+                        <p><span>Instagram connections</span><span className="channel-capability">{connections.length > 0 ? "Comments and direct messages" : `Connect a professional account to start delivering ${PRODUCT_NAME} automations.`}</span></p>
+                      </div>
+                    </div>
+                    <div className="settings-action"><a className="button button-secondary button-small" href="/api/meta/oauth/start">{connections.length > 0 ? "Connect another" : "Connect Instagram"} <ExternalLink size={14} /></a></div>
+                  </div>
                   {connections.length > 0 && (
                     <ul className="connection-list">
                       {connections.map((connection) => (
@@ -530,10 +550,17 @@ export function SettingsScreen() {
                   })}
                 </section>
 
-                <section className="settings-hero panel settings-card channel-settings-card facebook-settings-card" data-channel-card="facebook">
-                  <div className="settings-brand-icon"><FacebookGlyph size={30} brand /></div>
-                  <div className="settings-copy"><p className="eyebrow">Facebook Pages</p><h2>{facebookPages.length === 0 ? "No Page connected" : `${facebookPages.length} Page${facebookPages.length === 1 ? "" : "s"} connected`}</h2><p>{facebookPages.length > 0 ? "Connected Pages can deliver comment-reply automations on public posts." : "Connect a Facebook Page to auto-reply to comments with the same flows you use on Instagram."}</p></div>
-                  <div className="settings-action"><a className="button button-primary" href="/api/facebook/oauth/start">{facebookPages.length > 0 ? "Connect another Page" : "Connect Facebook Page"} <ExternalLink size={15} /></a></div>
+                <section className="channel-settings-card facebook-settings-card" data-channel-card="facebook" aria-labelledby="facebook-channel-title">
+                  <div className="channel-settings-header">
+                    <div className="channel-identity">
+                      <div className="settings-brand-icon"><FacebookGlyph size={27} brand /></div>
+                      <div className="settings-copy">
+                        <h3 id="facebook-channel-title">{facebookPages.length === 0 ? "No Page connected" : `${facebookPages.length} Page${facebookPages.length === 1 ? "" : "s"} connected`}</h3>
+                        <p><span>Facebook Pages</span><span className="channel-capability">{facebookPages.length > 0 ? "Public Page comments" : "Connect a Page to auto-reply to comments on public posts."}</span></p>
+                      </div>
+                    </div>
+                    <div className="settings-action"><a className="button button-secondary button-small" href="/api/facebook/oauth/start">{facebookPages.length > 0 ? "Connect another" : "Connect Facebook Page"} <ExternalLink size={14} /></a></div>
+                  </div>
                   {facebookState === "select-page" && (
                     <div className="page-picker">
                       <label className="field">
@@ -624,6 +651,8 @@ export function SettingsScreen() {
                       </div>
                     );
                   })}
+                </section>
+                  </div>
                 </section>
               </div>
             )}

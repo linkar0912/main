@@ -77,9 +77,6 @@ describe("flow follow-up runner", () => {
 
   it("skips with WINDOW_CLOSED when the person has not messaged in 24 hours", async () => {
     const repository = await seed();
-    // First touch creates the contact at "now"; the second (an update) moves
-    // lastSeenAt back 25 hours, closing Meta's window.
-    await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
     await repository.touchContact(
       "workspace_a",
       "ig_1",

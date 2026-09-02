@@ -1880,7 +1880,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       if (existing) {
         const updated = await client.automationContact.update({
           where: { id: existing.id },
-          data: { lastSeenAt: new Date(seenAt) },
+          data: {
+            createdAt: new Date(Math.min(existing.createdAt.getTime(), new Date(seenAt).getTime())),
+            lastSeenAt: new Date(Math.max(existing.lastSeenAt.getTime(), new Date(seenAt).getTime())),
+          },
         });
         return { created: false, record: mapContact(updated) };
       }
@@ -1892,6 +1895,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
             instagramAccountId,
             igScopedUserId,
             lastSeenAt: new Date(seenAt),
+            createdAt: new Date(seenAt),
           },
         });
         return { created: true, record: mapContact(created) };
@@ -2057,7 +2061,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async listCapturedContacts(workspaceId, limit): Promise<CapturedContactSummary[]> {
       const records = await client.automationContact.findMany({
         where: { workspaceId, state: "CAPTURED", email: { not: null } },
-        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
         take: limit,
       });
       return records.map((record) => ({
@@ -2213,7 +2217,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async listContactsByLeadStatus(workspaceId, options) {
       const records = await client.automationContact.findMany({
         where: { workspaceId, ...(options.leadStatus ? { leadStatus: options.leadStatus } : {}) },
-        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
         take: options.limit,
       });
       return records.map(mapContact);

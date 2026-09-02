@@ -69,6 +69,32 @@ function createRunnerClient(overrides: Partial<AutomationRunnerClient> = {}): Au
 }
 
 describe("automation runner", () => {
+  it("tracks every inbound Instagram sender as a contact even when no automation matches", async () => {
+    const repository = createMemoryRepository();
+    await repository.ensureWorkspace("workspace_a", "owner@example.com", "user-1");
+    await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: "sealed-token",
+      status: "CONNECTED",
+    });
+
+    await processNormalizedEvent({
+      id: "message_contact_1",
+      accountId: "ig_1",
+      type: "message.received",
+      text: "Hello",
+      recipientId: "person_1",
+      timestamp: RECENT_COMMENT_AT,
+    }, repository);
+
+    expect(await repository.getContact("workspace_a", "ig_1", "person_1")).toMatchObject({
+      igScopedUserId: "person_1",
+      leadStatus: "NEW",
+    });
+  });
+
   it("does not dispatch work for a suspended workspace", async () => {
     const key = randomBytes(32).toString("hex");
     const repository = createMemoryRepository([{

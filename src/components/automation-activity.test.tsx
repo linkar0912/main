@@ -14,6 +14,7 @@ function stubFetch(data: ParticipantActivitySummary[], summary?: ParticipantFunn
 function participant(overrides: Partial<ParticipantActivitySummary> = {}): ParticipantActivitySummary {
   return {
     id: "participant_1",
+    instagramUsername: "maya.creates",
     sourceMediaSnapshot: {
       id: "media_1",
       caption: "Giveaway Reel",
@@ -91,6 +92,22 @@ describe("AutomationActivity", () => {
     expect(link.getAttribute("href")).toBe("https://www.instagram.com/reel/media_1/");
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noreferrer");
+  });
+
+  it("identifies campaign participants by their Instagram handle instead of a numbered placeholder", async () => {
+    stubFetch([participant({ instagramUsername: "maya.creates" })]);
+    render(<AutomationActivity automationId="automation_1" />);
+
+    expect(await screen.findByText("@maya.creates")).toBeTruthy();
+    expect(screen.queryByText(/person 1/i)).toBeNull();
+  });
+
+  it("uses a neutral Instagram label when an older activity has no recorded handle", async () => {
+    stubFetch([participant({ instagramUsername: undefined })]);
+    render(<AutomationActivity automationId="automation_1" />);
+
+    expect(await screen.findByText("Instagram user")).toBeTruthy();
+    expect(screen.queryByText(/person 1/i)).toBeNull();
   });
 
   it("renders a delivered participant with a completed journey", async () => {
@@ -185,7 +202,7 @@ describe("AutomationActivity", () => {
     expect(container.querySelectorAll("img").length).toBe(0);
   });
 
-  it("renders sanitized public Facebook Page reply activity with channel filters", async () => {
+  it("renders compact, useful Facebook Page reply activity", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).endsWith("/activity")) {
         return {
@@ -199,6 +216,8 @@ describe("AutomationActivity", () => {
               connectionName: "Acme Page",
               eventType: "comment.created",
               result: "SENT",
+              authorName: "Taylor Morgan",
+              commentPreview: "Please send me the details",
               replyPreview: "Thanks for commenting!",
               createdAt: "2026-09-01T01:00:00.000Z",
             }],
@@ -210,11 +229,13 @@ describe("AutomationActivity", () => {
 
     render(<AutomationActivity automationId="automation_1" />);
 
-    expect(await screen.findByText("Public Page reply")).toBeTruthy();
+    expect(await screen.findByText("Taylor Morgan")).toBeTruthy();
+    expect(screen.getByText("Please send me the details")).toBeTruthy();
     expect(screen.getByText("Thanks for commenting!")).toBeTruthy();
-    expect((screen.getByLabelText("Provider filter") as HTMLSelectElement).value).toBe("FACEBOOK");
-    expect((screen.getByLabelText("Surface filter") as HTMLSelectElement).value).toBe("COMMENT");
-    expect((screen.getByLabelText("Page filter") as HTMLSelectElement).value).toBe("Acme Page");
+    expect(screen.getByText("Acme Page")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /all 1/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /sent 1/i })).toBeTruthy();
+    expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.getByText(/do not open a Messenger conversation/i)).toBeTruthy();
     expect(document.body.textContent).not.toContain("token");
   });

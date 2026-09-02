@@ -211,6 +211,29 @@ describe("SettingsScreen webhook health panel", () => {
     expect(facebookCard?.querySelector('[data-channel-health="facebook"]')).toBeTruthy();
   });
 
+  it("groups both channel managers into one accessible connections console", async () => {
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": {
+        data: [{ id: "connection_1", igUserId: "ig_1", username: "creator", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" }],
+      },
+      "/api/facebook/connection": {
+        data: [{ id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" }],
+      },
+      "/api/facebook/connection/health": { data: [] },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+
+    const consoleRegion = await screen.findByRole("region", { name: "Connected channels" });
+    expect(consoleRegion.querySelectorAll("[data-channel-card]")).toHaveLength(2);
+    expect(consoleRegion.querySelector('[data-channel-card="instagram"]')).toBeTruthy();
+    expect(consoleRegion.querySelector('[data-channel-card="facebook"]')).toBeTruthy();
+    expect(consoleRegion.querySelector('a[href="/api/meta/oauth/start"]')).toBeTruthy();
+    expect(consoleRegion.querySelector('a[href="/api/facebook/oauth/start"]')).toBeTruthy();
+  });
+
   it("shows the Pages returned by Facebook after OAuth instead of auto-connecting the first", async () => {
     window.history.replaceState({}, "", "/settings?facebook=select-page");
     stubFetch({

@@ -5,12 +5,14 @@ import { AtSign, Download, Search, UsersRound } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { ContactDetailModal } from "./contact-detail-modal";
 import { ContextHelpLink } from "./context-help-link";
+import { ContactsContentSkeleton } from "./skeleton";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 type ContactRow = {
   id: string;
   instagramAccountId: string;
   igScopedUserId: string;
+  instagramUsername?: string;
   email?: string;
   state: string;
   tags: string[];
@@ -31,7 +33,8 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
 const STATUS_ORDER: LeadStatus[] = ["NEW", "ENGAGED", "QUALIFIED", "CUSTOMER"];
 
 function contactName(contact: ContactRow): string {
-  return contact.email ?? `IG user ·${contact.igScopedUserId.slice(-6)}`;
+  const username = contact.instagramUsername?.trim().replace(/^@+/, "");
+  return username ? `@${username}` : contact.email ?? "Instagram user";
 }
 
 function formatSeen(value: string): string {
@@ -49,7 +52,9 @@ export function ContactsScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/contacts?scope=all&limit=200")
+    fetch("/api/contacts", { method: "POST" })
+      .catch(() => undefined)
+      .then(() => fetch("/api/contacts?scope=all&limit=200"))
       .then(async (response) => {
         const payload = await response.json().catch(() => ({})) as {
           data?: { contacts: ContactRow[]; counts: Record<LeadStatus, number> };
@@ -74,7 +79,7 @@ export function ContactsScreen() {
     return contacts.filter((contact) => {
       if (status && contact.leadStatus !== status) return false;
       if (!needle) return true;
-      return [contactName(contact), contact.igScopedUserId, contact.assigneeUserId ?? "", ...contact.tags]
+      return [contactName(contact), contact.email ?? "", contact.assigneeUserId ?? "", ...contact.tags]
         .join(" ")
         .toLowerCase()
         .includes(needle);
@@ -104,7 +109,7 @@ export function ContactsScreen() {
             <input
               type="search"
               aria-label="Search contacts"
-              placeholder="Search email, Instagram ID, tag, or assignee"
+              placeholder="Search Instagram handle, email, tag, or assignee"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -121,7 +126,7 @@ export function ContactsScreen() {
 
         {error ? <p className="form-error" role="alert">{error}</p> : null}
         {!loaded ? (
-          <div className="empty-state"><div className="loading-line" /><div className="loading-line short" /></div>
+          <ContactsContentSkeleton withToolbar={false} />
         ) : visible.length === 0 ? (
           <div className="empty-state">
             <span className="empty-icon"><UsersRound size={20} /></span>
@@ -138,7 +143,7 @@ export function ContactsScreen() {
                 <li key={contact.id} className="contact-row">
                   <div className="contact-primary">
                     <span className="contact-avatar" aria-hidden>{contact.email ? <AtSign size={17} /> : <UsersRound size={17} />}</span>
-                    <span><strong>{contactName(contact)}</strong><small>{contact.tags.join(" · ") || contact.state.toLowerCase()}</small></span>
+                    <span><strong>{contactName(contact)}</strong><small>{[contact.email, ...contact.tags].filter(Boolean).join(" · ") || contact.state.toLowerCase()}</small></span>
                   </div>
                   <span className={`status-pill is-${contact.leadStatus.toLowerCase()}`}>{STATUS_LABELS[contact.leadStatus]}</span>
                   <span className="contact-score">{contact.score} pts{contact.suppressedAt ? " · opted out" : ""}</span>
