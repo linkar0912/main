@@ -4,18 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
+  ChartNoAxesCombined,
   CircleHelp,
   Inbox,
   LayoutDashboard,
-  ListOrdered,
   LogOut,
-  Megaphone,
   Menu,
   Settings,
   ShieldCheck,
   UserRound,
   UsersRound,
   Workflow,
+  Zap,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { getWorkspaceBootstrap, refreshWorkspaceBootstrap } from "@/src/lib/client/workspace-data";
@@ -26,8 +26,8 @@ import { ThemeToggle } from "./theme-toggle";
 const workspaceNavigation = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/automations", label: "Automations", icon: Workflow },
-  { href: "/automations/sequences", label: "Sequences", icon: ListOrdered },
-  { href: "/automations/broadcasts", label: "Broadcasts", icon: Megaphone },
+  { href: "/quick-automation", label: "Quick Automation", icon: Zap },
+  { href: "/insights", label: "Insights", icon: ChartNoAxesCombined },
   { href: "/contacts", label: "Contacts", icon: UsersRound },
   { href: "/activity", label: "Inbox", icon: Inbox },
   { href: "/settings", label: "Settings", icon: Settings },

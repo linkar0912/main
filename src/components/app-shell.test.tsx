@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({ pathname: "/dashboard" }));
@@ -79,6 +79,18 @@ describe("AppShell", () => {
 
     const avatar = await screen.findByAltText("Instagram profile picture");
     expect(avatar.getAttribute("src")).toBe("https://cdn.instagram.com/dp.jpg");
+  });
+
+  it("keeps primary navigation focused on automations, insights, and quick setup", async () => {
+    stubShellFetch();
+    render(<AppShell><main>Workspace</main></AppShell>);
+
+    await screen.findByText("Member");
+    const navigation = screen.getByRole("navigation", { name: "Workspace sections" });
+    expect(within(navigation).getByRole("link", { name: "Quick Automation" }).getAttribute("href")).toBe("/quick-automation");
+    expect(within(navigation).getByRole("link", { name: "Insights" }).getAttribute("href")).toBe("/insights");
+    expect(within(navigation).queryByRole("link", { name: "Sequences" })).toBeNull();
+    expect(within(navigation).queryByRole("link", { name: "Broadcasts" })).toBeNull();
   });
 
   it("shows the operator-console link only to an allowlisted platform owner", async () => {

@@ -3,7 +3,6 @@
 import { Plus, Workflow } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { AutomationList, useAutomations } from "./automation-list";
-import { AutomationSectionNav } from "./automation-section-nav";
 import { CreateAutomationButton } from "./create-automation-button";
 import { DeliveryDiagnostics } from "./delivery-diagnostics";
 import { ContextHelpLink } from "./context-help-link";
@@ -39,9 +38,7 @@ export function AutomationsScreen() {
             <CreateAutomationButton className="button button-primary"><Plus size={17} /> New automation</CreateAutomationButton>
           </div>
         </header>
-        <div className="section-layout">
-          <AutomationSectionNav active="my" />
-          <div className="section-content">
+        <div className="section-content">
             {!loading && automations.length > 0 && (
               <div className="list-intro">
                 <div className="list-count"><Workflow size={17} /><span>{automations.length} {automations.length === 1 ? "automation" : "automations"}</span></div>
@@ -51,7 +48,6 @@ export function AutomationsScreen() {
               {error ? <p className="form-error" role="alert">{error}</p> : <AutomationList automations={automations} loading={loading} onStatusChange={setStatus} onDuplicate={duplicateAutomation} onDelete={deleteAutomation} />}
             </section>
             {automations.length > 0 && <DeliveryDiagnostics />}
-          </div>
         </div>
       </div>
     </AppShell>
