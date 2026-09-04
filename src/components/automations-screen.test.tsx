@@ -30,4 +30,22 @@ describe("AutomationsScreen", () => {
     expect(await screen.findByRole("heading", { name: "Automations" })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "Automation sections" })).toBeNull();
   });
+
+  it("shows a useful message when the automations endpoint returns an empty error response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/workspace/bootstrap")) {
+        return new Response(JSON.stringify({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }));
+      }
+      if (url === "/api/automations") return new Response(null, { status: 502 });
+      if (url.includes("/api/meta/connection") || url.includes("/api/facebook/connection")) {
+        return new Response(JSON.stringify({ data: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    render(<AutomationsScreen />);
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not load automations");
+  });
 });

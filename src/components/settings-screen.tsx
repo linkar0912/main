@@ -19,6 +19,7 @@ import { ContextHelpLink } from "./context-help-link";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 import { InstagramGlyph } from "./instagram-glyph";
 import { FacebookGlyph } from "./facebook-glyph";
+import { SocialAvatar } from "./social-avatar";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
@@ -592,9 +593,7 @@ export function SettingsScreen() {
                           {/* Facebook's literal brand blue is set inline (matches FacebookGlyph.tsx) rather than
                               in globals.css - the workspace palette contract (globals.test.ts) forbids legacy
                               Meta blue in the shared stylesheet. */}
-                          <span className="connection-avatar-ring" data-brand="facebook" style={{ background: "#1877F2" }}>
-                            <span className="connection-avatar" aria-hidden="true">{(page.pageName ?? "?").slice(0, 2).toUpperCase()}</span>
-                          </span>
+                          <SocialAvatar channel="facebook" name={page.pageName} src={page.avatarUrl} />
                           <div className="connection-copy">
                             <strong>{page.pageName}</strong>
                             <small>Connected {formatDate(page.connectedAt)} · Page ID {page.pageId}</small>

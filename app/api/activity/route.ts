@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/src/lib/auth/session";
-import { getServerEnv } from "@/src/lib/env";
-import { MetaClient } from "@/src/lib/meta/client";
 import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 import { getRepository } from "@/src/lib/repository-provider";
 
@@ -37,20 +35,15 @@ export async function GET(request: Request) {
     const recipientId = typeof event.payload.recipientId === "string" ? event.payload.recipientId : undefined;
     return accountId && recipientId ? [{ instagramAccountId: accountId, igScopedUserId: recipientId }] : [];
   });
-  const env = getServerEnv();
-  const connections = env.metaTokenEncryptionKey && identities.length
-    ? await repository.listConnections(session.workspaceId)
-    : [];
+  const contacts = await repository.getContactsByInstagramIdentities(session.workspaceId, identities);
+  const contactsByIdentity = new Map(contacts.map((contact) => [instagramIdentityKey(contact), contact]));
+  // Keep the inbox read path local. Provider profile enrichment belongs on
+  // ingestion or an explicit refresh path, not on every page load.
   const usernames = await resolveInstagramUsernames({
     identities,
     events,
-    connections,
-    ...(env.metaTokenEncryptionKey ? {
-      client: new MetaClient({ apiVersion: env.metaApiVersion }),
-      tokenEncryptionKey: env.metaTokenEncryptionKey,
-    } : {}),
   });
-  const data = await Promise.all(events.map(async (event) => {
+  const data = events.map((event) => {
       const payload = event.payload as Record<string, unknown>;
       const channel = event.eventType.startsWith("facebook.") ? "facebook" : "instagram";
       const accountId = typeof payload.accountId === "string" ? payload.accountId : undefined;
@@ -59,14 +52,21 @@ export async function GET(request: Request) {
         ? usernames.get(instagramIdentityKey({ instagramAccountId: accountId, igScopedUserId: senderId }))
         : undefined;
       const senderName = typeof payload.senderName === "string" ? payload.senderName : undefined;
+      const facebookSenderId = typeof payload.senderId === "string" ? payload.senderId : undefined;
+      const facebookPageId = typeof payload.pageId === "string" ? payload.pageId : undefined;
       const text = typeof payload.text === "string" ? payload.text : "";
       const contact = channel === "instagram" && accountId && senderId
-        ? await repository.getContact(session.workspaceId, accountId, senderId)
-        : null;
+        ? contactsByIdentity.get(instagramIdentityKey({ instagramAccountId: accountId, igScopedUserId: senderId }))
+        : undefined;
       return {
         id: event.id,
         channel,
         contactId: contact?.id,
+        avatarUrl: channel === "instagram" && contact
+          ? `/api/contacts/${contact.id}/avatar`
+          : channel === "facebook" && facebookPageId && facebookSenderId
+            ? `/api/facebook/avatar?pageId=${encodeURIComponent(facebookPageId)}&profileId=${encodeURIComponent(facebookSenderId)}`
+            : undefined,
         providerEventId: event.providerEventId,
         type: event.eventType,
         label: EVENT_LABELS[event.eventType] ?? event.eventType,
@@ -85,6 +85,6 @@ export async function GET(request: Request) {
               : undefined,
         summary: text.length > 0 ? (text.length > 120 ? `${text.slice(0, 120)}…` : text) : undefined,
       };
-    }));
+    });
   return NextResponse.json({ data });
 }

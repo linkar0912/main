@@ -147,11 +147,9 @@ describe("workspace palette contract", () => {
   });
 
   it("uses separators only at meaningful section boundaries", () => {
-    expect(css).not.toMatch(/\.inbox-stat-strip\s*{[^}]*border/);
-    expect(css).not.toMatch(/\.inbox-controls\s*{[^}]*border/);
-    expect(css).not.toMatch(/\.inbox-list\s*{[^}]*border/);
-    expect(css).not.toMatch(/\.inbox-list li\s*{[^}]*border/);
-    expect(css).not.toMatch(/\.contact-row\s*{[^}]*border/);
+    expect(css).toMatch(/\.conversation-desk\s*{[^}]*border:\s*1px solid var\(--line-strong\)/);
+    expect(css).toMatch(/\.conversation-contact-list li\s*\+\s*li\s*{[^}]*border-top:\s*1px solid var\(--line\)/);
+    expect(css).not.toMatch(/\.conversation-message\s*{[^}]*border-bottom/);
     expect(css).not.toMatch(/\.insights-metrics\s*{[^}]*border-block/);
     expect(css).not.toMatch(/\.insights-journey li\s*{[^}]*border/);
     expect(css).not.toMatch(/\.facebook-activity-header\s*{[^}]*border/);
@@ -159,5 +157,18 @@ describe("workspace palette contract", () => {
     expect(css).not.toMatch(/\.stat-block\s*{[^}]*border-left/);
     expect(css).not.toMatch(/\.page-picker\s*{[^}]*border-top/);
     expect(css).not.toMatch(/\.channel-health\s*{[^}]*border-top/);
+  });
+
+  it("uses consistent separators and stable geometry on the reported workspace surfaces", () => {
+    expect(css).toMatch(/\.insights-metric\s*\+\s*\.insights-metric\s*{[^}]*border-left:\s*1px solid var\(--line\)/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.insights-metric:nth-child\(3\)[^}]*border-top:\s*1px solid var\(--line\)/);
+    expect(css).toMatch(/\.contact-row\s*{[^}]*transition:\s*none/);
+    expect(css).not.toMatch(/\.contact-row:hover\s*{[^}]*background/);
+    expect(css).toMatch(/\.connected-channels-total \.health-orb\s*{[^}]*flex:\s*0 0 8px[^}]*height:\s*8px[^}]*width:\s*8px/);
+    expect(css).toMatch(/\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(280px,\s*340px\) minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/\.conversation-messages\s*{[^}]*overflow-y:\s*auto/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/\.contact-row\s*{[^}]*border-bottom:\s*1px solid var\(--line\)/);
+    expect(css).toMatch(/\.funnel-cell\s*{[^}]*min-height:\s*112px/);
   });
 });

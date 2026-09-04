@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import Image from "next/image";
 import styles from "./proof-rail.module.css";
 
@@ -8,6 +9,7 @@ const creatorExamples = [
     location: "Bengaluru",
     image: "/marketing/linkar-creator-aanya.webp",
     alt: "Aanya Mehta at a Bengaluru cafe",
+    tint: "#fff100",
     quote: "One thoughtful reply turns a passing comment into a real conversation.",
   },
   {
@@ -16,6 +18,7 @@ const creatorExamples = [
     location: "Mumbai",
     image: "/marketing/linkar-creator-arjun.webp",
     alt: "Arjun Nair on a Mumbai terrace",
+    tint: "#fa0cf7",
     quote: "The right follow-up is already waiting when I open my inbox.",
   },
 ] as const;
@@ -33,25 +36,29 @@ function CreatorCard({
       aria-label={`${creator.name}, ${creator.role.toLowerCase()}`}
       data-proof-card={!duplicate || undefined}
     >
-      <div className={styles.exampleHeader}>
+      <div
+        className={styles.portraitFrame}
+        data-proof-portrait
+        style={{ "--proof-tint": creator.tint } as CSSProperties}
+      >
         <Image
           className={styles.portrait}
           src={creator.image}
           alt={creator.alt}
-          width={88}
-          height={88}
-          sizes="88px"
+          width={136}
+          height={136}
+          sizes="68px"
         />
-        <div className={styles.identity}>
-          <p className={styles.workflowTag}>CREATOR WORKFLOW</p>
-          <h3>{creator.name}</h3>
-          <p className={styles.role}>{creator.role} · {creator.location}</p>
-        </div>
       </div>
-      <blockquote>“{creator.quote}”</blockquote>
-      <div className={styles.exampleFooter}>
-        <span>View workflow</span>
-        <span aria-hidden="true">↗</span>
+      <div className={styles.body}>
+        <div className={styles.identity}>
+          <h3 className={styles.name}>{creator.name}</h3>
+          <p className={styles.meta}>{creator.role} · {creator.location}</p>
+        </div>
+        <blockquote>“{creator.quote}”</blockquote>
+        <p className={styles.exampleFooter}>
+          Creator workflow <span aria-hidden="true">→</span>
+        </p>
       </div>
     </article>
   );
@@ -78,6 +85,8 @@ export function ProofRail() {
       className={styles.section}
       aria-label="Creator conversation examples"
       data-proof-layout="compact"
+      data-brand-palette="linkar"
+      data-strip="creator-marquee"
     >
       <div className={styles.inner}>
         <div className={styles.statement} data-proof-statement>

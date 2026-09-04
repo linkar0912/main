@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, Film, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Film, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { basicAutomationTemplates } from "@/src/lib/automation/templates";
@@ -128,7 +128,6 @@ export function QuickAutomationScreen() {
             <h1>Pick a Reel. Put it to work.</h1>
             <p className="muted page-lede">Choose one published Reel, then choose the reply flow it should run.</p>
           </div>
-          <span className="quick-automation-mark" aria-hidden><Sparkles size={22} /></span>
         </header>
 
         <section className="quick-automation-stage" aria-labelledby="choose-reel-heading">

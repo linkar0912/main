@@ -1458,6 +1458,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapOutboundDelivery);
     },
 
+    async listOutboundDeliveriesForRecipient(workspaceId, instagramAccountId, recipientId, limit) {
+      const records = await client.outboundDelivery.findMany({
+        where: { workspaceId, instagramAccountId, recipientId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: Math.max(0, limit),
+      });
+      return records.map(mapOutboundDelivery);
+    },
+
     async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
       const existing = await client.outboundDelivery.findUnique({
         where: { deliveryKey: input.deliveryKey },
@@ -1919,6 +1928,21 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         },
       });
       return record ? mapContact(record) : null;
+    },
+
+    async getContactsByInstagramIdentities(workspaceId, identities) {
+      const unique = [...new Map(identities.map((identity) => [
+        `${identity.instagramAccountId}:${identity.igScopedUserId}`,
+        identity,
+      ])).values()];
+      if (unique.length === 0) return [];
+      const records = await client.automationContact.findMany({
+        where: {
+          workspaceId,
+          OR: unique.map(({ instagramAccountId, igScopedUserId }) => ({ instagramAccountId, igScopedUserId })),
+        },
+      });
+      return records.map(mapContact);
     },
 
     async setContactAwaitingEmail(workspaceId, instagramAccountId, igScopedUserId, automationId, atIso) {

@@ -247,6 +247,41 @@ describe("AutomationBuilder", () => {
     expect(body.instagramAccountId).toBeNull();
   });
 
+  it("uses the connected Facebook Page avatar throughout the live preview", async () => {
+    const avatarUrl = "/api/facebook/avatar?pageId=12345&profileId=12345";
+    stubFetch({
+      facebookPages: { data: [
+        {
+          id: "fb_rec_1",
+          pageId: "12345",
+          pageName: "Acme Co",
+          status: "CONNECTED",
+          connectedAt: "2026-08-29T10:00:00.000Z",
+          avatarUrl,
+        },
+      ] },
+    });
+
+    render(
+      <AutomationBuilder
+        initialFacebookPageId="12345"
+        initialDefinition={{
+          version: 1,
+          trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
+          conditions: [],
+          actions: [{ type: "private_reply", text: "Thanks!" }],
+        }}
+      />,
+    );
+
+    const preview = screen.getAllByLabelText(/test preview/i)[0] as HTMLElement;
+    await waitFor(() => {
+      expect(
+        Array.from(preview.querySelectorAll(".facebook-avatar img"), (image) => image.getAttribute("src")),
+      ).toEqual([avatarUrl, avatarUrl]);
+    });
+  });
+
   it("lets a Facebook Page automation save as a draft or save and activate", async () => {
     const fetchMock = stubFetch({
       facebookPages: { data: [

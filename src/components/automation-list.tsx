@@ -12,7 +12,7 @@ import { getInstagramConnections, getFacebookPages } from "@/src/lib/client/work
 
 async function requestAutomations(signal?: AbortSignal): Promise<AutomationRecord[]> {
   const response = await fetch("/api/automations", { signal });
-  const payload = (await response.json()) as { data?: AutomationRecord[] };
+  const payload = (await response.json().catch(() => ({}))) as { data?: AutomationRecord[] };
   if (!response.ok) throw new Error("Could not load automations");
   return payload.data ?? [];
 }
@@ -67,7 +67,7 @@ export function useAutomations() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    const payload = (await response.json()) as { data?: AutomationRecord };
+    const payload = (await response.json().catch(() => ({}))) as { data?: AutomationRecord };
     if (!response.ok || !payload.data) throw new Error("Could not update automation");
     setAutomations((current) => current.map((automation) => automation.id === id ? payload.data as AutomationRecord : automation));
   }

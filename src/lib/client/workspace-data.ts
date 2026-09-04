@@ -52,6 +52,7 @@ export type FacebookPageSummary = {
   pageName: string;
   status: ConnectionStatus;
   connectedAt: string;
+  avatarUrl?: string;
 };
 
 type ClientCache<T> = { value?: T; pending?: Promise<T>; fetcher?: typeof fetch };

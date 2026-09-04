@@ -92,9 +92,9 @@ describe("ProfileScreen", () => {
       />,
     );
 
-    const avatar = await screen.findByRole("img", { name: /@brand\.acct profile picture/i });
+    const avatar = await screen.findByRole("img", { name: /@brand\.acct profile photo/i });
     expect(avatar.getAttribute("src")).toBe("https://cdn.instagram.com/dp.jpg");
-    expect(avatar.className).toContain("avatar-connection");
+    expect(avatar.closest(".social-avatar")).toBeTruthy();
   });
 
   it("falls back to the glyph when Meta provides no profile picture", async () => {
@@ -131,7 +131,7 @@ describe("ProfileScreen", () => {
 
     expect(await screen.findByText(/@brand\.acct/)).toBeTruthy();
     // The connection card falls back to a glyph avatar, never a broken image.
-    expect(document.querySelector(".avatar-connection")).toBeTruthy();
+    expect(document.querySelector(".social-avatar.is-instagram .social-avatar-fallback")).toBeTruthy();
     expect(document.querySelector(".settings-avatar")).toBeNull();
   });
 
@@ -148,7 +148,7 @@ describe("ProfileScreen", () => {
         return { ok: true, json: async () => ({ data: [] }) } as Response;
       }
       if (url.includes("/api/facebook/connection")) {
-        return { ok: true, json: async () => ({ data: [{ id: "fb_1", pageId: "page_1", pageName: "Linkar Page", status: "CONNECTED", connectedAt: "2026-08-30T00:00:00.000Z" }] }) } as Response;
+        return { ok: true, json: async () => ({ data: [{ id: "fb_1", pageId: "page_1", pageName: "Linkar Page", status: "CONNECTED", connectedAt: "2026-08-30T00:00:00.000Z", avatarUrl: "/api/facebook/avatar?pageId=page_1&profileId=page_1" }] }) } as Response;
       }
       throw new Error(`Unexpected fetch to ${url}`);
     }));
@@ -164,6 +164,7 @@ describe("ProfileScreen", () => {
 
     expect(await screen.findByRole("heading", { name: "Connected channels" })).toBeTruthy();
     expect(screen.getByText("Linkar Page")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Linkar Page profile photo" })).toBeTruthy();
     expect(screen.getByText(/Facebook Page/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /manage channels/i }).getAttribute("href")).toBe("/settings");
   });

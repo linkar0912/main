@@ -73,6 +73,14 @@ describe("QuickAutomationScreen", () => {
     expect(scrollIntoView).toHaveBeenCalled();
   });
 
+  it("keeps the Quick Automation header free of a decorative icon", async () => {
+    stubFetch();
+    const { container } = render(<QuickAutomationScreen />);
+
+    await screen.findByRole("heading", { name: "Pick a Reel. Put it to work." });
+    expect(container.querySelector(".quick-automation-header svg")).toBeNull();
+  });
+
   it("routes the selected Reel and flow into the existing builder", async () => {
     stubFetch();
     render(<QuickAutomationScreen />);

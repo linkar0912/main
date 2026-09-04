@@ -54,6 +54,7 @@ describe("GET /api/facebook/connection", () => {
       data: [{
         id: "rec_1", pageId: "p_1", pageName: "Acme", status: "CONNECTED",
         connectedAt: "2026-01-01T00:00:00.000Z",
+        avatarUrl: "/api/facebook/avatar?pageId=p_1&profileId=p_1",
       }],
     });
   });

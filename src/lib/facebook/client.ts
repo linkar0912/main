@@ -132,4 +132,17 @@ export class FacebookClient {
     return { id: typeof data.id === "string" ? data.id : undefined };
   }
 
+  async getProfilePictureUrl(connection: FacebookConnection, profileId: string): Promise<string | null> {
+    const url = new URL(`${this.baseUrl}/${this.apiVersion}/${profileId}`);
+    url.searchParams.set("fields", "picture.type(square).width(96).height(96)");
+    const data = await this.request(url, connection.accessToken);
+    const picture = typeof data.picture === "object" && data.picture !== null
+      ? data.picture as Record<string, unknown>
+      : undefined;
+    const pictureData = picture && typeof picture.data === "object" && picture.data !== null
+      ? picture.data as Record<string, unknown>
+      : undefined;
+    return pictureData && typeof pictureData.url === "string" && pictureData.url ? pictureData.url : null;
+  }
+
 }

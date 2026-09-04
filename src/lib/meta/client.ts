@@ -217,14 +217,17 @@ export class MetaClient {
     return { isUserFollowingBusiness: data.is_user_follow_business };
   }
 
-  async getUserProfile(connection: MetaConnection, igScopedUserId: string): Promise<{ username: string }> {
+  async getUserProfile(connection: MetaConnection, igScopedUserId: string): Promise<{ username: string; profilePictureUrl?: string }> {
     const url = new URL(`${this.baseUrl}/${this.apiVersion}/${igScopedUserId}`);
-    url.searchParams.set("fields", "username");
+    url.searchParams.set("fields", "username,profile_pic");
     const data = asRecord(await this.request(url, connection.accessToken));
     if (!data || typeof data.username !== "string" || !data.username.trim()) {
       throw new MetaApiError("Meta did not return an Instagram username", 502);
     }
-    return { username: data.username };
+    return {
+      username: data.username,
+      ...(typeof data.profile_pic === "string" && data.profile_pic ? { profilePictureUrl: data.profile_pic } : {}),
+    };
   }
 
   async subscribeToWebhooks(connection: MetaConnection): Promise<WebhookSubscriptionResult> {

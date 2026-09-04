@@ -350,18 +350,18 @@ describe("Meta message payloads", () => {
 
   it("loads an Instagram user's public handle from their scoped user id", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ id: "igsid_1", username: "maya.creates" }), { status: 200 }),
+      new Response(JSON.stringify({ id: "igsid_1", username: "maya.creates", profile_pic: "https://cdn.example/maya.jpg" }), { status: 200 }),
     );
     const client = new MetaClient({ apiVersion: "v25.0", fetcher });
 
     await expect(client.getUserProfile(
       { igUserId: "ig_1", accessToken: "access-token" },
       "igsid_1",
-    )).resolves.toEqual({ username: "maya.creates" });
+    )).resolves.toEqual({ username: "maya.creates", profilePictureUrl: "https://cdn.example/maya.jpg" });
 
     const requestUrl = new URL(String(fetcher.mock.calls[0][0]));
     expect(requestUrl.pathname).toBe("/v25.0/igsid_1");
-    expect(requestUrl.searchParams.get("fields")).toBe("username");
+    expect(requestUrl.searchParams.get("fields")).toBe("username,profile_pic");
   });
 
   it("rejects malformed media, public reply, and follower-status responses", async () => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { InlineContentSkeleton } from "./skeleton";
+import { SocialAvatar } from "./social-avatar";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 
@@ -60,6 +61,9 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
   const [showHandoffForm, setShowHandoffForm] = useState(false);
   const [handoffReason, setHandoffReason] = useState("");
   const [handoffPause, setHandoffPause] = useState(true);
+  const contactLabel = contact?.instagramUsername
+    ? `@${contact.instagramUsername.replace(/^@+/, "")}`
+    : contact?.email ?? "Instagram contact";
 
   useEffect(() => {
     let active = true;
@@ -185,14 +189,13 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
   }
 
   return (
-    <div className="modal-scrim" role="presentation" onClick={onClose}>
+    <div className="modal-scrim contact-detail-scrim" role="presentation" onClick={onClose}>
       <div
-        className="modal-panel"
+        className="modal-panel contact-detail-drawer"
         role="dialog"
         aria-modal="true"
         aria-label="Contact details"
         onClick={(event) => event.stopPropagation()}
-        style={{ padding: "var(--space-6)" }}
       >
         {error && <p className="form-error" role="alert">{error}</p>}
         {!contact && !error && (
@@ -200,26 +203,28 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
         )}
         {contact && (
           <>
-            <div className="list-intro">
-              <div>
-                <p className="eyebrow">Contact</p>
-                <h2>{contact.instagramUsername ? `@${contact.instagramUsername.replace(/^@+/, "")}` : contact.email ?? "Instagram contact"}</h2>
+            <header className="contact-detail-header">
+              <SocialAvatar channel="instagram" name={contactLabel} src={`/api/contacts/${contact.id}/avatar`} size="large" />
+              <div className="contact-detail-identity">
+                <h2>{contactLabel}</h2>
                 <p className="muted">
                   First seen {formatDate(contact.createdAt)} · Last seen {formatDate(contact.lastSeenAt)}
                   {contact.suppressedAt ? " · Opted out" : ""}
                 </p>
               </div>
               <button className="icon-button" type="button" aria-label="Close contact details" onClick={onClose}>✕</button>
-            </div>
+            </header>
 
-            <div className="contact-chips">
+            <div className="contact-chips contact-detail-chips">
               <span className="status-badge">Score {contact.score}</span>
               {contact.tags.map((tag) => (
                 <span className="tag-chip" key={tag}>{tag}</span>
               ))}
             </div>
 
-            <div className="field-grid field-spaced">
+            <section className="contact-detail-section" aria-labelledby="contact-profile-title">
+              <h3 id="contact-profile-title">Profile</h3>
+            <div className="field-grid">
               <label className="field">
                 <span>Pipeline stage</span>
                 <select
@@ -319,9 +324,12 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
                 </button>
               </form>
             )}
+            </section>
 
+            <section className="contact-detail-section" aria-labelledby="contact-tags-title">
+            <h3 id="contact-tags-title">Tags</h3>
             <label className="field field-spaced">
-              <span>Tags <em>comma separated - automatic tags are kept</em></span>
+              <span>Comma separated <em>automatic tags are kept</em></span>
               <input
                 aria-label="Contact tags"
                 value={tagDraft}
@@ -333,8 +341,10 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
             <button className="button button-secondary button-small" type="button" onClick={saveTags} disabled={saving}>
               {saving ? "Saving…" : "Save tags"}
             </button>
+            </section>
 
-            <p className="eyebrow field-spaced">Timeline</p>
+            <section className="contact-detail-section contact-detail-timeline" aria-labelledby="contact-timeline-title">
+            <h3 id="contact-timeline-title">Timeline</h3>
             {timeline.length === 0 ? (
               <p className="muted">No interactions recorded yet.</p>
             ) : (
@@ -350,6 +360,7 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
                 ))}
               </ul>
             )}
+            </section>
           </>
         )}
       </div>

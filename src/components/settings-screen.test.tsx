@@ -262,7 +262,7 @@ describe("SettingsScreen webhook health panel", () => {
       "/api/meta/connection": { data: [] },
       "/api/facebook/connection": {
         data: [
-          { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+          { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z", avatarUrl: "/api/facebook/avatar?pageId=12345&profileId=12345" },
         ],
       },
       "/api/facebook/connection/health": { data: [{
@@ -275,6 +275,8 @@ describe("SettingsScreen webhook health panel", () => {
     await act(async () => { render(<SettingsScreen />); });
 
     expect(await screen.findByText("Acme Co")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Acme Co profile photo" }).getAttribute("src"))
+      .toBe("/api/facebook/avatar?pageId=12345&profileId=12345");
     const disconnectButtons = screen.getAllByRole("button", { name: "Disconnect" });
     expect(disconnectButtons).toHaveLength(1);
   });

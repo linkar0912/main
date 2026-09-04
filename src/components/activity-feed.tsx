@@ -1,242 +1,232 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  AtSign,
-  Inbox,
-  Link2,
-  MessageCircle,
-  MousePointerClick,
-  Send,
-  UserCheck,
-} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Inbox, Info, Search, Send } from "lucide-react";
 import { ContactDetailModal } from "./contact-detail-modal";
 import { ActivityContentSkeleton } from "./skeleton";
+import { SocialAvatar } from "./social-avatar";
 
-type ActivityEntry = {
+type InboxContact = {
   id: string;
-  channel: "instagram" | "facebook";
-  contactId?: string;
-  type: string;
-  label: string;
+  username?: string;
+  avatarUrl: string;
+  preview: string;
+  lastMessageAt: string;
+  canMessage: boolean;
+  leadStatus: "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
+  tags: string[];
+};
+
+type InboxMessage = {
+  id: string;
+  direction: "inbound" | "outbound";
+  text: string;
   at: string;
-  account?: string;
-  from?: string;
-  summary?: string;
+  status: "received" | "sending" | "sent" | "failed" | "unknown";
+  error?: string;
 };
 
-type EventMeta = { icon: typeof MessageCircle; tone: string };
-
-const EVENT_META: Record<string, EventMeta> = {
-  "comment.created": { icon: MessageCircle, tone: "slate" },
-  "facebook.comment.created": { icon: MessageCircle, tone: "accent" },
-  "message.received": { icon: Send, tone: "accent" },
-  "quick_reply.received": { icon: MousePointerClick, tone: "grape" },
-  "postback.received": { icon: MousePointerClick, tone: "grape" },
-  "optin.received": { icon: UserCheck, tone: "leaf" },
-  "referral.received": { icon: Link2, tone: "honey" },
-  "story_mention.received": { icon: AtSign, tone: "flame" },
-};
-const DEFAULT_META: EventMeta = { icon: Inbox, tone: "slate" };
-
-const FILTERS: Array<{ value: string; label: string }> = [
-  { value: "", label: "All" },
-  { value: "comment.created", label: "Comments" },
-  { value: "facebook.comment.created", label: "Facebook comments" },
-  { value: "message.received", label: "Direct messages" },
-  { value: "quick_reply.received", label: "Quick replies" },
-  { value: "postback.received", label: "Button taps" },
-  { value: "optin.received", label: "Opt-ins" },
-  { value: "referral.received", label: "Referral taps" },
-  { value: "story_mention.received", label: "Story mentions" },
-];
-
-function formatTime(value: string): string {
-  return new Date(value).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+function displayName(contact: InboxContact): string {
+  return contact.username ? `@${contact.username.replace(/^@+/, "")}` : `Instagram contact ·${contact.id.slice(-5)}`;
 }
 
-function dayHeading(value: string): string {
+function formatListTime(value: string): string {
   const date = new Date(value);
   const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-  const sameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  if (sameDay(date, today)) return "Today";
-  if (sameDay(date, yesterday)) return "Yesterday";
-  return date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
-}
-
-function groupByDay(entries: ActivityEntry[]): Array<{ heading: string; entries: ActivityEntry[] }> {
-  const groups: Array<{ heading: string; entries: ActivityEntry[] }> = [];
-  for (const entry of entries) {
-    const heading = dayHeading(entry.at);
-    const current = groups[groups.length - 1];
-    if (current && current.heading === heading) current.entries.push(entry);
-    else groups.push({ heading, entries: [entry] });
+  if (date.toDateString() === today.toDateString()) {
+    return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
-  return groups;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-/** Live inbox of recent inbound Instagram and Facebook events. */
+function formatMessageTime(value: string): string {
+  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/** Contact-first Instagram conversation desk with persistent manual replies. */
 export function ActivityFeed() {
-  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+  const [contacts, setContacts] = useState<InboxContact[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [query, setQuery] = useState("");
+  const [draft, setDraft] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [conversationLoading, setConversationLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState("");
-  const [channel, setChannel] = useState<"all" | "instagram" | "facebook">("all");
   const [openContactId, setOpenContactId] = useState<string | null>(null);
+  const messageEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/activity?limit=100${filter ? `&type=${encodeURIComponent(filter)}` : ""}`)
+    let active = true;
+    fetch("/api/inbox")
       .then(async (response) => {
-        const payload = (await response.json().catch(() => ({}))) as { data?: ActivityEntry[]; error?: string };
-        if (!response.ok) throw new Error(payload.error ?? "Could not load activity");
-        if (!cancelled) setEntries(payload.data ?? []);
+        const payload = (await response.json().catch(() => ({}))) as { data?: { contacts: InboxContact[] }; error?: string };
+        if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load inbox");
+        if (active) setContacts(payload.data.contacts);
       })
       .catch((caught: unknown) => {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : "Could not load activity");
+        if (active) setError(caught instanceof Error ? caught.message : "Could not load inbox");
       })
       .finally(() => {
-        if (!cancelled) setLoaded(true);
+        if (active) setLoaded(true);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [filter]);
+    return () => { active = false; };
+  }, []);
 
-  const counts = useMemo(() => {
-    const byType = new Map<string, number>();
-    for (const entry of entries) byType.set(entry.type, (byType.get(entry.type) ?? 0) + 1);
-    return byType;
-  }, [entries]);
+  const visibleContacts = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return contacts;
+    return contacts.filter((contact) => `${displayName(contact)} ${contact.preview} ${contact.tags.join(" ")}`.toLowerCase().includes(needle));
+  }, [contacts, query]);
+  const selected = contacts.find((contact) => contact.id === selectedId) ?? null;
 
-  const visibleEntries = useMemo(
-    () => channel === "all" ? entries : entries.filter((entry) => entry.channel === channel),
-    [channel, entries],
-  );
-  const groups = useMemo(() => groupByDay(visibleEntries), [visibleEntries]);
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    fetch(`/api/inbox/${selectedId}`)
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as { data?: { messages: InboxMessage[] }; error?: string };
+        if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load conversation");
+        if (active) setMessages(payload.data.messages);
+      })
+      .catch((caught: unknown) => {
+        if (active) setError(caught instanceof Error ? caught.message : "Could not load conversation");
+      })
+      .finally(() => {
+        if (active) setConversationLoading(false);
+      });
+    return () => { active = false; };
+  }, [selectedId]);
 
-  if (!loaded) {
-    return <ActivityContentSkeleton />;
+  function openConversation(contactId: string) {
+    setConversationLoading(true);
+    setError("");
+    setMessages([]);
+    setSelectedId(contactId);
   }
-  if (error) return <p className="form-error" role="alert">{error}</p>;
+
+  useEffect(() => {
+    if (typeof messageEndRef.current?.scrollIntoView === "function") {
+      messageEndRef.current.scrollIntoView({ block: "nearest" });
+    }
+  }, [messages]);
+
+  async function sendMessage() {
+    if (!selected || !selected.canMessage || !draft.trim() || sending) return;
+    const text = draft.trim();
+    setSending(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/inbox/${selected.id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({ text }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { data?: { message: InboxMessage }; error?: string };
+      if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not send message");
+      setMessages((current) => [...current, payload.data!.message]);
+      setContacts((current) => current.map((contact) => contact.id === selected.id
+        ? { ...contact, preview: text, lastMessageAt: payload.data!.message.at }
+        : contact));
+      setDraft("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not send message");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!loaded) return <ActivityContentSkeleton />;
+  if (error && contacts.length === 0) return <p className="form-error" role="alert">{error}</p>;
 
   return (
-    <section aria-label="Unified social inbox">
-      {entries.length > 0 && (
-        <div className="inbox-stat-strip" aria-hidden={filter !== ""}>
-          <div className="inbox-total"><strong>{entries.length}</strong><span>recent events</span></div>
-          {FILTERS.slice(1).map(({ value, label }) => {
-            const count = counts.get(value) ?? 0;
-            if (count === 0) return null;
-            return (
-              <span className="inbox-stat-tile" key={value}><strong>{count}</strong> {label}</span>
-            );
-          })}
+    <section className={`conversation-desk ${selected ? "has-conversation" : ""}`} aria-label="Inbox conversations">
+      <aside className="conversation-roster" aria-label="Contacts">
+        <div className="conversation-roster-head">
+          <div><h2>All conversations</h2><span>{contacts.length} contact{contacts.length === 1 ? "" : "s"}</span></div>
+          <label className="conversation-search">
+            <Search size={17} aria-hidden="true" />
+            <span className="sr-only">Search contacts</span>
+            <input type="search" aria-label="Search contacts" placeholder="Search people or messages" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </label>
         </div>
-      )}
 
-      <div className="inbox-controls">
-        <div className="inbox-filter-row">
-          <span className="inbox-filter-label">Channel</span>
-          <div className="filter-chips" role="group" aria-label="Filter inbox by channel">
-          {(["all", "instagram", "facebook"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              className={`filter-chip ${channel === value ? "is-on" : ""}`}
-              aria-pressed={channel === value}
-              onClick={() => setChannel(value)}
-            >
-              {value === "all" ? "All channels" : value === "instagram" ? "Instagram" : "Facebook"}
-            </button>
-          ))}
+        {visibleContacts.length === 0 ? (
+          <div className="conversation-roster-empty">
+            <Inbox size={21} />
+            <p>{contacts.length ? "No contacts match this search." : "Contacts will appear here after they interact with your account."}</p>
           </div>
-        </div>
-        <div className="inbox-filter-row">
-          <span className="inbox-filter-label">Activity</span>
-          <div className="filter-chips" role="group" aria-label="Filter activity by type">
-          {FILTERS.map(({ value, label }) => (
-            <button
-              key={value || "all"}
-              type="button"
-              className={`filter-chip ${filter === value ? "is-on" : ""}`}
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
-            >
-              {label}
-            </button>
-          ))}
-          </div>
-        </div>
-        <p className="muted inbox-visible-count">{visibleEntries.length} event{visibleEntries.length === 1 ? "" : "s"} shown</p>
+        ) : (
+          <ul className="conversation-contact-list">
+            {visibleContacts.map((contact) => (
+              <li key={contact.id}>
+                <button type="button" className={selectedId === contact.id ? "is-selected" : ""} aria-label={`Open conversation with ${displayName(contact)}`} onClick={() => openConversation(contact.id)}>
+                  <SocialAvatar channel="instagram" name={displayName(contact)} src={contact.avatarUrl} />
+                  <span className="conversation-contact-copy">
+                    <span className="conversation-contact-topline"><strong>{displayName(contact)}</strong><time dateTime={contact.lastMessageAt}>{formatListTime(contact.lastMessageAt)}</time></span>
+                    <span className="conversation-preview">{contact.preview}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </aside>
+
+      <div className="conversation-panel">
+        {!selected ? (
+          <div className="conversation-blank"><span><Inbox size={24} /></span><h2>Your conversations live here</h2><p>Select any contact to read the history and reply.</p></div>
+        ) : (
+          <>
+            <header className="conversation-header">
+              <button className="conversation-back" type="button" aria-label="Back to contacts" onClick={() => setSelectedId(null)}><ArrowLeft size={19} /></button>
+              <SocialAvatar channel="instagram" name={displayName(selected)} src={selected.avatarUrl} />
+              <div><h2>{displayName(selected)}</h2><p>{selected.canMessage ? "Instagram · Available to reply" : "Instagram · Reply window closed"}</p></div>
+              <button className="icon-button" type="button" aria-label={`View details for ${displayName(selected)}`} onClick={() => setOpenContactId(selected.id)}><Info size={18} /></button>
+            </header>
+
+            <div className="conversation-messages" aria-label={`Conversation with ${displayName(selected)}`} aria-live="polite">
+              {conversationLoading ? (
+                <div className="conversation-loading">Loading conversation…</div>
+              ) : messages.length === 0 ? (
+                <div className="conversation-empty"><p>No messages with this contact yet.</p></div>
+              ) : messages.map((message) => (
+                <article className={`conversation-message is-${message.direction}`} key={message.id}>
+                  <p>{message.text}</p>
+                  <footer><time dateTime={message.at}>{formatMessageTime(message.at)}</time>{message.direction === "outbound" && <span>{message.status}</span>}</footer>
+                  {message.error && <small>{message.error}</small>}
+                </article>
+              ))}
+              <div ref={messageEndRef} />
+            </div>
+
+            <div className="conversation-compose">
+              {!selected.canMessage && <p className="conversation-window-note">The 24-hour Instagram reply window has closed. This contact can message you to reopen it.</p>}
+              {error && <p className="form-error" role="alert">{error}</p>}
+              <div className="conversation-compose-row">
+                <textarea
+                  aria-label={`Message ${displayName(selected)}`}
+                  placeholder={selected.canMessage ? "Write a reply…" : "Waiting for this contact to message again"}
+                  rows={2}
+                  maxLength={1000}
+                  value={draft}
+                  disabled={!selected.canMessage || sending}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); }
+                  }}
+                />
+                <button type="button" aria-label="Send message" onClick={() => void sendMessage()} disabled={!selected.canMessage || !draft.trim() || sending}>
+                  <Send size={18} /><span>{sending ? "Sending" : "Send"}</span>
+                </button>
+              </div>
+              <small>{draft.length}/1000 · Enter to send, Shift+Enter for a new line</small>
+            </div>
+          </>
+        )}
       </div>
 
-      {visibleEntries.length === 0 ? (
-        <div className="empty-state">
-          <span className="empty-icon"><Inbox size={20} /></span>
-          <h3>Nothing here yet</h3>
-          <p>Once an account is connected and people start commenting or messaging, every inbound event shows up here.</p>
-        </div>
-      ) : (
-        <div className="inbox-groups">
-          {groups.map((group) => (
-            <div className="inbox-group" key={group.heading + group.entries[0]?.id}>
-              <p className="inbox-day-heading">{group.heading}</p>
-              <ul className="inbox-list">
-                {group.entries.map((entry) => {
-                  const meta = EVENT_META[entry.type] ?? DEFAULT_META;
-                  const Icon = meta.icon;
-                  return (
-                    <li key={entry.id}>
-                      {entry.contactId ? (
-                        <button
-                          className="inbox-conversation-button"
-                          type="button"
-                          aria-label={`Open conversation with ${entry.from ?? "Instagram contact"}`}
-                          onClick={() => setOpenContactId(entry.contactId!)}
-                        >
-                      <div className={`inbox-type-icon tone-${meta.tone}`} aria-hidden>
-                        <Icon size={15} strokeWidth={2} />
-                      </div>
-                      <div className="inbox-body">
-                        <div className="inbox-row">
-                          <span className="inbox-label">{entry.label}</span>
-                          {entry.from && (
-                            <span className={entry.from.startsWith("@") ? "inbox-from" : "inbox-from is-id"}>
-                              {entry.from}
-                            </span>
-                          )}
-                          <time className="inbox-time" dateTime={entry.at}>{formatTime(entry.at)}</time>
-                        </div>
-                        {entry.summary && <p className="muted inbox-summary">{entry.summary}</p>}
-                      </div>
-                        </button>
-                      ) : (
-                        <div className="inbox-static-entry">
-                          <div className={`inbox-type-icon tone-${meta.tone}`} aria-hidden>
-                            <Icon size={15} strokeWidth={2} />
-                          </div>
-                          <div className="inbox-body">
-                            <div className="inbox-row">
-                              <span className="inbox-label">{entry.label}</span>
-                              {entry.from && <span className="inbox-from is-id">{entry.from}</span>}
-                              <time className="inbox-time" dateTime={entry.at}>{formatTime(entry.at)}</time>
-                            </div>
-                            {entry.summary && <p className="muted inbox-summary">{entry.summary}</p>}
-                          </div>
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
       {openContactId && <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} />}
     </section>
   );

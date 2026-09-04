@@ -29,20 +29,37 @@ describe("HeroSection", () => {
     expect(screen.queryByText("Linkar / reply flow")).toBeNull();
   });
 
-  it("keeps the full reply flow semantically available before enhancement", () => {
+  it("keeps the conversation preview semantically available before enhancement", () => {
     const markup = renderToStaticMarkup(<HeroSection />);
     render(<HeroSection />);
 
-    const scene = screen.getByRole("figure", { name: "A Linkar reply flow in motion" });
-    expect(scene.querySelector("ol")).not.toBeNull();
-    expect(screen.getByText("Can you send the guide?")).toBeTruthy();
-    expect(screen.getByText("Keyword found: GUIDE")).toBeTruthy();
-    expect(screen.getByText("Absolutely, I’ve sent the quick version. What are you hoping to improve first?")).toBeTruthy();
+    const scene = screen.getByRole("figure", { name: "A Linkar conversation preview" });
+    expect(scene.querySelector("ol")).toBeNull();
+    expect(screen.queryByText("Grab your guide")).toBeNull();
+    expect(screen.getByText("Do you have a website where I can see more?")).toBeTruthy();
+    expect(screen.getByText("Absolutely, here’s our website. Want to see pricing too?")).toBeTruthy();
+    expect(screen.getByText("Can I try it before I publish anything?")).toBeTruthy();
+    expect(screen.queryByText("Hey, here’s that guide you requested!")).toBeNull();
     expect(screen.getByText("Conversation moving")).toBeTruthy();
-    expect(markup).toContain("Can you send the guide?");
-    expect(markup).toContain("Keyword found: GUIDE");
-    expect(markup).toContain("Absolutely, I’ve sent the quick version. What are you hoping to improve first?");
+    expect(markup).not.toContain("Grab your guide");
+    expect(markup).toContain("Do you have a website where I can see more?");
+    expect(markup).toContain("Absolutely, here’s our website. Want to see pricing too?");
+    expect(markup).toContain("Can I try it before I publish anything?");
+    expect(markup).not.toContain("Hey, here’s that guide you requested!");
     expect(markup).toContain("Conversation moving");
+  });
+
+  it("marks the hero conversation as a staged Linkar motion sequence", () => {
+    render(<HeroSection />);
+
+    const scene = screen.getByRole("figure", { name: "A Linkar conversation preview" });
+    const stages = scene.querySelectorAll("[data-message-stage]");
+
+    expect(scene.getAttribute("data-brand-palette")).toBe("linkar");
+    expect(scene.getAttribute("data-conversation-motion")).toBe("looping");
+    expect(scene.getAttribute("data-message-visibility")).toBe("stacking-feed");
+    expect(scene.getAttribute("data-loop-continuity")).toBe("seamless");
+    expect(Array.from(stages, (stage) => stage.getAttribute("data-message-stage"))).toEqual(["1", "2", "3"]);
   });
 
   it("exposes an always-visible primary label and an independently staged secondary roll", () => {
@@ -55,6 +72,7 @@ describe("HeroSection", () => {
     expect(action.getAttribute("data-motion-stage")).toBe("action");
     expect(action.getAttribute("data-roll-primary")).toBe("native");
     expect(action.getAttribute("data-roll-secondary")).toBe("entering");
+    expect(action.getAttribute("data-contrast")).toBe("white-on-magenta");
     expect(action.parentElement?.getAttribute("data-action-visibility")).toBe("persistent");
     expect(action.parentElement?.getAttribute("data-motion-reduced")).toBe("final");
     expect(action.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
@@ -64,7 +82,7 @@ describe("HeroSection", () => {
     render(<HeroSection />);
 
     const image = screen.getByAltText("") as HTMLImageElement;
-    expect(image.getAttribute("src")).toContain("%2Fmarketing%2Flinkar-hero.webp");
+    expect(image.getAttribute("src")).toContain("%2Fmarketing%2Flinkar-hero-indian-relaxed.webp");
     expect(image.getAttribute("sizes")).toBe("100vw");
     expect(image.getAttribute("data-nimg")).toBe("fill");
   });

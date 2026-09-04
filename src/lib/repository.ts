@@ -26,7 +26,8 @@ export type OutboundDeliveryKind =
   | "BROADCAST_RECIPIENT"
   | "LEAD_EMAIL"
   | "LEAD_WEBHOOK"
-  | "FLOW_FOLLOWUP";
+  | "FLOW_FOLLOWUP"
+  | "MANUAL_INBOX";
 export type ParticipantState =
   | "COMMENT_MATCHED" | "OPENING_SENT" | "OPTED_IN" | "FOLLOW_REQUIRED"
   | "FOLLOW_VERIFIED" | "LINK_SENT" | "EXPIRED" | "FAILED";
@@ -738,6 +739,13 @@ export interface AutomationRepository {
   hasExecution(workspaceId: string, dedupeKey: string): Promise<boolean>;
   /** Lists the most recent FAILED outbound deliveries (newest first) for the dashboard. */
   listRecentOutboundFailures(workspaceId: string, limit: number): Promise<OutboundDeliveryRecord[]>;
+  /** Conversation deliveries for one exact Instagram identity, newest first. */
+  listOutboundDeliveriesForRecipient(
+    workspaceId: string,
+    instagramAccountId: string,
+    recipientId: string,
+    limit: number,
+  ): Promise<OutboundDeliveryRecord[]>;
   ensureOutboundDelivery(input: EnsureOutboundDeliveryInput): Promise<OutboundDeliveryRecord>;
   getOutboundDelivery(deliveryKey: string): Promise<OutboundDeliveryRecord | null>;
   /** Atomically creates/claims the delivery and reserves its monthly usage slot. */
@@ -837,6 +845,11 @@ export interface AutomationRepository {
     seenAt: string,
   ): Promise<TouchContactResult>;
   getContact(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<AutomationContactRecord | null>;
+  /** Resolves the distinct Instagram identities needed by read-heavy inbox views in one operation. */
+  getContactsByInstagramIdentities(
+    workspaceId: string,
+    identities: Array<{ instagramAccountId: string; igScopedUserId: string }>,
+  ): Promise<AutomationContactRecord[]>;
   setContactAwaitingEmail(
     workspaceId: string,
     instagramAccountId: string,

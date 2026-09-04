@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       pageName: page.pageName,
       status: page.status,
       connectedAt: page.connectedAt,
+      avatarUrl: `/api/facebook/avatar?pageId=${encodeURIComponent(page.pageId)}&profileId=${encodeURIComponent(page.pageId)}`,
     })),
   });
 }

@@ -1004,6 +1004,17 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       );
     },
 
+    async listOutboundDeliveriesForRecipient(workspaceId, instagramAccountId, recipientId, limit) {
+      return copy(
+        [...outboundDeliveries.values()]
+          .filter((record) => record.workspaceId === workspaceId
+            && record.instagramAccountId === instagramAccountId
+            && record.recipientId === recipientId)
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id))
+          .slice(0, Math.max(0, limit)),
+      );
+    },
+
     async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
       // Two concurrent callers can both observe the !existing branch and try
       // to insert; the second set() would win and bump the id. The Prisma
@@ -1442,6 +1453,20 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
       const record = id ? contacts.get(id) : undefined;
       return record ? copy(record) : null;
+    },
+
+    async getContactsByInstagramIdentities(workspaceId, identities) {
+      const result: AutomationContactRecord[] = [];
+      const seen = new Set<string>();
+      for (const identity of identities) {
+        const senderKey = `${workspaceId}:${identity.instagramAccountId}:${identity.igScopedUserId}`;
+        if (seen.has(senderKey)) continue;
+        seen.add(senderKey);
+        const id = contactIdsBySender.get(senderKey);
+        const record = id ? contacts.get(id) : undefined;
+        if (record) result.push(record);
+      }
+      return copy(result);
     },
 
     async setContactAwaitingEmail(workspaceId, instagramAccountId, igScopedUserId, automationId, atIso) {

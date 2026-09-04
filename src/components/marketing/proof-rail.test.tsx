@@ -11,6 +11,8 @@ describe("ProofRail", () => {
 
     const rail = screen.getByRole("region", { name: "Creator conversation examples" });
     expect(rail.id).toBe("proof");
+    expect(rail.getAttribute("data-brand-palette")).toBe("linkar");
+    expect(rail.getAttribute("data-strip")).toBe("creator-marquee");
     expect(within(rail).getByRole("heading", {
       level: 2,
       name: "Made for creators, marketers & brands.",

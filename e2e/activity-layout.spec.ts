@@ -45,8 +45,8 @@ test("campaign activity keeps the main column constrained with long captions", a
     };
     const main = rect(".activity-main");
     const side = rect(".activity-side");
-    const funnel = rect(".activity-funnel");
-    const banner = rect(".campaign-context");
+    const funnel = rect(".funnel-strip");
+    const banner = rect(".campaign-strip");
     return {
       mainWidth: main ? Math.round(main.width) : null,
       sideX: side ? Math.round(side.x) : null,

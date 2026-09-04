@@ -606,6 +606,7 @@ model OutboundDelivery {
 
   @@index([state, claimExpiresAt])
   @@index([workspaceId, kind, createdAt])
+  @@index([workspaceId, instagramAccountId, recipientId, createdAt])
   @@index([broadcastId, state])
 }
 

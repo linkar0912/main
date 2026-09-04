@@ -27,7 +27,7 @@ export function PublicPageReplyVariants({
         </div>
       ))}
       <button type="button" className="button button-secondary" disabled={variants.length >= 4} onClick={() => onChange([...variants, ""])}>
-        <Plus size={15} /> Add reply variation
+        <Plus size={15} /> {variants.length === 3 ? "Add final reply variation" : "Add reply variation"}
       </button>
       <small>Linkar rotates up to five public replies to keep responses natural.</small>
     </div>

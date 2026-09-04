@@ -1546,6 +1546,7 @@ function AutomationBuilderV1({
         {facebookPageId ? (
           <FacebookPagePreview
             pageName={facebookPages.find((p) => p.pageId === facebookPageId)?.pageName ?? "Your Page"}
+            pageAvatarUrl={facebookPages.find((p) => p.pageId === facebookPageId)?.avatarUrl}
             posterName="Your brand"
             postBody=""
             commentAuthor="A follower"

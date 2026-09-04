@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AtSign, Download, Search, UsersRound } from "lucide-react";
+import { Download, Search, UsersRound } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { ContactDetailModal } from "./contact-detail-modal";
 import { ContextHelpLink } from "./context-help-link";
 import { ContactsContentSkeleton } from "./skeleton";
+import { SocialAvatar } from "./social-avatar";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 type ContactRow = {
@@ -142,7 +143,7 @@ export function ContactsScreen() {
               {visible.map((contact) => (
                 <li key={contact.id} className="contact-row">
                   <div className="contact-primary">
-                    <span className="contact-avatar" aria-hidden>{contact.email ? <AtSign size={17} /> : <UsersRound size={17} />}</span>
+                    <SocialAvatar channel="instagram" name={contactName(contact)} src={`/api/contacts/${contact.id}/avatar`} />
                     <span><strong>{contactName(contact)}</strong><small>{[contact.email, ...contact.tags].filter(Boolean).join(" · ") || contact.state.toLowerCase()}</small></span>
                   </div>
                   <span className={`status-pill is-${contact.leadStatus.toLowerCase()}`}>{STATUS_LABELS[contact.leadStatus]}</span>

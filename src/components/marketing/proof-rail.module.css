@@ -2,37 +2,32 @@
   overflow: hidden;
   color: var(--marketing-text);
   background: var(--marketing-raised);
-  border-block: 1px solid var(--marketing-border);
+  border-block-start: 1px solid var(--marketing-border);
+  border-block-end: 1px solid var(--marketing-border);
 }
 
 .inner {
   display: grid;
-  grid-template-columns: minmax(220px, 20%) minmax(0, 1fr);
+  grid-template-columns: minmax(238px, 19%) minmax(0, 1fr);
   min-inline-size: 0;
 }
 
 .statement {
   display: flex;
   align-items: center;
-  min-block-size: clamp(112px, 8.2vw, 132px);
-  padding: 20px clamp(24px, 2.5vw, 44px);
+  min-block-size: clamp(88px, 6.4vw, 98px);
+  padding: 18px clamp(24px, 2.2vw, 34px);
   border-inline-end: 1px solid var(--marketing-border);
 }
 
-.workflowTag,
-.role,
-.exampleFooter {
-  font-family: var(--font-mono, ui-monospace, monospace);
-}
-
 .statement h2 {
-  max-inline-size: 23ch;
+  max-inline-size: 17ch;
   margin: 0;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(1.2rem, 1.45vw, 1.65rem);
-  font-weight: 850;
-  line-height: .98;
-  letter-spacing: -.06em;
+  font-size: clamp(1.12rem, 1.5vw, 1.4rem);
+  font-weight: 820;
+  line-height: 1.14;
+  letter-spacing: -.035em;
 }
 
 .ticker {
@@ -44,8 +39,8 @@
 .track {
   display: flex;
   inline-size: max-content;
-  min-block-size: clamp(112px, 8.2vw, 132px);
-  animation: proof-scroll 36s linear infinite;
+  min-block-size: clamp(88px, 6.4vw, 98px);
+  animation: proof-scroll 42s linear infinite;
 }
 
 .ticker:hover .track,
@@ -58,103 +53,109 @@
   flex: none;
 }
 
+/* Card anatomy: portrait slot on the left, three tight text rows on the right.
+   Cards are content-sized so every quote stays on a single line, and the rail
+   draws no divider between them. */
 .example {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: 68px minmax(0, 1fr);
-  grid-template-rows: auto 1fr auto;
-  column-gap: 14px;
-  flex: 0 0 clamp(430px, 36vw, 560px);
+  align-items: center;
+  column-gap: 16px;
   min-block-size: inherit;
-  padding: 18px clamp(20px, 2.3vw, 38px);
-  border-inline-end: 1px solid var(--marketing-border);
+  padding-inline: clamp(24px, 2.2vw, 34px);
 }
 
-.exampleHeader {
-  display: contents;
+.portraitFrame {
+  position: relative;
+  overflow: hidden;
+  inline-size: 68px;
+  block-size: 68px;
+  background: color-mix(in srgb, var(--proof-tint, #fff100) 26%, var(--marketing-raised));
+  border-radius: 14px;
 }
 
 .portrait {
   display: block;
-  grid-column: 1;
-  grid-row: 1 / span 2;
-  align-self: start;
-  inline-size: 68px;
-  block-size: 68px;
+  inline-size: 100%;
+  block-size: 100%;
   object-fit: cover;
-  border-radius: 14px;
-  filter: saturate(.92) contrast(1.02);
-  transition: transform 260ms cubic-bezier(.43, .195, .02, 1), filter 260ms ease;
+  transition: transform 320ms cubic-bezier(.43, .195, .02, 1);
 }
 
 .example:hover .portrait,
 .example:focus-within .portrait {
-  filter: saturate(1.04) contrast(1.04);
-  transform: rotate(-2deg) scale(1.04);
+  transform: scale(1.05);
+}
+
+.body {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .identity {
-  grid-column: 2;
-  grid-row: 1;
-  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.workflowTag {
-  margin: 0 0 3px;
-  color: var(--marketing-muted);
-  font-size: .53rem;
-  font-weight: 700;
-  letter-spacing: .08em;
+.name,
+.meta,
+.example blockquote,
+.exampleFooter {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  text-transform: uppercase;
 }
 
-.identity h3 {
+.name {
   margin: 0;
-  font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(1rem, 1.2vw, 1.22rem);
-  font-weight: 820;
-  line-height: 1;
-  letter-spacing: -.045em;
+  padding: 4px 8px;
+  color: var(--marketing-text);
+  font-size: .7rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: .015em;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--marketing-text) 8%, transparent);
+  border-radius: 5px;
 }
 
-.role {
-  margin: 4px 0 0;
+.meta {
+  margin: 0;
   color: var(--marketing-muted);
-  font-size: .55rem;
-  font-weight: 650;
-  letter-spacing: .02em;
+  font-size: .68rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: .055em;
+  white-space: nowrap;
 }
 
 .example blockquote {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: center;
-  max-inline-size: 42ch;
-  margin: 7px 0 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: clamp(.7rem, .8vw, .82rem);
-  font-weight: 650;
-  line-height: 1.18;
-  letter-spacing: -.02em;
+  margin: 0;
+  font-size: .72rem;
+  font-weight: 550;
+  line-height: 1.2;
+  letter-spacing: .01em;
+  white-space: nowrap;
 }
 
 .exampleFooter {
   display: flex;
-  grid-column: 2;
-  grid-row: 3;
   align-items: center;
-  justify-content: space-between;
-  padding-block-start: 5px;
+  gap: 9px;
+  margin: 0;
   color: var(--marketing-muted);
-  font-size: .51rem;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  font-size: .66rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: .07em;
 }
 
-.exampleFooter span:last-child {
-  color: var(--marketing-text);
-  font-size: .95rem;
+.exampleFooter span {
+  font-size: .9rem;
   letter-spacing: 0;
-  text-transform: none;
 }
 
 @keyframes proof-scroll {
@@ -165,12 +166,12 @@
 
 @media (min-width: 768px) and (max-width: 1023px) {
   .inner {
-    grid-template-columns: minmax(200px, 28%) minmax(0, 1fr);
+    grid-template-columns: minmax(200px, 27%) minmax(0, 1fr);
   }
 
   .statement,
   .track {
-    min-block-size: 118px;
+    min-block-size: 92px;
   }
 
   .statement {
@@ -178,19 +179,20 @@
   }
 
   .statement h2 {
-    max-inline-size: 19ch;
-    font-size: 1.35rem;
+    max-inline-size: 15ch;
+    font-size: 1.16rem;
   }
 
   .example {
     grid-template-columns: 60px minmax(0, 1fr);
-    flex-basis: 390px;
+    column-gap: 14px;
     padding-inline: 22px;
   }
 
-  .portrait {
+  .portraitFrame {
     inline-size: 60px;
     block-size: 60px;
+    border-radius: 12px;
   }
 }
 
@@ -200,38 +202,43 @@
   }
 
   .statement {
-    min-block-size: 96px;
-    padding: 24px 20px 22px;
+    min-block-size: 92px;
+    padding: 22px 20px;
     border-inline-end: 0;
     border-block-end: 1px solid var(--marketing-border);
   }
 
   .statement h2 {
     max-inline-size: 19ch;
-    font-size: clamp(1.45rem, 7.5vw, 1.95rem);
+    font-size: clamp(1.4rem, 7vw, 1.85rem);
   }
 
   .ticker,
   .track {
-    min-block-size: 174px;
+    min-block-size: 150px;
   }
 
   .example {
     grid-template-columns: 56px minmax(0, 1fr);
-    flex-basis: min(86vw, 330px);
-    min-block-size: 174px;
-    padding: 18px 20px;
+    column-gap: 13px;
+    min-block-size: 150px;
+    padding-inline: 20px;
   }
 
-  .portrait {
+  .portraitFrame {
     inline-size: 56px;
     block-size: 56px;
     border-radius: 12px;
   }
 
+  .identity {
+    flex-wrap: wrap;
+    gap: 6px 8px;
+  }
+
   .example blockquote {
-    max-inline-size: 31ch;
-    font-size: .7rem;
+    max-inline-size: 34ch;
+    white-space: normal;
   }
 }
 

@@ -90,6 +90,21 @@ describe("memory repository", () => {
     expect(contacts.map((contact) => contact.id)).toEqual([recent.record.id, older.record.id]);
   });
 
+  it("loads a requested set of inbox contacts in one repository operation", async () => {
+    const repository = createMemoryRepository();
+    const first = await repository.touchContact("workspace_a", "ig_123", "person_1", "2026-09-01T09:00:00.000Z");
+    const second = await repository.touchContact("workspace_a", "ig_456", "person_2", "2026-09-01T10:00:00.000Z");
+    await repository.touchContact("workspace_b", "ig_123", "person_1", "2026-09-01T11:00:00.000Z");
+
+    const contacts = await repository.getContactsByInstagramIdentities("workspace_a", [
+      { instagramAccountId: "ig_456", igScopedUserId: "person_2" },
+      { instagramAccountId: "ig_123", igScopedUserId: "person_1" },
+      { instagramAccountId: "ig_123", igScopedUserId: "missing" },
+    ]);
+
+    expect(contacts.map((contact) => contact.id).sort()).toEqual([first.record.id, second.record.id].sort());
+  });
+
   it("creates an owner membership when provisioning a workspace", async () => {
     const repository = createMemoryRepository();
 

@@ -51,6 +51,7 @@ describe("GET /api/activity", () => {
       label: "Facebook Page comment",
       account: "page_1",
       from: "Taylor",
+      avatarUrl: "/api/facebook/avatar?pageId=page_1&profileId=person_1",
       summary: "Interested",
     });
   });
@@ -81,11 +82,29 @@ describe("GET /api/activity", () => {
       channel: "instagram",
       contactId: contact.record.id,
       from: "@taylor",
+      avatarUrl: `/api/contacts/${contact.record.id}/avatar`,
       summary: "Can a person help me?",
     });
   });
 
-  it("resolves an Instagram handle for message events that only contain a scoped user id", async () => {
+  it("uses the persisted event handle without requesting a live profile", async () => {
+    await repository.recordWebhookEvent("workspace_1", {
+      providerEventId: "instagram_message_with_name",
+      eventType: "message.received",
+      receivedAt: "2026-08-30T06:01:00.000Z",
+      payload: { accountId: "ig_account_1", recipientId: "person_1", senderUsername: "probablymansi", text: "Hello" },
+    });
+    const externalFetch = vi.fn();
+    vi.stubGlobal("fetch", externalFetch);
+
+    const response = await GET(new Request("http://localhost/api/activity"));
+    const body = await response.json();
+
+    expect(body.data[0].from).toBe("@probablymansi");
+    expect(externalFetch).not.toHaveBeenCalled();
+  });
+
+  it("does not wait on Meta profile requests while loading the inbox", async () => {
     const key = randomBytes(32).toString("hex");
     process.env.META_TOKEN_ENCRYPTION_KEY = key;
     await repository.upsertConnection({
@@ -95,19 +114,21 @@ describe("GET /api/activity", () => {
       accessTokenEncrypted: sealSecret("access-token", key),
       status: "CONNECTED",
     });
+    await repository.touchContact("workspace_1", "ig_account_1", "person_1", "2026-08-30T06:00:00.000Z");
     await repository.recordWebhookEvent("workspace_1", {
-      providerEventId: "instagram_message_without_name",
+      providerEventId: "instagram_fast_inbox",
       eventType: "message.received",
       receivedAt: "2026-08-30T06:01:00.000Z",
       payload: { accountId: "ig_account_1", recipientId: "person_1", text: "Hello" },
     });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ username: "probablymansi" }), { status: 200 }),
-    ));
+    const externalFetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ username: "slow-profile" })));
+    vi.stubGlobal("fetch", externalFetch);
 
     const response = await GET(new Request("http://localhost/api/activity"));
     const body = await response.json();
 
-    expect(body.data[0].from).toBe("@probablymansi");
+    expect(response.status).toBe(200);
+    expect(body.data[0]).toMatchObject({ contactId: expect.any(String), from: "IG user ·rson_1" });
+    expect(externalFetch).not.toHaveBeenCalled();
   });
 });

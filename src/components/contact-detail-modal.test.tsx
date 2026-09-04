@@ -29,6 +29,9 @@ describe("ContactDetailModal", () => {
     render(<ContactDetailModal contactId="contact_fe5f55" onClose={() => undefined} />);
 
     expect(await screen.findByRole("heading", { name: "@tejastelkar9" })).toBeTruthy();
+    const dialog = screen.getByRole("dialog", { name: "Contact details" });
+    expect(dialog.classList.contains("contact-detail-drawer")).toBe(true);
+    expect(screen.getByRole("img", { name: "@tejastelkar9 profile photo" }).getAttribute("src")).toBe("/api/contacts/contact_fe5f55/avatar");
     expect(screen.queryByText("@fe5f55")).toBeNull();
   });
 });

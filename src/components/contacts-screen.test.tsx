@@ -57,6 +57,7 @@ describe("ContactsScreen", () => {
     render(<ContactsScreen />);
 
     expect(await screen.findByText("maya@example.com")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "maya@example.com profile photo" }).getAttribute("src")).toBe("/api/contacts/contact_1/avatar");
     fireEvent.change(screen.getByRole("searchbox", { name: "Search contacts" }), { target: { value: "probablymansi" } });
     expect(screen.queryByText("maya@example.com")).toBeNull();
     expect(screen.getByText("@probablymansi")).toBeTruthy();

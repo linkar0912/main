@@ -15,9 +15,8 @@ import {
   Users,
 } from "lucide-react";
 import { AppShell, useAccountIdentity } from "./app-shell";
-import { FacebookGlyph } from "./facebook-glyph";
-import { InstagramGlyph } from "./instagram-glyph";
 import { Skeleton } from "./skeleton";
+import { SocialAvatar } from "./social-avatar";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { formatDate } from "@/src/lib/format-date";
 import {
@@ -305,16 +304,7 @@ function ProfileBody({
             <div className="profile-channel-list">
               {connection ? (
                 <div className="connection-card">
-                  {connection.profilePictureUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- Meta serves avatars from its own CDN.
-                    <img
-                      className="avatar avatar-connection is-photo"
-                      src={connection.profilePictureUrl}
-                      alt={connection.username ? `@${connection.username} profile picture` : "Instagram profile picture"}
-                    />
-                  ) : (
-                    <span className="avatar avatar-connection" aria-hidden><InstagramGlyph size={20} brand /></span>
-                  )}
+                  <SocialAvatar channel="instagram" name={`@${connection.username}`} src={connection.profilePictureUrl ?? undefined} />
                   <div className="connection-card-id">
                     <strong>@{connection.username}</strong>
                     <span className="connection-status">
@@ -330,7 +320,7 @@ function ProfileBody({
               )}
               {facebookPage ? (
                 <div className="connection-card">
-                  <span className="avatar avatar-connection" aria-hidden><FacebookGlyph size={20} brand /></span>
+                  <SocialAvatar channel="facebook" name={facebookPage.pageName} src={facebookPage.avatarUrl} />
                   <div className="connection-card-id">
                     <strong>{facebookPage.pageName}</strong>
                     <span className="connection-status">
