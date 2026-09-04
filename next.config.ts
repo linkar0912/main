@@ -4,14 +4,21 @@ import type { NextConfig } from "next";
 // 'unsafe-inline' without a nonce-based middleware pipeline. Dev mode also
 // relies on eval for React refresh.
 const isProduction = process.env.NODE_ENV === "production";
+// Google Analytics 4 needs three separate allowances: the gtag loader script,
+// the collect beacons, and the tracking pixel fallback. Without all three the
+// tag silently fails - the loader 404s to a CSP violation and no hit is sent.
+const googleAnalyticsScript = "https://*.googletagmanager.com";
+const googleAnalyticsConnect =
+  "https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com";
+
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
+  `script-src 'self' 'unsafe-inline' ${googleAnalyticsScript}${isProduction ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
   // Instagram media thumbnails are loaded directly from Meta's CDN in the media picker.
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  `connect-src 'self' ${googleAnalyticsConnect}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

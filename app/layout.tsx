@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, JetBrains_Mono, Manrope } from "next/font/google";
+import { SiteAnalytics } from "@/src/components/site-analytics";
+import { getAnalyticsMeasurementId } from "@/src/lib/env";
 import "./globals.css";
 
 /* Brand type system - display carries headlines, sans carries the UI,
@@ -14,6 +16,8 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const gaMeasurementId = getAnalyticsMeasurementId();
+
   return (
     <html
       lang="en"
@@ -29,7 +33,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <SiteAnalytics measurementId={gaMeasurementId} />
+      </body>
     </html>
   );
 }

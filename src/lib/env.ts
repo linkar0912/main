@@ -308,3 +308,17 @@ export function getServerEnv(): ServerEnv {
     razorpay,
   };
 }
+
+/**
+ * GA4 measurement ID, read outside getServerEnv on purpose.
+ *
+ * The root layout renders on every prerendered page, and getServerEnv throws
+ * when production secrets are placeholders - which they are at image build
+ * time, since Coolify supplies them at runtime. Routing this through
+ * getServerEnv failed `next build` on every static page. It stays server-only
+ * rather than NEXT_PUBLIC_ so the value is read per request and one image can
+ * be pointed at a different property without a rebuild.
+ */
+export function getAnalyticsMeasurementId(): string {
+  return (process.env.GA_MEASUREMENT_ID ?? "").trim();
+}
