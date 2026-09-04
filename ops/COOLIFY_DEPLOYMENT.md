@@ -102,6 +102,9 @@ Environment values Compose requires (`?` means the deploy fails fast if unset):
 | `GOOGLE_REDIRECT_URI` | required when Google sign-in is enabled, must match the redirect URI registered in Google Cloud Console exactly |
 | `APP_URL`, `NEXT_PUBLIC_APP_URL`, `SUPPORT_EMAIL` | required |
 | `PUBLIC_SITE_URL` | marketing/legal origin; defaults to `https://linkar.in` |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | live account API credentials; store as Coolify secrets |
+| `RAZORPAY_WEBHOOK_SECRET` | separate high-entropy live webhook secret; never reuse the API secret |
+| `RAZORPAY_PLAN_*_ID` | six immutable live Plan IDs from the mapping below |
 
 `REDIS_URL` is assembled inside the Compose file from `VALKEY_PASSWORD`
 against the in-network hostname `valkey`. `DATABASE_URL`/`DIRECT_URL` are not
@@ -119,6 +122,84 @@ templates (Authentication → Emails → Templates) pointed at
 `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup` (and
 `type=recovery` for the reset template) rather than the default
 `{{ .ConfirmationURL }}`, which bypasses this app's confirm handler.
+
+### Razorpay subscription catalog
+
+Create these as six separate Plans in both Razorpay test mode and live mode.
+Razorpay amounts are integer currency subunits, so INR values below are paise.
+The customer-facing prices include applicable GST; do not configure an
+additional tax that increases the Checkout total above these amounts.
+
+| Linkar plan | Razorpay name | Amount | Period | Interval | Coolify variable |
+| --- | --- | ---: | --- | ---: | --- |
+| Creator monthly | Linkar Creator Monthly | `19900` | `monthly` | `1` | `RAZORPAY_PLAN_CREATOR_MONTHLY_ID` |
+| Creator annual | Linkar Creator Annual | `199000` | `yearly` | `1` | `RAZORPAY_PLAN_CREATOR_ANNUAL_ID` |
+| Growth monthly | Linkar Growth Monthly | `49900` | `monthly` | `1` | `RAZORPAY_PLAN_GROWTH_MONTHLY_ID` |
+| Growth annual | Linkar Growth Annual | `499000` | `yearly` | `1` | `RAZORPAY_PLAN_GROWTH_ANNUAL_ID` |
+| Agency monthly | Linkar Agency Monthly | `99900` | `monthly` | `1` | `RAZORPAY_PLAN_AGENCY_MONTHLY_ID` |
+| Agency annual | Linkar Agency Annual | `999000` | `yearly` | `1` | `RAZORPAY_PLAN_AGENCY_ANNUAL_ID` |
+
+Plans are immutable in Razorpay. Before each final **Create Plan** action,
+re-check name, INR amount, period, and interval. Record only the returned
+`plan_...` identifier in the matching environment variable. Test and live IDs
+must remain in separate configuration; production uses only live IDs.
+
+Run the secret-safe validation from a shell that already has the production
+environment loaded:
+
+```bash
+pnpm preflight:billing
+```
+
+The command prints the webhook URL and safe Plan IDs. It never prints the API
+secret or webhook secret. A production release must pass this preflight before
+the migration or application is deployed.
+
+### Razorpay webhook
+
+Deploy the migration and application first. Confirm
+`https://app.linkar.in/api/health` is healthy, then create the live webhook at:
+
+```text
+https://app.linkar.in/api/razorpay/webhook
+```
+
+Generate a new high-entropy secret (for example with `openssl rand -hex 32`),
+paste it directly into Razorpay and Coolify as `RAZORPAY_WEBHOOK_SECRET`, and
+never put it in a command transcript or repository file. Subscribe to the
+available subscription events from this set:
+
+- `subscription.authenticated`
+- `subscription.activated`
+- `subscription.charged`
+- `subscription.pending`
+- `subscription.halted`
+- `subscription.paused`
+- `subscription.resumed`
+- `subscription.cancelled`
+- `subscription.completed`
+- `subscription.expired`
+
+Razorpay may not show every lifecycle event in every account UI; select every
+event from the list that is offered. Linkar returns success for irrelevant
+events and grants paid access only from a valid activated, charged, or resumed
+subscription webhook.
+
+For rollback, deploy the previous application image without dropping the new
+billing tables. Disable the webhook or remove the complete Razorpay variable
+group if Checkout must be stopped. Existing paid entitlements remain in the
+database; do not reverse the additive migration during an incident.
+
+Controlled validation order:
+
+1. Create and exercise one test-mode Creator Monthly subscription.
+2. Confirm Checkout verification remains `processing` until its signed webhook.
+3. Confirm one webhook receipt, one audit transition, the Creator entitlement,
+   the paid-through date, and duplicate-event safety.
+4. Schedule cancellation and verify access persists through the paid period.
+5. Only with explicit approval immediately before payment, buy one live Creator
+   Monthly subscription from an owner-controlled Linkar workspace.
+6. Cancel that live subscription at period end unless it should be retained.
 
 ---
 

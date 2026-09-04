@@ -19,11 +19,12 @@ Linkar is an India-first Instagram and Facebook Page automation MVP. It provides
 - Current Instagram Business Login callback handling, webhook verification, inbound-only event normalization, BullMQ worker retries, and atomic execution claims.
 - Facebook Page OAuth with an explicit Page picker, permission validation, read-only webhook health, loop prevention, reply-once enforcement, daily quotas, and public comment replies.
 - A visual follow-gated Reel/post campaign builder: a matched comment triggers a public reply and a private opening message with an opt-in prompt, then Meta's own follower relationship gates a single private link delivery - with a participant activity view for diagnostics.
+- Workspace-owner billing with Razorpay Subscriptions, webhook-authoritative paid entitlements, monthly/annual Creator, Growth, and Agency plans, and paid-through cancellation handling.
 - AES-256-GCM encryption for stored Instagram and Facebook Page access tokens.
 - Public privacy, terms, data deletion, and support pages for Meta App Review.
 - Local demo mode when `DATABASE_URL` and `REDIS_URL` are omitted.
 
-Out of scope: AI, unsolicited DMs sent purely because someone followed the account, scraping, bulk cold messaging, WhatsApp, publishing, billing.
+Out of scope: AI, unsolicited DMs sent purely because someone followed the account, scraping, bulk cold messaging, WhatsApp, publishing, and Linkar-issued GST invoices or credit notes.
 
 ## Local demo (no database or worker)
 
@@ -69,6 +70,17 @@ pnpm worker
 Do not use `pnpm db:migrate` or `pnpm db:seed` in production. The complete
 Coolify/Cloudflare release order, rollback procedure, and owner-supplied values
 are in [`ops/COOLIFY_DEPLOYMENT.md`](ops/COOLIFY_DEPLOYMENT.md).
+
+For a billing-enabled release, load the nine Razorpay credentials/Plan IDs and
+run the secret-safe configuration check before deployment:
+
+```bash
+pnpm preflight:billing
+```
+
+The exact six-plan mapping and webhook setup are documented in the Coolify
+runbook. Paid access is activated only by a verified Razorpay webhook; the
+browser Checkout callback never grants an entitlement.
 
 Generate a token encryption key with:
 
