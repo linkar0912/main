@@ -23,11 +23,13 @@ describe("PricingPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("presents all four monthly plans with the launch limits", () => {
+  it("puts all four monthly plans first without the promotional hero", () => {
     render(<PricingPage />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "Start free. Stay because it works." })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Plans that grow with you." })).toBeTruthy();
     expect(screen.getByText("Every price includes applicable GST.")).toBeTruthy();
+    expect(screen.queryByLabelText("Free plan starts at zero rupees")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Your first 1,000 deliveries are on us." })).toBeNull();
 
     const expected = [
       ["Free plan", "₹0", "1,000 deliveries", "5 automations", "1 + 1 Instagram + Facebook", "1 seat"],
@@ -41,6 +43,20 @@ describe("PricingPage", () => {
       expect(within(plan).getByText(price)).toBeTruthy();
       for (const limit of limits) expect(within(plan).getByText(limit)).toBeTruthy();
       expect(within(plan).getByRole("link", { name: /start|choose/i }).getAttribute("href")).toBe("/signup");
+    }
+  });
+
+  it("compares every plan using the same operating limits", () => {
+    render(<PricingPage />);
+    const comparison = screen.getByRole("region", { name: "Compare every plan" });
+
+    for (const plan of ["Free", "Creator", "Growth", "Agency"]) {
+      expect(within(comparison).getByRole("columnheader", { name: plan })).toBeTruthy();
+    }
+
+    const deliveries = within(comparison).getByRole("row", { name: /Monthly deliveries/ });
+    for (const value of ["1,000", "5,000", "25,000", "50,000"]) {
+      expect(within(deliveries).getByRole("cell", { name: value })).toBeTruthy();
     }
   });
 
