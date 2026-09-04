@@ -35,6 +35,19 @@ describe("BillingSettings", () => {
     expect(screen.getAllByText("2 months free")).toHaveLength(3);
   });
 
+  it("keeps the current entitlement in a usage summary and reserves cards for upgrades", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => billingView() }));
+    await act(async () => { render(<BillingSettings />); });
+
+    const usage = await screen.findByRole("progressbar", { name: "Monthly delivery usage" });
+    expect(usage.getAttribute("aria-valuenow")).toBe("120");
+    expect(usage.getAttribute("aria-valuemax")).toBe("1000");
+    expect(screen.getByRole("article", { name: "Creator plan" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Growth plan" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Agency plan" })).toBeTruthy();
+    expect(screen.queryByRole("article", { name: "Free plan" })).toBeNull();
+  });
+
   it("lets only owners start Checkout and verifies its result", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => billingView() })

@@ -137,7 +137,7 @@ describe("SettingsScreen webhook health panel", () => {
     await act(async () => { render(<SettingsScreen />); });
     fireEvent.click(screen.getByRole("button", { name: /Billing/ }));
 
-    expect(await screen.findByRole("heading", { name: "Simple pricing. Room to grow." })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Plan and usage" })).toBeTruthy();
   });
 
   it("explains when the Instagram account belongs to another workspace", async () => {

@@ -165,7 +165,7 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.contact-row\s*{[^}]*transition:\s*none/);
     expect(css).not.toMatch(/\.contact-row:hover\s*{[^}]*background/);
     expect(css).toMatch(/\.connected-channels-total \.health-orb\s*{[^}]*flex:\s*0 0 8px[^}]*height:\s*8px[^}]*width:\s*8px/);
-    expect(css).toMatch(/\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(280px,\s*340px\) minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(380px,\s*430px\) minmax\(0,\s*1fr\)/);
     expect(css).toMatch(/\.conversation-messages\s*{[^}]*overflow-y:\s*auto/);
     expect(css).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
     expect(css).toMatch(/\.contact-row\s*{[^}]*border-bottom:\s*1px solid var\(--line\)/);

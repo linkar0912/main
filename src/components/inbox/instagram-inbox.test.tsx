@@ -13,6 +13,20 @@ const arjun = { ...aanya, id: "contact_2", username: "arjun", preview: "Pricing"
 describe("InstagramInbox", () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+  it("keeps everyday filters visible and reveals advanced filters on demand", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { contacts: [aanya], members: [] } }), { status: 200 })));
+    render(<InstagramInbox />);
+
+    expect(await screen.findByRole("searchbox", { name: "Search contacts" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Conversation status" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Sort conversations" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Assignment" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "More filters" }));
+    expect(screen.getByRole("combobox", { name: "Assignment" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Hide filters" }).getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("loads another roster page without duplicating contacts", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { contacts: [aanya], members: [], nextCursor: "page_2" } }), { status: 200 }))

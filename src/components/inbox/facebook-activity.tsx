@@ -80,13 +80,14 @@ export function FacebookActivity() {
   }, [items, page, query]);
 
   return <section className="facebook-activity" aria-label="Facebook Page activity">
-    <div className="facebook-activity-notice"><MessageCircle size={18} aria-hidden="true" /><p><strong>Public Page activity only.</strong> Facebook Messenger is not enabled.</p></div>
+    <header className="facebook-activity-heading"><div><h2>Page comments</h2><p>Comments collected from your connected Facebook Pages.</p></div><span>{loaded ? `${visible.length} loaded` : "Loading"}</span></header>
+    <div className="facebook-activity-notice"><MessageCircle size={18} aria-hidden="true" /><p><strong>Public comments only.</strong> Facebook Messenger is not enabled.</p></div>
     <div className="facebook-activity-tools">
       <label className="conversation-search"><Search size={17} aria-hidden="true" /><span className="sr-only">Search Facebook activity</span><input type="search" aria-label="Search Facebook activity" placeholder="Search comments or people" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       <select aria-label="Filter by Facebook Page" value={page} onChange={(event) => setPage(event.target.value)}><option value="">All loaded Pages</option>{pages.map((pageId) => <option key={pageId} value={pageId}>{pageId}</option>)}</select>
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}
-    {!loaded ? <p className="muted">Loading Facebook activity…</p> : visible.length === 0 ? <div className="facebook-activity-empty"><MessageCircle size={24} /><p>No Facebook Page comments match this view.</p></div> : <ol className="facebook-activity-list">
+    {!loaded ? <div className="facebook-activity-loading" role="status" aria-label="Loading Facebook activity"><span /><span /><span /></div> : visible.length === 0 ? <div className="facebook-activity-empty"><MessageCircle size={24} /><p>No Facebook Page comments match this view.</p></div> : <ol className="facebook-activity-list">
       {visible.map((item) => <li key={item.id}>
         <SocialAvatar channel="facebook" name={item.from ?? "Facebook commenter"} src={item.avatarUrl} />
         <div><div className="facebook-activity-topline"><strong>{item.from ?? "Facebook commenter"}</strong><time dateTime={item.at}>{new Date(item.at).toLocaleString()}</time></div><p>{item.summary ?? "Comment received"}</p><small>{item.label}{item.account ? ` · Page ${item.account}` : ""}</small></div>

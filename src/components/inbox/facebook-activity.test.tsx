@@ -9,6 +9,14 @@ const second = { ...first, id: "fb_2", account: "page_2", from: "Arjun", summary
 describe("FacebookActivity", () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+  it("presents loading as a compact feed status", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+    render(<FacebookActivity />);
+
+    expect(screen.getByRole("heading", { name: "Page comments" })).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Loading Facebook activity" })).toBeTruthy();
+  });
+
   it("renders public Page activity without messaging controls and paginates", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { items: [first], nextCursor: "next" } }), { status: 200 }))

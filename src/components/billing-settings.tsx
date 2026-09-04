@@ -133,45 +133,48 @@ export function BillingSettings() {
   if (!view) return <section className="panel billing-shell" aria-label="Billing"><p className="form-error" role="alert">{error}</p></section>;
 
   const plans = [FREE_BILLING_PLAN, ...view.catalog];
+  const currentPlan = plans.find((plan) => plan.key === view.entitlementPlanKey) ?? FREE_BILLING_PLAN;
+  const usageMaximum = currentPlan.monthlyDeliveryLimit;
+  const usageValue = Math.min(view.deliveriesUsed, usageMaximum);
   return (
     <section className="billing-shell" aria-labelledby="billing-title">
-      <header className="billing-heading panel">
+      <header className="billing-heading">
         <div>
-          <p className="eyebrow">Plan & usage</p>
-          <h2 id="billing-title">Simple pricing. Room to grow.</h2>
-          <p className="muted">Every price includes applicable GST. Annual plans give you two months free.</p>
+          <h2 id="billing-title">Plan and usage</h2>
+          <p className="muted">Choose the capacity that fits your conversations. GST is included.</p>
         </div>
-        <div className="billing-current" aria-label="Current billing summary">
-          <CreditCard size={18} />
-          <span><small>Current plan</small><strong>{view.entitlementPlanKey.charAt(0).toUpperCase() + view.entitlementPlanKey.slice(1)}</strong></span>
-          <span><small>Deliveries this month</small><strong>{view.deliveriesUsed.toLocaleString("en-IN")}</strong></span>
-        </div>
+        <fieldset className="billing-period" aria-label="Billing period">
+          <legend>Billing period</legend>
+          <label><input type="radio" name="billing-period" value="MONTHLY" checked={interval === "MONTHLY"} onChange={() => setInterval("MONTHLY")} /> Monthly</label>
+          <label><input type="radio" name="billing-period" value="ANNUAL" checked={interval === "ANNUAL"} onChange={() => setInterval("ANNUAL")} /> Annual</label>
+          <span>Save 2 months</span>
+        </fieldset>
       </header>
+
+      <section className="billing-current panel" aria-label="Current billing summary">
+        <div className="billing-current-plan"><span><CreditCard size={18} /></span><div><small>Current plan</small><strong>{currentPlan.name}</strong></div></div>
+        <div className="billing-usage-copy"><small>Monthly deliveries</small><strong>{view.deliveriesUsed.toLocaleString("en-IN")} <span>of {usageMaximum.toLocaleString("en-IN")}</span></strong></div>
+        <div className="billing-usage-meter" role="progressbar" aria-label="Monthly delivery usage" aria-valuemin={0} aria-valuemax={usageMaximum} aria-valuenow={usageValue}><span style={{ inlineSize: `${Math.min(100, (usageValue / usageMaximum) * 100)}%` }} /></div>
+        <p>{Math.max(0, usageMaximum - view.deliveriesUsed).toLocaleString("en-IN")} deliveries remaining</p>
+      </section>
 
       {!view.canManage && <p className="notice-banner notice-warning">Only the workspace owner can change billing. You can still review plans and usage.</p>}
       {!view.billingConfigured && <p className="notice-banner notice-warning">Secure checkout is being configured. Plan changes are temporarily unavailable.</p>}
       {message && <p className="notice-banner notice-success" role="status"><Check size={17} /> {message}</p>}
       {error && <p className="notice-banner notice-warning" role="alert">{error}</p>}
 
-      <fieldset className="billing-period" aria-label="Billing period">
-        <legend>Billing period</legend>
-        <label><input type="radio" name="billing-period" value="MONTHLY" checked={interval === "MONTHLY"} onChange={() => setInterval("MONTHLY")} /> Monthly</label>
-        <label><input type="radio" name="billing-period" value="ANNUAL" checked={interval === "ANNUAL"} onChange={() => setInterval("ANNUAL")} /> Annual</label>
-      </fieldset>
-
       <div className="billing-plan-grid">
-        {plans.map((plan) => {
-          const isFree = plan.key === "free";
+        {view.catalog.map((plan) => {
           const current = view.entitlementPlanKey === plan.key;
           const price = interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise;
           return (
-            <article className={`billing-plan ${current ? "is-current" : ""}`} key={plan.key}>
+            <article className={`billing-plan ${current ? "is-current" : ""} ${plan.key === "growth" ? "is-featured" : ""}`} aria-label={`${plan.name} plan`} key={plan.key}>
               <div className="billing-plan-top">
                 <h3>{plan.name}</h3>
-                {current && <span className="billing-plan-current"><Sparkles size={13} /> Current</span>}
+                {current ? <span className="billing-plan-current"><Sparkles size={13} /> Current</span> : plan.key === "growth" ? <span className="billing-plan-best">Best fit</span> : null}
               </div>
               <p className="billing-price"><strong>{formatRupees(price)}</strong><span>/{interval === "ANNUAL" ? "year" : "month"}</span></p>
-              {interval === "ANNUAL" && !isFree && <p className="billing-saving">2 months free</p>}
+              <p className="billing-saving">{interval === "ANNUAL" ? "2 months free" : "Billed monthly"}</p>
               <div className="billing-capacity" aria-label={`${plan.name} limits`}>
                 <span><Gauge size={14} /><strong>{plan.monthlyDeliveryLimit.toLocaleString("en-IN")}</strong> deliveries</span>
                 <span><strong>{plan.automationLimit}</strong> automations</span>
@@ -179,8 +182,8 @@ export function BillingSettings() {
                 <span><strong>{plan.memberLimit}</strong> {plan.memberLimit === 1 ? "seat" : "seats"}</span>
               </div>
               <ul>{plan.features.map((feature) => <li key={feature}><Check size={14} />{feature}</li>)}</ul>
-              <button className={`button ${current ? "button-secondary" : "button-primary"}`} type="button" disabled={isFree || current || !view.canManage || !view.billingConfigured || Boolean(busyPlan)} onClick={() => !isFree && void choosePlan(plan.key)}>
-                {current ? "Current plan" : isFree ? "Included" : busyPlan === plan.key ? "Opening…" : `Choose ${plan.name}`}
+              <button className={`button ${current ? "button-secondary" : "button-primary"}`} type="button" disabled={current || !view.canManage || !view.billingConfigured || Boolean(busyPlan)} onClick={() => void choosePlan(plan.key)}>
+                {current ? "Current plan" : busyPlan === plan.key ? "Opening…" : `Choose ${plan.name}`}
               </button>
             </article>
           );
