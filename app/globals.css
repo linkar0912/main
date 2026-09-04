@@ -3047,9 +3047,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .conversation-desk { background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); display: grid; grid-template-columns: minmax(380px, 430px) minmax(0, 1fr); height: max(650px, calc(100svh - 230px)); min-height: 0; overflow: hidden; }
 .conversation-roster { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .conversation-roster-head { border-bottom: 1px solid var(--line); padding: var(--space-5); }
-.conversation-roster-head > div { align-items: baseline; display: flex; justify-content: space-between; margin-bottom: var(--space-4); }
+.conversation-roster-head > div:first-child { align-items: baseline; display: flex; justify-content: space-between; margin-bottom: var(--space-4); }
 .conversation-roster-head h2 { font-size: 1rem; margin: 0; }
-.conversation-roster-head > div span { color: var(--muted); font-size: var(--type-meta); }
+.conversation-roster-head > div:first-child span { color: var(--muted); font-size: var(--type-meta); }
 .conversation-filter-stack { display: grid; gap: 9px; }
 .conversation-primary-filters { display: grid; gap: 7px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
 .conversation-primary-filters select,
