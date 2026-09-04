@@ -41,6 +41,38 @@ enum AdminAuditPhase {
   FAILURE
 }
 
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum BillingSubscriptionStatus {
+  CREATED
+  AUTHENTICATED
+  ACTIVE
+  PENDING
+  HALTED
+  PAUSED
+  CANCELLED
+  COMPLETED
+  EXPIRED
+}
+
+enum BillingCheckoutState {
+  CREATING
+  READY
+  VERIFIED
+  FAILED
+  EXPIRED
+}
+
+enum BillingWebhookState {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
 enum AdminDeletionTargetKind {
   USER
   WORKSPACE
@@ -189,6 +221,9 @@ model Workspace {
   entitlement       WorkspaceEntitlement?
   usagePeriods      WorkspaceUsagePeriod[]
   usageReservations WorkspaceUsageReservation[]
+  billingSubscription BillingSubscription?
+  billingCheckoutAttempts BillingCheckoutAttempt[]
+  billingWebhookEvents BillingWebhookEvent[]
 
   @@index([status, createdAt])
   @@index([updatedAt, id])
@@ -238,8 +273,74 @@ model PlanDefinition {
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
   workspaceEntitlements    WorkspaceEntitlement[]
+  billingSubscriptions     BillingSubscription[]
+  billingCheckoutAttempts  BillingCheckoutAttempt[]
 
   @@index([isActive, key])
+}
+
+model BillingSubscription {
+  id                     String                    @id
+  workspaceId            String                    @unique
+  planId                 String
+  interval               BillingInterval
+  providerSubscriptionId String?                   @unique
+  providerCustomerId     String?
+  providerPlanId         String
+  status                 BillingSubscriptionStatus @default(CREATED)
+  providerStatus         String
+  checkoutVerifiedAt     DateTime?
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean                   @default(false)
+  pendingPlanId          String?
+  pendingInterval        BillingInterval?
+  lastProviderEventAt    DateTime?
+  lastProviderEventId    String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  workspace              Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan                   PlanDefinition            @relation(fields: [planId], references: [id])
+
+  @@index([status, currentPeriodEnd])
+  @@index([planId])
+}
+
+model BillingCheckoutAttempt {
+  id                     String               @id
+  workspaceId            String
+  planId                 String
+  interval               BillingInterval
+  state                  BillingCheckoutState @default(CREATING)
+  providerSubscriptionId String?              @unique
+  expiresAt              DateTime
+  failureCode            String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  workspace              Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan                   PlanDefinition       @relation(fields: [planId], references: [id])
+
+  @@index([workspaceId, state, expiresAt])
+  @@index([planId])
+}
+
+model BillingWebhookEvent {
+  id                String              @id
+  eventId           String              @unique
+  eventType         String
+  entityId          String?
+  workspaceId       String?
+  providerCreatedAt DateTime
+  payloadHash       String
+  state             BillingWebhookState @default(RECEIVED)
+  failureCode       String?
+  receivedAt        DateTime            @default(now())
+  processedAt       DateTime?
+  workspace         Workspace?          @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([entityId, providerCreatedAt])
+  @@index([workspaceId, receivedAt])
+  @@index([state, receivedAt])
 }
 
 model WorkspaceEntitlement {
