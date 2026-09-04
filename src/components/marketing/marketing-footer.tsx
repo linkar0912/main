@@ -34,8 +34,12 @@ const columns = [
   {
     title: "Legal",
     links: [
-      ["Privacy", "/privacy"],
       ["Terms", "/terms"],
+      ["Acceptable use", "/acceptable-use"],
+      ["Privacy", "/privacy"],
+      ["Cookies", "/cookies"],
+      ["Data processing", "/data-processing"],
+      ["Service providers", "/service-providers"],
       ["Data deletion", "/data-deletion"],
     ],
   },

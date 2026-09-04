@@ -34,12 +34,19 @@ describe("PublicPage", () => {
     expect(screen.getByRole("contentinfo").getAttribute("data-compact")).toBe("true");
   });
 
+  it("opens the document on its effective date above the title", () => {
+    render(<PublicPage currentPath="/privacy" title="Privacy" intro="How Linkar handles your data." effectiveDate="1 January 2027"><p>Policy content</p></PublicPage>);
+
+    expect(screen.getByText("Effective date: 1 January 2027")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Privacy" })).toBeTruthy();
+  });
+
   it("links the three legal documents and identifies the current one", () => {
     render(<PublicPage currentPath="/privacy" title="Privacy" intro="How Linkar handles your data."><p>Policy content</p></PublicPage>);
 
     const navigation = within(screen.getByRole("navigation", { name: "Legal documents" }));
-    expect(navigation.getByRole("link", { name: "Privacy" }).getAttribute("aria-current")).toBe("page");
-    expect(navigation.getByRole("link", { name: "Terms" }).getAttribute("href")).toBe("/terms");
+    expect(navigation.getByRole("link", { name: "Privacy policy" }).getAttribute("aria-current")).toBe("page");
+    expect(navigation.getByRole("link", { name: "Terms of service" }).getAttribute("href")).toBe("/terms");
     expect(navigation.getByRole("link", { name: "Data deletion" }).getAttribute("href")).toBe("/data-deletion");
   });
 

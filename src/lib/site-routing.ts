@@ -32,6 +32,10 @@ const MARKETING_ROUTE_PREFIXES = [
   "/pricing",
   "/privacy",
   "/terms",
+  "/acceptable-use",
+  "/cookies",
+  "/data-processing",
+  "/service-providers",
   "/data-deletion",
   "/support",
 ] as const;
