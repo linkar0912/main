@@ -64,6 +64,7 @@ describe("MarketingPage", () => {
     expect(destinations.filter((href) => href === "/signup").length).toBeGreaterThanOrEqual(2);
     expect(destinations).toEqual(expect.arrayContaining([
       "/login",
+      "/pricing",
       "/#product",
       "/#how-it-works",
       "/#faq",
@@ -72,6 +73,8 @@ describe("MarketingPage", () => {
     const navigation = screen.getByRole("navigation", { name: "Primary" });
     expect(within(navigation).getByRole("link", { name: "Product" }).getAttribute("href"))
       .toBe("/#product");
+    expect(within(navigation).getByRole("link", { name: "Pricing" }).getAttribute("href"))
+      .toBe("/pricing");
   });
 
   it("connects every same-page Resources link to a rendered section", () => {

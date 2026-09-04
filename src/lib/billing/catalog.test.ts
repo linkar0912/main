@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BILLING_PLANS, getBillingPlan, resolveLinkarPlanFromRazorpayId, resolveRazorpayPlanId } from "./catalog";
+import { BILLING_PLANS, FREE_BILLING_PLAN, getBillingPlan, resolveLinkarPlanFromRazorpayId, resolveRazorpayPlanId } from "./catalog";
 
 const configuredEnv = {
   razorpay: {
@@ -16,6 +16,19 @@ const configuredEnv = {
 };
 
 describe("Linkar billing catalog", () => {
+  it("keeps the public free tier in the shared catalog", () => {
+    expect(FREE_BILLING_PLAN).toMatchObject({
+      key: "free",
+      monthlyPaise: 0,
+      annualPaise: 0,
+      monthlyDeliveryLimit: 1_000,
+      automationLimit: 5,
+      instagramConnectionLimit: 1,
+      facebookConnectionLimit: 1,
+      memberLimit: 1,
+    });
+  });
+
   it("keeps the launch pricing and generous delivery limits server-authoritative", () => {
     expect(BILLING_PLANS.creator).toMatchObject({
       monthlyPaise: 19_900,

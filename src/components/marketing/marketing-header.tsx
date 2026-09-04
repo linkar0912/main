@@ -11,16 +11,18 @@ import styles from "./marketing-header.module.css";
 
 const navigationItems = [
   { label: "Product", href: "/#product" },
+  { label: "Pricing", href: "/pricing" },
   { label: "How it works", href: "/#how-it-works" },
   { label: "Resources", href: "/#resources" },
 ] as const;
 
 const mobileNavigationItems = [
   navigationItems[0],
+  navigationItems[1],
   { label: "Instagram", href: "/#channels" },
   { label: "Facebook Pages", href: "/#channels" },
   { label: "Workflows", href: "/#workflows" },
-  ...navigationItems.slice(1),
+  ...navigationItems.slice(2),
 ] as const;
 
 const useCaseItems = [
@@ -243,6 +245,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
               </button>
             </li>
             <li><Link href={marketingHref(navigationItems[1].href, siteOrigin)}>{navigationItems[1].label}</Link></li>
+            <li><Link href={marketingHref(navigationItems[2].href, siteOrigin)}>{navigationItems[2].label}</Link></li>
             <li className={styles.solutionsTrigger}>
               <button
                 ref={resourcesButtonRef}

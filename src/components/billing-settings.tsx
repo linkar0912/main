@@ -4,6 +4,7 @@ import { Check, CreditCard, Gauge, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { openRazorpaySubscriptionCheckout } from "@/src/lib/client/razorpay-checkout";
+import { FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
 import type { BillingCatalogPlan, BillingInterval, BillingPlanKey } from "@/src/lib/billing/types";
 
 type BillingView = {
@@ -19,19 +20,6 @@ type BillingView = {
     pendingPlanId?: string | null;
   };
 };
-
-const FREE_PLAN = {
-  key: "free",
-  name: "Free",
-  monthlyPaise: 0,
-  annualPaise: 0,
-  memberLimit: 1,
-  automationLimit: 5,
-  instagramConnectionLimit: 1,
-  facebookConnectionLimit: 1,
-  monthlyDeliveryLimit: 1_000,
-  features: ["Core automations", "Instagram and Facebook"],
-} as const;
 
 function formatRupees(paise: number): string {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(paise / 100);
@@ -144,7 +132,7 @@ export function BillingSettings() {
   if (!view && !error) return <section className="panel billing-shell" aria-label="Billing"><p className="muted">Loading billing…</p></section>;
   if (!view) return <section className="panel billing-shell" aria-label="Billing"><p className="form-error" role="alert">{error}</p></section>;
 
-  const plans = [FREE_PLAN, ...view.catalog];
+  const plans = [FREE_BILLING_PLAN, ...view.catalog];
   return (
     <section className="billing-shell" aria-labelledby="billing-title">
       <header className="billing-heading panel">

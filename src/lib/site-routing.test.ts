@@ -39,6 +39,10 @@ describe("site host routing", () => {
       target: "marketing",
       pathname: "/privacy",
     });
+    expect(resolveHostRedirect("app.linkar.in", "/pricing")).toEqual({
+      target: "marketing",
+      pathname: "/pricing",
+    });
     expect(resolveHostRedirect("app.linkar.in", "/data-deletion/status/code-123")).toEqual({
       target: "marketing",
       pathname: "/data-deletion/status/code-123",
@@ -72,7 +76,7 @@ describe("site host routing", () => {
   });
 
   it("classifies the homepage, its anchors, and the public legal pages as marketing", () => {
-    for (const href of ["/", "/#top", "/#product", "/privacy", "/terms", "/data-deletion", "/support", "/support/status"]) {
+    for (const href of ["/", "/#top", "/#product", "/pricing", "/privacy", "/terms", "/data-deletion", "/support", "/support/status"]) {
       expect(isMarketingPath(href), href).toBe(true);
     }
     for (const href of ["/login", "/signup", "/dashboard", "/help", "/automations", "/admin"]) {
@@ -86,6 +90,7 @@ describe("site host routing", () => {
     // so the header bounced the visitor back to the login page they were on.
     expect(marketingHref("/#product", "https://linkar.in")).toBe("https://linkar.in/#product");
     expect(marketingHref("/#top", "https://linkar.in")).toBe("https://linkar.in/#top");
+    expect(marketingHref("/pricing", "https://linkar.in")).toBe("https://linkar.in/pricing");
     expect(marketingHref("/privacy", "https://linkar.in")).toBe("https://linkar.in/privacy");
     expect(marketingHref("/support", "https://linkar.in/")).toBe("https://linkar.in/support");
   });

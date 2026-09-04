@@ -1,6 +1,21 @@
 import type { ServerEnv } from "@/src/lib/env";
 import type { BillingCatalogPlan, BillingInterval, BillingPlanKey } from "./types";
 
+export const FREE_BILLING_PLAN = {
+  key: "free",
+  name: "Free",
+  monthlyPaise: 0,
+  annualPaise: 0,
+  memberLimit: 1,
+  automationLimit: 5,
+  instagramConnectionLimit: 1,
+  facebookConnectionLimit: 1,
+  sequenceLimit: 0,
+  monthlyBroadcastLimit: 0,
+  monthlyDeliveryLimit: 1_000,
+  features: ["Core automations", "Instagram and Facebook"],
+} as const;
+
 export const BILLING_PLANS = {
   creator: {
     key: "creator",
