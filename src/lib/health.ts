@@ -2,6 +2,7 @@ import { getServerEnv } from "./env";
 
 type DependencyState = "ok" | "not_configured" | "error";
 type IntegrationState = "configured" | "not_configured";
+type CapabilityState = "enabled" | "disabled";
 type HealthChecker = () => Promise<void>;
 
 export type HealthCheckers = {
@@ -28,6 +29,9 @@ export type Health = {
   integrations: {
     instagram: IntegrationState;
     facebook: IntegrationState;
+  };
+  capabilities: {
+    followGatedCampaigns: CapabilityState;
   };
 };
 
@@ -75,7 +79,7 @@ function integrationState(appId?: string, appSecret?: string): IntegrationState 
 }
 
 export async function getHealth(checkers: HealthCheckers = {}): Promise<Health> {
-  const { databaseUrl, redisUrl, metaAppId, metaAppSecret, facebookAppId, facebookAppSecret } = getServerEnv();
+  const { databaseUrl, redisUrl, metaAppId, metaAppSecret, facebookAppId, facebookAppSecret, followGatedCampaignsEnabled } = getServerEnv();
   const [database, redis] = await Promise.all([
     getDependencyState(Boolean(databaseUrl), checkers.database ?? checkDatabase),
     getDependencyState(Boolean(redisUrl), checkers.redis ?? (() => checkRedis(redisUrl!))),
@@ -96,6 +100,9 @@ export async function getHealth(checkers: HealthCheckers = {}): Promise<Health> 
     integrations: {
       instagram: integrationState(metaAppId, metaAppSecret),
       facebook: integrationState(facebookAppId, facebookAppSecret),
+    },
+    capabilities: {
+      followGatedCampaigns: followGatedCampaignsEnabled ? "enabled" : "disabled",
     },
   };
 }

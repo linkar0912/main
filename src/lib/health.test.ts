@@ -16,6 +16,7 @@ function stubNoIntegrationCredentials() {
 }
 
 const NO_INTEGRATIONS = { instagram: "not_configured", facebook: "not_configured" } as const;
+const DISABLED_CAPABILITIES = { followGatedCampaigns: "disabled" } as const;
 
 describe("getHealth", () => {
   it("reports demo mode with unconfigured dependencies", async () => {
@@ -33,6 +34,7 @@ describe("getHealth", () => {
         redis: "not_configured",
       },
       integrations: NO_INTEGRATIONS,
+      capabilities: DISABLED_CAPABILITIES,
     });
   });
 
@@ -56,6 +58,7 @@ describe("getHealth", () => {
         redis: "ok",
       },
       integrations: NO_INTEGRATIONS,
+      capabilities: DISABLED_CAPABILITIES,
     });
   });
 
@@ -78,6 +81,7 @@ describe("getHealth", () => {
         redis: "not_configured",
       },
       integrations: NO_INTEGRATIONS,
+      capabilities: DISABLED_CAPABILITIES,
     });
   });
 
@@ -100,6 +104,7 @@ describe("getHealth", () => {
         redis: "ok",
       },
       integrations: NO_INTEGRATIONS,
+      capabilities: DISABLED_CAPABILITIES,
     });
   });
 
@@ -125,6 +130,7 @@ describe("getHealth", () => {
         redis: "ok",
       },
       integrations: NO_INTEGRATIONS,
+      capabilities: DISABLED_CAPABILITIES,
     });
     expect(JSON.stringify(health)).not.toContain("postgresql://");
     expect(JSON.stringify(health)).not.toContain("secret");
@@ -203,6 +209,17 @@ describe("getHealth integrations", () => {
 
     expect(JSON.stringify(health)).not.toContain("super-secret-value");
     expect(JSON.stringify(health)).not.toContain("ig-app-id");
+  });
+});
+
+describe("getHealth capabilities", () => {
+  it.each([["true", "enabled"], ["false", "disabled"]] as const)("reports follow-gated campaigns as %s", async (configured, expected) => {
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("REDIS_URL", "");
+    vi.stubEnv("FOLLOW_GATED_CAMPAIGNS_ENABLED", configured);
+    const health = await getHealth();
+    expect(health.capabilities.followGatedCampaigns).toBe(expected);
+    expect(JSON.stringify(health.capabilities)).not.toContain("FOLLOW_GATED_CAMPAIGNS_ENABLED");
   });
 });
 

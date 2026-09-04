@@ -116,6 +116,7 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
           <p className="eyebrow">Workload</p>
           <h2>Application posture</h2>
           <dl className="admin-system-metrics">
+            <div><dt>Follow-gated campaigns</dt><dd>{snapshot.capabilities.followGatedCampaigns}</dd></div>
             <div><dt>Stuck claims</dt><dd>{snapshot.stuckClaims ?? "—"}</dd></div>
             <div><dt>Webhooks / hour</dt><dd>{snapshot.webhookThroughput.lastHour ?? "—"}</dd></div>
             <div><dt>Deletion queued</dt><dd>{snapshot.deletionJobs.queued ?? "—"}</dd></div>

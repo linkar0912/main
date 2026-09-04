@@ -228,7 +228,10 @@ curl --fail --show-error https://app.linkar.in/api/health
 ```
 
 Require `status: "ok"`, `mode: "configured"`, `dependencies.database: "ok"`
-and `dependencies.redis: "ok"`. Inspect worker logs for a clean Redis
+and `dependencies.redis: "ok"`. Also require
+`capabilities.followGatedCampaigns: "enabled"`; if it is disabled, set
+`FOLLOW_GATED_CAMPAIGNS_ENABLED=true` on both the web and worker services and
+redeploy them together. Inspect worker logs for a clean Redis
 connection, then exercise one controlled webhook event before re-enabling
 customer automations.
 
