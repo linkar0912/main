@@ -21,6 +21,15 @@ function mergeItems(current: FacebookActivityItem[], incoming: FacebookActivityI
   return [...current, ...incoming.filter((item) => !ids.has(item.id))];
 }
 
+async function fetchActivityPage(cursor?: string) {
+  const params = new URLSearchParams({ type: "facebook.comment.created", limit: "50" });
+  if (cursor) params.set("cursor", cursor);
+  const response = await fetch(`/api/activity?${params}`);
+  const payload = (await response.json().catch(() => ({}))) as { data?: { items: FacebookActivityItem[]; nextCursor?: string }; error?: string };
+  if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load Facebook activity");
+  return payload.data;
+}
+
 export function FacebookActivity() {
   const [items, setItems] = useState<FacebookActivityItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string>();
@@ -32,14 +41,10 @@ export function FacebookActivity() {
 
   async function load(cursor?: string) {
     if (cursor) setLoadingMore(true);
-    const params = new URLSearchParams({ type: "facebook.comment.created", limit: "50" });
-    if (cursor) params.set("cursor", cursor);
     try {
-      const response = await fetch(`/api/activity?${params}`);
-      const payload = (await response.json().catch(() => ({}))) as { data?: { items: FacebookActivityItem[]; nextCursor?: string }; error?: string };
-      if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load Facebook activity");
-      setItems((current) => cursor ? mergeItems(current, payload.data!.items) : payload.data!.items);
-      setNextCursor(payload.data.nextCursor);
+      const data = await fetchActivityPage(cursor);
+      setItems((current) => cursor ? mergeItems(current, data.items) : data.items);
+      setNextCursor(data.nextCursor);
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load Facebook activity");
@@ -49,7 +54,24 @@ export function FacebookActivity() {
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let active = true;
+    void fetchActivityPage()
+      .then((data) => {
+        if (!active) return;
+        setItems(data.items);
+        setNextCursor(data.nextCursor);
+        setError("");
+      })
+      .catch((caught: unknown) => {
+        if (!active) return;
+        setError(caught instanceof Error ? caught.message : "Could not load Facebook activity");
+      })
+      .finally(() => {
+        if (active) setLoaded(true);
+      });
+    return () => { active = false; };
+  }, []);
 
   const pages = useMemo(() => Array.from(new Set(items.map((item) => item.account).filter((value): value is string => Boolean(value)))).sort(), [items]);
   const visible = useMemo(() => {

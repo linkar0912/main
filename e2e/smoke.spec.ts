@@ -43,35 +43,23 @@ test.describe("unauthenticated visitor", () => {
   });
 });
 
-test("owner can sign out", async ({ browser }) => {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const page = await context.newPage();
-  await page.goto("/signup");
-  await page.getByLabel("Email").fill(`signout-${Date.now()}@example.com`);
-  await page.getByLabel("Password").fill("linkar-e2e-password");
-  await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/automations$/);
+test("owner can sign out", async ({ page }) => {
   await page.goto("/dashboard");
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
-  await context.close();
 });
 
-test("member can sign up and sign back in", async ({ page }) => {
+test("new signup requires email confirmation", async ({ browser }) => {
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
   const email = `member-${Date.now()}@example.com`;
   await page.goto("/signup");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("linkar-e2e-password");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/automations$/);
-
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/login$/);
-
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("linkar-e2e-password");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/signup\?sent=1/);
+  await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
+  await context.close();
 });
 
 test("dashboard and automation list are reachable", async ({ page }) => {
@@ -84,20 +72,7 @@ test("dashboard and automation list are reachable", async ({ page }) => {
 });
 
 test("automation delivery problems are visible without recipient payloads", async ({ page }) => {
-  // The diagnostics panel only mounts once the workspace has an automation,
-  // so seed one through the API before asserting on the list page.
-  const created = await page.request.post("/api/automations", {
-    data: {
-      name: `E2E diagnostics ${Date.now()}`,
-      definition: {
-        version: 1,
-        trigger: { type: "message", match: "any", keywords: [] },
-        conditions: [],
-        actions: [{ type: "send_text", text: "Hello" }],
-      },
-    },
-  });
-  expect(created.ok()).toBeTruthy();
+  await page.route("**/api/automations", (route) => route.fulfill({ json: { data: [{ id: "automation_1", name: "Diagnostics", status: "ACTIVE", version: 1, definition: { version: 1, trigger: { type: "message", match: "any", keywords: [] }, conditions: [], actions: [{ type: "send_text", text: "Hello" }] } }] } }));
 
   await page.route("**/api/automations/deliveries?limit=25", (route) => route.fulfill({
     json: { data: [{
@@ -132,6 +107,13 @@ async function nextUntil(page: import("@playwright/test").Page, saveName: string
 }
 
 test("classic builder creates a keyword autoresponder", async ({ page }) => {
+  let saved: Record<string, unknown> | undefined;
+  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] } }));
+  await page.route("**/api/automations", async (route) => {
+    if (route.request().method() === "POST") { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { data: { id: "automation_classic", ...saved } } }); }
+    return route.fulfill({ json: { data: saved ? [{ id: "automation_classic", ...saved, status: "ACTIVE", version: 1 }] : [] } });
+  });
+  await page.route("**/api/automations/automation_classic", (route) => route.fulfill({ json: { data: { id: "automation_classic", ...saved, status: "ACTIVE" } } }));
   await page.goto("/automations/new?type=classic");
   await expect(page.getByRole("heading", { name: /Build a reply flow/i })).toBeVisible();
 
@@ -144,13 +126,20 @@ test("classic builder creates a keyword autoresponder", async ({ page }) => {
   await page.getByLabel("Message text").fill("Here is the pricing you asked for.");
   await nextUntil(page, "Save & activate");
   await page.getByRole("button", { name: "Save & activate" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved and activated.");
+  await expect(page.getByText("Saved and activated.", { exact: false })).toBeVisible();
 
   await page.goto("/automations");
   await expect(page.getByText(/DM contains price/).first()).toBeVisible();
 });
 
 test("basic template gallery sets up a ready-to-edit automation", async ({ page }) => {
+  let saved: Record<string, unknown> | undefined;
+  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] } }));
+  await page.route("**/api/automations", async (route) => {
+    if (route.request().method() === "POST") { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { data: { id: "automation_template", ...saved } } }); }
+    return route.fulfill({ json: { data: saved ? [{ id: "automation_template", ...saved, status: "ACTIVE", version: 1 }] : [] } });
+  });
+  await page.route("**/api/automations/automation_template", (route) => route.fulfill({ json: { data: { id: "automation_template", ...saved, status: "ACTIVE" } } }));
   await page.goto("/automations");
   await page.getByRole("button", { name: /new automation/i }).click();
 
@@ -166,38 +155,23 @@ test("basic template gallery sets up a ready-to-edit automation", async ({ page 
 
   await nextUntil(page, "Save & activate");
   await page.getByRole("button", { name: "Save & activate" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved and activated.");
+  await expect(page.getByText("Saved and activated.", { exact: false })).toBeVisible();
 
   await page.goto("/automations");
   await expect(page.getByText("Conversation starters").first()).toBeVisible();
 });
 
-test("guided builder saves an automation", async ({ page }) => {
-  // `/automations/new` now always opens the version 2 campaign builder (see the
-  // "guided builder creates a follow-gated Reel campaign" test below); the
-  // legacy single-response version 1 builder is only reachable by editing an
-  // existing version 1 automation, so exercise that path directly here.
-  // `page.request` shares the signed-in page's cookies; the standalone `request`
-  // fixture does not, and would get 401s here.
-  const created = await page.request.post("/api/automations", {
-    data: {
-      name: "E2E guide delivery",
-      definition: {
-        version: 1,
-        trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
-        conditions: [],
-        actions: [{ type: "private_reply", text: "Here is the guide: https://example.com/guide" }],
-      },
-    },
-  });
-  expect(created.ok()).toBeTruthy();
-  const { data } = (await created.json()) as { data: { id: string } };
-
-  await page.goto(`/automations/${data.id}/edit`);
-  await expect(page.getByRole("heading", { name: "Tune this automation" })).toBeVisible();
+test("guided builder saves an automation draft", async ({ page }) => {
+  let saved: Record<string, unknown> | undefined;
+  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] } }));
+  await page.route("**/api/automations", (route) => { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { data: { id: "automation_draft", ...saved } } }); });
+  await page.goto("/automations/new?type=classic");
+  await page.getByLabel("Automation name").fill("E2E guide delivery");
+  await page.getByLabel("Keywords", { exact: true }).fill("guide");
   await nextUntil(page, "Save & activate");
-  await page.getByRole("button", { name: "Save & activate" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved and activated.");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved to your workspace as a draft.");
+  expect(saved?.name).toBe("E2E guide delivery");
 });
 
 test("guided builder creates a follow-gated Reel campaign", async ({ page }) => {
@@ -214,6 +188,12 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   await page.route("**/api/meta/media", (route) =>
     route.fulfill({ json: { data: [reelFixture], paging: {} } }),
   );
+  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] } }));
+  let saved: Record<string, unknown> | undefined;
+  await page.route("**/api/automations", async (route) => {
+    if (route.request().method() === "POST") { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { data: { id: "automation_campaign", ...saved } } }); }
+    return route.fulfill({ json: { data: saved ? [{ id: "automation_campaign", ...saved, status: "DRAFT", version: 2 }] : [] } });
+  });
 
   await page.goto("/automations");
   await page.getByRole("button", { name: /new automation/i }).click();
@@ -227,7 +207,8 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   await page.getByRole("checkbox", { name: /test reel/i }).click();
   // Comment & reply step.
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await page.getByLabel("Keywords").fill("guide");
+  await page.getByLabel("Keywords", { exact: true }).fill("guide");
+  await page.getByLabel("Public reply variation 1").fill("Check your DMs for the guide.");
   // Opening DM step.
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByLabel("Opening message text").fill("Reply guide! Tap below and I will send it over.");

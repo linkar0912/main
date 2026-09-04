@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { expect, test as setup } from "@playwright/test";
 
 const STORAGE_STATE = ".playwright/auth.json";
@@ -49,6 +50,14 @@ async function confirmEmailByAddress(email: string): Promise<void> {
 // this signed-in session through storageState instead of signing up itself,
 // keeping the suite inside the per-IP signup rate limit.
 setup("create the workspace owner", async ({ page }) => {
+  const migrationUrl = readEnvVar("DIRECT_URL") ?? readEnvVar("DATABASE_URL");
+  if (migrationUrl) {
+    execFileSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "deploy"], {
+      cwd: process.cwd(),
+      env: { ...process.env, DATABASE_URL: migrationUrl },
+      stdio: "pipe",
+    });
+  }
   const email = `owner-${Date.now()}@example.com`;
   const password = "linkar-e2e-password";
 

@@ -60,7 +60,7 @@ test("creates, reopens, activates, and renders a Facebook Page comment automatio
   await page.getByLabel("Daily send limit").fill("100");
   await advance(page);
   await expect(page.getByText(/Facebook · Page comments · Linkar Demo Page/)).toBeVisible();
-  await page.getByRole("button", { name: /save automation/i }).click();
+  await page.getByRole("button", { name: "Save draft" }).click();
   await expect.poll(() => savedBody).not.toBeNull();
 
   if (!savedBody) throw new Error("The automation save request was not captured");
@@ -77,7 +77,7 @@ test("creates, reopens, activates, and renders a Facebook Page comment automatio
     data: [{ id: "execution_1", provider: "FACEBOOK", surface: "COMMENT", connectionName: "Linkar Demo Page", eventType: "comment.created", result: "SENT", replyPreview: "Happy to help with those details.", createdAt: "2026-09-01T01:00:00.000Z" }],
   } }));
   await page.goto("/automations/automation_fb/activity");
-  await expect(page.getByText("Public Page reply")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Campaign activity" })).toBeVisible();
   await expect(page.getByText("Happy to help with those details.")).toBeVisible();
   await expect(page.getByText(/do not open a Messenger conversation/i)).toBeVisible();
 });

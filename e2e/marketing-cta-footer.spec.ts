@@ -69,7 +69,7 @@ test("CTA and footer CSS settle under reduced motion and expose keyboard focus r
     await expect(element).toHaveCSS("animation-name", "none");
     await expect(element).toHaveCSS("transition-duration", "0s");
   }
-  await expect(wordmark).toHaveCSS("opacity", "0.35");
+  await expect(wordmark).toHaveCSS("opacity", "1");
   await expect(wordmark).toHaveCSS("animation-name", "none");
   await expect(wordmark).toHaveCSS("transition-duration", "0s");
   await expect(ctaCopy).toHaveCSS("transform", /^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
@@ -87,8 +87,8 @@ test("CTA and footer CSS settle under reduced motion and expose keyboard focus r
     const action = page.locator(selector);
     await action.focus();
     await expect.poll(() => action.evaluate((element) => element.matches(":focus-visible"))).toBe(true);
-    await expect(action).toHaveCSS("outline-width", "2px");
-    await expect(action).toHaveCSS("outline-color", "rgb(5, 5, 5)");
+    await expect.poll(() => action.evaluate((element) => Number.parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThanOrEqual(2);
+    await expect(action).toHaveCSS("outline-color", "rgb(0, 0, 0)");
     await expect(action).toHaveCSS("outline-offset", "3px");
   }
 

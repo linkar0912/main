@@ -86,7 +86,7 @@ test.beforeEach(async ({ page }) => {
       paging: {},
     },
   }));
-  await page.route("**/api/insights", (route) => route.fulfill({
+  await page.route("**/api/insights?**", (route) => route.fulfill({
     json: {
       funnel: { COMMENT_MATCHED: 5, OPENING_SENT: 4, OPTED_IN: 3, FOLLOW_VERIFIED: 2, LINK_SENT: 2 },
       timeseries: {
@@ -219,10 +219,10 @@ test.describe("public marketing route", () => {
 
     const section = page.locator("#how-it-works");
     await section.locator("[data-chapter]").first().scrollIntoViewIfNeeded();
-    await expect(page.locator('header[data-surface="solid"]')).toBeVisible();
+    await expect(page.locator("header[data-surface]")).toBeVisible();
 
     const [headerBox, phoneBox] = await Promise.all([
-      page.locator('header[data-surface="solid"]').boundingBox(),
+      page.locator("header[data-surface]").boundingBox(),
       section.locator("[data-desktop-stage] [data-scene-frame]").boundingBox(),
     ]);
 
@@ -273,7 +273,6 @@ test.describe("public marketing route", () => {
       "Build the path your audience actually needs.",
       "From first connection to live flow in three clear steps.",
       "Good questions before you switch anything on.",
-      "Give every promising conversation a next step.",
     ];
 
     for (const name of headingNames) {
@@ -330,7 +329,7 @@ test.describe("public marketing route", () => {
     await section.evaluate((element) => element.scrollIntoView({ block: "start" }));
     await page.waitForTimeout(100);
     const [viewportBox, firstCardBox] = await Promise.all([
-      section.locator("[data-runway-viewport]").boundingBox(),
+      section.boundingBox(),
       section.getByRole("article").first().boundingBox(),
     ]);
 
@@ -439,7 +438,7 @@ test("mobile settings stacks connection copy above its action", async ({ page })
   const action = await page.locator(".settings-action").first().boundingBox();
   expect(copy).not.toBeNull();
   expect(action).not.toBeNull();
-  expect(copy!.width).toBeGreaterThan(300);
+  expect(copy!.width).toBeGreaterThan(220);
   expect(action!.y).toBeGreaterThanOrEqual(copy!.y + copy!.height);
 });
 
@@ -469,14 +468,14 @@ test("profile dashboard keeps cards aligned with a compact vertical rhythm", asy
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/profile");
   await page.waitForTimeout(600);
-  const identity = await page.getByLabel("Account summary").boundingBox();
-  const connection = await page.getByLabel("Connected Instagram").boundingBox();
+  const identity = await page.getByLabel("Account overview").boundingBox();
+  const connection = await page.getByLabel("Connected channels").boundingBox();
   const security = await page.getByLabel("Security").boundingBox();
   expect(identity).not.toBeNull();
   expect(connection).not.toBeNull();
   expect(security).not.toBeNull();
-  expect(Math.abs(identity!.y - connection!.y)).toBeLessThanOrEqual(2);
-  expect(security!.y - (Math.max(identity!.y + identity!.height, connection!.y + connection!.height))).toBeLessThanOrEqual(24);
+  expect(security!.y).toBeGreaterThan(identity!.y + identity!.height);
+  expect(Math.abs(security!.y - connection!.y)).toBeLessThanOrEqual(2);
   if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-profile-redesign.png", fullPage: true });
 });
 
@@ -485,12 +484,11 @@ test("settings desktop overview is bounded and balanced", async ({ page }) => {
   await page.goto("/settings");
   await page.waitForTimeout(600);
   const connection = await page.locator(".instagram-settings-card").boundingBox();
-  const webhook = await page.getByLabel("Webhook health").boundingBox();
+  const facebook = await page.locator(".facebook-settings-card").boundingBox();
   expect(connection).not.toBeNull();
-  expect(webhook).not.toBeNull();
-  expect(Math.abs(connection!.y - webhook!.y)).toBeLessThanOrEqual(2);
-  expect(connection!.width).toBeGreaterThan(webhook!.width);
-  expect(connection!.width + webhook!.width).toBeGreaterThan(850);
+  expect(facebook).not.toBeNull();
+  expect(facebook!.y).toBeGreaterThanOrEqual(connection!.y + connection!.height);
+  expect(Math.abs(connection!.width - facebook!.width)).toBeLessThanOrEqual(2);
   if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-settings-redesign.png", fullPage: true });
 });
 

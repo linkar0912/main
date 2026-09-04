@@ -44,12 +44,13 @@ test("builder exposes image actions, token hints, suggestions, and follow-ups", 
   await page.route("**/api/automations/suggest-keywords", (route) =>
     route.fulfill({ json: { data: ["kurti", "price", "collab"] } }));
   await page.goto("/automations/new?type=classic");
+  await page.getByLabel("Automation name").fill("Feature coverage flow");
 
   // Keyword suggestion chips render from the endpoint.
   const chips = page.getByTestId("keyword-suggestions");
   await expect(chips.getByRole("button", { name: "+ kurti" })).toBeVisible();
   await chips.getByRole("button", { name: "+ kurti" }).click();
-  await expect(page.getByLabel("Keywords")).toHaveValue(/kurti/);
+  await expect(page.getByLabel("Keywords", { exact: true })).toHaveValue(/kurti/);
 
   // Switch to a DM trigger, then move to the action step
   // (Trigger → Condition → Action).
@@ -59,6 +60,7 @@ test("builder exposes image actions, token hints, suggestions, and follow-ups", 
 
   // Personalization hint under the message text.
   await expect(page.getByText(/Personalize with/i)).toBeVisible();
+  await page.getByLabel("Message text").fill("Here are the details you requested.");
 
   // Follow-up nudge editor on DM triggers.
   await page.getByRole("button", { name: "Add a follow-up nudge" }).click();
@@ -82,10 +84,12 @@ test("capture fields support answer types and stop words", async ({ page }) => {
   await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [] } }));
   await page.goto("/automations/new?type=classic");
 
+  await page.getByLabel("Automation name").fill("Capture fields test");
   await page.getByLabel("Trigger source").selectOption("message");
   // Walk to the email collector step (Condition → Action → Email collector).
   await advance(page);
   await advance(page);
+  await page.getByLabel("Message text").fill("Tell us where to send the details.");
   await advance(page);
   await page.getByRole("checkbox", { name: /ask for the person/i }).check();
   await page.waitForTimeout(150);
@@ -100,13 +104,14 @@ test("capture fields support answer types and stop words", async ({ page }) => {
   await expect(page.getByText(/Stop-words message/i)).toBeVisible();
 });
 
-test("broadcasts screen offers win-back segments", async ({ page }) => {
+test("broadcasts screen offers eligible contact segments", async ({ page }) => {
   await page.route("**/api/broadcasts", (route) =>
     route.fulfill({ json: { data: [] } }, ));
   await page.goto("/automations/broadcasts");
 
   const segment = page.getByLabel("Segment");
-  await expect(segment.getByRole("option", { name: "Win-back: quiet 7+ days" })).toHaveCount(1);
-  await segment.selectOption("inactive_30d");
-  await expect(page.getByText(/Meta's last 24 hours/i)).toBeVisible();
+  await expect(segment.getByRole("option", { name: "Leads with a captured email" })).toHaveCount(1);
+  await expect(segment.getByRole("option", { name: "All known contacts" })).toHaveCount(1);
+  await segment.selectOption("all_contacts");
+  await expect(page.getByText(/last 24 hours receive a DM/i)).toBeVisible();
 });
