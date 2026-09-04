@@ -118,7 +118,7 @@ export function buildConversation(
       id: delivery.id,
       direction: "outbound",
       text,
-      at: delivery.sentAt ?? delivery.createdAt,
+      at: delivery.createdAt,
       status: deliveryStatus(delivery.state),
       ...(delivery.lastError ? { error: delivery.lastError } : {}),
     }];

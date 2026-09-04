@@ -28,7 +28,18 @@ export async function GET(request: Request) {
   const typeFilter = params.get("type") ?? undefined;
 
   const repository = getRepository();
-  const events = await repository.listRecentWebhookEvents(session.workspaceId, limit, typeFilter || undefined);
+  let page;
+  try {
+    page = await repository.listWebhookEventsPage(session.workspaceId, {
+      limit,
+      ...(typeFilter ? { eventType: typeFilter } : {}),
+      ...(params.get("cursor") ? { cursor: params.get("cursor")! } : {}),
+    });
+  } catch (error) {
+    const invalidCursor = error instanceof Error && error.message === "invalid_cursor";
+    return NextResponse.json({ error: invalidCursor ? "invalid_cursor" : "activity_unavailable" }, { status: invalidCursor ? 400 : 500 });
+  }
+  const events = page.records;
   const identities = events.flatMap((event) => {
     if (event.eventType.startsWith("facebook.")) return [];
     const accountId = typeof event.payload.accountId === "string" ? event.payload.accountId : undefined;
@@ -86,5 +97,5 @@ export async function GET(request: Request) {
         summary: text.length > 0 ? (text.length > 120 ? `${text.slice(0, 120)}…` : text) : undefined,
       };
     });
-  return NextResponse.json({ data });
+  return NextResponse.json({ data: { items: data, nextCursor: page.nextCursor } });
 }

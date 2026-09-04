@@ -14,7 +14,7 @@ vi.mock("@/src/lib/security/secrets", () => ({ unsealSecret: () => "plain-token"
 vi.mock("@/src/lib/meta/client", () => ({ MetaClient: class { sendDirectMessage = mocks.sendDirectMessage; } }));
 vi.mock("@/src/lib/automation/outbound-delivery", () => ({ executeOutboundDelivery: mocks.executeOutboundDelivery }));
 
-import { GET, POST } from "./route";
+import { GET, PATCH, POST } from "./route";
 
 const current = new Date().toISOString();
 const contact = {
@@ -27,6 +27,8 @@ const contact = {
   tags: [],
   score: 0,
   leadStatus: "NEW",
+  inboxStatus: "OPEN",
+  inboxFavorite: false,
   lastSeenAt: current,
   createdAt: current,
   updatedAt: current,
@@ -56,8 +58,8 @@ describe("/api/inbox/[contactId]", () => {
   it("returns the selected contact's ordered conversation", async () => {
     mocks.getRepository.mockReturnValue({
       getContactById: vi.fn().mockResolvedValue(contact),
-      listOutboundDeliveriesForRecipient: vi.fn().mockResolvedValue([]),
-      listRecentWebhookEvents: vi.fn().mockResolvedValue([inbound]),
+      listOutboundDeliveriesForRecipientPage: vi.fn().mockResolvedValue({ records: [] }),
+      listInboundEventsForRecipient: vi.fn().mockResolvedValue({ records: [inbound] }),
     });
 
     const response = await GET(new Request("http://localhost/api/inbox/contact_1"), context());
@@ -70,7 +72,7 @@ describe("/api/inbox/[contactId]", () => {
   it("sends and persists a manual reply inside the messaging window", async () => {
     const repository = {
       getContactById: vi.fn().mockResolvedValue(contact),
-      listRecentWebhookEvents: vi.fn().mockResolvedValue([inbound]),
+      listInboundEventsForRecipient: vi.fn().mockResolvedValue({ records: [inbound] }),
       listConnections: vi.fn().mockResolvedValue([{ igUserId: "ig_1", status: "CONNECTED", accessTokenEncrypted: "sealed" }]),
     };
     mocks.getRepository.mockReturnValue(repository);
@@ -96,7 +98,7 @@ describe("/api/inbox/[contactId]", () => {
   it("rejects a manual reply when no recent inbound message opened the window", async () => {
     mocks.getRepository.mockReturnValue({
       getContactById: vi.fn().mockResolvedValue(contact),
-      listRecentWebhookEvents: vi.fn().mockResolvedValue([]),
+      listInboundEventsForRecipient: vi.fn().mockResolvedValue({ records: [] }),
     });
 
     const response = await POST(new Request("http://localhost/api/inbox/contact_1", {
@@ -107,5 +109,19 @@ describe("/api/inbox/[contactId]", () => {
 
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: expect.stringContaining("24-hour") });
+  });
+
+  it("updates one inbox state operation", async () => {
+    const updateInboxState = vi.fn().mockResolvedValue({ ...contact, inboxFavorite: true });
+    mocks.getRepository.mockReturnValue({ getContactById: vi.fn().mockResolvedValue(contact), updateInboxState });
+
+    const response = await PATCH(new Request("http://localhost/api/inbox/contact_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "set_favorite", favorite: true }),
+    }), context());
+
+    expect(response.status).toBe(200);
+    expect(updateInboxState).toHaveBeenCalledWith("workspace_1", "contact_1", { action: "set_favorite", favorite: true });
   });
 });

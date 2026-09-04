@@ -45,7 +45,7 @@ describe("GET /api/activity", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.data[0]).toMatchObject({
+    expect(body.data.items[0]).toMatchObject({
       channel: "facebook",
       type: "facebook.comment.created",
       label: "Facebook Page comment",
@@ -78,7 +78,7 @@ describe("GET /api/activity", () => {
     const response = await GET(new Request("http://localhost/api/activity"));
     const body = await response.json();
 
-    expect(body.data[0]).toMatchObject({
+    expect(body.data.items[0]).toMatchObject({
       channel: "instagram",
       contactId: contact.record.id,
       from: "@taylor",
@@ -100,7 +100,7 @@ describe("GET /api/activity", () => {
     const response = await GET(new Request("http://localhost/api/activity"));
     const body = await response.json();
 
-    expect(body.data[0].from).toBe("@probablymansi");
+    expect(body.data.items[0].from).toBe("@probablymansi");
     expect(externalFetch).not.toHaveBeenCalled();
   });
 
@@ -128,7 +128,7 @@ describe("GET /api/activity", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.data[0]).toMatchObject({ contactId: expect.any(String), from: "IG user ·rson_1" });
+    expect(body.data.items[0]).toMatchObject({ contactId: expect.any(String), from: "IG user ·rson_1" });
     expect(externalFetch).not.toHaveBeenCalled();
   });
 });
