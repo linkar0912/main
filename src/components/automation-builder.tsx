@@ -1716,9 +1716,9 @@ function AutomationBuilderV2({
     if (step === 0) {
       if (!name.trim()) return "Give this automation a name first.";
       if (source === "specific_media" && mediaIds.length === 0) return "Select at least one post or Reel to watch.";
-      if (match === "keyword" && parseKeywords(keywords).length === 0) return "Add at least one keyword.";
     }
     if (step === 1) {
+      if (match === "keyword" && parseKeywords(keywords).length === 0) return "Add at least one keyword.";
       if (publicReplies.every((reply) => !reply.trim())) return "Add at least one public reply.";
       if (publicReplies.map((reply) => reply.trim()).filter(Boolean).length > MAX_PUBLIC_REPLIES) {
         return `Use up to ${MAX_PUBLIC_REPLIES} public reply variations.`;
