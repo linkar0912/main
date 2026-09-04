@@ -485,6 +485,11 @@ model AutomationContact {
   fields               Json?
   awaitingFields       Json?
   suppressedAt         DateTime?
+  // Human-inbox workflow state. This is separate from suppression and lead status.
+  inboxStatus          String               @default("OPEN")
+  inboxFavorite        Boolean              @default(false)
+  inboxReminderAt      DateTime?
+  inboxLastReadAt      DateTime?
   version              Int                  @default(1)
   lastSeenAt           DateTime             @default(now())
   createdAt            DateTime             @default(now())
@@ -495,6 +500,9 @@ model AutomationContact {
   @@unique([workspaceId, instagramAccountId, igScopedUserId])
   @@unique([id, workspaceId])
   @@index([workspaceId, state])
+  @@index([workspaceId, inboxStatus, lastSeenAt, id])
+  @@index([workspaceId, inboxReminderAt, id])
+  @@index([workspaceId, lastSeenAt, id])
 }
 
 // A timed drip campaign: ordered steps, each sent to enrolled contacts after a delay.

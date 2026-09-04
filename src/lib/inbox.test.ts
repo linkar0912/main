@@ -12,6 +12,8 @@ const contact: AutomationContactRecord = {
   tags: [],
   score: 0,
   leadStatus: "NEW",
+  inboxStatus: "OPEN",
+  inboxFavorite: false,
   lastSeenAt: "2026-09-03T10:00:00.000Z",
   createdAt: "2026-08-01T10:00:00.000Z",
   updatedAt: "2026-09-03T10:00:00.000Z",

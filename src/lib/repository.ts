@@ -294,6 +294,7 @@ export type ContactState = "NONE" | "AWAITING_EMAIL" | "AWAITING_FIELD" | "CAPTU
 
 /** Mini-CRM pipeline stage for a contact. */
 export type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
+export type InboxStatus = "OPEN" | "CLOSED";
 
 export const LEAD_STATUSES: readonly LeadStatus[] = ["NEW", "ENGAGED", "QUALIFIED", "CUSTOMER"];
 
@@ -335,6 +336,11 @@ export type AutomationContactRecord = {
   notes?: string;
   /** Automation that first brought this contact into the workspace. */
   sourceAutomationId?: string;
+  /** Human-inbox workflow state; independent from opt-out/suppression. */
+  inboxStatus: InboxStatus;
+  inboxFavorite: boolean;
+  inboxReminderAt?: string;
+  inboxLastReadAt?: string;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;

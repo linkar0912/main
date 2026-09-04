@@ -1418,6 +1418,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
             ...existing,
             createdAt: seenAt < existing.createdAt ? seenAt : existing.createdAt,
             lastSeenAt: seenAt > existing.lastSeenAt ? seenAt : existing.lastSeenAt,
+            inboxStatus: "OPEN",
             updatedAt: now(),
           };
           contacts.set(existingId, updated);
@@ -1435,6 +1436,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         tags: [],
         score: 0,
         leadStatus: "NEW",
+        inboxStatus: "OPEN",
+        inboxFavorite: false,
         // Honour the caller's timestamp verbatim, exactly as the Prisma
         // repository does. This used to floor a new contact's lastSeenAt at
         // now(), which the update path above never did - so a contact created

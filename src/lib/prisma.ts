@@ -292,6 +292,10 @@ function mapContact(record: {
   notes: string | null;
   sourceAutomationId: string | null;
   suppressedAt: Date | null;
+  inboxStatus: string;
+  inboxFavorite: boolean;
+  inboxReminderAt: Date | null;
+  inboxLastReadAt: Date | null;
   lastSeenAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -312,6 +316,10 @@ function mapContact(record: {
     assigneeUserId: record.assigneeUserId ?? undefined,
     notes: record.notes ?? undefined,
     sourceAutomationId: record.sourceAutomationId ?? undefined,
+    inboxStatus: record.inboxStatus === "CLOSED" ? "CLOSED" : "OPEN",
+    inboxFavorite: record.inboxFavorite,
+    inboxReminderAt: record.inboxReminderAt?.toISOString(),
+    inboxLastReadAt: record.inboxLastReadAt?.toISOString(),
     fields: (record as unknown as { fields?: Record<string, string> | null }).fields ?? undefined,
     awaitingFields: (record as unknown as { awaitingFields?: { id: string; question: string }[] | null }).awaitingFields ?? undefined,
     suppressedAt: record.suppressedAt?.toISOString(),
@@ -1892,6 +1900,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           data: {
             createdAt: new Date(Math.min(existing.createdAt.getTime(), new Date(seenAt).getTime())),
             lastSeenAt: new Date(Math.max(existing.lastSeenAt.getTime(), new Date(seenAt).getTime())),
+            inboxStatus: "OPEN",
           },
         });
         return { created: false, record: mapContact(updated) };
