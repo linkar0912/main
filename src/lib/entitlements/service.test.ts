@@ -97,4 +97,26 @@ describe("EntitlementService", () => {
     await service.reserveMonthlyDelivery("w1", "delivery_2");
     expect(entitlementRead).toHaveBeenCalledTimes(2);
   });
+
+  it("invalidates one workspace after a webhook changes its plan", async () => {
+    const repository = createMemoryEntitlementRepository({ plan: { key: "free", name: "Free", monthlyDeliveryLimit: 1_000 } });
+    const read = vi.spyOn(repository, "getWorkspaceEntitlement");
+    const service = createEntitlementService(repository);
+
+    await expect(service.getEffectiveEntitlements("w1")).resolves.toMatchObject({ planKey: "free" });
+    read.mockResolvedValueOnce({
+      plan: {
+        key: "creator", name: "Creator", memberLimit: 2, automationLimit: 20,
+        instagramConnectionLimit: 2, facebookConnectionLimit: 2, sequenceLimit: 10,
+        monthlyBroadcastLimit: 0, monthlyDeliveryLimit: 5_000, sequencesEnabled: true,
+        broadcastsEnabled: false, trackedLinksEnabled: true, teamEnabled: true,
+        facebookEnabled: true, exportsEnabled: false,
+      },
+      overrides: {},
+    });
+
+    service.invalidateWorkspace("w1");
+
+    await expect(service.getEffectiveEntitlements("w1")).resolves.toMatchObject({ planKey: "creator" });
+  });
 });

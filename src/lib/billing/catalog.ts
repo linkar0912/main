@@ -60,3 +60,17 @@ export function resolveRazorpayPlanId(
   if (!providerPlanId) throw new Error("razorpay_plan_not_configured");
   return providerPlanId;
 }
+
+export function resolveLinkarPlanFromRazorpayId(
+  providerPlanId: string,
+  env: Pick<ServerEnv, "razorpay">,
+): { plan: BillingPlanKey; planId: string; interval: BillingInterval } | null {
+  for (const plan of Object.keys(BILLING_PLANS) as BillingPlanKey[]) {
+    for (const interval of ["MONTHLY", "ANNUAL"] as const) {
+      if (env.razorpay.planIds[plan][interval] === providerPlanId) {
+        return { plan, planId: `plan_${plan}`, interval };
+      }
+    }
+  }
+  return null;
+}

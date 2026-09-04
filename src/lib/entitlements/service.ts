@@ -95,12 +95,17 @@ export function createEntitlementService(
     return repository.releaseMonthlyDelivery(deliveryKey);
   }
 
+  function invalidateWorkspace(workspaceId: string): void {
+    entitlementCache.delete(workspaceId);
+  }
+
   return {
     getEffectiveEntitlements,
     getMonthlyDeliveryLimit,
     assertEntitled,
     reserveMonthlyDelivery,
     releaseMonthlyDelivery,
+    invalidateWorkspace,
   };
 }
 

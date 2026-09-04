@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BILLING_PLANS, getBillingPlan, resolveRazorpayPlanId } from "./catalog";
+import { BILLING_PLANS, getBillingPlan, resolveLinkarPlanFromRazorpayId, resolveRazorpayPlanId } from "./catalog";
 
 const configuredEnv = {
   razorpay: {
@@ -49,5 +49,14 @@ describe("Linkar billing catalog", () => {
     expect(() => resolveRazorpayPlanId("creator", "MONTHLY", {
       razorpay: { planIds: { creator: {}, growth: {}, agency: {} } },
     })).toThrow("razorpay_plan_not_configured");
+  });
+
+  it("maps webhook provider plan IDs back to the trusted Linkar catalog", () => {
+    expect(resolveLinkarPlanFromRazorpayId("plan_growth_annual", configuredEnv)).toEqual({
+      plan: "growth",
+      planId: "plan_growth",
+      interval: "ANNUAL",
+    });
+    expect(resolveLinkarPlanFromRazorpayId("plan_attacker", configuredEnv)).toBeNull();
   });
 });

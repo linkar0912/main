@@ -48,7 +48,7 @@ describe("billing service", () => {
   it("creates a monthly subscription outside the checkout claim operation", async () => {
     const calls: string[] = [];
     const repo = repository({
-      claimCheckout: vi.fn(async () => { calls.push("claim"); return { kind: "create", attemptId: "attempt_1" }; }),
+      claimCheckout: vi.fn(async () => { calls.push("claim"); return { kind: "create" as const, attemptId: "attempt_1" }; }),
       markCheckoutReady: vi.fn(async () => { calls.push("ready"); }),
     });
     const gateway = provider();
