@@ -124,6 +124,22 @@ describe("SettingsScreen webhook health panel", () => {
     expect(screen.getByLabelText("Workspace timezone")).toBeTruthy();
   });
 
+  it("mounts workspace billing as its own settings section", async () => {
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": { data: [] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
+      "/api/billing": { data: { catalog: [], canManage: true, billingConfigured: true, entitlementPlanKey: "free", deliveriesUsed: 0, subscription: null } },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Billing/ }));
+
+    expect(await screen.findByRole("heading", { name: "Simple pricing. Room to grow." })).toBeTruthy();
+  });
+
   it("explains when the Instagram account belongs to another workspace", async () => {
     window.history.replaceState({}, "", "/settings?meta=already-connected");
     stubFetch({

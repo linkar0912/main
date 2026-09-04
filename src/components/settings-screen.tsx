@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Check,
   Clock,
+  CreditCard,
   ExternalLink,
   FileText,
   LockKeyhole,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
+import { BillingSettings } from "./billing-settings";
 import { ContextHelpLink } from "./context-help-link";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
 import { InstagramGlyph } from "./instagram-glyph";
@@ -88,7 +90,7 @@ export function SettingsScreen() {
   const [facebookChoices, setFacebookChoices] = useState<Array<{ id: string; name: string; category?: string }>>([]);
   const [selectedFacebookPageId, setSelectedFacebookPageId] = useState("");
   const [facebookSelectionBusy, setFacebookSelectionBusy] = useState(false);
-  const [section, setSection] = useState<"connections" | "delivery" | "team" | "policies">("connections");
+  const [section, setSection] = useState<"connections" | "delivery" | "billing" | "team" | "policies">("connections");
   const [disconnectingId, setDisconnectingId] = useState("");
   const [disconnectError, setDisconnectError] = useState("");
   const [team, setTeam] = useState<TeamOverview | null>(null);
@@ -389,7 +391,7 @@ export function SettingsScreen() {
   return (
     <AppShell>
       <div className="page-wrap settings-wrap">
-        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage Instagram and Facebook connections, delivery defaults, team access, and account safeguards.</p></div><div className="header-actions"><CopyDiagnosticsButton /><ContextHelpLink topic="connecting-instagram" /></div></header>
+        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage connections, delivery defaults, billing, team access, and account safeguards.</p></div><div className="header-actions"><CopyDiagnosticsButton /><ContextHelpLink topic="connecting-instagram" /></div></header>
 
         <section className="settings-summary" aria-label="Workspace summary">
           <div className="settings-summary-intro">
@@ -417,6 +419,9 @@ export function SettingsScreen() {
             </button>
             <button type="button" aria-pressed={section === "delivery"} className={`section-nav-link ${section === "delivery" ? "is-active" : ""}`} onClick={() => setSection("delivery")}>
               <Clock size={16} strokeWidth={1.9} /> Delivery
+            </button>
+            <button type="button" aria-pressed={section === "billing"} className={`section-nav-link ${section === "billing" ? "is-active" : ""}`} onClick={() => setSection("billing")}>
+              <CreditCard size={16} strokeWidth={1.9} /> Billing
             </button>
             <button type="button" aria-pressed={section === "team"} className={`section-nav-link ${section === "team" ? "is-active" : ""}`} onClick={() => setSection("team")}>
               <Users size={16} strokeWidth={1.9} /> Team
@@ -742,6 +747,8 @@ export function SettingsScreen() {
                 )}
               </section>
             )}
+
+            {section === "billing" && <BillingSettings />}
 
             {section === "policies" && (
               <section className="review-links panel settings-card"><div><p className="eyebrow">Policies & support</p><h2>Public resources</h2></div><div className="review-link-grid"><Link href="/privacy">Privacy policy <ExternalLink size={14} /></Link><Link href="/terms">Terms of service <ExternalLink size={14} /></Link><Link href="/data-deletion">Data deletion <ExternalLink size={14} /></Link><Link href="/support">Support <ExternalLink size={14} /></Link></div></section>
