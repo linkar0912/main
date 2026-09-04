@@ -11,7 +11,7 @@ export default function ActivityPage() {
           <div>
             <p className="eyebrow">Workspace / Inbox</p>
             <h1>Inbox</h1>
-            <p className="muted page-lede">Every Instagram contact, conversation, and human reply in one place.</p>
+            <p className="muted page-lede">Instagram conversations and Facebook Page comment activity in one workspace.</p>
           </div>
         </header>
         <ActivityFeed />

@@ -19,16 +19,18 @@ describe("ActivityFeed", () => {
   });
 
   it("shows every contact in a searchable conversation desk", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(contactsResponse), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify(String(input).includes("query=arjun")
+      ? { data: { ...contactsResponse.data, contacts: [contactsResponse.data.contacts[1]] } }
+      : contactsResponse), { status: 200 })));
 
     render(<ActivityFeed />);
 
-    expect(await screen.findByRole("region", { name: "Inbox conversations" })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Instagram inbox conversations" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /open conversation with @aanya/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /open conversation with @arjun/i })).toBeTruthy();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search contacts" }), { target: { value: "arjun" } });
-    expect(screen.queryByRole("button", { name: /@aanya/i })).toBeNull();
-    expect(screen.getByRole("button", { name: /open conversation with @arjun/i })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("button", { name: /@aanya/i })).toBeNull());
+    expect(await screen.findByRole("button", { name: /open conversation with @arjun/i })).toBeTruthy();
   });
 
   it("opens a full conversation and sends a manual reply", async () => {
