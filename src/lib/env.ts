@@ -1,3 +1,14 @@
+export type RazorpayEnv = {
+  keyId?: string;
+  keySecret?: string;
+  webhookSecret?: string;
+  planIds: {
+    creator: { MONTHLY?: string; ANNUAL?: string };
+    growth: { MONTHLY?: string; ANNUAL?: string };
+    agency: { MONTHLY?: string; ANNUAL?: string };
+  };
+};
+
 export type ServerEnv = {
   appName: string;
   appUrl: string;
@@ -52,6 +63,7 @@ export type ServerEnv = {
   supabaseUrl: string;
   supabasePublishableKey: string;
   supabaseServiceRoleKey: string;
+  razorpay: RazorpayEnv;
 };
 
 function booleanEnv(value: string | undefined): boolean {
@@ -129,6 +141,44 @@ export function getServerEnv(): ServerEnv {
   // booted and only broke at the first real user's OAuth callback, with an
   // error that read like a random server error rather than a config problem.
   const metaTokenEncryptionKey = optionalHexEncryptionKey(process.env.META_TOKEN_ENCRYPTION_KEY, "META_TOKEN_ENCRYPTION_KEY");
+  const razorpay: RazorpayEnv = {
+    keyId: process.env.RAZORPAY_KEY_ID?.trim() || undefined,
+    keySecret: process.env.RAZORPAY_KEY_SECRET?.trim() || undefined,
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || undefined,
+    planIds: {
+      creator: {
+        MONTHLY: process.env.RAZORPAY_PLAN_CREATOR_MONTHLY_ID?.trim() || undefined,
+        ANNUAL: process.env.RAZORPAY_PLAN_CREATOR_ANNUAL_ID?.trim() || undefined,
+      },
+      growth: {
+        MONTHLY: process.env.RAZORPAY_PLAN_GROWTH_MONTHLY_ID?.trim() || undefined,
+        ANNUAL: process.env.RAZORPAY_PLAN_GROWTH_ANNUAL_ID?.trim() || undefined,
+      },
+      agency: {
+        MONTHLY: process.env.RAZORPAY_PLAN_AGENCY_MONTHLY_ID?.trim() || undefined,
+        ANNUAL: process.env.RAZORPAY_PLAN_AGENCY_ANNUAL_ID?.trim() || undefined,
+      },
+    },
+  };
+  const razorpayValues = [
+    razorpay.keyId,
+    razorpay.keySecret,
+    razorpay.webhookSecret,
+    razorpay.planIds.creator.MONTHLY,
+    razorpay.planIds.creator.ANNUAL,
+    razorpay.planIds.growth.MONTHLY,
+    razorpay.planIds.growth.ANNUAL,
+    razorpay.planIds.agency.MONTHLY,
+    razorpay.planIds.agency.ANNUAL,
+  ];
+  const configuredRazorpayValues = razorpayValues.filter(Boolean).length;
+  if (
+    process.env.NODE_ENV === "production"
+    && configuredRazorpayValues > 0
+    && configuredRazorpayValues !== razorpayValues.length
+  ) {
+    throw new Error("RAZORPAY billing configuration must be complete in production");
+  }
 
   // Fail fast on malformed values instead of discovering them at request time.
   // Demo mode is unaffected: every validated value has a valid default.
@@ -255,5 +305,6 @@ export function getServerEnv(): ServerEnv {
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
     supabasePublishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+    razorpay,
   };
 }

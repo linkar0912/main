@@ -97,3 +97,56 @@ describe("provider request environment", () => {
     expect(getServerEnv().dispatchLeaseMs).toBe(15_000);
   });
 });
+
+describe("Razorpay billing environment", () => {
+  const completeBillingEnv = {
+    RAZORPAY_KEY_ID: "rzp_test_public",
+    RAZORPAY_KEY_SECRET: "key-secret",
+    RAZORPAY_WEBHOOK_SECRET: "webhook-secret",
+    RAZORPAY_PLAN_CREATOR_MONTHLY_ID: "plan_creator_monthly",
+    RAZORPAY_PLAN_CREATOR_ANNUAL_ID: "plan_creator_annual",
+    RAZORPAY_PLAN_GROWTH_MONTHLY_ID: "plan_growth_monthly",
+    RAZORPAY_PLAN_GROWTH_ANNUAL_ID: "plan_growth_annual",
+    RAZORPAY_PLAN_AGENCY_MONTHLY_ID: "plan_agency_monthly",
+    RAZORPAY_PLAN_AGENCY_ANNUAL_ID: "plan_agency_annual",
+  } as const;
+
+  it("groups complete provider credentials and plan IDs under a server-only boundary", () => {
+    for (const [name, value] of Object.entries(completeBillingEnv)) vi.stubEnv(name, value);
+
+    expect(getServerEnv().razorpay).toEqual({
+      keyId: "rzp_test_public",
+      keySecret: "key-secret",
+      webhookSecret: "webhook-secret",
+      planIds: {
+        creator: { MONTHLY: "plan_creator_monthly", ANNUAL: "plan_creator_annual" },
+        growth: { MONTHLY: "plan_growth_monthly", ANNUAL: "plan_growth_annual" },
+        agency: { MONTHLY: "plan_agency_monthly", ANNUAL: "plan_agency_annual" },
+      },
+    });
+  });
+
+  it("allows billing to remain entirely disabled in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PLATFORM_OWNER_USER_IDS", "11111111-1111-4111-8111-111111111111");
+    for (const name of Object.keys(completeBillingEnv)) vi.stubEnv(name, "");
+
+    expect(getServerEnv().razorpay).toEqual({
+      keyId: undefined,
+      keySecret: undefined,
+      webhookSecret: undefined,
+      planIds: { creator: {}, growth: {}, agency: {} },
+    });
+  });
+
+  it("rejects a partially configured production billing environment", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PLATFORM_OWNER_USER_IDS", "11111111-1111-4111-8111-111111111111");
+    for (const [name, value] of Object.entries(completeBillingEnv)) vi.stubEnv(name, value);
+    vi.stubEnv("RAZORPAY_WEBHOOK_SECRET", "");
+
+    expect(() => getServerEnv()).toThrow(
+      "RAZORPAY billing configuration must be complete in production",
+    );
+  });
+});
