@@ -16,7 +16,7 @@ describe("POST /api/billing/checkout", () => {
     }));
     expect(runtime).toBe("nodejs");
     expect(response.status).toBe(200);
-    expect(mocks.checkout).toHaveBeenCalledWith("ws_1", "creator", "MONTHLY");
+    expect(mocks.checkout).toHaveBeenCalledWith("ws_1", "creator", "MONTHLY", undefined);
   });
   it("rejects amounts and provider IDs supplied by the browser", async () => {
     const response = await POST(new Request("https://app.linkar.in/api/billing/checkout", {

@@ -22,6 +22,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       guard.session.workspaceId,
       parsed.data.plan,
       parsed.data.interval,
+      guard.auditContext,
     ));
   } catch (error) {
     return billingErrorResponse(error);

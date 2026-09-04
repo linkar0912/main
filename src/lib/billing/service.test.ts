@@ -45,6 +45,26 @@ function provider() {
 }
 
 describe("billing service", () => {
+  it("audits owner billing mutations without secrets or payment data", async () => {
+    const audit = vi.fn().mockResolvedValue(undefined);
+    const service = createBillingService({ repository: repository(), provider: provider(), env, audit });
+    const actor = {
+      requestId: "billing_req_1", userId: "user_1", email: "owner@example.com",
+      workspaceId: "ws_1", ipHash: "ip_hash", userAgent: "test", origin: "https://app.linkar.in",
+    };
+
+    await service.createCheckout("ws_1", "creator", "MONTHLY", actor);
+    await service.schedulePlanChange("ws_1", "growth", "ANNUAL", { ...actor, requestId: "billing_req_2" });
+    await service.cancelAtCycleEnd("ws_1", { ...actor, requestId: "billing_req_3" });
+
+    expect(audit.mock.calls.map(([event]) => [event.action, event.phase])).toEqual([
+      ["billing.checkout.create", "ATTEMPT"], ["billing.checkout.create", "SUCCESS"],
+      ["billing.plan.change", "ATTEMPT"], ["billing.plan.change", "SUCCESS"],
+      ["billing.subscription.cancel", "ATTEMPT"], ["billing.subscription.cancel", "SUCCESS"],
+    ]);
+    expect(JSON.stringify(audit.mock.calls)).not.toMatch(/checkout-secret|webhook-secret|payment/i);
+  });
+
   it("creates a monthly subscription outside the checkout claim operation", async () => {
     const calls: string[] = [];
     const repo = repository({
@@ -115,6 +135,14 @@ describe("billing service", () => {
 
     await expect(service.createCheckout("ws_1", "creator", "MONTHLY")).rejects.toMatchObject({ code: "provider_unavailable" });
     expect(repo.markCheckoutFailed).toHaveBeenCalledWith("attempt_1", "provider_unavailable");
+  });
+
+  it("does not mark the claim failed after Razorpay succeeds but persistence fails", async () => {
+    const repo = repository({ markCheckoutReady: vi.fn().mockRejectedValue(new Error("database unavailable")) });
+    const service = createBillingService({ repository: repo, provider: provider(), env });
+
+    await expect(service.createCheckout("ws_1", "creator", "MONTHLY")).rejects.toThrow("database unavailable");
+    expect(repo.markCheckoutFailed).not.toHaveBeenCalled();
   });
 
   it("verifies checkout without granting an entitlement", async () => {

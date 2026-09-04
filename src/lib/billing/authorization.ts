@@ -1,13 +1,19 @@
+import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 
+import { clientAddress } from "@/src/lib/auth/client-address";
 import { getValidatedSession, type AppSession } from "@/src/lib/auth/session";
+import { getServerEnv } from "@/src/lib/env";
+import { createId } from "@/src/lib/id";
 import { getRepository } from "@/src/lib/repository-provider";
 import type { MemberRole } from "@/src/lib/repository";
+import type { BillingMutationContext } from "./service";
 
 type BillingGuardSuccess = {
   ok: true;
   session: AppSession;
   role: MemberRole;
+  auditContext?: BillingMutationContext;
 };
 
 type BillingGuardFailure = {
@@ -35,5 +41,23 @@ export async function requireBillingOwner(request: Request): Promise<BillingGuar
   if (guard.role !== "OWNER") {
     return { ok: false, error: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
   }
-  return guard;
+  const env = getServerEnv();
+  const address = clientAddress(request, env.trustedProxyHops);
+  const ipHash = createHmac("sha256", env.authSessionSecret)
+    .update(`billing-client-address\0${address}`)
+    .digest("hex");
+  const requestOrigin = new URL(request.url).origin;
+  const suppliedOrigin = request.headers.get("origin");
+  return {
+    ...guard,
+    auditContext: {
+      requestId: createId("billing_req"),
+      userId: guard.session.userId,
+      email: guard.session.email,
+      workspaceId: guard.session.workspaceId,
+      ipHash,
+      userAgent: (request.headers.get("user-agent") ?? "unknown").slice(0, 1_000),
+      origin: suppliedOrigin === requestOrigin ? suppliedOrigin : requestOrigin,
+    },
+  };
 }

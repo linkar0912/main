@@ -64,41 +64,48 @@ export function createPrismaBillingRepository(client: BillingPrismaClient = pris
     },
 
     async claimCheckout(input) {
-      return client.$transaction(async (transaction) => {
-        await transaction.billingCheckoutAttempt.updateMany({
-          where: {
-            workspaceId: input.workspaceId,
-            state: { in: [BillingCheckoutState.CREATING, BillingCheckoutState.READY] },
-            expiresAt: { lte: input.now },
-          },
-          data: { state: BillingCheckoutState.EXPIRED },
-        });
-        const existing = await transaction.billingCheckoutAttempt.findFirst({
-          where: {
-            workspaceId: input.workspaceId,
-            state: { in: [BillingCheckoutState.CREATING, BillingCheckoutState.READY] },
-            expiresAt: { gt: input.now },
-          },
-          orderBy: { createdAt: "desc" },
-        });
-        if (existing && (existing.planId !== input.planId || existing.interval !== input.interval)) {
-          return { kind: "conflict", attemptId: existing.id } as const;
+      for (let attemptNumber = 0; attemptNumber < 3; attemptNumber += 1) {
+        try {
+          return await client.$transaction(async (transaction) => {
+            await transaction.billingCheckoutAttempt.updateMany({
+              where: {
+                workspaceId: input.workspaceId,
+                state: { in: [BillingCheckoutState.CREATING, BillingCheckoutState.READY] },
+                expiresAt: { lte: input.now },
+              },
+              data: { state: BillingCheckoutState.EXPIRED },
+            });
+            const existing = await transaction.billingCheckoutAttempt.findFirst({
+              where: {
+                workspaceId: input.workspaceId,
+                state: { in: [BillingCheckoutState.CREATING, BillingCheckoutState.READY] },
+                expiresAt: { gt: input.now },
+              },
+              orderBy: { createdAt: "desc" },
+            });
+            if (existing && (existing.planId !== input.planId || existing.interval !== input.interval)) {
+              return { kind: "conflict", attemptId: existing.id } as const;
+            }
+            if (existing?.state === BillingCheckoutState.READY && existing.providerSubscriptionId) {
+              return { kind: "reuse", attemptId: existing.id, subscriptionId: existing.providerSubscriptionId } as const;
+            }
+            if (existing) return { kind: "processing", attemptId: existing.id } as const;
+            const checkoutAttempt = await transaction.billingCheckoutAttempt.create({
+              data: {
+                id: createId("checkout"),
+                workspaceId: input.workspaceId,
+                planId: input.planId,
+                interval: input.interval,
+                expiresAt: input.expiresAt,
+              },
+            });
+            return { kind: "create", attemptId: checkoutAttempt.id } as const;
+          }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        } catch (error) {
+          if ((error as { code?: string }).code !== "P2034" || attemptNumber === 2) throw error;
         }
-        if (existing?.state === BillingCheckoutState.READY && existing.providerSubscriptionId) {
-          return { kind: "reuse", attemptId: existing.id, subscriptionId: existing.providerSubscriptionId } as const;
-        }
-        if (existing) return { kind: "processing", attemptId: existing.id } as const;
-        const attempt = await transaction.billingCheckoutAttempt.create({
-          data: {
-            id: createId("checkout"),
-            workspaceId: input.workspaceId,
-            planId: input.planId,
-            interval: input.interval,
-            expiresAt: input.expiresAt,
-          },
-        });
-        return { kind: "create", attemptId: attempt.id } as const;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }
+      throw new Error("checkout_claim_failed");
     },
 
     async markCheckoutReady(attemptId, providerSubscriptionId) {

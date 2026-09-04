@@ -1,5 +1,8 @@
 import "server-only";
 
+import { AdminAuditPhase } from "@prisma/client";
+
+import { appendAdminAuditEvent, type AdminAuditInput } from "@/src/lib/admin/audit";
 import type { BillingInterval, BillingPlanKey } from "./types";
 import { BILLING_PLANS, resolveRazorpayPlanId } from "./catalog";
 import type { ServerEnv } from "@/src/lib/env";
@@ -30,7 +33,18 @@ type BillingServiceDependencies = {
   repository: BillingRepository;
   provider: BillingProvider;
   env: Pick<ServerEnv, "razorpay">;
+  audit?: (input: AdminAuditInput) => Promise<void>;
   now?: () => Date;
+};
+
+export type BillingMutationContext = {
+  requestId: string;
+  userId: string;
+  email: string;
+  workspaceId: string;
+  ipHash: string;
+  userAgent: string;
+  origin?: string;
 };
 
 function monthStart(value: Date): Date {
@@ -39,6 +53,44 @@ function monthStart(value: Date): Date {
 
 export function createBillingService(dependencies: BillingServiceDependencies) {
   const now = dependencies.now ?? (() => new Date());
+
+  async function audited<T>(
+    context: BillingMutationContext | undefined,
+    action: string,
+    before: unknown,
+    operation: () => Promise<T>,
+    summarize: (result: T) => unknown,
+  ): Promise<T> {
+    if (!context || !dependencies.audit) return operation();
+    const base = {
+      requestId: context.requestId,
+      actorUserId: context.userId,
+      actorEmail: context.email,
+      sessionId: context.userId,
+      action,
+      targetType: "billing_subscription",
+      targetId: context.workspaceId,
+      workspaceId: context.workspaceId,
+      reason: "Workspace owner billing action",
+      ipHash: context.ipHash,
+      userAgent: context.userAgent,
+      origin: context.origin,
+    };
+    await dependencies.audit({ ...base, phase: AdminAuditPhase.ATTEMPT, before });
+    try {
+      const result = await operation();
+      await dependencies.audit({ ...base, phase: AdminAuditPhase.SUCCESS, before, after: summarize(result) });
+      return result;
+    } catch (error) {
+      await dependencies.audit({
+        ...base,
+        phase: AdminAuditPhase.FAILURE,
+        before,
+        errorCode: error instanceof BillingServiceError ? error.code : "billing_operation_failed",
+      });
+      throw error;
+    }
+  }
 
   function configuredCredentials(): { keyId: string; keySecret: string } {
     const { keyId, keySecret } = dependencies.env.razorpay;
@@ -57,35 +109,38 @@ export function createBillingService(dependencies: BillingServiceDependencies) {
     };
   }
 
-  async function createCheckout(workspaceId: string, plan: BillingPlanKey, interval: BillingInterval) {
-    const credentials = configuredCredentials();
-    const providerPlanId = resolveRazorpayPlanId(plan, interval, dependencies.env);
-    const current = now();
-    const claim = await dependencies.repository.claimCheckout({
-      workspaceId,
-      planId: `plan_${plan}`,
-      interval,
-      now: current,
-      expiresAt: new Date(current.getTime() + 15 * 60 * 1_000),
-    });
-    if (claim.kind === "processing") return { status: "processing" as const, attemptId: claim.attemptId };
-    if (claim.kind === "conflict") throw new BillingServiceError("subscription_conflict");
-    if (claim.kind === "reuse") {
-      return { status: "ready" as const, keyId: credentials.keyId, subscriptionId: claim.subscriptionId, attemptId: claim.attemptId };
-    }
-    try {
-      const subscription = await dependencies.provider.createSubscription({
-        planId: providerPlanId,
-        totalCount: interval === "MONTHLY" ? 120 : 10,
+  async function createCheckout(workspaceId: string, plan: BillingPlanKey, interval: BillingInterval, context?: BillingMutationContext) {
+    return audited(context, "billing.checkout.create", { plan, interval }, async () => {
+      const credentials = configuredCredentials();
+      const providerPlanId = resolveRazorpayPlanId(plan, interval, dependencies.env);
+      const current = now();
+      const claim = await dependencies.repository.claimCheckout({
         workspaceId,
-        attemptId: claim.attemptId,
+        planId: `plan_${plan}`,
+        interval,
+        now: current,
+        expiresAt: new Date(current.getTime() + 15 * 60 * 1_000),
       });
+      if (claim.kind === "processing") return { status: "processing" as const, attemptId: claim.attemptId };
+      if (claim.kind === "conflict") throw new BillingServiceError("subscription_conflict");
+      if (claim.kind === "reuse") {
+        return { status: "ready" as const, keyId: credentials.keyId, subscriptionId: claim.subscriptionId, attemptId: claim.attemptId };
+      }
+      let subscription: { id: string; status: string };
+      try {
+        subscription = await dependencies.provider.createSubscription({
+          planId: providerPlanId,
+          totalCount: interval === "MONTHLY" ? 120 : 10,
+          workspaceId,
+          attemptId: claim.attemptId,
+        });
+      } catch {
+        await dependencies.repository.markCheckoutFailed(claim.attemptId, "provider_unavailable");
+        throw new BillingServiceError("provider_unavailable");
+      }
       await dependencies.repository.markCheckoutReady(claim.attemptId, subscription.id);
       return { status: "ready" as const, keyId: credentials.keyId, subscriptionId: subscription.id, attemptId: claim.attemptId };
-    } catch {
-      await dependencies.repository.markCheckoutFailed(claim.attemptId, "provider_unavailable");
-      throw new BillingServiceError("provider_unavailable");
-    }
+    }, (result) => ({ plan, interval, state: result.status, providerSubscriptionId: "subscriptionId" in result ? result.subscriptionId : undefined }));
   }
 
   async function verifyCheckout(workspaceId: string, input: { paymentId: string; subscriptionId: string; signature: string }) {
@@ -98,31 +153,37 @@ export function createBillingService(dependencies: BillingServiceDependencies) {
     return { status: "processing" as const };
   }
 
-  async function schedulePlanChange(workspaceId: string, plan: BillingPlanKey, interval: BillingInterval) {
-    configuredCredentials();
-    const subscription = await dependencies.repository.getSubscriptionForOwnerAction(workspaceId);
-    if (!subscription || subscription.status !== "ACTIVE") throw new BillingServiceError("subscription_conflict");
-    const providerPlanId = resolveRazorpayPlanId(plan, interval, dependencies.env);
-    try {
-      await dependencies.provider.updateSubscription({ subscriptionId: subscription.providerSubscriptionId, planId: providerPlanId });
-    } catch {
-      throw new BillingServiceError("provider_unavailable");
-    }
-    await dependencies.repository.recordPendingPlanChange(subscription.id, `plan_${plan}`, interval);
-    return { status: "scheduled" as const };
+  async function schedulePlanChange(workspaceId: string, plan: BillingPlanKey, interval: BillingInterval, context?: BillingMutationContext) {
+    const result = await audited(context, "billing.plan.change", { plan, interval }, async () => {
+      configuredCredentials();
+      const subscription = await dependencies.repository.getSubscriptionForOwnerAction(workspaceId);
+      if (!subscription || subscription.status !== "ACTIVE") throw new BillingServiceError("subscription_conflict");
+      const providerPlanId = resolveRazorpayPlanId(plan, interval, dependencies.env);
+      try {
+        await dependencies.provider.updateSubscription({ subscriptionId: subscription.providerSubscriptionId, planId: providerPlanId });
+      } catch {
+        throw new BillingServiceError("provider_unavailable");
+      }
+      await dependencies.repository.recordPendingPlanChange(subscription.id, `plan_${plan}`, interval);
+      return { status: "scheduled" as const, providerSubscriptionId: subscription.providerSubscriptionId };
+    }, (result) => ({ plan, interval, state: result.status, providerSubscriptionId: result.providerSubscriptionId }));
+    return { status: result.status };
   }
 
-  async function cancelAtCycleEnd(workspaceId: string) {
-    configuredCredentials();
-    const subscription = await dependencies.repository.getSubscriptionForOwnerAction(workspaceId);
-    if (!subscription || subscription.status !== "ACTIVE") throw new BillingServiceError("subscription_conflict");
-    try {
-      await dependencies.provider.cancelSubscription(subscription.providerSubscriptionId);
-    } catch {
-      throw new BillingServiceError("provider_unavailable");
-    }
-    await dependencies.repository.recordPendingCancellation(subscription.id);
-    return { status: "scheduled" as const };
+  async function cancelAtCycleEnd(workspaceId: string, context?: BillingMutationContext) {
+    const result = await audited(context, "billing.subscription.cancel", {}, async () => {
+      configuredCredentials();
+      const subscription = await dependencies.repository.getSubscriptionForOwnerAction(workspaceId);
+      if (!subscription || subscription.status !== "ACTIVE") throw new BillingServiceError("subscription_conflict");
+      try {
+        await dependencies.provider.cancelSubscription(subscription.providerSubscriptionId);
+      } catch {
+        throw new BillingServiceError("provider_unavailable");
+      }
+      await dependencies.repository.recordPendingCancellation(subscription.id);
+      return { status: "scheduled" as const, providerSubscriptionId: subscription.providerSubscriptionId };
+    }, (result) => ({ state: result.status, providerSubscriptionId: result.providerSubscriptionId }));
+    return { status: result.status };
   }
 
   return { getBillingView, createCheckout, verifyCheckout, schedulePlanChange, cancelAtCycleEnd };
@@ -141,6 +202,7 @@ export function getBillingService(): ReturnType<typeof createBillingService> {
       timeoutMs: env.providerRequestTimeoutMs,
     }),
     env,
+    audit: appendAdminAuditEvent,
   });
   return productionService;
 }

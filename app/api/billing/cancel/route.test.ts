@@ -10,6 +10,6 @@ describe("POST /api/billing/cancel", () => {
     mocks.cancel.mockResolvedValue({ status: "scheduled" });
     const response = await POST(new Request("https://app.linkar.in/api/billing/cancel", { method: "POST" }));
     expect(response.status).toBe(200);
-    expect(mocks.cancel).toHaveBeenCalledWith("ws_1");
+    expect(mocks.cancel).toHaveBeenCalledWith("ws_1", undefined);
   });
 });

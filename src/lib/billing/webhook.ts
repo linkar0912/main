@@ -150,22 +150,27 @@ export function isStaleProviderEvent(lastAt: Date | null, lastId: string | null,
 export function createPrismaBillingWebhookRepository(client: WebhookPrismaClient = prisma): BillingWebhookRepository {
   return {
     async applyEvent(input) {
-      try {
-        return await client.$transaction(async (transaction) => {
-          const receipt = await transaction.billingWebhookEvent.create({
-            data: {
-              id: createId("billing_event"), eventId: input.eventId, eventType: input.eventType,
-              entityId: input.subscriptionId, providerCreatedAt: input.providerCreatedAt,
-              payloadHash: input.payloadHash,
-            },
-          });
+      return client.$transaction(async (transaction) => {
+          let receipt: { id: string };
+          try {
+            receipt = await transaction.billingWebhookEvent.create({
+              data: {
+                id: createId("billing_event"), eventId: input.eventId, eventType: input.eventType,
+                entityId: input.subscriptionId, providerCreatedAt: input.providerCreatedAt,
+                payloadHash: input.payloadHash,
+              },
+              select: { id: true },
+            });
+          } catch (error) {
+            if ((error as { code?: string }).code === "P2002") return { outcome: "duplicate" as const };
+            throw error;
+          }
           const current = await transaction.billingSubscription.findUnique({
             where: { providerSubscriptionId: input.subscriptionId },
           });
           const attempt = current ? null : await transaction.billingCheckoutAttempt.findFirst({
             where: {
               ...(input.attemptId ? { id: input.attemptId } : { providerSubscriptionId: input.subscriptionId }),
-              providerSubscriptionId: input.subscriptionId,
             },
           });
           const workspaceId = current?.workspaceId ?? attempt?.workspaceId;
@@ -226,10 +231,6 @@ export function createPrismaBillingWebhookRepository(client: WebhookPrismaClient
           });
           return { outcome: "applied" as const, workspaceId };
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-      } catch (error) {
-        if ((error as { code?: string }).code === "P2002") return { outcome: "duplicate" as const };
-        throw error;
-      }
     },
   };
 }

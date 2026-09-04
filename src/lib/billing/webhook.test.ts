@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const { createWebhookProcessor, entitlementPlanForEvent, isStaleProviderEvent, normalizeRazorpaySubscriptionEvent, WebhookError } = await import("./webhook");
+const { createPrismaBillingWebhookRepository, createWebhookProcessor, entitlementPlanForEvent, isStaleProviderEvent, normalizeRazorpaySubscriptionEvent, WebhookError } = await import("./webhook");
 
 const env = {
   razorpay: {
@@ -42,6 +42,32 @@ function signature(rawBody: Buffer): string {
 }
 
 describe("Razorpay webhook processing", () => {
+  it("classifies only a duplicate receipt insert as a duplicate webhook", async () => {
+    const duplicate = Object.assign(new Error("unique conflict"), { code: "P2002" });
+    const input = {
+      ...normalizeRazorpaySubscriptionEvent(JSON.parse(body().toString("utf8")), env)!,
+      eventId: "evt_1", payloadHash: "a".repeat(64), now: new Date("2026-09-04T12:00:00Z"),
+    };
+    const duplicateClient = {
+      $transaction: (operation: (tx: unknown) => unknown) => operation({
+        billingWebhookEvent: { create: vi.fn().mockRejectedValue(duplicate) },
+      }),
+    };
+    await expect(createPrismaBillingWebhookRepository(duplicateClient as never).applyEvent(input))
+      .resolves.toEqual({ outcome: "duplicate" });
+
+    const downstreamClient = {
+      $transaction: (operation: (tx: unknown) => unknown) => operation({
+        billingWebhookEvent: { create: vi.fn().mockResolvedValue({ id: "receipt_1" }) },
+        billingSubscription: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockRejectedValue(duplicate) },
+        billingCheckoutAttempt: { findFirst: vi.fn().mockResolvedValue({ workspaceId: "ws_1", planId: "plan_creator" }) },
+        workspaceEntitlement: { findUnique: vi.fn().mockResolvedValue({ planId: "plan_free" }) },
+      }),
+    };
+    await expect(createPrismaBillingWebhookRepository(downstreamClient as never).applyEvent(input))
+      .rejects.toMatchObject({ code: "P2002" });
+  });
+
   it("normalizes only the subscription fields Linkar needs", () => {
     const normalized = normalizeRazorpaySubscriptionEvent(JSON.parse(body().toString("utf8")), env);
     expect(normalized).toMatchObject({

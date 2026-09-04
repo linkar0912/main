@@ -10,7 +10,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const guard = await requireBillingOwner(request);
   if (!guard.ok) return guard.error;
   try {
-    return NextResponse.json(await getBillingService().cancelAtCycleEnd(guard.session.workspaceId));
+    return NextResponse.json(await getBillingService().cancelAtCycleEnd(guard.session.workspaceId, guard.auditContext));
   } catch (error) {
     return billingErrorResponse(error);
   }
