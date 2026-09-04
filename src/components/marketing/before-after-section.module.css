@@ -78,6 +78,11 @@
   list-style: none;
 }
 
+.waiting + ul,
+.answered + ol {
+  margin-block-start: clamp(24px, 2.6vw, 34px);
+}
+
 .manual li,
 .linkar li {
   display: flex;
@@ -93,6 +98,133 @@
 
 .manual li:last-child,
 .linkar li:last-child { border-bottom: 1px solid currentcolor; border-color: color-mix(in srgb, currentcolor 18%, transparent); }
+
+/* The two graphics carry the section's contrast: three messages left waiting on
+   one side, the first of them already answered on the other. */
+.waiting {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: clamp(28px, 3.4vw, 40px) 0 0;
+  list-style: none;
+}
+
+.waiting li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--marketing-canvas);
+  border: 1px solid var(--marketing-border);
+  border-radius: 14px;
+  opacity: .72;
+}
+
+.waitingDot {
+  flex: 0 0 auto;
+  inline-size: 8px;
+  block-size: 8px;
+  background: var(--flame);
+  border-radius: 50%;
+}
+
+.waitingBody {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+  margin-inline-end: auto;
+}
+
+.waitingBody strong {
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.waitingBody > span {
+  color: var(--marketing-muted);
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+.waitingAge {
+  flex: 0 0 auto;
+  color: var(--flame);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .68rem;
+  font-weight: 800;
+}
+
+.answered {
+  padding: 16px;
+  margin: clamp(28px, 3.4vw, 40px) 0 0;
+  background: rgb(255 255 255 / 96%);
+  border-radius: 18px;
+}
+
+.answered figcaption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-block-end: 13px;
+  border-block-end: 1px solid rgb(16 17 22 / 10%);
+}
+
+.answeredAvatar {
+  display: inline-flex;
+  flex: 0 0 30px;
+  inline-size: 30px;
+  block-size: 30px;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: var(--accent);
+  border-radius: 50%;
+  font-size: .74rem;
+  font-weight: 850;
+}
+
+.answeredWho {
+  display: grid;
+  gap: 1px;
+  min-inline-size: 0;
+  margin-inline-end: auto;
+}
+
+.answeredWho strong {
+  color: #101116;
+  font-size: .8rem;
+  font-weight: 800;
+}
+
+.answeredWho > span {
+  color: var(--leaf);
+  font-size: .68rem;
+  font-weight: 750;
+}
+
+.answeredIn,
+.answeredOut {
+  max-inline-size: 90%;
+  padding: 11px 14px;
+  margin: 12px 0 0;
+  font-size: .85rem;
+  line-height: 1.35;
+}
+
+.answeredIn {
+  color: #101116;
+  background: #f1f1ef;
+  border-radius: 16px 16px 16px 4px;
+  font-weight: 600;
+}
+
+.answeredOut {
+  margin-inline-start: auto;
+  color: #ffffff;
+  background: var(--accent);
+  border-radius: 16px 16px 4px 16px;
+  font-weight: 650;
+}
 
 .check {
   display: grid;

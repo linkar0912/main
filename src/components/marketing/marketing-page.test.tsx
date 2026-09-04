@@ -15,7 +15,6 @@ const landmarkIds = [
   "channels",
   "setup",
   "faq",
-  "get-started",
   "resources",
 ] as const;
 
@@ -48,7 +47,7 @@ describe("MarketingPage", () => {
     const landmarks = Array.from(
       container.querySelectorAll("header[data-surface], section[id], footer[id]"),
     );
-    expect(landmarks).toHaveLength(14);
+    expect(landmarks).toHaveLength(13);
     expect(landmarks.map((landmark) => landmark.id || "header")).toEqual([
       "header",
       ...landmarkIds,

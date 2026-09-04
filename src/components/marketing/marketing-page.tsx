@@ -2,7 +2,6 @@ import { AutomationStory } from "./automation-story";
 import { BeforeAfterSection } from "./before-after-section";
 import { ChannelShowcase } from "./channel-showcase";
 import { FaqSection } from "./faq-section";
-import { FinalCta } from "./final-cta";
 import { HeroSection } from "./hero-section";
 import { InsightsShowcase } from "./insights-showcase";
 import { ManifestoSection } from "./manifesto-section";
@@ -36,7 +35,6 @@ export function MarketingPage() {
         <ChannelShowcase />
         <SetupSteps />
         <FaqSection />
-        <FinalCta />
       </main>
       <MarketingFooter />
     </div>

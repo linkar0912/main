@@ -40,7 +40,6 @@ describe("marketing theme contract", () => {
       "./workflow-gallery.module.css",
       "./insights-showcase.module.css",
       "./setup-steps.module.css",
-      "./final-cta.module.css",
     ];
 
     for (const name of adaptiveModules) {

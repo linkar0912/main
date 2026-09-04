@@ -6,7 +6,6 @@ const structuralStyles = [
   "automation-story.module.css",
   "before-after-section.module.css",
   "channel-showcase.module.css",
-  "final-cta.module.css",
   "insights-showcase.module.css",
   "manifesto-section.module.css",
   "setup-steps.module.css",
