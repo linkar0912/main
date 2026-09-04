@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import { applicationOriginForPath } from "@/src/lib/site-routing";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
   const env = getServerEnv();
   const url = new URL(request.url);
   const nextPath = safeNextPath(url.searchParams.get("next"));
+  const destinationOrigin = applicationOriginForPath(nextPath, env);
   const inviteRaw = url.searchParams.get("invite") ?? "";
 
   const redirectTo = new URL("/auth/oauth/callback", env.appUrl);
@@ -38,7 +40,7 @@ export async function GET(request: Request) {
     },
   });
   if (error || !data?.url) {
-    return NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303);
+    return NextResponse.redirect(new URL("/login?error=oauth", destinationOrigin), 303);
   }
   return NextResponse.redirect(data.url, 303);
 }

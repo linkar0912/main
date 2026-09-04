@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { getServerEnv } from "@/src/lib/env";
+import { sharedAuthCookieDomain } from "@/src/lib/auth/cookie-domain";
 
 /**
  * Request-scoped Supabase client. Reads/writes the session via the Next.js
@@ -11,8 +12,10 @@ import { getServerEnv } from "@/src/lib/env";
 export async function createSupabaseServerClient() {
   const env = getServerEnv();
   const cookieStore = await cookies();
+  const domain = sharedAuthCookieDomain(env);
 
   return createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
+    ...(domain ? { cookieOptions: { domain } } : {}),
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: (cookiesToSet) => {

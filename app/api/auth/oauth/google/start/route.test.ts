@@ -5,6 +5,8 @@ import { readGoogleOAuthState } from "@/src/lib/auth/google-oauth-state";
 vi.mock("@/src/lib/env", () => ({
   getServerEnv: () => ({
     appUrl: "http://localhost:3000",
+    adminUrl: "http://localhost:3000",
+    publicSiteUrl: "http://localhost:3000",
     authSessionSecret: "test-secret-at-least-32-characters",
     googleClientId: "client-1",
     googleClientSecret: "secret-1",
@@ -50,11 +52,31 @@ describe("GET /api/auth/oauth/google/start", () => {
     expect(setCookie.toLowerCase()).toContain("httponly");
   });
 
+  it("shares the state cookie across production app and admin subdomains", async () => {
+    vi.resetModules();
+    vi.doMock("@/src/lib/env", () => ({
+      getServerEnv: () => ({
+        appUrl: "https://app.linkar.in",
+        adminUrl: "https://admin.linkar.in",
+        publicSiteUrl: "https://linkar.in",
+        authSessionSecret: "test-secret-at-least-32-characters",
+        googleClientId: "client-1",
+        googleClientSecret: "secret-1",
+        googleRedirectUri: "https://app.linkar.in/api/auth/oauth/google/callback",
+      }),
+    }));
+    const { GET: GetProduction } = await import("./route");
+    const response = await GetProduction(new Request("https://admin.linkar.in/api/auth/oauth/google/start?next=/admin/system"));
+    expect(response.headers.get("set-cookie")).toContain("Domain=linkar.in");
+  });
+
   it("redirects to login with error=oauth when Google sign-in isn't configured", async () => {
     vi.resetModules();
     vi.doMock("@/src/lib/env", () => ({
       getServerEnv: () => ({
         appUrl: "http://localhost:3000",
+        adminUrl: "http://localhost:3000",
+        publicSiteUrl: "http://localhost:3000",
         authSessionSecret: "test-secret-at-least-32-characters",
         googleClientId: undefined,
         googleClientSecret: undefined,

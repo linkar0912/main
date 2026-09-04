@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/src/lib/env", () => ({
-  getServerEnv: () => ({ appUrl: "http://localhost:3000" }),
+  getServerEnv: () => ({ appUrl: "http://localhost:3000", adminUrl: "http://localhost:3000" }),
 }));
 vi.mock("@/src/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth: { exchangeCodeForSession: mocks.exchangeCodeForSession } }),
@@ -75,6 +75,17 @@ describe("GET /auth/oauth/callback", () => {
     expect(location(response)).toBe("http://localhost:3000/automations");
     expect(mocks.ensureWorkspace).not.toHaveBeenCalled();
     expect(mocks.acceptInvitation).not.toHaveBeenCalled();
+  });
+
+  it("redirects an owner-console sign-in to the admin origin", async () => {
+    vi.resetModules();
+    vi.doMock("@/src/lib/env", () => ({
+      getServerEnv: () => ({ appUrl: "https://app.linkar.in", adminUrl: "https://admin.linkar.in" }),
+    }));
+    const { GET: GetProduction } = await import("./route");
+    mocks.findWorkspaceIdByMemberEmail.mockResolvedValue("ws_existing");
+    const response = await GetProduction(new Request("https://app.linkar.in/auth/oauth/callback?code=abc&next=/admin/system"));
+    expect(location(response)).toBe("https://admin.linkar.in/admin/system");
   });
 
   it("accepts a valid invite for a first-time OAuth sign-in", async () => {

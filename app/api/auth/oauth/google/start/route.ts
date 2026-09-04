@@ -3,6 +3,8 @@ import { safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { buildGoogleAuthorizeUrl } from "@/src/lib/auth/google-oauth";
 import { createGoogleOAuthState, GOOGLE_OAUTH_STATE_COOKIE } from "@/src/lib/auth/google-oauth-state";
+import { sharedAuthCookieDomain } from "@/src/lib/auth/cookie-domain";
+import { applicationOriginForPath } from "@/src/lib/site-routing";
 
 export const runtime = "nodejs";
 
@@ -11,13 +13,15 @@ export const runtime = "nodejs";
 // src/lib/auth/google-oauth.ts for why.
 export async function GET(request: Request) {
   const env = getServerEnv();
-  if (!env.googleClientId) {
-    return NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303);
-  }
-
   const url = new URL(request.url);
   const nextPath = safeNextPath(url.searchParams.get("next"));
+  const destinationOrigin = applicationOriginForPath(nextPath, env);
+  if (!env.googleClientId) {
+    return NextResponse.redirect(new URL("/login?error=oauth", destinationOrigin), 303);
+  }
+
   const inviteRaw = url.searchParams.get("invite") ?? "";
+  const cookieDomain = sharedAuthCookieDomain(env);
 
   const { state, nonce } = createGoogleOAuthState(
     { next: nextPath, ...(inviteRaw ? { invite: inviteRaw } : {}) },
@@ -35,6 +39,7 @@ export async function GET(request: Request) {
     secure: env.appUrl.startsWith("https://"),
     maxAge: 600,
     path: "/",
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
   });
   return response;
 }

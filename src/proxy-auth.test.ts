@@ -52,5 +52,10 @@ describe("proxy authentication boundaries", () => {
     expect(result.status).toBe(200);
     expect(result.headers.get("location")).toBeNull();
     expect(mocks.assertApplicationAccess).not.toHaveBeenCalled();
+    expect(mocks.createServerClient).toHaveBeenCalledWith(
+      "https://example.supabase.co",
+      "publishable-key",
+      expect.objectContaining({ cookieOptions: { domain: "linkar.in" } }),
+    );
   });
 });

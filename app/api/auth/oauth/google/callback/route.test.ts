@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/src/lib/env", () => ({
-  getServerEnv: () => ({ appUrl: "http://localhost:3000", authSessionSecret: SECRET }),
+  getServerEnv: () => ({ appUrl: "http://localhost:3000", adminUrl: "http://localhost:3000", publicSiteUrl: "http://localhost:3000", authSessionSecret: SECRET }),
 }));
 vi.mock("@/src/lib/auth/google-oauth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/src/lib/auth/google-oauth")>();
@@ -138,6 +138,24 @@ describe("GET /api/auth/oauth/google/callback", () => {
     expect(location(response)).toBe("http://localhost:3000/automations");
     expect(mocks.ensureWorkspace).not.toHaveBeenCalled();
     expect(mocks.acceptInvitation).not.toHaveBeenCalled();
+  });
+
+  it("redirects an owner-console sign-in to the admin origin", async () => {
+    vi.resetModules();
+    vi.doMock("@/src/lib/env", () => ({
+      getServerEnv: () => ({
+        appUrl: "https://app.linkar.in",
+        adminUrl: "https://admin.linkar.in",
+        publicSiteUrl: "https://linkar.in",
+        authSessionSecret: SECRET,
+      }),
+    }));
+    const { GET: GetProduction } = await import("./route");
+    const { state } = validState({ next: "/admin/system" });
+    const response = await GetProduction(new NextRequest(`https://app.linkar.in/api/auth/oauth/google/callback?code=abc&state=${state}`, {
+      headers: { cookie: `${GOOGLE_OAUTH_STATE_COOKIE}=${state}` },
+    }));
+    expect(location(response)).toBe("https://admin.linkar.in/admin/system");
   });
 
   it("accepts a valid invite for a first-time sign-in", async () => {

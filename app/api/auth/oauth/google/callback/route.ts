@@ -6,11 +6,18 @@ import { GOOGLE_OAUTH_STATE_COOKIE, readGoogleOAuthState } from "@/src/lib/auth/
 import { completeOAuthSignIn } from "@/src/lib/auth/complete-oauth-signin";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { logger } from "@/src/lib/logger";
+import { sharedAuthCookieDomain } from "@/src/lib/auth/cookie-domain";
+import { applicationOriginForPath } from "@/src/lib/site-routing";
 
 export const runtime = "nodejs";
 
-function withoutStateCookie(response: NextResponse): NextResponse {
-  response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE);
+function withoutStateCookie(response: NextResponse, env: ReturnType<typeof getServerEnv>): NextResponse {
+  const domain = sharedAuthCookieDomain(env);
+  if (domain) {
+    response.cookies.set({ name: GOOGLE_OAUTH_STATE_COOKIE, value: "", domain, path: "/", maxAge: 0 });
+  } else {
+    response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE);
+  }
   return response;
 }
 
@@ -27,7 +34,7 @@ export async function GET(request: NextRequest) {
   const storedState = request.cookies.get(GOOGLE_OAUTH_STATE_COOKIE)?.value;
 
   const oauthErrorRedirect = () =>
-    withoutStateCookie(NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303));
+    withoutStateCookie(NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303), env);
 
   const providerError = url.searchParams.get("error");
   if (providerError) {
@@ -73,5 +80,6 @@ export async function GET(request: NextRequest) {
   }
 
   await completeOAuthSignIn({ email: data.user.email, userId: data.user.id, inviteRaw: decoded.invite ?? "", repository });
-  return withoutStateCookie(NextResponse.redirect(new URL(decoded.next, env.appUrl), 303));
+  const destinationOrigin = applicationOriginForPath(decoded.next, env);
+  return withoutStateCookie(NextResponse.redirect(new URL(decoded.next, destinationOrigin), 303), env);
 }

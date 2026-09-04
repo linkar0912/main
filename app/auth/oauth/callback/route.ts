@@ -4,6 +4,7 @@ import { getServerEnv } from "@/src/lib/env";
 import { getRepository } from "@/src/lib/repository-provider";
 import { completeOAuthSignIn } from "@/src/lib/auth/complete-oauth-signin";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import { applicationOriginForPath } from "@/src/lib/site-routing";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const next = safeNextPath(url.searchParams.get("next"));
+  const destinationOrigin = applicationOriginForPath(next, env);
   const inviteRaw = url.searchParams.get("invite") ?? "";
 
   if (!code) {
@@ -31,5 +33,5 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303);
   }
   await completeOAuthSignIn({ email: data.user.email, userId: data.user.id, inviteRaw, repository });
-  return NextResponse.redirect(new URL(next, env.appUrl), 303);
+  return NextResponse.redirect(new URL(next, destinationOrigin), 303);
 }
