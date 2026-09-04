@@ -4,9 +4,9 @@
 -- role (table owner) is unaffected since owners bypass RLS unless FORCE is
 -- also set, which we deliberately do not set here.
 
-ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "AuthToken" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "RevokedSession" ENABLE ROW LEVEL SECURITY;
+-- The preceding Supabase Auth migration removes the legacy User, AuthToken,
+-- and RevokedSession tables. Keep this list limited to tables that still
+-- exist so a fresh database can apply the complete migration history.
 ALTER TABLE "WorkspaceInvitation" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Workspace" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "WorkspaceMember" ENABLE ROW LEVEL SECURITY;
