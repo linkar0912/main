@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -216,9 +216,11 @@ describe("SettingsScreen webhook health panel", () => {
 
     await act(async () => { render(<SettingsScreen />); });
 
-    const summary = await screen.findByLabelText("Workspace summary");
+    const summary = await screen.findByRole("region", { name: "Workspace pulse" });
     expect(summary.textContent).toContain("2 connected channels");
     expect(summary.textContent).toContain("Connected mode");
+    expect(within(summary).getByRole("group", { name: "Environment status" })).toBeTruthy();
+    expect(within(summary).getByRole("group", { name: "Channel status" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connections/ }).getAttribute("aria-pressed")).toBe("true");
 
     const instagramCard = screen.getByText("Instagram connections").closest('[data-channel-card="instagram"]');
@@ -244,6 +246,8 @@ describe("SettingsScreen webhook health panel", () => {
 
     const consoleRegion = await screen.findByRole("region", { name: "Connected channels" });
     expect(consoleRegion.querySelectorAll("[data-channel-card]")).toHaveLength(2);
+    expect(within(consoleRegion).getByRole("region", { name: "Instagram channel" })).toBeTruthy();
+    expect(within(consoleRegion).getByRole("region", { name: "Facebook channel" })).toBeTruthy();
     expect(consoleRegion.querySelector('[data-channel-card="instagram"]')).toBeTruthy();
     expect(consoleRegion.querySelector('[data-channel-card="facebook"]')).toBeTruthy();
     expect(consoleRegion.querySelector('a[href="/api/meta/oauth/start"]')).toBeTruthy();

@@ -71,6 +71,10 @@ describe("InstagramInbox", () => {
     render(<InstagramInbox />);
     fireEvent.click(await screen.findByRole("button", { name: /open conversation with @aanya/i }));
     await screen.findByText("No messages with this contact yet.");
+    const toolbar = screen.getByRole("toolbar", { name: "Conversation actions" });
+    expect(toolbar.querySelectorAll("button")).toHaveLength(2);
+    expect(screen.getByRole("combobox", { name: "Assign conversation" })).toBeTruthy();
+    expect(screen.getByLabelText("Conversation reminder")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Add to favourites" }));
     fireEvent.click(screen.getByRole("button", { name: "Close conversation" }));
 

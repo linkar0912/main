@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   ChartNoAxesCombined,
   CircleHelp,
+  CreditCard,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -36,8 +37,20 @@ const workspaceNavigation = [
 /** Personal destinations pinned to the bottom, like a profile drawer. */
 const accountNavigation = [
   { href: "/profile", label: "My Profile", icon: UserRound },
+  { href: "/pricing", label: "Pricing", icon: CreditCard },
   { href: "/help", label: "Help", icon: CircleHelp },
 ];
+
+const workspaceResourceLinks = [
+  { href: "/support", label: "Support" },
+  { href: "/terms", label: "Terms" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/cookies", label: "Cookies" },
+  { href: "/acceptable-use", label: "Acceptable use" },
+  { href: "/data-processing", label: "Data processing" },
+  { href: "/service-providers", label: "Service providers" },
+  { href: "/data-deletion", label: "Data deletion" },
+] as const;
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -292,7 +305,18 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </form>
       </aside>
 
-        <div className="main-content" inert={drawerOpen} aria-hidden={drawerOpen || undefined}>{children}</div>
+        <div className="main-content" inert={drawerOpen} aria-hidden={drawerOpen || undefined}>
+          <div className="app-content-slot">{children}</div>
+          <footer className="app-footer">
+            <span className="app-footer-brand">{PRODUCT_NAME}</span>
+            <nav className="app-footer-links" aria-label="Workspace resources">
+              {workspaceResourceLinks.map(({ href, label }) => (
+                <Link key={href} href={href}>{label}</Link>
+              ))}
+            </nav>
+            <small>© {new Date().getFullYear()} {PRODUCT_NAME}</small>
+          </footer>
+        </div>
       </div>
     </AccountIdentityContext.Provider>
   );

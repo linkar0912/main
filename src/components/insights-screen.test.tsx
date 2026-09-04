@@ -70,6 +70,7 @@ describe("InsightsScreen", () => {
     render(<InsightsScreen />);
 
     expect(await screen.findByRole("heading", { name: "Insights" })).toBeTruthy();
+    expect(within(await screen.findByRole("list", { name: "Performance summary" })).getAllByRole("listitem")).toHaveLength(4);
     expect(within(await screen.findByRole("group", { name: "Replies sent" })).getByText("9")).toBeTruthy();
     expect(within(screen.getByRole("group", { name: "People reached" })).getByText("12")).toBeTruthy();
     expect(within(screen.getByRole("group", { name: "Emails captured" })).getByText("7")).toBeTruthy();

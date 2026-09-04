@@ -160,11 +160,19 @@ describe("workspace palette contract", () => {
   });
 
   it("uses consistent separators and stable geometry on the reported workspace surfaces", () => {
-    expect(css).toMatch(/\.insights-metric\s*\+\s*\.insights-metric\s*{[^}]*border-left:\s*1px solid var\(--line\)/);
-    expect(css).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.insights-metric:nth-child\(3\)[^}]*border-top:\s*1px solid var\(--line\)/);
+    expect(css).toMatch(/\.stat-row\s*{[^}]*display:\s*grid[^}]*gap:\s*var\(--space-5\)/);
+    expect(css).not.toMatch(/\.stat-row\s*{[^}]*border-top/);
+    expect(css).toMatch(/\.insights-metrics\s*{[^}]*grid-template-columns:\s*repeat\(4/);
+    expect(css).toMatch(/\.insights-metric\s*{[^}]*min-width:\s*0/);
+    expect(css).not.toMatch(/\.insights-metric\s*{[^}]*(?:background|border|border-radius):/);
+    expect(css).not.toMatch(/\.insights-metric::before\s*{/);
+    expect(css).not.toMatch(/\.insights-metric\s*\+\s*\.insights-metric\s*{[^}]*border-left/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.insights-metrics\s*{[^}]*grid-template-columns:\s*repeat\(2/);
     expect(css).toMatch(/\.contact-row\s*{[^}]*transition:\s*none/);
     expect(css).not.toMatch(/\.contact-row:hover\s*{[^}]*background/);
     expect(css).toMatch(/\.connected-channels-total \.health-orb\s*{[^}]*flex:\s*0 0 8px[^}]*height:\s*8px[^}]*width:\s*8px/);
+    expect(css).toMatch(/\.connected-channels-list\s*{[^}]*grid-template-columns:\s*repeat\(2/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*1080px\)[\s\S]*?\.connected-channels-list\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
     expect(css).toMatch(/\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(380px,\s*430px\) minmax\(0,\s*1fr\)/);
     expect(css).toMatch(/\.conversation-roster-head\s*>\s*div:first-child\s*{[^}]*display:\s*flex/);
     expect(css).not.toMatch(/\.conversation-roster-head\s*>\s*div\s*{/);

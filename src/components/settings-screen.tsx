@@ -393,16 +393,16 @@ export function SettingsScreen() {
       <div className="page-wrap settings-wrap">
         <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage connections, delivery defaults, billing, team access, and account safeguards.</p></div><div className="header-actions"><CopyDiagnosticsButton /><ContextHelpLink topic="connecting-instagram" /></div></header>
 
-        <section className="settings-summary" aria-label="Workspace summary">
+        <section className="settings-summary" aria-label="Workspace pulse">
           <div className="settings-summary-intro">
-            <p className="eyebrow">Control center</p>
-            <strong>Everything your workspace needs, in one place.</strong>
+            <p>Workspace pulse</p>
+            <strong>Your connections at a glance.</strong>
           </div>
-          <div className="settings-summary-stat">
+          <div className="settings-summary-stat" role="group" aria-label="Environment status">
             <span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" />
             <span><small>Environment</small><strong>{mode === "demo" ? "Demo mode" : "Connected mode"}</strong></span>
           </div>
-          <div className="settings-summary-stat">
+          <div className="settings-summary-stat" role="group" aria-label="Channel status">
             <Plug size={18} aria-hidden="true" />
             <span><small>Channels</small><strong>{connectedChannelCount} connected {connectedChannelCount === 1 ? "channel" : "channels"}</strong></span>
           </div>
@@ -450,14 +450,14 @@ export function SettingsScreen() {
                       <h2 id="connected-channels-title">Connected channels</h2>
                       <p>Manage the accounts that listen for comments and deliver replies.</p>
                     </div>
-                    <span className="connected-channels-total" aria-label={`${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}>
+                    <span className="connected-channels-total" data-state={connectedChannelCount > 0 ? "ok" : "empty"} aria-label={`${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}>
                       <span className="health-orb" data-state={connectedChannelCount > 0 ? "ok" : "warn"} aria-hidden="true" />
                       {connectedChannelCount} live
                     </span>
                   </header>
 
                   <div className="connected-channels-list">
-                <section className="channel-settings-card instagram-settings-card" data-channel-card="instagram" aria-labelledby="instagram-channel-title">
+                <section className="channel-settings-card instagram-settings-card" data-channel-card="instagram" aria-label="Instagram channel">
                   <div className="channel-settings-header">
                     <div className="channel-identity">
                       {connections[0]?.profilePictureUrl ? (
@@ -556,7 +556,7 @@ export function SettingsScreen() {
                   })}
                 </section>
 
-                <section className="channel-settings-card facebook-settings-card" data-channel-card="facebook" aria-labelledby="facebook-channel-title">
+                <section className="channel-settings-card facebook-settings-card" data-channel-card="facebook" aria-label="Facebook channel">
                   <div className="channel-settings-header">
                     <div className="channel-identity">
                       <div className="settings-brand-icon"><FacebookGlyph size={27} brand /></div>

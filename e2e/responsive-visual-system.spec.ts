@@ -487,9 +487,162 @@ test("settings desktop overview is bounded and balanced", async ({ page }) => {
   const facebook = await page.locator(".facebook-settings-card").boundingBox();
   expect(connection).not.toBeNull();
   expect(facebook).not.toBeNull();
-  expect(facebook!.y).toBeGreaterThanOrEqual(connection!.y + connection!.height);
+  expect(Math.abs(connection!.y - facebook!.y)).toBeLessThanOrEqual(2);
   expect(Math.abs(connection!.width - facebook!.width)).toBeLessThanOrEqual(2);
+  expect(facebook!.x).toBeGreaterThan(connection!.x + connection!.width);
   if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-settings-redesign.png", fullPage: true });
+});
+
+test("home and insights share one quiet performance-stat treatment", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/dashboard");
+  const homeRow = page.locator(".stat-row").first();
+  const homeStat = homeRow.locator(".stat-block").first();
+  await expect(homeStat).toBeVisible();
+  const homeStyle = await homeStat.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, border: style.borderWidth, radius: style.borderRadius, padding: style.padding };
+  });
+  expect(await homeRow.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+  if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-home-stats-redesign.png", fullPage: true });
+
+  await page.goto("/insights");
+  const items = page.getByRole("list", { name: "Performance summary" }).getByRole("listitem");
+  await expect(items).toHaveCount(4);
+  const boxes = await items.evaluateAll((elements) => elements.map((element) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.x, y: box.y, width: box.width };
+  }));
+  expect(boxes[1].x).toBeGreaterThan(boxes[0].x + boxes[0].width);
+  expect(Math.abs(boxes[0].y - boxes[3].y)).toBeLessThanOrEqual(2);
+  const insightsRow = page.getByRole("list", { name: "Performance summary" });
+  const insightsStat = insightsRow.locator(".stat-block").first();
+  await expect(insightsStat).toBeVisible();
+  const insightsStyle = await insightsStat.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, border: style.borderWidth, radius: style.borderRadius, padding: style.padding };
+  });
+  expect(await insightsRow.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+  expect(insightsStyle).toEqual(homeStyle);
+  if (process.env.VISUAL_REVIEW) {
+    await page.screenshot({ path: "/tmp/linkar-insights-redesign.png", fullPage: true });
+    await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+    await page.screenshot({ path: "/tmp/linkar-insights-redesign-dark.png", fullPage: true });
+  }
+});
+
+test("workspace navigation exposes pricing and public resources without crowding the sidebar", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/insights");
+  const accountNavigation = page.getByRole("navigation", { name: "Account" });
+  await expect(accountNavigation.getByRole("link", { name: "Pricing" })).toBeVisible();
+  const resources = page.getByRole("navigation", { name: "Workspace resources" });
+  await expect(resources.getByRole("link")).toHaveCount(8);
+  const footer = page.locator(".app-footer");
+  await expect(footer).toBeVisible();
+  const footerBox = await footer.boundingBox();
+  expect(footerBox).not.toBeNull();
+  expect(footerBox!.width).toBeGreaterThan(900);
+  if (process.env.VISUAL_REVIEW) {
+    await page.screenshot({ path: "/tmp/linkar-app-links-desktop.png", fullPage: true });
+    await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+    await page.screenshot({ path: "/tmp/linkar-app-links-dark.png", fullPage: true });
+    await page.evaluate(() => { document.documentElement.dataset.theme = "light"; });
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(page.getByLabel("Workspace sidebar").getByRole("link", { name: "Pricing" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await footer.scrollIntoViewIfNeeded();
+  const mobileFooterBox = await footer.boundingBox();
+  expect(mobileFooterBox).not.toBeNull();
+  expect(mobileFooterBox!.width).toBeLessThanOrEqual(354);
+  if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-app-links-mobile.png", fullPage: true });
+});
+
+test("conversation actions form one compact desktop toolbar", async ({ page }) => {
+  await page.route("**/api/inbox**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/inbox") return route.fulfill({ json: { data: { contacts: [{
+      id: "contact_toolbar",
+      username: "aanya",
+      avatarUrl: null,
+      preview: "Send me the guide",
+      lastMessageAt: "2026-09-04T10:00:00.000Z",
+      canMessage: true,
+      unread: false,
+      leadStatus: "ENGAGED",
+      tags: [],
+      inboxStatus: "OPEN",
+      favorite: false,
+    }], members: [{ userId: "owner_1", email: "owner@example.com", role: "OWNER" }] } } });
+    return route.fulfill({ json: { data: { messages: [] } } });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/activity");
+  await page.getByRole("button", { name: /open conversation with @aanya/i }).click();
+  const toolbar = page.getByRole("toolbar", { name: "Conversation actions" });
+  await expect(toolbar).toBeVisible();
+  const box = await toolbar.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.height).toBeLessThanOrEqual(46);
+  expect(box!.width).toBeLessThanOrEqual(440);
+  if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-inbox-toolbar-redesign.png", fullPage: true });
+});
+
+test("inbox channel switching uses the compact segmented control", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/activity");
+  const tabs = page.getByRole("tablist", { name: "Inbox channels" });
+  const activeTab = tabs.getByRole("tab", { name: "Instagram conversations" });
+  await expect(tabs).toBeVisible();
+  const layout = await tabs.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const active = element.querySelector<HTMLElement>('[aria-selected="true"]');
+    const style = getComputedStyle(element);
+    return {
+      width: box.width,
+      radius: parseFloat(style.borderRadius),
+      background: style.backgroundColor,
+      activeBackground: active ? getComputedStyle(active).backgroundColor : "",
+    };
+  });
+  expect(layout.width).toBeLessThan(520);
+  expect(layout.radius).toBeGreaterThanOrEqual(20);
+  expect(layout.background).not.toBe("rgba(0, 0, 0, 0)");
+  expect(layout.activeBackground).not.toBe("rgba(0, 0, 0, 0)");
+  await expect(activeTab).toHaveAttribute("aria-selected", "true");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileBox = await tabs.boundingBox();
+  expect(mobileBox).not.toBeNull();
+  expect(mobileBox!.x).toBeGreaterThanOrEqual(16);
+  expect(mobileBox!.x + mobileBox!.width).toBeLessThanOrEqual(374);
+  if (process.env.VISUAL_REVIEW) {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+    await page.screenshot({ path: "/tmp/linkar-inbox-tabs-dark.png", fullPage: true });
+  }
+});
+
+test("jade connection status stays vivid and calm in dark mode", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("linkar-theme", "dark"));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/profile");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const status = page.getByRole("status", { name: "Instagram connected" });
+  await expect(status).toBeVisible();
+  const colors = await status.evaluate((element) => {
+    const dot = element.querySelector<HTMLElement>(".signal-dot");
+    return {
+      text: getComputedStyle(element).color,
+      dot: dot ? getComputedStyle(dot).backgroundColor : "",
+    };
+  });
+  expect(colors.text).toBe("rgb(98, 230, 185)");
+  expect(colors.dot).toBe("rgb(98, 230, 185)");
+  if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-profile-redesign-dark.png", fullPage: true });
 });
 
 test("mobile and tablet builder progress keeps descriptive labels", async ({ page }) => {

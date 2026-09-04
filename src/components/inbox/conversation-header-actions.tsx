@@ -14,7 +14,7 @@ function localReminder(value?: string): string {
 }
 
 export function ConversationHeaderActions({ contact, members, onOperation }: { contact: InboxContact; members: InboxMember[]; onOperation: (operation: InboxOperation) => void }) {
-  return <div className="conversation-header-actions">
+  return <div className="conversation-header-actions" role="toolbar" aria-label="Conversation actions">
     <button className="icon-button" type="button" aria-label={contact.favorite ? "Remove from favourites" : "Add to favourites"} onClick={() => onOperation({ action: "set_favorite", favorite: !contact.favorite })}><Star size={17} fill={contact.favorite ? "currentColor" : "none"} /></button>
     <button className="icon-button" type="button" aria-label={contact.inboxStatus === "OPEN" ? "Close conversation" : "Reopen conversation"} onClick={() => onOperation({ action: "set_status", status: contact.inboxStatus === "OPEN" ? "CLOSED" : "OPEN" })}><Archive size={17} /></button>
     <select className="conversation-assignee" aria-label="Assign conversation" value={contact.assigneeUserId ?? ""} onChange={(event) => onOperation({ action: "set_assignment", assigneeUserId: event.target.value || null })}><option value="">Unassigned</option>{members.map((member) => <option key={member.userId} value={member.userId}>{member.email}</option>)}</select>

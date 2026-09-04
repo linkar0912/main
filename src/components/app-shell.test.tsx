@@ -93,6 +93,36 @@ describe("AppShell", () => {
     expect(within(navigation).queryByRole("link", { name: "Broadcasts" })).toBeNull();
   });
 
+  it("keeps pricing discoverable with the account destinations", async () => {
+    stubShellFetch();
+    render(<AppShell><main>Workspace</main></AppShell>);
+
+    await screen.findByText("Member");
+    const account = screen.getByRole("navigation", { name: "Account" });
+    expect(within(account).getByRole("link", { name: "Pricing" }).getAttribute("href")).toBe("/pricing");
+  });
+
+  it("exposes every public support and policy destination from workspace pages", async () => {
+    stubShellFetch();
+    render(<AppShell><main>Workspace</main></AppShell>);
+
+    const resources = screen.getByRole("navigation", { name: "Workspace resources" });
+    const expectedLinks = [
+      ["Support", "/support"],
+      ["Terms", "/terms"],
+      ["Privacy", "/privacy"],
+      ["Cookies", "/cookies"],
+      ["Acceptable use", "/acceptable-use"],
+      ["Data processing", "/data-processing"],
+      ["Service providers", "/service-providers"],
+      ["Data deletion", "/data-deletion"],
+    ];
+
+    for (const [name, href] of expectedLinks) {
+      expect(within(resources).getByRole("link", { name }).getAttribute("href")).toBe(href);
+    }
+  });
+
   it("shows the operator-console link only to an allowlisted platform owner", async () => {
     stubShellFetch("OWNER", null, true);
     render(<AppShell><main>Workspace</main></AppShell>);

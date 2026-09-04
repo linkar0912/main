@@ -76,9 +76,12 @@ function VolumeChart({ sent, reached }: { sent: DayPoint[]; reached: DayPoint[] 
 
 function Metric({ label, value, note, icon: Icon }: { label: string; value: number; note: string; icon: typeof Send }) {
   return (
-    <div className="insights-metric" role="group" aria-label={label}>
-      <span className="insights-metric-icon"><Icon size={18} /></span>
-      <span><small>{label}</small><strong>{value.toLocaleString()}</strong><em>{note}</em></span>
+    <div className="insights-metric" role="listitem">
+      <div className="stat-block insights-metric-body" role="group" aria-label={label}>
+        <span className="stat-label"><Icon size={15} strokeWidth={1.8} /><span>{label}</span></span>
+        <span className="stat-value-row"><strong>{value.toLocaleString()}</strong></span>
+        <small className="stat-note">{note}</small>
+      </div>
     </div>
   );
 }
@@ -144,7 +147,7 @@ export function InsightsScreen() {
 
         {!loading && data && (
           <div className="insights-workspace">
-            <section className="insights-metrics" aria-label="Performance summary">
+            <section className="stat-row insights-metrics" role="list" aria-label="Performance summary">
               <Metric label="Replies sent" value={totals.sent} note="Last 14 days" icon={Send} />
               <Metric label="People reached" value={totals.reached} note="Last 14 days" icon={UsersRound} />
               <Metric label="Emails captured" value={data.capturedEmails} note="All time" icon={MailCheck} />

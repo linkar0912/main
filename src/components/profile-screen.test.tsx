@@ -95,6 +95,7 @@ describe("ProfileScreen", () => {
     const avatar = await screen.findByRole("img", { name: /@brand\.acct profile photo/i });
     expect(avatar.getAttribute("src")).toBe("https://cdn.instagram.com/dp.jpg");
     expect(avatar.closest(".social-avatar")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Instagram connected" })).toBeTruthy();
   });
 
   it("falls back to the glyph when Meta provides no profile picture", async () => {

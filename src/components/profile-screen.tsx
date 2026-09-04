@@ -307,7 +307,7 @@ function ProfileBody({
                   <SocialAvatar channel="instagram" name={`@${connection.username}`} src={connection.profilePictureUrl ?? undefined} />
                   <div className="connection-card-id">
                     <strong>@{connection.username}</strong>
-                    <span className="connection-status">
+                    <span className="connection-status" role="status" aria-label={`Instagram ${connection.status.toLowerCase()}`}>
                       <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
                       {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
                       {" · "}
@@ -323,7 +323,7 @@ function ProfileBody({
                   <SocialAvatar channel="facebook" name={facebookPage.pageName} src={facebookPage.avatarUrl} />
                   <div className="connection-card-id">
                     <strong>{facebookPage.pageName}</strong>
-                    <span className="connection-status">
+                    <span className="connection-status" role="status" aria-label={`Facebook ${facebookPage.status.toLowerCase()}`}>
                       <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
                       Facebook Page
                       {" · "}
