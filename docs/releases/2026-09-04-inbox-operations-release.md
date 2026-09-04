@@ -2,9 +2,9 @@
 
 ## Release
 
-- Deployed at: `2026-09-04T08:55:16Z`
-- Release commit: `cdd4381eb9e630b913b7f0a16fa299b30903c902`
-- Previous production / rollback image reference: `f8e728845bbefbac82cabfa0bc9727486debbf86`
+- Deployed at: `2026-09-04T09:47:00Z`
+- Release commit: `7e33afbebeacab2454a63d6e25d13a51d5e30b6a`
+- Previous production / rollback image reference: `cdd4381eb9e630b913b7f0a16fa299b30903c902`
 - Production container workflow: `https://github.com/linkar0912/main/actions/runs/33854796878` (passed)
 - CI workflow: `https://github.com/linkar0912/main/actions/runs/33854796745` (passed)
 - Prisma migrations: 45; `prisma migrate status` reported up to date after deployment.
@@ -28,9 +28,10 @@
 - PostgreSQL 17 migration rehearsal: passed from an empty database and from the 44-migration pre-change state.
 - Historical migration repair: removed RLS statements for legacy auth tables already dropped by the immediately preceding migration; both rehearsal paths pass and the connected database remains up to date.
 - Coolify service variable `FOLLOW_GATED_CAMPAIGNS_ENABLED=true` is explicit, runtime-enabled, and shared by the Compose environment used by web and worker.
-- Production `/api/health`: `status=ok`, `mode=configured`, `database=ok`, `redis=ok`, `instagram=configured`, `facebook=configured`, `followGatedCampaigns=enabled`, release `cdd4381eb9e630b913b7f0a16fa299b30903c902`.
+- Production `/api/health`: `status=ok`, `mode=configured`, `database=ok`, `redis=ok`, `instagram=configured`, `facebook=configured`, `followGatedCampaigns=enabled`, release `7e33afbebeacab2454a63d6e25d13a51d5e30b6a`.
+- Cross-subdomain OAuth is fixed: secure auth and OAuth-state cookies share `linkar.in` only for trusted HTTPS app/admin origins, and successful OAuth redirects preserve `/admin/*` destinations.
 - Authenticated production surfaces passed without console errors: Dashboard, Instagram Inbox, Facebook Page activity, Contacts, Automations, Settings, and Insights.
-- Owner System: `BLOCKED` for browser verification because `admin.linkar.in` requires its own authenticated session and no admin credential was available in the verification session. The public redirect to the admin login page worked.
+- Owner System: route reached the admin login page. Full authenticated browser verification remains `BLOCKED` until an owner completes the live OAuth/password sign-in; the previous Google attempt exposed the cross-subdomain state issue now fixed in this release.
 
 ## Controlled Meta smoke tests
 
@@ -44,4 +45,3 @@ The production workspace used for verification is in Demo mode with zero connect
 | Facebook Page public-comment reply | `BLOCKED` | Connect a Facebook Page, create an isolated Page-comment automation/test post, and provide a separate Facebook test account. |
 
 When those provider dependencies are available, record timestamp, automation name/ID, safe event or delivery ID, expected count, actual count, and pass/fail here. Do not add attachments, image messages, voice messages, notes, Facebook Messenger, or WhatsApp as part of these checks.
-
