@@ -346,6 +346,36 @@ export type AutomationContactRecord = {
   updatedAt: string;
 };
 
+export type InboxContactSort = "newest" | "oldest" | "unread";
+export type InboxContactQuery = {
+  limit: number;
+  cursor?: string;
+  query?: string;
+  status?: InboxStatus;
+  unread?: boolean;
+  assignment?: "mine" | "unassigned";
+  currentUserId?: string;
+  favorite?: boolean;
+  label?: string;
+  reminder?: "due" | "scheduled";
+  sort: InboxContactSort;
+  now: string;
+};
+export type InboxContactRow = {
+  record: AutomationContactRecord;
+  preview: string;
+  latestInboundAt?: string;
+  unread: boolean;
+};
+export type InboxContactPage = { rows: InboxContactRow[]; nextCursor?: string };
+export type InboxRecordPage<T> = { records: T[]; nextCursor?: string };
+export type InboxStatePatch =
+  | { action: "mark_read"; readAt: string }
+  | { action: "set_status"; status: InboxStatus }
+  | { action: "set_favorite"; favorite: boolean }
+  | { action: "set_reminder"; reminderAt: string | null }
+  | { action: "set_assignment"; assigneeUserId: string | null };
+
 /** Labels set automatically by the engine; manual tag editing never removes them. */
 export const AUTOMATIC_CONTACT_TAGS = ["email_captured", "opted_out", "clicked"] as const;
 
@@ -934,6 +964,8 @@ export interface AutomationRepository {
     workspaceId: string,
     options: { leadStatus?: LeadStatus; limit: number },
   ): Promise<AutomationContactRecord[]>;
+  listInboxContacts(workspaceId: string, query: InboxContactQuery): Promise<InboxContactPage>;
+  updateInboxState(workspaceId: string, contactId: string, patch: InboxStatePatch): Promise<AutomationContactRecord | null>;
   deleteContactsByWorkspaceIds(workspaceIds: string[]): Promise<number>;
   // Tracked short links.
   createTrackedLink(
@@ -1007,6 +1039,22 @@ export interface AutomationRepository {
   /** Idempotent per (workspaceId, providerEventId); never throws on duplicates. */
   recordWebhookEvent(workspaceId: string, input: RecordWebhookEventInput): Promise<void>;
   listRecentWebhookEvents(workspaceId: string, limit: number, eventType?: string): Promise<WebhookEventRecord[]>;
+  listInboundEventsForRecipient(
+    workspaceId: string,
+    instagramAccountId: string,
+    recipientId: string,
+    options: { limit: number; cursor?: string },
+  ): Promise<InboxRecordPage<WebhookEventRecord>>;
+  listOutboundDeliveriesForRecipientPage(
+    workspaceId: string,
+    instagramAccountId: string,
+    recipientId: string,
+    options: { limit: number; cursor?: string },
+  ): Promise<InboxRecordPage<OutboundDeliveryRecord>>;
+  listWebhookEventsPage(
+    workspaceId: string,
+    options: { limit: number; cursor?: string; eventType?: string },
+  ): Promise<InboxRecordPage<WebhookEventRecord>>;
   deleteOldWebhookEvents(before: string): Promise<number>;
   recordHelpSearch(
     workspaceId: string,

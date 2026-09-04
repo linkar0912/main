@@ -46,10 +46,13 @@ import type {
   WorkspaceStatus,
   HelpSearchRecord,
   HelpFeedbackRecord,
+  InboxContactQuery,
+  InboxContactRow,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { normalizeHelpQuery } from "./help-search";
+import { decodeInboxCursor, encodeInboxCursor } from "./inbox-cursor";
 
 function now(): string {
   return new Date().toISOString();
@@ -1015,6 +1018,24 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       );
     },
 
+    async listOutboundDeliveriesForRecipientPage(workspaceId, instagramAccountId, recipientId, options) {
+      const sorted = [...outboundDeliveries.values()]
+        .filter((record) => record.workspaceId === workspaceId
+          && record.instagramAccountId === instagramAccountId
+          && record.recipientId === recipientId)
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+      const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
+      const start = cursor ? sorted.findIndex((record) => record.id === cursor.id) + 1 : 0;
+      const page = sorted.slice(Math.max(0, start), Math.max(0, start) + options.limit + 1);
+      const hasMore = page.length > options.limit;
+      const records = page.slice(0, options.limit);
+      const last = records.at(-1);
+      return {
+        records: copy(records),
+        ...(hasMore && last ? { nextCursor: encodeInboxCursor({ kind: "messages", at: last.createdAt, id: last.id }) } : {}),
+      };
+    },
+
     async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
       // Two concurrent callers can both observe the !existing branch and try
       // to insert; the second set() would win and bump the id. The Prisma
@@ -1736,6 +1757,80 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       );
     },
 
+    async listInboxContacts(workspaceId, query: InboxContactQuery) {
+      const messageTypes = new Set(["message.received", "quick_reply.received", "postback.received", "story_mention.received"]);
+      const rows: InboxContactRow[] = [...contacts.values()]
+        .filter((contact) => contact.workspaceId === workspaceId)
+        .map((record) => {
+          const latest = [...webhookEvents.values()]
+            .filter((event) => event.workspaceId === workspaceId
+              && messageTypes.has(event.eventType)
+              && event.payload.accountId === record.instagramAccountId
+              && event.payload.recipientId === record.igScopedUserId)
+            .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || b.id.localeCompare(a.id))[0];
+          const latestInboundAt = latest?.receivedAt;
+          const unread = Boolean(latestInboundAt && (!record.inboxLastReadAt || latestInboundAt > record.inboxLastReadAt));
+          const text = typeof latest?.payload.text === "string" && latest.payload.text.trim()
+            ? latest.payload.text.trim()
+            : latest?.eventType === "story_mention.received" ? "Mentioned you in a story" : "No messages yet";
+          return { record: copy(record), preview: text, ...(latestInboundAt ? { latestInboundAt } : {}), unread };
+        });
+      const normalizedQuery = query.query?.trim().toLowerCase();
+      const filtered = rows.filter((row) => {
+        const contact = row.record;
+        if (query.status && contact.inboxStatus !== query.status) return false;
+        if (query.unread !== undefined && row.unread !== query.unread) return false;
+        if (query.assignment === "mine" && contact.assigneeUserId !== query.currentUserId) return false;
+        if (query.assignment === "unassigned" && contact.assigneeUserId) return false;
+        if (query.favorite !== undefined && contact.inboxFavorite !== query.favorite) return false;
+        if (query.label && !contact.tags.includes(query.label.toLowerCase())) return false;
+        if (query.reminder === "due" && (!contact.inboxReminderAt || contact.inboxReminderAt > query.now)) return false;
+        if (query.reminder === "scheduled" && (!contact.inboxReminderAt || contact.inboxReminderAt <= query.now)) return false;
+        if (normalizedQuery) {
+          const haystack = [contact.igScopedUserId, contact.email, ...contact.tags, row.preview].filter(Boolean).join(" ").toLowerCase();
+          if (!haystack.includes(normalizedQuery)) return false;
+        }
+        return true;
+      });
+      filtered.sort((left, right) => {
+        if (query.sort === "unread" && left.unread !== right.unread) return left.unread ? -1 : 1;
+        const leftAt = left.latestInboundAt ?? left.record.lastSeenAt;
+        const rightAt = right.latestInboundAt ?? right.record.lastSeenAt;
+        const timeOrder = leftAt.localeCompare(rightAt);
+        if (timeOrder !== 0) return query.sort === "oldest" ? timeOrder : -timeOrder;
+        return query.sort === "oldest"
+          ? left.record.id.localeCompare(right.record.id)
+          : right.record.id.localeCompare(left.record.id);
+      });
+      const cursor = query.cursor ? decodeInboxCursor(query.cursor, "contacts") : undefined;
+      const start = cursor ? filtered.findIndex((row) => row.record.id === cursor.id) + 1 : 0;
+      const page = filtered.slice(Math.max(0, start), Math.max(0, start) + query.limit + 1);
+      const hasMore = page.length > query.limit;
+      const visible = page.slice(0, query.limit);
+      const last = visible.at(-1);
+      return {
+        rows: copy(visible),
+        ...(hasMore && last ? { nextCursor: encodeInboxCursor({
+          kind: "contacts",
+          at: last.latestInboundAt ?? last.record.lastSeenAt,
+          id: last.record.id,
+        }) } : {}),
+      };
+    },
+
+    async updateInboxState(workspaceId, contactId, patch) {
+      const current = contacts.get(contactId);
+      if (!current || current.workspaceId !== workspaceId) return null;
+      const updated: AutomationContactRecord = { ...current, updatedAt: now() };
+      if (patch.action === "mark_read") updated.inboxLastReadAt = patch.readAt;
+      if (patch.action === "set_status") updated.inboxStatus = patch.status;
+      if (patch.action === "set_favorite") updated.inboxFavorite = patch.favorite;
+      if (patch.action === "set_reminder") updated.inboxReminderAt = patch.reminderAt ?? undefined;
+      if (patch.action === "set_assignment") updated.assigneeUserId = patch.assigneeUserId ?? undefined;
+      contacts.set(contactId, updated);
+      return copy(updated);
+    },
+
     async countParticipantsByVariant(workspaceId, automationId) {
       // Shares the Prisma path's tally so the two implementations cannot drift:
       // this one already normalized before bucketing, which is why the suite
@@ -1771,6 +1866,36 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
         .slice(0, limit)
         .map(copy);
+    },
+
+    async listInboundEventsForRecipient(workspaceId, instagramAccountId, recipientId, options) {
+      const messageTypes = new Set(["message.received", "quick_reply.received", "postback.received", "story_mention.received"]);
+      const sorted = [...webhookEvents.values()]
+        .filter((event) => event.workspaceId === workspaceId
+          && messageTypes.has(event.eventType)
+          && event.payload.accountId === instagramAccountId
+          && event.payload.recipientId === recipientId)
+        .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || b.id.localeCompare(a.id));
+      const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
+      const start = cursor ? sorted.findIndex((event) => event.id === cursor.id) + 1 : 0;
+      const page = sorted.slice(Math.max(0, start), Math.max(0, start) + options.limit + 1);
+      const hasMore = page.length > options.limit;
+      const records = page.slice(0, options.limit);
+      const last = records.at(-1);
+      return { records: records.map(copy), ...(hasMore && last ? { nextCursor: encodeInboxCursor({ kind: "messages", at: last.receivedAt, id: last.id }) } : {}) };
+    },
+
+    async listWebhookEventsPage(workspaceId, options) {
+      const sorted = [...webhookEvents.values()]
+        .filter((event) => event.workspaceId === workspaceId && (!options.eventType || event.eventType === options.eventType))
+        .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || b.id.localeCompare(a.id));
+      const cursor = options.cursor ? decodeInboxCursor(options.cursor, "activity") : undefined;
+      const start = cursor ? sorted.findIndex((event) => event.id === cursor.id) + 1 : 0;
+      const page = sorted.slice(Math.max(0, start), Math.max(0, start) + options.limit + 1);
+      const hasMore = page.length > options.limit;
+      const records = page.slice(0, options.limit);
+      const last = records.at(-1);
+      return { records: records.map(copy), ...(hasMore && last ? { nextCursor: encodeInboxCursor({ kind: "activity", at: last.receivedAt, id: last.id }) } : {}) };
     },
 
     async deleteOldWebhookEvents(before) {

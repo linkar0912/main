@@ -49,6 +49,7 @@ import type { EmailCaptureField } from "./automation/types";
 import { toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
 import { normalizeHelpQuery } from "./help-search";
+import { decodeInboxCursor, encodeInboxCursor } from "./inbox-cursor";
 
 function mapInvitation(record: {
   id: string;
@@ -1475,6 +1476,30 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapOutboundDelivery);
     },
 
+    async listOutboundDeliveriesForRecipientPage(workspaceId, instagramAccountId, recipientId, options) {
+      const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
+      const records = await client.outboundDelivery.findMany({
+        where: {
+          workspaceId,
+          instagramAccountId,
+          recipientId,
+          ...(cursor ? { OR: [
+            { createdAt: { lt: new Date(cursor.at) } },
+            { createdAt: new Date(cursor.at), id: { lt: cursor.id } },
+          ] } : {}),
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: options.limit + 1,
+      });
+      const hasMore = records.length > options.limit;
+      const visible = records.slice(0, options.limit).map(mapOutboundDelivery);
+      const last = visible.at(-1);
+      return {
+        records: visible,
+        ...(hasMore && last ? { nextCursor: encodeInboxCursor({ kind: "messages", at: last.createdAt, id: last.id }) } : {}),
+      };
+    },
+
     async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
       const existing = await client.outboundDelivery.findUnique({
         where: { deliveryKey: input.deliveryKey },
@@ -2256,6 +2281,120 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapContact);
     },
 
+    async listInboxContacts(workspaceId, query) {
+      const messageTypes = ["message.received", "quick_reply.received", "postback.received", "story_mention.received"];
+      const cursor = query.cursor ? decodeInboxCursor(query.cursor, "contacts") : undefined;
+      let cursorUnread = false;
+      if (cursor && query.sort === "unread") {
+        const cursorContact = await client.automationContact.findFirst({ where: { id: cursor.id, workspaceId } });
+        if (cursorContact) {
+          const latest = await client.webhookEvent.findFirst({
+            where: {
+              workspaceId,
+              eventType: { in: messageTypes },
+              payload: { path: ["accountId"], equals: cursorContact.instagramAccountId },
+              AND: { payload: { path: ["recipientId"], equals: cursorContact.igScopedUserId } },
+            },
+            orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+          });
+          cursorUnread = Boolean(latest && (!cursorContact.inboxLastReadAt || latest.receivedAt > cursorContact.inboxLastReadAt));
+        }
+      }
+      const unreadSql = Prisma.sql`(latest."receivedAt" IS NOT NULL AND (c."inboxLastReadAt" IS NULL OR latest."receivedAt" > c."inboxLastReadAt"))`;
+      const activitySql = Prisma.sql`COALESCE(latest."receivedAt", c."lastSeenAt")`;
+      const conditions: Prisma.Sql[] = [Prisma.sql`c."workspaceId" = ${workspaceId}`];
+      if (query.status) conditions.push(Prisma.sql`c."inboxStatus" = ${query.status}`);
+      if (query.unread !== undefined) conditions.push(query.unread ? unreadSql : Prisma.sql`NOT ${unreadSql}`);
+      if (query.assignment === "mine") conditions.push(Prisma.sql`c."assigneeUserId" = ${query.currentUserId ?? ""}`);
+      if (query.assignment === "unassigned") conditions.push(Prisma.sql`c."assigneeUserId" IS NULL`);
+      if (query.favorite !== undefined) conditions.push(Prisma.sql`c."inboxFavorite" = ${query.favorite}`);
+      if (query.label) conditions.push(Prisma.sql`${query.label.toLowerCase()} = ANY(c."tags")`);
+      if (query.reminder === "due") conditions.push(Prisma.sql`c."inboxReminderAt" IS NOT NULL AND c."inboxReminderAt" <= ${new Date(query.now)}`);
+      if (query.reminder === "scheduled") conditions.push(Prisma.sql`c."inboxReminderAt" > ${new Date(query.now)}`);
+      if (query.query?.trim()) {
+        const pattern = `%${query.query.trim()}%`;
+        conditions.push(Prisma.sql`(
+          c."igScopedUserId" ILIKE ${pattern}
+          OR COALESCE(c."email", '') ILIKE ${pattern}
+          OR c."tags"::text ILIKE ${pattern}
+          OR COALESCE(latest."preview", '') ILIKE ${pattern}
+        )`);
+      }
+      if (cursor) {
+        const at = new Date(cursor.at);
+        const chronological = query.sort === "oldest"
+          ? Prisma.sql`(${activitySql} > ${at} OR (${activitySql} = ${at} AND c."id" > ${cursor.id}))`
+          : Prisma.sql`(${activitySql} < ${at} OR (${activitySql} = ${at} AND c."id" < ${cursor.id}))`;
+        conditions.push(query.sort === "unread"
+          ? Prisma.sql`(${unreadSql} < ${cursorUnread} OR (${unreadSql} = ${cursorUnread} AND ${chronological}))`
+          : chronological);
+      }
+      const order = query.sort === "oldest"
+        ? Prisma.sql`${activitySql} ASC, c."id" ASC`
+        : query.sort === "unread"
+          ? Prisma.sql`${unreadSql} DESC, ${activitySql} DESC, c."id" DESC`
+          : Prisma.sql`${activitySql} DESC, c."id" DESC`;
+      type RawRow = Parameters<typeof mapContact>[0] & {
+        latestInboundAt: Date | null;
+        preview: string | null;
+        unread: boolean;
+      };
+      const rows = await client.$queryRaw<RawRow[]>(Prisma.sql`
+        SELECT c.*,
+          latest."receivedAt" AS "latestInboundAt",
+          latest."preview" AS "preview",
+          ${unreadSql} AS "unread"
+        FROM "AutomationContact" c
+        LEFT JOIN LATERAL (
+          SELECT w."receivedAt",
+            CASE
+              WHEN NULLIF(BTRIM(w."payload"->>'text'), '') IS NOT NULL THEN BTRIM(w."payload"->>'text')
+              WHEN w."eventType" = 'story_mention.received' THEN 'Mentioned you in a story'
+              ELSE 'Instagram interaction'
+            END AS "preview"
+          FROM "WebhookEvent" w
+          WHERE w."workspaceId" = c."workspaceId"
+            AND w."eventType" IN ('message.received', 'quick_reply.received', 'postback.received', 'story_mention.received')
+            AND w."payload"->>'accountId' = c."instagramAccountId"
+            AND w."payload"->>'recipientId' = c."igScopedUserId"
+          ORDER BY w."receivedAt" DESC, w."id" DESC
+          LIMIT 1
+        ) latest ON TRUE
+        WHERE ${Prisma.join(conditions, " AND ")}
+        ORDER BY ${order}
+        LIMIT ${query.limit + 1}
+      `);
+      const hasMore = rows.length > query.limit;
+      const visible = rows.slice(0, query.limit).map((row) => ({
+        record: mapContact(row),
+        preview: row.preview ?? "No messages yet",
+        ...(row.latestInboundAt ? { latestInboundAt: row.latestInboundAt.toISOString() } : {}),
+        unread: row.unread,
+      }));
+      const last = visible.at(-1);
+      return {
+        rows: visible,
+        ...(hasMore && last ? { nextCursor: encodeInboxCursor({
+          kind: "contacts",
+          at: last.latestInboundAt ?? last.record.lastSeenAt,
+          id: last.record.id,
+        }) } : {}),
+      };
+    },
+
+    async updateInboxState(workspaceId, contactId, patch) {
+      const current = await client.automationContact.findFirst({ where: { id: contactId, workspaceId } });
+      if (!current) return null;
+      const data: Prisma.AutomationContactUncheckedUpdateInput = {};
+      if (patch.action === "mark_read") data.inboxLastReadAt = new Date(patch.readAt);
+      if (patch.action === "set_status") data.inboxStatus = patch.status;
+      if (patch.action === "set_favorite") data.inboxFavorite = patch.favorite;
+      if (patch.action === "set_reminder") data.inboxReminderAt = patch.reminderAt ? new Date(patch.reminderAt) : null;
+      if (patch.action === "set_assignment") data.assigneeUserId = patch.assigneeUserId;
+      const updated = await client.automationContact.update({ where: { id: current.id }, data });
+      return mapContact(updated);
+    },
+
     async countParticipantsByVariant(workspaceId, automationId) {
       const groupByVariant = (where: Record<string, unknown>) =>
         client.automationParticipant.groupBy({
@@ -2311,6 +2450,64 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         ...(record.processedAt ? { processedAt: record.processedAt.toISOString() } : {}),
         payload: record.payload as Record<string, unknown>,
       }));
+    },
+
+    async listInboundEventsForRecipient(workspaceId, instagramAccountId, recipientId, options) {
+      const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
+      const records = await client.webhookEvent.findMany({
+        where: {
+          workspaceId,
+          eventType: { in: ["message.received", "quick_reply.received", "postback.received", "story_mention.received"] },
+          payload: { path: ["accountId"], equals: instagramAccountId },
+          AND: [
+            { payload: { path: ["recipientId"], equals: recipientId } },
+            ...(cursor ? [{ OR: [
+              { receivedAt: { lt: new Date(cursor.at) } },
+              { receivedAt: new Date(cursor.at), id: { lt: cursor.id } },
+            ] }] : []),
+          ],
+        },
+        orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+        take: options.limit + 1,
+      });
+      const hasMore = records.length > options.limit;
+      const visible = records.slice(0, options.limit).map((record) => ({
+        id: record.id,
+        providerEventId: record.providerEventId,
+        eventType: record.eventType,
+        receivedAt: record.receivedAt.toISOString(),
+        ...(record.processedAt ? { processedAt: record.processedAt.toISOString() } : {}),
+        payload: record.payload as Record<string, unknown>,
+      }));
+      const last = visible.at(-1);
+      return { records: visible, ...(hasMore && last ? { nextCursor: encodeInboxCursor({ kind: "messages", at: last.receivedAt, id: last.id }) } : {}) };
+    },
+
+    async listWebhookEventsPage(workspaceId, options) {
+      const cursor = options.cursor ? decodeInboxCursor(options.cursor, "activity") : undefined;
+      const records = await client.webhookEvent.findMany({
+        where: {
+          workspaceId,
+          ...(options.eventType ? { eventType: options.eventType } : {}),
+          ...(cursor ? { OR: [
+            { receivedAt: { lt: new Date(cursor.at) } },
+            { receivedAt: new Date(cursor.at), id: { lt: cursor.id } },
+          ] } : {}),
+        },
+        orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+        take: options.limit + 1,
+      });
+      const hasMore = records.length > options.limit;
+      const visible = records.slice(0, options.limit).map((record) => ({
+        id: record.id,
+        providerEventId: record.providerEventId,
+        eventType: record.eventType,
+        receivedAt: record.receivedAt.toISOString(),
+        ...(record.processedAt ? { processedAt: record.processedAt.toISOString() } : {}),
+        payload: record.payload as Record<string, unknown>,
+      }));
+      const last = visible.at(-1);
+      return { records: visible, ...(hasMore && last ? { nextCursor: encodeInboxCursor({ kind: "activity", at: last.receivedAt, id: last.id }) } : {}) };
     },
 
     async deleteOldWebhookEvents(before) {
