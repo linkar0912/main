@@ -121,7 +121,11 @@ const insightsOverviewCache: ClientCache<InsightsOverview> = {};
 
 async function requestJson<T>(url: string, select: (payload: unknown) => T): Promise<T> {
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`Could not load ${url}`);
+  if (!response.ok) {
+    const error = new Error(`Could not load ${url}`) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
   return select(await response.json());
 }
 

@@ -35,6 +35,19 @@ describe("BillingSettings", () => {
     expect(screen.getAllByText("2 months free")).toHaveLength(3);
   });
 
+  it("reuses a recent billing response when the section remounts", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => billingView() });
+    vi.stubGlobal("fetch", fetchMock);
+    const first = render(<BillingSettings />);
+    await screen.findByRole("heading", { name: "Plan and usage" });
+    first.unmount();
+
+    render(<BillingSettings />);
+    await screen.findByRole("heading", { name: "Plan and usage" });
+
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/billing")).toHaveLength(1);
+  });
+
   it("keeps the current entitlement in a usage summary and reserves cards for upgrades", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => billingView() }));
     await act(async () => { render(<BillingSettings />); });

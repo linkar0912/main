@@ -4,23 +4,10 @@ import { Check, CreditCard, Gauge, Sparkles, TicketCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { openRazorpaySubscriptionCheckout } from "@/src/lib/client/razorpay-checkout";
+import { getBillingView, invalidateWorkspaceResource, type BillingView } from "@/src/lib/client/workspace-data";
 import { FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
-import type { BillingCatalogPlan, BillingInterval, BillingPlanKey } from "@/src/lib/billing/types";
+import type { BillingInterval, BillingPlanKey } from "@/src/lib/billing/types";
 import { ActionNotice } from "./action-notice";
-
-type BillingView = {
-  catalog: BillingCatalogPlan[];
-  canManage: boolean;
-  billingConfigured: boolean;
-  entitlementPlanKey: string;
-  deliveriesUsed: number;
-  subscription: null | {
-    status: string;
-    currentPeriodEnd?: string | null;
-    cancelAtPeriodEnd?: boolean;
-    pendingPlanId?: string | null;
-  };
-};
 
 function formatRupees(paise: number): string {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(paise / 100);
@@ -41,22 +28,17 @@ export function BillingSettings() {
   const [redeemingInvite, setRedeemingInvite] = useState(false);
   const [inviteNotice, setInviteNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
-  const load = useCallback(async () => {
-    const response = await fetch("/api/billing");
-    const payload = await response.json() as { data?: BillingView; error?: string };
-    if (!response.ok || !payload.data) throw new Error(payload.error ?? "billing_load_failed");
-    setView(payload.data);
-    return payload.data;
+  const load = useCallback(async (fresh = false) => {
+    if (fresh) invalidateWorkspaceResource("billing");
+    const next = await getBillingView();
+    setView(next);
+    return next;
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/billing", { signal: controller.signal })
-      .then(async (response) => {
-        const payload = await response.json() as { data?: BillingView; error?: string };
-        if (!response.ok || !payload.data) throw new Error(payload.error ?? "billing_load_failed");
-        setView(payload.data);
-      })
+    void getBillingView(controller.signal)
+      .then(setView)
       .catch((reason) => {
         if (reason instanceof DOMException && reason.name === "AbortError") return;
         setError("Billing details could not be loaded. Try again.");
@@ -67,7 +49,7 @@ export function BillingSettings() {
   useEffect(() => {
     if (!activating) return;
     const timer = window.setInterval(() => {
-      void load().then((next) => {
+      void load(true).then((next) => {
         if (next.subscription?.status === "ACTIVE") {
           setActivating(false);
           setMessage("Your plan is active.");
@@ -96,7 +78,7 @@ export function BillingSettings() {
         const payload = await response.json() as { error?: string };
         if (!response.ok) throw new Error(payload.error ?? "plan_change_failed");
         setMessage("Plan change scheduled for your next billing cycle.");
-        await load();
+        await load(true);
         return;
       }
       const response = await fetch("/api/billing/checkout", {
@@ -136,7 +118,7 @@ export function BillingSettings() {
       return;
     }
     setMessage("Cancellation scheduled. Paid access stays active through the current billing period.");
-    await load().catch(() => undefined);
+    await load(true).catch(() => undefined);
   }
 
   async function redeemInvite() {
@@ -151,7 +133,7 @@ export function BillingSettings() {
       if (!response.ok) throw new Error(payload.error ?? "invite_code_redemption_failed");
       if (!payload.data) throw new Error("invite_code_redemption_failed");
       setInviteCode("");
-      await load();
+      await load(true);
       setInviteNotice({
         tone: "success",
         message: `Invite applied. ${payload.data.plan.name} access is active until ${formatDate(payload.data.expiresAt)}. Your paid subscription was not changed.`,

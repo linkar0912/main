@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 
 const { SettingsScreen } = await import("./settings-screen");
 
-type Route = { data?: unknown; mode?: string };
+type Route = { data?: unknown; mode?: string; members?: unknown[]; invitations?: unknown[] };
 
 function stubFetch(routes: Record<string, Route>) {
   vi.stubGlobal(
@@ -61,6 +61,50 @@ describe("SettingsScreen webhook health panel", () => {
 
     expect(await screen.findByText("All caught up")).toBeTruthy();
     expect(screen.queryByText(/Reconnect Instagram/)).toBeNull();
+  });
+
+  it("loads team and delivery settings only when those sections are opened", async () => {
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": { data: [] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
+      "/api/team/invitations": { members: [], invitations: [] },
+      "/api/workspace/messaging": { data: null },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+    await screen.findByText("No account connected");
+    const fetchMock = vi.mocked(fetch);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/team/invitations"))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/workspace/messaging"))).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: /Team/ }));
+    await screen.findByLabelText("Invite by email");
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/team/invitations"))).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Delivery/ }));
+    await screen.findByRole("region", { name: "Messaging hours" });
+    await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/workspace/messaging"))).toHaveLength(1));
+  });
+
+  it("shows connection names before slower provider health checks finish", async () => {
+    let finishHealth: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/health")) return new Promise<Response>((resolve) => { finishHealth = resolve; });
+      if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [{ id: "connection_1", igUserId: "ig_1", username: "creator", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" }] }) } as Response;
+      if (url.includes("/api/facebook/connection")) return { ok: true, json: async () => ({ data: [] }) } as Response;
+      if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } }) } as Response;
+      throw new Error(`Unexpected fetch to ${url}`);
+    }));
+
+    await act(async () => { render(<SettingsScreen />); });
+    expect(await screen.findByText("@creator")).toBeTruthy();
+    expect(screen.queryByText("All caught up")).toBeNull();
+
+    await act(async () => finishHealth?.({ ok: true, json: async () => ({ data: [] }) } as Response));
   });
 
   it("lists missing fields and prompts a reconnect when the subscription is incomplete", async () => {

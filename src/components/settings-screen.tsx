@@ -25,7 +25,17 @@ import { SocialAvatar } from "./social-avatar";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
-import { clearWorkspaceDataCache, getInstagramConnections, getFacebookPages, getWorkspaceBootstrap, type FacebookPageSummary } from "@/src/lib/client/workspace-data";
+import {
+  clearWorkspaceDataCache,
+  getFacebookPages,
+  getInstagramConnections,
+  getMessagingSettings,
+  getTeamOverview,
+  getWorkspaceBootstrap,
+  invalidateWorkspaceResource,
+  type FacebookPageSummary,
+  type TeamOverview,
+} from "@/src/lib/client/workspace-data";
 
 type Connection = { id: string; igUserId: string; username: string; status: ConnectionStatus; connectedAt: string; profilePictureUrl?: string | null };
 type ConnectionHealth = {
@@ -37,9 +47,6 @@ type ConnectionHealth = {
   missingFields: string[];
   checkError?: string;
 };
-type TeamMember = { email: string; role: string };
-type TeamInvitation = { id: string; email: string; role: string; expiresAt: string };
-type TeamOverview = { members: TeamMember[]; invitations: TeamInvitation[] };
 
 const WEBHOOK_FIELD_LABELS: Record<string, string> = {
   comments: "Comments",
@@ -111,18 +118,20 @@ export function SettingsScreen() {
   const [quietError, setQuietError] = useState("");
 
   useEffect(() => {
-    void fetch("/api/workspace/messaging")
-      .then((r) => r.json())
-      .then((payload: { data?: { startHour: number; endHour: number; timezone: string } | null }) => {
-        if (payload?.data) {
+    if (section !== "delivery") return;
+    const controller = new AbortController();
+    void getMessagingSettings(controller.signal)
+      .then((data) => {
+        if (data) {
           setQuietEnabled(true);
-          setQuietStart(payload.data.startHour);
-          setQuietEnd(payload.data.endHour);
-          setQuietTz(payload.data.timezone);
+          setQuietStart(data.startHour);
+          setQuietEnd(data.endHour);
+          setQuietTz(data.timezone);
         }
       })
       .catch(() => undefined);
-  }, []);
+    return () => controller.abort();
+  }, [section]);
 
   useEffect(() => {
     if (facebookState !== "select-page") return;
@@ -191,6 +200,7 @@ export function SettingsScreen() {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(payload.error ?? "Could not save messaging hours.");
       }
+      invalidateWorkspaceResource("messaging-settings");
       setQuietSaved(true);
       setTimeout(() => setQuietSaved(false), 2500);
     } catch (error) {
@@ -234,20 +244,24 @@ export function SettingsScreen() {
    */
   async function fetchConnectionsData() {
     try {
-      const [connectionData, fbPages, bootstrap, connectionHealthResponse, fbHealthResponse] = await Promise.all([
+      const [connectionData, fbPages, bootstrap] = await Promise.all([
         getInstagramConnections(),
         getFacebookPages(),
         getWorkspaceBootstrap().catch(() => null),
-        fetch("/api/meta/connection/health"),
-        fetch("/api/facebook/connection/health"),
       ]);
-      const connectionHealthPayload = (await connectionHealthResponse.json()) as { data?: ConnectionHealth[] };
-      const fbHealthPayload = (await fbHealthResponse.json().catch(() => ({ data: [] }))) as { data?: FacebookHealth[] };
       setConnections(connectionData);
       setFacebookPages(fbPages);
       setMode(bootstrap?.mode ?? "demo");
-      setHealth(connectionHealthPayload.data ?? []);
-      setFacebookHealth(fbHealthPayload.data ?? []);
+      setConnectionsLoading(false);
+
+      // Provider health can be noticeably slower than our own connection
+      // records. Do not make account names wait for those external checks.
+      const [instagramHealth, facebookPageHealth] = await Promise.allSettled([
+        fetch("/api/meta/connection/health").then((response) => response.json() as Promise<{ data?: ConnectionHealth[] }>),
+        fetch("/api/facebook/connection/health").then((response) => response.json() as Promise<{ data?: FacebookHealth[] }>),
+      ]);
+      if (instagramHealth.status === "fulfilled") setHealth(instagramHealth.value.data ?? []);
+      if (facebookPageHealth.status === "fulfilled") setFacebookHealth(facebookPageHealth.value.data ?? []);
     } catch {
       // A network blip here previously left the page silently showing "No
       // account connected" / "No Page connected" - indistinguishable from
@@ -274,27 +288,22 @@ export function SettingsScreen() {
   }, []);
 
   useEffect(() => {
-    void fetch("/api/team/invitations").then(async (response) => {
-      if (!response.ok) {
-        // A real permissions signal (403) from the API, not a fetch failure -
-        // safe to distinguish because reaching this branch means the request
-        // itself succeeded.
+    if (section !== "team") return;
+    const controller = new AbortController();
+    void getTeamOverview(controller.signal).then(setTeam).catch((reason: unknown) => {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      if ((reason as { status?: number })?.status === 403) {
         setTeamManageable(false);
         return;
       }
-      setTeam(await response.json() as TeamOverview);
-    }).catch(() => {
-      // Unlike the branch above, this is a fetch that never got a response at
-      // all (network failure) - reporting it as "you're not an owner/admin"
-      // would mislead even the actual workspace owner into thinking they'd
-      // lost access over what might just be a dropped connection.
       setTeamLoadError("Could not load team settings. Check your connection and try again.");
     });
-  }, []);
+    return () => controller.abort();
+  }, [section]);
 
   async function refreshTeam() {
-    const response = await fetch("/api/team/invitations");
-    if (response.ok) setTeam(await response.json() as TeamOverview);
+    invalidateWorkspaceResource("team-overview");
+    setTeam(await getTeamOverview());
   }
 
   async function sendInvitation(event: React.FormEvent<HTMLFormElement>) {
