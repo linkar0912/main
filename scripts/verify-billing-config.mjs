@@ -8,7 +8,7 @@ const PLAN_VARIABLES = [
 ];
 
 const SECRET_VARIABLES = ["RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"];
-const REQUIRED_VARIABLES = ["RAZORPAY_KEY_ID", ...SECRET_VARIABLES, ...PLAN_VARIABLES];
+const REQUIRED_VARIABLES = ["RAZORPAY_KEY_ID", ...SECRET_VARIABLES, ...PLAN_VARIABLES, "WORKER_HEALTH_URL"];
 const EXPECTED_WEBHOOK_URL = "https://app.linkar.in/api/razorpay/webhook";
 
 export function validateBillingConfig(env) {
@@ -37,6 +37,12 @@ export function validateBillingConfig(env) {
     }
   } catch {
     errors.push("APP_URL must be a valid HTTPS URL");
+  }
+  try {
+    const workerHealthUrl = new URL(env.WORKER_HEALTH_URL ?? "");
+    if (workerHealthUrl.protocol !== "https:") errors.push("WORKER_HEALTH_URL must be a valid HTTPS URL");
+  } catch {
+    if (env.WORKER_HEALTH_URL?.trim()) errors.push("WORKER_HEALTH_URL must be a valid HTTPS URL");
   }
 
   return { ok: errors.length === 0, errors, webhookUrl, planVariables: PLAN_VARIABLES };

@@ -14,6 +14,7 @@ const completeEnv: NodeJS.ProcessEnv = {
   ...process.env,
   NODE_ENV: "production",
   APP_URL: "https://app.linkar.in",
+  WORKER_HEALTH_URL: "https://worker.internal/health",
   RAZORPAY_KEY_ID: "rzp_live_public_test_value",
   RAZORPAY_KEY_SECRET: "fake-key-secret-that-must-never-print",
   RAZORPAY_WEBHOOK_SECRET: "fake-webhook-secret-that-must-never-print",
@@ -72,5 +73,15 @@ describe("billing configuration preflight", () => {
     });
     expect(result.status).toBe(1);
     expect(`${result.stdout}${result.stderr}`).toContain("Razorpay Plan IDs must be unique");
+  });
+
+  it("requires the worker heartbeat endpoint without printing its value", () => {
+    const env = { ...completeEnv };
+    delete env.WORKER_HEALTH_URL;
+    const result = run(env);
+    const output = `${result.stdout}${result.stderr}`;
+    expect(result.status).toBe(1);
+    expect(output).toContain("WORKER_HEALTH_URL");
+    expect(output).not.toContain(completeEnv.RAZORPAY_KEY_SECRET);
   });
 });
