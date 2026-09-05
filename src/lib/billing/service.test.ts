@@ -90,6 +90,29 @@ describe("billing service", () => {
     });
   });
 
+  it("reports billing as unavailable when any trusted Razorpay mapping is missing", async () => {
+    const service = createBillingService({
+      repository: repository(),
+      provider: provider(),
+      env: { razorpay: { ...env.razorpay, planIds: { ...env.razorpay.planIds, agency: { ...env.razorpay.planIds.agency, ANNUAL: undefined } } } },
+    });
+
+    await expect(service.getBillingView("ws_1", "OWNER")).resolves.toMatchObject({
+      billingConfigured: false,
+      billingMissing: ["RAZORPAY_PLAN_AGENCY_ANNUAL_ID"],
+    });
+  });
+
+  it("maps an incomplete plan mapping to the safe configuration error", async () => {
+    const service = createBillingService({
+      repository: repository(),
+      provider: provider(),
+      env: { razorpay: { ...env.razorpay, planIds: { ...env.razorpay.planIds, creator: { ...env.razorpay.planIds.creator, MONTHLY: undefined } } } },
+    });
+
+    await expect(service.createCheckout("ws_1", "creator", "MONTHLY")).rejects.toMatchObject({ code: "billing_not_configured" });
+  });
+
   it("reuses a ready attempt and never creates a second provider subscription", async () => {
     const repo = repository({
       claimCheckout: vi.fn().mockResolvedValue({ kind: "reuse", attemptId: "attempt_1", subscriptionId: "sub_existing" }),

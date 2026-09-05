@@ -71,6 +71,7 @@ export type BillingView = {
   catalog: BillingCatalogPlan[];
   canManage: boolean;
   billingConfigured: boolean;
+  billingMissing?: string[];
   entitlementPlanKey: string;
   deliveriesUsed: number;
   subscription: null | {

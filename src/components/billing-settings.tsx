@@ -182,7 +182,7 @@ export function BillingSettings() {
       </section>
 
       {!view.canManage && <p className="notice-banner notice-warning">Only the workspace owner can change billing. You can still review plans and usage.</p>}
-      {!view.billingConfigured && <p className="notice-banner notice-warning">Secure checkout is being configured. Plan changes are temporarily unavailable.</p>}
+      {!view.billingConfigured && <p className="notice-banner notice-warning">Secure checkout is unavailable because the payment connection is incomplete. Plan changes will be enabled once the setup is finished.</p>}
       {message && <p className="notice-banner notice-success" role="status"><Check size={17} /> {message}</p>}
       {error && <p className="notice-banner notice-warning" role="alert">{error}</p>}
 

@@ -51,6 +51,21 @@ function monthStart(value: Date): Date {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1));
 }
 
+function missingRazorpayConfig(razorpay: ServerEnv["razorpay"]): string[] {
+  const values: Array<[string, string | undefined]> = [
+    ["RAZORPAY_KEY_ID", razorpay.keyId],
+    ["RAZORPAY_KEY_SECRET", razorpay.keySecret],
+    ["RAZORPAY_WEBHOOK_SECRET", razorpay.webhookSecret],
+    ["RAZORPAY_PLAN_CREATOR_MONTHLY_ID", razorpay.planIds.creator.MONTHLY],
+    ["RAZORPAY_PLAN_CREATOR_ANNUAL_ID", razorpay.planIds.creator.ANNUAL],
+    ["RAZORPAY_PLAN_GROWTH_MONTHLY_ID", razorpay.planIds.growth.MONTHLY],
+    ["RAZORPAY_PLAN_GROWTH_ANNUAL_ID", razorpay.planIds.growth.ANNUAL],
+    ["RAZORPAY_PLAN_AGENCY_MONTHLY_ID", razorpay.planIds.agency.MONTHLY],
+    ["RAZORPAY_PLAN_AGENCY_ANNUAL_ID", razorpay.planIds.agency.ANNUAL],
+  ];
+  return values.filter(([, value]) => !value).map(([name]) => name);
+}
+
 export function createBillingService(dependencies: BillingServiceDependencies) {
   const now = dependencies.now ?? (() => new Date());
 
@@ -101,18 +116,25 @@ export function createBillingService(dependencies: BillingServiceDependencies) {
   async function getBillingView(workspaceId: string, role: string) {
     const current = now();
     const data = await dependencies.repository.getBillingView(workspaceId, monthStart(current));
+    const billingMissing = missingRazorpayConfig(dependencies.env.razorpay);
     return {
       ...data,
       catalog: Object.values(BILLING_PLANS),
       canManage: role === "OWNER",
-      billingConfigured: Boolean(dependencies.env.razorpay.keyId && dependencies.env.razorpay.keySecret),
+      billingConfigured: billingMissing.length === 0,
+      billingMissing,
     };
   }
 
   async function createCheckout(workspaceId: string, plan: BillingPlanKey, interval: BillingInterval, context?: BillingMutationContext) {
     return audited(context, "billing.checkout.create", { plan, interval }, async () => {
       const credentials = configuredCredentials();
-      const providerPlanId = resolveRazorpayPlanId(plan, interval, dependencies.env);
+      let providerPlanId: string;
+      try {
+        providerPlanId = resolveRazorpayPlanId(plan, interval, dependencies.env);
+      } catch {
+        throw new BillingServiceError("billing_not_configured");
+      }
       const current = now();
       const claim = await dependencies.repository.claimCheckout({
         workspaceId,
