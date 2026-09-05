@@ -5,6 +5,7 @@ import { logger } from "@/src/lib/logger";
 import { getServerEnv } from "@/src/lib/env";
 import { unsealSecret } from "@/src/lib/security/secrets";
 import { unsubscribeFacebookPageFromWebhooks } from "@/src/lib/facebook/oauth";
+import { measureServerOperation } from "@/src/lib/server-timing";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,10 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const pages = await getRepository().listFacebookPages(session.workspaceId);
+  const pages = await measureServerOperation(
+    "facebook.connections.repository",
+    () => getRepository().listFacebookPages(session.workspaceId),
+  );
   return NextResponse.json({
     data: pages.map((page) => ({
       id: page.id,

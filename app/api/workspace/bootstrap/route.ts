@@ -5,6 +5,7 @@ import { getRuntimeMode } from "@/src/lib/health";
 import { loadProfilePictureUrl } from "@/src/lib/meta/profile-picture";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { measureServerOperation } from "@/src/lib/server-timing";
 
 export const runtime = "nodejs";
 
@@ -16,15 +17,21 @@ export async function GET(request: Request) {
 
     const env = getServerEnv();
     const repository = getRepository();
-    const [role, connections, entitlements] = await Promise.all([
-        repository.getMemberRole(session.workspaceId, session.email),
-        repository.listConnections(session.workspaceId).catch(() => []),
-        getEntitlementService().getEffectiveEntitlements(session.workspaceId),
-    ]);
+    const [role, connections, entitlements] = await measureServerOperation(
+        "workspace.bootstrap.repository",
+        () => Promise.all([
+            repository.getMemberRole(session.workspaceId, session.email),
+            repository.listConnections(session.workspaceId).catch(() => []),
+            getEntitlementService().getEffectiveEntitlements(session.workspaceId),
+        ]),
+    );
 
     const first = connections[0];
     const igAvatarUrl = first
-        ? await loadProfilePictureUrl(env, first.igUserId, first.accessTokenEncrypted)
+        ? await measureServerOperation(
+            "workspace.bootstrap.avatar",
+            () => loadProfilePictureUrl(env, first.igUserId, first.accessTokenEncrypted),
+        )
         : null;
 
     return NextResponse.json({

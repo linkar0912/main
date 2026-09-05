@@ -5,6 +5,7 @@ import { logger } from "@/src/lib/logger";
 import { MetaClient } from "@/src/lib/meta/client";
 import { clearProfilePictureCache, loadProfilePictureUrl } from "@/src/lib/meta/profile-picture";
 import { unsealSecret } from "@/src/lib/security/secrets";
+import { measureServerOperation } from "@/src/lib/server-timing";
 
 export const runtime = "nodejs";
 
@@ -12,18 +13,24 @@ export async function GET(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const env = getServerEnv();
-  const connections = await getRepository().listConnections(session.workspaceId);
+  const connections = await measureServerOperation(
+    "instagram.connections.repository",
+    () => getRepository().listConnections(session.workspaceId),
+  );
   // The avatar is fetched live from Meta for each connection; any failure degrades
   // to null so the UI can fall back to the Instagram glyph.
-  const data = await Promise.all(
-    connections.map(async ({ id, igUserId, username, status, connectedAt, accessTokenEncrypted }) => ({
-      id,
-      igUserId,
-      username,
-      status,
-      connectedAt,
-      profilePictureUrl: await loadProfilePictureUrl(env, igUserId, accessTokenEncrypted),
-    })),
+  const data = await measureServerOperation(
+    "instagram.connections.avatars",
+    () => Promise.all(
+      connections.map(async ({ id, igUserId, username, status, connectedAt, accessTokenEncrypted }) => ({
+        id,
+        igUserId,
+        username,
+        status,
+        connectedAt,
+        profilePictureUrl: await loadProfilePictureUrl(env, igUserId, accessTokenEncrypted),
+      })),
+    ),
   );
   return Response.json({ data });
 }
