@@ -67,7 +67,7 @@ describe("premium invite codes", () => {
 
   it("redeems a valid code for exactly 30 days", async () => {
     const now = new Date("2026-09-05T10:00:00.000Z");
-    const code = { id: "code_1", planId: "plan_agency", durationDays: 30, expiresAt: null, revokedAt: null };
+    const code = { id: "code_1", planId: "plan_agency", durationDays: 30, expiresAt: null, revokedAt: null, plan: { key: "agency", name: "Agency" } };
     const transaction = {
       premiumInviteCode: { findUnique: vi.fn().mockResolvedValue(code) },
       premiumInviteRedemption: {
@@ -81,6 +81,7 @@ describe("premium invite codes", () => {
     const result = await service.redeem({ code: "LINKAR-ABCD-1234", workspaceId: "ws_1", userId: "user_1" });
 
     expect(result.planId).toBe("plan_agency");
+    expect(result.plan).toEqual({ key: "agency", name: "Agency" });
     expect(result.expiresAt).toBe("2026-10-05T10:00:00.000Z");
     expect(transaction.premiumInviteRedemption.create).toHaveBeenCalledOnce();
   });

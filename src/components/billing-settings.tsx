@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { openRazorpaySubscriptionCheckout } from "@/src/lib/client/razorpay-checkout";
 import { FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
 import type { BillingCatalogPlan, BillingInterval, BillingPlanKey } from "@/src/lib/billing/types";
+import { ActionNotice } from "./action-notice";
 
 type BillingView = {
   catalog: BillingCatalogPlan[];
@@ -38,6 +39,7 @@ export function BillingSettings() {
   const [activating, setActivating] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [redeemingInvite, setRedeemingInvite] = useState(false);
+  const [inviteNotice, setInviteNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/billing");
@@ -74,6 +76,12 @@ export function BillingSettings() {
     }, 1_500);
     return () => window.clearInterval(timer);
   }, [activating, load]);
+
+  useEffect(() => {
+    if (!inviteNotice) return;
+    const timer = window.setTimeout(() => setInviteNotice(null), 6_000);
+    return () => window.clearTimeout(timer);
+  }, [inviteNotice]);
 
   async function choosePlan(plan: BillingPlanKey) {
     if (!view?.canManage || busyPlan) return;
@@ -134,23 +142,28 @@ export function BillingSettings() {
   async function redeemInvite() {
     if (!view?.canManage || !inviteCode.trim() || redeemingInvite) return;
     setRedeemingInvite(true);
-    setError("");
-    setMessage("");
+    setInviteNotice(null);
     try {
       const response = await fetch("/api/billing/invite-code", {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: inviteCode }),
       });
-      const payload = await response.json() as { error?: string };
+      const payload = await response.json() as { data?: { plan: { key: string; name: string }; expiresAt: string }; error?: string };
       if (!response.ok) throw new Error(payload.error ?? "invite_code_redemption_failed");
+      if (!payload.data) throw new Error("invite_code_redemption_failed");
       setInviteCode("");
       await load();
-      setMessage("Agency access is active for 30 days. Your paid subscription was not changed.");
+      setInviteNotice({
+        tone: "success",
+        message: `Invite applied. ${payload.data.plan.name} access is active until ${formatDate(payload.data.expiresAt)}. Your paid subscription was not changed.`,
+      });
     } catch (reason) {
       const code = reason instanceof Error ? reason.message : "invite_code_redemption_failed";
-      setError(code === "invite_code_used" ? "This invite code has already been used."
-        : code === "premium_access_already_active" ? "Premium invite access is already active for this workspace."
-          : code === "invite_code_expired" || code === "invite_code_revoked" ? "This invite code is no longer active."
-            : "That invite code is not valid. Check it and try again.");
+      const message = code === "invite_code_used" ? "This invite has already been used"
+        : code === "premium_access_already_active" ? "This workspace already has invite access"
+          : code === "invite_code_expired" || code === "invite_code_revoked" ? "This invite is no longer active"
+            : code === "invite_code_invalid" ? "We couldn’t find that invite. Check the code and try again"
+              : "We couldn’t apply the invite. Try again.";
+      setInviteNotice({ tone: "error", message });
     } finally {
       setRedeemingInvite(false);
     }
@@ -165,6 +178,7 @@ export function BillingSettings() {
   const usageValue = Math.min(view.deliveriesUsed, usageMaximum);
   return (
     <section className="billing-shell" aria-labelledby="billing-title">
+      {inviteNotice ? <ActionNotice tone={inviteNotice.tone} message={inviteNotice.message} onDismiss={() => setInviteNotice(null)} /> : null}
       <header className="billing-heading">
         <div>
           <h2 id="billing-title">Plan and usage</h2>
@@ -193,12 +207,12 @@ export function BillingSettings() {
       <section className="billing-invite panel" aria-labelledby="premium-invite-title">
         <div className="billing-invite-copy">
           <span><TicketCheck size={18} /></span>
-          <div><h3 id="premium-invite-title">Have a premium invite?</h3><p>Redeem it for 30 days of Agency access. Only the workspace owner can apply a code.</p></div>
+          <div><small>Limited-time plan access</small><h3 id="premium-invite-title">Invite access</h3><p>Enter your code to unlock the plan included with your invite for 30 days. Your current subscription stays unchanged.</p></div>
         </div>
         <div className="billing-invite-form">
           <label className="sr-only" htmlFor="premium-invite-code">Premium invite code</label>
           <input id="premium-invite-code" value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="LINKAR-XXXX-XXXX-XXXX" autoComplete="off" />
-          <button className="button button-primary" type="button" disabled={!view.canManage || !inviteCode.trim() || redeemingInvite} onClick={() => void redeemInvite()}>{redeemingInvite ? "Redeeming…" : "Redeem invite"}</button>
+          <button className="button button-primary" type="button" disabled={!view.canManage || !inviteCode.trim() || redeemingInvite} onClick={() => void redeemInvite()}>{redeemingInvite ? "Applying…" : "Apply invite"}</button>
         </div>
       </section>
 

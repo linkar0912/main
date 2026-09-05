@@ -71,18 +71,53 @@ describe("BillingSettings", () => {
     expect(screen.getByRole("button", { name: "Choose Creator" }).hasAttribute("disabled")).toBe(true);
   });
 
-  it("lets the workspace owner redeem a one-month premium invite", async () => {
+  it("shows the granted plan and expiry in a dismissible success popup", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => billingView() })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { planId: "plan_agency", expiresAt: "2026-10-05T00:00:00.000Z" } }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => billingView({ entitlementPlanKey: "agency" }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { plan: { key: "creator", name: "Creator" }, expiresAt: "2026-10-05T00:00:00.000Z" } }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => billingView({ entitlementPlanKey: "creator" }) });
     vi.stubGlobal("fetch", fetchMock);
     await act(async () => { render(<BillingSettings />); });
 
     fireEvent.change(await screen.findByLabelText(/premium invite code/i), { target: { value: "LINKAR-ABCD-EFGH-IJKL" } });
-    fireEvent.click(screen.getByRole("button", { name: /redeem invite/i }));
+    fireEvent.click(screen.getByRole("button", { name: /apply invite/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/billing/invite-code", expect.objectContaining({ method: "POST" })));
-    expect(await screen.findByText(/Agency access is active for 30 days/i)).toBeTruthy();
+    const popup = await screen.findByRole("status");
+    expect(popup.textContent).toContain("Invite applied. Creator access is active until 5 Oct 2026.");
+    fireEvent.click(screen.getByRole("button", { name: /dismiss notification/i }));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it.each([
+    ["invite_code_used", "This invite has already been used"],
+    ["premium_access_already_active", "This workspace already has invite access"],
+    ["invite_code_expired", "This invite is no longer active"],
+    ["invite_code_revoked", "This invite is no longer active"],
+    ["invite_code_invalid", "We couldn’t find that invite. Check the code and try again"],
+  ])("shows %s redemption failures in an error popup", async (code, expectedMessage) => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => billingView() })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: code }) });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<BillingSettings />); });
+
+    fireEvent.change(await screen.findByLabelText(/premium invite code/i), { target: { value: "LINKAR-ABCD-EFGH-IJKL" } });
+    fireEvent.click(screen.getByRole("button", { name: /apply invite/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(expectedMessage);
+  });
+
+  it("shows a retryable popup when invite redemption cannot reach the server", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => billingView() })
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<BillingSettings />); });
+
+    fireEvent.change(await screen.findByLabelText(/premium invite code/i), { target: { value: "LINKAR-ABCD-EFGH-IJKL" } });
+    fireEvent.click(screen.getByRole("button", { name: /apply invite/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("We couldn’t apply the invite. Try again.");
   });
 });

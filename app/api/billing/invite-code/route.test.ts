@@ -10,7 +10,7 @@ describe("POST /api/billing/invite-code", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.guard.mockResolvedValue({ ok: true, session: { workspaceId: "ws_1", userId: "user_1" }, role: "OWNER" });
-    mocks.redeem.mockResolvedValue({ planId: "plan_agency", expiresAt: "2026-10-05T00:00:00.000Z" });
+    mocks.redeem.mockResolvedValue({ planId: "plan_agency", plan: { key: "agency", name: "Agency" }, expiresAt: "2026-10-05T00:00:00.000Z" });
   });
 
   it("redeems for the owner and invalidates cached entitlements", async () => {
@@ -18,6 +18,12 @@ describe("POST /api/billing/invite-code", () => {
     expect(response.status).toBe(200);
     expect(mocks.redeem).toHaveBeenCalledWith({ code: "LINKAR-ABCD", workspaceId: "ws_1", userId: "user_1" });
     expect(mocks.invalidate).toHaveBeenCalledWith("ws_1");
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        plan: { key: "agency", name: "Agency" },
+        expiresAt: "2026-10-05T00:00:00.000Z",
+      },
+    });
   });
 
   it("returns a conflict for a used code", async () => {

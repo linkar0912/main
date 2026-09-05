@@ -20,7 +20,12 @@ export async function POST(request: Request) {
       userId: guard.session.userId,
     });
     getEntitlementService().invalidateWorkspace(guard.session.workspaceId);
-    return NextResponse.json({ data });
+    return NextResponse.json({
+      data: {
+        plan: data.plan,
+        expiresAt: data.expiresAt,
+      },
+    });
   } catch (error) {
     const code = error instanceof Error ? error.message : "invite_code_redemption_failed";
     if (conflicts.has(code)) return NextResponse.json({ error: code }, { status: 409 });

@@ -26,9 +26,12 @@ export function createPremiumInviteService(client: PrismaClient = prisma, now: (
     const startsAt = now();
     try {
       return await client.$transaction(async (transaction) => {
-        const invite = await transaction.premiumInviteCode.findUnique({
+      const invite = await transaction.premiumInviteCode.findUnique({
         where: { codeHash: hashPremiumInviteCode(input.code) },
-        include: { redemption: { select: { id: true } } },
+        include: {
+          plan: { select: { key: true, name: true } },
+          redemption: { select: { id: true } },
+        },
       });
       if (!invite) throw new Error("invite_code_invalid");
       if (invite.redemption) throw new Error("invite_code_used");
@@ -51,7 +54,7 @@ export function createPremiumInviteService(client: PrismaClient = prisma, now: (
           expiresAt,
         },
       });
-        return { ...redemption, startsAt: startsAt.toISOString(), expiresAt: expiresAt.toISOString() };
+        return { ...redemption, plan: invite.plan, startsAt: startsAt.toISOString(), expiresAt: expiresAt.toISOString() };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       if ((error as { code?: string }).code === "P2002") throw new Error("invite_code_used");

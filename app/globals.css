@@ -2169,13 +2169,16 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .billing-usage-meter > span { background: var(--accent); border-radius: inherit; display: block; height: 100%; min-width: 3px; }
 .billing-current > p { color: var(--muted); font-size: .68rem; margin: 0; white-space: nowrap; }
 .billing-shell > .notice-banner { align-items: center; border-radius: 10px; display: flex; font-size: .76rem; margin: 0; min-height: 44px; padding: 10px 14px; }
-.billing-invite { align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); display: flex; gap: var(--space-5); justify-content: space-between; margin: 0; padding: var(--space-5); }
+.billing-invite { align-items: center; background: linear-gradient(135deg, color-mix(in srgb, var(--panel) 94%, var(--volt)), var(--panel)); border: 1px solid color-mix(in srgb, var(--line) 78%, var(--volt)); border-radius: var(--radius-lg); box-shadow: 0 16px 42px rgb(20 20 24 / 7%); display: flex; gap: var(--space-5); justify-content: space-between; margin: 0; overflow: hidden; padding: clamp(20px, 3vw, 30px); position: relative; }
+.billing-invite::after { background: var(--volt); border-radius: 999px; content: ""; filter: blur(34px); height: 72px; opacity: .12; pointer-events: none; position: absolute; right: -24px; top: -34px; width: 150px; }
 .billing-invite-copy { align-items: center; display: flex; gap: var(--space-3); min-width: 0; }
-.billing-invite-copy > span { align-items: center; background: var(--volt); border-radius: 50%; color: var(--on-volt); display: flex; flex: 0 0 38px; height: 38px; justify-content: center; width: 38px; }
-.billing-invite h3 { font-size: .92rem; margin: 0 0 3px; }
-.billing-invite p { color: var(--muted); font-size: .74rem; margin: 0; }
-.billing-invite-form { display: flex; flex: 0 1 430px; gap: 8px; }
+.billing-invite-copy > span { align-items: center; background: var(--volt); border-radius: 14px; box-shadow: 0 9px 20px color-mix(in srgb, var(--volt) 24%, transparent); color: var(--on-volt); display: flex; flex: 0 0 46px; height: 46px; justify-content: center; transform: rotate(-4deg); width: 46px; }
+.billing-invite-copy small { color: var(--muted); display: block; font-size: .64rem; font-weight: 750; letter-spacing: .08em; margin-bottom: 3px; text-transform: uppercase; }
+.billing-invite h3 { font-size: 1.02rem; margin: 0 0 4px; }
+.billing-invite p { color: var(--muted); font-size: .77rem; line-height: 1.5; margin: 0; max-width: 540px; }
+.billing-invite-form { display: flex; flex: 0 1 470px; gap: 8px; position: relative; z-index: 1; }
 .billing-invite-form input { min-width: 0; text-transform: uppercase; width: 100%; }
+[data-theme="dark"] .billing-invite { background: linear-gradient(135deg, color-mix(in srgb, var(--panel) 95%, var(--volt)), var(--panel)); box-shadow: 0 18px 50px rgb(0 0 0 / 22%); }
 .billing-plan-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .billing-plan { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 16px; display: flex; flex-direction: column; min-height: 420px; min-width: 0; overflow: hidden; padding: var(--space-5); position: relative; }
 .billing-plan.is-current { border-color: var(--volt-deep); box-shadow: inset 0 4px 0 var(--volt); }
