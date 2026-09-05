@@ -2170,6 +2170,13 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .billing-usage-meter > span { background: var(--accent); border-radius: inherit; display: block; height: 100%; min-width: 3px; }
 .billing-current > p { color: var(--muted); font-size: .68rem; margin: 0; white-space: nowrap; }
 .billing-shell > .notice-banner { align-items: center; border-radius: 10px; display: flex; font-size: .76rem; margin: 0; min-height: 44px; padding: 10px 14px; }
+.billing-invite { align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); display: flex; gap: var(--space-5); justify-content: space-between; margin: 0; padding: var(--space-5); }
+.billing-invite-copy { align-items: center; display: flex; gap: var(--space-3); min-width: 0; }
+.billing-invite-copy > span { align-items: center; background: var(--volt); border-radius: 50%; color: var(--on-volt); display: flex; flex: 0 0 38px; height: 38px; justify-content: center; width: 38px; }
+.billing-invite h3 { font-size: .92rem; margin: 0 0 3px; }
+.billing-invite p { color: var(--muted); font-size: .74rem; margin: 0; }
+.billing-invite-form { display: flex; flex: 0 1 430px; gap: 8px; }
+.billing-invite-form input { min-width: 0; text-transform: uppercase; width: 100%; }
 .billing-plan-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .billing-plan { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 16px; display: flex; flex-direction: column; min-height: 420px; min-width: 0; overflow: hidden; padding: var(--space-5); position: relative; }
 .billing-plan.is-current { border-color: var(--volt-deep); box-shadow: inset 0 4px 0 var(--volt); }
@@ -2309,6 +2316,15 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .admin-check-field { align-items: center; display: flex; font-size: .78rem; gap: 8px; grid-column: 1 / -1; }
 .admin-plan-stack { display: grid; gap: var(--space-5); }
 .admin-plan-card { display: grid; gap: var(--space-4); padding: var(--space-5); }
+.admin-invite-section { border-bottom: 1px solid var(--line); margin-bottom: var(--space-7); padding-bottom: var(--space-7); }
+.admin-invite-create { background: var(--surface-soft); grid-template-columns: repeat(3, minmax(0, 1fr)) auto; margin-bottom: var(--space-4); }
+.admin-invite-create > .button { align-self: end; }
+.admin-created-code { align-items: center; background: var(--ink-strong); border-radius: 10px; color: var(--white); display: flex; gap: var(--space-3); grid-column: 1 / -1; justify-content: space-between; padding: 10px 12px; }
+.admin-created-code code { font-size: .82rem; font-weight: 800; letter-spacing: .06em; }
+.admin-invite-list { border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; }
+.admin-invite-row { align-items: center; background: var(--panel); display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr) auto auto; padding: 13px var(--space-4); }
+.admin-invite-row + .admin-invite-row { border-top: 1px solid var(--line); }
+.admin-invite-row p, .admin-invite-row small { color: var(--muted); font-size: var(--type-meta); margin: 3px 0 0; }
 .admin-new-plan { border-color: color-mix(in srgb, var(--honey) 55%, var(--line)); margin-bottom: var(--space-6); }
 .admin-plan-fieldset { border: 1px solid var(--line); border-radius: var(--radius-md); display: grid; gap: var(--space-3); margin: 0; padding: var(--space-4); }
 .admin-plan-fieldset legend { font-size: .78rem; font-weight: 800; padding: 0 7px; }
@@ -2443,6 +2459,10 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .admin-command-actions .button { width: 100%; }
   .admin-create-form { grid-template-columns: 1fr; }
   .admin-plan-limit-grid, .admin-feature-grid { grid-template-columns: 1fr; }
+  .admin-invite-create { grid-template-columns: 1fr; }
+  .admin-created-code { align-items: stretch; flex-direction: column; overflow-wrap: anywhere; }
+  .admin-invite-row { align-items: start; grid-template-columns: minmax(0, 1fr) auto; }
+  .admin-invite-row .button { grid-column: 1 / -1; width: 100%; }
   .admin-entitlement-grid { grid-template-columns: 1fr; }
   .admin-operations-filter { grid-template-columns: 1fr; }
   .admin-integration-filter { grid-template-columns: 1fr; }
@@ -3033,6 +3053,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .hamburger { height: 44px; width: 44px; }
   .mobile-topbar { min-height: 64px; }
   .page-wrap { padding: var(--space-6) 18px 56px; }
+  .billing-invite { align-items: stretch; flex-direction: column; }
+  .billing-invite-form { flex-basis: auto; flex-direction: column; }
+  .billing-invite-form .button { width: 100%; }
   .builder-intro { margin-bottom: var(--space-5); }
   .builder-footer { align-items: stretch; background: var(--surface); bottom: 0; gap: 8px; margin-inline: -18px; padding: 12px 18px max(12px, env(safe-area-inset-bottom)); position: sticky; z-index: 20; }
   .builder-actions { flex: 1; }

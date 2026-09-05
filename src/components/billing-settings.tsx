@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CreditCard, Gauge, Sparkles } from "lucide-react";
+import { Check, CreditCard, Gauge, Sparkles, TicketCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { openRazorpaySubscriptionCheckout } from "@/src/lib/client/razorpay-checkout";
@@ -36,6 +36,8 @@ export function BillingSettings() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [activating, setActivating] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [redeemingInvite, setRedeemingInvite] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/billing");
@@ -129,6 +131,31 @@ export function BillingSettings() {
     await load().catch(() => undefined);
   }
 
+  async function redeemInvite() {
+    if (!view?.canManage || !inviteCode.trim() || redeemingInvite) return;
+    setRedeemingInvite(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/billing/invite-code", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: inviteCode }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "invite_code_redemption_failed");
+      setInviteCode("");
+      await load();
+      setMessage("Agency access is active for 30 days. Your paid subscription was not changed.");
+    } catch (reason) {
+      const code = reason instanceof Error ? reason.message : "invite_code_redemption_failed";
+      setError(code === "invite_code_used" ? "This invite code has already been used."
+        : code === "premium_access_already_active" ? "Premium invite access is already active for this workspace."
+          : code === "invite_code_expired" || code === "invite_code_revoked" ? "This invite code is no longer active."
+            : "That invite code is not valid. Check it and try again.");
+    } finally {
+      setRedeemingInvite(false);
+    }
+  }
+
   if (!view && !error) return <section className="panel billing-shell" aria-label="Billing"><p className="muted">Loading billing…</p></section>;
   if (!view) return <section className="panel billing-shell" aria-label="Billing"><p className="form-error" role="alert">{error}</p></section>;
 
@@ -162,6 +189,18 @@ export function BillingSettings() {
       {!view.billingConfigured && <p className="notice-banner notice-warning">Secure checkout is being configured. Plan changes are temporarily unavailable.</p>}
       {message && <p className="notice-banner notice-success" role="status"><Check size={17} /> {message}</p>}
       {error && <p className="notice-banner notice-warning" role="alert">{error}</p>}
+
+      <section className="billing-invite panel" aria-labelledby="premium-invite-title">
+        <div className="billing-invite-copy">
+          <span><TicketCheck size={18} /></span>
+          <div><h3 id="premium-invite-title">Have a premium invite?</h3><p>Redeem it for 30 days of Agency access. Only the workspace owner can apply a code.</p></div>
+        </div>
+        <div className="billing-invite-form">
+          <label className="sr-only" htmlFor="premium-invite-code">Premium invite code</label>
+          <input id="premium-invite-code" value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="LINKAR-XXXX-XXXX-XXXX" autoComplete="off" />
+          <button className="button button-primary" type="button" disabled={!view.canManage || !inviteCode.trim() || redeemingInvite} onClick={() => void redeemInvite()}>{redeemingInvite ? "Redeeming…" : "Redeem invite"}</button>
+        </div>
+      </section>
 
       <div className="billing-plan-grid">
         {view.catalog.map((plan) => {

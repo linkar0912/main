@@ -70,4 +70,19 @@ describe("BillingSettings", () => {
     expect(await screen.findByText(/Only the workspace owner can change billing/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Choose Creator" }).hasAttribute("disabled")).toBe(true);
   });
+
+  it("lets the workspace owner redeem a one-month premium invite", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => billingView() })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { planId: "plan_agency", expiresAt: "2026-10-05T00:00:00.000Z" } }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => billingView({ entitlementPlanKey: "agency" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<BillingSettings />); });
+
+    fireEvent.change(await screen.findByLabelText(/premium invite code/i), { target: { value: "LINKAR-ABCD-EFGH-IJKL" } });
+    fireEvent.click(screen.getByRole("button", { name: /redeem invite/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/billing/invite-code", expect.objectContaining({ method: "POST" })));
+    expect(await screen.findByText(/Agency access is active for 30 days/i)).toBeTruthy();
+  });
 });

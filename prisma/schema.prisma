@@ -141,7 +141,7 @@ enum ParticipantState {
 // lose its next-media binding and (with the publishedAt > activatedAt check)
 // re-bind to the next-published post instead of the originally targeted one.
 model AutomationVersion {
-  id                 String   @id
+  id                 String           @id
   automationId       String
   workspaceId        String
   // Monotonically increasing per-automation version number (1 = creation state).
@@ -162,7 +162,7 @@ model AutomationVersion {
   // Who/what produced the snapshot (user id when available; "system" for cron).
   snapshotBy         String?
   // When the snapshot was taken.
-  snapshotAt         DateTime @default(now())
+  snapshotAt         DateTime         @default(now())
 
   @@unique([automationId, version])
   @@index([automationId, snapshotAt])
@@ -200,41 +200,42 @@ model WorkspaceInvitation {
 }
 
 model Workspace {
-  id                 String                  @id
-  name               String
-  slug               String                  @unique
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
-  version            Int                     @default(1)
+  id                       String                      @id
+  name                     String
+  slug                     String                      @unique
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
+  version                  Int                         @default(1)
   // Optional messaging quiet hours (workspace-local time). Null = always-on.
-  quietStartHour     Int?
-  quietEndHour       Int?
-  timezone           String?
-  status             WorkspaceStatus         @default(ACTIVE)
-  suspendedAt        DateTime?
-  suspendedReason    String?
-  suspendedByUserId  String?
-  deletionScheduledAt DateTime?
-  members            WorkspaceMember[]
-  connections        InstagramConnection[]
-  facebookPages      FacebookPageConnection[]
-  automations        Automation[]
-  participants       AutomationParticipant[]
-  executions         AutomationExecution[]
-  webhookEvents      WebhookEvent[]
-  helpSearches       HelpSearchEvent[]
-  helpFeedback       HelpArticleFeedback[]
-  contacts           AutomationContact[]
-  sequences          AutomationSequence[]
-  broadcasts         Broadcast[]
-  outboundDeliveries OutboundDelivery[]
-  trackedLinks       TrackedLink[]
-  entitlement       WorkspaceEntitlement?
-  usagePeriods      WorkspaceUsagePeriod[]
-  usageReservations WorkspaceUsageReservation[]
-  billingSubscription BillingSubscription?
-  billingCheckoutAttempts BillingCheckoutAttempt[]
-  billingWebhookEvents BillingWebhookEvent[]
+  quietStartHour           Int?
+  quietEndHour             Int?
+  timezone                 String?
+  status                   WorkspaceStatus             @default(ACTIVE)
+  suspendedAt              DateTime?
+  suspendedReason          String?
+  suspendedByUserId        String?
+  deletionScheduledAt      DateTime?
+  members                  WorkspaceMember[]
+  connections              InstagramConnection[]
+  facebookPages            FacebookPageConnection[]
+  automations              Automation[]
+  participants             AutomationParticipant[]
+  executions               AutomationExecution[]
+  webhookEvents            WebhookEvent[]
+  helpSearches             HelpSearchEvent[]
+  helpFeedback             HelpArticleFeedback[]
+  contacts                 AutomationContact[]
+  sequences                AutomationSequence[]
+  broadcasts               Broadcast[]
+  outboundDeliveries       OutboundDelivery[]
+  trackedLinks             TrackedLink[]
+  entitlement              WorkspaceEntitlement?
+  usagePeriods             WorkspaceUsagePeriod[]
+  usageReservations        WorkspaceUsageReservation[]
+  billingSubscription      BillingSubscription?
+  billingCheckoutAttempts  BillingCheckoutAttempt[]
+  billingWebhookEvents     BillingWebhookEvent[]
+  premiumInviteRedemptions PremiumInviteRedemption[]
 
   @@index([status, createdAt])
   @@index([updatedAt, id])
@@ -263,11 +264,11 @@ model HelpArticleFeedback {
 }
 
 model PlanDefinition {
-  id                       String   @id
-  key                      String   @unique
+  id                       String                    @id
+  key                      String                    @unique
   name                     String
-  isActive                 Boolean  @default(true)
-  version                  Int      @default(1)
+  isActive                 Boolean                   @default(true)
+  version                  Int                       @default(1)
   memberLimit              Int?
   automationLimit          Int?
   instagramConnectionLimit Int?
@@ -275,17 +276,19 @@ model PlanDefinition {
   sequenceLimit            Int?
   monthlyBroadcastLimit    Int?
   monthlyDeliveryLimit     Int?
-  sequencesEnabled         Boolean  @default(false)
-  broadcastsEnabled        Boolean  @default(false)
-  trackedLinksEnabled      Boolean  @default(false)
-  teamEnabled              Boolean  @default(false)
-  facebookEnabled          Boolean  @default(false)
-  exportsEnabled           Boolean  @default(false)
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  sequencesEnabled         Boolean                   @default(false)
+  broadcastsEnabled        Boolean                   @default(false)
+  trackedLinksEnabled      Boolean                   @default(false)
+  teamEnabled              Boolean                   @default(false)
+  facebookEnabled          Boolean                   @default(false)
+  exportsEnabled           Boolean                   @default(false)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
   workspaceEntitlements    WorkspaceEntitlement[]
   billingSubscriptions     BillingSubscription[]
   billingCheckoutAttempts  BillingCheckoutAttempt[]
+  premiumInviteCodes       PremiumInviteCode[]
+  premiumInviteRedemptions PremiumInviteRedemption[]
 
   @@index([isActive, key])
 }
@@ -355,23 +358,59 @@ model BillingWebhookEvent {
 }
 
 model WorkspaceEntitlement {
-  workspaceId String   @id
+  workspaceId String         @id
   planId      String
-  overrides   Json     @default("{}")
-  version     Int      @default(1)
-  updatedAt   DateTime @updatedAt
+  overrides   Json           @default("{}")
+  version     Int            @default(1)
+  updatedAt   DateTime       @updatedAt
   workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   plan        PlanDefinition @relation(fields: [planId], references: [id])
 
   @@index([planId])
 }
 
+model PremiumInviteCode {
+  id              String                   @id
+  codeHash        String                   @unique
+  label           String
+  planId          String
+  durationDays    Int                      @default(30)
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  createdByUserId String
+  createdAt       DateTime                 @default(now())
+  plan            PlanDefinition           @relation(fields: [planId], references: [id])
+  redemption      PremiumInviteRedemption?
+
+  @@index([planId])
+  @@index([revokedAt, expiresAt])
+  @@index([createdByUserId, createdAt])
+}
+
+model PremiumInviteRedemption {
+  id               String            @id
+  codeId           String            @unique
+  workspaceId      String
+  redeemedByUserId String
+  planId           String
+  startsAt         DateTime
+  expiresAt        DateTime
+  createdAt        DateTime          @default(now())
+  code             PremiumInviteCode @relation(fields: [codeId], references: [id])
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan             PlanDefinition    @relation(fields: [planId], references: [id])
+
+  @@index([workspaceId, startsAt, expiresAt])
+  @@index([planId])
+  @@index([redeemedByUserId, createdAt])
+}
+
 model WorkspaceUsagePeriod {
-  workspaceId       String
-  periodStart       DateTime @db.Date
-  deliveriesReserved Int    @default(0)
-  broadcastsCreated  Int    @default(0)
-  updatedAt          DateTime @updatedAt
+  workspaceId        String
+  periodStart        DateTime  @db.Date
+  deliveriesReserved Int       @default(0)
+  broadcastsCreated  Int       @default(0)
+  updatedAt          DateTime  @updatedAt
   workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@id([workspaceId, periodStart])
@@ -379,10 +418,10 @@ model WorkspaceUsagePeriod {
 }
 
 model WorkspaceUsageReservation {
-  deliveryKey String   @id
+  deliveryKey String    @id
   workspaceId String
-  periodStart DateTime @db.Date
-  createdAt   DateTime @default(now())
+  periodStart DateTime  @db.Date
+  createdAt   DateTime  @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, periodStart])
@@ -432,31 +471,31 @@ model InstagramConnection {
 }
 
 model Automation {
-  id                String                       @id
-  workspaceId       String
-  provider          AutomationProvider
+  id                      String                       @id
+  workspaceId             String
+  provider                AutomationProvider
   // Instagram account (igUserId) this automation is pinned to. Null = the
   // automation answers events from every connected account in the workspace.
-  instagramAccountId String?
+  instagramAccountId      String?
   // Facebook Page this automation is pinned to. A disconnected Page leaves
   // its Facebook automation paused and unpinned until the user selects a Page.
-  facebookPageId     String?
-  name              String
-  status            AutomationStatus             @default(DRAFT)
-  version           Int                          @default(1)
-  definition        Json
-  activatedAt       DateTime?
-  boundMediaId      String?
+  facebookPageId          String?
+  name                    String
+  status                  AutomationStatus             @default(DRAFT)
+  version                 Int                          @default(1)
+  definition              Json
+  activatedAt             DateTime?
+  boundMediaId            String?
   // Higher priority automations are evaluated first when multiple flows could
   // match the same event. 0 (default) is fine for the common single-flow setup.
-  priority          Int                          @default(0)
-  createdAt         DateTime                     @default(now())
-  updatedAt         DateTime                     @updatedAt
-  archivedAt        DateTime?
-  workspace         Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  executions        AutomationExecution[]
-  participants      AutomationParticipant[]
-  dailySendCounters AutomationDailySendCounter[]
+  priority                Int                          @default(0)
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+  archivedAt              DateTime?
+  workspace               Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executions              AutomationExecution[]
+  participants            AutomationParticipant[]
+  dailySendCounters       AutomationDailySendCounter[]
   facebookReplyRecipients FacebookReplyRecipient[]
 
   @@index([workspaceId, status])
@@ -516,32 +555,32 @@ model AutomationParticipant {
 // stored untouched; UTM params are appended at click time so a single link
 // works across every campaign.
 model TrackedLink {
-  id                 String   @id
-  workspaceId        String
+  id              String    @id
+  workspaceId     String
   // The branded path (e.g. "/r/summer-sale"). Unique per workspace.
-  slug               String
+  slug            String
   // Final URL we redirect to. Validated as http(s) at write time.
-  destination        String
+  destination     String
   // Optional expiry. Past the deadline the redirect returns 410 Gone.
-  expiresAt          DateTime?
+  expiresAt       DateTime?
   // UTM parameters appended as query strings. Stored separately so a single
   // destination can be re-used across campaigns with different attribution.
-  utmSource          String?
-  utmMedium          String?
-  utmCampaign        String?
-  utmTerm            String?
-  utmContent         String?
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  utmTerm         String?
+  utmContent      String?
   // Optional webhook pinged on every click (used for conversion callbacks).
-  conversionUrl      String?
+  conversionUrl   String?
   // Free-form context for the activity inbox. Limited to 240 chars in the API.
-  notes              String?
-  version            Int      @default(1)
-  disabledAt         DateTime?
-  createdByUserId    String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  notes           String?
+  version         Int       @default(1)
+  disabledAt      DateTime?
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   clicks    TrackedLinkClick[]
 
   @@unique([workspaceId, slug])
@@ -552,16 +591,16 @@ model TrackedLink {
 // unique counts without ever storing the raw IP. Country + UA are best-effort
 // headers from the redirect request.
 model TrackedLinkClick {
-  id        String   @id
-  linkId    String
+  id          String   @id
+  linkId      String
   workspaceId String
   // Hashed (sha256(salt + ip), first 16 hex chars). Never the raw IP.
-  ipHash    String
+  ipHash      String
   // User-Agent header (truncated to 240 chars). Helps spot bots.
-  userAgent String?
+  userAgent   String?
   // Cloudflare/Vercel geo header. Optional.
-  country   String?
-  clickedAt DateTime @default(now())
+  country     String?
+  clickedAt   DateTime @default(now())
 
   link TrackedLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
 
@@ -741,16 +780,16 @@ model AutomationDailySendCounter {
 }
 
 model WebhookEvent {
-  id              String    @id
-  workspaceId     String
-  providerEventId String
-  eventType       String
-  payload         Json
-  receivedAt      DateTime  @default(now())
-  processedAt     DateTime?
-  version         Int       @default(1)
-  adminReprocessCount Int    @default(0)
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                  String    @id
+  workspaceId         String
+  providerEventId     String
+  eventType           String
+  payload             Json
+  receivedAt          DateTime  @default(now())
+  processedAt         DateTime?
+  version             Int       @default(1)
+  adminReprocessCount Int       @default(0)
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, providerEventId])
   @@index([workspaceId, receivedAt])
@@ -855,47 +894,47 @@ model AdminIncident {
 }
 
 model AdminDeletionJob {
-  id                   String                     @id
-  targetKind           AdminDeletionTargetKind
-  targetId             String
-  state                AdminDeletionJobState      @default(QUEUED)
-  impact               Json
-  impactVersion        Int
-  impactDigest         String
-  version              Int                        @default(1)
-  requestedByUserId    String
-  requestedByEmail     String
-  reason               String
-  idempotencyKey       String                     @unique
-  includeAuthUsers     Boolean                    @default(false)
-  currentStage         AdminDeletionStageKind?
-  progress             Int                        @default(0)
-  attempts             Int                        @default(0)
-  cancelRequestedAt    DateTime?
-  cancelledAt          DateTime?
-  cancelledByUserId    String?
-  irreversibleAt       DateTime?
-  terminalErrorCode    String?
-  createdAt            DateTime                   @default(now())
-  startedAt            DateTime?
-  finishedAt           DateTime?
-  updatedAt            DateTime                   @updatedAt
-  stages               AdminDeletionStage[]
+  id                String                  @id
+  targetKind        AdminDeletionTargetKind
+  targetId          String
+  state             AdminDeletionJobState   @default(QUEUED)
+  impact            Json
+  impactVersion     Int
+  impactDigest      String
+  version           Int                     @default(1)
+  requestedByUserId String
+  requestedByEmail  String
+  reason            String
+  idempotencyKey    String                  @unique
+  includeAuthUsers  Boolean                 @default(false)
+  currentStage      AdminDeletionStageKind?
+  progress          Int                     @default(0)
+  attempts          Int                     @default(0)
+  cancelRequestedAt DateTime?
+  cancelledAt       DateTime?
+  cancelledByUserId String?
+  irreversibleAt    DateTime?
+  terminalErrorCode String?
+  createdAt         DateTime                @default(now())
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  updatedAt         DateTime                @updatedAt
+  stages            AdminDeletionStage[]
 
   @@index([state, createdAt])
   @@index([targetKind, targetId, state])
 }
 
 model AdminDeletionStage {
-  jobId        String
-  stage        AdminDeletionStageKind
-  state        AdminDeletionStageState @default(PENDING)
-  attempts     Int                     @default(0)
+  jobId         String
+  stage         AdminDeletionStageKind
+  state         AdminDeletionStageState @default(PENDING)
+  attempts      Int                     @default(0)
   safeErrorCode String?
-  startedAt    DateTime?
-  completedAt  DateTime?
-  updatedAt    DateTime                @updatedAt
-  job          AdminDeletionJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  updatedAt     DateTime                @updatedAt
+  job           AdminDeletionJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@id([jobId, stage])
   @@index([state, updatedAt])

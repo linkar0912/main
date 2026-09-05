@@ -43,13 +43,22 @@ function mapPlan(plan: {
 
 class MonthlyLimitReached extends Error {}
 
-export function createPrismaEntitlementRepository(client = prisma): EntitlementRepository {
+export function createPrismaEntitlementRepository(client = prisma, now: () => Date = () => new Date()): EntitlementRepository {
   return {
     async getWorkspaceEntitlement(workspaceId) {
-      const entitlement = await client.workspaceEntitlement.findUnique({
-        where: { workspaceId },
-        select: { overrides: true, plan: true },
-      });
+      const timestamp = now();
+      const [entitlement, premium] = await Promise.all([
+        client.workspaceEntitlement.findUnique({
+          where: { workspaceId },
+          select: { overrides: true, plan: true },
+        }),
+        client.premiumInviteRedemption.findFirst({
+          where: { workspaceId, startsAt: { lte: timestamp }, expiresAt: { gt: timestamp } },
+          orderBy: { expiresAt: "desc" },
+          select: { plan: true },
+        }),
+      ]);
+      if (premium) return { plan: mapPlan(premium.plan), overrides: {} };
       return entitlement ? { plan: mapPlan(entitlement.plan), overrides: entitlement.overrides } : null;
     },
 
