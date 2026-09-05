@@ -153,7 +153,7 @@ function startRequest<T>(cache: ClientCache<T>, url: string, select: (payload: u
   return pending;
 }
 
-function sharedRequest<T>(cache: ClientCache<T>, url: string, select: (payload: unknown) => T): Promise<T> {
+function sharedRequest<T>(cache: ClientCache<T>, url: string, select: (payload: unknown) => T, waitForStaleRefresh = false): Promise<T> {
   // A replaced fetch implementation indicates a new test/runtime boundary.
   // In the browser the native fetch reference stays stable for the session.
   if (cache.fetcher !== fetch) {
@@ -170,6 +170,7 @@ function sharedRequest<T>(cache: ClientCache<T>, url: string, select: (payload: 
       // unhandled promise; the last confirmed value stays available.
       void startRequest(cache, url, select).catch(() => undefined);
     }
+    if (waitForStaleRefresh && cache.pending) return cache.pending;
     return Promise.resolve(cache.value);
   }
   if (cache.pending) return cache.pending;
@@ -222,7 +223,12 @@ export function getBillingView(signal?: AbortSignal): Promise<BillingView> {
 }
 
 export function getInsightsOverview(signal?: AbortSignal): Promise<InsightsOverview> {
-  return forCaller(sharedRequest(insightsOverviewCache, "/api/insights?include=overview", (payload) => payload as InsightsOverview), signal);
+  return forCaller(sharedRequest(
+    insightsOverviewCache,
+    "/api/insights?include=overview",
+    (payload) => payload as InsightsOverview,
+    true,
+  ), signal);
 }
 
 function resetCache(cache: ClientCache<unknown>): void {

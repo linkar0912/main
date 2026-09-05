@@ -20,7 +20,7 @@ import { TrackedLinksPanel } from "./tracked-links-panel";
 import { StatusBadge } from "./status-badge";
 import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
-import { clearWorkspaceDataCache, getFacebookPages, getInstagramConnections } from "@/src/lib/client/workspace-data";
+import { getFacebookPages, getInstagramConnections, getInsightsOverview } from "@/src/lib/client/workspace-data";
 import { ReplyVolumeChart, type DayPoint } from "./reply-volume-chart";
 
 type InsightsPayload = {
@@ -204,25 +204,18 @@ export function DashboardScreen() {
       // /api/insights already returns it as capturedEmails off the same
       // countCapturedContacts() query, and the contacts route pages in 50
       // contact rows on top. One fewer authenticated round trip per load.
-      fetch("/api/insights?include=overview")
-        .then((response) => (response.ok ? response.json() : null))
-        .then((payload: InsightsPayload | null) => setInsights(payload))
+      getInsightsOverview()
+        .then((payload) => setInsights(payload))
         .catch(() => undefined);
-      // Force a fresh connection lookup so a disconnect performed in the
-      // settings tab (or another tab) is reflected on the dashboard as
-      // soon as it regains focus. Without the cache invalidation the
-      // shared in-memory cache would have served the stale "connected"
-      // snapshot from the previous load.
-      clearWorkspaceDataCache("connections");
       Promise.all([
         getInstagramConnections().catch(() => []),
         getFacebookPages().catch(() => []),
       ]).then(([connections, pages]) => setHasConnection(connections.length > 0 || pages.length > 0));
     }
     refresh();
-    // The dashboard is the workspace overview; a stale "you are connected"
-    // banner after a settings-side disconnect is a real UX bug. Refetching
-    // on focus is the cheapest fix.
+    // Resource freshness prevents tab focus from producing a burst of repeat
+    // requests. Connection mutations invalidate their own entries, while
+    // older confirmed entries refresh after the shared 30-second window.
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, []);

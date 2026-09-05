@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AutomationRecord } from "@/src/lib/repository";
 
@@ -55,6 +55,17 @@ describe("DashboardScreen onboarding", () => {
     render(<DashboardScreen />);
 
     expect(screen.queryByText("Connect your Instagram account")).toBeNull();
+  });
+
+  it("reuses warm overview data when the window regains focus", async () => {
+    stubDashboardFetch();
+    const fetchMock = vi.mocked(fetch);
+    render(<DashboardScreen />);
+    await screen.findByRole("img", { name: /daily replies sent and people reached/i });
+
+    window.dispatchEvent(new Event("focus"));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/insights?include=overview"))).toHaveLength(1));
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/meta/connection"))).toHaveLength(1);
   });
 
   it("treats a connected Facebook Page as a connected channel", async () => {

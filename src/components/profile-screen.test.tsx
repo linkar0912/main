@@ -53,6 +53,27 @@ describe("ProfileScreen", () => {
     expect(document.querySelector(".profile-overview")).toBeNull();
   });
 
+  it("reuses shell and connection data when Profile remounts", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/workspace/bootstrap")) return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
+      if (url.includes("/api/meta/connection")) return { ok: true, json: async () => ({ data: [] }) } as Response;
+      if (url.includes("/api/facebook/connection")) return { ok: true, json: async () => ({ data: [] }) } as Response;
+      throw new Error(`Unexpected fetch to ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = render(<ProfileScreen email="owner@example.com" memberSince="2026-08-20T00:00:00.000Z" emailVerified role="OWNER" />);
+    await screen.findByText("No Instagram account connected yet.");
+    first.unmount();
+    render(<ProfileScreen email="owner@example.com" memberSince="2026-08-20T00:00:00.000Z" emailVerified role="OWNER" />);
+    await screen.findByText("No Instagram account connected yet.");
+
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/workspace/bootstrap"))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/meta/connection"))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/facebook/connection"))).toHaveLength(1);
+  });
+
   it("uses skeletons for identity facts that have not resolved", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
 
