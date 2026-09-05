@@ -65,6 +65,13 @@ describe("production runtime commands", () => {
     expect(worker).toContain("reconcileExpiredDeliveryClaims");
     expect(worker).toContain("DELIVERY_RECONCILIATION_INTERVAL_MS");
   });
+
+  it("runs production incident monitoring at startup and every five minutes", () => {
+    const worker = readProjectFile("src/worker.ts");
+    expect(worker).toContain("createSystemMonitor");
+    expect(worker).toContain("SYSTEM_MONITOR_INTERVAL_MS");
+    expect(worker).toContain("void runSystemMonitor()");
+  });
 });
 
 describe("follow-gated campaign environment flag", () => {

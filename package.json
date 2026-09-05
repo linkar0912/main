@@ -9,6 +9,7 @@
     "check:compose": "docker compose --env-file .env.production.example -f docker-compose.production.yml config --quiet",
     "preflight:billing": "node scripts/verify-billing-config.mjs",
     "preflight:instagram-ownership": "node scripts/preflight-instagram-ownership.mjs",
+    "monitor:production": "node scripts/check-production-health.mjs",
     "backfill:member-user-ids": "node scripts/backfill-member-user-ids.mjs",
     "deploy:coolify": "node scripts/coolify-deploy.mjs",
     "dev": "next dev",

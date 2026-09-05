@@ -361,42 +361,42 @@ test.describe("public marketing route", () => {
     expect(metrics.centerDelta).toBeLessThanOrEqual(2);
   });
 
-  test("final CTA artwork stays within the mobile section gutters", async ({ page }) => {
+  test("marketing footer stays within the mobile page gutters", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
 
-    const section = page.locator("#get-started");
-    const figure = section.getByRole("figure", { name: "A Linkar flow ready to publish" });
-    const [sectionBox, figureBox, widths] = await Promise.all([
-      section.boundingBox(),
-      figure.boundingBox(),
-      section.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth })),
+    const footer = page.locator("#resources");
+    const navigation = footer.getByRole("navigation", { name: "Footer" });
+    const [footerBox, navigationBox, widths] = await Promise.all([
+      footer.boundingBox(),
+      navigation.boundingBox(),
+      footer.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth })),
     ]);
 
-    expect(sectionBox).not.toBeNull();
-    expect(figureBox).not.toBeNull();
+    expect(footerBox).not.toBeNull();
+    expect(navigationBox).not.toBeNull();
     expect(widths.scroll).toBeLessThanOrEqual(widths.client);
-    expect(figureBox!.x).toBeGreaterThanOrEqual(sectionBox!.x + 20);
-    expect(figureBox!.x + figureBox!.width).toBeLessThanOrEqual(sectionBox!.x + sectionBox!.width - 20);
+    expect(navigationBox!.x).toBeGreaterThanOrEqual(footerBox!.x + 20);
+    expect(navigationBox!.x + navigationBox!.width).toBeLessThanOrEqual(footerBox!.x + footerBox!.width - 20);
   });
 
-  test("final CTA flow card remains fully inside the section on mobile", async ({ page }) => {
+  test("footer get-started action remains fully inside the mobile footer", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
 
-    const section = page.locator("#get-started");
-    await section.scrollIntoViewIfNeeded();
+    const footer = page.locator("#resources");
+    await footer.scrollIntoViewIfNeeded();
     await page.waitForTimeout(120);
 
-    const [sectionBox, figureBox] = await Promise.all([
-      section.boundingBox(),
-      section.getByRole("figure", { name: "A Linkar flow ready to publish" }).boundingBox(),
+    const [footerBox, actionBox] = await Promise.all([
+      footer.boundingBox(),
+      footer.getByRole("link", { name: "Get started" }).boundingBox(),
     ]);
 
-    expect(sectionBox).not.toBeNull();
-    expect(figureBox).not.toBeNull();
-    expect(figureBox!.y).toBeGreaterThanOrEqual(sectionBox!.y);
-    expect(figureBox!.y + figureBox!.height).toBeLessThanOrEqual(sectionBox!.y + sectionBox!.height + 1);
+    expect(footerBox).not.toBeNull();
+    expect(actionBox).not.toBeNull();
+    expect(actionBox!.x).toBeGreaterThanOrEqual(footerBox!.x + 20);
+    expect(actionBox!.x + actionBox!.width).toBeLessThanOrEqual(footerBox!.x + footerBox!.width - 20);
   });
 
   test("automation phone remains inside the mobile content column", async ({ page }) => {

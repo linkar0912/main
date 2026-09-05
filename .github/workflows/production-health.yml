@@ -1,0 +1,27 @@
+name: Production health
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-health
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify Linkar production
+        env:
+          PRODUCTION_HEALTH_URL: https://app.linkar.in/api/health
+        run: node scripts/check-production-health.mjs

@@ -23,8 +23,10 @@ import { createWorkerHealthServer, workerHealthPort } from "./lib/worker-health"
 import { reconcileUsageReservations } from "./lib/admin/system/usage-reconciliation";
 import { processAdminDeletion } from "./lib/admin/deletion/processor";
 import { createDeliveryTiming } from "./lib/automation/delivery-timing";
+import { createSystemMonitor } from "./lib/admin/system/monitor";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
+const SYSTEM_MONITOR_INTERVAL_MS = 5 * 60 * 1_000;
 
 async function processTimedRealtimeJob<T>(
   jobId: string | undefined,
@@ -226,6 +228,17 @@ if (!env.redisUrl) {
   setInterval(() => void runDeliveryReconciliation().catch((error) =>
     logger.error("Delivery reconciliation failed", { error: error.message })),
   DELIVERY_RECONCILIATION_INTERVAL_MS).unref();
+
+  const systemMonitor = createSystemMonitor();
+  const runSystemMonitor = async () => {
+    const result = await systemMonitor.run();
+    if (!result.skipped && (result.lifecycleChanges > 0 || result.alertsDelivered > 0)) {
+      logger.info("Production system monitor", result);
+    }
+  };
+  void runSystemMonitor().catch((error) => logger.error("Production system monitor failed", { error: error.message }));
+  setInterval(() => void runSystemMonitor().catch((error) =>
+    logger.error("Production system monitor failed", { error: error.message })), SYSTEM_MONITOR_INTERVAL_MS).unref();
 
   // Sequence scheduler: delivers drip steps that are due. Runs shortly after boot and
   // then every 15 minutes - granular enough for hour-level step delays.

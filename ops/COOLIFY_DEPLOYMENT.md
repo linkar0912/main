@@ -308,6 +308,35 @@ Then verify from outside:
 curl --fail --show-error https://app.linkar.in/api/health
 ```
 
+The same strict check runs every five minutes in `.github/workflows/production-health.yml`
+and can be run manually with `pnpm monitor:production`. Enable GitHub Actions
+failure notifications for the repository owner so a complete host or routing
+failure is visible even when Linkar's worker cannot run its in-process monitor.
+During Hostinger recovery, also enable VPS resource notifications for disk and
+availability; the in-app incident ledger cannot report while the whole host is
+offline.
+
+Linkar's worker separately evaluates component, queue, delivery, deletion, and
+billing posture every five minutes. It records lifecycle changes in
+`AdminIncident` and sends open/escalated/recovered email only when
+`EMAIL_API_KEY`, `EMAIL_FROM`, and `PLATFORM_ALERT_EMAILS` are configured.
+The email key must be a Resend sending-only key and the sender domain must be
+verified. Incident rows remain visible in `/admin/system` if email delivery is
+temporarily unavailable.
+
+### Razorpay activation gate
+
+Before enabling plan changes, run `pnpm preflight:billing` against the exact
+Coolify production environment. It requires the canonical HTTPS app origin, a
+live-mode key, a separate webhook secret, and six distinct Plan IDs. In the
+Razorpay live dashboard, configure the webhook URL exactly as
+`https://app.linkar.in/api/razorpay/webhook` and enable subscription lifecycle
+events used by the billing processor. Apply Prisma migrations before the first
+webhook can arrive. Verify the complete checkout, authenticated, active,
+cancel-at-period-end, and recovery path in test mode first. A real Creator
+Monthly transaction charges ₹199 and therefore requires fresh explicit owner
+approval immediately before checkout.
+
 Require `status: "ok"`, `mode: "configured"`, `dependencies.database: "ok"`
 and `dependencies.redis: "ok"`. Also require
 `capabilities.followGatedCampaigns: "enabled"`; if it is disabled, set

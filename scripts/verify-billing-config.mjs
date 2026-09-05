@@ -20,6 +20,13 @@ export function validateBillingConfig(env) {
     const value = env[name]?.trim();
     if (value && !/^plan_[A-Za-z0-9_]+$/.test(value)) errors.push(`${name} must begin with plan_`);
   }
+  if (env.NODE_ENV === "production" && env.RAZORPAY_KEY_ID?.trim() && !env.RAZORPAY_KEY_ID.trim().startsWith("rzp_live_")) {
+    errors.push("RAZORPAY_KEY_ID must be a live-mode key in production");
+  }
+  const configuredPlanIds = PLAN_VARIABLES.map((name) => env[name]?.trim()).filter(Boolean);
+  if (new Set(configuredPlanIds).size !== configuredPlanIds.length) {
+    errors.push("Razorpay Plan IDs must be unique across tiers and billing intervals");
+  }
 
   let webhookUrl;
   try {
@@ -43,7 +50,7 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  console.log("Billing configuration is complete.");
+  console.log("Razorpay live-mode billing configuration is complete.");
   console.log(`Webhook: ${result.webhookUrl}`);
   for (const name of result.planVariables) console.log(`${name}=${process.env[name]}`);
 }

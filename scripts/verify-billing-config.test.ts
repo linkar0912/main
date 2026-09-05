@@ -58,4 +58,19 @@ describe("billing configuration preflight", () => {
     expect(output).toContain("APP_URL");
     expect(output).toContain("RAZORPAY_PLAN_CREATOR_MONTHLY_ID");
   });
+
+  it("rejects a test-mode Razorpay key for production activation", () => {
+    const result = run({ ...completeEnv, RAZORPAY_KEY_ID: "rzp_test_public_value" });
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}${result.stderr}`).toContain("RAZORPAY_KEY_ID must be a live-mode key");
+  });
+
+  it("rejects reused plan IDs across tiers or billing intervals", () => {
+    const result = run({
+      ...completeEnv,
+      RAZORPAY_PLAN_GROWTH_MONTHLY_ID: completeEnv.RAZORPAY_PLAN_CREATOR_MONTHLY_ID,
+    });
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}${result.stderr}`).toContain("Razorpay Plan IDs must be unique");
+  });
 });

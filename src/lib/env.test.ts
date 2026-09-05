@@ -40,6 +40,23 @@ describe("platform owner environment", () => {
       "PLATFORM_OWNER_USER_IDS is required in production",
     );
   });
+
+  it("normalizes platform alert recipients without exposing them to the client", () => {
+    vi.stubEnv("PLATFORM_ALERT_EMAILS", " owner@linkar.in,ops@linkar.in,owner@linkar.in ");
+    vi.stubEnv("EMAIL_FROM", "Linkar Alerts <alerts@linkar.in>");
+    vi.stubEnv("EMAIL_API_KEY", "re_test_key");
+
+    expect(getServerEnv()).toMatchObject({
+      platformAlertEmails: ["owner@linkar.in", "ops@linkar.in"],
+      emailFrom: "Linkar Alerts <alerts@linkar.in>",
+      emailApiKey: "re_test_key",
+    });
+  });
+
+  it("rejects malformed platform alert recipients", () => {
+    vi.stubEnv("PLATFORM_ALERT_EMAILS", "owner@linkar.in,not-an-email");
+    expect(() => getServerEnv()).toThrow("PLATFORM_ALERT_EMAILS must contain email addresses");
+  });
 });
 
 describe("token encryption key environment", () => {

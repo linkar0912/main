@@ -15,6 +15,9 @@ export type ServerEnv = {
   adminUrl: string;
   publicSiteUrl: string;
   supportEmail: string;
+  emailApiKey?: string;
+  emailFrom?: string;
+  platformAlertEmails: string[];
   databaseUrl?: string;
   redisUrl?: string;
   metaAppId?: string;
@@ -117,6 +120,16 @@ export function parseUuidList(name: string, value: string | undefined): string[]
     throw new Error(`${name} is required in production`);
   }
   return ids;
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function parseEmailList(name: string, value: string | undefined): string[] {
+  const emails = [...new Set((value ?? "").split(",").map((email) => email.trim().toLowerCase()).filter(Boolean))];
+  if (emails.some((email) => !EMAIL.test(email))) {
+    throw new Error(`${name} must contain email addresses`);
+  }
+  return emails;
 }
 
 export function getServerEnv(): ServerEnv {
@@ -235,6 +248,9 @@ export function getServerEnv(): ServerEnv {
     adminUrl,
     publicSiteUrl,
     supportEmail: process.env.SUPPORT_EMAIL ?? "support@linkar.in",
+    emailApiKey: process.env.EMAIL_API_KEY?.trim() || undefined,
+    emailFrom: process.env.EMAIL_FROM?.trim() || undefined,
+    platformAlertEmails: parseEmailList("PLATFORM_ALERT_EMAILS", process.env.PLATFORM_ALERT_EMAILS),
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: process.env.REDIS_URL,
     metaAppId: process.env.META_APP_ID || undefined,

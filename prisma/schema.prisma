@@ -41,6 +41,17 @@ enum AdminAuditPhase {
   FAILURE
 }
 
+enum AdminIncidentSeverity {
+  WARNING
+  CRITICAL
+}
+
+enum AdminIncidentStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
 enum BillingInterval {
   MONTHLY
   ANNUAL
@@ -816,6 +827,31 @@ model AdminAuditEvent {
   @@unique([requestId, phase])
   @@index([createdAt, id])
   @@index([workspaceId, createdAt])
+}
+
+model AdminIncident {
+  id                 String                @id @default(cuid())
+  fingerprint        String
+  activeKey          String?               @unique
+  source             String
+  title              String
+  detail             String
+  severity           AdminIncidentSeverity
+  status             AdminIncidentStatus   @default(OPEN)
+  occurrenceCount    Int                   @default(1)
+  firstSeenAt        DateTime              @default(now())
+  lastSeenAt         DateTime              @default(now())
+  acknowledgedAt     DateTime?
+  acknowledgedBy     String?
+  resolvedAt         DateTime?
+  notificationSentAt DateTime?
+  recoverySentAt     DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([status, severity, lastSeenAt])
+  @@index([fingerprint, createdAt])
+  @@index([resolvedAt])
 }
 
 model AdminDeletionJob {
