@@ -20,11 +20,11 @@ export function HeroSection() {
       <div className={styles.grid}>
         <div className={styles.copy}>
           <h1 id="hero-title" className={styles.title}>
-            <span className={styles.titleLine}>Turn attention into </span>
-            <span className={styles.titleLine}>conversations that keep moving.</span>
+            <span className={styles.titleLine}>Reply to every opportunity. </span>
+            <span className={styles.titleLine}>Even when you are away.</span>
           </h1>
           <p className={styles.body}>
-            Set the trigger once. Linkar replies with context, follows up on time, and brings you back when a real person matters.
+            Choose what someone says or does, write the reply once, and let Linkar answer comments and messages for you.
           </p>
           <div className={styles.actions} data-action-visibility="persistent" data-motion-reduced="final">
             <a
@@ -35,10 +35,10 @@ export function HeroSection() {
               data-roll-secondary="entering"
               data-contrast="white-on-magenta"
             >
-              <ButtonRoll label="Start building" />
+              <ButtonRoll label="Create your first reply" />
             </a>
           </div>
-          <p className={styles.proof}>Clear rules. Useful replies. Your voice.</p>
+          <p className={styles.proof}>Easy to set up. Always in your voice.</p>
         </div>
 
         <figure

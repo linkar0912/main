@@ -84,26 +84,26 @@ describe("AutomationStory", () => {
   it("server-renders exact ordered Linkar chapters and one semantic scene summary", () => {
     const markup = renderToStaticMarkup(<AutomationStory />);
     render(<AutomationStory />);
-    const section = screen.getByRole("region", { name: "One spark. A conversation that knows what comes next." });
+    const section = screen.getByRole("region", { name: "From the first comment to the right next step." });
     expect(section.id).toBe("how-it-works");
     expect(section.getAttribute("data-active-scene")).toBe("comment");
     expect(section.getAttribute("data-active-index")).toBe("0");
     expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
-      "Open the right door", "Learn what matters", "Return on time", "Bring in a person",
+      "Reply right away", "Ask one useful question", "Follow up at the right time", "Let your team take over",
     ]);
     expect(Array.from(section.querySelectorAll("[data-sequence]")).map((number) => number.textContent)).toEqual(["01", "02", "03", "04"]);
     expect(Array.from(section.querySelectorAll("[data-chapter-copy]")).map((copy) => copy.textContent)).toEqual([
-      "When the right comment arrives, Linkar sends a useful private reply in your voice.",
-      "Ask one focused question, save the answer, and shape the next message around it.",
-      "Schedule a thoughtful follow-up while the conversation is still open, with no reminder list required.",
-      "When intent becomes valuable or nuanced, pause the flow and place the full context in your queue.",
+      "When someone leaves the comment you are looking for, Linkar privately sends the reply you wrote.",
+      "Find out what someone needs, save their answer, and send the most helpful next message.",
+      "Schedule a friendly reminder while the conversation is still open. Linkar remembers when to send it.",
+      "When someone needs a personal answer, pause automatic replies and keep the conversation ready for your team.",
     ]);
     [
-      "GUIDE please", "Keyword matched", "The quick guide is ready. What would you like to improve first?",
-      "More replies or better leads?", "Better leads", "Goal saved", "Now: guide sent",
-      "+ 18h: check in", "Within window", "Project details received", "Automation paused", "Ready for you",
+      "GUIDE please", "GUIDE recognized", "The quick guide is ready. What would you like to improve first?",
+      "More replies or better leads?", "Better leads", "Answer remembered", "Now: guide sent",
+      "+ 18h: check in", "Ready to send", "Project details received", "Automatic replies paused", "Ready for your team",
     ].forEach((state) => expect(markup).toContain(state));
-    expect(screen.getAllByRole("figure", { name: "Linkar automation preview in an iPhone social conversation interface" })).toHaveLength(1);
+    expect(screen.getAllByRole("figure", { name: "Linkar reply preview in an iPhone conversation" })).toHaveLength(1);
     expect(screen.getAllByRole("list")).toHaveLength(1);
     expect(screen.getAllByRole("listitem")).toHaveLength(4);
     expect(section.querySelectorAll('[data-device-frame="iphone"]')).toHaveLength(5);
@@ -131,7 +131,7 @@ describe("AutomationStory", () => {
   it("maps exact progress bands using the 45% viewport activation line", () => {
     const frames = installAnimationFrame();
     render(<AutomationStory />);
-    const section = screen.getByRole("region", { name: "One spark. A conversation that knows what comes next." });
+    const section = screen.getByRole("region", { name: "From the first comment to the right next step." });
     const storyBody = section.querySelector<HTMLElement>("[data-story-body]");
     expect(storyBody).not.toBeNull();
     const cases: Array<[number, string, string]> = [
@@ -182,7 +182,7 @@ describe("AutomationStory", () => {
     const addEventListener = vi.spyOn(window, "addEventListener");
     const frames = installAnimationFrame();
     render(<AutomationStory />);
-    const section = screen.getByRole("region", { name: "One spark. A conversation that knows what comes next." });
+    const section = screen.getByRole("region", { name: "From the first comment to the right next step." });
     expect(section.getAttribute("data-motion")).toBe("reduced");
     expect(section.querySelectorAll("[data-flow-scene]")).toHaveLength(4);
     expect(within(section).getAllByRole("heading", { level: 3 })).toHaveLength(4);

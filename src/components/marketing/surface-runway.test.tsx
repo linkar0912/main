@@ -14,30 +14,30 @@ afterEach(() => {
 describe("SurfaceRunway", () => {
   it("renders four informational surface cards with their exact copy and labelled local previews", () => {
     render(<SurfaceRunway />);
-    const section = screen.getByRole("region", { name: "Meet people where the conversation starts." });
+    const section = screen.getByRole("region", { name: "Choose where Linkar should reply." });
 
     expect(section.id).toBe("surfaces");
-    expect(within(section).getByText("Choose the signal. Linkar gives every response a deliberate next step.")).toBeTruthy();
+    expect(within(section).getByText("Start with a comment, message, or Story mention and decide exactly what happens next.")).toBeTruthy();
     const cards = within(section).getAllByRole("article");
     expect(cards).toHaveLength(4);
     expect(cards.map((card) => card.querySelector("h3")?.textContent)).toEqual([
-      "Comment triggers", "DM triggers", "Story mentions", "Follow-gated campaigns",
+      "Reply when someone comments", "Answer common messages", "Thank people for Story mentions", "Send links to followers",
     ]);
     expect(cards.map((card) => card.querySelector("p")?.textContent)).toEqual([
-      "Turn a chosen word beneath a post into a relevant private reply.",
-      "Recognize an incoming phrase and guide the conversation from the first message.",
-      "Acknowledge a mention while the moment is still warm.",
-      "Check the condition before releasing the promised next step.",
+      "Choose a word such as GUIDE or PRICE and privately send the answer they asked for.",
+      "Recognize questions about prices, hours, or delivery and answer them straight away.",
+      "Send a warm thank-you when someone mentions your account in an Instagram Story.",
+      "Ask permission, check that the person follows you, and then send the promised link.",
     ]);
     expect(within(section).getAllByRole("figure")).toHaveLength(4);
     expect(Array.from(section.querySelectorAll("figure")).every((preview) => preview.hasAttribute("data-reveal"))).toBe(true);
-    expect(within(section).getAllByText("Comment → Keyword rule → Reply")).toHaveLength(1);
+    expect(within(section).getAllByText("Someone comments → Chosen word matches → Private reply")).toHaveLength(1);
     expect(section.querySelectorAll("a, button, [draggable='true']")).toHaveLength(0);
   });
 
   it("numbers the cards in order so the first one is identifiable", () => {
     render(<SurfaceRunway />);
-    const section = screen.getByRole("region", { name: "Meet people where the conversation starts." });
+    const section = screen.getByRole("region", { name: "Choose where Linkar should reply." });
 
     expect(within(section).getAllByRole("article").map((card) => card.firstElementChild?.textContent))
       .toEqual(["01", "02", "03", "04"]);
@@ -53,7 +53,7 @@ describe("SurfaceRunway", () => {
     vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
 
     const view = render(<SurfaceRunway />);
-    const section = screen.getByRole("region", { name: "Meet people where the conversation starts." });
+    const section = screen.getByRole("region", { name: "Choose where Linkar should reply." });
 
     expect(addEventListener).not.toHaveBeenCalledWith("scroll", expect.any(Function), expect.anything());
     expect(addEventListener).not.toHaveBeenCalledWith("resize", expect.any(Function), expect.anything());

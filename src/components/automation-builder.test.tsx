@@ -211,8 +211,8 @@ describe("AutomationBuilder", () => {
     render(<AutomationBuilder initialDefinition={greeting} initialName="Welcome" />);
 
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /add a follow-up nudge/i }));
-    fireEvent.change(screen.getByLabelText(/nudge 1 message/i), { target: { value: "Still there?" } });
+    fireEvent.click(screen.getByRole("button", { name: /add a reminder message/i }));
+    fireEvent.change(screen.getByLabelText(/reminder 1 message/i), { target: { value: "Still there?" } });
     for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
 

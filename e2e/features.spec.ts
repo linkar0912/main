@@ -9,13 +9,13 @@ test("template picker surfaces the new India-first recipes", async ({ page }) =>
   await page.getByRole("button", { name: "New automation" }).click();
 
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByText("Price list responder")).toBeVisible();
-  await expect(dialog.getByText("Influencer collab intake")).toBeVisible();
-  await expect(dialog.getByText("Offer with follow-up nudge")).toBeVisible();
-  await expect(dialog.getByText("Event & webinar registration")).toBeVisible();
+  await expect(dialog.getByText("Send prices when someone asks")).toBeVisible();
+  await expect(dialog.getByText("Collect partnership enquiries")).toBeVisible();
+  await expect(dialog.getByText("Send an offer and a reminder")).toBeVisible();
+  await expect(dialog.getByText("Register people for an event")).toBeVisible();
 
   await dialog.getByLabel("Search templates").fill("price");
-  await expect(dialog.getByText(/Price list responder/)).toBeVisible();
+  await expect(dialog.getByText(/Send prices when someone asks/)).toBeVisible();
 });
 
 test("price-list recipe prefills an image card reply", async ({ page }) => {
@@ -23,12 +23,12 @@ test("price-list recipe prefills an image card reply", async ({ page }) => {
   await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [] } }));
   await page.goto("/automations/new?type=classic&template=price-list-responder");
 
-  await expect(page.getByLabel("Automation name")).toHaveValue(/Price list responder/i);
+  await expect(page.getByLabel("Reply name")).toHaveValue(/Send prices when someone asks/i);
   const imageInput = page.getByLabel("Image URL");
   await expect(imageInput).toHaveValue("https://example.com/images/price-list.jpg");
   await expect(page.getByLabel("Caption")).toHaveValue(/price list/i);
   // And the phone preview renders the image bubble.
-  await expect(page.getByLabel(/test preview/i).locator(".ig-dm-image")).toBeVisible();
+  await expect(page.getByLabel(/message preview/i).locator(".ig-dm-image")).toBeVisible();
 });
 
 /** Clicks Next once and gives React a beat to swap the wizard step, so back-to-back
@@ -44,17 +44,17 @@ test("builder exposes image actions, token hints, suggestions, and follow-ups", 
   await page.route("**/api/automations/suggest-keywords", (route) =>
     route.fulfill({ json: { data: ["kurti", "price", "collab"] } }));
   await page.goto("/automations/new?type=classic");
-  await page.getByLabel("Automation name").fill("Feature coverage flow");
+  await page.getByLabel("Reply name").fill("Feature coverage flow");
 
   // Keyword suggestion chips render from the endpoint.
   const chips = page.getByTestId("keyword-suggestions");
   await expect(chips.getByRole("button", { name: "+ kurti" })).toBeVisible();
   await chips.getByRole("button", { name: "+ kurti" }).click();
-  await expect(page.getByLabel("Keywords", { exact: true })).toHaveValue(/kurti/);
+  await expect(page.getByLabel("Words to look for", { exact: true })).toHaveValue(/kurti/);
 
   // Switch to a DM trigger, then move to the action step
   // (Trigger → Condition → Action).
-  await page.getByLabel("Trigger source").selectOption("message");
+  await page.getByLabel("Where will it start?").selectOption("message");
   await advance(page);
   await advance(page);
 
@@ -63,20 +63,20 @@ test("builder exposes image actions, token hints, suggestions, and follow-ups", 
   await page.getByLabel("Message text").fill("Here are the details you requested.");
 
   // Follow-up nudge editor on DM triggers.
-  await page.getByRole("button", { name: "Add a follow-up nudge" }).click();
-  await page.getByLabel("Nudge 1 delay in minutes").fill("1440");
+  await page.getByRole("button", { name: "Add a reminder message" }).click();
+  await page.getByLabel("Reminder 1 delay in minutes").fill("1440");
   await page
-    .getByLabel("Nudge 1 message")
+    .getByLabel("Reminder 1 message")
     .fill("Still interested, {username}? Your offer ends tonight.");
-  await page.getByLabel("Nudge 1 button label").fill("Claim");
-  await page.getByLabel("Nudge 1 link URL").fill("https://example.com/offer");
+  await page.getByLabel("Reminder 1 button label").fill("Claim");
+  await page.getByLabel("Reminder 1 link URL").fill("https://example.com/offer");
 
   // Walk to Review (Email collector → Guardrails → Review) and confirm the
   // summary calls out the scheduled nudge.
   await advance(page);
   await advance(page);
   await advance(page);
-  await expect(page.getByText(/1 follow-up nudge scheduled after the flow/i)).toBeVisible();
+  await expect(page.getByText(/1 reminder message scheduled/i)).toBeVisible();
 });
 
 test("capture fields support answer types and stop words", async ({ page }) => {
@@ -84,8 +84,8 @@ test("capture fields support answer types and stop words", async ({ page }) => {
   await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [] } }));
   await page.goto("/automations/new?type=classic");
 
-  await page.getByLabel("Automation name").fill("Capture fields test");
-  await page.getByLabel("Trigger source").selectOption("message");
+  await page.getByLabel("Reply name").fill("Capture fields test");
+  await page.getByLabel("Where will it start?").selectOption("message");
   // Walk to the email collector step (Condition → Action → Email collector).
   await advance(page);
   await advance(page);

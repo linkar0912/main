@@ -15,33 +15,33 @@ describe("SetupSteps", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<SetupSteps />);
 
-    const section = screen.getByRole("region", { name: "From first connection to live flow in three clear steps." });
+    const section = screen.getByRole("region", { name: "Start replying in three simple steps." });
     expect(section.id).toBe("setup");
-    expect(within(section).getByText("Linkar keeps setup focused so you can spend your judgment on the conversation.")).toBeTruthy();
+    expect(within(section).getByText("Linkar guides you from connecting an account to turning on your first automatic reply.")).toBeTruthy();
 
     const steps = Array.from(within(section).getByRole("list").querySelectorAll(":scope > li")).filter(
       (step): step is HTMLElement => step instanceof HTMLElement,
     );
     expect(steps).toHaveLength(3);
     expect(Array.from(steps, (step) => within(step).getByRole("heading", { level: 3 }).textContent)).toEqual([
-      "Connect your professional account",
-      "Choose a trigger",
-      "Publish the flow",
+      "Connect Instagram or Facebook",
+      "Choose what starts the reply",
+      "Review it and turn it on",
     ]);
     expect(Array.from(steps, (step) => within(step).getByText(/^0[1-3]$/).textContent)).toEqual(["01", "02", "03"]);
-    expect(within(steps[0]).getByText("Authorize Instagram or a Facebook Page securely and confirm the channel you want Linkar to use.")).toBeTruthy();
-    expect(within(steps[1]).getByText("Pick a supported Instagram or Facebook comment, message, mention, or campaign condition.")).toBeTruthy();
-    expect(within(steps[2]).getByText("Review the path, switch it on, and watch each conversation move through visible states.")).toBeTruthy();
+    expect(within(steps[0]).getByText("Choose the professional Instagram account or Facebook Page that Linkar should reply from.")).toBeTruthy();
+    expect(within(steps[1]).getByText("Pick a comment, message, or Story mention, then choose the words Linkar should look for.")).toBeTruthy();
+    expect(within(steps[2]).getByText("Read through the messages once, switch the reply on, and see what Linkar sends.")).toBeTruthy();
     expect(Array.from(steps, (step) => within(step).getByRole("figure").getAttribute("aria-label"))).toEqual([
       "Protected Linkar connection preview",
-      "Linkar trigger preview",
-      "Published Linkar flow preview",
+      "Linkar reply starting-point preview",
+      "Linkar reply turned on preview",
     ]);
     expect(Array.from(steps, (step) => within(step).getByRole("figure").querySelector("svg"))).not.toContain(null);
     expect(Array.from(steps, (step) => within(step).getByRole("figure").querySelector("figcaption")?.textContent)).toEqual([
-      "Connection protected",
-      "Trigger ready",
-      "Flow live",
+      "Connected securely",
+      "Starting point ready",
+      "Automatic reply is on",
     ]);
     expect(within(section).queryAllByRole("button")).toHaveLength(0);
     expect(within(section).queryAllByRole("link")).toHaveLength(0);
@@ -61,7 +61,7 @@ describe("SetupSteps", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<SetupSteps />);
 
-    const section = screen.getByRole("region", { name: "From first connection to live flow in three clear steps." });
+    const section = screen.getByRole("region", { name: "Start replying in three simple steps." });
     expect(section.getAttribute("data-reduced-motion-state")).toBe("visible");
     expect(within(section).getAllByRole("figure")).toHaveLength(3);
   });

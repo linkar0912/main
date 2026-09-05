@@ -13,18 +13,18 @@ describe("HeroSection", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", {
       level: 1,
-      name: "Turn attention into conversations that keep moving.",
+      name: "Reply to every opportunity. Even when you are away.",
     })).toBeTruthy();
     expect(screen.getByText(
-      "Set the trigger once. Linkar replies with context, follows up on time, and brings you back when a real person matters.",
+      "Choose what someone says or does, write the reply once, and let Linkar answer comments and messages for you.",
     )).toBeTruthy();
-    expect(screen.getByText("Clear rules. Useful replies. Your voice.")).toBeTruthy();
+    expect(screen.getByText("Easy to set up. Always in your voice.")).toBeTruthy();
   });
 
   it("offers only the direct signup action from the copy subtree", () => {
     render(<HeroSection />);
 
-    expect(screen.getByRole("link", { name: "Start building" }).getAttribute("href")).toBe("/signup");
+    expect(screen.getByRole("link", { name: "Create your first reply" }).getAttribute("href")).toBe("/signup");
     expect(screen.queryByRole("link", { name: "See how it works" })).toBeNull();
     expect(screen.queryByText("Linkar / reply flow")).toBeNull();
   });
@@ -65,8 +65,8 @@ describe("HeroSection", () => {
   it("exposes an always-visible primary label and an independently staged secondary roll", () => {
     render(<HeroSection />);
 
-    const hero = screen.getByRole("region", { name: "Turn attention into conversations that keep moving." });
-    const action = screen.getByRole("link", { name: "Start building" });
+    const hero = screen.getByRole("region", { name: "Reply to every opportunity. Even when you are away." });
+    const action = screen.getByRole("link", { name: "Create your first reply" });
 
     expect(hero.getAttribute("data-motion")).toBe("staged");
     expect(action.getAttribute("data-motion-stage")).toBe("action");

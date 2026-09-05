@@ -35,12 +35,12 @@ test("creates, reopens, activates, and renders a Facebook Page comment automatio
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Facebook" }).click();
   await dialog.getByLabel("Facebook Page").selectOption("page_1");
-  await dialog.getByText("Keyword comment reply", { exact: true }).click();
+  await dialog.getByText("Reply when a comment includes chosen words", { exact: true }).click();
 
   await expect(page.getByLabel("Channel")).toHaveValue("FACEBOOK");
   await expect(page.getByLabel("Facebook Page")).toHaveValue("page_1");
   await page.getByLabel("Post IDs").fill("post_1");
-  await page.getByLabel("Keywords", { exact: true }).fill("price, details");
+  await page.getByLabel("Words to look for", { exact: true }).fill("price, details");
   await page.getByLabel("Keyword logic").selectOption("all");
   await page.getByLabel("Exclude keywords").fill("spam");
   await page.getByLabel("Reply once per person").check();

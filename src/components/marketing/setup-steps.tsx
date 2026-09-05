@@ -14,23 +14,23 @@ const setupSteps: readonly SetupStep[] = [
   {
     id: "connect",
     number: "01",
-    title: "Connect your professional account",
-    description: "Authorize Instagram or a Facebook Page securely and confirm the channel you want Linkar to use.",
-    status: "Connection protected",
+    title: "Connect Instagram or Facebook",
+    description: "Choose the professional Instagram account or Facebook Page that Linkar should reply from.",
+    status: "Connected securely",
   },
   {
     id: "trigger",
     number: "02",
-    title: "Choose a trigger",
-    description: "Pick a supported Instagram or Facebook comment, message, mention, or campaign condition.",
-    status: "Trigger ready",
+    title: "Choose what starts the reply",
+    description: "Pick a comment, message, or Story mention, then choose the words Linkar should look for.",
+    status: "Starting point ready",
   },
   {
     id: "publish",
     number: "03",
-    title: "Publish the flow",
-    description: "Review the path, switch it on, and watch each conversation move through visible states.",
-    status: "Flow live",
+    title: "Review it and turn it on",
+    description: "Read through the messages once, switch the reply on, and see what Linkar sends.",
+    status: "Automatic reply is on",
   },
 ];
 
@@ -80,7 +80,7 @@ function ConnectPreview() {
         </span>
       </div>
       <div className={styles.fieldGrid}>
-        {["comments", "messages", "mentions", "postbacks"].map((field) => (
+        {["comments", "messages", "mentions", "button taps"].map((field) => (
           <span className={styles.fieldChip} key={field}>
             <i className={styles.tick}><TickIcon /></i>
             {field}
@@ -96,18 +96,18 @@ function TriggerPreview() {
   return (
     <div className={styles.panel}>
       <div className={styles.panelHead}>
-        <span className={styles.eyebrow}>Step 01<i>·</i>Trigger</span>
-        <strong>When should Linkar listen?</strong>
+        <span className={styles.eyebrow}>Step 01<i>·</i>When this happens</span>
+        <strong>What should start this reply?</strong>
       </div>
       <label className={styles.field}>
-        <span>Trigger source</span>
+        <span>Where will it start?</span>
         <span className={styles.select}>
           Post &amp; Reel comments
           <i><ChevronIcon /></i>
         </span>
       </label>
       <label className={styles.field}>
-        <span>Match mode</span>
+        <span>Which comments count?</span>
         <span className={styles.select}>
           A keyword
           <i><ChevronIcon /></i>
@@ -123,8 +123,8 @@ function TriggerPreview() {
         <path d="M3 1v22" />
       </svg>
       <div className={styles.actionRow}>
-        <span className={styles.eyebrow}>Step 02<i>·</i>Action</span>
-        <strong>Private reply</strong>
+        <span className={styles.eyebrow}>Step 02<i>·</i>Linkar will do this</span>
+        <strong>Send a private reply</strong>
       </div>
     </div>
   );
@@ -139,8 +139,8 @@ function PublishPreview() {
           <InstagramGlyph size={17} brand />
         </span>
         <span className={styles.channelId}>
-          <strong>Lead magnet from comments</strong>
-          <span className={styles.rowMeta}>Comment replies<i>·</i>2 actions</span>
+          <strong>Send a free guide from comments</strong>
+          <span className={styles.rowMeta}>Comment replies<i>·</i>2 messages</span>
         </span>
         <svg className={styles.toggle} viewBox="0 0 44 24" aria-hidden="true">
           <rect className={styles.switchTrack} x="0" y="0" width="44" height="24" rx="12" />
@@ -152,7 +152,7 @@ function PublishPreview() {
         <span><strong>0</strong>failed</span>
         <span className={styles.statusPill} data-live="true">
           <i className={styles.liveDot} />
-          Active
+          On
         </span>
       </div>
     </div>
@@ -169,8 +169,8 @@ function SetupIllustration({ step }: { step: SetupStep }) {
   const label = step.id === "connect"
     ? "Protected Linkar connection preview"
     : step.id === "trigger"
-      ? "Linkar trigger preview"
-      : "Published Linkar flow preview";
+      ? "Linkar reply starting-point preview"
+      : "Linkar reply turned on preview";
   const Preview = previews[step.id];
 
   return (
@@ -185,8 +185,8 @@ export function SetupSteps() {
   return (
     <section id="setup" className={styles.section} aria-labelledby="setup-title" data-reduced-motion-state="visible">
       <header className={styles.header}>
-        <h2 id="setup-title">From first connection to live flow in three clear steps.</h2>
-        <p>Linkar keeps setup focused so you can spend your judgment on the conversation.</p>
+        <h2 id="setup-title">Start replying in three simple steps.</h2>
+        <p>Linkar guides you from connecting an account to turning on your first automatic reply.</p>
       </header>
       <ol className={styles.steps}>
         {setupSteps.map((step, index) => (

@@ -163,8 +163,8 @@ export function SurfaceRunway() {
   return (
     <section id="surfaces" className={styles.section} aria-labelledby="surfaces-title">
       <header className={styles.header}>
-        <h2 id="surfaces-title">Meet people where the conversation starts.</h2>
-        <p>Choose the signal. Linkar gives every response a deliberate next step.</p>
+        <h2 id="surfaces-title">Choose where Linkar should reply.</h2>
+        <p>Start with a comment, message, or Story mention and decide exactly what happens next.</p>
       </header>
       <div className={styles.viewport}>
         <ul className={styles.track}>

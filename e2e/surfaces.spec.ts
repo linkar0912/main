@@ -10,7 +10,7 @@ test("builder wraps the preview in a phone shell with status bar and updated bad
   await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [] } }));
   await page.goto("/automations/new?type=campaign");
 
-  const preview = page.getByLabel(/test preview/i);
+  const preview = page.getByLabel(/message preview/i);
   await expect(preview.locator(".ig-device")).toBeVisible();
   await expect(preview.locator(".ig-phone")).toBeVisible();
   await expect(preview.locator(".ig-device-button")).toHaveCount(3);
@@ -34,7 +34,7 @@ test("template picker tiles show example flows and search narrows them", async (
   await expect(channel.locator(".template-channel-switch")).toHaveCSS("border-top-width", "0px");
   await expect(channel.getByRole("button", { name: "Instagram" })).toHaveAttribute("aria-pressed", "true");
   await expect(channel.locator('[data-brand-logo="instagram"]')).toBeVisible();
-  await expect(dialog.getByText("Follow-gated Reel campaign")).toBeVisible();
+  await expect(dialog.getByText("Send a link after someone follows you")).toBeVisible();
   await expect(dialog.locator(".template-example").first()).toBeVisible();
   await expect(dialog.locator(".template-picker-tile-icon")).toHaveCount(0);
 
@@ -55,8 +55,8 @@ test("template picker tiles show example flows and search narrows them", async (
   await channel.getByRole("button", { name: "Instagram" }).click();
 
   await dialog.getByLabel("Search templates").fill("story");
-  await expect(dialog.getByText(/Story Mention Reply/)).toBeVisible();
-  await expect(dialog.getByText(/Email Capture/)).toHaveCount(0);
+  await expect(dialog.getByText(/Thank people who mention you in a Story/)).toBeVisible();
+  await expect(dialog.getByText(/Collect email addresses in messages/)).toHaveCount(0);
 });
 
 test("campaign activity filters by status chips and offers retries", async ({ page }) => {

@@ -38,7 +38,7 @@ test("builder preview drops the dark panel and shows the connected photo", async
   await page.route("**/api/automations/suggest-keywords", (route) => route.fulfill({ json: { data: [] } }));
   await page.goto("/automations/new?type=classic");
 
-  const preview = page.getByLabel(/test preview/i);
+  const preview = page.getByLabel(/message preview/i);
   const phone = preview.locator(".ig-phone");
   await expect(phone).toBeVisible();
 
@@ -57,7 +57,7 @@ test("campaign preview gives other commenters the default no-photo avatar", asyn
   }));
   await page.goto("/automations/new?type=campaign");
 
-  const preview = page.getByLabel(/test preview/i);
+  const preview = page.getByLabel(/message preview/i);
   await preview.getByRole("tab", { name: "Comments" }).click();
 
   // The stranger commenting carries Instagram's default avatar, never our photo.

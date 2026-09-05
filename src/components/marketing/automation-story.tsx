@@ -17,23 +17,23 @@ type AutomationStoryProps = {
 const sceneSummaries = {
   comment: [
     'Comment “GUIDE please”',
-    'Condition “Keyword matched”',
+    'Linkar recognizes “GUIDE”',
     'Private reply “The quick guide is ready. What would you like to improve first?”',
   ],
   qualify: [
     'Question “More replies or better leads?”',
     'Tapped reply “Better leads”',
-    'Memory “Goal saved”',
+    'Linkar remembers “Better leads”',
   ],
   followup: [
     'Timeline “Now: guide sent”',
     'Timeline “+ 18h: check in”',
-    'Status “Within window”',
+    'Reminder “Ready to send in 18 hours”',
   ],
   handoff: [
-    'Signal “Project details received”',
-    'Action “Automation paused”',
-    'Queue “Ready for you”',
+    'Message “Project details received”',
+    'Automatic replies pause',
+    'Conversation moves to the team inbox',
   ],
 } as const satisfies Record<StoryChapter["scene"], readonly [string, string, string]>;
 
@@ -280,7 +280,7 @@ function CommentScene() {
             <span className={styles.commentHeart}><Icon name="heart" size={14} /></span>
           </div>
 
-          <AutomationNote detail="Private reply sent" active>Keyword matched</AutomationNote>
+          <AutomationNote detail="Private reply sent" active>GUIDE recognized</AutomationNote>
 
           <div className={styles.inboxRow}>
             <span className={styles.ring} data-size="sm"><span className={styles.ringInner}>L</span></span>
@@ -322,7 +322,7 @@ function QualifyScene() {
           <span>Better leads</span>
         </div>
         <p className={styles.bubbleOut}>Better leads</p>
-        <AutomationNote detail="Goal saved" active>Answer stored</AutomationNote>
+        <AutomationNote detail="Answer remembered" active>Better leads</AutomationNote>
       </div>
       <MessageComposer label="Message…" />
     </div>
@@ -344,8 +344,8 @@ function FollowupScene() {
         <LinkCard />
         <p className={styles.bubbleIn}>More replies or better leads?</p>
         <p className={styles.bubbleOut}>Better leads</p>
-        <AutomationNote detail="Goal saved">Answer stored</AutomationNote>
-        <AutomationNote detail="Within window" active>Queued for + 18h</AutomationNote>
+        <AutomationNote detail="Answer remembered">Better leads</AutomationNote>
+        <AutomationNote detail="Ready to send" active>Waiting 18 hours</AutomationNote>
         <p className={styles.bubblePending}>
           How is the guide fitting the way you qualify new leads?
           <span className={styles.pendingTag}><Icon name="clock" size={12} /> Not sent yet</span>
@@ -368,18 +368,18 @@ function HandoffScene() {
       <div className={styles.screen} data-screen="thread">
         <ThreadIntro />
         <p className={styles.bubbleOut}>Better leads</p>
-        <AutomationNote detail="Goal saved">Answer stored</AutomationNote>
+        <AutomationNote detail="Answer remembered">Better leads</AutomationNote>
         <p className={styles.dayMark}>Yesterday<i>·</i>9:41</p>
         <p className={styles.bubbleOut}>How is the guide fitting the way you qualify new leads?</p>
         <TypingBubble />
         <p className={styles.bubbleIn}>Project details received</p>
-        <AutomationNote detail="Automation paused" active>Handed to you</AutomationNote>
+        <AutomationNote detail="Automatic replies paused" active>Handed to your team</AutomationNote>
         {/* Deliberately not dressed as Instagram: the queue is Linkar's own
             surface, so it is set in Linkar's mono and carries the volt edge
             rather than pretending to be a message. */}
         <div className={styles.queue}>
-          <span className={styles.queueFlag}>Ready for you</span>
-          <strong>Full context attached</strong>
+          <span className={styles.queueFlag}>Ready for your team</span>
+          <strong>Conversation history included</strong>
           <span className={styles.queueMeta}>Goal: better leads<i>·</i>Guide sent<i>·</i>4 messages</span>
         </div>
       </div>
@@ -531,8 +531,8 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
       style={{ "--story-progress": 0, "--story-index": safeActiveIndex } as React.CSSProperties}
     >
       <header className={styles.header}>
-        <h2 id="story-title">One spark. A conversation that knows what comes next.</h2>
-        <p>Linkar turns a simple trigger into a clear, useful sequence.</p>
+        <h2 id="story-title">From the first comment to the right next step.</h2>
+        <p>Linkar replies, remembers useful answers, follows up, and brings in your team when needed.</p>
       </header>
 
       <div className={styles.storyGrid} data-story-body ref={storyBodyRef}>
@@ -556,7 +556,7 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
         </div>
 
         <div className={styles.stage} data-desktop-stage>
-          <figure aria-label="Linkar automation preview in an iPhone social conversation interface">
+          <figure aria-label="Linkar reply preview in an iPhone conversation">
             <ol className={styles.semanticSummary}>
               {chapters.map((chapter) => (
                 <li key={chapter.id}>
@@ -588,7 +588,7 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
                 <span className={styles.homeIndicator} />
               </div>
             </div>
-            <figcaption className={styles.figcaption}>Linkar conversation flow.</figcaption>
+            <figcaption className={styles.figcaption}>A conversation handled by Linkar.</figcaption>
           </figure>
         </div>
       </div>

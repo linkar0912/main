@@ -23,7 +23,7 @@ function stepKind(label: string, index: number): StepKind {
   if (text.startsWith("save")) return "memory";
   if (text.startsWith("branch")) return "condition";
   if (text.startsWith("pause")) return "handoff";
-  if (text.includes("queue")) return "queue";
+  if (text.includes("queue") || text.includes("team inbox")) return "queue";
   return "action";
 }
 
@@ -38,13 +38,13 @@ const stepIcons: Record<StepKind, string> = {
 };
 
 const stepLabels: Record<StepKind, string> = {
-  trigger: "Trigger",
-  action: "Action",
-  delay: "Delay",
-  memory: "Memory",
-  condition: "Condition",
-  handoff: "Handoff",
-  queue: "Queue",
+  trigger: "Starts when",
+  action: "Then Linkar",
+  delay: "Wait",
+  memory: "Remember",
+  condition: "Choose from the answer",
+  handoff: "Pause replies",
+  queue: "Team inbox",
 };
 
 function StepIcon({ kind }: { kind: StepKind }) {
@@ -73,13 +73,13 @@ function BuilderPreview({ workflow }: { workflow: WorkflowItem }) {
   const nodes = workflowNodes(workflow);
 
   return (
-    <figure className={styles.preview} aria-label={`${workflow.title} flow preview`} data-reduced-motion-state="visible">
+    <figure className={styles.preview} aria-label={`${workflow.title} reply preview`} data-reduced-motion-state="visible">
       <div className={styles.builderFrame}>
         <div className={styles.builderChrome}>
-          <span>Flow canvas</span>
+          <span>Reply plan</span>
           <span className={styles.livePill}>
             <i aria-hidden="true" />
-            Live logic
+            Ready to run
           </span>
         </div>
         <div className={styles.builderBody}>
@@ -171,8 +171,8 @@ export function WorkflowGallery() {
       data-reduced-motion-state="visible"
     >
       <header className={styles.header}>
-        <h2 id="gallery-title">Build the path your audience actually needs.</h2>
-        <p>Start with a real moment, then decide what Linkar should remember, send, or hand back.</p>
+        <h2 id="gallery-title">See what Linkar can handle for you.</h2>
+        <p>Start with a real customer moment, then choose what Linkar should ask, send, remember, or pass to your team.</p>
       </header>
 
       <div className={styles.desktopGallery}>

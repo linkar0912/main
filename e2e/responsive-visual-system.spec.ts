@@ -131,7 +131,7 @@ test.describe("public marketing route", () => {
       await page.goto("/");
       const heading = page.getByRole("heading", {
         level: 1,
-        name: /Turn attention into conversations that keep moving/i,
+        name: /Reply to every opportunity. Even when you are away./i,
       });
       const metrics = await heading.evaluate((element) => {
         const box = element.getBoundingClientRect();
@@ -152,7 +152,7 @@ test.describe("public marketing route", () => {
       await page.goto("/");
       await expect(page.getByRole("heading", {
         level: 1,
-        name: /Turn attention into conversations that keep moving/i,
+        name: /Reply to every opportunity. Even when you are away./i,
       })).toBeVisible();
       const width = await page.evaluate(() => ({
         viewport: window.innerWidth,

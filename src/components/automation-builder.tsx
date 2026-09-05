@@ -1112,19 +1112,19 @@ function AutomationBuilderV1({
             )}
             {triggerType !== "comment" && (
               <>
-                <p className="eyebrow field-spaced">Follow-up nudges <em>optional · up to 2</em></p>
+                <p className="eyebrow field-spaced">Reminder messages <em>optional · up to 2</em></p>
                 <p className="muted">
-                  Schedule a timed nudge - “Still interested?” a day later. Skipped automatically if the
-                  person opted out or Meta’s 24-hour reply window closed.
+                  Send a reminder such as “Still interested?” later. Linkar skips it if the person asks
+                  not to receive messages or Meta’s reply window has closed.
                 </p>
                 {followUps.map((followUp, index) => (
                   <div className="classic-action" key={index}>
                     <div className="classic-action-head">
-                      <span className="classic-action-index">Nudge {index + 1}</span>
+                      <span className="classic-action-index">Reminder {index + 1}</span>
                       <button
                         className="icon-button"
                         type="button"
-                        aria-label={`Remove nudge ${index + 1}`}
+                        aria-label={`Remove reminder ${index + 1}`}
                         onClick={() => setFollowUps((current) => current.filter((_, i) => i !== index))}
                       >
                         <Trash2 size={15} />
@@ -1134,7 +1134,7 @@ function AutomationBuilderV1({
                       <label className="field">
                         <span>Wait before sending (minutes)</span>
                         <input
-                          aria-label={`Nudge ${index + 1} delay in minutes`}
+                          aria-label={`Reminder ${index + 1} delay in minutes`}
                           type="number"
                           min={1}
                           max={10_080}
@@ -1146,9 +1146,9 @@ function AutomationBuilderV1({
                       </label>
                     </div>
                     <label className="field">
-                      <span>Nudge message</span>
+                      <span>Reminder message</span>
                       <textarea
-                        aria-label={`Nudge ${index + 1} message`}
+                        aria-label={`Reminder ${index + 1} message`}
                         value={followUp.text}
                         onChange={(event) =>
                           setFollowUps((current) => current.map((f, i) => (i === index ? { ...f, text: event.target.value } : f)))}
@@ -1164,7 +1164,7 @@ function AutomationBuilderV1({
                       <label className="field">
                         <span>Button label <em>optional</em></span>
                         <input
-                          aria-label={`Nudge ${index + 1} button label`}
+                          aria-label={`Reminder ${index + 1} button label`}
                           value={followUp.buttonLabel}
                           onChange={(event) =>
                             setFollowUps((current) => current.map((f, i) => (i === index ? { ...f, buttonLabel: event.target.value } : f)))}
@@ -1173,9 +1173,9 @@ function AutomationBuilderV1({
                         />
                       </label>
                       <label className="field">
-                        <span>Nudge link URL</span>
+                        <span>Reminder link</span>
                         <input
-                          aria-label={`Nudge ${index + 1} link URL`}
+                          aria-label={`Reminder ${index + 1} link URL`}
                           value={followUp.url}
                           onChange={(event) =>
                             setFollowUps((current) => current.map((f, i) => (i === index ? { ...f, url: event.target.value } : f)))}
@@ -1191,7 +1191,7 @@ function AutomationBuilderV1({
                     className="button button-secondary"
                     onClick={() => setFollowUps((current) => [...current, { delayMinutes: "1440", text: "", buttonLabel: "", url: "" }])}
                   >
-                    <Plus size={15} /> Add a follow-up nudge
+                    <Plus size={15} /> Add a reminder message
                   </button>
                 )}
               </>
@@ -2269,14 +2269,14 @@ function AutomationBuilderV2({
                 <li>{nonEmptyReplies.length || "No"} public reply variation{nonEmptyReplies.length === 1 ? "" : "s"} ready</li>
                 {followGateRequired ? (
                   <>
-                    <li>Opening DM asks for a follow before delivering anything</li>
+                    <li>Linkar asks permission and checks whether they follow you before sending the link</li>
                     <li>Recheck button reads “{recheckButtonLabel || "add a label"}”</li>
                   </>
                 ) : (
                   <li>The follow check is off, so the link goes out after they give permission</li>
                 )}
                 <li>
-                  Verified followers land on{" "}
+                  People who follow you receive{" "}
                   {deliveryUrl ? (
                     <a href={deliveryUrl} target="_blank" rel="noreferrer" className="text-link">{deliveryUrl}</a>
                   ) : (

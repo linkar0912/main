@@ -14,18 +14,18 @@ describe("WorkflowGallery", () => {
   it("renders the exact ordered Linkar workflow examples with the first tab selected", () => {
     render(<WorkflowGallery />);
 
-    const section = screen.getByRole("region", { name: "Build the path your audience actually needs." });
+    const section = screen.getByRole("region", { name: "See what Linkar can handle for you." });
     expect(section.id).toBe("workflows");
-    expect(within(section).getByText("Start with a real moment, then decide what Linkar should remember, send, or hand back.")).toBeTruthy();
+    expect(within(section).getByText("Start with a real customer moment, then choose what Linkar should ask, send, remember, or pass to your team.")).toBeTruthy();
 
     const tablist = within(section).getByRole("tablist", { name: "Workflow examples" });
     expect(tablist.getAttribute("aria-orientation")).toBe("vertical");
     const tabs = within(tablist).getAllByRole("tab");
     expect(tabs.map((tab) => tab.getAttribute("aria-label"))).toEqual([
-      "Guide delivery",
-      "Lead qualifier",
-      "Timed nurture",
-      "Human handoff",
+      "Send a free guide",
+      "Ask what someone needs",
+      "Follow up later",
+      "Let your team take over",
     ]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect(tabs.slice(1).every((tab) => tab.getAttribute("aria-selected") === "false")).toBe(true);
@@ -40,59 +40,59 @@ describe("WorkflowGallery", () => {
     });
 
     const panel = within(section).getByRole("tabpanel");
-    expect(within(panel).getByText("Keyword trigger")).toBeTruthy();
-    expect(within(panel).getByText("Send guide")).toBeTruthy();
-    expect(within(panel).getByText("Ask goal")).toBeTruthy();
-    expect(within(panel).getByText("Flow canvas")).toBeTruthy();
-    expect(within(panel).getByText("Live logic")).toBeTruthy();
+    expect(within(panel).getByText("Someone comments GUIDE")).toBeTruthy();
+    expect(within(panel).getByText("Send the guide")).toBeTruthy();
+    expect(within(panel).getByText("Ask what they need")).toBeTruthy();
+    expect(within(panel).getByText("Reply plan")).toBeTruthy();
+    expect(within(panel).getByText("Ready to run")).toBeTruthy();
     expect(panel.querySelector("svg path")).toBeTruthy();
   });
 
   it("changes the selected preview on a real click", () => {
     render(<WorkflowGallery />);
 
-    const priceList = screen.getByRole("tab", { name: "Guide delivery" });
-    fireEvent.click(screen.getByRole("tab", { name: "Timed nurture" }));
+    const priceList = screen.getByRole("tab", { name: "Send a free guide" });
+    fireEvent.click(screen.getByRole("tab", { name: "Follow up later" }));
 
     expect(priceList.getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByRole("tab", { name: "Timed nurture" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("tabpanel").textContent).toContain("Reply received");
+    expect(screen.getByRole("tab", { name: "Follow up later" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tabpanel").textContent).toContain("Someone replies");
     expect(screen.getByRole("tabpanel").textContent).toContain("Wait 18 hours");
-    expect(screen.getByRole("tabpanel").textContent).toContain("Send check-in");
-    expect(screen.getByRole("tabpanel").textContent).not.toContain("Send guide");
+    expect(screen.getByRole("tabpanel").textContent).toContain("Send a reminder");
+    expect(screen.getByRole("tabpanel").textContent).not.toContain("Send the guide");
   });
 
   it("uses vertical tab keyboard behavior with wrapping and keeps focus on the selected tab", () => {
     render(<WorkflowGallery />);
 
-    const guide = screen.getByRole("tab", { name: "Guide delivery" });
+    const guide = screen.getByRole("tab", { name: "Send a free guide" });
     guide.focus();
     fireEvent.keyDown(guide, { key: "ArrowUp" });
-    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Human handoff" }));
-    expect(screen.getByRole("tab", { name: "Human handoff" }).getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Let your team take over" }));
+    expect(screen.getByRole("tab", { name: "Let your team take over" }).getAttribute("aria-selected")).toBe("true");
 
     fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
-    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Guide delivery" }));
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Send a free guide" }));
 
     fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Lead qualifier" }));
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Ask what someone needs" }));
 
     fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Guide delivery" }));
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Send a free guide" }));
 
     fireEvent.keyDown(document.activeElement!, { key: "End" });
-    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Human handoff" }));
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Let your team take over" }));
 
     fireEvent.keyDown(document.activeElement!, { key: "Home" });
-    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Guide delivery" }));
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Send a free guide" }));
   });
 
   it("provides one-open accordion controls and matching details for mobile presentation", () => {
     render(<WorkflowGallery />);
 
     const accordion = screen.getByLabelText("Workflow examples on mobile");
-    const guide = within(accordion).getByRole("button", { name: "Guide delivery" });
-    const lead = within(accordion).getByRole("button", { name: "Lead qualifier" });
+    const guide = within(accordion).getByRole("button", { name: "Send a free guide" });
+    const lead = within(accordion).getByRole("button", { name: "Ask what someone needs" });
     expect(guide.getAttribute("aria-expanded")).toBe("true");
     expect(lead.getAttribute("aria-expanded")).toBe("false");
     expect(guide.getAttribute("aria-controls")).toBeTruthy();
@@ -106,7 +106,7 @@ describe("WorkflowGallery", () => {
     fireEvent.click(lead);
     expect(guide.getAttribute("aria-expanded")).toBe("false");
     expect(lead.getAttribute("aria-expanded")).toBe("true");
-    expect(document.getElementById(lead.getAttribute("aria-controls") ?? "")?.textContent).toContain("Save answer");
+    expect(document.getElementById(lead.getAttribute("aria-controls") ?? "")?.textContent).toContain("Save the answer");
 
     fireEvent.click(lead);
     expect(lead.getAttribute("aria-expanded")).toBe("true");
@@ -125,13 +125,13 @@ describe("WorkflowGallery", () => {
     })));
     render(<WorkflowGallery />);
 
-    const section = screen.getByRole("region", { name: "Build the path your audience actually needs." });
+    const section = screen.getByRole("region", { name: "See what Linkar can handle for you." });
     expect(section.getAttribute("data-reduced-motion-state")).toBe("visible");
-    fireEvent.click(screen.getByRole("tab", { name: "Lead qualifier" }));
-    expect(screen.getByRole("tabpanel").textContent).toContain("Save answer");
+    fireEvent.click(screen.getByRole("tab", { name: "Ask what someone needs" }));
+    expect(screen.getByRole("tabpanel").textContent).toContain("Save the answer");
     const exposedPanels = screen.getAllByRole("tabpanel");
     expect(exposedPanels).toHaveLength(1);
-    expect(exposedPanels[0].textContent).not.toContain("Send guide");
+    expect(exposedPanels[0].textContent).not.toContain("Send the guide");
     expect(screen.getAllByRole("tabpanel", { hidden: true })).toHaveLength(4);
     expect(section.querySelector("[data-transition-state='leaving']")).toBeNull();
   });

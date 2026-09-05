@@ -17,9 +17,9 @@ test.describe("unauthenticated visitor", () => {
     await page.goto("/");
     await expect(page.getByRole("heading", {
       level: 1,
-      name: /Turn attention into conversations that keep moving/i,
+      name: /Reply to every opportunity. Even when you are away./i,
     })).toBeVisible();
-    await page.getByRole("link", { name: "Start building" }).click();
+    await page.getByRole("link", { name: "Create your first reply" }).click();
     await expect(page).toHaveURL(/\/signup$/);
   });
 
@@ -115,11 +115,11 @@ test("classic builder creates a keyword autoresponder", async ({ page }) => {
   });
   await page.route("**/api/automations/automation_classic", (route) => route.fulfill({ json: { data: { id: "automation_classic", ...saved, status: "ACTIVE" } } }));
   await page.goto("/automations/new?type=classic");
-  await expect(page.getByRole("heading", { name: /Build a reply flow/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Create an automatic reply/i })).toBeVisible();
 
-  await page.getByLabel("Automation name").fill(`E2E Autoresponder ${Date.now()}`);
-  await page.getByLabel("Trigger source").selectOption("message");
-  await page.getByLabel("Keywords").fill("price");
+  await page.getByLabel("Reply name").fill(`E2E Autoresponder ${Date.now()}`);
+  await page.getByLabel("Where will it start?").selectOption("message");
+  await page.getByLabel("Words to look for").fill("price");
   // Action step: Trigger → Condition → Action.
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByRole("button", { name: "Next", exact: true }).click();
@@ -144,21 +144,21 @@ test("basic template gallery sets up a ready-to-edit automation", async ({ page 
   await page.getByRole("button", { name: /new automation/i }).click();
 
   const dialog = page.getByRole("dialog");
-  const startersTile = dialog.locator(".template-picker-tile", { hasText: "Conversation Starters" });
+  const startersTile = dialog.locator(".template-picker-tile", { hasText: "Answer common questions" });
   await expect(startersTile).toBeVisible();
   await expect(dialog.getByText(/Unavailable for now\./)).toHaveCount(0);
   await expect(dialog.getByText("BETA")).toHaveCount(0);
   await startersTile.click();
 
-  await expect(page.getByRole("heading", { name: /Build a reply flow/i })).toBeVisible();
-  await expect(page.getByLabel("Automation name")).toHaveValue("Conversation starters");
+  await expect(page.getByRole("heading", { name: /Create an automatic reply/i })).toBeVisible();
+  await expect(page.getByLabel("Reply name")).toHaveValue("Answer common questions");
 
   await nextUntil(page, "Save & activate");
   await page.getByRole("button", { name: "Save & activate" }).click();
   await expect(page.getByText("Saved and activated.", { exact: false })).toBeVisible();
 
   await page.goto("/automations");
-  await expect(page.getByText("Conversation starters").first()).toBeVisible();
+  await expect(page.getByText("Answer common questions").first()).toBeVisible();
 });
 
 test("guided builder saves an automation draft", async ({ page }) => {
@@ -166,8 +166,8 @@ test("guided builder saves an automation draft", async ({ page }) => {
   await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] } }));
   await page.route("**/api/automations", (route) => { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { data: { id: "automation_draft", ...saved } } }); });
   await page.goto("/automations/new?type=classic");
-  await page.getByLabel("Automation name").fill("E2E guide delivery");
-  await page.getByLabel("Keywords", { exact: true }).fill("guide");
+  await page.getByLabel("Reply name").fill("E2E guide delivery");
+  await page.getByLabel("Words to look for", { exact: true }).fill("guide");
   await nextUntil(page, "Save & activate");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("status")).toContainText("Saved to your workspace as a draft.");
@@ -198,16 +198,16 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   await page.goto("/automations");
   await page.getByRole("button", { name: /new automation/i }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByText("Follow-gated Reel campaign")).toBeVisible();
-  await dialog.locator(".template-picker-tile", { hasText: "Follow-gated Reel campaign" }).click();
-  await expect(page.getByRole("heading", { name: /Build a follow-gated Reel campaign/i })).toBeVisible();
+  await expect(dialog.getByText("Send a link after someone follows you")).toBeVisible();
+  await dialog.locator(".template-picker-tile", { hasText: "Send a link after someone follows you" }).click();
+  await expect(page.getByRole("heading", { name: /Send a link after someone follows you/i })).toBeVisible();
 
-  await page.getByLabel("Automation name").fill(automationName);
+  await page.getByLabel("Reply name").fill(automationName);
   // Content step: pick the mocked Reel.
   await page.getByRole("checkbox", { name: /test reel/i }).click();
   // Comment & reply step.
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await page.getByLabel("Keywords", { exact: true }).fill("guide");
+  await page.getByLabel("Words to look for", { exact: true }).fill("guide");
   await page.getByLabel("Public reply variation 1").fill("Check your DMs for the guide.");
   // Opening DM step.
   await page.getByRole("button", { name: "Next", exact: true }).click();
@@ -215,8 +215,8 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   await page.getByLabel("Not-following prompt").fill("Follow us first, then tap I followed to unlock this.");
   // Delivery step.
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await page.getByLabel("Delivery message").fill("You are verified - here is your guide.");
-  await page.getByLabel("Delivery link").fill("https://example.com/guide");
+  await page.getByLabel("Message to send with the link").fill("You are verified - here is your guide.");
+  await page.getByLabel("Link to send").fill("https://example.com/guide");
   // Guardrails, then Review.
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByRole("button", { name: "Next", exact: true }).click();
@@ -224,7 +224,7 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   // Review the follow gate before saving: the gate is enabled by default and
   // the review step summarizes it explicitly.
   await expect(page.getByTestId("review-summary")).toContainText(
-    "Opening DM asks for a follow before delivering anything",
+    "Linkar asks permission and checks whether they follow you before sending the link",
   );
 
   await page.getByRole("button", { name: "Save draft" }).click();
