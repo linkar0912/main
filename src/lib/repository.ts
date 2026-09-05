@@ -719,6 +719,7 @@ export interface AutomationRepository {
     workspaceId: string,
     id: string,
     patch: UpdateAutomationInput,
+    options?: { snapshotBy?: string },
   ): Promise<AutomationRecord | null>;
   listConnections(workspaceId: string): Promise<InstagramConnectionRecord[]>;
   listConnectionsExpiringBefore(before: string): Promise<InstagramConnectionRecord[]>;

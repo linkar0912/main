@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPrismaRepository, prisma } from "./prisma";
+import type { FlowDefinition } from "./automation/types";
 
 // These tests exercise mapParticipantPatch's undefined-to-null translation for the four
 // clearable participant diagnostic/error fields, without touching a real database. They
@@ -100,6 +101,90 @@ describe("mapParticipantPatch (via transitionParticipant)", () => {
 
     const data = updateMany.mock.calls[0]?.[0]?.data as Record<string, unknown>;
     expect(data.publicReplyError).toBe("Meta public reply temporarily failed");
+  });
+});
+
+describe("Prisma automation edits", () => {
+  it("writes the edited definition and snapshots the previous definition in the same transaction", async () => {
+    const previousDefinition: FlowDefinition = {
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["old"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Old reply" }],
+    };
+    const editedDefinition: FlowDefinition = {
+      ...previousDefinition,
+      actions: [{ type: "send_text", text: "Edited reply" }],
+    };
+    const previous = {
+      id: "automation_1",
+      workspaceId: "workspace_1",
+      provider: "INSTAGRAM",
+      instagramAccountId: "ig_1",
+      facebookPageId: null,
+      name: "Welcome",
+      status: "ACTIVE",
+      version: 1,
+      definition: previousDefinition,
+      activatedAt: new Date("2026-09-01T10:00:00.000Z"),
+      boundMediaId: null,
+      priority: 4,
+      createdAt: new Date("2026-09-01T09:00:00.000Z"),
+      updatedAt: new Date("2026-09-01T10:00:00.000Z"),
+      archivedAt: null,
+    };
+    const createVersion = vi.fn().mockResolvedValue({
+      id: "autover_1",
+      automationId: previous.id,
+      workspaceId: previous.workspaceId,
+      version: 1,
+      name: previous.name,
+      definition: previousDefinition,
+      status: previous.status,
+      priority: previous.priority,
+      activatedAt: previous.activatedAt,
+      boundMediaId: null,
+      instagramAccountId: previous.instagramAccountId,
+      facebookPageId: null,
+      snapshotBy: "user_editor",
+      snapshotAt: new Date("2026-09-05T08:00:00.000Z"),
+    });
+    const update = vi.fn().mockResolvedValue({ ...previous, definition: editedDefinition });
+    const transaction = {
+      automation: { findFirst: vi.fn().mockResolvedValue(previous), update },
+      automationVersion: {
+        aggregate: vi.fn().mockResolvedValue({ _max: { version: null } }),
+        create: createVersion,
+      },
+    };
+    const client = {
+      $transaction: vi.fn(async (operation: (tx: typeof transaction) => unknown) => operation(transaction)),
+    } as unknown as typeof prisma;
+    const repository = createPrismaRepository(client);
+
+    await (repository.updateAutomation as unknown as (
+      workspaceId: string,
+      id: string,
+      patch: { definition: FlowDefinition },
+      options: { snapshotBy: string },
+    ) => Promise<unknown>)(
+      "workspace_1",
+      "automation_1",
+      { definition: editedDefinition },
+      { snapshotBy: "user_editor" },
+    );
+
+    expect(createVersion).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        automationId: "automation_1",
+        definition: previousDefinition,
+        snapshotBy: "user_editor",
+      }),
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "automation_1" },
+      data: expect.objectContaining({ definition: editedDefinition, version: 1 }),
+    });
   });
 });
 

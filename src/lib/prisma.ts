@@ -935,7 +935,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return mapAutomation(record);
     },
 
-    async updateAutomation(workspaceId, id, patch: UpdateAutomationInput) {
+    async updateAutomation(workspaceId, id, patch: UpdateAutomationInput, options?: { snapshotBy?: string }) {
       // Transaction keeps the existence check and the update atomic so a concurrent
       // delete cannot turn the findFirst/update pair into a spurious P2025 failure.
       // For the channel pins we strip them out of the spread and apply explicit
@@ -946,7 +946,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       const data: Record<string, unknown> = {
         ...rest,
         ...(provider ? { provider } : {}),
-        ...(definition ? { version: definition.version } : {}),
+        ...(definition ? {
+          definition: definition as Prisma.InputJsonValue,
+          version: definition.version,
+        } : {}),
       };
       if (boundMediaId !== undefined) data.boundMediaId = boundMediaId ?? null;
       if (instagramAccountId !== undefined) {
@@ -964,8 +967,31 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       const record = await client.$transaction(async (transaction) => {
         const existing = await transaction.automation.findFirst({ where: { workspaceId, id } });
         if (!existing) return null;
+        if (options?.snapshotBy) {
+          const aggregate = await transaction.automationVersion.aggregate({
+            where: { automationId: id },
+            _max: { version: true },
+          });
+          await transaction.automationVersion.create({
+            data: {
+              id: createId("autover"),
+              automationId: id,
+              workspaceId,
+              version: (aggregate._max.version ?? 0) + 1,
+              name: existing.name,
+              definition: existing.definition as Prisma.InputJsonValue,
+              status: existing.status,
+              priority: existing.priority,
+              ...(existing.activatedAt ? { activatedAt: existing.activatedAt } : {}),
+              ...(existing.boundMediaId ? { boundMediaId: existing.boundMediaId } : {}),
+              ...(existing.instagramAccountId ? { instagramAccountId: existing.instagramAccountId } : {}),
+              ...(existing.facebookPageId ? { facebookPageId: existing.facebookPageId } : {}),
+              snapshotBy: options.snapshotBy,
+            },
+          });
+        }
         return transaction.automation.update({ where: { id }, data });
-      });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       return record ? mapAutomation(record) : null;
     },
 

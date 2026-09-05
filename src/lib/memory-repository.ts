@@ -498,9 +498,12 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return copy(automation);
     },
 
-    async updateAutomation(workspaceId, id, patch: UpdateAutomationInput) {
+    async updateAutomation(workspaceId, id, patch: UpdateAutomationInput, options?: { snapshotBy?: string }) {
       const current = automations.get(id);
       if (!current || current.workspaceId !== workspaceId) return null;
+      if (options?.snapshotBy) {
+        await this.snapshotAutomation(workspaceId, id, options.snapshotBy);
+      }
       const { boundMediaId, instagramAccountId, facebookPageId, provider, ...rest } = patch;
       // Mutual exclusion: clearing one channel implicitly unpins the other so
       // a single PATCH never leaves an automation pinned to two channels at

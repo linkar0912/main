@@ -24,6 +24,29 @@ async function seed(repository: ReturnType<typeof createMemoryRepository>) {
 }
 
 describe("automation version history", () => {
+  it("snapshots the previous state when an edit and its history entry are requested together", async () => {
+    const repository = createMemoryRepository();
+    const automation = await seed(repository);
+
+    await (repository.updateAutomation as unknown as (
+      workspaceId: string,
+      id: string,
+      patch: { definition: FlowDefinition },
+      options: { snapshotBy: string },
+    ) => Promise<unknown>)(
+      "workspace_versions",
+      automation.id,
+      { definition: nextDefinition },
+      { snapshotBy: "user_editor" },
+    );
+
+    const current = await repository.getAutomation("workspace_versions", automation.id);
+    const [history] = await repository.listAutomationVersions("workspace_versions", automation.id, 10);
+    expect(current?.definition).toEqual(nextDefinition);
+    expect(history?.definition).toEqual(baseDefinition);
+    expect(history?.snapshotBy).toBe("user_editor");
+  });
+
   it("snapshots the current state on demand and increments the version number", async () => {
     const repository = createMemoryRepository();
     const automation = await seed(repository);
