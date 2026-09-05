@@ -4,7 +4,11 @@ import { adminJson, adminRouteError, runAuditedAdminMutation } from "@/src/lib/a
 import { requireAdminRead, requireAdminWrite } from "@/src/lib/admin/request-guard";
 import { getPremiumInviteService } from "@/src/lib/billing/premium-invite";
 
-const CreateInput = z.object({ label: z.string().trim().min(2).max(120), expiresAt: z.string().datetime().nullable().optional() }).strict();
+const CreateInput = z.object({
+  label: z.string().trim().min(2).max(120),
+  planKey: z.string().trim().min(2).max(40),
+  expiresAt: z.string().datetime().nullable().optional(),
+}).strict();
 
 export async function GET(request: Request) {
   try {
@@ -23,6 +27,7 @@ export async function POST(request: Request) {
       guard,
       () => getPremiumInviteService().create({
         label: input.label,
+        planKey: input.planKey,
         createdByUserId: guard.owner.userId,
         expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
       }),

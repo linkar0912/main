@@ -59,9 +59,17 @@ export function createPremiumInviteService(client: PrismaClient = prisma, now: (
     }
   }
 
-  async function create(input: { label: string; createdByUserId: string; expiresAt?: Date | null }) {
-    const plan = await client.planDefinition.findUnique({ where: { key: "agency" }, select: { id: true, isActive: true } });
-    if (!plan?.isActive) throw new Error("agency_plan_unavailable");
+  async function create(input: { label: string; planKey: string; createdByUserId: string; expiresAt?: Date | null }) {
+    if (input.planKey === "free") {
+      throw Object.assign(new Error("invite_plan_unavailable"), { status: 422, code: "invite_plan_unavailable" });
+    }
+    const plan = await client.planDefinition.findFirst({
+      where: { key: input.planKey, isActive: true },
+      select: { id: true, key: true, name: true, isActive: true },
+    });
+    if (!plan) {
+      throw Object.assign(new Error("invite_plan_unavailable"), { status: 422, code: "invite_plan_unavailable" });
+    }
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const code = generateCode();
       try {
@@ -71,7 +79,7 @@ export function createPremiumInviteService(client: PrismaClient = prisma, now: (
             planId: plan.id, durationDays: 30, expiresAt: input.expiresAt ?? null, createdByUserId: input.createdByUserId,
           },
         });
-        return { ...record, code };
+        return { ...record, code, plan: { key: plan.key, name: plan.name } };
       } catch (error) {
         if ((error as { code?: string }).code !== "P2002" || attempt === 2) throw error;
       }
