@@ -1643,7 +1643,12 @@ function AutomationBuilderV2({
   const [highestUnlockedStep, setHighestUnlockedStep] = useState(0);
   const [previewView, setPreviewView] = useState<PreviewView>("post");
   const connections = useInstagramConnections();
-  const connection = connections[0] ?? null;
+  const selectedInstagramAccountId = instagramAccountId
+    || connections.find((item) => item.igUserId)?.igUserId
+    || "";
+  const connection = connections.find((item) => item.igUserId === selectedInstagramAccountId)
+    ?? connections[0]
+    ?? null;
   const [mediaIndex, setMediaIndex] = useState<Record<string, { thumbnailUrl?: string; isReel?: boolean }>>({});
   const onMediaIndexChange = useCallback(
     (index: Record<string, { thumbnailUrl?: string; isReel?: boolean }>) => setMediaIndex(index),
@@ -1797,7 +1802,7 @@ function AutomationBuilderV2({
           provider: "INSTAGRAM",
           name,
           definition: buildDefinition(),
-          instagramAccountId: instagramAccountId || null,
+          instagramAccountId: selectedInstagramAccountId || null,
         }),
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: { id: string }; error?: string };
@@ -1904,10 +1909,10 @@ function AutomationBuilderV2({
             <span>Instagram account</span>
             <select
               aria-label="Instagram account"
-              value={instagramAccountId}
+              value={selectedInstagramAccountId}
               onChange={(event) => setInstagramAccountId(event.target.value)}
             >
-              <option value="">All connected accounts</option>
+              <option value="" disabled>Select a connected account</option>
               {connections.map((item) => (
                 <option key={item.igUserId || item.username} value={item.igUserId}>@{item.username}</option>
               ))}

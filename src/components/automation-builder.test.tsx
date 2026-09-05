@@ -836,6 +836,32 @@ describe("AutomationBuilder", () => {
     expect(onSaved).toHaveBeenCalledWith({ id: "automation_9" });
   });
 
+  it("pins a new campaign to its only connected Instagram account when saving", async () => {
+    const fetchMock = stubFetch({
+      connection: {
+        data: [{
+          id: "conn_1",
+          igUserId: "17841401239924397",
+          username: "probablymansi",
+          status: "CONNECTED",
+          connectedAt: "2026-09-03T00:00:00.000Z",
+        }],
+      },
+      media: { data: [reel], paging: {} },
+    });
+    render(<AutomationBuilder />);
+
+    await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("checkbox"));
+    await fillRequiredCampaignFields();
+    goToReviewStep();
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/automations", expect.anything()));
+    const request = findRequest(fetchMock, (url) => url === "/api/automations");
+    expect(JSON.parse(String(request.body)).instagramAccountId).toBe("17841401239924397");
+  });
+
   it("saves and activates by saving first, then patching the returned automation to ACTIVE", async () => {
     const fetchMock = stubFetch({
       media: { data: [reel], paging: {} },
