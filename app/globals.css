@@ -1878,22 +1878,21 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .review-link-grid a { align-items: center; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--slate); display: inline-flex; font-size: .72rem; font-weight: 650; gap: 5px; padding: 8px 10px; transition: background var(--speed), color var(--speed); }
 .review-link-grid a:hover { color: var(--ink); }
 
-/* Profile account overview and primary/supporting columns */
-.profile-overview { display: grid; gap: var(--space-5); }
-.profile-overview-main { align-items: center; display: flex; gap: var(--space-4); min-width: 0; }
-.profile-overview-identity { align-items: center; display: flex; gap: var(--space-4); min-width: 0; }
-.profile-overview-identity .account-summary-id .eyebrow { margin-bottom: 4px; }
-.profile-overview-identity .account-summary-id h2 { font-size: 1.5rem; letter-spacing: -.02em; margin: 0; }
-.profile-overview-identity .account-summary-id small { color: var(--muted); overflow-wrap: anywhere; }
-.profile-facts { display: grid; gap: 1px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; overflow: hidden; }
-.profile-fact { background: var(--surface-soft); display: grid; gap: 5px; min-width: 0; padding: var(--space-3) var(--space-4); }
-.profile-fact:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
-.profile-fact:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
-.profile-fact dt { color: var(--muted); font-size: var(--type-meta); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.profile-fact dd { color: var(--ink); font-size: var(--type-body); font-weight: 750; margin: 0; overflow-wrap: anywhere; }
-.profile-fact dd[data-tone="accent"] { color: var(--accent-text); }
-.profile-fact dd[data-tone="ok"] { color: var(--leaf); }
-.profile-fact dd[data-tone="warn"] { color: var(--honey); }
+/* Profile identity and primary/supporting columns */
+.profile-identity { display: grid; gap: var(--space-6); grid-template-columns: minmax(220px, .75fr) minmax(0, 1.25fr); }
+.profile-identity-person { align-items: center; display: flex; min-width: 0; }
+.profile-identity-avatar { align-items: center; display: flex; gap: var(--space-4); min-width: 0; }
+.profile-identity-avatar .account-summary-id .eyebrow { margin-bottom: 4px; }
+.profile-identity-avatar .account-summary-id h2 { font-size: 1.5rem; letter-spacing: -.02em; margin: 0; }
+.profile-identity-avatar .account-summary-id small { color: var(--muted); overflow-wrap: anywhere; }
+.profile-identity-facts { align-content: center; display: grid; gap: 0 var(--space-5); grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.profile-identity-facts > div { border-top: 1px solid var(--line); display: grid; gap: 4px; min-width: 0; padding: 12px 0; }
+.profile-identity-facts > div:nth-child(-n + 2) { border-top: 0; padding-top: 0; }
+.profile-identity-facts dt { color: var(--muted); font-size: var(--type-meta); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.profile-identity-facts dd { color: var(--ink); font-size: var(--type-body); font-weight: 750; margin: 0; min-height: 18px; overflow-wrap: anywhere; }
+.profile-identity-facts dd[data-tone="accent"] { color: var(--accent-text); }
+.profile-identity-facts dd[data-tone="ok"] { color: var(--leaf); }
+.profile-identity-facts dd[data-tone="warn"] { color: var(--honey); }
 .profile-layout { align-items: start; display: grid; gap: var(--space-5); grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); margin-top: var(--space-5); }
 .profile-main, .profile-side { display: grid; gap: var(--space-5); min-width: 0; }
 .profile-main > .panel, .profile-side > .panel { margin-bottom: 0; }
@@ -2538,11 +2537,11 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
     padding-right: var(--space-5);
   }
   .profile-security-card .account-form > .button { min-width: 0; width: 100%; }
-  .profile-overview-main,
-  .profile-overview-identity { align-items: flex-start; }
-  .profile-facts { grid-template-columns: 1fr; }
-  .profile-fact:first-child { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
-  .profile-fact:last-child { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+  .profile-identity { grid-template-columns: 1fr; }
+  .profile-identity-person,
+  .profile-identity-avatar { align-items: flex-start; }
+  .profile-identity-facts { grid-template-columns: 1fr; }
+  .profile-identity-facts > div:nth-child(2) { border-top: 1px solid var(--line); padding-top: 12px; }
   .account-session-row { align-items: stretch; flex-direction: column; }
   .account-session-row .button { width: 100%; }
   .delivery-time-grid { grid-template-columns: 1fr; }

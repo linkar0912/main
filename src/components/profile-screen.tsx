@@ -197,9 +197,9 @@ function ProfileBody({
         </div>
       )}
 
-      <section className="panel profile-card profile-overview" aria-label="Account overview">
-        <div className="profile-overview-main">
-          <div className="profile-overview-identity">
+      <section className="panel profile-card profile-identity" aria-label="Profile identity">
+        <div className="profile-identity-person">
+          <div className="profile-identity-avatar">
             {avatar ? (
               // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
               <img className="avatar avatar-large is-photo" src={avatar} alt="" />
@@ -209,7 +209,7 @@ function ProfileBody({
               <Skeleton style={{ borderRadius: "50%", flex: "0 0 76px", height: 76, width: 76 }} />
             )}
             <div className="account-summary-id">
-              <p className="eyebrow">Personal details</p>
+              <p className="eyebrow">Your account</p>
               {email ? (
                 <>
                   <h2>{displayNameFromEmail(email)}</h2>
@@ -221,25 +221,30 @@ function ProfileBody({
                   <Skeleton style={{ height: 13, width: 220 }} />
                 </>
               )}
-              <span className="account-summary-meta">
-                {memberSince ? `Joined ${formatDate(memberSince)}` : "Workspace member"}
-              </span>
             </div>
           </div>
         </div>
-        <dl className="profile-facts">
-          <div className="profile-fact">
-            <dt>Role</dt>
+        <dl className="profile-identity-facts">
+          <div>
+            <dt>Email address</dt>
+            <dd>{email || <Skeleton style={{ height: 15, width: 150 }} />}</dd>
+          </div>
+          <div>
+            <dt>Workspace role</dt>
             <dd data-tone="accent">{role ? roleLabel(role) : <Skeleton style={{ height: 15, width: 62 }} />}</dd>
           </div>
-          <div className="profile-fact">
-            <dt>Plan</dt>
+          <div>
+            <dt>Current plan</dt>
             <dd>{plan}</dd>
           </div>
-          <div className="profile-fact">
+          <div>
+            <dt>Joined</dt>
+            <dd>{memberSince ? formatDate(memberSince) : <Skeleton style={{ height: 15, width: 92 }} />}</dd>
+          </div>
+          <div>
             <dt>Email status</dt>
             <dd data-tone={emailVerified === null ? undefined : emailVerified ? "ok" : "warn"}>
-              {emailVerified === null ? "Checking…" : emailVerified ? "Verified" : "Unverified"}
+              {emailVerified === null ? <Skeleton style={{ height: 15, width: 70 }} /> : emailVerified ? "Verified" : "Unverified"}
             </dd>
           </div>
         </dl>
@@ -255,7 +260,7 @@ function ProfileBody({
       </section>
 
       <div className="profile-layout">
-        <main className="profile-main">
+        <section className="profile-main profile-account-actions" aria-label="Account actions">
           <section className="panel profile-card profile-security-card" aria-label="Security">
             <div className="panel-heading">
               <div><p className="eyebrow">Security</p><h2>Password &amp; sessions</h2></div>
@@ -294,9 +299,21 @@ function ProfileBody({
               </form>
             </div>
           </section>
-        </main>
+          <section className="panel profile-card profile-links-card" aria-label="Workspace links">
+            <div className="panel-heading">
+              <div><p className="eyebrow">Quick access</p><h2>Workspace links</h2></div>
+              <Users size={19} strokeWidth={1.8} />
+            </div>
+            <nav className="related-links">
+              <Link href="/settings">Team &amp; invitations <ArrowUpRight size={13} /></Link>
+              <Link href="/help">Help centre <CircleHelp size={13} /></Link>
+              <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
+              <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
+            </nav>
+          </section>
+        </section>
         <aside className="profile-side" aria-label="Profile supporting information">
-          <section className="panel profile-card profile-channels-card" aria-label="Connected channels">
+          <section className="panel profile-card profile-channels profile-channels-card" aria-label="Connected channels">
             <div className="panel-heading">
               <div><p className="eyebrow">Active channels</p><h2>Connected channels</h2></div>
               <Link2 size={19} />
@@ -338,18 +355,6 @@ function ProfileBody({
             <Link className={`button ${hasChannel ? "button-secondary" : "button-primary"} button-block`} href="/settings">
               <Link2 size={15} /> {hasChannel ? "Manage channels" : "Connect a channel"}
             </Link>
-          </section>
-          <section className="panel profile-card" aria-label="Workspace links">
-            <div className="panel-heading">
-              <div><p className="eyebrow">Quick access</p><h2>Workspace links</h2></div>
-              <Users size={19} strokeWidth={1.8} />
-            </div>
-            <nav className="related-links">
-              <Link href="/settings">Team &amp; invitations <ArrowUpRight size={13} /></Link>
-              <Link href="/help">Help centre <CircleHelp size={13} /></Link>
-              <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
-              <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
-            </nav>
           </section>
         </aside>
       </div>

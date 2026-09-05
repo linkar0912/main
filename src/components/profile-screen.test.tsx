@@ -42,15 +42,28 @@ describe("ProfileScreen", () => {
       />,
     );
 
-    const overview = screen.getByRole("region", { name: "Account overview" });
-    expect(within(overview).getByText("Role")).toBeTruthy();
-    expect(within(overview).getByText("Plan")).toBeTruthy();
-    expect(within(overview).getByText("Email status")).toBeTruthy();
-    expect(within(overview).getByText("Member")).toBeTruthy();
-    expect(within(overview).queryByText("Owner")).toBeNull();
-    expect(screen.getByRole("region", { name: "Security" })).toBeTruthy();
+    const identity = screen.getByRole("region", { name: "Profile identity" });
+    expect(within(identity).getByText("Workspace role")).toBeTruthy();
+    expect(within(identity).getByText("Current plan")).toBeTruthy();
+    expect(within(identity).getByText("Email status")).toBeTruthy();
+    expect(within(identity).getByText("Member")).toBeTruthy();
+    expect(within(identity).queryByText("Owner")).toBeNull();
     expect(screen.getByRole("region", { name: "Connected channels" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Workspace links" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Account actions" })).toBeTruthy();
+    expect(document.querySelector(".profile-overview")).toBeNull();
+  });
+
+  it("uses skeletons for identity facts that have not resolved", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+
+    render(<ProfileScreen email="owner@example.com" role="OWNER" />);
+
+    const identity = screen.getByRole("region", { name: "Profile identity" });
+    const joined = within(identity).getByText("Joined").closest("div");
+    const verification = within(identity).getByText("Email status").closest("div");
+    expect(joined?.querySelector(".skeleton-block")).toBeTruthy();
+    expect(verification?.querySelector(".skeleton-block")).toBeTruthy();
+    expect(within(identity).queryByText("Checking…")).toBeNull();
   });
 
   it("shows the connected Instagram account's profile picture", async () => {
