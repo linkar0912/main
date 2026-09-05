@@ -12,6 +12,7 @@
     "preflight:instagram-ownership": "node scripts/preflight-instagram-ownership.mjs",
     "monitor:production": "node scripts/check-production-health.mjs",
     "backfill:member-user-ids": "node scripts/backfill-member-user-ids.mjs",
+    "preview:synthetic-accounts": "tsx scripts/preview-synthetic-accounts.ts",
     "deploy:coolify": "node scripts/coolify-deploy.mjs",
     "dev": "next dev",
     "build": "prisma generate && next build && pnpm build:worker",
