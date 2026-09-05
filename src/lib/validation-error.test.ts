@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { toReadableValidationError } from "./validation-error";
+import { toReadableApiError, toReadableValidationError } from "./validation-error";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(120),
   steps: z.array(z.object({ text: z.string().trim().min(1) })).min(1),
+});
+
+describe("toReadableApiError", () => {
+  it("translates channel target codes into instructions", () => {
+    expect(toReadableApiError("invalid_channel_target", "Could not save"))
+      .toBe("Choose a connected Instagram account or Facebook Page.");
+  });
+
+  it("humanizes unknown machine-readable errors", () => {
+    expect(toReadableApiError("provider_temporarily_unavailable", "Could not save"))
+      .toBe("Provider temporarily unavailable.");
+  });
 });
 
 function errorFrom(input: unknown): unknown {

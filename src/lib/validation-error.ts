@@ -27,3 +27,19 @@ export function toReadableValidationError(error: unknown, fallback: string): str
   if (error instanceof Error && error.message.trim()) return error.message;
   return fallback;
 }
+
+const API_ERROR_MESSAGES: Record<string, string> = {
+  invalid_channel_target: "Choose a connected Instagram account or Facebook Page.",
+  invalid_channel_definition: "This automation has settings that are not supported by the selected channel.",
+};
+
+export function toReadableApiError(error: unknown, fallback: string): string {
+  if (typeof error !== "string" || !error.trim()) return fallback;
+  const normalized = error.trim();
+  if (API_ERROR_MESSAGES[normalized]) return API_ERROR_MESSAGES[normalized];
+  if (/^[a-z0-9_]+$/.test(normalized)) {
+    const readable = normalized.replaceAll("_", " ");
+    return `${readable.charAt(0).toUpperCase()}${readable.slice(1)}.`;
+  }
+  return normalized;
+}

@@ -6,6 +6,7 @@ import {
   Check,
   ChevronDown,
   CircleHelp,
+  Eye,
   Film,
   Link2,
   Mail,
@@ -15,6 +16,7 @@ import {
   ShieldCheck,
   Trash2,
   UserCheck,
+  X,
 } from "lucide-react";
 import type { FlowAction, FlowCondition, FlowDefinition, FlowDefinitionV1, FlowDefinitionV2, MediaSnapshot } from "@/src/lib/automation/types";
 import { MediaPicker } from "./media-picker";
@@ -29,6 +31,8 @@ import { CommentConditionsSection } from "./automation-builder/comment-condition
 import { PublicPageReplyVariants } from "./automation-builder/action-section";
 import { AutomationPriorityField } from "./automation-builder/delivery-controls-section";
 import { ChannelReviewItem } from "./automation-builder/review-section";
+import { ActionNotice } from "./action-notice";
+import { toReadableApiError } from "@/src/lib/validation-error";
 
 type AutomationBuilderProps = {
   automationId?: string;
@@ -305,8 +309,9 @@ function AutomationBuilderV1({
   const [savedIntent, setSavedIntent] = useState<"draft" | "activate" | null>(null);
   const [error, setError] = useState("");
   const [activeStep, setActiveStep] = useState(0);
-  const [highestUnlockedStep, setHighestUnlockedStep] = useState(0);
+  const [highestUnlockedStep, setHighestUnlockedStep] = useState(automationId ? 99 : 0);
   const [previewView, setPreviewView] = useState<PreviewView>(initialDefinition.trigger.type === "comment" ? "post" : "dm");
+  const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const connections = useInstagramConnections();
   const connection = connections[0] ?? null;
   // Classic flows reference media by pasted IDs; pull thumbnails so the phone
@@ -709,7 +714,7 @@ function AutomationBuilderV1({
       onSaved?.(payload.data);
       setSavedIntent(intent);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save this automation");
+      setError(toReadableApiError(caught instanceof Error ? caught.message : caught, "Could not save this automation"));
     } finally {
       setPendingIntent(null);
     }
@@ -747,6 +752,14 @@ function AutomationBuilderV1({
 
   return (
     <form className="builder-layout" onSubmit={(event) => { event.preventDefault(); void save("activate"); }}>
+      {error ? <ActionNotice tone="error" message={error} onDismiss={() => setError("")} /> : null}
+      {!error && savedIntent ? (
+        <ActionNotice
+          tone="success"
+          message={savedIntent === "activate" ? "Saved and activated." : "Saved to your workspace as a draft."}
+          onDismiss={() => setSavedIntent(null)}
+        />
+      ) : null}
       <div className="builder-main">
         <div className="builder-intro">
           <div>
@@ -1488,14 +1501,9 @@ function AutomationBuilderV1({
         </div>
 
         <div className="builder-footer">
-          <div>
-            {error && <p className="form-error" role="alert">{error}</p>}
-            {savedIntent && (
-              <p className="form-success" role="status">
-                <Check size={15} /> {savedIntent === "activate" ? "Saved and activated." : "Saved to your workspace as a draft."}
-              </p>
-            )}
-          </div>
+          <button type="button" aria-label="Open phone mockup" className="button button-secondary builder-mobile-preview-trigger" onClick={() => setMobilePreviewOpen(true)}>
+            <Eye size={16} /> Preview
+          </button>
           <div className="builder-actions">
             {clampedStep > 0 && (
               <button type="button" className="button button-secondary" onClick={() => goToStep(clampedStep - 1)}>
@@ -1525,8 +1533,12 @@ function AutomationBuilderV1({
         </div>
       </div>
 
-      <aside className="builder-preview" aria-label="Test preview">
-        <p className="eyebrow">Test preview</p>
+      {mobilePreviewOpen ? <button type="button" className="builder-preview-scrim" aria-label="Close phone mockup backdrop" onClick={() => setMobilePreviewOpen(false)} /> : null}
+      <aside className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`} aria-label="Test preview">
+        <div className="builder-preview-heading">
+          <p className="eyebrow">Test preview</p>
+          <button type="button" className="icon-button builder-preview-close" aria-label="Close phone mockup" onClick={() => setMobilePreviewOpen(false)}><X size={17} /></button>
+        </div>
         <div className="preview-line" />
         {facebookPageId ? (
           <FacebookPagePreview
@@ -1586,6 +1598,7 @@ function AutomationBuilderV2({
   initialDefinition = defaultDefinitionV2,
   initialInstagramAccountId = "",
   initialMediaIds = [],
+  initialPriority = 0,
   onSaved,
 }: {
   automationId?: string;
@@ -1593,6 +1606,7 @@ function AutomationBuilderV2({
   initialDefinition?: FlowDefinitionV2;
   initialInstagramAccountId?: string;
   initialMediaIds?: string[];
+  initialPriority?: number;
   onSaved?: (automation: unknown) => void;
 }) {
   const [name, setName] = useState(initialName);
@@ -1618,6 +1632,7 @@ function AutomationBuilderV2({
   const [scheduleStart, setScheduleStart] = useState(isoToLocalInput(initialDefinition.schedule?.startsAt));
   const [scheduleEnd, setScheduleEnd] = useState(isoToLocalInput(initialDefinition.schedule?.endsAt));
   const [campaignDailyLimit, setCampaignDailyLimit] = useState(initialDefinition.dailySendLimit ? String(initialDefinition.dailySendLimit) : "");
+  const [priority, setPriority] = useState(String(initialPriority));
   const [deliveryText, setDeliveryText] = useState(initialDefinition.delivery.text);
   const [deliveryUrl, setDeliveryUrl] = useState(initialDefinition.delivery.url);
   const [deliveryButtonLabel, setDeliveryButtonLabel] = useState(initialDefinition.delivery.buttonLabel ?? "");
@@ -1625,8 +1640,9 @@ function AutomationBuilderV2({
   const [savedIntent, setSavedIntent] = useState<"draft" | "activate" | null>(null);
   const [error, setError] = useState("");
   const [activeStep, setActiveStep] = useState(0);
-  const [highestUnlockedStep, setHighestUnlockedStep] = useState(0);
+  const [highestUnlockedStep, setHighestUnlockedStep] = useState(automationId ? WIZARD_STEPS.length - 1 : 0);
   const [previewView, setPreviewView] = useState<PreviewView>("post");
+  const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const connections = useInstagramConnections();
   const selectedInstagramAccountId = instagramAccountId
     || connections.find((item) => item.igUserId)?.igUserId
@@ -1780,6 +1796,7 @@ function AutomationBuilderV2({
     }
     setPendingIntent(intent);
     try {
+      const parsedPriority = Number.parseInt(priority, 10);
       const response = await fetch(savedAutomationId ? `/api/automations/${savedAutomationId}` : "/api/automations", {
         method: savedAutomationId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
@@ -1788,6 +1805,7 @@ function AutomationBuilderV2({
           name,
           status: intent === "activate" ? "ACTIVE" : "DRAFT",
           definition: buildDefinition(),
+          priority: Number.isFinite(parsedPriority) ? parsedPriority : 0,
           instagramAccountId: selectedInstagramAccountId || null,
         }),
       });
@@ -1798,7 +1816,7 @@ function AutomationBuilderV2({
       onSaved?.(payload.data);
       setSavedIntent(intent);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save this automation");
+      setError(toReadableApiError(caught instanceof Error ? caught.message : caught, "Could not save this automation"));
     } finally {
       setPendingIntent(null);
     }
@@ -1859,6 +1877,14 @@ function AutomationBuilderV2({
 
   return (
     <div className="builder-layout">
+      {error ? <ActionNotice tone="error" message={error} onDismiss={() => setError("")} /> : null}
+      {!error && savedIntent ? (
+        <ActionNotice
+          tone="success"
+          message={savedIntent === "activate" ? "Saved and activated." : "Saved to your workspace."}
+          onDismiss={() => setSavedIntent(null)}
+        />
+      ) : null}
       <div className="builder-main">
         <div className="builder-intro">
           <div>
@@ -2202,6 +2228,7 @@ function AutomationBuilderV2({
                 />
                 <small>Pauses new deliveries for the rest of the day when the cap is reached.</small>
               </label>
+              <AutomationPriorityField value={priority} onChange={setPriority} />
               <div className="field-grid field-spaced">
                 <label className="field">
                   <span>Active from <em>optional</em></span>
@@ -2268,14 +2295,9 @@ function AutomationBuilderV2({
         </div>
 
         <div className="builder-footer">
-          <div>
-            {error && <p className="form-error" role="alert">{error}</p>}
-            {!error && savedIntent && (
-              <p className="form-success" role="status">
-                <Check size={15} /> {savedIntent === "activate" ? "Saved and activated." : "Saved to your workspace."}
-              </p>
-            )}
-          </div>
+          <button type="button" aria-label="Open phone mockup" className="button button-secondary builder-mobile-preview-trigger" onClick={() => setMobilePreviewOpen(true)}>
+            <Eye size={16} /> Preview
+          </button>
           <div className="builder-actions">
             {activeStep > 0 && (
               <button type="button" className="button button-secondary" onClick={() => goToStep(activeStep - 1)}>
@@ -2310,8 +2332,12 @@ function AutomationBuilderV2({
         </div>
       </div>
 
-      <aside className="builder-preview" aria-label="Test preview">
-        <p className="eyebrow">Test preview</p>
+      {mobilePreviewOpen ? <button type="button" className="builder-preview-scrim" aria-label="Close phone mockup backdrop" onClick={() => setMobilePreviewOpen(false)} /> : null}
+      <aside className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`} aria-label="Test preview">
+        <div className="builder-preview-heading">
+          <p className="eyebrow">Test preview</p>
+          <button type="button" className="icon-button builder-preview-close" aria-label="Close phone mockup" onClick={() => setMobilePreviewOpen(false)}><X size={17} /></button>
+        </div>
         <div className="preview-line" />
         <InstagramPreview
           view={previewView}
@@ -2377,6 +2403,7 @@ export function AutomationBuilder({
       initialDefinition={initialDefinition as FlowDefinitionV2 | undefined}
       initialInstagramAccountId={initialInstagramAccountId}
       initialMediaIds={initialMediaIds}
+      initialPriority={initialPriority}
       onSaved={onSaved}
     />
   );

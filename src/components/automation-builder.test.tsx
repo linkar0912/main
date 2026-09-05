@@ -109,6 +109,16 @@ describe("AutomationBuilder", () => {
     expect(preview.querySelector(".ig-homebar")).toBeTruthy();
   });
 
+  it("opens and closes the preview as a mobile sheet", () => {
+    stubFetch();
+    render(<AutomationBuilder />);
+
+    fireEvent.click(screen.getByRole("button", { name: /open phone mockup/i }));
+    expect(screen.getByLabelText(/test preview/i).classList.contains("is-open")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /^close phone mockup$/i }));
+    expect(screen.getByLabelText(/test preview/i).classList.contains("is-open")).toBe(false);
+  });
+
   it("keeps editing version 1 definitions on the legacy single-reply form", async () => {
     const legacyDefinition: FlowDefinitionV1 = {
       version: 1,
@@ -926,6 +936,67 @@ describe("AutomationBuilder", () => {
       status: "ACTIVE",
       definition: existingDefinition,
     });
+  });
+
+  it("opens every step immediately when editing an existing campaign", () => {
+    const existingDefinition: FlowDefinitionV2 = {
+      version: 2,
+      trigger: { type: "comment", source: "all_media", mediaIds: [], mediaSnapshots: [], match: "any", keywords: [] },
+      publicReplies: ["Check your messages."],
+      openingMessage: { text: "Open the DM.", optInButtonLabel: "Get it" },
+      followGate: { required: false, notFollowingMessage: "", recheckButtonLabel: "" },
+      delivery: { text: "Here is the link.", url: "https://example.com/item" },
+    };
+    stubFetch();
+    render(<AutomationBuilder automationId="automation_edit" initialName="Existing campaign" initialDefinition={existingDefinition} />);
+
+    const review = screen.getByRole("button", { name: /review/i });
+    expect((review as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(review);
+    expect(screen.getByRole("heading", { name: /review before you save/i }).closest(".wizard-step")?.classList.contains("is-hidden")).toBe(false);
+  });
+
+  it("rehydrates and persists campaign priority", async () => {
+    const existingDefinition: FlowDefinitionV2 = {
+      version: 2,
+      trigger: { type: "comment", source: "all_media", mediaIds: [], mediaSnapshots: [], match: "any", keywords: [] },
+      publicReplies: ["Check your messages."],
+      openingMessage: { text: "Open the DM.", optInButtonLabel: "Get it" },
+      followGate: { required: false, notFollowingMessage: "", recheckButtonLabel: "" },
+      delivery: { text: "Here is the link.", url: "https://example.com/item" },
+    };
+    const fetchMock = stubFetch();
+    render(<AutomationBuilder automationId="automation_edit" initialName="Existing campaign" initialDefinition={existingDefinition} initialPriority={8} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /guardrails/i }));
+    expect((screen.getByLabelText(/^priority$/i) as HTMLInputElement).value).toBe("8");
+    fireEvent.change(screen.getByLabelText(/^priority$/i), { target: { value: "11" } });
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/automations/automation_edit", expect.anything()));
+    const request = findRequest(fetchMock, (url) => url === "/api/automations/automation_edit");
+    expect(JSON.parse(String(request.body)).priority).toBe(11);
+  });
+
+  it("shows API codes as a readable popup instead of raw text below the form", async () => {
+    const existingDefinition: FlowDefinitionV2 = {
+      version: 2,
+      trigger: { type: "comment", source: "all_media", mediaIds: [], mediaSnapshots: [], match: "any", keywords: [] },
+      publicReplies: ["Check your messages."],
+      openingMessage: { text: "Open the DM.", optInButtonLabel: "Get it" },
+      followGate: { required: false, notFollowingMessage: "", recheckButtonLabel: "" },
+      delivery: { text: "Here is the link.", url: "https://example.com/item" },
+    };
+    stubFetch({ patchOk: false, patchResponse: { error: "invalid_channel_target" } });
+    render(<AutomationBuilder automationId="automation_edit" initialName="Existing campaign" initialDefinition={existingDefinition} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Choose a connected Instagram account or Facebook Page.");
+    expect(alert.classList.contains("action-notice")).toBe(true);
   });
 
   it("submits the full version 2 JSON shape expected by the API", async () => {
