@@ -3,6 +3,22 @@ import { validateFlowDefinition } from "./definition";
 import { basicAutomationTemplates, getCompatibleTemplates, getTemplateById } from "./templates";
 
 describe("premade automation templates", () => {
+  it("gives every recipe short, outcome-first copy and natural steps", () => {
+    for (const template of basicAutomationTemplates) {
+      expect(template.title.trim().length, `${template.id} needs a title`).toBeGreaterThan(0);
+      expect(template.description.length, `${template.id} description is too long`).toBeLessThanOrEqual(140);
+      expect(template.description, `${template.id} description must be one sentence`).toMatch(/[.!?]$/);
+      expect(template.howItWorks.length, `${template.id} needs plain steps`).toBeGreaterThanOrEqual(2);
+      expect(template.howItWorks.length).toBeLessThanOrEqual(5);
+      expect([template.title, template.description, ...template.howItWorks].join(" ")).not.toMatch(/→|\b(trigger|payload|webhook|opt-in)\b/i);
+    }
+  });
+
+  it("uses the approved names for the most common recipes", () => {
+    expect(getTemplateById("comment-link-dm")?.title).toBe("Send a link when someone comments");
+    expect(getTemplateById("default-reply")?.title).toBe("Reply to every new message");
+    expect(getTemplateById("story-mention-reply")?.title).toBe("Thank people who mention you in a Story");
+  });
   it("ships the complete Facebook Page-comment recipe set with safe public replies", () => {
     const expectedIds = [
       "facebook-keyword-comment-reply",
@@ -93,7 +109,7 @@ describe("premade automation templates", () => {
   });
 
   it("looks templates up by id", () => {
-    expect(getTemplateById("default-reply")?.title).toContain("Default Reply");
+    expect(getTemplateById("default-reply")?.title).toContain("Reply to every new message");
     expect(getTemplateById("conversation-starters")?.setup).toBeDefined();
     expect(getTemplateById("does-not-exist")).toBeUndefined();
   });

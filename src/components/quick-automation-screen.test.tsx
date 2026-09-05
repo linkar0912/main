@@ -68,7 +68,7 @@ describe("QuickAutomationScreen", () => {
 
     expect(screen.getByRole("heading", { name: /choose what happens next/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /follow-gated reel campaign/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /auto-dm links from comments/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /send a link when someone comments/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /conversation starters/i })).toBeNull();
     expect(scrollIntoView).toHaveBeenCalled();
   });
@@ -86,7 +86,7 @@ describe("QuickAutomationScreen", () => {
     render(<QuickAutomationScreen />);
 
     fireEvent.click(await screen.findByRole("button", { name: /select reel giveaway reel/i }));
-    fireEvent.click(screen.getByRole("button", { name: /auto-dm links from comments/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send a link when someone comments/i }));
 
     expect(push).toHaveBeenCalledWith(
       "/automations/new?type=classic&template=comment-link-dm&media=reel_1",

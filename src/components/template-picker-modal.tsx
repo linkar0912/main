@@ -30,43 +30,6 @@ const CATEGORY_ICONS: Record<TemplateTriggerType, typeof MessageCircle> = {
   optin: CheckCircle2,
 };
 
-/**
- * One concrete line per recipe so the tile shows the flow, not just the label.
- * The opening word has to match the recipe's real trigger - a line that promises
- * "Comment X →" on a DM-triggered recipe describes a flow the builder will not
- * let you build. `template-picker-modal.test.tsx` enforces that.
- */
-export const TEMPLATE_EXAMPLES: Record<string, string> = {
-  "comment-link-dm": "Comment “link” → DM: “Here you go: https://…”",
-  "conversation-starters": "DM “price” → menu: Pricing / Hours / Delivery",
-  "email-capture": "DM “guide” → asks for their email → delivers it",
-  "welcome-new-followers": "First DM ever → “Hey! Thanks for reaching out.”",
-  "story-mention-reply": "They mention you in a story → thank-you DM",
-  "default-reply": "Anything unmatched → “Got it! Someone will reply soon.”",
-  "main-menu": "“MENU” → tappable list of everything you offer",
-  "comment-catch-all": "Comment anything (no keyword) → instant private reply",
-  "referral-welcome": "Tap from an ad/ref link → warm welcome DM",
-  "optin-confirmation": "Opt-in tap → “Done! Here is what you asked for.”",
-  "giveaway-entry": "DM “enter” → “You are in. Here are the rules.”",
-  "affiliate-link": "DM “shop” → affiliate link with a tappable button",
-  "lead-magnet-comment": "Comment “GUIDE” → private reply with your free PDF link",
-  "price-list-responder": "DM “price” → product photo + prices → catalog button",
-  "course-faq-booking": "DM “course” → program details → book-a-call button",
-  "event-registration": "DM “webinar” → collects name, email, phone → confirms seat",
-  "influencer-collab-intake": "DM “collab” → collects email, niche, platform → alerts team",
-  "giveaway-comment-entry": "Comment “ENTER” → private reply: “You’re in!”",
-  "offer-followup": "DM “offer” → deal link → next day: “Still interested?”",
-  "facebook-keyword-comment-reply": "Comment “price” → public Page reply",
-  "facebook-every-comment-reply": "Any top-level comment → public Page reply",
-  "facebook-product-pricing-faq": "Comment “price” → public pricing acknowledgement",
-  "facebook-availability-hours": "Comment “hours” → public availability acknowledgement",
-  "facebook-giveaway-acknowledgement": "Comment “enter” → public giveaway acknowledgement",
-  "facebook-support-acknowledgement": "Comment “help” → public support acknowledgement",
-  "facebook-per-post-campaign-reply": "Campaign comment → public reply on selected posts",
-};
-
-const CAMPAIGN_EXAMPLE = "Comment “drop” → public reply → DM opt-in → follow check → link";
-
 // Order categories the way a person thinks about them, not alphabetically.
 const CATEGORY_ORDER: TemplateTriggerType[] = ["comment", "message", "story_mention", "first_contact", "referral", "optin"];
 
@@ -74,7 +37,7 @@ type PickerItem = {
   id: string;
   title: string;
   description: string;
-  example?: string;
+  howItWorks: string[];
   category: TemplateTriggerType;
   popular?: boolean;
   featured?: boolean;
@@ -90,7 +53,10 @@ function Tile({ item, onSelect }: { item: PickerItem; onSelect: () => void }) {
     <button type="button" className="template-picker-tile" onClick={onSelect}>
       <strong>{item.title}</strong>
       <p>{item.description}</p>
-      {item.example && <span className="template-example">{item.example}</span>}
+      <div className="template-example">
+        <small>How it works</small>
+        <ol>{item.howItWorks.map((step) => <li key={step}>{step}</li>)}</ol>
+      </div>
       <span className="template-picker-tile-meta">
         <span>{item.featured ? "Quick automation" : triggerLabel(item.category)}</span>
         {item.popular && <span className="template-picker-badge">Popular</span>}
@@ -154,9 +120,13 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
     if (provider === "FACEBOOK" && !facebookPageId) return [];
     const campaign: PickerItem = {
       id: "campaign-follow-gate",
-      title: "Follow-gated Reel campaign",
-      description: "Comment keyword → public reply → DM opt-in → follow check → deliver your link.",
-      example: CAMPAIGN_EXAMPLE,
+      title: "Send a link after someone follows you",
+      description: "Ask people to follow you before Linkar sends the link they requested.",
+      howItWorks: [
+        "Someone comments using a word you choose.",
+        "Linkar replies and asks permission to send a message.",
+        "After they follow you, Linkar sends your link.",
+      ],
       category: "comment",
       popular: true,
       featured: true,
@@ -169,7 +139,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
       id: template.id,
       title: template.title,
       description: template.description,
-      example: TEMPLATE_EXAMPLES[template.id],
+      howItWorks: template.howItWorks,
       category: template.setup.definition.trigger.type,
       popular: template.popular,
       href: provider === "FACEBOOK"

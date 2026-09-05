@@ -6,7 +6,7 @@ function pageTemplate(input: {
   title: string;
   description: string;
   name: string;
-  trigger: FlowDefinitionV1["trigger"];
+  trigger: Extract<FlowDefinitionV1["trigger"], { type: "comment" }>;
   reply: string;
   popular?: boolean;
 }): PremadeTemplate {
@@ -14,6 +14,10 @@ function pageTemplate(input: {
     id: input.id,
     title: input.title,
     description: input.description,
+    howItWorks: [
+      input.trigger.match === "any" ? "Someone comments on your Facebook Page." : "Someone comments using a word you choose.",
+      "Linkar posts the public reply you saved.",
+    ],
     icon: "reply",
     popular: input.popular,
     provider: "FACEBOOK",

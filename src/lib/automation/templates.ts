@@ -15,6 +15,7 @@ export type PremadeTemplate = {
   id: string;
   title: string;
   description: string;
+  howItWorks: string[];
   icon:
   | "user-plus"
   | "message"
@@ -34,7 +35,57 @@ export type PremadeTemplate = {
   setup: { name: string; definition: FlowDefinitionV1 };
 };
 
-type LegacyInstagramTemplate = Omit<PremadeTemplate, "provider" | "surface" | "requiredCapabilities">;
+type LegacyInstagramTemplate = Omit<PremadeTemplate, "provider" | "surface" | "requiredCapabilities" | "howItWorks">;
+
+const PLAIN_COPY_OVERRIDES: Record<string, { title?: string; description?: string }> = {
+  "comment-link-dm": {
+    title: "Send a link when someone comments",
+    description: "When someone comments with a word you choose, Linkar sends your link in a private reply.",
+  },
+  "story-mention-reply": {
+    title: "Thank people who mention you in a Story",
+    description: "When someone mentions you in a Story, Linkar sends the thank-you message you saved.",
+  },
+  "default-reply": {
+    title: "Reply to every new message",
+    description: "When a message does not match another reply, Linkar sends this helpful fallback.",
+  },
+  "optin-confirmation": {
+    title: "Confirm a button tap",
+    description: "When someone taps your permission button, Linkar confirms it and shares the next step.",
+  },
+};
+
+function conciseDescription(template: LegacyInstagramTemplate): string {
+  const override = PLAIN_COPY_OVERRIDES[template.id]?.description;
+  if (override) return override;
+  const firstSentence = template.description.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim();
+  if (firstSentence && firstSentence.length <= 140) return firstSentence;
+  switch (template.setup.definition.trigger.type) {
+    case "comment": return "When someone comments, Linkar sends the reply you saved.";
+    case "message": return "When someone sends a matching message, Linkar replies with the information you saved.";
+    case "story_mention": return "When someone mentions you in a Story, Linkar sends your saved reply.";
+    case "first_contact": return "When someone messages you for the first time, Linkar sends a warm welcome.";
+    case "referral": return "When someone arrives from an ad or referral link, Linkar welcomes them in a message.";
+    case "optin": return "When someone agrees to receive a message, Linkar confirms what happens next.";
+  }
+}
+
+function naturalSteps(template: LegacyInstagramTemplate): string[] {
+  const trigger = template.setup.definition.trigger;
+  const first = trigger.type === "comment"
+    ? trigger.match === "any" ? "Someone comments on your post or Reel." : "Someone comments using a word you choose."
+    : trigger.type === "message"
+      ? trigger.match === "any" ? "Someone sends you a new message." : "Someone messages you using a word you choose."
+      : trigger.type === "story_mention" ? "Someone mentions you in an Instagram Story."
+        : trigger.type === "first_contact" ? "Someone starts their first conversation with you."
+          : trigger.type === "referral" ? "Someone opens your chat from an ad or referral link."
+            : "Someone agrees to receive your message.";
+  if (template.setup.definition.emailCapture) {
+    return [first, "Linkar asks for their email and any details you need.", "Linkar confirms their details and sends what you promised."];
+  }
+  return [first, "Linkar sends the reply you saved."];
+}
 
 const legacyInstagramTemplates: LegacyInstagramTemplate[] = [
   {
@@ -507,6 +558,9 @@ export const instagramAutomationTemplates: PremadeTemplate[] = legacyInstagramTe
   const surface = template.setup.definition.trigger.type === "comment" ? "COMMENT" : "MESSAGING";
   return {
     ...template,
+    title: PLAIN_COPY_OVERRIDES[template.id]?.title ?? template.title,
+    description: conciseDescription(template),
+    howItWorks: naturalSteps(template),
     provider: "INSTAGRAM",
     surface,
     requiredCapabilities: [surface === "COMMENT" ? "instagram-comment" : "instagram-messaging"],
