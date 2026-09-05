@@ -198,8 +198,8 @@ describe("DashboardScreen onboarding", () => {
     // Tier one: only the two charted series get full stat-block treatment.
     const headline = document.querySelectorAll(".stat-block");
     expect(headline).toHaveLength(2);
-    expect(screen.getByText("Replies sent").closest(".stat-block")).toBeTruthy();
-    expect(screen.getByText("People reached").closest(".stat-block")).toBeTruthy();
+    expect([...headline].some((item) => item.textContent?.includes("Replies sent"))).toBe(true);
+    expect([...headline].some((item) => item.textContent?.includes("People reached"))).toBe(true);
 
     // Tier two: the context metrics live in the meta strip, not in cards.
     expect(screen.getByText("Emails captured").closest(".stat-meta")).toBeTruthy();

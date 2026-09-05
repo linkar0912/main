@@ -21,9 +21,8 @@ import { StatusBadge } from "./status-badge";
 import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
 import { clearWorkspaceDataCache, getFacebookPages, getInstagramConnections } from "@/src/lib/client/workspace-data";
+import { ReplyVolumeChart, type DayPoint } from "./reply-volume-chart";
 
-// Mirrors DailyCount in src/lib/repository.ts - the key is `day`, not `date`.
-type DayPoint = { day: string; count: number };
 type InsightsPayload = {
   timeseries?: { participantsPerDay?: DayPoint[]; sentPerDay?: DayPoint[] };
   capturedEmails?: number;
@@ -71,56 +70,6 @@ function flowTriggerLabel(automation: AutomationRecord): string {
   if (trigger?.type === "first_contact") return "First-contact welcome";
   if (trigger?.type === "story_mention") return "Story mentions";
   return "Comment replies";
-}
-
-function formatDayLabel(day: string | undefined): string {
-  if (!day) return "";
-  const dayOfMonth = Number(day.slice(-2));
-  return Number.isFinite(dayOfMonth) ? String(dayOfMonth) : day.slice(-2);
-}
-
-/** Two-series bar chart, matching the pattern already used on the Insights page. */
-function VolumeChart({ sentPoints, reachedPoints }: { sentPoints: DayPoint[]; reachedPoints: DayPoint[] }) {
-  const reachedByDay = new Map(reachedPoints.map((point) => [point.day, point.count]));
-  const peak = Math.max(1, ...sentPoints.map((point) => point.count), ...reachedPoints.map((point) => point.count));
-  // Any day with real activity still reads as a bar, not a sliver - plain
-  // count/peak scaling flattens modest, evenly-spread real-world numbers.
-  const heightOf = (count: number) => (count > 0 ? Math.max(10, Math.round((count / peak) * 100)) : 2);
-  const hasActivity = sentPoints.some((point) => point.count > 0) || reachedPoints.some((point) => point.count > 0);
-
-  if (!hasActivity) {
-    // All-zero fortnight: an empty plot with 2px slivers at the bottom reads as
-    // broken, so swap the whole plot for a calm empty state.
-    return (
-      <p className="chart-empty">
-        No replies in the last 14 days yet - once your automations start sending, daily activity shows up here.
-      </p>
-    );
-  }
-
-  return (
-    <div className="chart-plot">
-      <div className="insights-chart" role="img" aria-label="Daily replies sent and people reached for the last 14 days">
-        {sentPoints.map((point) => {
-          const reached = reachedByDay.get(point.day) ?? 0;
-          const isEmpty = point.count === 0 && reached === 0;
-          return (
-            <div
-              className={isEmpty ? "chart-column is-empty" : "chart-column"}
-              key={point.day}
-              title={`${formatDayLabel(point.day)} - ${point.count} sent, ${reached} reached`}
-            >
-              <div className="chart-bars is-lg">
-                <span className="chart-bar bar-participants" style={{ height: `${heightOf(reached)}%` }} />
-                <span className="chart-bar bar-sent" style={{ height: `${heightOf(point.count)}%` }} />
-              </div>
-              <small>{formatDayLabel(point.day)}</small>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function displayNameFromEmail(email: string): string {
@@ -391,7 +340,7 @@ export function DashboardScreen() {
                   <dd>{activeCount.toLocaleString()} <span>of {automations.length.toLocaleString()}</span></dd>
                 </div>
               </dl>
-              <VolumeChart sentPoints={sentPerDay} reachedPoints={participantsPerDay} />
+              <ReplyVolumeChart sent={sentPerDay} reached={participantsPerDay} days={14} compact />
             </>
           ) : (
             <p className="panel-empty">

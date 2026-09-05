@@ -4,8 +4,8 @@ import { Download, MailCheck, MousePointerClick, RefreshCw, Send, UsersRound } f
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "./app-shell";
 import { InsightsContentSkeleton } from "./skeleton";
+import { ReplyVolumeChart, type DayPoint } from "./reply-volume-chart";
 
-type DayPoint = { day: string; count: number };
 type MediaPerformance = { mediaId: string; matched: number; delivered: number; clicked: number };
 type InsightsPayload = {
   funnel: Record<string, number>;
@@ -26,52 +26,6 @@ const FUNNEL_STAGES = [
 
 function sum(points: DayPoint[]): number {
   return points.reduce((total, point) => total + point.count, 0);
-}
-
-function formatDay(day: string): string {
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
-}
-
-function normalizeDayPoints(sent: DayPoint[], reached: DayPoint[]) {
-  const byDay = new Map<string, { day: string; sent: number; reached: number }>();
-  for (const point of sent) {
-    const current = byDay.get(point.day) ?? { day: point.day, sent: 0, reached: 0 };
-    current.sent += point.count;
-    byDay.set(point.day, current);
-  }
-  for (const point of reached) {
-    const current = byDay.get(point.day) ?? { day: point.day, sent: 0, reached: 0 };
-    current.reached += point.count;
-    byDay.set(point.day, current);
-  }
-  return [...byDay.values()].sort((left, right) => left.day.localeCompare(right.day));
-}
-
-function VolumeChart({ sent, reached }: { sent: DayPoint[]; reached: DayPoint[] }) {
-  const points = normalizeDayPoints(sent, reached);
-  const peak = Math.max(1, ...sent.map((point) => point.count), ...reached.map((point) => point.count));
-  const hasActivity = sent.some((point) => point.count > 0) || reached.some((point) => point.count > 0);
-  const height = (count: number) => count ? Math.max(8, Math.round((count / peak) * 100)) : 2;
-
-  if (!hasActivity) {
-    return <p className="chart-empty">No activity yet. Your daily reply volume will appear here after an automation runs.</p>;
-  }
-
-  return (
-    <div className="chart-plot">
-      <div className="insights-chart" role="img" aria-label="Daily replies sent and people reached for the last 14 days">
-        {points.map((point) => (
-            <div className={point.sent || point.reached ? "chart-column" : "chart-column is-empty"} key={point.day} title={`${formatDay(point.day)}: ${point.sent} sent, ${point.reached} reached`}>
-              <div className="chart-bars is-lg">
-                <span className="chart-bar bar-participants" style={{ height: `${height(point.reached)}%` }} />
-                <span className="chart-bar bar-sent" style={{ height: `${height(point.sent)}%` }} />
-              </div>
-              <small className="chart-date-label">{formatDay(point.day)}</small>
-            </div>
-          ))}
-      </div>
-    </div>
-  );
 }
 
 function Metric({ label, value, note, icon: Icon }: { label: string; value: number; note: string; icon: typeof Send }) {
@@ -157,9 +111,8 @@ export function InsightsScreen() {
             <section className="panel chart-panel insights-volume" aria-label="Performance over time">
               <div className="panel-heading insights-heading-row">
                 <div><p className="eyebrow">Last {data.timeseries.days} days</p><h2>Reply volume</h2></div>
-                <div className="insights-legend" aria-label="Chart legend"><span><i className="legend-swatch swatch-sent" /> Replies sent</span><span><i className="legend-swatch swatch-participants" /> People reached</span></div>
               </div>
-              <VolumeChart sent={data.timeseries.sentPerDay} reached={data.timeseries.participantsPerDay} />
+              <ReplyVolumeChart sent={data.timeseries.sentPerDay} reached={data.timeseries.participantsPerDay} days={data.timeseries.days} />
             </section>
 
             <div className="insights-detail-grid">

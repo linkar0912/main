@@ -1743,6 +1743,11 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .insights-heading-row { align-items: flex-start; display: flex; gap: var(--space-4); justify-content: space-between; }
 .insights-legend { align-items: center; display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: var(--space-4); justify-content: flex-end; min-width: 0; }
 .insights-legend span { align-items: center; color: var(--muted); display: flex; font-size: .74rem; gap: 7px; }
+.reply-volume-chart { display: grid; gap: var(--space-3); }
+.reply-volume-chart > .insights-legend { justify-content: flex-start; }
+.reply-volume-chart.is-compact { gap: var(--space-2); }
+.reply-volume-chart.is-compact .insights-chart { min-height: 190px; }
+.reply-volume-chart.is-compact .chart-bars.is-lg { height: 160px; }
 .insights-detail-grid { align-items: start; display: grid; gap: var(--space-7); grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr); }
 .insights-detail-grid > .panel { min-width: 0; }
 .insights-detail-heading { align-items: flex-start; display: flex; margin-bottom: var(--space-5); min-height: 52px; }
