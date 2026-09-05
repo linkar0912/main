@@ -23,7 +23,6 @@ import { MediaPicker } from "./media-picker";
 import { FollowGateFields } from "./follow-gate-fields";
 import { InstagramPreview, type DmBubble, type PreviewView } from "./instagram-preview";
 import { FacebookPagePreview } from "./facebook-page-preview";
-import { AutomationSimulator } from "./automation-simulator";
 import { getInstagramConnections, getFacebookPages, type FacebookPageSummary } from "@/src/lib/client/workspace-data";
 import { ChannelSelector } from "./automation-builder/channel-selector";
 import { CommentKeywordControls, type CommentKeywordMode } from "./automation-builder/trigger-section";
@@ -1564,7 +1563,6 @@ function AutomationBuilderV1({
             messages={dmMessages}
           />
         )}
-        <AutomationSimulator buildDefinition={buildDefinition} />
       </aside>
     </form>
   );
@@ -2352,7 +2350,6 @@ function AutomationBuilderV2({
           commentReply={nonEmptyReplies[0]}
           messages={dmMessages}
         />
-        <AutomationSimulator buildDefinition={buildDefinition} />
       </aside>
     </div>
   );

@@ -3575,11 +3575,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .facebook-activity-loading span { animation: none; }
 }
 
-/* Simulator + A/B report */
-.simulator-panel { margin-top: var(--space-5); }
-.simulator-actions { display: grid; gap: 6px; list-style: none; margin: var(--space-2) 0 0; padding: 0; }
-.simulator-actions li { font-size: .8rem; }
-.simulator-actions code { background: var(--surface-soft); border-radius: 4px; font-size: .7rem; padding: 1px 5px; }
+/* A/B report */
 .warning-text { color: var(--warning-ink); }
 /* Lives in the 340px activity sidebar, where "40 reached - 50 delivered
    (125%) - 22 clicks" never fits beside the chip on one line - the old
@@ -3619,15 +3615,6 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   flex: 1;
   flex-direction: column;
   min-height: 0;
-}
-
-/* Simulator result panel - container around the rendered outcome. */
-.simulator-result {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  margin-top: var(--space-4);
-  padding: var(--space-4);
 }
 
 /* Retry button on a failed automation activity row - informational modifier

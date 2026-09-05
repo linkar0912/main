@@ -14,9 +14,6 @@ test("creates, reopens, activates, and renders a Facebook Page comment automatio
   await page.route("**/api/meta/connection**", (route) => route.fulfill({ json: { data: [] } }));
   await page.route("**/api/meta/media**", (route) => route.fulfill({ json: { data: [], paging: {} } }));
   await page.route("**/api/automations/suggest-keywords**", (route) => route.fulfill({ json: { data: ["price", "details"] } }));
-  await page.route("**/api/automations/simulate", (route) => route.fulfill({ json: {
-    data: { result: { matched: true, actions: [{ type: "private_reply", summary: "Public Page reply" }] }, issues: [] },
-  } }));
   await page.route("**/api/automations", async (route) => {
     if (route.request().method() === "POST") {
       savedBody = route.request().postDataJSON() as Record<string, unknown>;
@@ -47,10 +44,6 @@ test("creates, reopens, activates, and renders a Facebook Page comment automatio
   await page.getByLabel("Keyword logic").selectOption("all");
   await page.getByLabel("Exclude keywords").fill("spam");
   await page.getByLabel("Reply once per person").check();
-  await page.getByLabel("Sample event type").selectOption("comment.created");
-  await page.getByLabel("Sample event text").fill("price and details");
-  await page.getByRole("button", { name: "Run simulation" }).click();
-  await expect(page.getByText(/would fire 1 action/i)).toBeVisible();
   await advance(page);
   await advance(page);
   await page.getByRole("button", { name: "Add reply variation" }).click();

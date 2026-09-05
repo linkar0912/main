@@ -1124,4 +1124,14 @@ describe("AutomationBuilder", () => {
       },
     ]);
   });
+
+  it("does not expose the removed Test run tool in either builder", () => {
+    stubFetch();
+    const view = render(<AutomationBuilder />);
+    expect(screen.queryByRole("region", { name: "Test run" })).toBeNull();
+
+    view.unmount();
+    render(<AutomationBuilder variant="classic" />);
+    expect(screen.queryByRole("region", { name: "Test run" })).toBeNull();
+  });
 });
