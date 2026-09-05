@@ -62,13 +62,13 @@ const reel = {
 };
 
 async function fillRequiredCampaignFields() {
-  fireEvent.change(screen.getByLabelText(/automation name/i), { target: { value: "Reel drop" } });
-  fireEvent.change(screen.getByLabelText(/^keywords$/i), { target: { value: "drop" } });
+  fireEvent.change(screen.getByLabelText(/reply name/i), { target: { value: "Reel drop" } });
+  fireEvent.change(screen.getByLabelText(/words to look for/i), { target: { value: "drop" } });
   fireEvent.change(screen.getByLabelText(/public reply variation 1/i), { target: { value: "Check your messages." } });
   fireEvent.change(screen.getByLabelText(/opening message text/i), { target: { value: "Follow to unlock the link!" } });
   fireEvent.change(screen.getByLabelText(/not-following prompt/i), { target: { value: "Please follow first." } });
-  fireEvent.change(screen.getByLabelText(/delivery message/i), { target: { value: "Here is your link." } });
-  fireEvent.change(screen.getByLabelText(/delivery link/i), { target: { value: "https://example.com/prize" } });
+  fireEvent.change(screen.getByLabelText(/message to send with the link/i), { target: { value: "Here is your link." } });
+  fireEvent.change(screen.getByLabelText(/link to send/i), { target: { value: "https://example.com/prize" } });
 }
 
 /** The wizard only mounts Save draft / Save & activate on its last (review) step. */
@@ -89,7 +89,7 @@ describe("AutomationBuilder", () => {
     stubFetch();
     render(<AutomationBuilder />);
 
-    const preview = screen.getByLabelText(/test preview/i);
+    const preview = screen.getByLabelText(/message preview/i);
     fireEvent.click(within(preview).getByRole("tab", { name: "Comments" }));
     // The business reply carries an avatar (photo when connected, default otherwise);
     // the other commenter always gets Instagram's no-photo default.
@@ -102,7 +102,7 @@ describe("AutomationBuilder", () => {
     stubFetch();
     render(<AutomationBuilder />);
 
-    const preview = screen.getByLabelText(/test preview/i);
+    const preview = screen.getByLabelText(/message preview/i);
     expect(preview.querySelector(".ig-device")).toBeTruthy();
     expect(preview.querySelector(".ig-statusbar-island")).toBeTruthy();
     expect(preview.querySelectorAll(".ig-device-button")).toHaveLength(3);
@@ -114,9 +114,9 @@ describe("AutomationBuilder", () => {
     render(<AutomationBuilder />);
 
     fireEvent.click(screen.getByRole("button", { name: /open phone mockup/i }));
-    expect(screen.getByLabelText(/test preview/i).classList.contains("is-open")).toBe(true);
+    expect(screen.getByLabelText(/message preview/i).classList.contains("is-open")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /^close phone mockup$/i }));
-    expect(screen.getByLabelText(/test preview/i).classList.contains("is-open")).toBe(false);
+    expect(screen.getByLabelText(/message preview/i).classList.contains("is-open")).toBe(false);
   });
 
   it("keeps editing version 1 definitions on the legacy single-reply form", async () => {
@@ -243,7 +243,7 @@ describe("AutomationBuilder", () => {
     fireEvent.change(pageSelect, { target: { value: "12345" } });
 
     // Preview should now be the Facebook layout, not the Instagram phone shell.
-    const preview = screen.getAllByLabelText(/test preview/i)[0] as HTMLElement;
+    const preview = screen.getAllByLabelText(/message preview/i)[0] as HTMLElement;
     expect(preview.querySelector(".facebook-preview")).toBeTruthy();
     expect(screen.getByText("Public Page reply")).toBeTruthy();
     expect(preview.querySelector(".ig-device")).toBeNull();
@@ -288,7 +288,7 @@ describe("AutomationBuilder", () => {
       />,
     );
 
-    const preview = screen.getAllByLabelText(/test preview/i)[0] as HTMLElement;
+    const preview = screen.getAllByLabelText(/message preview/i)[0] as HTMLElement;
     await waitFor(() => {
       expect(
         Array.from(preview.querySelectorAll(".facebook-avatar img"), (image) => image.getAttribute("src")),
@@ -379,8 +379,8 @@ describe("AutomationBuilder", () => {
     );
 
     expect((await screen.findByLabelText("Facebook Page") as HTMLSelectElement).value).toBe("12345");
-    fireEvent.change(screen.getByLabelText("Keyword logic"), { target: { value: "all" } });
-    fireEvent.change(screen.getByLabelText("Exclude keywords"), { target: { value: "scam, spam" } });
+    fireEvent.change(screen.getByLabelText("How should the words match?"), { target: { value: "all" } });
+    fireEvent.change(screen.getByLabelText("Words to ignore"), { target: { value: "scam, spam" } });
     fireEvent.click(screen.getByLabelText("Reply once per person"));
     fireEvent.click(screen.getByRole("button", { name: "Add reply variation" }));
     fireEvent.change(screen.getByLabelText("Public Page reply variation 2"), { target: { value: "Happy to help." } });
@@ -455,9 +455,27 @@ describe("AutomationBuilder", () => {
 
     render(<AutomationBuilder initialDefinition={definition} />);
 
-    expect(screen.getByLabelText("Lead webhook URL")).toBeTruthy();
+    expect(screen.getByLabelText("App URL for new leads")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add question" })).toBeTruthy();
     expect(screen.queryByLabelText("Delivery email subject")).toBeNull();
+  });
+
+  it("explains the classic builder in everyday language", () => {
+    stubFetch();
+    const definition: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Here is the guide." }],
+    };
+
+    render(<AutomationBuilder initialDefinition={definition} />);
+
+    expect(screen.getAllByText("When this happens").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "What should start this reply?" })).toBeTruthy();
+    expect(screen.getAllByText("Linkar will do this").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Trigger$/i)).toBeNull();
+    expect(screen.queryByText(/^Action$/i)).toBeNull();
   });
 
   it("defaults new automations to the version 2 campaign builder with sections in order", () => {
@@ -467,7 +485,16 @@ describe("AutomationBuilder", () => {
     expect(screen.queryByText("Flow v2")).toBeNull();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((node) => node.textContent ?? "");
     const indexOf = (needle: RegExp) => headings.findIndex((text) => needle.test(text));
-    const order = ["watch", "comment", "public reply", "opening", "follow", "deliver", "limits", "review"].map(
+    const order = [
+      "watch",
+      "comment starts",
+      "public reply",
+      "ask before",
+      "check if they follow",
+      "what should Linkar send",
+      "limits",
+      "review before",
+    ].map(
       (word) => indexOf(new RegExp(word, "i")),
     );
     expect(order.every((value) => value >= 0)).toBe(true);
@@ -481,9 +508,9 @@ describe("AutomationBuilder", () => {
     expect(screen.queryByRole("button", { name: /save draft/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^back$/i })).toBeNull();
 
-    fireEvent.change(screen.getByLabelText(/automation name/i), { target: { value: "Sequential campaign" } });
-    fireEvent.change(screen.getByLabelText(/trigger source/i), { target: { value: "all_media" } });
-    fireEvent.change(screen.getByLabelText(/^keywords$/i), { target: { value: "guide" } });
+    fireEvent.change(screen.getByLabelText(/reply name/i), { target: { value: "Sequential campaign" } });
+    fireEvent.change(screen.getByLabelText(/posts to watch/i), { target: { value: "all_media" } });
+    fireEvent.change(screen.getByLabelText(/words to look for/i), { target: { value: "guide" } });
 
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     fireEvent.change(screen.getByLabelText(/public reply variation 1/i), { target: { value: "I’ll send it now." } });
@@ -491,8 +518,8 @@ describe("AutomationBuilder", () => {
     fireEvent.change(screen.getByLabelText(/opening message text/i), { target: { value: "Tap below to continue." } });
     fireEvent.change(screen.getByLabelText(/not-following prompt/i), { target: { value: "Follow first, then try again." } });
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
-    fireEvent.change(screen.getByLabelText(/delivery message/i), { target: { value: "Here is your link." } });
-    fireEvent.change(screen.getByLabelText(/delivery link/i), { target: { value: "https://example.com/guide" } });
+    fireEvent.change(screen.getByLabelText(/message to send with the link/i), { target: { value: "Here is your link." } });
+    fireEvent.change(screen.getByLabelText(/link to send/i), { target: { value: "https://example.com/guide" } });
 
     for (let i = 0; i < 2; i += 1) {
       fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
@@ -520,9 +547,9 @@ describe("AutomationBuilder", () => {
     expect(screen.getByRole("alert").textContent).toBe("Give this automation a name first.");
     expect(screen.getByRole("heading", { name: /which posts should linkar watch/i })).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText(/automation name/i), { target: { value: "Unlocked campaign" } });
-    fireEvent.change(screen.getByLabelText(/trigger source/i), { target: { value: "all_media" } });
-    fireEvent.change(screen.getByLabelText(/^keywords$/i), { target: { value: "guide" } });
+    fireEvent.change(screen.getByLabelText(/reply name/i), { target: { value: "Unlocked campaign" } });
+    fireEvent.change(screen.getByLabelText(/posts to watch/i), { target: { value: "all_media" } });
+    fireEvent.change(screen.getByLabelText(/words to look for/i), { target: { value: "guide" } });
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
 
     expect(secondStage).toHaveProperty("disabled", false);
@@ -540,17 +567,17 @@ describe("AutomationBuilder", () => {
     };
     render(<AutomationBuilder initialDefinition={legacyDefinition} initialName="Classic flow" />);
 
-    const conditionStage = screen.getByRole("button", { name: /condition/i });
+    const conditionStage = screen.getByRole("button", { name: /who should get it/i });
     const reviewStage = screen.getByRole("button", { name: /review/i });
     expect(conditionStage).toHaveProperty("disabled", true);
     expect(reviewStage).toHaveProperty("disabled", true);
 
     fireEvent.click(conditionStage);
-    expect(screen.getByRole("heading", { name: /when should linkar listen/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /what should start this reply/i })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     expect(conditionStage).toHaveProperty("disabled", false);
-    expect(screen.getByRole("heading", { name: /keep the audience precise/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /add another check if you need one/i })).toBeTruthy();
     expect(reviewStage).toHaveProperty("disabled", true);
   });
 
@@ -562,10 +589,10 @@ describe("AutomationBuilder", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("true");
 
-    fireEvent.change(screen.getByLabelText(/trigger source/i), { target: { value: "all_media" } });
+    fireEvent.change(screen.getByLabelText(/posts to watch/i), { target: { value: "all_media" } });
     expect(screen.queryByRole("checkbox")).toBeNull();
 
-    fireEvent.change(screen.getByLabelText(/trigger source/i), { target: { value: "specific_media" } });
+    fireEvent.change(screen.getByLabelText(/posts to watch/i), { target: { value: "specific_media" } });
     await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
     expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("false");
   });
@@ -624,8 +651,8 @@ describe("AutomationBuilder", () => {
     await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole("checkbox"));
     await fillRequiredCampaignFields();
-    fireEvent.change(screen.getByLabelText(/match mode/i), { target: { value: "any" } });
-    expect(screen.queryByLabelText(/^keywords$/i)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/which comments count/i), { target: { value: "any" } });
+    expect(screen.queryByLabelText(/words to look for/i)).toBeNull();
 
     goToReviewStep();
     fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
@@ -666,7 +693,7 @@ describe("AutomationBuilder", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     await fillRequiredCampaignFields();
     fireEvent.change(screen.getByLabelText(/opening message text/i), { target: { value: "Follow us to get the freebie." } });
-    fireEvent.change(screen.getByLabelText(/opt-in button label/i), { target: { value: "Send it" } });
+    fireEvent.change(screen.getByLabelText(/permission button text/i), { target: { value: "Send it" } });
 
     goToReviewStep();
     fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
@@ -708,7 +735,7 @@ describe("AutomationBuilder", () => {
     await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole("checkbox"));
     await fillRequiredCampaignFields();
-    fireEvent.change(screen.getByLabelText(/delivery button label/i), { target: { value: "Open link" } });
+    fireEvent.change(screen.getByLabelText(/link button text/i), { target: { value: "Open link" } });
 
     goToReviewStep();
     fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
@@ -730,13 +757,13 @@ describe("AutomationBuilder", () => {
     await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole("checkbox"));
     await fillRequiredCampaignFields();
-    fireEvent.change(screen.getByLabelText(/delivery link/i), { target: { value: "http://example.com/prize" } });
+    fireEvent.change(screen.getByLabelText(/link to send/i), { target: { value: "http://example.com/prize" } });
     goToReviewStep();
 
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Delivery links must use HTTPS.");
     expect(fetchMock).not.toHaveBeenCalledWith("/api/automations", expect.anything());
 
-    fireEvent.change(screen.getByLabelText(/delivery link/i), { target: { value: "http://localhost:3000/prize" } });
+    fireEvent.change(screen.getByLabelText(/link to send/i), { target: { value: "http://localhost:3000/prize" } });
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
@@ -771,12 +798,12 @@ describe("AutomationBuilder", () => {
 
     expect(screen.queryByText(/two links pasted together/i)).toBeNull();
 
-    fireEvent.change(screen.getByLabelText(/delivery link/i), {
+    fireEvent.change(screen.getByLabelText(/link to send/i), {
       target: { value: "https://example.com/prizehttps://example.com/prize" },
     });
     expect(await screen.findByText(/two links pasted together/i)).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText(/delivery link/i), { target: { value: "https://example.com/prize" } });
+    fireEvent.change(screen.getByLabelText(/link to send/i), { target: { value: "https://example.com/prize" } });
     await waitFor(() => expect(screen.queryByText(/two links pasted together/i)).toBeNull());
   });
 
@@ -789,7 +816,7 @@ describe("AutomationBuilder", () => {
     await fillRequiredCampaignFields();
     const callsBeforePreview = fetchMock.mock.calls.length;
 
-    const preview = screen.getByLabelText(/test preview/i);
+    const preview = screen.getByLabelText(/message preview/i);
     expect(preview.textContent).not.toContain("Follow to unlock the link!");
 
     fireEvent.click(within(preview).getByRole("tab", { name: "DM" }));
@@ -813,7 +840,7 @@ describe("AutomationBuilder", () => {
     await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole("checkbox"));
 
-    const preview = screen.getByLabelText(/test preview/i);
+    const preview = screen.getByLabelText(/message preview/i);
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/meta/connection"))).toBe(true));
     await waitFor(() => expect(preview.textContent).toContain("@brand.acct"));
     expect(preview.textContent).toContain("ID 17841400000000001");
@@ -968,7 +995,7 @@ describe("AutomationBuilder", () => {
     const fetchMock = stubFetch();
     render(<AutomationBuilder automationId="automation_edit" initialName="Existing campaign" initialDefinition={existingDefinition} initialPriority={8} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /guardrails/i }));
+    fireEvent.click(screen.getByRole("button", { name: /limits/i }));
     expect((screen.getByLabelText(/^priority$/i) as HTMLInputElement).value).toBe("8");
     fireEvent.change(screen.getByLabelText(/^priority$/i), { target: { value: "11" } });
     fireEvent.click(screen.getByRole("button", { name: /review/i }));
@@ -1006,7 +1033,7 @@ describe("AutomationBuilder", () => {
     await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole("checkbox"));
     await fillRequiredCampaignFields();
-    fireEvent.change(screen.getByLabelText(/opt-in button label/i), { target: { value: "Send it" } });
+    fireEvent.change(screen.getByLabelText(/permission button text/i), { target: { value: "Send it" } });
     fireEvent.change(screen.getByLabelText(/recheck button label/i), { target: { value: "I followed" } });
     goToReviewStep();
     fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
@@ -1041,7 +1068,7 @@ describe("AutomationBuilder", () => {
     await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole("checkbox"));
     await fillRequiredCampaignFields();
-    fireEvent.change(screen.getByLabelText(/^keywords$/i), { target: { value: "Guide, guide, GUIDE , help" } });
+    fireEvent.change(screen.getByLabelText(/words to look for/i), { target: { value: "Guide, guide, GUIDE , help" } });
     goToReviewStep();
     fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
 
@@ -1055,7 +1082,7 @@ describe("AutomationBuilder", () => {
     const fetchMock = stubFetch();
     render(<AutomationBuilder />);
 
-    fireEvent.change(screen.getByLabelText(/trigger source/i), { target: { value: "next_media" } });
+    fireEvent.change(screen.getByLabelText(/posts to watch/i), { target: { value: "next_media" } });
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.getByTestId("review-summary").textContent).toContain("next post you publish");
 

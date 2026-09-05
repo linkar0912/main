@@ -14,18 +14,18 @@ export function CommentKeywordControls({
   return (
     <div className="field-grid field-spaced">
       <label className="field">
-        <span>Keyword logic</span>
-        <select aria-label="Keyword logic" value={mode} onChange={(event) => onModeChange(event.target.value as CommentKeywordMode)}>
-          <option value="any">Match any keyword</option>
-          <option value="all">Require all keywords</option>
+        <span>How should the words match?</span>
+        <select aria-label="How should the words match?" value={mode} onChange={(event) => onModeChange(event.target.value as CommentKeywordMode)}>
+          <option value="any">Any chosen word</option>
+          <option value="all">All chosen words</option>
           <option value="contains">Contains phrase</option>
           <option value="exact">Exact comment</option>
           <option value="regex">Regular expression</option>
         </select>
       </label>
       <label className="field">
-        <span>Exclude keywords <em>optional</em></span>
-        <input aria-label="Exclude keywords" value={negativeKeywords} onChange={(event) => onNegativeKeywordsChange(event.target.value)} placeholder="spam, scam" />
+        <span>Words to ignore <em>optional</em></span>
+        <input aria-label="Words to ignore" value={negativeKeywords} onChange={(event) => onNegativeKeywordsChange(event.target.value)} placeholder="spam, scam" />
       </label>
     </div>
   );

@@ -377,11 +377,11 @@ function AutomationBuilderV1({
     "review",
   ] as const;
   const wizardLabels: Record<string, string> = {
-    trigger: "Trigger",
-    condition: "Condition",
-    action: actions.length > 1 ? "Actions" : "Action",
-    email: "Email collector",
-    guardrails: "Guardrails",
+    trigger: "When this happens",
+    condition: "Who should get it",
+    action: "Linkar will do this",
+    email: "Ask for an email",
+    guardrails: "Limits",
     review: "Review",
   };
   const clampedStep = Math.min(activeStep, wizardSteps.length - 1);
@@ -763,15 +763,15 @@ function AutomationBuilderV1({
         <div className="builder-intro">
           <div>
             <p className="eyebrow">Guided builder</p>
-            <h1>{automationId ? "Tune this automation" : "Build a reply flow"}</h1>
-            <p className="muted">Choose one clear trigger, add a guardrail if you need it, then pick the reply.</p>
+            <h1>{automationId ? "Edit this automatic reply" : "Create an automatic reply"}</h1>
+            <p className="muted">Choose what starts the reply, write what Linkar should send, then review it before turning it on.</p>
           </div>
         </div>
 
         <label className="field field-wide">
-          <span>Automation name</span>
+          <span>Give this reply a name</span>
           <input
-            aria-label="Automation name"
+            aria-label="Reply name"
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="e.g. Send the creator guide"
@@ -835,17 +835,17 @@ function AutomationBuilderV1({
           <div className="step-content">
             <div className="step-heading">
               <div>
-                <p className="eyebrow">Trigger</p>
-                <h2>When should Linkar listen?</h2>
+                <p className="eyebrow">When this happens</p>
+                <h2>What should start this reply?</h2>
               </div>
               <MessageCircle size={21} strokeWidth={1.7} />
             </div>
             <div className="field-grid">
               <label className="field">
-                <span>Trigger source</span>
+                <span>Where will it start?</span>
                 <span className="select-wrap">
                   <select
-                    aria-label="Trigger source"
+                    aria-label="Where will it start?"
                     value={triggerType}
                     onChange={(event) => changeTriggerType(event.target.value as ClassicTriggerType)}
                   >
@@ -854,17 +854,17 @@ function AutomationBuilderV1({
                     {!isFacebook && <option value="first_contact">First-time contact</option>}
                     {!isFacebook && <option value="story_mention">Story mention</option>}
                     {!isFacebook && <option value="referral">Referral link tap</option>}
-                    {!isFacebook && <option value="optin">Opt-in tap</option>}
+                    {!isFacebook && <option value="optin">Permission button tap</option>}
                   </select>
                   <ChevronDown size={16} />
                 </span>
               </label>
               {usesTextTrigger && (
                 <label className="field">
-                  <span>Match mode</span>
+                  <span>Which messages count?</span>
                   <span className="select-wrap">
                     <select
-                      aria-label="Match mode"
+                      aria-label="Which messages count?"
                       value={triggerMatch}
                       onChange={(event) => setTriggerMatch(event.target.value as "keyword" | "any")}
                     >
@@ -879,9 +879,9 @@ function AutomationBuilderV1({
             {usesTextTrigger && triggerMatch === "keyword" && (
               <>
               <label className="field field-spaced">
-                <span>Keywords</span>
+                <span>What words should Linkar look for?</span>
                 <input
-                  aria-label="Keywords"
+                  aria-label="Words to look for"
                   value={keywords}
                   onChange={(event) => setKeywords(event.target.value)}
                   placeholder="guide, price, link"
@@ -932,8 +932,8 @@ function AutomationBuilderV1({
               <div className="step-content">
                 <div className="step-heading">
                   <div>
-                    <p className="eyebrow">Condition <em>optional</em></p>
-                    <h2>Keep the audience precise</h2>
+                    <p className="eyebrow">Who should get it <em>optional</em></p>
+                    <h2>Add another check if you need one</h2>
                   </div>
                   <CircleHelp size={21} strokeWidth={1.7} />
                 </div>
@@ -976,7 +976,7 @@ function AutomationBuilderV1({
           <div className="step-content">
             <div className="step-heading">
               <div>
-                <p className="eyebrow">{actions.length > 1 ? "Actions" : "Action"}</p>
+                <p className="eyebrow">Linkar will do this</p>
                 <h2>{isFacebook ? "What should Linkar reply publicly?" : "What should the person receive?"}</h2>
               </div>
               <Send size={21} strokeWidth={1.7} />
@@ -988,7 +988,7 @@ function AutomationBuilderV1({
                   {!usesTextTrigger && (
                     <span className="select-wrap">
                       <select
-                        aria-label={`Action ${index + 1} type`}
+                        aria-label={`What Linkar should send in step ${index + 1}`}
                         value={action.type}
                         onChange={(event) => changeActionType(index, event.target.value as FlowAction["type"])}
                       >
@@ -1318,9 +1318,9 @@ function AutomationBuilderV1({
                     </>
                   )}
                   <label className="field">
-                        <span>Lead webhook URL <em>optional</em></span>
+                        <span>Send new leads to another app <em>optional</em></span>
                         <input
-                          aria-label="Lead webhook URL"
+                          aria-label="App URL for new leads"
                           value={notifyUrl}
                           onChange={(event) => setNotifyUrl(event.target.value)}
                           placeholder="https://hooks.zapier.com/…"
@@ -1403,7 +1403,7 @@ function AutomationBuilderV1({
                           <small>Their remaining questions are skipped and the lead keeps what was already collected.</small>
                         </label>
                       )}
-                  <small>Asked after their email - answers are stored on the lead and included in the lead webhook.</small>
+                  <small>Asked after their email. Answers are saved with the contact and sent to the app URL above.</small>
                 </>
               )}
             </div>
@@ -1417,7 +1417,7 @@ function AutomationBuilderV1({
           <div className="step-content">
             <div className="step-heading">
               <div>
-                <p className="eyebrow">Guardrails <em>optional</em></p>
+                <p className="eyebrow">Limits <em>optional</em></p>
                 <h2>Set limits and timing</h2>
               </div>
               <ShieldCheck size={21} strokeWidth={1.7} />
@@ -1474,13 +1474,13 @@ function AutomationBuilderV1({
             </div>
             <ul className="review-summary" data-testid="review-summary">
               <li>
-                Triggered by {triggerType === "comment" ? "a comment" : triggerType === "message" ? "a DM" : triggerType === "referral" ? "a referral link tap" : triggerType === "optin" ? "an opt-in tap" : triggerType === "first_contact" ? "first contact" : "a story mention"}
+                Starts when there is {triggerType === "comment" ? "a comment" : triggerType === "message" ? "a message" : triggerType === "referral" ? "a referral-link tap" : triggerType === "optin" ? "a permission-button tap" : triggerType === "first_contact" ? "a first message" : "a Story mention"}
                 {usesTextTrigger ? (triggerMatch === "keyword" ? ` containing “${parseKeywords(keywords).join("”, “") || "add a keyword"}”` : " (any text)") : ""}
               </li>
               <li>{actions.length} message{actions.length === 1 ? "" : "s"} ready to send</li>
-              {triggerType !== "comment" && emailCaptureEnabled && <li>Collects the person’s email after the flow runs</li>}
+              {triggerType !== "comment" && emailCaptureEnabled && <li>Asks the person for their email after replying</li>}
               {followUps.filter((followUp) => followUp.text.trim()).length > 0 && (
-                <li>{followUps.filter((followUp) => followUp.text.trim()).length} follow-up nudge{followUps.filter((followUp) => followUp.text.trim()).length === 1 ? "" : "s"} scheduled after the flow</li>
+                <li>{followUps.filter((followUp) => followUp.text.trim()).length} reminder message{followUps.filter((followUp) => followUp.text.trim()).length === 1 ? "" : "s"} scheduled</li>
               )}
               {dailyLimit && <li>Daily send limit: {dailyLimit}</li>}
               <li>Priority: {priority || "0"}</li>
@@ -1533,9 +1533,9 @@ function AutomationBuilderV1({
       </div>
 
       {mobilePreviewOpen ? <button type="button" className="builder-preview-scrim" aria-label="Close phone mockup backdrop" onClick={() => setMobilePreviewOpen(false)} /> : null}
-      <aside className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`} aria-label="Test preview">
+      <aside className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`} aria-label="Message preview">
         <div className="builder-preview-heading">
-          <p className="eyebrow">Test preview</p>
+          <p className="eyebrow">Message preview</p>
           <button type="button" className="icon-button builder-preview-close" aria-label="Close phone mockup" onClick={() => setMobilePreviewOpen(false)}><X size={17} /></button>
         </div>
         <div className="preview-line" />
@@ -1579,7 +1579,7 @@ const defaultDefinitionV2: FlowDefinitionV2 = {
   delivery: { text: "", url: "", buttonLabel: "" },
 };
 
-const WIZARD_STEPS = ["Content", "Comment & reply", "Opening DM", "Delivery", "Guardrails", "Review"] as const;
+const WIZARD_STEPS = ["Choose posts", "Comment & reply", "Ask permission", "Send link", "Limits", "Review"] as const;
 const STEP_PREVIEW_VIEW: PreviewView[] = ["post", "comments", "dm", "dm", "dm", "dm"];
 
 function isLocalDeliveryUrl(url: URL): boolean {
@@ -1887,15 +1887,15 @@ function AutomationBuilderV2({
         <div className="builder-intro">
           <div>
             <p className="eyebrow">Guided builder</p>
-            <h1>{savedAutomationId ? "Tune this campaign" : "Build a follow-gated Reel campaign"}</h1>
-            <p className="muted">A public reply, a DM opt-in, a follow check, and a verified link: every step explicit.</p>
+            <h1>{savedAutomationId ? "Edit this comment reply" : "Send a link after someone follows you"}</h1>
+            <p className="muted">Choose the comment, ask permission to message them, check their follow, and send your link.</p>
           </div>
         </div>
 
         <label className="field field-wide">
-          <span>Automation name</span>
+          <span>Give this reply a name</span>
           <input
-            aria-label="Automation name"
+            aria-label="Reply name"
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="e.g. Reel giveaway follow gate"
@@ -1946,9 +1946,9 @@ function AutomationBuilderV2({
                 <Film size={21} strokeWidth={1.7} />
               </div>
               <label className="field">
-                <span>Trigger source</span>
+                <span>Which posts should Linkar watch?</span>
                 <span className="select-wrap">
-                  <select aria-label="Trigger source" value={source} onChange={(event) => changeSource(event.target.value as MediaSource)}>
+                  <select aria-label="Posts to watch" value={source} onChange={(event) => changeSource(event.target.value as MediaSource)}>
                     <option value="specific_media">Specific posts or Reels</option>
                     <option value="all_media">All of my posts</option>
                     <option value="next_media">The next post I publish</option>
@@ -1979,15 +1979,15 @@ function AutomationBuilderV2({
             <div className="step-content">
               <div className="step-heading">
                 <div>
-                  <p className="eyebrow">Trigger</p>
+                  <p className="eyebrow">When this happens</p>
                   <h2>What comment starts this campaign?</h2>
                 </div>
                 <MessageCircle size={21} strokeWidth={1.7} />
               </div>
               <label className="field">
-                <span>Match mode</span>
+                <span>Which comments count?</span>
                 <span className="select-wrap">
-                  <select aria-label="Match mode" value={match} onChange={(event) => setMatch(event.target.value as "keyword" | "any")}>
+                  <select aria-label="Which comments count?" value={match} onChange={(event) => setMatch(event.target.value as "keyword" | "any")}>
                     <option value="keyword">A keyword</option>
                     <option value="any">Any comment</option>
                   </select>
@@ -1996,9 +1996,9 @@ function AutomationBuilderV2({
               </label>
               {match === "keyword" && (
                 <label className="field field-spaced">
-                  <span>Keywords</span>
+                  <span>What words should Linkar look for?</span>
                   <input
-                    aria-label="Keywords"
+                    aria-label="Words to look for"
                     value={keywords}
                     onChange={(event) => setKeywords(event.target.value)}
                     placeholder="drop, giveaway, price"
@@ -2063,8 +2063,8 @@ function AutomationBuilderV2({
             <div className="step-content">
               <div className="step-heading">
                 <div>
-                  <p className="eyebrow">Opening DM</p>
-                  <h2>Send an opening message that asks for consent</h2>
+                  <p className="eyebrow">Ask permission</p>
+                  <h2>Ask before sending the link</h2>
                 </div>
                 <UserCheck size={21} strokeWidth={1.7} />
               </div>
@@ -2080,9 +2080,9 @@ function AutomationBuilderV2({
                 />
               </label>
               <label className="field field-spaced">
-                <span>Opt-in button label</span>
+                <span>Permission button text</span>
                 <input
-                  aria-label="Opt-in button label"
+                  aria-label="Permission button text"
                   value={optInButtonLabel}
                   onChange={(event) => setOptInButtonLabel(event.target.value)}
                   maxLength={QUICK_REPLY_LABEL_MAX_LENGTH}
@@ -2099,7 +2099,7 @@ function AutomationBuilderV2({
                   rows={3}
                   placeholder={"One variation per line - one is picked per person at random"}
                 />
-                <small>Variations keep the same opt-in button and rotate per participant.</small>
+                <small>Linkar keeps the same permission button and rotates the message for each person.</small>
               </label>
             </div>
           </section>
@@ -2109,8 +2109,8 @@ function AutomationBuilderV2({
             <div className="step-content">
               <div className="step-heading">
                 <div>
-                  <p className="eyebrow">Follow gate</p>
-                  <h2>Require a follow before the link unlocks</h2>
+                  <p className="eyebrow">Follower check</p>
+                  <h2>Check if they follow you before sending the link</h2>
                 </div>
                 <ShieldCheck size={21} strokeWidth={1.7} />
               </div>
@@ -2118,11 +2118,11 @@ function AutomationBuilderV2({
                 <input
                   type="checkbox"
                   role="switch"
-                  aria-label="Follow gate enabled"
+                  aria-label="Check whether they follow you"
                   checked={followGateRequired}
                   onChange={(event) => setFollowGateRequired(event.target.checked)}
                 />
-                <span>{followGateRequired ? "On - verify they follow you before delivering" : "Off - deliver right after the opt-in tap"}</span>
+                <span>{followGateRequired ? "On - check that they follow you before sending the link" : "Off - send the link after they give permission"}</span>
               </label>
               {followGateRequired && (
                 <FollowGateFields
@@ -2142,15 +2142,15 @@ function AutomationBuilderV2({
             <div className="step-content">
               <div className="step-heading">
                 <div>
-                  <p className="eyebrow">Delivery</p>
-                  <h2>What do you deliver once someone is verified?</h2>
+                  <p className="eyebrow">Send the link</p>
+                  <h2>What should Linkar send?</h2>
                 </div>
                 <Link2 size={21} strokeWidth={1.7} />
               </div>
               <label className="field">
-                <span>Delivery message</span>
+                <span>Message</span>
                 <textarea
-                  aria-label="Delivery message"
+                  aria-label="Message to send with the link"
                   value={deliveryText}
                   onChange={(event) => setDeliveryText(event.target.value)}
                   rows={2}
@@ -2160,11 +2160,11 @@ function AutomationBuilderV2({
               </label>
               <div className="field-grid field-spaced">
                 <label className="field">
-                  <span>Delivery link</span>
+                  <span>Link</span>
                   <div className="input-with-icon">
                     <Link2 size={16} />
                     <input
-                      aria-label="Delivery link"
+                      aria-label="Link to send"
                       value={deliveryUrl}
                       onChange={(event) => setDeliveryUrl(event.target.value)}
                       placeholder="https://your-site.com/prize"
@@ -2178,9 +2178,9 @@ function AutomationBuilderV2({
                   )}
                 </label>
                 <label className="field">
-                  <span>Delivery button label <em>optional</em></span>
+                  <span>Button text <em>optional</em></span>
                   <input
-                    aria-label="Delivery button label"
+                    aria-label="Link button text"
                     value={deliveryButtonLabel}
                     onChange={(event) => setDeliveryButtonLabel(event.target.value)}
                     maxLength={80}
@@ -2189,9 +2189,9 @@ function AutomationBuilderV2({
                 </label>
               </div>
               <label className="field field-spaced">
-                <span>Delivery copy variations <em>optional</em></span>
+                <span>Other ways to say it <em>optional</em></span>
                 <textarea
-                  aria-label="Delivery copy variations"
+                  aria-label="Other message versions"
                   value={deliveryVariants}
                   onChange={(event) => setDeliveryVariants(event.target.value)}
                   rows={3}
@@ -2208,7 +2208,7 @@ function AutomationBuilderV2({
             <div className="step-content">
               <div className="step-heading">
                 <div>
-                  <p className="eyebrow">Guardrails <em>optional</em></p>
+                  <p className="eyebrow">Limits <em>optional</em></p>
                   <h2>Set limits and timing</h2>
                 </div>
                 <ShieldCheck size={21} strokeWidth={1.7} />
@@ -2265,7 +2265,7 @@ function AutomationBuilderV2({
               </div>
               <ul className="review-summary" data-testid="review-summary">
                 <li>Watching {sourceSummary}</li>
-                <li>Triggered by {match === "keyword" ? (keywordList.length ? `a comment containing “${keywordList.join("”, “")}”` : "a keyword (add one below)") : "any comment"}</li>
+                <li>Starts when {match === "keyword" ? (keywordList.length ? `a comment contains “${keywordList.join("”, “")}”` : "a chosen word appears in a comment") : "anyone comments"}</li>
                 <li>{nonEmptyReplies.length || "No"} public reply variation{nonEmptyReplies.length === 1 ? "" : "s"} ready</li>
                 {followGateRequired ? (
                   <>
@@ -2273,7 +2273,7 @@ function AutomationBuilderV2({
                     <li>Recheck button reads “{recheckButtonLabel || "add a label"}”</li>
                   </>
                 ) : (
-                  <li>Follow gate is off - the link goes out right after the opt-in tap</li>
+                  <li>The follow check is off, so the link goes out after they give permission</li>
                 )}
                 <li>
                   Verified followers land on{" "}
@@ -2331,9 +2331,9 @@ function AutomationBuilderV2({
       </div>
 
       {mobilePreviewOpen ? <button type="button" className="builder-preview-scrim" aria-label="Close phone mockup backdrop" onClick={() => setMobilePreviewOpen(false)} /> : null}
-      <aside className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`} aria-label="Test preview">
+      <aside className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`} aria-label="Message preview">
         <div className="builder-preview-heading">
-          <p className="eyebrow">Test preview</p>
+          <p className="eyebrow">Message preview</p>
           <button type="button" className="icon-button builder-preview-close" aria-label="Close phone mockup" onClick={() => setMobilePreviewOpen(false)}><X size={17} /></button>
         </div>
         <div className="preview-line" />

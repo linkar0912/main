@@ -25,7 +25,7 @@ export function CommentConditionsSection({
       <label className="field field-spaced checkbox-field">
         <input type="checkbox" aria-label="Reply once per person" checked={replyOncePerUser} onChange={(event) => onReplyOncePerUserChange(event.target.checked)} />
         <span>Reply once per person</span>
-        <small>Prevents this automation from replying repeatedly to the same person.</small>
+        <small>Stops this reply from being sent repeatedly to the same person.</small>
       </label>
     </>
   );
