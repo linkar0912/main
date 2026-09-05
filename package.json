@@ -6,6 +6,7 @@
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "check:branding": "node scripts/check-branding.mjs",
+    "check:copy": "node scripts/check-customer-copy.mjs",
     "check:compose": "docker compose --env-file .env.production.example -f docker-compose.production.yml config --quiet",
     "preflight:billing": "node scripts/verify-billing-config.mjs",
     "preflight:instagram-ownership": "node scripts/preflight-instagram-ownership.mjs",
