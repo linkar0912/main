@@ -11,6 +11,19 @@ const SECRET_VARIABLES = ["RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"];
 const REQUIRED_VARIABLES = ["RAZORPAY_KEY_ID", ...SECRET_VARIABLES, ...PLAN_VARIABLES, "WORKER_HEALTH_URL"];
 const EXPECTED_WEBHOOK_URL = "https://app.linkar.in/api/razorpay/webhook";
 
+function isValidWorkerHealthUrl(value) {
+  try {
+    const url = new URL(value ?? "");
+    if (url.protocol === "https:") return true;
+    // Coolify's compose network keeps the worker private. The web container
+    // reaches it over the isolated Docker network, so this one exact HTTP
+    // origin is safe and is the default rendered by docker-compose.coolify.yml.
+    return url.protocol === "http:" && url.hostname === "worker" && url.port === "3001" && url.pathname === "/health";
+  } catch {
+    return false;
+  }
+}
+
 export function validateBillingConfig(env) {
   const errors = [];
   for (const name of REQUIRED_VARIABLES) {
@@ -38,11 +51,8 @@ export function validateBillingConfig(env) {
   } catch {
     errors.push("APP_URL must be a valid HTTPS URL");
   }
-  try {
-    const workerHealthUrl = new URL(env.WORKER_HEALTH_URL ?? "");
-    if (workerHealthUrl.protocol !== "https:") errors.push("WORKER_HEALTH_URL must be a valid HTTPS URL");
-  } catch {
-    if (env.WORKER_HEALTH_URL?.trim()) errors.push("WORKER_HEALTH_URL must be a valid HTTPS URL");
+  if (!isValidWorkerHealthUrl(env.WORKER_HEALTH_URL)) {
+    errors.push("WORKER_HEALTH_URL must be HTTPS or the private Coolify URL http://worker:3001/health");
   }
 
   return { ok: errors.length === 0, errors, webhookUrl, planVariables: PLAN_VARIABLES };

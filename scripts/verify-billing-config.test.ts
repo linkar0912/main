@@ -14,7 +14,7 @@ const completeEnv: NodeJS.ProcessEnv = {
   ...process.env,
   NODE_ENV: "production",
   APP_URL: "https://app.linkar.in",
-  WORKER_HEALTH_URL: "https://worker.internal/health",
+  WORKER_HEALTH_URL: "http://worker:3001/health",
   RAZORPAY_KEY_ID: "rzp_live_public_test_value",
   RAZORPAY_KEY_SECRET: "fake-key-secret-that-must-never-print",
   RAZORPAY_WEBHOOK_SECRET: "fake-webhook-secret-that-must-never-print",
@@ -64,6 +64,12 @@ describe("billing configuration preflight", () => {
     const result = run({ ...completeEnv, RAZORPAY_KEY_ID: "rzp_test_public_value" });
     expect(result.status).toBe(1);
     expect(`${result.stdout}${result.stderr}`).toContain("RAZORPAY_KEY_ID must be a live-mode key");
+  });
+
+  it("rejects an arbitrary insecure worker endpoint", () => {
+    const result = run({ ...completeEnv, WORKER_HEALTH_URL: "http://worker.internal/health" });
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}${result.stderr}`).toContain("WORKER_HEALTH_URL");
   });
 
   it("rejects reused plan IDs across tiers or billing intervals", () => {
