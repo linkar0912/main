@@ -117,12 +117,13 @@ export function AdminSecurityScreen({
 
   async function verifyEnrollment(event: React.FormEvent) {
     event.preventDefault();
-    if (!enrollment || !/^\d{6}$/.test(code)) return;
+    const factorId = enrollment?.factorId ?? verifiedFactors[0]?.id;
+    if (!factorId || !/^\d{6}$/.test(code)) return;
     setBusy(true);
     setError(null);
     try {
       const data = await post(
-        { action: "verify", factorId: enrollment.factorId, code },
+        { action: "verify", factorId, code },
         "Verify owner MFA",
       );
       onVerified(typeof data.redirectTo === "string" ? data.redirectTo : "/admin");
@@ -205,13 +206,35 @@ export function AdminSecurityScreen({
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Required before access</p>
-              <h2>MFA enrollment required</h2>
+              <h2>{verifiedFactors.length > 0 ? "Verify your authenticator" : "MFA enrollment required"}</h2>
             </div>
             <LockKeyhole size={24} aria-hidden />
           </div>
-          <p className="muted">Add Linkar to a TOTP authenticator, then enter one fresh six-digit code.</p>
+          <p className="muted">
+            {verifiedFactors.length > 0
+              ? `Enter a fresh six-digit code from ${verifiedFactors[0]?.friendlyName ?? "your authenticator"}.`
+              : "Add Linkar to a TOTP authenticator, then enter one fresh six-digit code."}
+          </p>
 
-          {!enrollment ? (
+          {verifiedFactors.length > 0 ? (
+            <form className="admin-enrollment-fields admin-existing-factor" onSubmit={verifyEnrollment}>
+              <label className="field">
+                <span>Six-digit verification code</span>
+                <input
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  autoFocus
+                />
+              </label>
+              <button className="button button-primary" type="submit" disabled={busy || !/^\d{6}$/.test(code)}>
+                Verify and open admin
+              </button>
+            </form>
+          ) : !enrollment ? (
             <button className="button button-primary" type="button" disabled={busy} onClick={() => void beginEnrollment()}>
               <KeyRound size={16} aria-hidden /> Set up authenticator
             </button>

@@ -1501,7 +1501,7 @@ function AutomationBuilderV1({
         </div>
 
         <div className="builder-footer">
-          <button type="button" aria-label="Open phone mockup" className="button button-secondary builder-mobile-preview-trigger" onClick={() => setMobilePreviewOpen(true)}>
+          <button type="button" aria-label="Open phone mockup" className="button button-secondary builder-mobile-preview-trigger" onClick={() => { setError(""); setMobilePreviewOpen(true); }}>
             <Eye size={16} /> Preview
           </button>
           <div className="builder-actions">
@@ -2295,7 +2295,7 @@ function AutomationBuilderV2({
         </div>
 
         <div className="builder-footer">
-          <button type="button" aria-label="Open phone mockup" className="button button-secondary builder-mobile-preview-trigger" onClick={() => setMobilePreviewOpen(true)}>
+          <button type="button" aria-label="Open phone mockup" className="button button-secondary builder-mobile-preview-trigger" onClick={() => { setError(""); setMobilePreviewOpen(true); }}>
             <Eye size={16} /> Preview
           </button>
           <div className="builder-actions">

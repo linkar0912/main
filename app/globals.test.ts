@@ -58,6 +58,7 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.condition-marker,\s*\.guard-marker\s*{[^}]*background:\s*var\(--surface-sunk\)[^}]*color:\s*var\(--slate\)/);
     expect(css).not.toMatch(/\.quickstart-badge\s*{[^}]*var\(--flame\)/);
     expect(css).not.toMatch(/\.bar-participants,\s*\.swatch-participants\s*{[^}]*var\(--grape\)/);
+    expect(css).not.toMatch(/var\(--surface\)/);
   });
 
   it("keeps text readable on brand fills in both themes", () => {
@@ -87,10 +88,19 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/@media \(max-width:\s*820px\)[\s\S]*?\.automation-row\s*{[^}]*flex-wrap:\s*wrap/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.settings-hero\s*{[^}]*align-items:\s*stretch[^}]*flex-direction:\s*column/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.automation-row\s*{[^}]*flex-wrap:\s*wrap/);
-    expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.wizard-progress-label\s*{[^}]*display:\s*inline/);
+    expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.wizard-progress-label\s*{[^}]*display:\s*none/);
+    expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.wizard-progress-step\.is-active \.wizard-progress-label\s*{[^}]*display:\s*inline/);
     expect(css).toMatch(/@media \(max-width:\s*820px\)[\s\S]*?\.wizard-progress-label\s*{[^}]*display:\s*inline/);
     expect(css).toMatch(/\.sequence-submit-actions \.text-link\s*{[^}]*min-height:\s*44px/);
     expect(css).toMatch(/\.row-identity\s*{[^}]*min-width:\s*0/);
+  });
+
+  it("keeps builder overlays inside an iPhone viewport", () => {
+    expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.action-notice\s*{[^}]*left:\s*14px[^}]*right:\s*14px[^}]*transform:\s*none[^}]*width:\s*auto/);
+    expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.builder-preview\.is-open\s*{[^}]*height:\s*100dvh[^}]*inset:\s*0/);
+    expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.builder-preview\.is-open \.ig-phone\s*{[^}]*height:\s*min\(500px,\s*calc\(100dvh - 230px\)\)/);
+    expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.template-picker\s*{[^}]*height:\s*100dvh/);
+    expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.template-picker-categories\s*{[^}]*flex-wrap:\s*nowrap[^}]*overflow-x:\s*auto/);
   });
 
   it("keeps settings cards free of decorative top strips", () => {

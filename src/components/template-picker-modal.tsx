@@ -194,7 +194,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
   const rest = visible.filter((item) => !item.popular);
 
   return createPortal(
-    <div className="modal-scrim" onMouseDown={onClose}>
+    <div className="modal-scrim template-picker-scrim" onMouseDown={onClose}>
       <div className="modal-panel is-wide template-picker" role="dialog" aria-modal="true" aria-labelledby={headingId} onMouseDown={(event) => event.stopPropagation()}>
         <header className="template-picker-head">
           <h2 id={headingId}>Templates</h2>

@@ -74,6 +74,29 @@ describe("AdminSecurityScreen", () => {
     expect(screen.getByText("MFA enrollment required")).toBeTruthy();
   });
 
+  it("challenges an existing verified factor instead of trying to enroll a duplicate", async () => {
+    const onVerified = vi.fn();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { action: string; factorId: string; code: string };
+      expect(body).toEqual({ action: "verify", factorId: "factor-primary", code: "654321" });
+      return jsonResponse({ data: { verified: true, redirectTo: "/admin" } });
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{
+      aal: "aal1",
+      nextAal: "aal2",
+      factors: [{ id: "factor-primary", friendlyName: "Linkar Operator", factorType: "totp", status: "verified" }],
+    }} onVerified={onVerified} />);
+
+    expect(screen.getByRole("heading", { name: "Verify your authenticator" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Set up authenticator" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Six-digit verification code"), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and open admin" }));
+
+    await waitFor(() => expect(onVerified).toHaveBeenCalledWith("/admin"));
+  });
+
   it("shows factor removal only when another verified recovery factor exists", async () => {
     global.fetch = vi.fn() as typeof fetch;
 
