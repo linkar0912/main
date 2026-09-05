@@ -17,7 +17,7 @@ function billingView(overrides: Record<string, unknown> = {}) {
 }
 
 describe("BillingSettings", () => {
-  afterEach(() => { cleanup(); vi.unstubAllGlobals(); checkout.mockReset(); });
+  afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); checkout.mockReset(); });
 
   it("shows the exact monthly and annual launch prices and operating limits", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => billingView() }));
@@ -75,6 +75,56 @@ describe("BillingSettings", () => {
     await waitFor(() => expect(checkout).toHaveBeenCalledWith({ key: "rzp_test_public", subscriptionId: "sub_1" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/billing/checkout/verify", expect.objectContaining({ method: "POST" })));
     expect(await screen.findByText(/activating your plan/i)).toBeTruthy();
+  });
+
+  it("lets an owner switch the current paid plan from monthly to annual", async () => {
+    const activeCreator = billingView({
+      entitlementPlanKey: "creator",
+      subscription: { status: "ACTIVE", planId: "plan_creator", interval: "MONTHLY" },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => activeCreator })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "scheduled" }) })
+      .mockResolvedValue({ ok: true, json: async () => activeCreator });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<BillingSettings />); });
+
+    expect((await screen.findByRole("button", { name: /current billing/i })).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("radio", { name: /Annual/ }));
+    const annualButton = screen.getByRole("button", { name: /choose creator/i });
+    expect(annualButton.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(annualButton);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/billing/change-plan", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ plan: "creator", interval: "ANNUAL" }),
+    })));
+  });
+
+  it("stops activation polling and prevents a duplicate checkout while Razorpay is delayed", async () => {
+    const waitingView = billingView({
+      entitlementPlanKey: "free",
+      subscription: { status: "AUTHENTICATED", planId: "plan_creator", interval: "MONTHLY" },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => billingView() })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "ready", keyId: "rzp_test_public", subscriptionId: "sub_1", attemptId: "attempt_1" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "processing" }) })
+      .mockResolvedValue({ ok: true, json: async () => waitingView });
+    vi.stubGlobal("fetch", fetchMock);
+    checkout.mockResolvedValue({ razorpay_payment_id: "pay_1", razorpay_subscription_id: "sub_1", razorpay_signature: "a".repeat(64) });
+    await act(async () => { render(<BillingSettings />); });
+    const creatorButton = await screen.findByRole("button", { name: "Choose Creator" });
+    vi.useFakeTimers();
+    fireEvent.click(creatorButton);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(screen.getByRole("button", { name: "Choose Growth" }).hasAttribute("disabled")).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+    expect(screen.getByText(/Razorpay is still confirming your plan/i)).toBeTruthy();
+    const callsAfterTimeout = fetchMock.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    expect(fetchMock.mock.calls).toHaveLength(callsAfterTimeout);
   });
 
   it("explains why members cannot make financial changes", async () => {

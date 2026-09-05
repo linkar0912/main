@@ -5,6 +5,7 @@ import { openRazorpaySubscriptionCheckout } from "./razorpay-checkout";
 
 describe("Razorpay Checkout adapter", () => {
   afterEach(() => {
+    vi.useRealTimers();
     document.head.innerHTML = "";
     delete (window as unknown as { Razorpay?: unknown }).Razorpay;
   });
@@ -17,6 +18,17 @@ describe("Razorpay Checkout adapter", () => {
     scripts[0].dispatchEvent(new Event("error"));
     await expect(first).rejects.toThrow("checkout_unavailable");
     await expect(second).rejects.toThrow("checkout_unavailable");
+  });
+
+  it("fails cleanly when Razorpay's Checkout script never finishes loading", async () => {
+    vi.useFakeTimers();
+    const result = openRazorpaySubscriptionCheckout({ key: "rzp_test_public", subscriptionId: "sub_1" });
+    const rejection = expect(result).rejects.toThrow("checkout_unavailable");
+
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    await rejection;
+    expect(document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')).toBeNull();
   });
 
   it("opens Linkar subscription Checkout and returns the verified response", async () => {

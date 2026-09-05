@@ -9,6 +9,9 @@ import { FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
 import type { BillingInterval, BillingPlanKey } from "@/src/lib/billing/types";
 import { ActionNotice } from "./action-notice";
 
+const ACTIVATION_POLL_MS = 3_000;
+const ACTIVATION_TIMEOUT_MS = 45_000;
+
 function formatRupees(paise: number): string {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(paise / 100);
 }
@@ -48,15 +51,22 @@ export function BillingSettings() {
 
   useEffect(() => {
     if (!activating) return;
-    const timer = window.setInterval(() => {
+    const pollTimer = window.setInterval(() => {
       void load(true).then((next) => {
         if (next.subscription?.status === "ACTIVE") {
           setActivating(false);
           setMessage("Your plan is active.");
         }
       }).catch(() => undefined);
-    }, 1_500);
-    return () => window.clearInterval(timer);
+    }, ACTIVATION_POLL_MS);
+    const timeoutTimer = window.setTimeout(() => {
+      setActivating(false);
+      setMessage("Checkout was verified. Razorpay is still confirming your plan. Refresh in a moment, and do not pay again.");
+    }, ACTIVATION_TIMEOUT_MS);
+    return () => {
+      window.clearInterval(pollTimer);
+      window.clearTimeout(timeoutTimer);
+    };
   }, [activating, load]);
 
   useEffect(() => {
@@ -201,6 +211,9 @@ export function BillingSettings() {
       <div className="billing-plan-grid">
         {view.catalog.map((plan) => {
           const current = view.entitlementPlanKey === plan.key;
+          const currentBillingSelection = view.subscription?.status === "ACTIVE"
+            && view.subscription.planId === `plan_${plan.key}`
+            && view.subscription.interval === interval;
           const price = interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise;
           return (
             <article className={`billing-plan ${current ? "is-current" : ""} ${plan.key === "growth" ? "is-featured" : ""}`} aria-label={`${plan.name} plan`} key={plan.key}>
@@ -217,8 +230,8 @@ export function BillingSettings() {
                 <span><strong>{plan.memberLimit}</strong> {plan.memberLimit === 1 ? "seat" : "seats"}</span>
               </div>
               <ul>{plan.features.map((feature) => <li key={feature}><Check size={14} />{feature}</li>)}</ul>
-              <button className={`button ${current ? "button-secondary" : "button-primary"}`} type="button" disabled={current || !view.canManage || !view.billingConfigured || Boolean(busyPlan)} onClick={() => void choosePlan(plan.key)}>
-                {current ? "Current plan" : busyPlan === plan.key ? "Opening…" : `Choose ${plan.name}`}
+              <button className={`button ${currentBillingSelection ? "button-secondary" : "button-primary"}`} type="button" disabled={currentBillingSelection || activating || !view.canManage || !view.billingConfigured || Boolean(busyPlan)} onClick={() => void choosePlan(plan.key)}>
+                {currentBillingSelection ? "Current billing" : busyPlan === plan.key ? "Opening…" : `Choose ${plan.name}`}
               </button>
             </article>
           );

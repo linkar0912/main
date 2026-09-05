@@ -41,13 +41,24 @@ export async function requireBillingOwner(request: Request): Promise<BillingGuar
   if (guard.role !== "OWNER") {
     return { ok: false, error: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
   }
+  const suppliedOrigin = request.headers.get("origin")?.trim();
+  if (!suppliedOrigin) {
+    return { ok: false, error: NextResponse.json({ error: "origin_required" }, { status: 403 }) };
+  }
+  let normalizedOrigin: string;
+  try {
+    normalizedOrigin = new URL(suppliedOrigin).origin;
+  } catch {
+    return { ok: false, error: NextResponse.json({ error: "origin_mismatch" }, { status: 403 }) };
+  }
+  if (normalizedOrigin !== new URL(request.url).origin) {
+    return { ok: false, error: NextResponse.json({ error: "origin_mismatch" }, { status: 403 }) };
+  }
   const env = getServerEnv();
   const address = clientAddress(request, env.trustedProxyHops);
   const ipHash = createHmac("sha256", env.authSessionSecret)
     .update(`billing-client-address\0${address}`)
     .digest("hex");
-  const requestOrigin = new URL(request.url).origin;
-  const suppliedOrigin = request.headers.get("origin");
   return {
     ...guard,
     auditContext: {
@@ -57,7 +68,7 @@ export async function requireBillingOwner(request: Request): Promise<BillingGuar
       workspaceId: guard.session.workspaceId,
       ipHash,
       userAgent: (request.headers.get("user-agent") ?? "unknown").slice(0, 1_000),
-      origin: suppliedOrigin === requestOrigin ? suppliedOrigin : requestOrigin,
+      origin: normalizedOrigin,
     },
   };
 }

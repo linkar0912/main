@@ -87,6 +87,18 @@ describe("Razorpay webhook processing", () => {
     expect(() => normalizeRazorpaySubscriptionEvent({ event: "subscription.activated", payload: {} }, env)).toThrow("invalid_webhook_payload");
   });
 
+  it("reconciles Razorpay's subscription.updated event without granting a plan early", () => {
+    const updated = normalizeRazorpaySubscriptionEvent(JSON.parse(body("subscription.updated", { status: "active" }).toString("utf8")), env);
+
+    expect(updated).toMatchObject({
+      eventType: "subscription.updated",
+      providerStatus: "active",
+      status: "ACTIVE",
+      linkarPlanId: "plan_creator",
+    });
+    expect(entitlementPlanForEvent(updated!, "plan_growth", new Date("2026-09-04T12:00:00Z"))).toBe("plan_growth");
+  });
+
   it("grants paid access only for activated or charged events", () => {
     const active = normalizeRazorpaySubscriptionEvent(JSON.parse(body().toString("utf8")), env)!;
     const authenticated = normalizeRazorpaySubscriptionEvent(JSON.parse(body("subscription.authenticated").toString("utf8")), env)!;

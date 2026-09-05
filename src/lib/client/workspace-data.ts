@@ -76,6 +76,8 @@ export type BillingView = {
   deliveriesUsed: number;
   subscription: null | {
     status: string;
+    planId?: string;
+    interval?: "MONTHLY" | "ANNUAL";
     currentPeriodEnd?: string | null;
     cancelAtPeriodEnd?: boolean;
     pendingPlanId?: string | null;

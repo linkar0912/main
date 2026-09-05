@@ -22,6 +22,7 @@ const RELEVANT_EVENTS = new Set([
   "subscription.cancelled",
   "subscription.completed",
   "subscription.expired",
+  "subscription.updated",
 ]);
 
 export type NormalizedRazorpayEvent = {
@@ -65,7 +66,7 @@ function unixDate(value: unknown, required = false): Date | undefined {
   return new Date(value * 1_000);
 }
 
-function normalizedStatus(eventType: string): BillingSubscriptionStatus {
+function normalizedStatus(eventType: string, providerStatus: string): BillingSubscriptionStatus {
   const suffix = eventType.slice("subscription.".length);
   const mapping: Record<string, BillingSubscriptionStatus> = {
     authenticated: BillingSubscriptionStatus.AUTHENTICATED,
@@ -79,7 +80,20 @@ function normalizedStatus(eventType: string): BillingSubscriptionStatus {
     completed: BillingSubscriptionStatus.COMPLETED,
     expired: BillingSubscriptionStatus.EXPIRED,
   };
-  return mapping[suffix];
+  const providerMapping: Record<string, BillingSubscriptionStatus> = {
+    created: BillingSubscriptionStatus.CREATED,
+    authenticated: BillingSubscriptionStatus.AUTHENTICATED,
+    active: BillingSubscriptionStatus.ACTIVE,
+    pending: BillingSubscriptionStatus.PENDING,
+    halted: BillingSubscriptionStatus.HALTED,
+    paused: BillingSubscriptionStatus.PAUSED,
+    cancelled: BillingSubscriptionStatus.CANCELLED,
+    completed: BillingSubscriptionStatus.COMPLETED,
+    expired: BillingSubscriptionStatus.EXPIRED,
+  };
+  const status = suffix === "updated" ? providerMapping[providerStatus] : mapping[suffix];
+  if (!status) throw new WebhookError("invalid_webhook_payload");
+  return status;
 }
 
 export function normalizeRazorpaySubscriptionEvent(
@@ -97,14 +111,15 @@ export function normalizeRazorpaySubscriptionEvent(
   const trustedPlan = resolveLinkarPlanFromRazorpayId(providerPlanId, env);
   if (!trustedPlan) throw new WebhookError("invalid_webhook_payload");
   const notes = record(entity.notes);
+  const providerStatus = requiredString(entity.status);
   return {
     eventType,
     subscriptionId: requiredString(entity.id),
     providerPlanId,
     linkarPlanId: trustedPlan.planId,
     interval: trustedPlan.interval,
-    providerStatus: requiredString(entity.status),
-    status: normalizedStatus(eventType),
+    providerStatus,
+    status: normalizedStatus(eventType, providerStatus),
     providerCreatedAt: unixDate(root?.created_at, true)!,
     currentPeriodStart: unixDate(entity.current_start),
     currentPeriodEnd: unixDate(entity.current_end),

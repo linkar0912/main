@@ -11,7 +11,9 @@ vi.mock("@/src/lib/repository-provider", () => ({
 }));
 
 const { requireBillingOwner, requireBillingReader } = await import("./authorization");
-const request = new Request("https://app.linkar.in/api/billing");
+const request = new Request("https://app.linkar.in/api/billing", {
+  headers: { origin: "https://app.linkar.in" },
+});
 
 describe("billing authorization", () => {
   beforeEach(() => {
@@ -48,5 +50,18 @@ describe("billing authorization", () => {
     const member = await requireBillingOwner(request);
     expect(member.ok).toBe(false);
     if (!member.ok) expect(member.error.status).toBe(403);
+  });
+
+  it("rejects billing mutations without the exact application origin", async () => {
+    const missingOrigin = await requireBillingOwner(new Request("https://app.linkar.in/api/billing/cancel", { method: "POST" }));
+    expect(missingOrigin.ok).toBe(false);
+    if (!missingOrigin.ok) expect(await missingOrigin.error.json()).toEqual({ error: "origin_required" });
+
+    const crossOrigin = await requireBillingOwner(new Request("https://app.linkar.in/api/billing/cancel", {
+      method: "POST",
+      headers: { origin: "https://malicious.example" },
+    }));
+    expect(crossOrigin.ok).toBe(false);
+    if (!crossOrigin.ok) expect(await crossOrigin.error.json()).toEqual({ error: "origin_mismatch" });
   });
 });

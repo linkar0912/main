@@ -207,4 +207,15 @@ describe("billing service", () => {
     expect(gateway.cancelSubscription).toHaveBeenCalledWith("sub_1");
     expect(repo.recordPendingCancellation).toHaveBeenCalledWith("billing_1");
   });
+
+  it("maps a missing plan-change mapping to the safe configuration error", async () => {
+    const service = createBillingService({
+      repository: repository(),
+      provider: provider(),
+      env: { razorpay: { ...env.razorpay, planIds: { ...env.razorpay.planIds, growth: { ...env.razorpay.planIds.growth, ANNUAL: undefined } } } },
+    });
+
+    await expect(service.schedulePlanChange("ws_1", "growth", "ANNUAL"))
+      .rejects.toMatchObject({ code: "billing_not_configured" });
+  });
 });

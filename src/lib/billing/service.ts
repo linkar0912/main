@@ -180,7 +180,12 @@ export function createBillingService(dependencies: BillingServiceDependencies) {
       configuredCredentials();
       const subscription = await dependencies.repository.getSubscriptionForOwnerAction(workspaceId);
       if (!subscription || subscription.status !== "ACTIVE") throw new BillingServiceError("subscription_conflict");
-      const providerPlanId = resolveRazorpayPlanId(plan, interval, dependencies.env);
+      let providerPlanId: string;
+      try {
+        providerPlanId = resolveRazorpayPlanId(plan, interval, dependencies.env);
+      } catch {
+        throw new BillingServiceError("billing_not_configured");
+      }
       try {
         await dependencies.provider.updateSubscription({ subscriptionId: subscription.providerSubscriptionId, planId: providerPlanId });
       } catch {

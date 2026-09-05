@@ -15,6 +15,7 @@ declare global {
 }
 
 let checkoutLoad: Promise<void> | undefined;
+const CHECKOUT_LOAD_TIMEOUT_MS = 15_000;
 
 function loadCheckout(): Promise<void> {
   if (window.Razorpay) return Promise.resolve();
@@ -23,11 +24,18 @@ function loadCheckout(): Promise<void> {
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => {
+    const fail = () => {
+      window.clearTimeout(timeout);
+      script.remove();
       checkoutLoad = undefined;
       reject(new Error("checkout_unavailable"));
     };
+    const timeout = window.setTimeout(fail, CHECKOUT_LOAD_TIMEOUT_MS);
+    script.onload = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    script.onerror = fail;
     document.head.appendChild(script);
   });
   return checkoutLoad;
