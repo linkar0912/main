@@ -1,4 +1,5 @@
 import type { ConnectionStatus, MemberRole } from "../repository";
+import type { BillingCatalogPlan } from "../billing/types";
 
 export type WorkspaceBootstrap = {
   email: string;
@@ -55,34 +56,88 @@ export type FacebookPageSummary = {
   avatarUrl?: string;
 };
 
-type ClientCache<T> = { value?: T; pending?: Promise<T>; fetcher?: typeof fetch };
+export type TeamOverview = {
+  members: Array<{ email: string; role: string }>;
+  invitations: Array<{ id: string; email: string; role: string; expiresAt: string }>;
+};
+
+export type MessagingSettings = {
+  startHour: number;
+  endHour: number;
+  timezone: string;
+} | null;
+
+export type BillingView = {
+  catalog: BillingCatalogPlan[];
+  canManage: boolean;
+  billingConfigured: boolean;
+  entitlementPlanKey: string;
+  deliveriesUsed: number;
+  subscription: null | {
+    status: string;
+    currentPeriodEnd?: string | null;
+    cancelAtPeriodEnd?: boolean;
+    pendingPlanId?: string | null;
+  };
+};
+
+export type InsightsDayPoint = { day: string; count: number };
+export type InsightsOverview = {
+  timeseries?: {
+    participantsPerDay?: InsightsDayPoint[];
+    sentPerDay?: InsightsDayPoint[];
+  };
+  capturedEmails?: number;
+  optedOut?: number;
+};
+
+export type WorkspaceResourceKey =
+  | "bootstrap"
+  | "account-profile"
+  | "instagram-connections"
+  | "facebook-pages"
+  | "team-overview"
+  | "messaging-settings"
+  | "billing"
+  | "insights-overview";
+
+type ClientCache<T> = {
+  value?: T;
+  pending?: Promise<T>;
+  fetchedAt?: number;
+  fetcher?: typeof fetch;
+};
+
+const FRESH_FOR_MS = 30_000;
 
 const bootstrapCache: ClientCache<WorkspaceBootstrap> = {};
 const accountProfileCache: ClientCache<AccountProfile> = {};
 const connectionsCache: ClientCache<InstagramConnectionSummary[]> = {};
 const facebookPagesCache: ClientCache<FacebookPageSummary[]> = {};
+const teamOverviewCache: ClientCache<TeamOverview> = {};
+const messagingSettingsCache: ClientCache<MessagingSettings> = {};
+const billingCache: ClientCache<BillingView> = {};
+const insightsOverviewCache: ClientCache<InsightsOverview> = {};
 
-async function requestData<T>(url: string): Promise<T> {
+async function requestJson<T>(url: string, select: (payload: unknown) => T): Promise<T> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Could not load ${url}`);
-  const payload = await response.json() as { data?: T };
-  if (payload.data === undefined) throw new Error(`Missing data from ${url}`);
-  return payload.data;
+  return select(await response.json());
 }
 
-function cachedRequest<T>(cache: ClientCache<T>, url: string): Promise<T> {
-  // A replaced fetch implementation indicates a new test/runtime boundary.
-  // In the browser the native fetch reference stays stable for the session.
-  if (cache.fetcher !== fetch) {
-    cache.value = undefined;
-    cache.pending = undefined;
-    cache.fetcher = fetch;
-  }
-  if (cache.value !== undefined) return Promise.resolve(cache.value);
-  if (cache.pending) return cache.pending;
-  cache.pending = requestData<T>(url)
+function wrappedData<T>(url: string): (payload: unknown) => T {
+  return (payload) => {
+    const data = (payload as { data?: T }).data;
+    if (data === undefined) throw new Error(`Missing data from ${url}`);
+    return data;
+  };
+}
+
+function startRequest<T>(cache: ClientCache<T>, url: string, select: (payload: unknown) => T): Promise<T> {
+  const pending = requestJson(url, select)
     .then((value) => {
       cache.value = value;
+      cache.fetchedAt = Date.now();
       cache.pending = undefined;
       return value;
     })
@@ -90,7 +145,45 @@ function cachedRequest<T>(cache: ClientCache<T>, url: string): Promise<T> {
       cache.pending = undefined;
       throw error;
     });
-  return cache.pending;
+  cache.pending = pending;
+  return pending;
+}
+
+function sharedRequest<T>(cache: ClientCache<T>, url: string, select: (payload: unknown) => T): Promise<T> {
+  // A replaced fetch implementation indicates a new test/runtime boundary.
+  // In the browser the native fetch reference stays stable for the session.
+  if (cache.fetcher !== fetch) {
+    cache.value = undefined;
+    cache.pending = undefined;
+    cache.fetchedAt = undefined;
+    cache.fetcher = fetch;
+  }
+  if (cache.value !== undefined && cache.fetchedAt !== undefined) {
+    if (Date.now() - cache.fetchedAt < FRESH_FOR_MS) return Promise.resolve(cache.value);
+    if (!cache.pending) {
+      // Keep confirmed content visible while a stale entry refreshes. The
+      // rejection handler prevents an unavailable refresh from becoming an
+      // unhandled promise; the last confirmed value stays available.
+      void startRequest(cache, url, select).catch(() => undefined);
+    }
+    return Promise.resolve(cache.value);
+  }
+  if (cache.pending) return cache.pending;
+  return startRequest(cache, url, select);
+}
+
+function forCaller<T>(request: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return request;
+  if (signal.aborted) return Promise.reject(new DOMException("The request was aborted", "AbortError"));
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new DOMException("The request was aborted", "AbortError"));
+    signal.addEventListener("abort", abort, { once: true });
+    void request.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
+function cachedRequest<T>(cache: ClientCache<T>, url: string, signal?: AbortSignal): Promise<T> {
+  return forCaller(sharedRequest(cache, url, wrappedData<T>(url)), signal);
 }
 
 export function getWorkspaceBootstrap(): Promise<WorkspaceBootstrap> {
@@ -109,32 +202,67 @@ export function getFacebookPages(): Promise<FacebookPageSummary[]> {
   return cachedRequest(facebookPagesCache, "/api/facebook/connection");
 }
 
+export function getTeamOverview(signal?: AbortSignal): Promise<TeamOverview> {
+  return forCaller(sharedRequest(teamOverviewCache, "/api/team/invitations", (payload) => {
+    const result = payload as Partial<TeamOverview>;
+    return { members: result.members ?? [], invitations: result.invitations ?? [] };
+  }), signal);
+}
+
+export function getMessagingSettings(signal?: AbortSignal): Promise<MessagingSettings> {
+  return cachedRequest(messagingSettingsCache, "/api/workspace/messaging", signal);
+}
+
+export function getBillingView(signal?: AbortSignal): Promise<BillingView> {
+  return cachedRequest(billingCache, "/api/billing", signal);
+}
+
+export function getInsightsOverview(signal?: AbortSignal): Promise<InsightsOverview> {
+  return forCaller(sharedRequest(insightsOverviewCache, "/api/insights?include=overview", (payload) => payload as InsightsOverview), signal);
+}
+
+function resetCache(cache: ClientCache<unknown>): void {
+  cache.value = undefined;
+  cache.pending = undefined;
+  cache.fetchedAt = undefined;
+  cache.fetcher = undefined;
+}
+
+export function invalidateWorkspaceResource(key: WorkspaceResourceKey): void {
+  const caches: Record<WorkspaceResourceKey, ClientCache<unknown>> = {
+    bootstrap: bootstrapCache,
+    "account-profile": accountProfileCache,
+    "instagram-connections": connectionsCache,
+    "facebook-pages": facebookPagesCache,
+    "team-overview": teamOverviewCache,
+    "messaging-settings": messagingSettingsCache,
+    billing: billingCache,
+    "insights-overview": insightsOverviewCache,
+  };
+  resetCache(caches[key]);
+}
+
 /**
  * Force a fresh fetch of the workspace bootstrap, bypassing the in-memory
  * cache. Use after a role change, plan upgrade, or avatar update so the
  * sidebar reflects server state without a full page reload.
  */
 export function refreshWorkspaceBootstrap(): Promise<WorkspaceBootstrap> {
-  bootstrapCache.value = undefined;
-  bootstrapCache.pending = undefined;
+  invalidateWorkspaceResource("bootstrap");
   return getWorkspaceBootstrap();
 }
 
 /** Clear after connection mutations; the no-argument form is also useful at a
  * session boundary and keeps isolated component tests deterministic. */
 export function clearWorkspaceDataCache(scope: "connections" | "all" = "all"): void {
-  connectionsCache.value = undefined;
-  connectionsCache.pending = undefined;
-  connectionsCache.fetcher = undefined;
-  facebookPagesCache.value = undefined;
-  facebookPagesCache.pending = undefined;
-  facebookPagesCache.fetcher = undefined;
+  invalidateWorkspaceResource("instagram-connections");
+  invalidateWorkspaceResource("facebook-pages");
   if (scope === "all") {
-    bootstrapCache.value = undefined;
-    bootstrapCache.pending = undefined;
-    bootstrapCache.fetcher = undefined;
-    accountProfileCache.value = undefined;
-    accountProfileCache.pending = undefined;
-    accountProfileCache.fetcher = undefined;
+    invalidateWorkspaceResource("bootstrap");
+    invalidateWorkspaceResource("account-profile");
+    invalidateWorkspaceResource("team-overview");
+    invalidateWorkspaceResource("messaging-settings");
+    invalidateWorkspaceResource("billing");
+    invalidateWorkspaceResource("insights-overview");
   }
 }
