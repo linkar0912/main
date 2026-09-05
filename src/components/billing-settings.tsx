@@ -204,7 +204,7 @@ export function BillingSettings() {
         <div className="billing-invite-form">
           <label className="sr-only" htmlFor="premium-invite-code">Premium invite code</label>
           <input id="premium-invite-code" value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="LINKAR-XXXX-XXXX-XXXX" autoComplete="off" />
-          <button className="button button-primary" type="button" disabled={!view.canManage || !inviteCode.trim() || redeemingInvite} onClick={() => void redeemInvite()}>{redeemingInvite ? "Applying…" : "Apply invite"}</button>
+          <button className="button button-primary billing-invite-submit" type="button" disabled={!view.canManage || !inviteCode.trim() || redeemingInvite} onClick={() => void redeemInvite()}>{redeemingInvite ? "Applying…" : "Apply invite"}</button>
         </div>
       </section>
 

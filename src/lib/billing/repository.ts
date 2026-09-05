@@ -21,7 +21,6 @@ export interface BillingRepository {
   getBillingView(workspaceId: string, periodStart: Date): Promise<{
     subscription: unknown;
     deliveriesUsed: number;
-    entitlementPlanKey: string;
   }>;
   claimCheckout(input: {
     workspaceId: string;
@@ -45,12 +44,8 @@ type BillingPrismaClient = Pick<PrismaClient,
 export function createPrismaBillingRepository(client: BillingPrismaClient = prisma): BillingRepository {
   return {
     async getBillingView(workspaceId, periodStart) {
-      const [subscription, entitlement, usage] = await Promise.all([
+      const [subscription, usage] = await Promise.all([
         client.billingSubscription.findUnique({ where: { workspaceId } }),
-        client.workspaceEntitlement.findUnique({
-          where: { workspaceId },
-          select: { plan: { select: { key: true } } },
-        }),
         client.workspaceUsagePeriod.findUnique({
           where: { workspaceId_periodStart: { workspaceId, periodStart } },
           select: { deliveriesReserved: true },
@@ -59,7 +54,6 @@ export function createPrismaBillingRepository(client: BillingPrismaClient = pris
       return {
         subscription,
         deliveriesUsed: usage?.deliveriesReserved ?? 0,
-        entitlementPlanKey: entitlement?.plan.key ?? "free",
       };
     },
 

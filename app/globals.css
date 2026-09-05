@@ -2184,8 +2184,45 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .billing-invite-copy small { color: var(--muted); display: block; font-size: .64rem; font-weight: 750; letter-spacing: .08em; margin-bottom: 3px; text-transform: uppercase; }
 .billing-invite h3 { font-size: 1.02rem; margin: 0 0 4px; }
 .billing-invite p { color: var(--muted); font-size: .77rem; line-height: 1.5; margin: 0; max-width: 540px; }
-.billing-invite-form { display: flex; flex: 0 1 470px; gap: 8px; position: relative; z-index: 1; }
-.billing-invite-form input { min-width: 0; text-transform: uppercase; width: 100%; }
+.billing-invite-form { display: grid; flex: 0 1 500px; gap: 10px; grid-template-columns: minmax(220px, 1fr) auto; position: relative; z-index: 1; }
+.billing-invite-form input {
+  background: var(--surface-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink-strong);
+  height: 52px;
+  min-width: 0;
+  outline: 0;
+  padding: 0 16px;
+  text-transform: uppercase;
+  transition: background var(--speed) var(--ease-out), border-color var(--speed) var(--ease-out), box-shadow var(--speed) var(--ease-out);
+  width: 100%;
+}
+.billing-invite-form input::placeholder { color: var(--subtle); opacity: 1; }
+.billing-invite-form input:hover { border-color: var(--subtle); }
+.billing-invite-form input:focus {
+  background: var(--panel);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .16);
+}
+.billing-invite-submit {
+  background: var(--volt);
+  color: var(--on-volt);
+  min-height: 52px;
+  min-width: 164px;
+  padding-inline: 22px;
+  white-space: nowrap;
+}
+.billing-invite-submit:hover { background: var(--volt); box-shadow: 0 9px 22px color-mix(in srgb, var(--volt) 22%, transparent); }
+.billing-invite-submit:disabled {
+  background: var(--surface-sunk);
+  border-color: var(--line-strong);
+  box-shadow: none;
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 1;
+  transform: none;
+}
 [data-theme="dark"] .billing-invite { background: linear-gradient(135deg, color-mix(in srgb, var(--panel) 95%, var(--volt)), var(--panel)); box-shadow: 0 18px 50px rgb(0 0 0 / 22%); }
 .billing-plan-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .billing-plan { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 16px; display: flex; flex-direction: column; min-height: 420px; min-width: 0; overflow: hidden; padding: var(--space-5); position: relative; }
@@ -3091,7 +3128,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .mobile-topbar { min-height: 64px; }
   .page-wrap { padding: var(--space-6) 18px 56px; }
   .billing-invite { align-items: stretch; flex-direction: column; }
-  .billing-invite-form { flex-basis: auto; flex-direction: column; }
+  .billing-invite-form { flex-basis: auto; grid-template-columns: 1fr; }
   .billing-invite-form .button { width: 100%; }
   .builder-intro { margin-bottom: var(--space-5); }
   .builder-intro h1 { font-size: clamp(1.85rem, 8vw, 2.1rem); line-height: 1.02; overflow-wrap: anywhere; }

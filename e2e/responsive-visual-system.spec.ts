@@ -531,15 +531,15 @@ test("home and insights share one quiet performance-stat treatment", async ({ pa
   }
 });
 
-test("workspace navigation exposes pricing and public resources without crowding the sidebar", async ({ page }) => {
+test("workspace navigation keeps pricing out of the sidebar and policies in settings", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/insights");
   const accountNavigation = page.getByRole("navigation", { name: "Account" });
-  await expect(accountNavigation.getByRole("link", { name: "Pricing" })).toBeVisible();
-  const resources = page.getByRole("navigation", { name: "Workspace resources" });
-  await expect(resources.getByRole("link")).toHaveCount(8);
+  await expect(accountNavigation.getByRole("link", { name: "Pricing" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Workspace resources" })).toHaveCount(0);
   const footer = page.locator(".app-footer");
   await expect(footer).toBeVisible();
+  await expect(footer).toHaveText(/^© \d{4} Linkar$/);
   const footerBox = await footer.boundingBox();
   expect(footerBox).not.toBeNull();
   expect(footerBox!.width).toBeGreaterThan(900);
@@ -550,9 +550,14 @@ test("workspace navigation exposes pricing and public resources without crowding
     await page.evaluate(() => { document.documentElement.dataset.theme = "light"; });
   }
 
+  await page.goto("/settings");
+  await page.getByRole("button", { name: /Policies/ }).click();
+  const policies = page.getByRole("region", { name: "Policies and support" });
+  await expect(policies.getByRole("link")).toHaveCount(8);
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await expect(page.getByLabel("Workspace sidebar").getByRole("link", { name: "Pricing" })).toBeVisible();
+  await expect(page.getByLabel("Workspace sidebar").getByRole("link", { name: "Pricing" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await footer.scrollIntoViewIfNeeded();
   const mobileFooterBox = await footer.boundingBox();

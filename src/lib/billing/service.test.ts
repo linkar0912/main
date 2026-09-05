@@ -7,7 +7,7 @@ import type { BillingRepository } from "./repository";
 
 function repository(overrides: Partial<BillingRepository> = {}): BillingRepository {
   return {
-    getBillingView: vi.fn().mockResolvedValue({ subscription: null, deliveriesUsed: 0, entitlementPlanKey: "free" }),
+    getBillingView: vi.fn().mockResolvedValue({ subscription: null, deliveriesUsed: 0 }),
     claimCheckout: vi.fn().mockResolvedValue({ kind: "create", attemptId: "attempt_1" }),
     markCheckoutReady: vi.fn().mockResolvedValue(undefined),
     markCheckoutFailed: vi.fn().mockResolvedValue(undefined),
@@ -22,6 +22,8 @@ function repository(overrides: Partial<BillingRepository> = {}): BillingReposito
     ...overrides,
   };
 }
+
+const getFreePlanKey = vi.fn().mockResolvedValue("free");
 
 const env = {
   razorpay: {
@@ -45,9 +47,23 @@ function provider() {
 }
 
 describe("billing service", () => {
+  it("uses the effective plan for billing instead of the base entitlement", async () => {
+    const dependencies = {
+      repository: repository(),
+      provider: provider(),
+      env,
+      getEffectivePlanKey: vi.fn().mockResolvedValue("agency"),
+    };
+    const service = createBillingService(dependencies);
+
+    await expect(service.getBillingView("ws_1", "OWNER")).resolves.toMatchObject({
+      entitlementPlanKey: "agency",
+    });
+  });
+
   it("audits owner billing mutations without secrets or payment data", async () => {
     const audit = vi.fn().mockResolvedValue(undefined);
-    const service = createBillingService({ repository: repository(), provider: provider(), env, audit });
+    const service = createBillingService({ repository: repository(), provider: provider(), env, getEffectivePlanKey: getFreePlanKey, audit });
     const actor = {
       requestId: "billing_req_1", userId: "user_1", email: "owner@example.com",
       workspaceId: "ws_1", ipHash: "ip_hash", userAgent: "test", origin: "https://app.linkar.in",
@@ -73,7 +89,7 @@ describe("billing service", () => {
     });
     const gateway = provider();
     gateway.createSubscription.mockImplementation(async () => { calls.push("provider"); return { id: "sub_1", status: "created" }; });
-    const service = createBillingService({ repository: repo, provider: gateway, env, now: () => new Date("2026-09-04T12:00:00Z") });
+    const service = createBillingService({ repository: repo, provider: gateway, env, getEffectivePlanKey: getFreePlanKey, now: () => new Date("2026-09-04T12:00:00Z") });
 
     await expect(service.createCheckout("ws_1", "creator", "MONTHLY")).resolves.toEqual({
       status: "ready",
@@ -95,6 +111,7 @@ describe("billing service", () => {
       repository: repository(),
       provider: provider(),
       env: { razorpay: { ...env.razorpay, planIds: { ...env.razorpay.planIds, agency: { ...env.razorpay.planIds.agency, ANNUAL: undefined } } } },
+      getEffectivePlanKey: getFreePlanKey,
     });
 
     await expect(service.getBillingView("ws_1", "OWNER")).resolves.toMatchObject({
@@ -108,6 +125,7 @@ describe("billing service", () => {
       repository: repository(),
       provider: provider(),
       env: { razorpay: { ...env.razorpay, planIds: { ...env.razorpay.planIds, creator: { ...env.razorpay.planIds.creator, MONTHLY: undefined } } } },
+      getEffectivePlanKey: getFreePlanKey,
     });
 
     await expect(service.createCheckout("ws_1", "creator", "MONTHLY")).rejects.toMatchObject({ code: "billing_not_configured" });
@@ -118,7 +136,7 @@ describe("billing service", () => {
       claimCheckout: vi.fn().mockResolvedValue({ kind: "reuse", attemptId: "attempt_1", subscriptionId: "sub_existing" }),
     });
     const gateway = provider();
-    const service = createBillingService({ repository: repo, provider: gateway, env });
+    const service = createBillingService({ repository: repo, provider: gateway, env, getEffectivePlanKey: getFreePlanKey });
 
     await expect(service.createCheckout("ws_1", "creator", "MONTHLY")).resolves.toMatchObject({
       status: "ready",
@@ -130,7 +148,7 @@ describe("billing service", () => {
   it("returns processing while another request creates the provider subscription", async () => {
     const repo = repository({ claimCheckout: vi.fn().mockResolvedValue({ kind: "processing", attemptId: "attempt_1" }) });
     const gateway = provider();
-    const service = createBillingService({ repository: repo, provider: gateway, env });
+    const service = createBillingService({ repository: repo, provider: gateway, env, getEffectivePlanKey: getFreePlanKey });
 
     await expect(service.createCheckout("ws_1", "growth", "ANNUAL")).resolves.toEqual({
       status: "processing",
@@ -142,7 +160,7 @@ describe("billing service", () => {
   it("rejects a different selection while another checkout remains open", async () => {
     const repo = repository({ claimCheckout: vi.fn().mockResolvedValue({ kind: "conflict", attemptId: "attempt_1" }) });
     const gateway = provider();
-    const service = createBillingService({ repository: repo, provider: gateway, env });
+    const service = createBillingService({ repository: repo, provider: gateway, env, getEffectivePlanKey: getFreePlanKey });
 
     await expect(service.createCheckout("ws_1", "agency", "ANNUAL")).rejects.toMatchObject({
       code: "subscription_conflict",
@@ -154,7 +172,7 @@ describe("billing service", () => {
     const repo = repository();
     const gateway = provider();
     gateway.createSubscription.mockRejectedValue(new Error("sensitive provider response"));
-    const service = createBillingService({ repository: repo, provider: gateway, env });
+    const service = createBillingService({ repository: repo, provider: gateway, env, getEffectivePlanKey: getFreePlanKey });
 
     await expect(service.createCheckout("ws_1", "creator", "MONTHLY")).rejects.toMatchObject({ code: "provider_unavailable" });
     expect(repo.markCheckoutFailed).toHaveBeenCalledWith("attempt_1", "provider_unavailable");
@@ -162,7 +180,7 @@ describe("billing service", () => {
 
   it("does not mark the claim failed after Razorpay succeeds but persistence fails", async () => {
     const repo = repository({ markCheckoutReady: vi.fn().mockRejectedValue(new Error("database unavailable")) });
-    const service = createBillingService({ repository: repo, provider: provider(), env });
+    const service = createBillingService({ repository: repo, provider: provider(), env, getEffectivePlanKey: getFreePlanKey });
 
     await expect(service.createCheckout("ws_1", "creator", "MONTHLY")).rejects.toThrow("database unavailable");
     expect(repo.markCheckoutFailed).not.toHaveBeenCalled();
@@ -171,7 +189,7 @@ describe("billing service", () => {
   it("verifies checkout without granting an entitlement", async () => {
     const repo = repository();
     const gateway = provider();
-    const service = createBillingService({ repository: repo, provider: gateway, env });
+    const service = createBillingService({ repository: repo, provider: gateway, env, getEffectivePlanKey: getFreePlanKey });
     const { createHmac } = await import("node:crypto");
     const signature = createHmac("sha256", "checkout-secret").update("pay_1|sub_1").digest("hex");
 
@@ -186,7 +204,7 @@ describe("billing service", () => {
 
   it("rejects invalid checkout signatures", async () => {
     const repo = repository();
-    const service = createBillingService({ repository: repo, provider: provider(), env });
+    const service = createBillingService({ repository: repo, provider: provider(), env, getEffectivePlanKey: getFreePlanKey });
 
     await expect(service.verifyCheckout("ws_1", {
       paymentId: "pay_1", subscriptionId: "sub_1", signature: "0".repeat(64),
@@ -197,7 +215,7 @@ describe("billing service", () => {
   it("schedules plan changes and cancellation without changing entitlement", async () => {
     const repo = repository();
     const gateway = provider();
-    const service = createBillingService({ repository: repo, provider: gateway, env });
+    const service = createBillingService({ repository: repo, provider: gateway, env, getEffectivePlanKey: getFreePlanKey });
 
     await service.schedulePlanChange("ws_1", "growth", "ANNUAL");
     expect(gateway.updateSubscription).toHaveBeenCalledWith({ subscriptionId: "sub_1", planId: "plan_growth_annual" });
@@ -213,6 +231,7 @@ describe("billing service", () => {
       repository: repository(),
       provider: provider(),
       env: { razorpay: { ...env.razorpay, planIds: { ...env.razorpay.planIds, growth: { ...env.razorpay.planIds.growth, ANNUAL: undefined } } } },
+      getEffectivePlanKey: getFreePlanKey,
     });
 
     await expect(service.schedulePlanChange("ws_1", "growth", "ANNUAL"))

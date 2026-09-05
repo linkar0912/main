@@ -7,6 +7,7 @@ import type { BillingInterval, BillingPlanKey } from "./types";
 import { BILLING_PLANS, resolveRazorpayPlanId } from "./catalog";
 import type { ServerEnv } from "@/src/lib/env";
 import { getServerEnv } from "@/src/lib/env";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { verifyCheckoutSignature } from "./signatures";
 import { createPrismaBillingRepository, type BillingRepository } from "./repository";
 import { RazorpayClient } from "./razorpay-client";
@@ -33,6 +34,7 @@ type BillingServiceDependencies = {
   repository: BillingRepository;
   provider: BillingProvider;
   env: Pick<ServerEnv, "razorpay">;
+  getEffectivePlanKey: (workspaceId: string) => Promise<string>;
   audit?: (input: AdminAuditInput) => Promise<void>;
   now?: () => Date;
 };
@@ -115,10 +117,14 @@ export function createBillingService(dependencies: BillingServiceDependencies) {
 
   async function getBillingView(workspaceId: string, role: string) {
     const current = now();
-    const data = await dependencies.repository.getBillingView(workspaceId, monthStart(current));
+    const [data, entitlementPlanKey] = await Promise.all([
+      dependencies.repository.getBillingView(workspaceId, monthStart(current)),
+      dependencies.getEffectivePlanKey(workspaceId),
+    ]);
     const billingMissing = missingRazorpayConfig(dependencies.env.razorpay);
     return {
       ...data,
+      entitlementPlanKey,
       catalog: Object.values(BILLING_PLANS),
       canManage: role === "OWNER",
       billingConfigured: billingMissing.length === 0,
@@ -229,6 +235,7 @@ export function getBillingService(): ReturnType<typeof createBillingService> {
       timeoutMs: env.providerRequestTimeoutMs,
     }),
     env,
+    getEffectivePlanKey: async (workspaceId) => (await getEntitlementService().getEffectiveEntitlements(workspaceId)).planKey,
     audit: appendAdminAuditEvent,
   });
   return productionService;
