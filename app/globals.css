@@ -299,6 +299,9 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+  .action-notice,
+  .modal-panel,
+  .modal-scrim { animation: none !important; transition: none !important; }
 }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
@@ -3063,8 +3066,13 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 
 @media (max-width: 720px) {
   .modal-panel.is-wide { max-width: 100%; }
+  .template-picker-scrim { overflow: hidden; padding: 0; }
+  .template-picker { border-radius: 0; height: 100dvh; max-height: 100dvh; }
   .template-picker-layout { flex-direction: column; }
-  .template-picker-categories { border-bottom: 1px solid var(--line); border-right: 0; flex-direction: row; flex-wrap: wrap; max-height: none; }
+  .template-picker-categories { border-bottom: 1px solid var(--line); border-right: 0; flex-direction: row; flex-wrap: nowrap; max-height: none; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .template-picker-categories::-webkit-scrollbar { display: none; }
+  .template-picker-category { flex: 0 0 auto; }
+  .template-picker-content { min-height: 0; overscroll-behavior: contain; overflow-y: auto; }
   .template-picker-grid { grid-template-columns: 1fr; }
 }
 

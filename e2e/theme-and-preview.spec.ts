@@ -63,3 +63,20 @@ test("campaign preview gives other commenters the default no-photo avatar", asyn
   // The stranger commenting carries Instagram's default avatar, never our photo.
   await expect(preview.locator(".ig-comment").first().locator(".ig-avatar-default")).toBeVisible();
 });
+
+test("reduced-motion users get instant sheets and notices", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: /explore all templates/i }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Templates" });
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate((element) => getComputedStyle(element).animationDuration)).toBe("0s");
+  await dialog.getByRole("button", { name: "Close" }).click();
+
+  await page.goto("/automations/new?type=campaign");
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  const notice = page.getByRole("alert").filter({ hasText: "Give this automation a name" });
+  await expect(notice).toBeVisible();
+  expect(await notice.evaluate((element) => getComputedStyle(element).animationDuration)).toBe("0s");
+});

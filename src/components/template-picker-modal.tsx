@@ -275,7 +275,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
 
           <div className="template-channel-surface">
             <span>
-              <small>Automation surface</small>
+              <small>Works with</small>
               <strong>{provider === "FACEBOOK" ? "Page comments" : "Comments & messages"}</strong>
             </span>
           </div>
@@ -300,7 +300,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
             })}
           </nav>
 
-          <div className="template-picker-content">
+          <div className="template-picker-content" role="region" aria-label="Template results" tabIndex={0}>
             {visible.length === 0 && (
               <p className="muted">
                 {provider === "FACEBOOK" && !facebookPageId ? "Select a connected Facebook Page to choose a recipe." : `No templates match “${query}”.`}

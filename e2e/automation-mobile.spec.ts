@@ -59,7 +59,7 @@ test("builder feedback, progress, and phone preview fit an iPhone", async ({ pag
 
 test("template picker becomes a usable full-height iPhone sheet", async ({ page }) => {
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: /create automation/i }).first().click();
+  await page.getByRole("button", { name: /explore all templates/i }).click();
 
   const dialog = page.getByRole("dialog", { name: "Templates" });
   await expect(dialog).toBeVisible();
@@ -74,5 +74,12 @@ test("template picker becomes a usable full-height iPhone sheet", async ({ page 
   expect(dialogBox!.height).toBe(visualHeight);
   await expect(dialog.getByRole("button", { name: "Start from scratch" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Close" })).toBeVisible();
+  const categories = dialog.getByRole("navigation", { name: "Template categories" });
+  await expect(categories).toBeVisible();
+  expect(await categories.evaluate((element) => getComputedStyle(element).flexWrap)).toBe("nowrap");
+  const results = dialog.getByRole("region", { name: "Template results" });
+  await expect(results).toBeVisible();
+  expect(await results.evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
+  expect(await results.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

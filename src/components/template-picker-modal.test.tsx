@@ -31,6 +31,7 @@ describe("TemplatePickerModal", () => {
     expect(runway.querySelector('[data-brand-logo="instagram"]')).toBeTruthy();
     expect(runway.querySelector('[data-brand-logo="facebook"]')).toBeTruthy();
     expect(runway.querySelector(".template-channel-surface-icon")).toBeNull();
+    expect(within(runway).getByText("Works with")).toBeTruthy();
     expect(within(runway).getByText("Comments & messages")).toBeTruthy();
 
     fireEvent.click(facebook);
@@ -40,6 +41,7 @@ describe("TemplatePickerModal", () => {
     expect(await within(runway).findByText("Connected Page")).toBeTruthy();
     expect(runway.querySelector(".template-channel-select-chevron")).toBeTruthy();
     expect(within(runway).getByText("Page comments")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Template results" })).toBeTruthy();
   });
 
   it("switches to a connected Facebook Page and shows only compatible Page-comment recipes", async () => {
