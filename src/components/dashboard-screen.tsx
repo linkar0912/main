@@ -156,9 +156,9 @@ function DashboardGreeting() {
           Welcome back - here’s how your replies performed over the last 14 days.
         </p>
       </div>
-      <CreateAutomationButton className="button button-primary">
-        <Plus size={17} /> Create automation
-      </CreateAutomationButton>
+      <Link className="button button-primary" href="/quick-automation">
+        <Zap size={17} /> Quick Automation
+      </Link>
     </header>
   );
 }
@@ -311,7 +311,7 @@ export function DashboardScreen() {
 
         <DashboardGreeting />
 
-        <section aria-label="Start here">
+        {!loading && automations.length === 0 ? <section aria-label="Start here">
           <div className="quickstart-head">
             <h2>Start here</h2>
             <button className="text-link" type="button" onClick={() => setPickerOpen(true)}>
@@ -339,7 +339,7 @@ export function DashboardScreen() {
               </span>
             </Link>
           </div>
-        </section>
+        </section> : null}
 
         <SetupChecklist automations={automations} hasConnection={hasConnection} loading={loading} />
 

@@ -751,7 +751,19 @@ export function SettingsScreen() {
             {section === "billing" && <BillingSettings />}
 
             {section === "policies" && (
-              <section className="review-links panel settings-card"><div><p className="eyebrow">Policies & support</p><h2>Public resources</h2></div><div className="review-link-grid"><Link href="/privacy">Privacy policy <ExternalLink size={14} /></Link><Link href="/terms">Terms of service <ExternalLink size={14} /></Link><Link href="/data-deletion">Data deletion <ExternalLink size={14} /></Link><Link href="/support">Support <ExternalLink size={14} /></Link></div></section>
+              <section className="review-links panel settings-card" aria-label="Policies and support">
+                <div><p className="eyebrow">Policies & support</p><h2>Everything in one place</h2><p className="muted">Find help, understand how Linkar uses data, and review the rules that protect your workspace.</p></div>
+                <div className="review-link-grid">
+                  <Link href="/support">Support <ExternalLink size={14} /></Link>
+                  <Link href="/terms">Terms of service <ExternalLink size={14} /></Link>
+                  <Link href="/privacy">Privacy policy <ExternalLink size={14} /></Link>
+                  <Link href="/cookies">Cookies <ExternalLink size={14} /></Link>
+                  <Link href="/acceptable-use">Acceptable use <ExternalLink size={14} /></Link>
+                  <Link href="/data-processing">Data processing <ExternalLink size={14} /></Link>
+                  <Link href="/service-providers">Service providers <ExternalLink size={14} /></Link>
+                  <Link href="/data-deletion">Data deletion <ExternalLink size={14} /></Link>
+                </div>
+              </section>
             )}
           </div>
         </div>

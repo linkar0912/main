@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AutomationRecord } from "@/src/lib/repository";
 
@@ -93,7 +93,31 @@ describe("DashboardScreen onboarding", () => {
 
     render(<DashboardScreen />);
 
-    expect(await screen.findByRole("heading", { name: "Hello, Tejas Creator!" })).toBeTruthy();
+    const heading = await screen.findByRole("heading", { name: "Hello, Tejas Creator!" });
+    const greeting = heading.closest("header");
+    expect(greeting).toBeTruthy();
+    expect(within(greeting as HTMLElement).getByRole("link", { name: "Quick Automation" }).getAttribute("href")).toBe("/quick-automation");
+  });
+
+  it("shows Start here only after an empty automation list has loaded", async () => {
+    stubDashboardFetch();
+    automationState.loading = true;
+    const view = render(<DashboardScreen />);
+    expect(screen.queryByRole("region", { name: "Start here" })).toBeNull();
+
+    automationState.loading = false;
+    automationState.automations = [{
+      id: "automation_1", workspaceId: "workspace_1", provider: "INSTAGRAM", name: "Welcome",
+      status: "ACTIVE", version: 1, priority: 0,
+      definition: { version: 1, trigger: { type: "message", match: "any", keywords: [] }, conditions: [], actions: [] },
+      createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z",
+    }];
+    view.rerender(<DashboardScreen />);
+    expect(screen.queryByRole("region", { name: "Start here" })).toBeNull();
+
+    automationState.automations = [];
+    view.rerender(<DashboardScreen />);
+    expect(screen.getByRole("region", { name: "Start here" })).toBeTruthy();
   });
 
   it("waits for automations before calculating first-step completion", async () => {

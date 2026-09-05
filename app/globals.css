@@ -630,6 +630,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   margin: 0 clamp(24px, 3vw, 44px);
   padding: var(--space-5) 0 var(--space-6);
 }
+.app-footer:has(> small:only-child) { display: flex; justify-content: flex-end; }
 .app-footer-brand { color: var(--ink); font-weight: 800; }
 .app-footer-links { display: flex; flex-wrap: wrap; gap: 7px var(--space-4); }
 .app-footer-links a { color: var(--muted); }
@@ -1866,9 +1867,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .team-who small { color: var(--muted); font-size: var(--type-meta); }
 .invite-form { align-items: flex-end; display: flex; gap: 10px; margin-top: var(--space-4); }
 .invite-form .field:first-child { flex: 1; }
-.review-links { align-items: center; display: flex; gap: var(--space-6); justify-content: space-between; }
+.review-links { align-items: flex-start; display: grid; gap: var(--space-6); grid-template-columns: minmax(220px, .7fr) minmax(320px, 1.3fr); justify-content: space-between; }
 .review-links h2 { margin: 0; }
-.review-link-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
+.review-link-grid { display: grid; gap: var(--space-2); grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .review-link-grid a { align-items: center; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--slate); display: inline-flex; font-size: .72rem; font-weight: 650; gap: 5px; padding: 8px 10px; transition: background var(--speed), color var(--speed); }
 .review-link-grid a:hover { color: var(--ink); }
 

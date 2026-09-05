@@ -140,6 +140,33 @@ describe("SettingsScreen webhook health panel", () => {
     expect(await screen.findByRole("heading", { name: "Plan and usage" })).toBeTruthy();
   });
 
+  it("keeps every support and policy destination in Policies", async () => {
+    stubFetch({
+      "/api/meta/connection/health": { data: [] },
+      "/api/meta/connection": { data: [] },
+      "/api/facebook/connection": { data: [] },
+      "/api/facebook/connection/health": { data: [] },
+      "/api/workspace/bootstrap": { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: "configured" } },
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Policies/ }));
+
+    const directory = screen.getByRole("region", { name: "Policies and support" });
+    for (const [name, href] of [
+      ["Support", "/support"],
+      ["Terms of service", "/terms"],
+      ["Privacy policy", "/privacy"],
+      ["Cookies", "/cookies"],
+      ["Acceptable use", "/acceptable-use"],
+      ["Data processing", "/data-processing"],
+      ["Service providers", "/service-providers"],
+      ["Data deletion", "/data-deletion"],
+    ]) {
+      expect(within(directory).getByRole("link", { name: new RegExp(`^${name}`) }).getAttribute("href")).toBe(href);
+    }
+  });
+
   it("explains when the Instagram account belongs to another workspace", async () => {
     window.history.replaceState({}, "", "/settings?meta=already-connected");
     stubFetch({

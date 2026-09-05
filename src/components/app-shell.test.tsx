@@ -93,34 +93,22 @@ describe("AppShell", () => {
     expect(within(navigation).queryByRole("link", { name: "Broadcasts" })).toBeNull();
   });
 
-  it("keeps pricing discoverable with the account destinations", async () => {
+  it("keeps pricing out of the account destinations", async () => {
     stubShellFetch();
     render(<AppShell><main>Workspace</main></AppShell>);
 
     await screen.findByText("Member");
     const account = screen.getByRole("navigation", { name: "Account" });
-    expect(within(account).getByRole("link", { name: "Pricing" }).getAttribute("href")).toBe("/pricing");
+    expect(within(account).queryByRole("link", { name: "Pricing" })).toBeNull();
   });
 
-  it("exposes every public support and policy destination from workspace pages", async () => {
+  it("keeps the signed-in footer compact without duplicate resource links", async () => {
     stubShellFetch();
     render(<AppShell><main>Workspace</main></AppShell>);
 
-    const resources = screen.getByRole("navigation", { name: "Workspace resources" });
-    const expectedLinks = [
-      ["Support", "/support"],
-      ["Terms", "/terms"],
-      ["Privacy", "/privacy"],
-      ["Cookies", "/cookies"],
-      ["Acceptable use", "/acceptable-use"],
-      ["Data processing", "/data-processing"],
-      ["Service providers", "/service-providers"],
-      ["Data deletion", "/data-deletion"],
-    ];
-
-    for (const [name, href] of expectedLinks) {
-      expect(within(resources).getByRole("link", { name }).getAttribute("href")).toBe(href);
-    }
+    await screen.findByText("Member");
+    expect(screen.queryByRole("navigation", { name: "Workspace resources" })).toBeNull();
+    expect(document.querySelector(".app-footer")?.textContent).toMatch(/^© \d{4} Linkar$/);
   });
 
   it("shows the operator-console link only to an allowlisted platform owner", async () => {
