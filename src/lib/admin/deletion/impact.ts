@@ -74,6 +74,7 @@ async function previewWorkspace(id: string): Promise<DeletionImpact> {
 }
 
 export async function previewDeletion(target: DeletionTarget): Promise<DeletionPreview> {
+  if (target.kind === "SYNTHETIC_ACCOUNTS") throw new AdminWorkspaceError(422, "unsupported_deletion_target");
   const impact = target.kind === "USER" ? await previewUser(target.id) : await previewWorkspace(target.id);
   return { impact, impactDigest: digestDeletionImpact(impact), confirmationPhrase: deletionConfirmationPhrase(target) };
 }

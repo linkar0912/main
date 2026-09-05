@@ -1,0 +1,1 @@
+ALTER TYPE "AdminDeletionTargetKind" ADD VALUE 'SYNTHETIC_ACCOUNTS';

@@ -31,6 +31,10 @@ async function main() {
         where: { userId: { in: userIds } },
         select: { userId: true, workspaceId: true, role: true },
       }),
+      listOwnedWorkspaceMemberships: (workspaceIds) => prisma.workspaceMember.findMany({
+        where: { workspaceId: { in: workspaceIds } },
+        select: { userId: true, workspaceId: true, role: true },
+      }),
     });
 
     process.stdout.write(`${JSON.stringify({
@@ -39,6 +43,7 @@ async function main() {
       protectedAccountsExcluded: inventory.excludedProtectedCount,
       membershipsAffected: inventory.membershipCount,
       ownedWorkspacesAffected: inventory.ownedWorkspaceCount,
+      sharedWorkspacesRequiringReview: inventory.unsafeOwnedWorkspaceCount,
       digest: inventory.digest,
     })}\n`);
   } finally {

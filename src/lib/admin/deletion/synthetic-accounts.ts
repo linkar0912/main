@@ -43,6 +43,7 @@ export function buildSyntheticInventoryDigest(accounts: readonly SyntheticAccoun
 export async function buildSyntheticAccountInventory(dependencies: {
   listAuthUsersPage: (page: number, perPage: number) => Promise<AuthUser[]>;
   listMemberships: (userIds: string[]) => Promise<Membership[]>;
+  listOwnedWorkspaceMemberships?: (workspaceIds: string[]) => Promise<Membership[]>;
   platformOwnerUserIds: readonly string[];
 }) {
   const matchedUsers: Array<{ id: string; email: string }> = [];
@@ -82,6 +83,16 @@ export async function buildSyntheticAccountInventory(dependencies: {
         .sort(),
     };
   }).sort((a, b) => a.userId.localeCompare(b.userId));
+  const eligibleUserIds = new Set(accounts.map((account) => account.userId));
+  const ownedWorkspaceIds = [...new Set(accounts.flatMap((account) => account.ownedWorkspaceIds))].sort();
+  const ownedWorkspaceMemberships = ownedWorkspaceIds.length > 0 && dependencies.listOwnedWorkspaceMemberships
+    ? await dependencies.listOwnedWorkspaceMemberships(ownedWorkspaceIds)
+    : memberships.filter((membership) => ownedWorkspaceIds.includes(membership.workspaceId));
+  const unsafeOwnedWorkspaceIds = new Set(
+    ownedWorkspaceMemberships
+      .filter((membership) => !membership.userId || !eligibleUserIds.has(membership.userId))
+      .map((membership) => membership.workspaceId),
+  );
 
   return {
     count: accounts.length,
@@ -89,6 +100,7 @@ export async function buildSyntheticAccountInventory(dependencies: {
     excludedProtectedCount: excludedProtected.length,
     membershipCount: accounts.reduce((total, account) => total + account.membershipCount, 0),
     ownedWorkspaceCount: accounts.reduce((total, account) => total + account.ownedWorkspaceIds.length, 0),
+    unsafeOwnedWorkspaceCount: unsafeOwnedWorkspaceIds.size,
     digest: buildSyntheticInventoryDigest(accounts),
   };
 }

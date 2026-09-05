@@ -51,12 +51,32 @@ describe("approved synthetic accounts", () => {
       platformOwnerUserIds: ["PROTECTED"],
       listAuthUsersPage: async (page) => page === 1 ? firstPage : [{ id: "synthetic-member", email: "member-3@example.com" }],
       listMemberships,
+      listOwnedWorkspaceMemberships: async () => [
+        { userId: "synthetic-owner", workspaceId: "workspace-1", role: "OWNER" },
+      ],
     });
 
     expect(inventory.count).toBe(2);
     expect(inventory.excludedProtectedCount).toBe(1);
     expect(inventory.membershipCount).toBe(2);
     expect(inventory.ownedWorkspaceCount).toBe(1);
+    expect(inventory.unsafeOwnedWorkspaceCount).toBe(0);
     expect(inventory.accounts.find((account) => account.userId === "synthetic-owner")?.ownedWorkspaceIds).toEqual(["workspace-1"]);
+  });
+
+  it("flags a synthetic-owned workspace shared with any non-synthetic identity", async () => {
+    const inventory = await buildSyntheticAccountInventory({
+      platformOwnerUserIds: [],
+      listAuthUsersPage: async () => [{ id: "synthetic-owner", email: "owner-1@example.com" }],
+      listMemberships: async () => [
+        { userId: "synthetic-owner", workspaceId: "workspace-1", role: "OWNER" },
+      ],
+      listOwnedWorkspaceMemberships: async () => [
+        { userId: "synthetic-owner", workspaceId: "workspace-1", role: "OWNER" },
+        { userId: "genuine-user", workspaceId: "workspace-1", role: "MEMBER" },
+      ],
+    });
+
+    expect(inventory.unsafeOwnedWorkspaceCount).toBe(1);
   });
 });

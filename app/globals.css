@@ -3629,6 +3629,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 /* Owner command-center extensions: destructive workflows and audit inspection. */
 .admin-system-links { display: flex; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-5) var(--space-7) 0; }
 .admin-deletion-wizard { display: grid; gap: var(--space-4); margin-bottom: var(--space-6); }
+.synthetic-cleanup-panel { background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 7%, var(--panel)), var(--panel) 48%); border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); }
+.synthetic-cleanup-panel > .button { justify-self: start; }
 .admin-impact-preview { background: var(--surface-soft); border: 1px solid var(--line-strong); border-radius: var(--radius-md); display: grid; gap: var(--space-3); padding: var(--space-5); }
 .admin-impact-preview code { overflow-wrap: anywhere; }
 .admin-command-message { font-weight: 700; margin: 0; }

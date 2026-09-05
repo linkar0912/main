@@ -182,19 +182,25 @@ export async function enqueueAdminDeletion(jobId: string): Promise<boolean> {
 }
 
 export async function deleteQueuedWorkspaceEvents(workspaceId: string): Promise<void> {
+  return deleteQueuedWorkspaceEventsBatch([workspaceId]);
+}
+
+export async function deleteQueuedWorkspaceEventsBatch(workspaceIds: readonly string[]): Promise<void> {
   const queue = getWebhookQueue();
   if (!queue) return;
+  const targets = new Set(workspaceIds);
+  if (targets.size === 0) return;
   const states: JobType[] = ["waiting", "delayed", "prioritized", "waiting-children", "failed", "completed"];
   let start = 0;
   for (;;) {
     const page = await queue.getJobs(states, start, start + JOB_SCAN_PAGE_SIZE - 1);
-    const matches = page.filter((job) => job?.data?.workspaceId === workspaceId);
+    const matches = page.filter((job) => targets.has(job?.data?.workspaceId));
     await Promise.all(matches.map((job) => job.remove()));
     if (page.length < JOB_SCAN_PAGE_SIZE) break;
     start += JOB_SCAN_PAGE_SIZE - matches.length;
   }
   const active = await queue.getJobs(["active"], 0, JOB_SCAN_PAGE_SIZE - 1);
-  if (active.some((job) => job?.data?.workspaceId === workspaceId)) throw new Error("workspace_jobs_active");
+  if (active.some((job) => targets.has(job?.data?.workspaceId))) throw new Error("workspace_jobs_active");
 }
 
 async function findJobsByAccount(queue: Queue, igUserId: string, includeActive: boolean): Promise<Job[]> {

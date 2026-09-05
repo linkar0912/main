@@ -87,6 +87,7 @@ enum BillingWebhookState {
 enum AdminDeletionTargetKind {
   USER
   WORKSPACE
+  SYNTHETIC_ACCOUNTS
 }
 
 enum AdminDeletionJobState {

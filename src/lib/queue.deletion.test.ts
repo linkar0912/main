@@ -13,7 +13,7 @@ vi.mock("bullmq", () => ({
   },
 }));
 
-const { deleteQueuedInstagramEvents } = await import("./queue");
+const { deleteQueuedInstagramEvents, deleteQueuedWorkspaceEventsBatch } = await import("./queue");
 
 describe("Instagram queue deletion", () => {
   beforeEach(() => {
@@ -40,5 +40,25 @@ describe("Instagram queue deletion", () => {
 
     expect(webhookRemove).toHaveBeenCalledOnce();
     expect(broadcastRemove).toHaveBeenCalledOnce();
+  });
+
+  it("removes events for a workspace batch in one queue scan", async () => {
+    const firstRemove = vi.fn().mockResolvedValue(undefined);
+    const secondRemove = vi.fn().mockResolvedValue(undefined);
+    const preservedRemove = vi.fn().mockResolvedValue(undefined);
+    state.getJobs
+      .mockResolvedValueOnce([
+        { data: { workspaceId: "workspace_1" }, remove: firstRemove },
+        { data: { workspaceId: "workspace_2" }, remove: secondRemove },
+        { data: { workspaceId: "workspace_3" }, remove: preservedRemove },
+      ])
+      .mockResolvedValueOnce([]);
+
+    await deleteQueuedWorkspaceEventsBatch(["workspace_1", "workspace_2"]);
+
+    expect(firstRemove).toHaveBeenCalledOnce();
+    expect(secondRemove).toHaveBeenCalledOnce();
+    expect(preservedRemove).not.toHaveBeenCalled();
+    expect(state.getJobs).toHaveBeenCalledTimes(2);
   });
 });
