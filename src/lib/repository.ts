@@ -259,6 +259,9 @@ export type CreateAutomationInput = {
   instagramAccountId?: string;
   facebookPageId?: string;
   priority?: number;
+  status?: Extract<AutomationStatus, "DRAFT" | "ACTIVE">;
+  activatedAt?: string;
+  boundMediaId?: string;
 };
 
 export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "status" | "definition" | "activatedAt" | "priority">> & {

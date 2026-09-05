@@ -97,6 +97,30 @@ describe("POST /api/automations", () => {
     }));
   });
 
+  it("creates an active automation with its activation timestamp in one operation", async () => {
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.listConnections.mockResolvedValue([{ igUserId: "ig_1", status: "CONNECTED" }]);
+    mocks.createAutomation.mockImplementation(async (_workspaceId, input) => ({ id: "automation_1", ...input }));
+
+    const response = await POST(new Request("http://localhost/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "INSTAGRAM",
+        instagramAccountId: "ig_1",
+        name: "Active reply",
+        status: "ACTIVE",
+        definition: { version: 1, trigger: { type: "message", match: "any", keywords: [] }, conditions: [], actions: [{ type: "send_text", text: "Hello" }] },
+      }),
+    }));
+
+    expect(response.status).toBe(201);
+    expect(mocks.createAutomation).toHaveBeenCalledWith("workspace_1", expect.objectContaining({
+      status: "ACTIVE",
+      activatedAt: expect.any(String),
+    }));
+  });
+
   it("rejects a Messenger definition on the Facebook Page-comment channel with field-addressable issues", async () => {
     mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
     mocks.listFacebookPages.mockResolvedValue([{ pageId: "page_1", status: "CONNECTED" }]);

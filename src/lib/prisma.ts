@@ -930,6 +930,9 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           instagramAccountId: input.instagramAccountId ?? null,
           facebookPageId: input.facebookPageId ?? null,
           priority: input.priority ?? 0,
+          status: input.status ?? "DRAFT",
+          activatedAt: input.activatedAt ? new Date(input.activatedAt) : null,
+          boundMediaId: input.boundMediaId ?? null,
         },
       });
       return mapAutomation(record);

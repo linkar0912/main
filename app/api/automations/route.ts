@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    let body: { provider?: unknown; name?: unknown; definition?: unknown; priority?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
+    let body: { provider?: unknown; name?: unknown; status?: unknown; definition?: unknown; priority?: unknown; instagramAccountId?: unknown; facebookPageId?: unknown };
     try {
       body = (await request.json()) as typeof body;
     } catch {
@@ -35,6 +35,10 @@ export async function POST(request: Request) {
     if (typeof priority !== "number" || !Number.isInteger(priority) || priority < -100 || priority > 100) {
       return NextResponse.json({ error: "Priority must be a whole number from -100 to 100" }, { status: 400 });
     }
+    if (body.status !== undefined && body.status !== "DRAFT" && body.status !== "ACTIVE") {
+      return NextResponse.json({ error: "Status must be DRAFT or ACTIVE" }, { status: 400 });
+    }
+    const status = body.status === "ACTIVE" ? "ACTIVE" : "DRAFT";
     const target = parseAutomationTarget(body, { requirePin: true });
     if (!target) return NextResponse.json({ error: "invalid_channel_target" }, { status: 400 });
     const definition = validateFlowDefinition(body.definition);
@@ -68,6 +72,8 @@ export async function POST(request: Request) {
       name,
       definition,
       priority,
+      status,
+      ...(status === "ACTIVE" ? { activatedAt: new Date().toISOString() } : {}),
       ...(instagramAccountId ? { instagramAccountId } : {}),
       ...(facebookPageId ? { facebookPageId } : {}),
     });

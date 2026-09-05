@@ -7,6 +7,7 @@ import type { FlowDefinitionV1, FlowDefinitionV2 } from "@/src/lib/automation/ty
 type FetchOverrides = {
   media?: unknown;
   createResponse?: unknown;
+  createOk?: boolean;
   patchResponse?: unknown;
   patchOk?: boolean;
   connection?: unknown;
@@ -26,7 +27,10 @@ function stubFetch(overrides: FetchOverrides = {}) {
       return { ok: true, json: async () => overrides.facebookPages ?? { data: [] } } as Response;
     }
     if (!init?.method || init.method === "POST") {
-      return { ok: true, json: async () => overrides.createResponse ?? { data: { id: "automation_new" } } } as Response;
+      return {
+        ok: overrides.createOk ?? true,
+        json: async () => overrides.createResponse ?? { data: { id: "automation_new" } },
+      } as Response;
     }
     if (init.method === "PATCH") {
       return {
@@ -282,13 +286,12 @@ describe("AutomationBuilder", () => {
     });
   });
 
-  it("lets a Facebook Page automation save as a draft or save and activate", async () => {
+  it("saves and activates a Facebook Page automation in one request", async () => {
     const fetchMock = stubFetch({
       facebookPages: { data: [
         { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
       ] },
-      createResponse: { data: { id: "automation_fb", status: "DRAFT" } },
-      patchResponse: { data: { id: "automation_fb", status: "ACTIVE" } },
+      createResponse: { data: { id: "automation_fb", status: "ACTIVE" } },
     });
 
     render(
@@ -308,25 +311,20 @@ describe("AutomationBuilder", () => {
     expect(screen.getByRole("button", { name: /save draft/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /save & activate/i }));
 
-    await waitFor(() => {
-      const activation = fetchMock.mock.calls.find(([url, init]) =>
-        String(url) === "/api/automations/automation_fb" &&
-        (init as RequestInit | undefined)?.method === "PATCH" &&
-        JSON.parse(String((init as RequestInit).body)).status === "ACTIVE",
-      );
-      expect(activation).toBeTruthy();
-    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/automations", expect.anything()));
+    const request = findRequest(fetchMock, (url) => url === "/api/automations");
+    expect(JSON.parse(String(request.body))).toMatchObject({ status: "ACTIVE", facebookPageId: "12345" });
+    expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PATCH")).toBe(false);
     expect(await screen.findByText(/saved and activated/i)).toBeTruthy();
   });
 
-  it("explains when a Facebook automation was saved but activation failed", async () => {
+  it("shows a provider error when Facebook activation fails", async () => {
     stubFetch({
       facebookPages: { data: [
         { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
       ] },
-      createResponse: { data: { id: "automation_fb", status: "DRAFT" } },
-      patchOk: false,
-      patchResponse: { error: "Meta activation unavailable" },
+      createOk: false,
+      createResponse: { error: "Meta activation unavailable" },
     });
 
     render(
@@ -345,10 +343,7 @@ describe("AutomationBuilder", () => {
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     fireEvent.click(screen.getByRole("button", { name: /save & activate/i }));
 
-    expect(await screen.findByRole("alert")).toHaveProperty(
-      "textContent",
-      "Saved as a draft, but activation failed.",
-    );
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Meta activation unavailable");
   });
 
   it("persists the complete Facebook Page comment policy", async () => {
@@ -862,11 +857,10 @@ describe("AutomationBuilder", () => {
     expect(JSON.parse(String(request.body)).instagramAccountId).toBe("17841401239924397");
   });
 
-  it("saves and activates by saving first, then patching the returned automation to ACTIVE", async () => {
+  it("saves and activates a new campaign in one POST", async () => {
     const fetchMock = stubFetch({
       media: { data: [reel], paging: {} },
       createResponse: { data: { id: "automation_9" } },
-      patchResponse: { data: { id: "automation_9", status: "ACTIVE" } },
     });
     render(<AutomationBuilder />);
 
@@ -876,19 +870,62 @@ describe("AutomationBuilder", () => {
     goToReviewStep();
     fireEvent.click(screen.getByRole("button", { name: /save & activate/i }));
 
-    await waitFor(() => {
-      const activatePatch = fetchMock.mock.calls.find(
-        ([url, init]) => url === "/api/automations/automation_9" && (init as RequestInit)?.method === "PATCH",
-      );
-      expect(activatePatch).toBeTruthy();
-    });
-    const activateRequest = findRequest(
-      fetchMock,
-      (url, init) => url === "/api/automations/automation_9" && init?.method === "PATCH",
-    );
-    expect(JSON.parse(String(activateRequest.body))).toEqual({ status: "ACTIVE" });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/automations", expect.anything()));
     const createRequest = findRequest(fetchMock, (url) => url === "/api/automations");
     expect(createRequest.method).toBe("POST");
+    expect(JSON.parse(String(createRequest.body))).toMatchObject({ status: "ACTIVE" });
+    expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PATCH")).toBe(false);
+  });
+
+  it("saves an edited campaign as a draft in the same request as its definition", async () => {
+    const existingDefinition: FlowDefinitionV2 = {
+      version: 2,
+      trigger: { type: "comment", source: "all_media", mediaIds: [], mediaSnapshots: [], match: "keyword", keywords: ["drop"] },
+      publicReplies: ["Check your messages."],
+      openingMessage: { text: "Open the DM.", optInButtonLabel: "Get it" },
+      followGate: { required: false, notFollowingMessage: "", recheckButtonLabel: "" },
+      delivery: { text: "Here is your link.", url: "https://example.com/old" },
+    };
+    const fetchMock = stubFetch({ patchResponse: { data: { id: "automation_edit", status: "DRAFT" } } });
+    render(<AutomationBuilder automationId="automation_edit" initialName="Existing campaign" initialDefinition={existingDefinition} />);
+
+    goToReviewStep();
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/automations/automation_edit", expect.anything()));
+    const request = findRequest(fetchMock, (url) => url === "/api/automations/automation_edit");
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      status: "DRAFT",
+      definition: existingDefinition,
+    });
+  });
+
+  it("updates and activates an edited campaign with one PATCH", async () => {
+    const existingDefinition: FlowDefinitionV2 = {
+      version: 2,
+      trigger: { type: "comment", source: "all_media", mediaIds: [], mediaSnapshots: [], match: "any", keywords: [] },
+      publicReplies: ["Check your messages."],
+      openingMessage: { text: "Open the DM.", optInButtonLabel: "Get it" },
+      followGate: { required: false, notFollowingMessage: "", recheckButtonLabel: "" },
+      delivery: { text: "Edited delivery.", url: "https://example.com/edited" },
+    };
+    const fetchMock = stubFetch({ patchResponse: { data: { id: "automation_edit", status: "ACTIVE" } } });
+    render(<AutomationBuilder automationId="automation_edit" initialName="Existing campaign" initialDefinition={existingDefinition} />);
+
+    goToReviewStep();
+    fireEvent.click(screen.getByRole("button", { name: /save & activate/i }));
+
+    await waitFor(() => {
+      const saves = fetchMock.mock.calls.filter(([url, init]) => (
+        String(url) === "/api/automations/automation_edit" && (init as RequestInit)?.method === "PATCH"
+      ));
+      expect(saves).toHaveLength(1);
+    });
+    const request = findRequest(fetchMock, (url) => url === "/api/automations/automation_edit");
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      status: "ACTIVE",
+      definition: existingDefinition,
+    });
   });
 
   it("submits the full version 2 JSON shape expected by the API", async () => {

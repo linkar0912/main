@@ -684,12 +684,12 @@ function AutomationBuilderV1({
       // toggles the channel explicitly so the saved payload never carries a
       // pair of pins.
       const parsedPriority = Number.parseInt(priority, 10);
-      const body: { provider: "INSTAGRAM" | "FACEBOOK"; name: string; definition: FlowDefinitionV1; priority?: number; status?: "DRAFT"; instagramAccountId?: string | null; facebookPageId?: string | null } = {
+      const body: { provider: "INSTAGRAM" | "FACEBOOK"; name: string; definition: FlowDefinitionV1; priority?: number; status: "DRAFT" | "ACTIVE"; instagramAccountId?: string | null; facebookPageId?: string | null } = {
         provider: channel,
         name,
         definition: buildDefinition(),
         priority: Number.isFinite(parsedPriority) ? parsedPriority : 0,
-        ...(automationId && intent === "draft" ? { status: "DRAFT" as const } : {}),
+        status: intent === "activate" ? "ACTIVE" : "DRAFT",
       };
       if (channel === "FACEBOOK") {
         if (!facebookPageId) throw new Error("Select a connected Facebook Page before saving.");
@@ -706,22 +706,7 @@ function AutomationBuilderV1({
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: { id?: string }; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");
-      const savedId = payload.data.id ?? automationId;
-      if (intent === "activate") {
-        if (!savedId) throw new Error("Saved as a draft, but activation failed.");
-        const activateResponse = await fetch(`/api/automations/${savedId}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ status: "ACTIVE" }),
-        });
-        const activatePayload = (await activateResponse.json().catch(() => ({}))) as { data?: unknown };
-        if (!activateResponse.ok || !activatePayload.data) {
-          throw new Error("Saved as a draft, but activation failed.");
-        }
-        onSaved?.(activatePayload.data);
-      } else {
-        onSaved?.(payload.data);
-      }
+      onSaved?.(payload.data);
       setSavedIntent(intent);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save this automation");
@@ -1801,6 +1786,7 @@ function AutomationBuilderV2({
         body: JSON.stringify({
           provider: "INSTAGRAM",
           name,
+          status: intent === "activate" ? "ACTIVE" : "DRAFT",
           definition: buildDefinition(),
           instagramAccountId: selectedInstagramAccountId || null,
         }),
@@ -1809,18 +1795,7 @@ function AutomationBuilderV2({
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");
       setSavedAutomationId(payload.data.id);
 
-      if (intent === "activate") {
-        const activateResponse = await fetch(`/api/automations/${payload.data.id}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ status: "ACTIVE" }),
-        });
-        const activatePayload = (await activateResponse.json().catch(() => ({}))) as { data?: unknown; error?: string };
-        if (!activateResponse.ok) throw new Error(activatePayload.error ?? "Saved as a draft, but activation failed.");
-        onSaved?.(activatePayload.data);
-      } else {
-        onSaved?.(payload.data);
-      }
+      onSaved?.(payload.data);
       setSavedIntent(intent);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save this automation");

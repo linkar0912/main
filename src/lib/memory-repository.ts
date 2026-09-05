@@ -485,13 +485,15 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         workspaceId,
         provider: input.provider ?? (input.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
         name: input.name.trim(),
-        status: "DRAFT",
+        status: input.status ?? "DRAFT",
         version: input.definition.version,
         definition: copy(input.definition),
         priority: input.priority ?? 0,
         createdAt: timestamp,
         updatedAt: timestamp,
       };
+      if (input.activatedAt) automation.activatedAt = input.activatedAt;
+      if (input.boundMediaId) automation.boundMediaId = input.boundMediaId;
       if (input.instagramAccountId) automation.instagramAccountId = input.instagramAccountId;
       if (input.facebookPageId) automation.facebookPageId = input.facebookPageId;
       automations.set(automation.id, automation);
