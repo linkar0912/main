@@ -53,12 +53,12 @@ describe("TemplatePickerModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Facebook" }));
     const pageSelect = await screen.findByLabelText("Facebook Page");
-    expect(screen.queryByText("Keyword comment reply")).toBeNull();
+    expect(screen.queryByText("Reply when a comment includes chosen words")).toBeNull();
     fireEvent.change(pageSelect, { target: { value: "page_1" } });
 
-    expect(await screen.findByText("Keyword comment reply")).toBeTruthy();
-    expect(screen.queryByText(/Conversation Starters/)).toBeNull();
-    fireEvent.click(screen.getByText("Keyword comment reply"));
+    expect(await screen.findByText("Reply when a comment includes chosen words")).toBeTruthy();
+    expect(screen.queryByText(/Answer common questions/)).toBeNull();
+    fireEvent.click(screen.getByText("Reply when a comment includes chosen words"));
 
     await waitFor(() => expect(push).toHaveBeenCalledWith(
       "/automations/new?type=classic&template=facebook-keyword-comment-reply&provider=facebook&surface=comment&connection=page_1",
@@ -83,14 +83,14 @@ describe("TemplatePickerModal", () => {
     render(<TemplatePickerModal onClose={() => {}} />);
 
     expect(screen.getByText("Send a link after someone follows you")).toBeTruthy();
-    expect(screen.getByText(/Say hi to new followers/)).toBeTruthy();
-    expect(screen.getByText(/Conversation Starters/)).toBeTruthy();
+    expect(screen.getByText(/Welcome someone’s first message/)).toBeTruthy();
+    expect(screen.getByText(/Answer common questions/)).toBeTruthy();
     expect(screen.getByText(/Thank people who mention you in a Story/)).toBeTruthy();
-    expect(screen.getByText(/Email Capture/)).toBeTruthy();
+    expect(screen.getByText(/Collect email addresses in messages/)).toBeTruthy();
     expect(screen.getByText("Reply to every new message", { selector: "strong" })).toBeTruthy();
     expect(screen.getAllByText("How it works").length).toBeGreaterThan(0);
     expect(document.querySelector(".template-picker")?.textContent).not.toContain("→");
-    expect(screen.getByText(/Main Menu/)).toBeTruthy();
+    expect(screen.getByText(/Send a menu of helpful links/)).toBeTruthy();
     // Template tiles carry no icons anymore.
     expect(document.querySelector(".template-picker-tile-icon")).toBeNull();
   });
@@ -101,14 +101,14 @@ describe("TemplatePickerModal", () => {
     fireEvent.change(screen.getByLabelText("Search templates"), { target: { value: "story" } });
 
     expect(screen.getByText(/Thank people who mention you in a Story/)).toBeTruthy();
-    expect(screen.queryByText(/Email Capture/)).toBeNull();
+    expect(screen.queryByText(/Collect email addresses in messages/)).toBeNull();
     expect(screen.queryByText("Send a link after someone follows you")).toBeNull();
   });
 
   it("navigates to the builder with the template id when a recipe is chosen", () => {
     render(<TemplatePickerModal onClose={() => {}} />);
 
-    fireEvent.click(screen.getByText(/Email Capture/));
+    fireEvent.click(screen.getByText(/Collect email addresses in messages/));
 
     expect(push).toHaveBeenCalledWith(
       `/automations/new?type=classic&template=${basicAutomationTemplates.find((t) => t.id === "email-capture")?.id}`,
@@ -138,11 +138,11 @@ describe("TemplatePickerModal", () => {
     fireEvent.click(categories.getByText("Story mentions"));
 
     expect(screen.getByText(/Thank people who mention you in a Story/)).toBeTruthy();
-    expect(screen.queryByText(/Email Capture/)).toBeNull();
+    expect(screen.queryByText(/Collect email addresses in messages/)).toBeNull();
     expect(screen.queryByText("Send a link after someone follows you")).toBeNull();
 
     fireEvent.click(categories.getByText("All templates"));
-    expect(screen.getByText(/Email Capture/)).toBeTruthy();
+    expect(screen.getByText(/Collect email addresses in messages/)).toBeTruthy();
   });
 
   it("groups the follow-gated campaign under Post & Reel comments, since that's its real trigger", () => {
@@ -152,7 +152,7 @@ describe("TemplatePickerModal", () => {
     fireEvent.click(categories.getByText("Post & Reel comments"));
 
     expect(screen.getByText("Send a link after someone follows you")).toBeTruthy();
-    expect(screen.queryByText(/Email Capture/)).toBeNull();
+    expect(screen.queryByText(/Collect email addresses in messages/)).toBeNull();
   });
 
   it("closes on Escape", () => {

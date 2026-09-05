@@ -67,7 +67,7 @@ describe("QuickAutomationScreen", () => {
     fireEvent.click(reel);
 
     expect(screen.getByRole("heading", { name: /choose what happens next/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /follow-gated reel campaign/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /send a link after someone follows you/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /send a link when someone comments/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /conversation starters/i })).toBeNull();
     expect(scrollIntoView).toHaveBeenCalled();

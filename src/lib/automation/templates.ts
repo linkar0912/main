@@ -42,6 +42,18 @@ const PLAIN_COPY_OVERRIDES: Record<string, { title?: string; description?: strin
     title: "Send a link when someone comments",
     description: "When someone comments with a word you choose, Linkar sends your link in a private reply.",
   },
+  "conversation-starters": {
+    title: "Answer common questions",
+    description: "When someone asks about prices, hours, or delivery, Linkar sends a helpful answer with buttons.",
+  },
+  "email-capture": {
+    title: "Collect email addresses in messages",
+    description: "Linkar asks for an email address, saves it, and sends the person what you promised.",
+  },
+  "welcome-new-followers": {
+    title: "Welcome someone’s first message",
+    description: "When someone messages you for the first time, Linkar sends one warm welcome.",
+  },
   "story-mention-reply": {
     title: "Thank people who mention you in a Story",
     description: "When someone mentions you in a Story, Linkar sends the thank-you message you saved.",
@@ -53,6 +65,54 @@ const PLAIN_COPY_OVERRIDES: Record<string, { title?: string; description?: strin
   "optin-confirmation": {
     title: "Confirm a button tap",
     description: "When someone taps your permission button, Linkar confirms it and shares the next step.",
+  },
+  "main-menu": {
+    title: "Send a menu of helpful links",
+    description: "When someone messages MENU, Linkar sends buttons for your most useful pages.",
+  },
+  "comment-catch-all": {
+    title: "Reply when someone comments anything",
+    description: "When anyone comments on a selected post or Reel, Linkar sends your saved private reply.",
+  },
+  "referral-welcome": {
+    title: "Welcome people from an ad",
+    description: "When someone opens your messages from an ad or referral link, Linkar welcomes them.",
+  },
+  "giveaway-entry": {
+    title: "Confirm giveaway entries in messages",
+    description: "When someone messages your giveaway word, Linkar confirms their entry and shares the rules.",
+  },
+  "affiliate-link": {
+    title: "Send a shopping link",
+    description: "When someone asks to shop or buy, Linkar sends your product or affiliate link.",
+  },
+  "lead-magnet-comment": {
+    title: "Send a free guide from comments",
+    description: "When someone comments GUIDE, PDF, or FREE, Linkar privately sends the resource link.",
+  },
+  "price-list-responder": {
+    title: "Send prices when someone asks",
+    description: "When someone asks about price or cost, Linkar sends your price image and catalogue link.",
+  },
+  "course-faq-booking": {
+    title: "Answer course questions",
+    description: "When someone asks about your course, Linkar sends the details and a booking link.",
+  },
+  "event-registration": {
+    title: "Register people for an event",
+    description: "Linkar collects the attendee’s details in messages and sends the joining link.",
+  },
+  "influencer-collab-intake": {
+    title: "Collect partnership enquiries",
+    description: "Linkar asks interested brands or creators for the details your team needs.",
+  },
+  "giveaway-comment-entry": {
+    title: "Confirm giveaway comments",
+    description: "When someone comments your entry word, Linkar privately confirms that they are included.",
+  },
+  "offer-followup": {
+    title: "Send an offer and a reminder",
+    description: "Linkar sends your offer, then follows up later if the person has not replied.",
   },
 };
 
@@ -556,11 +616,13 @@ const legacyInstagramTemplates: LegacyInstagramTemplate[] = [
 
 export const instagramAutomationTemplates: PremadeTemplate[] = legacyInstagramTemplates.map((template) => {
   const surface = template.setup.definition.trigger.type === "comment" ? "COMMENT" : "MESSAGING";
+  const title = PLAIN_COPY_OVERRIDES[template.id]?.title ?? template.title;
   return {
     ...template,
-    title: PLAIN_COPY_OVERRIDES[template.id]?.title ?? template.title,
+    title,
     description: conciseDescription(template),
     howItWorks: naturalSteps(template),
+    setup: { ...template.setup, name: title },
     provider: "INSTAGRAM",
     surface,
     requiredCapabilities: [surface === "COMMENT" ? "instagram-comment" : "instagram-messaging"],
@@ -590,11 +652,11 @@ export function getTemplateById(id: string): PremadeTemplate | undefined {
 
 const TRIGGER_LABELS: Record<TemplateTriggerType, string> = {
   comment: "Post & Reel comments",
-  message: "Direct messages",
+  message: "Instagram messages",
   story_mention: "Story mentions",
-  first_contact: "First contact",
-  referral: "Ad referrals",
-  optin: "Opt-in taps",
+  first_contact: "First message",
+  referral: "People arriving from ads",
+  optin: "Permission button taps",
 };
 
 export function triggerLabel(type: TemplateTriggerType): string {

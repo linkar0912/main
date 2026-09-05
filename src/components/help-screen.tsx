@@ -138,8 +138,8 @@ const TOPICS: Topic[] = [
         a: (
           <>
             <Link href="/settings">Settings</Link> → the Instagram connections card → Disconnect.
-            Linkar unsubscribes the webhooks on Meta&apos;s side too, so nothing keeps arriving for an
-            account you removed. Your automations stay saved and go quiet.
+            Linkar also stops receiving updates from that account. Your automatic replies stay saved
+            but remain quiet until you connect the account again.
           </>
         ),
       },
@@ -376,9 +376,9 @@ const TOPICS: Topic[] = [
         q: "Can I send leads to Zapier / Make / n8n?",
         a: (
           <>
-            Add a lead webhook URL to the email collector. Linkar POSTs{" "}
-            <code>{"{email, automationId, automationName, capturedAt, fields}"}</code> as JSON the
-            moment collection completes.
+            Add the receiving app&apos;s URL under “Send new leads to another app.” Linkar sends the
+            person&apos;s answers there as soon as collection finishes. Your Zapier, Make, or n8n setup
+            can then continue the work.
           </>
         ),
       },
@@ -554,19 +554,18 @@ const TOPICS: Topic[] = [
   {
     id: "troubleshooting",
     title: "Troubleshooting",
-    blurb: "Nothing sent? Work down this list - webhooks, matching, windows, and quiet hours.",
+    blurb: "Nothing sent? Check the connection, matching words, sending limits, and quiet hours.",
     icon: Wrench,
     articles: [
       {
         q: "My automation didn't reply. What do I check first?",
         a: (
           <>
-            In order: the automation is Active; the channel is connected and shows every webhook field
-            subscribed in <Link href="/settings">Settings</Link>; the keyword and match mode really
-            match what was written (and no negative keyword vetoed it); the post is inside the
-            automation&apos;s post scope; the daily send limit and activation window haven&apos;t closed
-            it; and quiet hours aren&apos;t holding the send.{" "}
-            <Link href="/activity">Inbox</Link> gives the outcome of each execution.
+            Check that the automatic reply is On, the account says Connected in{" "}
+            <Link href="/settings">Settings</Link>, and the words someone wrote match the words you
+            chose. Then check that the right post is selected, the daily limit has not been reached,
+            and quiet hours are not delaying the reply. <Link href="/activity">Inbox</Link> shows
+            what happened each time Linkar tried to reply.
           </>
         ),
       },
@@ -642,9 +641,9 @@ const TOPICS: Topic[] = [
         q: "How is my Meta access protected?",
         a: (
           <>
-            Access tokens are encrypted at rest, every incoming webhook signature is verified before
-            processing, duplicate events are ignored safely, and replies only ever follow the rules you
-            saved. Never paste a token or password into a support email.
+            Linkar stores connection details securely, checks that incoming updates really came from
+            the connected service, and safely ignores duplicates. Replies only follow rules you saved.
+            Never paste a password or private connection key into a support email.
           </>
         ),
       },

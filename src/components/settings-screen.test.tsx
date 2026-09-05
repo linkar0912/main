@@ -144,7 +144,7 @@ describe("SettingsScreen webhook health panel", () => {
     await act(async () => { render(<SettingsScreen />); });
 
     await screen.findByText("No account connected");
-    expect(screen.queryByLabelText("Webhook health")).toBeNull();
+    expect(screen.queryByLabelText("Connection check")).toBeNull();
   });
 
   it("organizes delivery controls before the supporting safeguards", async () => {

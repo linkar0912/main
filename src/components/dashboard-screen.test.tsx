@@ -215,6 +215,6 @@ describe("DashboardScreen onboarding", () => {
     // Tier two: the context metrics live in the meta strip, not in cards.
     expect(screen.getByText("Emails captured").closest(".stat-meta")).toBeTruthy();
     expect(screen.getByText("Opted out").closest(".stat-meta")).toBeTruthy();
-    expect(screen.getByText("Active flows").closest(".stat-meta")).toBeTruthy();
+    expect(screen.getByText("Replies that are on").closest(".stat-meta")).toBeTruthy();
   });
 });

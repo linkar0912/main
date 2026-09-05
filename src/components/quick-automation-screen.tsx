@@ -126,7 +126,7 @@ export function QuickAutomationScreen() {
           <div>
             <p className="eyebrow">Quick automation</p>
             <h1>Pick a Reel. Put it to work.</h1>
-            <p className="muted page-lede">Choose one published Reel, then choose the reply flow it should run.</p>
+            <p className="muted page-lede">Choose a published Reel, then choose what Linkar should do when someone comments.</p>
           </div>
         </header>
 
@@ -198,11 +198,11 @@ export function QuickAutomationScreen() {
           <section ref={flowStageRef} className="quick-automation-stage quick-flow-stage" aria-labelledby="choose-flow-heading">
             <div className="quick-stage-heading">
               <span className="quick-stage-number">2</span>
-              <div><h2 id="choose-flow-heading">Choose what happens next</h2><p>Each flow opens ready for the Reel you selected.</p></div>
+              <div><h2 id="choose-flow-heading">Choose what happens next</h2><p>Each option opens ready for the Reel you selected.</p></div>
             </div>
             <div className="quick-flow-grid">
               <button type="button" className="quick-flow-card is-featured" onClick={() => openFlow("campaign")}>
-                <span><strong>Follow-gated Reel campaign</strong><small>Reply publicly, ask for a DM opt-in, check the follow, then deliver a link.</small></span>
+                <span><strong>Send a link after someone follows you</strong><small>Reply to their comment, ask permission in a message, check that they follow you, then send the link.</small></span>
                 <ArrowRight size={18} />
               </button>
               {commentTemplates.map((template) => (

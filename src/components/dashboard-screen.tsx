@@ -66,8 +66,8 @@ function DeltaPill({ delta }: { delta?: Delta | null }) {
 
 function flowTriggerLabel(automation: AutomationRecord): string {
   const trigger = automation.definition.trigger as { type?: string } | undefined;
-  if (trigger?.type === "message") return "DM keywords";
-  if (trigger?.type === "first_contact") return "First-contact welcome";
+  if (trigger?.type === "message") return "Words in a message";
+  if (trigger?.type === "first_contact") return "First-message welcome";
   if (trigger?.type === "story_mention") return "Story mentions";
   return "Comment replies";
 }
@@ -138,7 +138,7 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
       key: "activate",
       done: automations.some((automation) => automation.status === "ACTIVE"),
       title: "Activate it and go live",
-      hint: "Active flows reply to supported comments and messages.",
+      hint: "Replies that are on can answer matching comments and messages.",
       href: "/automations",
     },
   ];
@@ -262,7 +262,7 @@ export function DashboardScreen() {
           </div>
           <div className="quickstart-grid">
             <Link className="quickstart-card" href="/automations/new?type=classic&template=comment-link-dm">
-              <strong>Auto-DM links from comments</strong>
+              <strong>Send a link when someone comments</strong>
               <span className="quickstart-card-meta">
                 <span><Zap size={13} /> Quick Automation</span>
                 <span className="quickstart-badge">Popular</span>
@@ -329,7 +329,7 @@ export function DashboardScreen() {
                   <dd>{optedOutTotal.toLocaleString()} <span>respected</span></dd>
                 </div>
                 <div className="stat-meta-item">
-                  <dt>Active flows</dt>
+                  <dt>Replies that are on</dt>
                   <dd>{activeCount.toLocaleString()} <span>of {automations.length.toLocaleString()}</span></dd>
                 </div>
               </dl>
@@ -357,7 +357,7 @@ export function DashboardScreen() {
             <div className="empty-state">
               <span className="empty-icon"><Workflow size={20} /></span>
               <h3>No automations yet</h3>
-              <p>Create your first reply flow to start answering comments and DMs automatically.</p>
+              <p>Create your first automatic reply to start answering comments and messages.</p>
               <CreateAutomationButton className="button button-primary">
                 <Plus size={15} /> New automation
               </CreateAutomationButton>
@@ -383,7 +383,7 @@ export function DashboardScreen() {
             <div>
               <p className="eyebrow">Health</p>
               <h2>Recent failures</h2>
-              <p className="muted">The last 50 deliveries that Meta or our webhooks rejected.</p>
+              <p className="muted">The latest messages Linkar or Meta could not send, with the reason when available.</p>
             </div>
           </div>
           <FailurePanel />

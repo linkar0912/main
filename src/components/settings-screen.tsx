@@ -343,28 +343,28 @@ export function SettingsScreen() {
 
   const statusMessage: Record<string, string> = {
     connected: "Instagram is connected. The account is ready for review testing.",
-    "missing-config": "Add your Meta App ID and redirect URI before connecting Instagram.",
-    "missing-encryption-key": "Add META_TOKEN_ENCRYPTION_KEY before connecting an account.",
+    "missing-config": "Instagram setup is not complete yet. Ask the workspace administrator to finish the connection settings.",
+    "missing-encryption-key": "Secure connection storage is not ready yet. Ask the workspace administrator to finish setup.",
     "invalid-state": "The Meta sign-in expired. Start the connection again.",
     cancelled: "You cancelled the Instagram authorization - click Connect again whenever you're ready.",
     denied: "Instagram refused this connection before it started. Make sure this workspace owner has a role on the Meta app (or the app is Live with Instagram advanced access), then retry.",
-    "token-exchange": "Instagram rejected the app credentials while finishing sign-in. Verify META_APP_ID and META_APP_SECRET in the deployment, and that this exact callback URL is listed under Valid OAuth Redirect URIs in the Meta app: {callbackUrl}",
-    "missing-permissions": "Instagram signed in but did not approve every permission Linkar needs. Reconnect and accept all requested scopes - until the app passes App Review, the Instagram account must belong to a role on the Meta app.",
+    "token-exchange": "Instagram could not finish signing in. Check the connection settings or contact support. Callback address: {callbackUrl}",
+    "missing-permissions": "Instagram did not approve everything Linkar needs. Reconnect and allow every requested permission.",
     "profile-fetch": "Signed in, but Linkar could not read the account profile back from Instagram. This is usually transient - retry the connection.",
     "already-connected": "That Instagram account already belongs to another Linkar workspace. Disconnect it there before connecting it here.",
     error: "Meta could not finish the connection. Check the app settings and try again.",
   };
 
   const facebookStatusMessage: Record<string, string> = {
-    connected: "Facebook Page is connected. The Page is ready to receive comment-reply webhooks.",
+    connected: "Facebook Page is connected and ready to reply to comments.",
     "select-page": "Choose which Facebook Page Linkar should connect. Nothing is connected until you confirm.",
-    "missing-config": "Add your Facebook App ID, App Secret, and redirect URI before connecting a Page.",
-    "missing-encryption-key": "Add FACEBOOK_TOKEN_ENCRYPTION_KEY (or META_TOKEN_ENCRYPTION_KEY) before connecting a Page.",
+    "missing-config": "Facebook setup is not complete yet. Ask the workspace administrator to finish the connection settings.",
+    "missing-encryption-key": "Secure connection storage is not ready yet. Ask the workspace administrator to finish setup.",
     "invalid-state": "The Facebook sign-in expired. Start the connection again.",
     cancelled: "You cancelled the Facebook authorization - click Connect again whenever you're ready.",
     denied: "Facebook refused this connection before it started. Make sure this workspace owner has a role on the Meta app and that the Pages the user manages appear under their Business portfolio.",
-    "token-exchange": "Facebook rejected the app credentials while finishing sign-in. Verify FACEBOOK_APP_ID and FACEBOOK_APP_SECRET, and that the callback URL is listed under Valid OAuth Redirect URIs in the Meta app.",
-    "missing-permissions": "Facebook signed in but did not approve every permission Linkar needs (pages_show_list, pages_manage_metadata, pages_manage_engagement, pages_read_engagement, pages_read_user_content). Reconnect and accept all requested scopes.",
+    "token-exchange": "Facebook could not finish signing in. Check the connection settings or contact support.",
+    "missing-permissions": "Facebook did not approve everything Linkar needs. Reconnect and allow every requested permission.",
     "no-pages": "Signed in, but no Facebook Pages were found under this account. Create a Page in Business Manager or claim an existing one, then retry.",
     "page-listing": "Signed in, but Linkar could not read the Pages from Meta. This is usually transient - retry the connection.",
     "already-connected": "That Facebook Page already belongs to another Linkar workspace. Disconnect it there before connecting it here.",
@@ -529,7 +529,7 @@ export function SettingsScreen() {
                       <div
                         className="channel-health"
                         data-channel-health="instagram"
-                        aria-label={connections.length > 1 ? `Webhook health for @${connection.username}` : "Webhook health"}
+                        aria-label={connections.length > 1 ? `Connection check for @${connection.username}` : "Connection check"}
                         key={connection.id}
                       >
                         <span
@@ -635,7 +635,7 @@ export function SettingsScreen() {
                       <div
                         className="channel-health"
                         data-channel-health="facebook"
-                        aria-label={facebookPages.length > 1 ? `Facebook webhook health for ${page.pageName}` : "Facebook webhook health"}
+                        aria-label={facebookPages.length > 1 ? `Facebook connection check for ${page.pageName}` : "Facebook connection check"}
                         key={page.id}
                       >
                         <span
@@ -713,7 +713,7 @@ export function SettingsScreen() {
                 </section>
 
                 <aside className="delivery-safeguards" aria-label="Delivery safeguards">
-                  <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Protected by default</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Access tokens are encrypted at rest.</li><li><Check size={16} /> Webhook signatures are verified before processing.</li><li><Check size={16} /> Duplicate events are ignored safely.</li><li><Check size={16} /> Replies follow saved rules, never scraping.</li></ul></section>
+                  <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Data handling</p><h2>Protected by default</h2></div><ShieldCheck size={21} /></div><ul className="check-list"><li><Check size={16} /> Connection details are stored securely.</li><li><Check size={16} /> Updates from connected apps are checked before use.</li><li><Check size={16} /> Repeated updates are ignored safely.</li><li><Check size={16} /> Replies follow only the rules you save.</li></ul></section>
                   <section className="panel settings-panel settings-card"><div className="panel-heading"><div><p className="eyebrow">Environment</p><h2>{mode === "demo" ? "Demo mode" : "Connected mode"}</h2></div><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} /></div><p className="muted">{mode === "demo" ? "The workspace runs on sample data until DATABASE_URL and Meta credentials are configured." : "This workspace is configured for live Meta-backed delivery."}</p><Link className="text-link" href="/support">View setup guidance <ExternalLink size={15} /></Link></section>
                 </aside>
               </div>
