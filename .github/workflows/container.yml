@@ -61,6 +61,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Deploy verified image to Dokploy
+        if: github.ref == 'refs/heads/main'
         env:
           DEPLOY_HOST: ${{ secrets.DOKPLOY_DEPLOY_HOST }}
           DEPLOY_KEY: ${{ secrets.DOKPLOY_DEPLOY_KEY }}
