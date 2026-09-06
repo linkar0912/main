@@ -59,3 +59,19 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Deploy verified image to Dokploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DOKPLOY_DEPLOY_HOST }}
+          DEPLOY_KEY: ${{ secrets.DOKPLOY_DEPLOY_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.DOKPLOY_DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          key=$(mktemp)
+          known_hosts=$(mktemp)
+          trap 'rm -f "$key" "$known_hosts"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          printf '%s\n' "$DEPLOY_HOST_KEY" > "$known_hosts"
+          chmod 600 "$key" "$known_hosts"
+          ssh -i "$key" -o IdentitiesOnly=yes -o UserKnownHostsFile="$known_hosts" \
+            deploybot@"$DEPLOY_HOST" "deploy $GITHUB_SHA"
