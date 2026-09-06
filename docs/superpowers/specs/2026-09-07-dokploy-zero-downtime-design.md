@@ -77,20 +77,23 @@ to the healthy old replica until the new task becomes healthy.
 
 ## Source and release flow
 
-TrackParcel uses its public Git repository on branch `main` and Dokploy's
-Nixpacks build, matching the platform-style build used before migration.
-Automatic deployment is enabled only after an initial build succeeds on a
-temporary hostname.
+Both projects publish immutable `sha-<40-character-commit>` images to GHCR.
+Linkar retains its existing Dockerfile workflow. TrackParcel gains an equivalent
+production Dockerfile and container workflow so its private source repository
+does not need to be cloned by Dokploy and its health endpoint can report the
+commit baked into the running image.
 
-Linkar uses its public Git repository on branch `main` and its checked-in
-`Dockerfile`. This gives Dokploy a release-aware Application while keeping the
-existing GitHub container workflow available as an immutable artifact source.
-The production health endpoint must report the Git commit baked into the image.
+Dokploy Applications use the GHCR `main` tag for candidate discovery, while the
+CI release record and health endpoint use the immutable SHA identity. Production
+deployment is triggered only after the repository's tests, lint, build, and
+container publication succeed.
 
-Future pushes to `main` trigger the configured Dokploy Application deployment.
-CI failure must prevent promotion. If direct Dokploy Git auto-deploy cannot be
-gated on CI completion, GitHub Actions will call the private deployment webhook
-only after its verification/build job succeeds.
+Dokploy remains private. GitHub Actions connects over SSH with a dedicated key
+whose server-side `authorized_keys` entry forces a root-owned deployment script;
+it cannot request an interactive shell or choose another command. The script
+accepts only a 40-character hexadecimal commit, calls Dokploy through localhost,
+waits for health, and verifies that the public health endpoint reports that exact
+commit. Separate keys restrict TrackParcel and Linkar to their own release path.
 
 ## Database migrations and worker releases
 
@@ -121,8 +124,9 @@ matches the web release.
 7. Verify public routes, TLS, release SHA, static assets, database, and Redis.
 8. Remove only the old Compose web service after the Application has served
    healthy production traffic. Keep the Compose definition rollback copy.
-9. Enable the approved push-to-deploy trigger and perform a no-op or documentation
-   release while continuously probing the public health endpoint.
+9. Install the forced-command deployment keys as repository Actions secrets,
+   enable deployment after the green container build, and perform a no-op or
+   documentation release while continuously probing the public health endpoint.
 
 ## Failure handling and rollback
 
@@ -142,6 +146,8 @@ matches the web release.
 
 - Dokploy remains reachable only through an administrator SSH tunnel.
 - Git access is limited to the two production repositories.
+- GitHub deployment keys have no general-purpose server shell access; each key
+  is bound to one root-owned release command.
 - No registry, GitHub, Cloudflare, or application secrets are committed.
 - Application and worker ports are not published on the Netcup public address.
 - Temporary validation DNS records are removed after acceptance.
