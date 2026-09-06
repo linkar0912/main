@@ -43,13 +43,14 @@ This minimizes live-state changes while using Dokploy's native release model.
 
 ## Target architecture
 
-TrackParcel has a `trackparcel-web` Dokploy Application attached to the existing
-`trackparcel` private Docker network. The TrackParcel Compose project retains
-only Valkey after cutover.
+TrackParcel has a `trackparcel-web` Dokploy Application attached to the
+attachable `trackparcel-app-network` overlay. The TrackParcel Compose project
+retains only Valkey, which is also attached to that overlay, after cutover.
 
-Linkar has a `linkar-web` Dokploy Application attached to the existing `linkar`
-private Docker network. The Linkar Compose project retains worker, migration,
-and Valkey services after cutover. Only one Linkar worker remains active.
+Linkar has a `linkar-web` Dokploy Application attached to the attachable
+`linkar-app-network` overlay. The Linkar Compose project retains worker,
+migration, and Valkey services after cutover; Valkey also joins the overlay.
+Only one Linkar worker remains active.
 
 Each Application receives the corresponding production environment variables,
 including a Redis URL whose host is the stable Compose service alias `valkey`.
@@ -77,16 +78,14 @@ to the healthy old replica until the new task becomes healthy.
 
 ## Source and release flow
 
-Both projects publish immutable `sha-<40-character-commit>` images to GHCR.
-Linkar retains its existing Dockerfile workflow. TrackParcel gains an equivalent
-production Dockerfile and container workflow so its private source repository
-does not need to be cloned by Dokploy and its health endpoint can report the
-commit baked into the running image.
+Linkar publishes immutable `sha-<40-character-commit>` images to GHCR and its
+Application deploys that exact tag. TrackParcel remains a private Git source:
+Dokploy clones it with a read-only deploy key and builds its production
+Dockerfile locally with `BUILD_COMMIT` set to the requested main-branch commit.
 
-Dokploy Applications use the GHCR `main` tag for candidate discovery, while the
-CI release record and health endpoint use the immutable SHA identity. Production
-deployment is triggered only after the repository's tests, lint, build, and
-container publication succeed.
+Production deployment is triggered only after the repository's tests, lint,
+build, and container verification or publication succeeds. The health endpoint
+must report the requested immutable SHA before the release bridge succeeds.
 
 Dokploy remains private. GitHub Actions connects over SSH with a dedicated key
 whose server-side `authorized_keys` entry forces a root-owned deployment script;

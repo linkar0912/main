@@ -13,7 +13,8 @@ test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 mkdir -p "$test_dir/libexec"
 
-sed "s#/usr/local/libexec#$test_dir/libexec#g" "$source_script" > "$test_dir/forced-deploy.sh"
+sed -e "s#/usr/local/libexec#$test_dir/libexec#g" -e 's/exec sudo -n /exec /' \
+  "$source_script" > "$test_dir/forced-deploy.sh"
 chmod 700 "$test_dir/forced-deploy.sh"
 
 for project in trackparcel linkar; do

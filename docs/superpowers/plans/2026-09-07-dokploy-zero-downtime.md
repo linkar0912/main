@@ -4,9 +4,9 @@
 
 **Goal:** Convert TrackParcel and Linkar public web releases from single-container Compose recreation to health-gated, start-first Dokploy Applications with CI-gated push deployment.
 
-**Architecture:** Each public web process becomes a one-replica Docker Swarm Application connected to its existing private Compose network. Persistent Valkey and Linkar's singleton worker remain in Compose; GitHub Actions publishes immutable GHCR images and triggers a private, forced-command SSH release bridge only after verification succeeds.
+**Architecture:** Each public web process becomes a one-replica Docker Swarm Application connected to an attachable per-project overlay shared with its persistent Valkey. Linkar publishes immutable GHCR images; TrackParcel is built from private Git with a read-only deploy key. GitHub Actions triggers a private, forced-command SSH release bridge only after verification succeeds.
 
-**Tech Stack:** Docker/BuildKit, GHCR, GitHub Actions, Dokploy HTTP API, Docker Swarm, Traefik, Cloudflare Tunnel, Next.js health routes, Valkey, POSIX shell.
+**Tech Stack:** Docker/BuildKit, private Git, GHCR, GitHub Actions, Dokploy HTTP API, Docker Swarm, Traefik, Cloudflare Tunnel, Next.js health routes, Valkey, POSIX shell.
 
 **Spec:** `docs/superpowers/specs/2026-09-07-dokploy-zero-downtime-design.md`
 
@@ -33,7 +33,7 @@
 
 **Interfaces:**
 - Consumes: `BUILD_COMMIT` Docker build argument and the existing `npm run build`/`npm start` commands.
-- Produces: `ghcr.io/tejastelkar/trackparcel:sha-<commit>` and a health response whose `release` equals `BUILD_COMMIT`.
+- Produces: a reproducible Dokploy Dockerfile build and a health response whose `release` equals `BUILD_COMMIT`.
 
 - [ ] **Step 1: Extend the health-route test with authoritative image provenance**
 
@@ -162,16 +162,16 @@ Store secret-bearing JSON as mode 600. Print only IDs, counts, hashes, and healt
 - Create outside Git: `zero-downtime/create-applications.mjs` and redacted result JSON.
 
 **Interfaces:**
-- Consumes: current Compose environments, existing Docker networks `trackparcel` and `linkar`, and immutable GHCR images for the current production commits.
+- Consumes: current Compose environments, attachable project overlay networks, TrackParcel private Git source, and Linkar's immutable GHCR image.
 - Produces: `trackparcel-web` and `linkar-web` Dokploy Applications with no production-domain dependency.
 
-- [ ] **Step 1: Confirm both current production SHA images exist in GHCR**
+- [ ] **Step 1: Confirm both candidate sources are immutable and buildable**
 
-TrackParcel's current SHA image must be built and published if absent; Linkar's existing SHA image digest must match the running image.
+TrackParcel's exact private Git commit must build through its production Dockerfile; Linkar's SHA image digest must exist in GHCR.
 
 - [ ] **Step 2: Create each Application in its existing production environment**
 
-Configure Docker source, port 3000, one replica, the matching private network ID, no public host port, the copied web environment, and current production SHA image.
+Configure source, port 3000, one replica, the matching overlay network ID, no public host port, and the copied web environment. Use private Git plus Dockerfile for TrackParcel and the immutable GHCR SHA tag for Linkar.
 
 - [ ] **Step 3: Configure health and rollout policies**
 

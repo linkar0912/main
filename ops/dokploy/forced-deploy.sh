@@ -38,4 +38,4 @@ fi
 
 unset SSH_ORIGINAL_COMMAND SSH_CLIENT SSH_CONNECTION SSH_TTY
 
-exec "/usr/local/libexec/dokploy-release-$project" "$sha"
+exec sudo -n "/usr/local/libexec/dokploy-release-$project" "$sha"
