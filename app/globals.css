@@ -1548,6 +1548,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .ig-dm-button { border-radius: 999px; font-size: .72rem; font-weight: 700; padding: 9px 16px; }
 .ig-dm-button.is-bot { align-self: flex-start; background: #262626; }
 .ig-dm-button.is-tap { align-self: flex-end; background: var(--grape); color: var(--white); }
+.ig-dm-template { align-self: flex-start; background: #262626; border-radius: 16px; border-bottom-left-radius: 4px; max-width: 82%; overflow: hidden; }
+.ig-dm-template-copy { font-size: .74rem; line-height: 1.4; overflow-wrap: anywhere; padding: 10px 13px; }
+.ig-dm-template-action { border-top: 1px solid #3a3a3a; color: #f5f5f5; font-size: .72rem; font-weight: 700; padding: 9px 12px; text-align: center; }
 .ig-dm-image { border-radius: 14px; overflow: hidden; max-width: 78%; }
 /* min-height keeps the bubble visible while an image loads or when the URL is
    unreachable - a collapsed zero-height bubble reads as a broken preview. */

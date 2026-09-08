@@ -118,6 +118,10 @@ function metaConnection(
   };
 }
 
+function instagramProfileUrl(connection: InstagramConnectionRecord): string {
+  return `https://www.instagram.com/${encodeURIComponent(connection.username)}/`;
+}
+
 /**
  * Picks one message variant per participant deterministically-ish: a random
  * draw spread across the configured variants. Falls back to the base text.
@@ -473,6 +477,7 @@ async function resolveNextMedia(
 type DeliveryContext = {
   client: CampaignRunnerClient;
   connection: MetaConnection;
+  profileUrl: string;
   repository: AutomationRepository;
   interactionSecret: string;
   finalAttempt: boolean;
@@ -774,13 +779,14 @@ async function deliverOpeningReply(
   });
   const openingMessage = {
     text: openingText,
-    quickReply: {
+    buttons: [{
+      type: "postback" as const,
       title: definition.openingMessage.optInButtonLabel,
       payload: createInteractionPayload(
         { participantId: participant.id, action: "opt_in" },
         ctx.interactionSecret,
       ),
-    },
+    }],
   };
   return guardedDelivery(
     participant,
@@ -794,7 +800,7 @@ async function deliverOpeningReply(
         const response = await ctx.client.sendPrivateReply(
           ctx.connection,
           String(payload.commentId),
-          payload.message as { text: string; quickReply: { title: string; payload: string } },
+          payload.message as { text: string; buttons: [{ type: "postback"; title: string; payload: string }] },
         );
         if (!response.message_id || !response.recipient_id) {
           throw new Error("Meta accepted the opening reply without delivery identifiers");
@@ -857,13 +863,21 @@ async function promptForFollow(
     recheckCount: participant.recheckCount + (actionPurpose === "recheck" ? 1 : 0),
   });
 
-  const followReply = {
-    title: definition.followGate.recheckButtonLabel,
-    payload: createInteractionPayload(
-      { participantId: participant.id, action: "recheck" },
-      ctx.interactionSecret,
-      event.timestamp,
-    ),
+  const followMessage: MetaMessage = {
+    type: "button_template",
+    text: definition.followGate.notFollowingMessage,
+    buttons: [
+      { type: "web_url", title: "Visit Profile", url: ctx.profileUrl },
+      {
+        type: "postback",
+        title: definition.followGate.recheckButtonLabel,
+        payload: createInteractionPayload(
+          { participantId: participant.id, action: "recheck" },
+          ctx.interactionSecret,
+          event.timestamp,
+        ),
+      },
+    ],
   };
   return guardedDelivery(
     participant,
@@ -872,17 +886,15 @@ async function promptForFollow(
       externalEventId: event.id,
       payload: {
         recipientId: event.recipientId!,
-        text: definition.followGate.notFollowingMessage,
-        reply: followReply,
+        message: followMessage,
       },
       dailySendLimit: definition.dailySendLimit,
       allowedStates: [participant.state],
       send: async (payload) => {
-        const response = await ctx.client.sendQuickReply(
+        const response = await ctx.client.sendDirectMessage(
           ctx.connection,
           String(payload.recipientId),
-          String(payload.text),
-          payload.reply as { title: string; payload: string },
+          payload.message as MetaMessage,
         );
         if (!response.message_id) {
           throw new Error("Meta accepted the follow prompt without a delivery identifier");
@@ -925,17 +937,21 @@ async function sendCooldownNotice(
   const providerStartedAt = performance.now();
   ctx.timingObserver?.providerStarted();
   try {
-    const response = await ctx.client.sendQuickReply(
+    const response = await ctx.client.sendDirectMessage(
       ctx.connection,
       event.recipientId!,
-      COOLDOWN_NOTICE_TEXT,
       {
-        title: definition.followGate.recheckButtonLabel,
-        payload: createInteractionPayload(
-          { participantId: participant.id, action: "recheck" },
-          ctx.interactionSecret,
-          event.timestamp,
-        ),
+        type: "button_template",
+        text: COOLDOWN_NOTICE_TEXT,
+        buttons: [{
+          type: "postback",
+          title: definition.followGate.recheckButtonLabel,
+          payload: createInteractionPayload(
+            { participantId: participant.id, action: "recheck" },
+            ctx.interactionSecret,
+            event.timestamp,
+          ),
+        }],
       },
     );
     if (!response.message_id) throw new Error("Meta accepted the cooldown notice without a delivery identifier");
@@ -1106,6 +1122,7 @@ export async function processExistingCampaignParticipant(
   const ctx: DeliveryContext = {
     client: options.client,
     connection: metaConnection(mapping.connection, options.tokenEncryptionKey),
+    profileUrl: instagramProfileUrl(mapping.connection),
     repository,
     interactionSecret: options.interactionSecret,
     finalAttempt: options.finalAttempt === true,
@@ -1352,6 +1369,7 @@ export async function processPendingCampaignInteraction(
     const resumed = await deliverFinalMessage(participant, definition, event, {
       client: options.client,
       connection: metaConnection(mapping.connection, options.tokenEncryptionKey),
+      profileUrl: instagramProfileUrl(mapping.connection),
       repository,
       interactionSecret: options.interactionSecret,
       finalAttempt: options.finalAttempt === true,
@@ -1402,6 +1420,7 @@ export async function processPendingCampaignInteraction(
         await sendCooldownNotice(participant, definition, event, {
           client: options.client,
           connection: metaConnection(mapping.connection, options.tokenEncryptionKey),
+          profileUrl: instagramProfileUrl(mapping.connection),
           repository,
           interactionSecret: options.interactionSecret,
           finalAttempt: options.finalAttempt === true,
@@ -1441,6 +1460,7 @@ export async function processPendingCampaignInteraction(
   const ctx: DeliveryContext = {
     client: options.client,
     connection: metaConnection(mapping.connection, options.tokenEncryptionKey),
+    profileUrl: instagramProfileUrl(mapping.connection),
     repository,
     interactionSecret: options.interactionSecret,
     finalAttempt: options.finalAttempt === true,

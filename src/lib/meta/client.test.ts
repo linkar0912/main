@@ -26,6 +26,25 @@ describe("Meta message payloads", () => {
     });
   });
 
+  it("attaches a persistent postback button to a comment-triggered private reply", () => {
+    expect(buildPrivateReplyPayload("comment_1", {
+      text: "Tap below and I’ll send access shortly.",
+      buttons: [{ type: "postback", title: "Send me the access", payload: "signed-opt-in" }],
+    })).toEqual({
+      recipient: { comment_id: "comment_1" },
+      message: {
+        attachment: {
+          type: "template",
+          payload: {
+            template_type: "button",
+            text: "Tap below and I’ll send access shortly.",
+            buttons: [{ type: "postback", title: "Send me the access", payload: "signed-opt-in" }],
+          },
+        },
+      },
+    });
+  });
+
   it("builds a button message for a direct-message recipient", () => {
     expect(
       buildDirectMessagePayload("person_1", {
@@ -43,6 +62,32 @@ describe("Meta message payloads", () => {
             template_type: "button",
             text: "Choose a plan",
             buttons: [{ type: "web_url", url: "https://example.com/plans", title: "View plans" }],
+          },
+        },
+      },
+    });
+  });
+
+  it("builds a two-action button card for the follow prompt", () => {
+    expect(buildDirectMessagePayload("person_1", {
+      type: "button_template",
+      text: "Follow this account, then tap below.",
+      buttons: [
+        { type: "web_url", title: "Visit Profile", url: "https://www.instagram.com/creator/" },
+        { type: "postback", title: "I'm following", payload: "signed-recheck" },
+      ],
+    })).toEqual({
+      recipient: { id: "person_1" },
+      message: {
+        attachment: {
+          type: "template",
+          payload: {
+            template_type: "button",
+            text: "Follow this account, then tap below.",
+            buttons: [
+              { type: "web_url", title: "Visit Profile", url: "https://www.instagram.com/creator/" },
+              { type: "postback", title: "I'm following", payload: "signed-recheck" },
+            ],
           },
         },
       },

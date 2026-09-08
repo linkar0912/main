@@ -68,6 +68,16 @@ function createRunnerClient(overrides: Partial<AutomationRunnerClient> = {}): Au
   };
 }
 
+function openingPostbackPayload(client: AutomationRunnerClient): string {
+  const opening = vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2];
+  if (typeof opening !== "object" || opening === null || !Array.isArray(opening.buttons)) {
+    throw new Error("opening postback button missing");
+  }
+  const button = opening.buttons.find((candidate) => candidate.type === "postback");
+  if (!button || button.type !== "postback") throw new Error("opening postback button missing");
+  return button.payload;
+}
+
 describe("automation runner", () => {
   it("tracks every inbound Instagram sender as a contact even when no automation matches", async () => {
     const repository = createMemoryRepository();
@@ -754,8 +764,7 @@ describe("automation runner", () => {
     await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_1", username: "creator", accessTokenEncrypted: sealSecret("access-token", key), status: "CONNECTED" });
     const client = createRunnerClient({ getUserFollowStatus: vi.fn().mockResolvedValue({ isUserFollowingBusiness: false }) });
     await processNormalizedEvent({ ...event, mediaId: "media_1", timestamp: Date.now() }, repository, { client, tokenEncryptionKey: key, interactionSecret: "app-secret", campaignsEnabled: true });
-    const opening = vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2];
-    if (typeof opening === "string" || !opening?.quickReply) throw new Error("opening payload missing");
+    const openingPayload = openingPostbackPayload(client);
 
     await processNormalizedEvent({
       id: "postback_1",
@@ -763,12 +772,12 @@ describe("automation runner", () => {
       type: "postback.received",
       text: "legacy would match",
       recipientId: "person_1",
-      interactionPayload: opening.quickReply.payload,
+      interactionPayload: openingPayload,
       timestamp: Date.now() + 1_000,
     }, repository, { client, tokenEncryptionKey: key, interactionSecret: "app-secret", campaignsEnabled: true });
 
-    expect(client.sendQuickReply).toHaveBeenCalledTimes(1);
-    expect(client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(client.sendQuickReply).not.toHaveBeenCalled();
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
     expect(await repository.hasExecution("workspace_a", "legacy_postback:postback_1")).toBe(false);
   });
 
@@ -793,8 +802,7 @@ describe("automation runner", () => {
     await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_1", username: "creator", accessTokenEncrypted: sealSecret("access-token", key), status: "CONNECTED" });
     const client = createRunnerClient();
     await processNormalizedEvent({ ...event, mediaId: "media_1", timestamp: Date.now() }, repository, { client, tokenEncryptionKey: key, interactionSecret: "app-secret", campaignsEnabled: true });
-    const opening = vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2];
-    if (typeof opening === "string" || !opening?.quickReply) throw new Error("opening payload missing");
+    const openingPayload = openingPostbackPayload(client);
     const interactionId = `postback_${eventSuffix}`;
 
     const result = await processNormalizedEvent({
@@ -803,7 +811,7 @@ describe("automation runner", () => {
       type: "postback.received",
       text: "legacy would match",
       recipientId: "person_1",
-      interactionPayload: corruptPayload(opening.quickReply.payload),
+      interactionPayload: corruptPayload(openingPayload),
       timestamp: Date.now() + 1_000,
     }, repository, { client, tokenEncryptionKey: key, interactionSecret: "app-secret", campaignsEnabled: true });
 

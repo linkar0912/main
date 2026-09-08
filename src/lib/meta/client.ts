@@ -56,6 +56,21 @@ export type WebhookSubscriptionResult = {
 
 export function buildPrivateReplyPayload(commentId: string, message: string | MetaPrivateReply) {
   const normalized = typeof message === "string" ? { text: message } : message;
+  if (normalized.buttons?.length) {
+    return {
+      recipient: { comment_id: commentId },
+      message: {
+        attachment: {
+          type: "template" as const,
+          payload: {
+            template_type: "button" as const,
+            text: normalized.text,
+            buttons: normalized.buttons,
+          },
+        },
+      },
+    };
+  }
   return {
     recipient: { comment_id: commentId },
     message: {
@@ -82,6 +97,21 @@ export function buildDirectMessagePayload(recipientId: string, message: MetaMess
         attachment: {
           type: "image",
           payload: { url: message.imageUrl, is_reusable: true },
+        },
+      },
+    };
+  }
+  if (message.type === "button_template") {
+    return {
+      recipient: { id: recipientId },
+      message: {
+        attachment: {
+          type: "template",
+          payload: {
+            template_type: "button",
+            text: message.text,
+            buttons: message.buttons,
+          },
         },
       },
     };

@@ -21,12 +21,22 @@ export type MetaButtonMessage = {
   url: string;
 };
 
+export type MetaTemplateButton =
+  | { type: "web_url"; title: string; url: string }
+  | { type: "postback"; title: string; payload: string };
+
+export type MetaButtonTemplateMessage = {
+  type: "button_template";
+  text: string;
+  buttons: MetaTemplateButton[];
+};
+
 export type MetaImageMessage = {
   type: "image";
   imageUrl: string;
 };
 
-export type MetaMessage = MetaTextMessage | MetaLinkMessage | MetaButtonMessage | MetaImageMessage;
+export type MetaMessage = MetaTextMessage | MetaLinkMessage | MetaButtonMessage | MetaButtonTemplateMessage | MetaImageMessage;
 
 export type MetaTokenResult = {
   accessToken: string;
@@ -62,4 +72,5 @@ export type MetaPrivateReply = {
     title: string;
     payload: string;
   };
+  buttons?: MetaTemplateButton[];
 };

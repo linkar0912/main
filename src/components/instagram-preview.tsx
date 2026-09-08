@@ -22,11 +22,12 @@ export type PreviewView = "post" | "comments" | "dm";
 export type DmBubble = {
   id: string;
   /** "bot" = Linkar's automated message, shown incoming (left, gray) like a real DM from
-   * another account. "tap" = a quick-reply button attached to that message, shown as its
-   * own right-aligned colored pill, the same visual split Instagram itself uses. */
+   * another account. "tap" = the person's reply after selecting a quick reply or postback. */
   from: "bot" | "tap";
   text?: string;
   button?: string;
+  /** Persistent button-template actions rendered inside the incoming message card. */
+  actions?: string[];
   imageUrl?: string;
 };
 
@@ -167,7 +168,14 @@ function DmView({ username, avatarUrl, messages }: { username: string; avatarUrl
       <div className="ig-dm-thread">
         {messages.length === 0 && <p className="ig-dm-empty muted">Your messages will appear here</p>}
         {messages.map((bubble) =>
-          bubble.button ? (
+          bubble.actions?.length ? (
+            <div className="ig-dm-template" data-testid="instagram-button-template" key={bubble.id}>
+              <div className="ig-dm-template-copy">{bubble.text}</div>
+              {bubble.actions.map((action, index) => (
+                <div className="ig-dm-template-action" key={`${bubble.id}-${index}`}>{action}</div>
+              ))}
+            </div>
+          ) : bubble.button ? (
             <div className={`ig-dm-button ${bubble.from === "tap" ? "is-tap" : "is-bot"}`} key={bubble.id}>{bubble.button}</div>
           ) : bubble.imageUrl ? (
             <div className={`ig-dm-image ${bubble.from === "tap" ? "is-tap" : "is-bot"}`} key={bubble.id}>

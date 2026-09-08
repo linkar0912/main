@@ -108,6 +108,34 @@ function createClient(overrides: Partial<CampaignRunnerClient> = {}): CampaignRu
   };
 }
 
+function postbackPayload(message: unknown): string | undefined {
+  if (typeof message !== "object" || message === null) return undefined;
+  const buttons = (message as { buttons?: unknown }).buttons;
+  if (!Array.isArray(buttons)) return undefined;
+  const button = buttons.find((candidate) => (
+    typeof candidate === "object"
+    && candidate !== null
+    && (candidate as { type?: unknown }).type === "postback"
+  ));
+  return typeof (button as { payload?: unknown } | undefined)?.payload === "string"
+    ? (button as { payload: string }).payload
+    : undefined;
+}
+
+function openingPostbackPayload(client: CampaignRunnerClient): string {
+  const opening = vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2];
+  const payload = postbackPayload(opening);
+  if (!payload) throw new Error("opening postback button was not sent");
+  return payload;
+}
+
+function directPostbackPayload(client: CampaignRunnerClient, callIndex = 0): string {
+  const message = vi.mocked(client.sendDirectMessage).mock.calls[callIndex]?.[2];
+  const payload = postbackPayload(message);
+  if (!payload) throw new Error("direct-message postback button was not sent");
+  return payload;
+}
+
 async function createHarness(client = createClient()) {
   const repository = createMemoryRepository([automation]);
   await repository.upsertConnection({
@@ -144,12 +172,7 @@ async function openParticipant(
     10,
   );
   if (!participant) throw new Error("test participant was not created");
-  const openingCall = vi.mocked(client.sendPrivateReply).mock.calls[0];
-  const opening = openingCall?.[2];
-  if (typeof opening === "string" || !opening?.quickReply) {
-    throw new Error("opening quick reply was not sent");
-  }
-  return { ...harness, participant, optInPayload: opening.quickReply.payload };
+  return { ...harness, participant, optInPayload: openingPostbackPayload(client) };
 }
 
 function interactionEvent(
@@ -232,10 +255,8 @@ describe("follow-gated campaign runner", () => {
     };
 
     await processCampaignEvent(commentEvent, limitedAutomation, mapping, repository, options);
-    const opening = vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2];
-    if (typeof opening === "string" || !opening?.quickReply) throw new Error("opening payload missing");
     await processPendingCampaignInteraction(
-      interactionEvent(opening.quickReply.payload, NOW + 1_000),
+      interactionEvent(openingPostbackPayload(client), NOW + 1_000),
       mapping,
       repository,
       options,
@@ -281,10 +302,9 @@ describe("follow-gated campaign runner", () => {
     expect(definition.publicReplies).toContain(publicText);
     expect(opening).toMatchObject({
       text: definition.openingMessage.text,
-      quickReply: { title: definition.openingMessage.optInButtonLabel },
+      buttons: [{ type: "postback", title: definition.openingMessage.optInButtonLabel }],
     });
-    if (typeof opening === "string" || !opening.quickReply) throw new Error("missing opening payload");
-    expect(readInteractionPayload(opening.quickReply.payload, INTERACTION_SECRET, NOW)).toEqual({
+    expect(readInteractionPayload(openingPostbackPayload(client), INTERACTION_SECRET, NOW)).toEqual({
       participantId: participant.id,
       action: "opt_in",
     });
@@ -371,19 +391,31 @@ describe("follow-gated campaign runner", () => {
     });
   });
 
-  it("prompts an opted-in non-follower with a signed user-initiated recheck", async () => {
+  it("prompts an opted-in non-follower with attached profile and signed recheck buttons", async () => {
     const harness = await openParticipant();
     vi.mocked(harness.client.getUserFollowStatus).mockResolvedValue({ isUserFollowingBusiness: false });
     const event = interactionEvent(harness.optInPayload, NOW + 1_000);
 
     await processPendingCampaignInteraction(event, harness.mapping, harness.repository, harness.options);
 
-    expect(harness.client.sendDirectMessage).not.toHaveBeenCalled();
-    expect(harness.client.sendQuickReply).toHaveBeenCalledTimes(1);
-    const prompt = vi.mocked(harness.client.sendQuickReply).mock.calls[0];
-    expect(prompt?.slice(1, 3)).toEqual(["scoped_user_1", definition.followGate.notFollowingMessage]);
-    expect(prompt?.[3]?.title).toBe(definition.followGate.recheckButtonLabel);
-    expect(readInteractionPayload(prompt?.[3]?.payload ?? "", INTERACTION_SECRET, event.timestamp)).toEqual({
+    expect(harness.client.sendQuickReply).not.toHaveBeenCalled();
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledWith(
+      { igUserId: commentEvent.accountId, accessToken: "access-token" },
+      "scoped_user_1",
+      {
+        type: "button_template",
+        text: definition.followGate.notFollowingMessage,
+        buttons: [
+          { type: "web_url", title: "Visit Profile", url: "https://www.instagram.com/creator/" },
+          { type: "postback", title: definition.followGate.recheckButtonLabel, payload: expect.any(String) },
+        ],
+      },
+    );
+    const prompt = vi.mocked(harness.client.sendDirectMessage).mock.calls[0]?.[2];
+    const recheckButton = prompt?.type === "button_template"
+      ? prompt.buttons.find((button) => button.type === "postback")
+      : undefined;
+    expect(readInteractionPayload(recheckButton?.payload ?? "", INTERACTION_SECRET, event.timestamp)).toEqual({
       participantId: harness.participant.id,
       action: "recheck",
     });
@@ -401,8 +433,7 @@ describe("follow-gated campaign runner", () => {
     const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
     vi.setSystemTime(optInEvent.timestamp);
     await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
-    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
-    if (!recheckPayload) throw new Error("recheck payload was not sent");
+    const recheckPayload = directPostbackPayload(harness.client);
     vi.mocked(harness.client.getUserFollowStatus).mockResolvedValueOnce({ isUserFollowingBusiness: true });
     const recheckEvent = interactionEvent(recheckPayload, optInEvent.timestamp + 10_000);
 
@@ -410,7 +441,7 @@ describe("follow-gated campaign runner", () => {
     await processPendingCampaignInteraction(recheckEvent, harness.mapping, harness.repository, harness.options);
 
     expect(await readParticipant(harness.repository)).toMatchObject({ state: "LINK_SENT", followStatus: true });
-    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(2);
     expect(harness.client.getUserFollowStatus).toHaveBeenCalledTimes(2);
   });
 
@@ -420,14 +451,14 @@ describe("follow-gated campaign runner", () => {
         .mockResolvedValueOnce({ isUserFollowingBusiness: false })
         .mockResolvedValueOnce({ isUserFollowingBusiness: true }),
       sendDirectMessage: vi.fn()
+        .mockResolvedValueOnce({ recipient_id: "scoped_user_1", message_id: "follow_prompt_1" })
         .mockRejectedValueOnce(new MetaApiError("temporarily unavailable", 503))
         .mockResolvedValueOnce({ recipient_id: "scoped_user_1", message_id: "final_message_retry" }),
     });
     const harness = await openParticipant(client);
     const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
     await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
-    const recheckPayload = vi.mocked(client.sendQuickReply).mock.calls[0]?.[3]?.payload;
-    if (!recheckPayload) throw new Error("recheck payload was not sent");
+    const recheckPayload = directPostbackPayload(client);
     const recheckEvent = interactionEvent(recheckPayload, optInEvent.timestamp + 10_000);
 
     await expect(
@@ -447,7 +478,7 @@ describe("follow-gated campaign runner", () => {
       finalProviderId: "final_message_retry",
     });
     expect(client.getUserFollowStatus).toHaveBeenCalledTimes(2);
-    expect(client.sendDirectMessage).toHaveBeenCalledTimes(2);
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(3);
   });
 
   it("reconciles final provider success after participant persistence fails without sending twice", async () => {
@@ -603,9 +634,7 @@ describe("follow-gated campaign runner", () => {
       });
     } else {
       await processCampaignEvent(commentEvent, automation, harness.mapping, harness.repository, harness.options);
-      const opening = vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2];
-      if (typeof opening === "string" || !opening?.quickReply) throw new Error("opening payload missing");
-      const event = interactionEvent(opening.quickReply.payload, NOW + 1_000);
+      const event = interactionEvent(openingPostbackPayload(client), NOW + 1_000);
       await processPendingCampaignInteraction(event, harness.mapping, harness.repository, harness.options);
       await processPendingCampaignInteraction(event, harness.mapping, harness.repository, harness.options);
       expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
@@ -630,8 +659,7 @@ describe("follow-gated campaign runner", () => {
     const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
     vi.setSystemTime(optInEvent.timestamp);
     await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
-    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
-    if (!recheckPayload) throw new Error("recheck payload was not sent");
+    const recheckPayload = directPostbackPayload(harness.client);
     const recheckEvent = interactionEvent(recheckPayload, optInEvent.timestamp + 10_000);
 
     await processPendingCampaignInteraction(recheckEvent, harness.mapping, harness.repository, harness.options);
@@ -642,8 +670,8 @@ describe("follow-gated campaign runner", () => {
       recheckCount: 1,
       followCheckedAt: new Date(recheckEvent.timestamp).toISOString(),
     });
-    expect(harness.client.sendQuickReply).toHaveBeenCalledTimes(2);
-    expect(harness.client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(harness.client.sendQuickReply).not.toHaveBeenCalled();
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(2);
   });
 
   it("rejects a recheck before 10 seconds and accepts the exact cooldown boundary", async () => {
@@ -652,8 +680,7 @@ describe("follow-gated campaign runner", () => {
     const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
     vi.setSystemTime(optInEvent.timestamp);
     await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
-    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
-    if (!recheckPayload) throw new Error("recheck payload was not sent");
+    const recheckPayload = directPostbackPayload(harness.client);
 
     await processPendingCampaignInteraction(
       interactionEvent(recheckPayload, optInEvent.timestamp + 9_999),
@@ -680,8 +707,7 @@ describe("follow-gated campaign runner", () => {
     const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
     vi.setSystemTime(optInEvent.timestamp);
     await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
-    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
-    if (!recheckPayload) throw new Error("recheck payload was not sent");
+    const recheckPayload = directPostbackPayload(harness.client);
 
     await processPendingCampaignInteraction(
       interactionEvent(recheckPayload, optInEvent.timestamp + 5_000),
@@ -692,9 +718,11 @@ describe("follow-gated campaign runner", () => {
 
     expect(harness.client.getUserFollowStatus).toHaveBeenCalledTimes(1);
     expect((await readParticipant(harness.repository)).recheckCount).toBe(0);
-    expect(harness.client.sendQuickReply).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(harness.client.sendQuickReply).mock.calls[1]?.[2]).toMatch(/few more seconds/i);
-    const noticePayload = vi.mocked(harness.client.sendQuickReply).mock.calls[1]?.[3]?.payload;
+    expect(harness.client.sendQuickReply).not.toHaveBeenCalled();
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(2);
+    const noticeMessage = vi.mocked(harness.client.sendDirectMessage).mock.calls[1]?.[2];
+    expect(noticeMessage?.type === "button_template" ? noticeMessage.text : undefined).toMatch(/few more seconds/i);
+    const noticePayload = directPostbackPayload(harness.client, 1);
     expect(typeof noticePayload).toBe("string");
     expect(noticePayload).not.toBe(recheckPayload);
   });
@@ -705,14 +733,14 @@ describe("follow-gated campaign runner", () => {
     const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
     vi.setSystemTime(optInEvent.timestamp);
     await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
-    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
-    if (!recheckPayload) throw new Error("recheck payload was not sent");
+    const recheckPayload = directPostbackPayload(harness.client);
 
     const violatingEvent = interactionEvent(recheckPayload, optInEvent.timestamp + 5_000, { id: "recheck_replay" });
     await processPendingCampaignInteraction(violatingEvent, harness.mapping, harness.repository, harness.options);
     await processPendingCampaignInteraction(violatingEvent, harness.mapping, harness.repository, harness.options);
 
-    expect(harness.client.sendQuickReply).toHaveBeenCalledTimes(2);
+    expect(harness.client.sendQuickReply).not.toHaveBeenCalled();
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(2);
   });
 
   it("allows only one competing recheck to claim the next cooldown slot", async () => {
@@ -721,8 +749,7 @@ describe("follow-gated campaign runner", () => {
     const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
     vi.setSystemTime(optInEvent.timestamp);
     await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
-    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
-    if (!recheckPayload) throw new Error("recheck payload was not sent");
+    const recheckPayload = directPostbackPayload(harness.client);
     const timestamp = optInEvent.timestamp + 10_000;
 
     await Promise.all([
@@ -741,7 +768,8 @@ describe("follow-gated campaign runner", () => {
     ]);
 
     expect(harness.client.getUserFollowStatus).toHaveBeenCalledTimes(2);
-    expect(harness.client.sendQuickReply).toHaveBeenCalledTimes(2);
+    expect(harness.client.sendQuickReply).not.toHaveBeenCalled();
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(2);
     expect((await readParticipant(harness.repository)).recheckCount).toBe(1);
   });
 
@@ -803,7 +831,7 @@ describe("follow-gated campaign runner", () => {
 
     expect(await readParticipant(harness.repository)).toMatchObject({ state: "EXPIRED" });
     expect(harness.client.getUserFollowStatus).toHaveBeenCalledTimes(1);
-    expect(harness.client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
   });
 
   it("accepts a valid recheck one millisecond before the messaging window closes", async () => {
@@ -813,8 +841,7 @@ describe("follow-gated campaign runner", () => {
       .mockResolvedValueOnce({ isUserFollowingBusiness: true });
     const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
     await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
-    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
-    if (!recheckPayload) throw new Error("recheck payload was not sent");
+    const recheckPayload = directPostbackPayload(harness.client);
 
     await processPendingCampaignInteraction(
       interactionEvent(recheckPayload, optInEvent.timestamp + 24 * 60 * 60 * 1_000 - 1),
@@ -824,7 +851,7 @@ describe("follow-gated campaign runner", () => {
     );
 
     expect(await readParticipant(harness.repository)).toMatchObject({ state: "LINK_SENT" });
-    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(2);
   });
 
   it("allows only one concurrent final-delivery dispatch", async () => {
@@ -1126,8 +1153,7 @@ describe("follow-gated campaign runner", () => {
     vi.mocked(harness.client.getUserFollowStatus).mockResolvedValue({ isUserFollowingBusiness: false });
     const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
     await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
-    const recheckPayload = vi.mocked(harness.client.sendQuickReply).mock.calls[0]?.[3]?.payload;
-    if (!recheckPayload) throw new Error("recheck payload was not sent");
+    const recheckPayload = directPostbackPayload(harness.client);
     const expiresAt = optInEvent.timestamp + 24 * 60 * 60 * 1_000;
 
     const result = await processPendingCampaignInteraction(
@@ -1325,8 +1351,8 @@ describe("campaign expansion behavior", () => {
 
     await processCampaignEvent(commentEvent, ungatedAutomation, mapping, repository, options);
     const openingCall = vi.mocked(client.sendPrivateReply).mock.calls[0];
-    const payload = (openingCall?.[2] as { quickReply?: { payload: string } }).quickReply?.payload;
-    if (!payload) throw new Error("opening quick reply was not sent");
+    const payload = postbackPayload(openingCall?.[2]);
+    if (!payload) throw new Error("opening postback button was not sent");
 
     const result = await processPendingCampaignInteraction(
       interactionEvent(payload, NOW + 1_000),

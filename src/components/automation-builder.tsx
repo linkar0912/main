@@ -1861,16 +1861,29 @@ function AutomationBuilderV2({
 
   const dmMessages: DmBubble[] = [];
   if (openingText.trim()) {
-    dmMessages.push({ id: "opening", from: "bot", text: openingText });
+    dmMessages.push({
+      id: "opening",
+      from: "bot",
+      text: openingText,
+      actions: [optInButtonLabel.trim() || "Get it"],
+    });
     dmMessages.push({ id: "opt-in", from: "tap", button: optInButtonLabel.trim() || "Get it" });
   }
   if (followGateRequired && notFollowingMessage.trim()) {
-    dmMessages.push({ id: "not-following", from: "bot", text: notFollowingMessage });
-    dmMessages.push({ id: "recheck", from: "tap", button: recheckButtonLabel.trim() || "I followed" });
+    dmMessages.push({
+      id: "not-following",
+      from: "bot",
+      text: notFollowingMessage,
+      actions: ["Visit Profile", recheckButtonLabel.trim() || "I followed"],
+    });
   }
   if (deliveryText.trim()) {
-    dmMessages.push({ id: "delivery", from: "bot", text: deliveryText });
-    if (deliveryButtonLabel.trim()) dmMessages.push({ id: "delivery-button", from: "tap", button: deliveryButtonLabel });
+    dmMessages.push({
+      id: "delivery",
+      from: "bot",
+      text: deliveryText,
+      ...(deliveryButtonLabel.trim() ? { actions: [deliveryButtonLabel.trim()] } : {}),
+    });
   }
 
   return (
