@@ -34,12 +34,15 @@ const INTERACTION_EVENT_TYPES = new Set<NormalizedEvent["type"]>([
   "referral.received",
 ]);
 
-const PARTICIPANT_ACTION_STATES: ParticipantState[] = [
+const PUBLIC_REPLY_ACTION_STATES: ParticipantState[] = [
   "COMMENT_MATCHED",
   "OPENING_SENT",
   "OPTED_IN",
   "FOLLOW_REQUIRED",
   "FOLLOW_VERIFIED",
+  // The concurrently dispatched opening reply can fail first. The public
+  // reply still needs to persist its already-started provider outcome.
+  "FAILED",
 ];
 
 export type CampaignRunnerClient = Pick<
@@ -718,7 +721,7 @@ async function deliverPublicReply(
   if (!text) {
     const skipped = await ctx.repository.transitionParticipant(
       participant.id,
-      PARTICIPANT_ACTION_STATES,
+      PUBLIC_REPLY_ACTION_STATES,
       { publicReplyStatus: "SKIPPED" },
     );
     return skipped ?? participant;
@@ -731,7 +734,7 @@ async function deliverPublicReply(
       externalEventId: participant.sourceCommentId,
       payload: { commentId: participant.sourceCommentId, text },
       dailySendLimit: definition.dailySendLimit,
-      allowedStates: PARTICIPANT_ACTION_STATES,
+      allowedStates: PUBLIC_REPLY_ACTION_STATES,
       send: async (payload) => ({
         messageId: (await ctx.client.replyToComment(
           ctx.connection,
@@ -1130,12 +1133,22 @@ export async function processExistingCampaignParticipant(
     timingObserver: options.timingObserver,
   };
 
+  const deliveries: Promise<AutomationParticipantRecord>[] = [];
   if (participant.publicReplyStatus !== "SENT" && participant.publicReplyStatus !== "SKIPPED") {
-    participant = await deliverPublicReply(participant, automation.definition, ctx);
+    deliveries.push(deliverPublicReply(participant, automation.definition, ctx));
   }
   if (participant.openingStatus !== "SENT" && participant.state !== "FAILED") {
-    participant = await deliverOpeningReply(participant, automation.definition, ctx);
+    deliveries.push(deliverOpeningReply(participant, automation.definition, ctx));
   }
+
+  // These are distinct Meta operations with independent durable claims. Waiting
+  // for both to settle avoids retrying the queue job while its sibling send is
+  // still in flight, while removing the public-reply round trip from DM latency.
+  const deliveryResults = await Promise.allSettled(deliveries);
+  const failedDelivery = deliveryResults.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failedDelivery) throw failedDelivery.reason;
 
   participant = await currentParticipant(participant, repository);
   if (participant.openingStatus === "SENT") {

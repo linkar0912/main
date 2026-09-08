@@ -5,6 +5,30 @@ function normalizedText(value: string): string {
   return value.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function containsWholeKeyword(text: string, keyword: string): boolean {
+  const candidate = normalizedText(text);
+  const normalizedKeyword = normalizedText(keyword);
+  if (!normalizedKeyword) return false;
+
+  const flexiblePhrase = normalizedKeyword
+    .split(/\s+/u)
+    .map(escapeRegex)
+    .join("\\s+");
+  const startsWithWordCharacter = /^[\p{L}\p{N}_]/u.test(normalizedKeyword);
+  const endsWithWordCharacter = /[\p{L}\p{N}_]$/u.test(normalizedKeyword);
+  const pattern = [
+    startsWithWordCharacter ? "(?<![\\p{L}\\p{N}_])" : "",
+    flexiblePhrase,
+    endsWithWordCharacter ? "(?![\\p{L}\\p{N}_])" : "",
+  ].join("");
+
+  return new RegExp(pattern, "u").test(candidate);
+}
+
 function containsKeyword(text: string, keywords: string[]): boolean {
   const candidate = normalizedText(text);
   return keywords.some((keyword) => candidate.includes(normalizedText(keyword)));
@@ -44,9 +68,9 @@ function matchesKeywordsWithMode(
     });
   }
   if (effectiveMode === "all") {
-    return normalizedKeywords.every((keyword) => candidate.includes(normalizedText(keyword)));
+    return normalizedKeywords.every((keyword) => containsWholeKeyword(text, keyword));
   }
-  return containsKeyword(text, keywords);
+  return normalizedKeywords.some((keyword) => containsWholeKeyword(text, keyword));
 }
 
 /** Returns true if `text` contains any of the negative keywords (case-insensitive). */
@@ -57,10 +81,30 @@ function matchesNegative(text: string | undefined, negativeKeywords: string[] | 
 }
 
 /** The first keyword that appears in `text` (normalized), for {keyword} personalization. */
-export function findMatchedKeyword(text: string | undefined, keywords: string[]): string | undefined {
+export function findMatchedKeyword(
+  text: string | undefined,
+  keywords: string[],
+  mode: CommentTrigger["mode"] = "any",
+): string | undefined {
   if (!text) return undefined;
   const candidate = normalizedText(text);
-  return keywords.find((keyword) => candidate.includes(normalizedText(keyword)));
+  if (mode === "contains") {
+    return keywords.find((keyword) => candidate.includes(normalizedText(keyword)));
+  }
+  if (mode === "exact") {
+    return keywords.find((keyword) => normalizedText(keyword) === candidate);
+  }
+  if (mode === "regex") {
+    return keywords.find((keyword) => {
+      if (keyword.length === 0 || keyword.length > 200) return false;
+      try {
+        return new RegExp(keyword, "i").test(text);
+      } catch {
+        return false;
+      }
+    });
+  }
+  return keywords.find((keyword) => containsWholeKeyword(text, keyword));
 }
 
 /** Per-media override for the private reply, when the trigger carries a map. */

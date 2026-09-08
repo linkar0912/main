@@ -21,7 +21,7 @@ export function evaluateFlow(
 
   const matchedKeyword =
     (flow.trigger.type === "comment" || flow.trigger.type === "message") && flow.trigger.match === "keyword"
-      ? findMatchedKeyword(event.text, flow.trigger.keywords)
+      ? findMatchedKeyword(event.text, flow.trigger.keywords, flow.trigger.mode)
       : undefined;
 
   const actions: ExecutionAction[] = [];

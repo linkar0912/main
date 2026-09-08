@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { containsWholeKeyword } from "./match";
 import type { FlowDefinitionV2, NormalizedEvent } from "./types";
 
 export type CampaignMatchResult =
@@ -29,8 +30,7 @@ export function matchCampaign(definition: FlowDefinitionV2, event: NormalizedEve
     return { matched: true };
   }
 
-  const text = normalizedText(event.text);
-  const keyword = definition.trigger.keywords.find((candidate) => text.includes(normalizedText(candidate)));
+  const keyword = definition.trigger.keywords.find((candidate) => containsWholeKeyword(event.text, candidate));
   if (!keyword) {
     return { matched: false, reason: "keyword did not match" };
   }

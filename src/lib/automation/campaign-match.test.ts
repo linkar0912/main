@@ -65,6 +65,25 @@ describe("matchCampaign", () => {
     });
   });
 
+  it("does not match a keyword embedded inside a longer word", () => {
+    expect(matchCampaign(campaignDefinition, { ...commentEvent, text: "Please send the guidelines" })).toEqual({
+      matched: false,
+      reason: "keyword did not match",
+    });
+  });
+
+  it("matches whole keyword phrases across case and flexible whitespace", () => {
+    const definition: FlowDefinitionV2 = {
+      ...campaignDefinition,
+      trigger: { ...campaignDefinition.trigger, keywords: ["free guide"] },
+    };
+
+    expect(matchCampaign(definition, { ...commentEvent, text: "Send the FREE   GUIDE, please" })).toEqual({
+      matched: true,
+      keyword: "free guide",
+    });
+  });
+
   it("defers next-media matching until a runner binds media", () => {
     const definition: FlowDefinitionV2 = {
       ...campaignDefinition,

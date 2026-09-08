@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FlowDefinition, FlowDefinitionV1, NormalizedEvent } from "./types";
-import { matchesTrigger, resolveReplyForMedia } from "./match";
+import { findMatchedKeyword, matchesTrigger, resolveReplyForMedia } from "./match";
 
 const commentEvent: NormalizedEvent = {
   id: "comment_1",
@@ -22,6 +22,32 @@ describe("matchesTrigger", () => {
     };
 
     expect(matchesTrigger(flow, commentEvent)).toBe(true);
+  });
+
+  it("uses whole keyword phrases by default for existing workflows", () => {
+    const flow: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "comment", match: "keyword", keywords: ["free guide"], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Sent" }],
+    };
+
+    expect(matchesTrigger(flow, { ...commentEvent, text: "Send the FREE   GUIDE, please" })).toBe(true);
+    expect(matchesTrigger(flow, { ...commentEvent, text: "Read our free guidelines" })).toBe(false);
+    expect(findMatchedKeyword("Send the FREE   GUIDE, please", ["free guide"])).toBe("free guide");
+    expect(findMatchedKeyword("Read our free guidelines", ["free guide"])).toBeUndefined();
+  });
+
+  it("keeps explicit contains mode available for intentional substring matching", () => {
+    const flow: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "comment", match: "keyword", mode: "contains", keywords: ["guide"], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Sent" }],
+    };
+
+    expect(matchesTrigger(flow, { ...commentEvent, text: "guidelines" })).toBe(true);
+    expect(findMatchedKeyword("guidelines", ["guide"], "contains")).toBe("guide");
   });
 
   it("matches any comment only on selected media when media IDs are present", () => {
@@ -117,4 +143,3 @@ describe("matchesTrigger", () => {
     expect(resolveReplyForMedia(trigger, "media_2")).toBeUndefined();
   });
 });
-

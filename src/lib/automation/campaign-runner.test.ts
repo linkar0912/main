@@ -310,6 +310,80 @@ describe("follow-gated campaign runner", () => {
     });
   });
 
+  it.each([
+    ["embedded keyword", { text: "Please send the guidelines" }],
+    ["different media", { mediaId: "media_other" }],
+  ])("does not create a participant or send for an unmatched %s comment", async (_case, eventPatch) => {
+    const { client, repository, mapping, options } = await createHarness();
+
+    const result = await processCampaignEvent(
+      { ...commentEvent, ...eventPatch },
+      automation,
+      mapping,
+      repository,
+      options,
+    );
+
+    expect(result).toEqual({ handled: false, matched: 0, sent: 0, skipped: 0, failed: 0 });
+    expect(await repository.listParticipants(automation.workspaceId, automation.id, 10)).toHaveLength(0);
+    expect(client.replyToComment).not.toHaveBeenCalled();
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+  });
+
+  it("starts the private reply without waiting for the public reply to finish", async () => {
+    vi.useRealTimers();
+    let releasePublicReply!: (value: { id: string }) => void;
+    const pendingPublicReply = new Promise<{ id: string }>((resolve) => {
+      releasePublicReply = resolve;
+    });
+    const client = createClient({
+      replyToComment: vi.fn(() => pendingPublicReply),
+    });
+    const { repository, mapping, options } = await createHarness(client);
+
+    const processing = processCampaignEvent(commentEvent, automation, mapping, repository, options);
+    await vi.waitFor(() => expect(client.replyToComment).toHaveBeenCalledTimes(1));
+    const privateReplyStartedBeforePublicFinished = await vi.waitFor(
+      () => {
+        expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+        return true;
+      },
+      { timeout: 100 },
+    ).then(() => true, () => false);
+
+    releasePublicReply({ id: "public_reply_1" });
+    await processing;
+
+    expect(privateReplyStartedBeforePublicFinished).toBe(true);
+  });
+
+  it("records a concurrent public reply that finishes after the opening reply fails", async () => {
+    vi.useRealTimers();
+    let releasePublicReply!: (value: { id: string }) => void;
+    const pendingPublicReply = new Promise<{ id: string }>((resolve) => {
+      releasePublicReply = resolve;
+    });
+    const client = createClient({
+      replyToComment: vi.fn(() => pendingPublicReply),
+      sendPrivateReply: vi.fn().mockRejectedValue(new MetaApiError("invalid private reply", 400)),
+    });
+    const { repository, mapping, options } = await createHarness(client);
+
+    const processing = processCampaignEvent(commentEvent, automation, mapping, repository, options);
+    await vi.waitFor(async () => {
+      expect((await readParticipant(repository)).state).toBe("FAILED");
+    });
+    releasePublicReply({ id: "public_reply_after_failure" });
+    await processing;
+
+    expect(await readParticipant(repository)).toMatchObject({
+      state: "FAILED",
+      openingStatus: "FAILED",
+      publicReplyStatus: "SENT",
+      publicReplyProviderId: "public_reply_after_failure",
+    });
+  });
+
   it("replays only a retryable pending opener after the public reply succeeded", async () => {
     const client = createClient({
       sendPrivateReply: vi.fn()
