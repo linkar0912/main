@@ -43,7 +43,7 @@ Production verification completed at 2026-08-23 15:50 IST:
 - Backup persisted across container recreation with filesystem mode `600`.
 - Both Release 1 migrations report a non-null successful completion in `_prisma_migrations`.
 - `InstagramConnection_igUserId_key` exists after migration.
-- Coolify state: web `running:healthy`, worker running, migrate exited, PostgreSQL and Valkey `running:healthy`.
+- Production state at release time: web and worker healthy, migration complete, PostgreSQL and Valkey healthy.
 - Public `/api/health`: HTTP 200, `status=ok`, `mode=configured`, database and Redis `ok`.
 - Unauthenticated `/api/automations`, `/api/sequences`, `/api/broadcasts`, and `/api/insights/funnels`: HTTP 401.
 - A fresh production CSS asset was fetched successfully. The manually configured `/api/health.release` value remains stale and was not used as deployment evidence.

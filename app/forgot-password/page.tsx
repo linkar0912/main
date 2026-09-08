@@ -6,7 +6,7 @@ import { getServerEnv } from "@/src/lib/env";
 import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
 
 // force-dynamic is required, not vestigial: the marketing chrome needs
-// publicSiteUrl, which is read from the environment at request time so Coolify's
+// publicSiteUrl, which is read from the environment at request time so the deployment's
 // value is used rather than whatever the Docker image was built with. Without
 // this the page is prerendered, getServerEnv() runs during the build, and env
 // validation fails there. /login and /signup are force-dynamic for the same

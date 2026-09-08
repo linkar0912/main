@@ -56,20 +56,13 @@ this local workflow.
 
 ## Production deployment
 
-Production requires a Supabase project (Postgres + Auth), Valkey, Meta
-credentials, and a public HTTPS URL. Build the release, apply only committed
-migrations, then run the web and worker as separate long-lived processes:
+Production runs on Dokploy. A push to `main` passes CI, publishes an immutable
+GHCR image, and promotes that exact commit through the restricted release
+bridge. Do not push `main` merely to store unfinished work. The release order,
+verification, migration, rollback, and configuration procedures are in
+[`ops/DOKPLOY_DEPLOYMENT.md`](ops/DOKPLOY_DEPLOYMENT.md).
 
-```bash
-pnpm build
-pnpm db:migrate:deploy
-pnpm start
-pnpm worker
-```
-
-Do not use `pnpm db:migrate` or `pnpm db:seed` in production. The complete
-Coolify/Cloudflare release order, rollback procedure, and owner-supplied values
-are in [`ops/COOLIFY_DEPLOYMENT.md`](ops/COOLIFY_DEPLOYMENT.md).
+Never use `pnpm db:migrate` or `pnpm db:seed` in production.
 
 For a billing-enabled release, load the nine Razorpay credentials/Plan IDs and
 run the secret-safe configuration check before deployment:
@@ -78,9 +71,9 @@ run the secret-safe configuration check before deployment:
 pnpm preflight:billing
 ```
 
-The exact six-plan mapping and webhook setup are documented in the Coolify
-runbook. Paid access is activated only by a verified Razorpay webhook; the
-browser Checkout callback never grants an entitlement.
+The exact deployment and webhook checks are documented in the Dokploy runbook.
+Paid access is activated only by a verified Razorpay webhook; the browser
+Checkout callback never grants an entitlement.
 
 Generate a token encryption key with:
 
@@ -115,19 +108,11 @@ pnpm test:e2e
 
 ## Production requirements
 
-Production needs a public HTTPS deployment, a Supabase project (Postgres + Auth), Valkey, `APP_URL`/`NEXT_PUBLIC_APP_URL` set to the app origin, `PUBLIC_SITE_URL` set to the marketing origin, an `AUTH_SESSION_SECRET`, a Meta App ID and secret, a token encryption key, and the worker process running alongside the web process. `GET /api/health` reports dependency state without returning connection details; it returns `503` when either configured dependency is unavailable or only one of Postgres and Valkey is configured. Coolify can set `SOURCE_COMMIT` to include its deployment commit marker. Accounts are self-serve via `/signup`; each account gets its own isolated workspace.
+Production needs a public HTTPS deployment, a Supabase project (Postgres + Auth), Valkey, `APP_URL`/`NEXT_PUBLIC_APP_URL` set to the app origin, `PUBLIC_SITE_URL` set to the marketing origin, an `AUTH_SESSION_SECRET`, a Meta App ID and secret, a token encryption key, and the singleton worker running alongside the web application. `GET /api/health` reports dependency state and the immutable image commit without returning connection details; it returns `503` when either configured dependency is unavailable or only one of PostgreSQL and Valkey is configured. Accounts are self-serve via `/signup`; each account gets its own isolated workspace.
 
-The local production topology can be checked with:
-
-```bash
-cp .env.production.example .env.production
-pnpm check:compose
-```
-
-`.env.production` contains secrets and is intentionally ignored; replace every
-placeholder before any deployment. `check:compose` reads the checked-in example
-template so it can validate strict required-variable interpolation without a
-local secret file. Do not publish PostgreSQL or Valkey ports.
+`.env.production.example` is a variable-name checklist. Replace every
+placeholder in Dokploy and never commit a populated production environment.
+Do not publish PostgreSQL, Valkey, or worker health ports.
 
 After the web service is public, verify its configured dependencies without
 printing connection details:

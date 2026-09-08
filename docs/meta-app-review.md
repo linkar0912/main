@@ -23,7 +23,7 @@ The owner must supply all of the following before this production procedure can
 be completed:
 
 - the final public Linkar domain and a monitored support mailbox;
-- Coolify/server access and private PostgreSQL and Valkey connection values;
+- Dokploy access and private PostgreSQL and Valkey connection values;
 - the Instagram and Facebook app IDs, app secrets, and the business account that owns them;
 - a stable token-encryption key, a high-entropy webhook verify token, and a
   session signing secret (`AUTH_SESSION_SECRET`); and
@@ -34,7 +34,7 @@ be completed:
 Set these production values on the web app and worker:
 
 ```dotenv
-# The Coolify stack refuses to start without META_APP_ID, META_APP_SECRET,
+# The production stack refuses to start without META_APP_ID, META_APP_SECRET,
 # FACEBOOK_APP_ID, FACEBOOK_APP_SECRET and FACEBOOK_VERIFY_TOKEN. Set all five
 # before deploying - a missing one is a failed boot, not a silent degrade.
 APP_NAME=Linkar

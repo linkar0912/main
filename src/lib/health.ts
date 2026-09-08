@@ -92,10 +92,8 @@ export async function getHealth(checkers: HealthCheckers = {}): Promise<Health> 
         ? "ok"
         : "degraded",
     mode: databaseUrl || redisUrl ? "configured" : "demo",  // same rule as getRuntimeMode()
-    // BUILD_COMMIT is baked into the image at build time and is authoritative.
-    // SOURCE_COMMIT is supplied by the operator and has gone stale in
-    // production before, so it is only a fallback for images built without it.
-    release: process.env.BUILD_COMMIT || process.env.SOURCE_COMMIT || null,
+    // BUILD_COMMIT is baked into the image and cannot drift from the running code.
+    release: process.env.BUILD_COMMIT || null,
     dependencies: { database, redis },
     integrations: {
       instagram: integrationState(metaAppId, metaAppSecret),

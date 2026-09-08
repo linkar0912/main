@@ -6,11 +6,11 @@ export const DEFAULT_WORKER_HEALTH_PORT = 3001;
 /**
  * Liveness endpoint for the worker container.
  *
- * The worker has no HTTP surface of its own, so Coolify reported it as
- * `running:unknown` - the container was up, but nothing verified it could
- * still reach Redis and PostgreSQL, which is exactly what the App Review
- * runbook asks us to confirm. This reuses the same probes the web app exposes
- * so a stalled worker fails its healthcheck instead of sitting there silently.
+ * The worker has no public HTTP surface, so process state alone cannot verify it
+ * can still reach Redis and PostgreSQL. This endpoint lets the orchestrator
+ * satisfy the App Review readiness check. It reuses the same probes the web
+ * app exposes, so a stalled worker fails its healthcheck instead of sitting
+ * there silently.
  */
 export function createWorkerHealthServer(checkers: HealthCheckers = {}): Server {
   return createServer((request, response) => {

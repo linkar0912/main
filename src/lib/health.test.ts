@@ -22,7 +22,7 @@ describe("getHealth", () => {
   it("reports demo mode with unconfigured dependencies", async () => {
     vi.stubEnv("DATABASE_URL", "");
     vi.stubEnv("REDIS_URL", "");
-    vi.stubEnv("SOURCE_COMMIT", "");
+    vi.stubEnv("BUILD_COMMIT", "");
     stubNoIntegrationCredentials();
 
     await expect(getHealth()).resolves.toEqual({
@@ -41,7 +41,7 @@ describe("getHealth", () => {
   it("reports configured healthy dependencies", async () => {
     vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
     vi.stubEnv("REDIS_URL", "redis://:secret@redis:6379");
-    vi.stubEnv("SOURCE_COMMIT", "coolify-commit-marker");
+    vi.stubEnv("BUILD_COMMIT", "baked-into-the-image");
     stubNoIntegrationCredentials();
 
     await expect(
@@ -52,7 +52,7 @@ describe("getHealth", () => {
     ).resolves.toEqual({
       status: "ok",
       mode: "configured",
-      release: "coolify-commit-marker",
+      release: "baked-into-the-image",
       dependencies: {
         database: "ok",
         redis: "ok",
@@ -65,7 +65,7 @@ describe("getHealth", () => {
   it("reports degraded when only the database is configured", async () => {
     vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
     vi.stubEnv("REDIS_URL", "");
-    vi.stubEnv("SOURCE_COMMIT", "");
+    vi.stubEnv("BUILD_COMMIT", "");
     stubNoIntegrationCredentials();
 
     await expect(
@@ -88,7 +88,7 @@ describe("getHealth", () => {
   it("reports degraded when only Redis is configured", async () => {
     vi.stubEnv("DATABASE_URL", "");
     vi.stubEnv("REDIS_URL", "redis://:secret@valkey:6379");
-    vi.stubEnv("SOURCE_COMMIT", "");
+    vi.stubEnv("BUILD_COMMIT", "");
     stubNoIntegrationCredentials();
 
     await expect(
@@ -111,7 +111,7 @@ describe("getHealth", () => {
   it("reports a safe degraded response when a configured dependency fails", async () => {
     vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
     vi.stubEnv("REDIS_URL", "redis://:secret@redis:6379");
-    vi.stubEnv("SOURCE_COMMIT", "");
+    vi.stubEnv("BUILD_COMMIT", "");
     stubNoIntegrationCredentials();
 
     const health = await getHealth({
@@ -138,24 +138,19 @@ describe("getHealth", () => {
 });
 
 describe("getHealth release provenance", () => {
-  it("prefers the commit baked into the image over an operator-supplied one", async () => {
-    // SOURCE_COMMIT is set by hand in Coolify and went 30 commits stale in
-    // production, so the image-baked value has to win.
+  it("reports the commit baked into the image", async () => {
     vi.stubEnv("DATABASE_URL", "");
     vi.stubEnv("REDIS_URL", "");
     vi.stubEnv("BUILD_COMMIT", "baked-into-the-image");
-    vi.stubEnv("SOURCE_COMMIT", "stale-operator-value");
 
     await expect(getHealth()).resolves.toMatchObject({ release: "baked-into-the-image" });
   });
 
-  it("falls back to the operator-supplied commit when the image has none", async () => {
+  it("reports no release when the image has no baked commit", async () => {
     vi.stubEnv("DATABASE_URL", "");
     vi.stubEnv("REDIS_URL", "");
     vi.stubEnv("BUILD_COMMIT", "");
-    vi.stubEnv("SOURCE_COMMIT", "operator-value");
-
-    await expect(getHealth()).resolves.toMatchObject({ release: "operator-value" });
+    await expect(getHealth()).resolves.toMatchObject({ release: null });
   });
 });
 

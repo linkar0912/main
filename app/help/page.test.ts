@@ -16,7 +16,7 @@ describe("HelpPage", () => {
     // request time rather than frozen into the Docker image build. That cost
     // every navigation a full server round trip before anything painted.
     // supportEmail now travels on /api/workspace/bootstrap - still request-time,
-    // still Coolify's value, but fetched once by the app shell - so the page can
+    // still the deployment's value, but fetched once by the app shell - so the page can
     // be a plain static client page like /automations.
     expect(source).not.toMatch(/dynamic\s*=\s*["']force-dynamic["']/);
     expect(source).not.toMatch(/getServerEnv/);

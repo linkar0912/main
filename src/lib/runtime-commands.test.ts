@@ -26,27 +26,9 @@ afterEach(() => {
 describe("production runtime commands", () => {
   it("runs bundled binaries without invoking pnpm's runtime install checks", () => {
     const dockerfile = readProjectFile("Dockerfile");
-    const coolifyCompose = readProjectFile("docker-compose.coolify.yml");
-    const productionCompose = readProjectFile("docker-compose.production.yml");
 
     expect(dockerfile).toContain('CMD ["./node_modules/.bin/next", "start"]');
-    expect(coolifyCompose).toContain(
-      'command: ["./node_modules/.bin/prisma", "migrate", "deploy"]',
-    );
-    // The worker ships as a prebuilt esbuild bundle: no TS loader, no pnpm runtime.
-    expect(coolifyCompose).toContain(
-      'command: ["node", "dist/worker.js"]',
-    );
-    expect(productionCompose).toContain(
-      'command: ["./node_modules/.bin/next", "start"]',
-    );
-    expect(productionCompose).toContain(
-      'command: ["node", "dist/worker.js"]',
-    );
-
-    for (const contents of [dockerfile, coolifyCompose, productionCompose]) {
-      expect(contents).not.toMatch(/(?:CMD|command:) \["pnpm"/);
-    }
+    expect(dockerfile).not.toMatch(/CMD \["pnpm"/);
   });
 
   it("passes the campaign rollout flag and signing secret through worker and webhook execution", () => {

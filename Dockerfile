@@ -28,9 +28,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Identifies the build itself. The operator-supplied SOURCE_COMMIT is set by
-# hand in the deploy target and has gone stale there, so /api/health prefers
-# this value - it cannot drift from the image it is baked into.
+# Identifies the build itself. This cannot drift from the image it is baked into.
 ARG BUILD_COMMIT=unknown
 ENV BUILD_COMMIT=${BUILD_COMMIT}
 

@@ -25,4 +25,3 @@ test-results/
 !.env.production.example
 *.log
 .DS_Store
-.coolify-deploy-state.json

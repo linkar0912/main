@@ -10,7 +10,7 @@ export function clientAddress(request: Request, trustedProxyHops: number): strin
     if (cloudflareIp) return cloudflareIp;
     // X-Forwarded-For is freely forgeable. Only honor it when the operator
     // has explicitly told us how many trusted reverse proxies sit in front
-    // of the app (nginx, Traefik, Coolify, Cloudflare without the dedicated
+    // of the app (nginx, Traefik, Cloudflare without the dedicated
     // header above, etc.). With zero trusted hops we MUST ignore XFF entirely
     // - otherwise an unauthenticated client can append its own XFF entry and
     // bypass the login rate limiter by spoofing a different IP on each

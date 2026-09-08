@@ -15,9 +15,8 @@ function isValidWorkerHealthUrl(value) {
   try {
     const url = new URL(value ?? "");
     if (url.protocol === "https:") return true;
-    // Coolify's compose network keeps the worker private. The web container
-    // reaches it over the isolated Docker network, so this one exact HTTP
-    // origin is safe and is the default rendered by docker-compose.coolify.yml.
+    // The private application network keeps the worker unreachable publicly.
+    // The web container reaches this exact origin over that isolated network.
     return url.protocol === "http:" && url.hostname === "worker" && url.port === "3001" && url.pathname === "/health";
   } catch {
     return false;
@@ -52,7 +51,7 @@ export function validateBillingConfig(env) {
     errors.push("APP_URL must be a valid HTTPS URL");
   }
   if (!isValidWorkerHealthUrl(env.WORKER_HEALTH_URL)) {
-    errors.push("WORKER_HEALTH_URL must be HTTPS or the private Coolify URL http://worker:3001/health");
+    errors.push("WORKER_HEALTH_URL must be HTTPS or the private container URL http://worker:3001/health");
   }
 
   return { ok: errors.length === 0, errors, webhookUrl, planVariables: PLAN_VARIABLES };

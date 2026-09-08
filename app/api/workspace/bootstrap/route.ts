@@ -43,7 +43,7 @@ export async function GET(request: Request) {
             igAvatarUrl,
             platformOwner: env.platformOwnerUserIds.includes(session.userId.toLowerCase()),
             // Read at request time (never baked into the image build) so the
-            // help centre can render statically and still show Coolify's value.
+            // help centre can render statically and still show the deployment value.
             supportEmail: env.supportEmail,
             // Config-only, no I/O. Home and Settings used to call /api/health
             // for this one field, paying a Redis connect plus a `SELECT 1` on

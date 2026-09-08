@@ -43,7 +43,7 @@ Local verification on 2026-08-23 (Asia/Kolkata):
   applied first; Release 2 then applied by itself and a second deploy reported
   no pending migrations.
 - Local Compose parsing: unavailable because Docker is not installed in this
-  workspace. The live Coolify container graph and health checks remain a
+  workspace. The live container graph and health checks remain a
   production deployment gate.
 
 Production deployment evidence is pending. Credentials, access tokens,

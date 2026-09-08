@@ -135,7 +135,7 @@ export function parseEmailList(name: string, value: string | undefined): string[
 export function getServerEnv(): ServerEnv {
   // NEXT_PUBLIC_* values are frozen by Next.js during `next build`. Prefer a
   // server-only variable so one container image can be configured correctly
-  // at runtime by Coolify.
+  // at runtime by the deployment platform.
   const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const adminUrl = process.env.ADMIN_URL ?? appUrl;
   const publicSiteUrl =
@@ -330,7 +330,7 @@ export function getServerEnv(): ServerEnv {
  *
  * The root layout renders on every prerendered page, and getServerEnv throws
  * when production secrets are placeholders - which they are at image build
- * time, since Coolify supplies them at runtime. Routing this through
+ * time, since the deployment platform supplies them at runtime. Routing this through
  * getServerEnv failed `next build` on every static page. It stays server-only
  * rather than NEXT_PUBLIC_ so the value is read per request and one image can
  * be pointed at a different property without a rebuild.

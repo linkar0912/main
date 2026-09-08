@@ -8,7 +8,7 @@ export const metadata = { title: "Help · Linkar" };
 // image build - but it also meant every navigation to /help waited on a fresh
 // server round trip before anything painted. supportEmail now rides along on
 // /api/workspace/bootstrap, which is already request-time and already fetched
-// once by the app shell, so the runtime value is still honoured (Coolify's, not
+// once by the app shell, so the deployment's runtime value is still honoured, not
 // the build's) and the page renders immediately.
 export default function HelpPage() {
     return <HelpScreen />;

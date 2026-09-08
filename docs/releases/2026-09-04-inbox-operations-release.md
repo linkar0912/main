@@ -27,7 +27,7 @@
 - Playwright: 63 tests passed.
 - PostgreSQL 17 migration rehearsal: passed from an empty database and from the 44-migration pre-change state.
 - Historical migration repair: removed RLS statements for legacy auth tables already dropped by the immediately preceding migration; both rehearsal paths pass and the connected database remains up to date.
-- Coolify service variable `FOLLOW_GATED_CAMPAIGNS_ENABLED=true` is explicit, runtime-enabled, and shared by the Compose environment used by web and worker.
+- Production variable `FOLLOW_GATED_CAMPAIGNS_ENABLED=true` is explicit, runtime-enabled, and shared by web and worker.
 - Production `/api/health`: `status=ok`, `mode=configured`, `database=ok`, `redis=ok`, `instagram=configured`, `facebook=configured`, `followGatedCampaigns=enabled`, release `7e33afbebeacab2454a63d6e25d13a51d5e30b6a`.
 - Cross-subdomain OAuth is fixed: secure auth and OAuth-state cookies share `linkar.in` only for trusted HTTPS app/admin origins, and successful OAuth redirects preserve `/admin/*` destinations.
 - Authenticated production surfaces passed without console errors: Dashboard, Instagram Inbox, Facebook Page activity, Contacts, Automations, Settings, and Insights.
