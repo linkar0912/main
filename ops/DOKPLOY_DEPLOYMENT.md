@@ -74,6 +74,36 @@ Require all of the following:
 - Instagram and Facebook configuration states are expected;
 - `followGatedCampaigns` is `enabled` for the live feature.
 
+## Release failure triage
+
+Find the failing stage first:
+
+```bash
+gh run list --workflow="Build production container" --limit 5
+gh run view <run-id> --log-failed
+```
+
+- Verification or build failure: fix it and push a new commit. Dokploy was not
+  invoked and production is unchanged.
+- SSH or host-key failure: check the three `DOKPLOY_DEPLOY_*` secrets and the
+  `deploybot` authorized key. The pinned host key must come from the live server
+  and match the fingerprint in the provider's provisioning email. Never disable
+  host verification.
+- The deploy step prints `curl: (22) ... 401` after SSH connected: the SSH key is
+  fine, but the Dokploy API key used by the host-side release script
+  (`/etc/dokploy-release/api-key`, shared by the Linkar and TrackParcel release
+  commands) is no longer accepted. Create a new API key in Dokploy, write it to
+  that file (mode 600, no extra characters), confirm
+  `curl -H "x-api-key: $(cat /etc/dokploy-release/api-key)" http://localhost:3000/api/project.all`
+  returns 200, then re-run the failed workflow. Production keeps serving the
+  previous release while this is broken.
+- Public health reports an older `release` after a green workflow: the previous
+  containers are still serving; the requested release did not complete.
+
+The Dokploy panel and API are not published. Reach them from an administrator
+machine through an SSH tunnel to the host, on a local port that does not clash
+with a running dev server.
+
 ## Database migrations
 
 Schema migrations are a separate operation. Back up PostgreSQL first, run only
