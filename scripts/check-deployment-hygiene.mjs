@@ -100,7 +100,7 @@ async function main() {
 
   for (const finding of findings) {
     const location = finding.line > 0 ? `${finding.path}:${finding.line}` : finding.path;
-    console.error(`${location} — ${finding.message}`);
+    console.error(`${location}: ${finding.message}`);
   }
   process.exitCode = 1;
 }

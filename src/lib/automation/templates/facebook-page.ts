@@ -76,7 +76,7 @@ export const facebookPageAutomationTemplates: PremadeTemplate[] = [
     description: "When someone comments your giveaway word, Linkar publicly confirms that it was seen.",
     name: "Confirm giveaway comments",
     trigger: { type: "comment", match: "keyword", keywords: ["enter", "giveaway"], mediaIds: [] },
-    reply: "Entry noted—thanks for taking part! Please check the post for the full rules.",
+    reply: "Entry noted - thanks for taking part! Please check the post for the full rules.",
   }),
   pageTemplate({
     id: "facebook-support-acknowledgement",

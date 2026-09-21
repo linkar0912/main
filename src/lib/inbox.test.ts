@@ -46,7 +46,7 @@ describe("inbox projections", () => {
       kind: "MANUAL_INBOX",
       recipientId: "person_1",
       instagramAccountId: "ig_1",
-      payload: { type: "text", text: "Absolutely — what do you need?" },
+      payload: { type: "text", text: "Absolutely - what do you need?" },
       state: "SENT",
       retryable: false,
       attemptCount: 1,
@@ -57,7 +57,7 @@ describe("inbox projections", () => {
 
     expect(buildConversation(contact, [outbound], [inbound])).toEqual([
       expect.objectContaining({ id: "event_1", direction: "inbound", text: "Can you help?" }),
-      expect.objectContaining({ id: "delivery_1", direction: "outbound", text: "Absolutely — what do you need?", status: "sent" }),
+      expect.objectContaining({ id: "delivery_1", direction: "outbound", text: "Absolutely - what do you need?", status: "sent" }),
     ]);
   });
 

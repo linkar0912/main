@@ -75,7 +75,6 @@ describe("quick replies flow action", () => {
       repository,
       { client, tokenEncryptionKey: TOKEN_KEY },
     );
-    console.log("DBG_RESULT", JSON.stringify(result));
     const problems = await repository.listOutboundDeliveryProblems("workspace_a", 5);
     expect(problems.map((problem) => problem.lastError)).toEqual([]);
     expect(result).toMatchObject({ matched: 1, sent: 1 });
