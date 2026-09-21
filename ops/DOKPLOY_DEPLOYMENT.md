@@ -124,6 +124,96 @@ DATABASE_URL="$DIRECT_URL" pnpm exec prisma migrate deploy
 
 ### Migrations that add indexed columns
 
+Adding a column, backfilling it, and indexing it on a busy table are operations
+with different locking behaviour, so they are separated (`20260921180000` and
+`20260921180200` plus `scripts/backfill-webhook-event-actors.mjs` are the worked
+example):
+
+1. A migration adds the column as nullable. It is catalog-only, with no rewrite.
+2. A batched, idempotent script backfills existing rows in small committed
+   batches. It is a script, not a migration, because one migration is one
+   transaction and would lock and bloat a large table.
+3. A migration creates the index with `CREATE INDEX CONCURRENTLY` as the only
+   statement in its file. It cannot run inside a transaction block, and it must
+   not block inserts on a table that takes live webhook traffic.
+
+Release order when new code reads the new column:
+
+1. Back up PostgreSQL.
+2. Apply the migrations with the command above, before pushing `main`.
+3. Run the backfill so existing rows are ready before the code that reads them:
+
+   ```bash
+   DATABASE_URL="$DIRECT_URL" pnpm backfill:webhook-event-actors
+   ```
+
+   Progress goes to stderr; the final line is JSON and `remaining` must be `0`.
+   `BACKFILL_BATCH_SIZE` (default 2000) tunes the batch size.
+4. Push `main` and wait for the release to pass the checks in "Verification".
+5. Run the same backfill once more. The previous release keeps writing rows
+   without the new columns until the new one is live, and this catches them.
+   It is safe to repeat: it never overwrites a value that is already set.
+6. Confirm the index is valid (a failed concurrent build leaves an invalid
+   index that must be dropped and rebuilt):
+
+   ```bash
+   psql "$DIRECT_URL" -c "SELECT relname, indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE relname LIKE 'WebhookEvent_workspaceId_accountId%';"
+   ```
+
+Test a new migration chain and any backfill script against a throwaway local
+PostgreSQL with an explicit `DATABASE_URL` before they touch production. Never
+point a local command at the production database.
+
+## Release failure triage
+
+Find the failing stage first:
+
+```bash
+gh run list --workflow="Build production container" --limit 5
+gh run view <run-id> --log-failed
+```
+
+- Verification or build failure: fix it and push a new commit. Dokploy was not
+  invoked and production is unchanged.
+- SSH or host-key failure: check the three `DOKPLOY_DEPLOY_*` secrets and the
+  `deploybot` authorized key. The pinned host key must come from the live server
+  and match the fingerprint in the provider's provisioning email. Never disable
+  host verification.
+- The deploy step prints `curl: (22) ... 401` after SSH connected: the SSH key is
+  fine, but the Dokploy API key used by the host-side release script
+  (`/etc/dokploy-release/api-key`, shared by the Linkar and TrackParcel release
+  commands) is no longer accepted. Create a new API key in Dokploy, write it to
+  that file (mode 600, no extra characters), confirm
+  `curl -H "x-api-key: $(cat /etc/dokploy-release/api-key)" http://localhost:3000/api/project.all`
+  returns 200, then re-run the failed workflow. Production keeps serving the
+  previous release while this is broken.
+- Public health reports an older `release` after a green workflow: the previous
+  containers are still serving; the requested release did not complete.
+
+The Dokploy panel and API are not published. Reach them from an administrator
+machine through an SSH tunnel to the host, on a local port that does not clash
+with a running dev server.
+
+## Database migrations
+
+Schema migrations are a separate operation. Back up PostgreSQL first, run only
+committed migrations through `prisma migrate deploy` using `DIRECT_URL`, and
+keep migrations backward-compatible with both web versions during a start-first
+rollout. Never use `prisma migrate dev` or `db:seed` in production.
+
+If a migration fails, stop the release and inspect `_prisma_migrations` before
+retrying. Do not edit or delete migration history to force a deployment.
+
+Run migrations on the **direct** connection (port 5432), not the pooled one:
+`DATABASE_URL` in production points at the transaction pooler, which cannot run
+`CREATE INDEX CONCURRENTLY`.
+
+```bash
+DATABASE_URL="$DIRECT_URL" pnpm exec prisma migrate deploy
+```
+
+### Migrations that add indexed columns
+
 Adding a column, backfilling it, and indexing it on a busy table is three
 operations with different locking behaviour, so ship them as three migrations
 in this order (`20260921180000` to `20260921180200` is the worked example):
