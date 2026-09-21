@@ -142,10 +142,9 @@ function PublishPreview() {
           <strong>Send a free guide from comments</strong>
           <span className={styles.rowMeta}>Comment replies<i>·</i>2 messages</span>
         </span>
-        <svg className={styles.toggle} viewBox="0 0 44 24" aria-hidden="true">
-          <rect className={styles.switchTrack} x="0" y="0" width="44" height="24" rx="12" />
-          <circle className={styles.switchKnob} cx="32" cy="12" r="9" />
-        </svg>
+        <span className={styles.toggle} data-toggle-state="on" aria-hidden="true">
+          <span className={styles.switchKnob} data-toggle-knob="true" />
+        </span>
       </div>
       <div className={styles.statRow}>
         <span><strong>1,284</strong>replies sent</span>

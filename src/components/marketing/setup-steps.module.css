@@ -335,13 +335,27 @@
 }
 
 .toggle {
-  inline-size: 40px;
-  block-size: auto;
+  display: flex;
+  align-items: center;
+  inline-size: 44px;
+  block-size: 24px;
+  box-sizing: border-box;
   flex: 0 0 auto;
+  padding: 3px;
+  background: #fa0cf7;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 18%);
 }
 
-.switchTrack { fill: #fa0cf7; }
-.switchKnob { fill: #ffffff; }
+.switchKnob {
+  inline-size: 18px;
+  block-size: 18px;
+  flex: 0 0 auto;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 28%);
+  transform: translateX(20px);
+}
 
 .statRow {
   display: flex;
@@ -372,7 +386,7 @@
 .revealCard[data-visible="true"] .switchKnob { animation: switch-on 400ms cubic-bezier(.43,.195,.02,1) both; }
 
 @keyframes connector-draw { from { stroke-dashoffset: 36; } to { stroke-dashoffset: 0; } }
-@keyframes switch-on { from { transform: translateX(-22px); } to { transform: translateX(0); } }
+@keyframes switch-on { from { transform: translateX(0); } to { transform: translateX(20px); } }
 
 @media (min-width: 768px) and (max-width: 1023px) {
   .section { padding: 112px 32px; }

@@ -39,21 +39,101 @@
 }
 
 .copyRail {
+  position: sticky;
+  top: 140px;
   grid-column: 2 / span 5;
+  align-self: start;
+  block-size: calc(100vh - 140px);
+}
+
+.storyProgressRail {
+  position: absolute;
+  inset-block-start: 28px;
+  inset-inline: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  inline-size: 100%;
+  block-size: 5px;
+}
+
+.storyProgressMark {
+  position: relative;
+  display: block;
+  inline-size: 44px;
+  block-size: 5px;
+  overflow: hidden;
+  background: rgb(5 5 5 / 16%);
+  border-radius: 999px;
+  transform-origin: center;
+  transition: background-color 320ms ease;
+}
+
+.storyProgressMark[data-progress-state="active"] {
+  background: #050505;
+}
+
+.storyProgressMark[data-progress-state="before"] {
+  background: rgb(5 5 5 / 42%);
+}
+
+.storyCta {
+  position: absolute;
+  z-index: 4;
+  inset-inline: 0;
+  inset-block-end: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 64px;
+  color: #ffffff;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--marketing-label-size);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  background: #050505;
+  border: 2px solid #050505;
+  border-radius: 999px;
+  transition: color 240ms ease, background-color 240ms ease;
+}
+
+.storyCta:hover,
+.storyCta:focus-visible {
+  color: #050505;
+  background: #ffffff;
+}
+
+.storyCta:focus-visible {
+  outline: 3px solid #fa0cf7;
+  outline-offset: 4px;
 }
 
 .chapter {
+  position: absolute;
+  inset: 0;
   display: grid;
   align-content: center;
-  min-block-size: 100vh;
+  box-sizing: border-box;
+  min-block-size: 0;
   max-inline-size: 520px;
+  padding-block-start: 0;
   scroll-margin-top: 6rem;
-  opacity: .35;
-  transform: translateY(24px);
-  transition: opacity 600ms cubic-bezier(.43, .195, .02, 1), transform 600ms cubic-bezier(.43, .195, .02, 1);
+  pointer-events: none;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(44px) scale(.985);
+  transition: opacity 620ms cubic-bezier(.43, .195, .02, 1), transform 720ms cubic-bezier(.43, .195, .02, 1);
 }
 
-.chapter[data-active="true"] {
+.chapter[data-chapter-state="before"] {
+  transform: translateY(-44px) scale(.985);
+}
+
+.chapter[data-chapter-state="active"] {
+  pointer-events: auto;
   opacity: 1;
   transform: translateY(0);
 }
@@ -61,25 +141,17 @@
 /* Mono is Linkar's voice. It appears on the section's own furniture and on the
    automation notes inside the phone - never on Instagram's UI, which uses the
    system stack below. Whose surface you are reading is encoded in the type. */
-.sequence,
 .autoNote,
 .queueFlag,
 .figcaption {
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 
-.sequence {
-  margin: 0 0 26px;
-  font-size: var(--marketing-label-size);
-  font-weight: 650;
-  letter-spacing: .08em;
-}
-
 .chapter h3 {
-  max-inline-size: 440px;
-  margin: 0;
+  max-inline-size: 500px;
+  margin: 0 auto;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: var(--marketing-card-title-size);
+  font-size: clamp(3.75rem, 5vw, 5.8rem);
   font-weight: 850;
   line-height: .94;
   letter-spacing: -.055em;
@@ -88,7 +160,7 @@
 
 .chapterBody {
   max-inline-size: 48ch;
-  margin: 28px 0 0;
+  margin: 28px auto 0;
   font-size: var(--marketing-body-size);
   font-weight: 570;
   line-height: 1.55;
@@ -121,18 +193,23 @@
 
 .sceneLayers {
   position: relative;
+  inline-size: 100%;
+  min-inline-size: 0;
   min-block-size: 0;
+  overflow: hidden;
 }
 
 .desktopScene {
   position: absolute;
   inset: 0;
   display: grid;
+  min-inline-size: 0;
+  overflow: hidden;
   place-items: stretch;
   pointer-events: none;
   opacity: 0;
-  transform: translateY(32px);
-  transition: opacity 600ms cubic-bezier(.43, .195, .02, 1), transform 600ms cubic-bezier(.43, .195, .02, 1);
+  transform: translateY(44px) scale(.985);
+  transition: opacity 620ms cubic-bezier(.43, .195, .02, 1), transform 720ms cubic-bezier(.43, .195, .02, 1);
 }
 
 .desktopScene > .sceneBody {
@@ -140,7 +217,11 @@
   block-size: 100%;
 }
 
-.desktopScene[data-active="true"] {
+.desktopScene[data-scene-state="before"] {
+  transform: translateY(-44px) scale(.985);
+}
+
+.desktopScene[data-scene-state="active"] {
   pointer-events: auto;
   opacity: 1;
   transform: translateY(0);
@@ -297,6 +378,8 @@
 .sceneBody {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  box-sizing: border-box;
+  min-inline-size: 0;
   min-block-size: 0;
   overflow: hidden;
   font-family: var(--ig-font);
@@ -426,7 +509,7 @@
 .postMedia {
   display: grid;
   align-content: end;
-  min-block-size: 132px;
+  min-block-size: 116px;
   padding: 14px 15px;
   color: #ffffff;
   background:
@@ -523,7 +606,7 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 12px 13px 10px;
+  padding: 9px 13px 8px;
 }
 
 .commentCopy {
@@ -566,7 +649,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 13px;
+  min-block-size: 0;
+  padding: 8px 13px;
   border-block-start: 1px solid var(--ig-hairline);
 }
 
@@ -657,6 +741,8 @@
   align-content: end;
   gap: 7px;
   justify-items: start;
+  box-sizing: border-box;
+  inline-size: 100%;
   padding: 12px 12px 10px;
 }
 
@@ -724,7 +810,9 @@
 .bubbleIn,
 .bubbleOut,
 .bubblePending {
-  max-inline-size: 78%;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  max-inline-size: calc(78% - 8px);
   margin: 0;
   padding: 9px 13px;
   font-size: .7rem;
@@ -740,6 +828,8 @@
 }
 
 .bubbleOut {
+  position: relative;
+  inset-inline-end: 24px;
   justify-self: end;
   color: #ffffff;
   background: var(--ig-sent);
@@ -869,6 +959,10 @@
   position: relative;
   gap: 5px;
   align-self: stretch;
+  justify-self: stretch;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  inline-size: calc(100% - 48px);
   margin-block-start: 8px;
   padding: 13px 14px;
   background: #ffffff;
@@ -922,7 +1016,8 @@
   justify-self: center;
   align-self: center;
   inline-size: fit-content;
-  max-inline-size: 100%;
+  max-inline-size: calc(100% - 48px);
+  box-sizing: border-box;
   margin: 5px 0;
   padding: 4px 10px;
   color: var(--ig-secondary);
@@ -1001,13 +1096,17 @@
   to { opacity: 1; transform: none; }
 }
 
+@keyframes progressGlint {
+  to { transform: translateX(115%); }
+}
+
 @keyframes chatInLeft {
   from { opacity: 0; transform: translate(-12px, 6px) scale(.96); }
   to { opacity: 1; transform: none; }
 }
 
 @keyframes chatInRight {
-  from { opacity: 0; transform: translate(12px, 6px) scale(.96); }
+  from { opacity: 0; transform: translateY(10px) scale(.97); }
   to { opacity: 1; transform: none; }
 }
 
@@ -1193,7 +1292,22 @@
     padding: 0;
   }
 
+  .copyRail {
+    position: static;
+    block-size: auto;
+  }
+
+  .storyProgressRail {
+    display: none;
+  }
+
+  .storyCta {
+    display: none;
+  }
+
   .chapter {
+    position: relative;
+    inset: auto;
     grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
     column-gap: 40px;
     min-block-size: auto;
@@ -1204,7 +1318,6 @@
     transform: none;
   }
 
-  .sequence,
   .chapter h3,
   .chapterBody {
     grid-column: 1;
@@ -1264,7 +1377,22 @@
     padding: 0;
   }
 
+  .copyRail {
+    position: static;
+    block-size: auto;
+  }
+
+  .storyProgressRail {
+    display: none;
+  }
+
+  .storyCta {
+    display: none;
+  }
+
   .chapter {
+    position: relative;
+    inset: auto;
     display: grid;
     min-block-size: auto;
     max-inline-size: none;
@@ -1272,10 +1400,6 @@
     border-bottom: 1px solid var(--marketing-on-volt);
     opacity: 1;
     transform: none;
-  }
-
-  .sequence {
-    margin-block-end: 18px;
   }
 
   .chapter h3 {
@@ -1369,12 +1493,28 @@
     min-block-size: auto;
   }
 
+  .storyProgressRail {
+    display: none;
+  }
+
+  .storyCta {
+    display: none;
+  }
+
+  .desktopScene {
+    transition: none;
+  }
+
   .copyRail {
+    position: static;
+    block-size: auto;
     max-inline-size: 1440px;
     margin-inline: auto;
   }
 
   .chapter {
+    position: relative;
+    inset: auto;
     grid-template-columns: minmax(0, .75fr) minmax(340px, 1fr);
     column-gap: clamp(32px, 5vw, 80px);
     min-block-size: auto;
@@ -1386,7 +1526,6 @@
     transition: none;
   }
 
-  .sequence,
   .chapter h3,
   .chapterBody {
     grid-column: 1;
@@ -1425,7 +1564,6 @@
     padding-block-start: 0;
   }
 
-  .sequence,
   .chapter h3,
   .chapterBody,
   .mobileScene {

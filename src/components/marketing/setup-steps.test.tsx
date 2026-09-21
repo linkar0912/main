@@ -38,6 +38,9 @@ describe("SetupSteps", () => {
       "Linkar reply turned on preview",
     ]);
     expect(Array.from(steps, (step) => within(step).getByRole("figure").querySelector("svg"))).not.toContain(null);
+    const onToggle = steps[2].querySelector('[data-toggle-state="on"]');
+    expect(onToggle).not.toBeNull();
+    expect(onToggle?.querySelector('[data-toggle-knob="true"]')).not.toBeNull();
     expect(Array.from(steps, (step) => within(step).getByRole("figure").querySelector("figcaption")?.textContent)).toEqual([
       "Connected securely",
       "Starting point ready",

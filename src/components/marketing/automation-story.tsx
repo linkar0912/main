@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { storyChapters, type StoryChapter } from "./marketing-content";
 import { Reveal } from "./reveal";
@@ -546,13 +547,28 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
               data-chapter={chapter.scene}
               data-chapter-index={index}
               data-active={safeActiveIndex === index ? "true" : "false"}
+              data-chapter-state={index < safeActiveIndex ? "before" : index > safeActiveIndex ? "after" : "active"}
             >
-              <p className={styles.sequence} data-sequence>{chapter.eyebrow}</p>
+              <div className={styles.storyProgressRail} data-story-progress-rail aria-hidden="true">
+                {chapters.map((progressChapter, progressIndex) => {
+                  const progressState = progressIndex < safeActiveIndex ? "before" : progressIndex > safeActiveIndex ? "after" : "active";
+                  return (
+                    <span
+                      key={progressChapter.id}
+                      className={styles.storyProgressMark}
+                      data-progress-mark
+                      data-progress-state={progressState}
+                      data-progress-step={progressState === "before" ? "complete" : progressState === "after" ? "upcoming" : "active"}
+                    />
+                  );
+                })}
+              </div>
               <h3 id={`story-${chapter.id}-title`}>{chapter.title}</h3>
               <p className={styles.chapterBody} data-chapter-copy>{chapter.body}</p>
               <MobileScene scene={chapter.scene} />
             </article>
           ))}
+          <Link className={styles.storyCta} href="/signup">Get started</Link>
         </div>
 
         <div className={styles.stage} data-desktop-stage>
@@ -580,6 +596,7 @@ export function AutomationStory({ chapters = storyChapters }: AutomationStoryPro
                       className={styles.desktopScene}
                       data-scene={chapter.scene}
                       data-active={safeActiveIndex === index ? "true" : "false"}
+                      data-scene-state={index < safeActiveIndex ? "before" : index > safeActiveIndex ? "after" : "active"}
                     >
                       <SceneBody scene={chapter.scene} />
                     </div>

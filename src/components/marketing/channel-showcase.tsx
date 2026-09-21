@@ -38,10 +38,9 @@ export function ChannelShowcase() {
           <span>One workspace, with each channel handled on its own terms.</span>
         </header>
         <div className={styles.cards}>
-          {channels.map((channel, index) => (
+          {channels.map((channel) => (
             <article className={styles.card} key={channel.id} data-channel={channel.id}>
               <div className={styles.cardTop}>
-                <span className={styles.number}>{String(index + 1).padStart(2, "0")}</span>
                 <span className={styles.icon} aria-hidden="true">{channel.icon}</span>
               </div>
               <p className={styles.eyebrow}>{channel.eyebrow}</p>

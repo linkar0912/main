@@ -91,7 +91,7 @@ describe("AutomationStory", () => {
     expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
       "Reply right away", "Ask one useful question", "Follow up at the right time", "Let your team take over",
     ]);
-    expect(Array.from(section.querySelectorAll("[data-sequence]")).map((number) => number.textContent)).toEqual(["01", "02", "03", "04"]);
+    expect(section.querySelectorAll("[data-sequence]")).toHaveLength(0);
     expect(Array.from(section.querySelectorAll("[data-chapter-copy]")).map((copy) => copy.textContent)).toEqual([
       "When someone leaves the comment you are looking for, Linkar privately sends the reply you wrote.",
       "Find out what someone needs, save their answer, and send the most helpful next message.",
@@ -114,6 +114,8 @@ describe("AutomationStory", () => {
     expect(section.querySelectorAll('[aria-hidden="true"] [data-scene-body]')).toHaveLength(8);
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
     expect(screen.queryAllByRole("button")).toHaveLength(0);
+    const action = within(section).getByRole("link", { name: "Get started" });
+    expect(action.getAttribute("href")).toBe("/signup");
   });
 
   it("keeps one stable desktop frame while four scene bodies crossfade", () => {
@@ -147,6 +149,22 @@ describe("AutomationStory", () => {
       expect(section.getAttribute("data-active-scene")).toBe(scene);
       expect(section.style.getPropertyValue("--story-index")).toBe(index);
       expect(Number(section.style.getPropertyValue("--story-progress"))).toBeCloseTo(progress, 4);
+
+      const stageScenes = Array.from(section.querySelectorAll<HTMLElement>("[data-desktop-stage] [data-scene-state]"));
+      expect(stageScenes.map((stageScene) => stageScene.getAttribute("data-scene-state"))).toEqual(
+        [0, 1, 2, 3].map((sceneIndex) => sceneIndex < Number(index) ? "before" : sceneIndex > Number(index) ? "after" : "active"),
+      );
+
+      const progressRails = Array.from(section.querySelectorAll<HTMLElement>("[data-story-progress-rail]"));
+      expect(progressRails).toHaveLength(4);
+      progressRails.forEach((rail) => {
+        expect(Array.from(rail.querySelectorAll("[data-progress-mark]"), (mark) => mark.getAttribute("data-progress-state"))).toEqual(
+          [0, 1, 2, 3].map((markIndex) => markIndex < Number(index) ? "before" : markIndex > Number(index) ? "after" : "active"),
+        );
+        expect(rail.querySelectorAll('[data-progress-step="complete"]')).toHaveLength(Number(index));
+        expect(rail.querySelectorAll('[data-progress-step="active"]')).toHaveLength(1);
+        expect(rail.querySelectorAll('[data-progress-step="upcoming"]')).toHaveLength(3 - Number(index));
+      });
     }
   });
 
