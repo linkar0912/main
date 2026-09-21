@@ -114,6 +114,52 @@ rollout. Never use `prisma migrate dev` or `db:seed` in production.
 If a migration fails, stop the release and inspect `_prisma_migrations` before
 retrying. Do not edit or delete migration history to force a deployment.
 
+Run migrations on the **direct** connection (port 5432), not the pooled one:
+`DATABASE_URL` in production points at the transaction pooler, which cannot run
+`CREATE INDEX CONCURRENTLY`.
+
+```bash
+DATABASE_URL="$DIRECT_URL" pnpm exec prisma migrate deploy
+```
+
+### Migrations that add indexed columns
+
+Adding a column, backfilling it, and indexing it on a busy table is three
+operations with different locking behaviour, so ship them as three migrations
+in this order (`20260921180000` to `20260921180200` is the worked example):
+
+1. Add the column as nullable. It is catalog-only, with no rewrite.
+2. Backfill it with an idempotent `UPDATE ... WHERE <column> IS NULL`.
+3. Create the index with `CREATE INDEX CONCURRENTLY` as the only statement in
+   its own migration file. It cannot run inside a transaction block, and it
+   must not block inserts on a table that takes live webhook traffic.
+
+Release order when new code reads the new column:
+
+1. Back up PostgreSQL.
+2. Apply the migrations with the command above, before pushing `main`.
+3. Push `main` and wait for the release to pass the checks in "Verification".
+4. Run the idempotent backfill once more to catch rows the previous release wrote
+   between step 2 and the new release going live, then confirm nothing is left:
+
+   ```bash
+   psql "$DIRECT_URL" -f prisma/migrations/20260921180100_webhook_event_actor_backfill/migration.sql
+   psql "$DIRECT_URL" -c "SELECT count(*) FROM \"WebhookEvent\" WHERE payload ? 'accountId' AND \"accountId\" IS NULL;"
+   ```
+
+   The count must be `0`. Until this runs, conversations may omit the few events
+   received during the deploy window.
+5. Confirm the index is valid (a failed concurrent build leaves an invalid
+   index that must be dropped and rebuilt):
+
+   ```bash
+   psql "$DIRECT_URL" -c "SELECT relname, indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE relname LIKE 'WebhookEvent_workspaceId_accountId%';"
+   ```
+
+Test a new migration chain against a throwaway local PostgreSQL with an
+explicit `DATABASE_URL` before it touches production. Never point a local
+command at the production database.
+
 ## Rollback
 
 Rollback uses the last known-good immutable SHA, not a moving tag. An authorized
