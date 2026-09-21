@@ -4,7 +4,6 @@ import { ArrowRight, Check, Film, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { basicAutomationTemplates } from "@/src/lib/automation/templates";
-import { AppShell } from "./app-shell";
 
 type QuickMedia = {
   id: string;
@@ -120,7 +119,7 @@ export function QuickAutomationScreen() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-wrap quick-automation-page">
         <header className="page-header quick-automation-header">
           <div>
@@ -215,6 +214,6 @@ export function QuickAutomationScreen() {
           </section>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

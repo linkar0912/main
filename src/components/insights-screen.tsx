@@ -2,7 +2,6 @@
 
 import { Download, MailCheck, MousePointerClick, RefreshCw, Send, UsersRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AppShell } from "./app-shell";
 import { InsightsContentSkeleton } from "./skeleton";
 import { ReplyVolumeChart, type DayPoint } from "./reply-volume-chart";
 
@@ -76,7 +75,7 @@ export function InsightsScreen() {
   }), [data]);
 
   return (
-    <AppShell>
+    <>
       <main className="page-wrap insights-page">
         <header className="page-header insights-page-header">
           <div>
@@ -132,7 +131,7 @@ export function InsightsScreen() {
                     <table className="insights-table" aria-label="Top content performance">
                       <thead><tr><th>Post</th><th>Matched</th><th>Delivered</th><th>Clicks</th><th>Click rate</th></tr></thead>
                       <tbody>{data.mediaPerformance.map((row) => (
-                        <tr key={row.mediaId}><td className="media-id-cell" title={row.mediaId}>{row.mediaId}</td><td>{row.matched}</td><td>{row.delivered}</td><td>{row.clicked}</td><td>{row.delivered ? `${Math.round((row.clicked / row.delivered) * 100)}%` : "—"}</td></tr>
+                        <tr key={row.mediaId}><td className="media-id-cell" title={row.mediaId}>{row.mediaId}</td><td>{row.matched}</td><td>{row.delivered}</td><td>{row.clicked}</td><td>{row.delivered ? `${Math.round((row.clicked / row.delivered) * 100)}%` : "-"}</td></tr>
                       ))}</tbody>
                     </table>
                   </div>
@@ -142,6 +141,6 @@ export function InsightsScreen() {
           </div>
         )}
       </main>
-    </AppShell>
+    </>
   );
 }

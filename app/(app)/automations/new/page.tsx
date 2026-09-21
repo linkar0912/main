@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { AppShell } from "@/src/components/app-shell";
 import { AutomationBuilder } from "@/src/components/automation-builder";
 import { parseNewAutomationTarget } from "@/src/lib/automation/new-automation-target";
 import { getTemplateById } from "@/src/lib/automation/templates";
@@ -27,7 +26,7 @@ export default async function NewAutomationPage({ searchParams }: NewAutomationP
   const setup = template?.setup;
   const target = parseNewAutomationTarget(params);
   return (
-    <AppShell>
+    <>
       <div className="page-wrap builder-wrap">
         <Link className="back-link" href="/automations">
           <ArrowLeft size={16} /> Back to automations
@@ -45,6 +44,6 @@ export default async function NewAutomationPage({ searchParams }: NewAutomationP
           initialMediaIds={target.initialMediaIds}
         />
       </div>
-    </AppShell>
+    </>
   );
 }

@@ -111,7 +111,10 @@ type ClientCache<T> = {
   fetcher?: typeof fetch;
 };
 
-const FRESH_FOR_MS = 30_000;
+// Two minutes, not thirty seconds: stale entries are already served
+// immediately while a background refresh runs, so a longer freshness window
+// only cuts repeat request volume - the UI never blocks on a stale value.
+const FRESH_FOR_MS = 120_000;
 
 const bootstrapCache: ClientCache<WorkspaceBootstrap> = {};
 const accountProfileCache: ClientCache<AccountProfile> = {};
@@ -192,6 +195,33 @@ function forCaller<T>(request: Promise<T>, signal?: AbortSignal): Promise<T> {
 
 function cachedRequest<T>(cache: ClientCache<T>, url: string, signal?: AbortSignal): Promise<T> {
   return forCaller(sharedRequest(cache, url, wrappedData<T>(url)), signal);
+}
+
+/**
+ * Seeds the module caches with data rendered into the page by a Server
+ * Component (e.g. Home). Entries only land when the cache is empty, so
+ * server-rendered data never clobbers fresher client state from a mutation
+ * or a background refresh. The first client fetch then resolves from cache
+ * instead of waiting on a post-hydration API round trip.
+ */
+export function seedWorkspaceData(seed: {
+  insightsOverview?: InsightsOverview;
+  instagramConnections?: InstagramConnectionSummary[];
+  facebookPages?: FacebookPageSummary[];
+}): void {
+  const now = Date.now();
+  if (seed.insightsOverview !== undefined && insightsOverviewCache.value === undefined) {
+    insightsOverviewCache.value = seed.insightsOverview;
+    insightsOverviewCache.fetchedAt = now;
+  }
+  if (seed.instagramConnections !== undefined && connectionsCache.value === undefined) {
+    connectionsCache.value = seed.instagramConnections;
+    connectionsCache.fetchedAt = now;
+  }
+  if (seed.facebookPages !== undefined && facebookPagesCache.value === undefined) {
+    facebookPagesCache.value = seed.facebookPages;
+    facebookPagesCache.fetchedAt = now;
+  }
 }
 
 export function getWorkspaceBootstrap(): Promise<WorkspaceBootstrap> {

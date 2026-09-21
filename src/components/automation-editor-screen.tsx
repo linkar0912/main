@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
-import { AppShell } from "./app-shell";
 import { AutomationBuilder } from "./automation-builder";
 import { InlineContentSkeleton } from "./skeleton";
 import type { AutomationRecord } from "@/src/lib/repository";
@@ -33,7 +32,7 @@ export function AutomationEditorScreen({ automationId }: { automationId: string 
   }, [automationId]);
 
   return (
-    <AppShell>
+    <>
       <div className="page-wrap builder-wrap">
         <Link className="back-link" href="/automations"><ArrowLeft size={16} /> Back to automations</Link>
         {loading && (
@@ -51,6 +50,6 @@ export function AutomationEditorScreen({ automationId }: { automationId: string 
           />
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

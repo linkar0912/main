@@ -79,7 +79,7 @@ describe("workspace client data cache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps confirmed data fresh for 30 seconds and refreshes stale data in the background", async () => {
+  it("keeps confirmed data fresh for two minutes and refreshes stale data in the background", async () => {
     let now = 1_000;
     vi.spyOn(Date, "now").mockImplementation(() => now);
     const fetchMock = vi.fn(async () => ({
@@ -89,7 +89,7 @@ describe("workspace client data cache", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     expect((await getBillingView()).entitlementPlanKey).toBe("creator");
-    now += 29_999;
+    now += 119_999;
     expect((await getBillingView()).entitlementPlanKey).toBe("creator");
     expect(fetchMock).toHaveBeenCalledTimes(1);
 

@@ -8,6 +8,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const { ProfileScreen } = await import("./profile-screen");
+const { AppShell } = await import("./app-shell");
 
 describe("ProfileScreen", () => {
   afterEach(() => {
@@ -63,10 +64,10 @@ describe("ProfileScreen", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const first = render(<ProfileScreen email="owner@example.com" memberSince="2026-08-20T00:00:00.000Z" emailVerified role="OWNER" />);
+    const first = render(<AppShell><ProfileScreen email="owner@example.com" memberSince="2026-08-20T00:00:00.000Z" emailVerified role="OWNER" /></AppShell>);
     await screen.findByText("No Instagram account connected yet.");
     first.unmount();
-    render(<ProfileScreen email="owner@example.com" memberSince="2026-08-20T00:00:00.000Z" emailVerified role="OWNER" />);
+    render(<AppShell><ProfileScreen email="owner@example.com" memberSince="2026-08-20T00:00:00.000Z" emailVerified role="OWNER" /></AppShell>);
     await screen.findByText("No Instagram account connected yet.");
 
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/workspace/bootstrap"))).toHaveLength(1);

@@ -17,12 +17,51 @@ async function requestAutomations(signal?: AbortSignal): Promise<AutomationRecor
   return payload.data ?? [];
 }
 
-export function useAutomations() {
-  const [automations, setAutomations] = useState<AutomationRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+// Module-level stale-while-revalidate cache, mirroring
+// src/lib/client/workspace-data.ts: Home and /automations both need the list,
+// and repeat visits should paint confirmed rows instantly instead of flashing
+// skeletons on every navigation.
+const AUTOMATIONS_FRESH_FOR_MS = 30_000;
+const automationsCache: { value?: AutomationRecord[]; fetchedAt?: number } = {};
+
+function readFreshAutomations(): AutomationRecord[] | undefined {
+  if (automationsCache.value === undefined || automationsCache.fetchedAt === undefined) return undefined;
+  return Date.now() - automationsCache.fetchedAt < AUTOMATIONS_FRESH_FOR_MS ? automationsCache.value : undefined;
+}
+
+/** Seed from a Server Component's initial data. The empty-cache guard keeps
+ * older server data from overwriting fresher client state (mutations PATCH
+ * through setStatus, which syncs the cache). */
+export function seedAutomations(value: AutomationRecord[]): void {
+  if (automationsCache.value !== undefined) return;
+  automationsCache.value = value;
+  automationsCache.fetchedAt = Date.now();
+}
+
+function storeAutomations(value: AutomationRecord[]): void {
+  automationsCache.value = value;
+  automationsCache.fetchedAt = Date.now();
+}
+
+/** Test isolation helper: clears the module cache between specs. */
+export function clearAutomationsCache(): void {
+  automationsCache.value = undefined;
+  automationsCache.fetchedAt = undefined;
+}
+
+export function useAutomations(initialData?: AutomationRecord[]) {
+  const [automations, setAutomations] = useState<AutomationRecord[]>(() => {
+    if (initialData) seedAutomations(initialData);
+    return automationsCache.value ?? [];
+  });
+  const [loading, setLoading] = useState(() => readFreshAutomations() === undefined);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // A fresh cache (seeded by the server-rendered page or a recent visit)
+    // needs no request at all; a stale one keeps its rows on screen while the
+    // refresh happens in the background.
+    if (readFreshAutomations() !== undefined) return;
     // AbortController + signal both cancel the in-flight fetch and gate the
     // setters; the `mounted` flag covers the synchronous render path where
     // the fetch is still in flight.
@@ -30,6 +69,7 @@ export function useAutomations() {
     let mounted = true;
     void requestAutomations(controller.signal)
       .then((data) => {
+        storeAutomations(data);
         if (mounted) {
           setAutomations(data);
           setError("");
@@ -52,6 +92,7 @@ export function useAutomations() {
     setLoading(true);
     try {
       const data = await requestAutomations();
+      storeAutomations(data);
       setAutomations(data);
       setError("");
     } catch (caught) {
@@ -69,7 +110,11 @@ export function useAutomations() {
     });
     const payload = (await response.json().catch(() => ({}))) as { data?: AutomationRecord };
     if (!response.ok || !payload.data) throw new Error("Could not update automation");
-    setAutomations((current) => current.map((automation) => automation.id === id ? payload.data as AutomationRecord : automation));
+    setAutomations((current) => {
+      const next = current.map((automation) => automation.id === id ? payload.data as AutomationRecord : automation);
+      storeAutomations(next);
+      return next;
+    });
   }
 
   return { automations, loading, error, reload, setStatus };

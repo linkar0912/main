@@ -12,7 +12,7 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
-import { AppShell, useAccountIdentity } from "./app-shell";
+import { useAccountIdentity } from "./app-shell";
 import { useAutomations } from "./automation-list";
 import { CreateAutomationButton } from "./create-automation-button";
 import { FailurePanel } from "./failure-panel";
@@ -20,13 +20,20 @@ import { TrackedLinksPanel } from "./tracked-links-panel";
 import { StatusBadge } from "./status-badge";
 import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
-import { getFacebookPages, getInstagramConnections, getInsightsOverview } from "@/src/lib/client/workspace-data";
+import { getFacebookPages, getInstagramConnections, getInsightsOverview, seedWorkspaceData } from "@/src/lib/client/workspace-data";
 import { ReplyVolumeChart, type DayPoint } from "./reply-volume-chart";
 
 type InsightsPayload = {
-  timeseries?: { participantsPerDay?: DayPoint[]; sentPerDay?: DayPoint[] };
+  timeseries?: { days?: number; participantsPerDay?: DayPoint[]; sentPerDay?: DayPoint[] };
   capturedEmails?: number;
   optedOut?: number;
+};
+
+export type DashboardScreenProps = {
+  /** Server-rendered into the page payload by app/(app)/dashboard/page.tsx. */
+  initialAutomations?: AutomationRecord[];
+  initialInsights?: InsightsPayload;
+  initialHasConnection?: boolean;
 };
 
 type Delta = { dir: "up" | "down" | "flat"; label: string };
@@ -192,10 +199,15 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
   );
 }
 
-export function DashboardScreen() {
-  const { automations, loading } = useAutomations();
-  const [insights, setInsights] = useState<InsightsPayload | null>(null);
-  const [hasConnection, setHasConnection] = useState<boolean | null>(null);
+export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection }: DashboardScreenProps = {}) {
+  const { automations, loading } = useAutomations(initialAutomations);
+  const [insights, setInsights] = useState<InsightsPayload | null>(() => {
+    // Seed the shared insights cache so the effect below resolves instantly
+    // and every later consumer (e.g. /insights) reuses the server-rendered data.
+    if (initialInsights) seedWorkspaceData({ insightsOverview: initialInsights });
+    return initialInsights ?? null;
+  });
+  const [hasConnection, setHasConnection] = useState<boolean | null>(() => initialHasConnection ?? null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
@@ -215,7 +227,7 @@ export function DashboardScreen() {
     refresh();
     // Resource freshness prevents tab focus from producing a burst of repeat
     // requests. Connection mutations invalidate their own entries, while
-    // older confirmed entries refresh after the shared 30-second window.
+    // older confirmed entries refresh after the shared freshness window.
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, []);
@@ -247,7 +259,7 @@ export function DashboardScreen() {
   ];
 
   return (
-    <AppShell>
+    <>
       <div className="page-wrap">
         <DemoBanner />
 
@@ -393,6 +405,6 @@ export function DashboardScreen() {
         </section>
         {pickerOpen && <TemplatePickerModal onClose={() => setPickerOpen(false)} />}
       </div>
-    </AppShell>
+    </>
   );
 }

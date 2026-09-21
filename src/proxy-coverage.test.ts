@@ -60,10 +60,16 @@ describe("proxy.ts matcher coverage", () => {
 
   it("covers every AppShell-rendering page", () => {
     const pages = listPageFiles(APP_ROOT);
+    // The (app) route group's layout mounts AppShell around every page inside
+    // it, so group membership - not a literal <AppShell> in the page source -
+    // is what makes a route authenticated-only. Pages elsewhere that render
+    // AppShell directly are still caught by the source check.
     const shellPages = pages
-      .filter((file) => /AppShell/.test(readFileSync(file, "utf8")))
+      .filter((file) => file.startsWith(join(APP_ROOT, "(app)")) || /AppShell/.test(readFileSync(file, "utf8")))
       .map((file) => file.replace(APP_ROOT + "/", "").replace(/\/page\.tsx?$/, ""));
-    const segmentsPerPage = shellPages.map((relative) => relative.split("/"));
+    // Route-group segments like (app) organize files without appearing in the
+    // URL, so they are dropped before matching against proxy.ts's matcher.
+    const segmentsPerPage = shellPages.map((relative) => relative.split("/").filter((segment) => !segment.startsWith("(")));
     const uncovered = segmentsPerPage.filter((segments) => !matcherCoversRoute(matcher, segments));
     expect(uncovered, `proxy.ts matcher does not cover these gated pages: ${uncovered.map((s) => "/" + s.join("/")).join(", ")}`).toEqual([]);
   });

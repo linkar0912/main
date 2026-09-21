@@ -623,6 +623,19 @@ export type ApplicationAccessState = {
   sessionInvalidBefore: string | null;
 };
 
+/**
+ * Everything session validation needs in one round trip: the caller's first
+ * membership (with the workspace lifecycle status joined in) plus their
+ * platform control flags. Replaces the serial
+ * listWorkspaceMembershipsByUserId -> getApplicationAccessState pair that
+ * put two to three sequential database queries on every authenticated
+ * request; the two underlying lookups run in parallel instead.
+ */
+export type SessionAccessSnapshot = ApplicationAccessState & {
+  workspaceId: string;
+  email: string;
+};
+
 export type PlatformUserControlState = {
   status: PlatformUserStatus;
   sessionInvalidBefore: string | null;
@@ -655,6 +668,7 @@ export interface AutomationRepository {
   ensureWorkspace(workspaceId: string, ownerEmail: string, ownerUserId?: string): Promise<void>;
   listMembers(workspaceId: string): Promise<MemberRecord[]>;
   listWorkspaceMembershipsByUserId(userId: string): Promise<MemberRecord[]>;
+  getSessionAccessSnapshot(userId: string): Promise<SessionAccessSnapshot | null>;
   findWorkspaceIdByMemberUserId(userId: string): Promise<string | null>;
   bindMemberUserId(workspaceId: string, email: string, userId: string): Promise<boolean>;
   setWorkspaceLifecycle(workspaceId: string, change: WorkspaceLifecycleChange): Promise<boolean>;

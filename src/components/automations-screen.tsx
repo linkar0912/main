@@ -1,14 +1,14 @@
 "use client";
 
 import { Plus, Workflow } from "lucide-react";
-import { AppShell } from "./app-shell";
 import { AutomationList, useAutomations } from "./automation-list";
 import { CreateAutomationButton } from "./create-automation-button";
 import { DeliveryDiagnostics } from "./delivery-diagnostics";
 import { ContextHelpLink } from "./context-help-link";
+import type { AutomationRecord } from "@/src/lib/repository";
 
-export function AutomationsScreen() {
-  const { automations, loading, error, setStatus, reload } = useAutomations();
+export function AutomationsScreen({ initialAutomations }: { initialAutomations?: AutomationRecord[] } = {}) {
+  const { automations, loading, error, setStatus, reload } = useAutomations(initialAutomations);
 
   async function duplicateAutomation(id: string) {
     const response = await fetch(`/api/automations/${id}/duplicate`, { method: "POST" });
@@ -29,7 +29,7 @@ export function AutomationsScreen() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-wrap narrow-wrap">
         <header className="page-header">
           <div><p className="eyebrow">Workspace / automation</p><h1>Automations</h1><p className="muted page-lede">Rules that turn Instagram and Facebook signals into helpful, timely replies.</p></div>
@@ -50,6 +50,6 @@ export function AutomationsScreen() {
             {automations.length > 0 && <DeliveryDiagnostics />}
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }

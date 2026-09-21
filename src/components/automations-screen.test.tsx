@@ -5,11 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation", () => ({ usePathname: () => "/automations" }));
 
 const { AutomationsScreen } = await import("./automations-screen");
+const { clearAutomationsCache } = await import("./automation-list");
 
 describe("AutomationsScreen", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    clearAutomationsCache();
   });
 
   it("uses the main workspace navigation without a duplicate automation sub-navigation", async () => {

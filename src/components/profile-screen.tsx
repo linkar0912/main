@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { AppShell, useAccountIdentity } from "./app-shell";
+import { useAccountIdentity } from "./app-shell";
 import { Skeleton } from "./skeleton";
 import { SocialAvatar } from "./social-avatar";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
@@ -96,9 +96,9 @@ function accountErrorFor(error: string | null): string {
 
 export function ProfileScreen(props: ProfileScreenProps = {}) {
   return (
-    <AppShell>
+    <>
       <ProfileBody {...props} />
-    </AppShell>
+    </>
   );
 }
 

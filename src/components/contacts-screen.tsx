@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Download, Search, UsersRound } from "lucide-react";
-import { AppShell } from "./app-shell";
 import { ContactDetailModal } from "./contact-detail-modal";
 import { ContextHelpLink } from "./context-help-link";
 import { ContactsContentSkeleton } from "./skeleton";
@@ -90,7 +89,7 @@ export function ContactsScreen() {
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
 
   return (
-    <AppShell>
+    <>
       <div className="page-wrap contacts-wrap">
         <header className="page-header">
           <div>
@@ -158,6 +157,6 @@ export function ContactsScreen() {
         )}
         {openContactId ? <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} /> : null}
       </div>
-    </AppShell>
+    </>
   );
 }

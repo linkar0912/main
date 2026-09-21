@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { getRepository } from "../repository-provider";
+import { cache } from "react";
 import type { AutomationRepository } from "../repository";
 
 export type AppSession = {
@@ -20,7 +21,7 @@ export type GetValidatedSessionOptions = {
 
 type ApplicationAccessRepository = Pick<
   AutomationRepository,
-  "listWorkspaceMembershipsByUserId" | "findWorkspaceIdByMemberEmail" | "bindMemberUserId" | "getApplicationAccessState"
+  "getSessionAccessSnapshot" | "findWorkspaceIdByMemberEmail" | "bindMemberUserId" | "getApplicationAccessState"
 >;
 
 export async function assertApplicationAccess(
@@ -30,23 +31,36 @@ export async function assertApplicationAccess(
   repository: ApplicationAccessRepository = getRepository(),
 ): Promise<{ workspaceId: string; email: string } | null> {
   const normalizedEmail = email.trim().toLowerCase();
-  const memberships = await repository.listWorkspaceMembershipsByUserId(userId);
-  let membership = memberships[0];
+  // Fast path: one snapshot call (membership + workspace status + platform
+  // control flags, two queries in parallel) covers users with a bound member
+  // row - which is every request after first login.
+  const snapshot = await repository.getSessionAccessSnapshot(userId);
 
-  if (!membership) {
-    const workspaceId = await repository.findWorkspaceIdByMemberEmail(normalizedEmail);
-    if (!workspaceId) return null;
-    const bound = await repository.bindMemberUserId(workspaceId, normalizedEmail, userId);
+  let workspaceId: string;
+  let memberEmail: string;
+  let access: { userStatus: string; workspaceStatus: string; sessionInvalidBefore: string | null } | null;
+
+  if (snapshot) {
+    workspaceId = snapshot.workspaceId;
+    memberEmail = snapshot.email;
+    access = snapshot;
+  } else {
+    // Backfill path: a member row that predates userId binding. Claim it once,
+    // then the fast path serves every later request.
+    const foundWorkspaceId = await repository.findWorkspaceIdByMemberEmail(normalizedEmail);
+    if (!foundWorkspaceId) return null;
+    const bound = await repository.bindMemberUserId(foundWorkspaceId, normalizedEmail, userId);
     if (!bound) return null;
-    membership = { id: "backfilled", workspaceId, email: normalizedEmail, role: "MEMBER", userId };
+    workspaceId = foundWorkspaceId;
+    memberEmail = normalizedEmail;
+    access = await repository.getApplicationAccessState(userId, workspaceId);
   }
 
-  const access = await repository.getApplicationAccessState(userId, membership.workspaceId);
   if (!access || access.userStatus !== "ACTIVE" || access.workspaceStatus !== "ACTIVE") return null;
   if (access.sessionInvalidBefore) {
     if (issuedAt === null || issuedAt * 1000 < Date.parse(access.sessionInvalidBefore)) return null;
   }
-  return { workspaceId: membership.workspaceId, email: membership.email.toLowerCase() };
+  return { workspaceId, email: memberEmail.toLowerCase() };
 }
 
 /**
@@ -86,6 +100,33 @@ export async function getValidatedSession(
   }) ?? true);
 
   return allowed ? session : null;
+}
+
+/**
+ * Request-scoped session resolution for Server Components (pages, layouts).
+ * React cache() dedupes every call within one RSC render pass, so a layout
+ * and its page can both ask for the session without repeating the Supabase
+ * JWT verification and the access-state database queries.
+ *
+ * Route handlers must keep using getValidatedSession: cache() scopes to the
+ * React render pass and offers no dedupe guarantees outside one, and the
+ * options hook (validateApplicationSession) is a route-handler concern.
+ */
+const resolveRequestSession = cache(async (): Promise<AppSession | null> => {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data?.claims?.sub || !data.claims.email) return null;
+
+  const userId = String(data.claims.sub);
+  const email = String(data.claims.email);
+  const issuedAt = typeof data.claims.iat === "number" ? data.claims.iat : null;
+  return assertApplicationAccess(userId, email, issuedAt).then((access) =>
+    access ? { userId, email: access.email, workspaceId: access.workspaceId } : null,
+  );
+});
+
+export function getRequestSession(): Promise<AppSession | null> {
+  return resolveRequestSession();
 }
 
 function hasBackslashOrControlChar(value: string): boolean {

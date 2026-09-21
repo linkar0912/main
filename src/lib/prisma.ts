@@ -570,6 +570,32 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       }));
     },
 
+    async getSessionAccessSnapshot(userId) {
+      // One membership lookup (joining the workspace status) and the platform
+      // control lookup run in parallel: a single round trip's latency instead
+      // of the serial listWorkspaceMembershipsByUserId + getApplicationAccessState
+      // pair that session validation used to pay on every request.
+      const [member, userControl] = await Promise.all([
+        client.workspaceMember.findFirst({
+          where: { userId },
+          orderBy: [{ workspaceId: "asc" }, { id: "asc" }],
+          select: { workspaceId: true, email: true, workspace: { select: { status: true } } },
+        }),
+        client.platformUserControl.findUnique({
+          where: { userId },
+          select: { status: true, sessionInvalidBefore: true },
+        }),
+      ]);
+      if (!member) return null;
+      return {
+        workspaceId: member.workspaceId,
+        email: member.email,
+        userStatus: userControl?.status ?? "ACTIVE",
+        workspaceStatus: member.workspace.status as WorkspaceStatus,
+        sessionInvalidBefore: userControl?.sessionInvalidBefore?.toISOString() ?? null,
+      };
+    },
+
     async findWorkspaceIdByMemberUserId(userId) {
       const member = await client.workspaceMember.findFirst({
         where: { userId },

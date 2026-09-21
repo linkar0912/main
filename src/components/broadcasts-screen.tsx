@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Megaphone } from "lucide-react";
-import { AppShell } from "./app-shell";
 import { AutomationSectionNav } from "./automation-section-nav";
 import { ContextHelpLink } from "./context-help-link";
 
@@ -79,7 +78,7 @@ export function BroadcastsScreen() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-wrap narrow-wrap">
         <header className="page-header">
           <div>
@@ -164,6 +163,6 @@ export function BroadcastsScreen() {
           </div>
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }

@@ -11,6 +11,7 @@ vi.mock("./automation-list", () => ({
 }));
 
 const { DashboardScreen } = await import("./dashboard-screen");
+const { AppShell } = await import("./app-shell");
 
 function stubDashboardFetch() {
   const sentPerDay = Array.from({ length: 14 }, (_, index) => ({
@@ -102,7 +103,10 @@ describe("DashboardScreen onboarding", () => {
       throw new Error(`Unexpected fetch to ${url}`);
     }));
 
-    render(<DashboardScreen />);
+    // The greeting reads the account identity from the shell context; in the
+    // app that context comes from the (app) route group's layout, so the test
+    // wraps the screen in AppShell the same way.
+    render(<AppShell><DashboardScreen /></AppShell>);
 
     const heading = await screen.findByRole("heading", { name: "Hello, Tejas Creator!" });
     const greeting = heading.closest("header");

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Play, Plus, RotateCw, Trash2 } from "lucide-react";
-import { AppShell } from "./app-shell";
 import { AutomationSectionNav } from "./automation-section-nav";
 import { ContextHelpLink } from "./context-help-link";
 
@@ -187,7 +186,7 @@ export function SequencesScreen() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page-wrap narrow-wrap">
         <header className="page-header">
           <div>
@@ -332,6 +331,6 @@ export function SequencesScreen() {
           </div>
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }

@@ -15,7 +15,6 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { AppShell } from "./app-shell";
 import { BillingSettings } from "./billing-settings";
 import { ContextHelpLink } from "./context-help-link";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
@@ -398,7 +397,7 @@ export function SettingsScreen() {
   const connectedChannelCount = Number(connections.length > 0) + Number(facebookPages.length > 0);
 
   return (
-    <AppShell>
+    <>
       <div className="page-wrap settings-wrap">
         <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage connections, delivery defaults, billing, team access, and account safeguards.</p></div><div className="header-actions"><CopyDiagnosticsButton /><ContextHelpLink topic="connecting-instagram" /></div></header>
 
@@ -777,6 +776,6 @@ export function SettingsScreen() {
           </div>
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }

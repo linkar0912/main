@@ -1,11 +1,10 @@
-import { AppShell } from "@/src/components/app-shell";
 import { ActivityFeed } from "@/src/components/activity-feed";
 
 export const metadata = { title: "Inbox · Linkar" };
 
 export default function ActivityPage() {
   return (
-    <AppShell>
+    <>
       <div className="page-wrap inbox-page-wrap">
         <header className="page-header">
           <div>
@@ -16,6 +15,6 @@ export default function ActivityPage() {
         </header>
         <ActivityFeed />
       </div>
-    </AppShell>
+    </>
   );
 }

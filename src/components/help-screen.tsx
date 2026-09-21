@@ -20,7 +20,7 @@ import {
   Workflow,
   Wrench,
 } from "lucide-react";
-import { AppShell, useAccountIdentity } from "./app-shell";
+import { useAccountIdentity } from "./app-shell";
 import { FacebookGlyph } from "./facebook-glyph";
 import { InstagramGlyph } from "./instagram-glyph";
 import { helpArticleMatchesQuery, normalizeHelpQuery } from "@/src/lib/help-search";
@@ -672,9 +672,9 @@ const TOPICS: Topic[] = [
  */
 export function HelpScreen({ supportEmail }: { supportEmail?: string } = {}) {
   return (
-    <AppShell>
+    <>
       <HelpBody supportEmail={supportEmail} />
-    </AppShell>
+    </>
   );
 }
 

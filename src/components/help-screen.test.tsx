@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation", () => ({ usePathname: () => "/help" }));
 
 const { HelpScreen } = await import("./help-screen");
+const { AppShell } = await import("./app-shell");
 
 describe("HelpScreen search", () => {
   afterEach(() => {
@@ -112,7 +113,9 @@ describe("HelpScreen search", () => {
       throw new Error(`Unexpected fetch to ${String(input)}`);
     }));
 
-    render(<HelpScreen />);
+    // The support email arrives on the bootstrap payload fetched by the app
+    // shell, which the (app) route group's layout mounts around the screen.
+    render(<AppShell><HelpScreen /></AppShell>);
 
     const link = await screen.findByRole("link", { name: /runtime@linkar\.in/ });
     expect(link.getAttribute("href")).toBe("mailto:runtime@linkar.in");

@@ -183,6 +183,22 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return copy([...membersByEmail.values()].filter((member) => member.userId === userId));
     },
 
+    async getSessionAccessSnapshot(userId) {
+      const member = [...membersByEmail.values()]
+        .filter((candidate) => candidate.userId === userId)
+        .sort((a, b) => a.workspaceId.localeCompare(b.workspaceId) || a.id.localeCompare(b.id))[0];
+      if (!member) return null;
+      const lifecycle = workspaceLifecycle.get(member.workspaceId);
+      if (!lifecycle) return null;
+      return {
+        workspaceId: member.workspaceId,
+        email: member.email,
+        userStatus: "ACTIVE",
+        workspaceStatus: lifecycle.status,
+        sessionInvalidBefore: null,
+      };
+    },
+
     async findWorkspaceIdByMemberUserId(userId) {
       return [...membersByEmail.values()].find((member) => member.userId === userId)?.workspaceId ?? null;
     },

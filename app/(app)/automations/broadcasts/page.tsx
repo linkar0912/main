@@ -2,8 +2,7 @@ import { BroadcastsScreen } from "@/src/components/broadcasts-screen";
 
 export const metadata = { title: "Broadcasts · Linkar" };
 
-// BroadcastsScreen renders its own AppShell (like the other client screens),
-// so wrapping it here would draw the sidebar twice.
+// The (app) route group's layout mounts the AppShell around this screen.
 export default function BroadcastsPage() {
   return <BroadcastsScreen />;
 }

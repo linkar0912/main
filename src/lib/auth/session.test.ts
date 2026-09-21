@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getClaims: vi.fn(),
   findWorkspaceIdByMemberEmail: vi.fn(),
-  listWorkspaceMembershipsByUserId: vi.fn(),
+  getSessionAccessSnapshot: vi.fn(),
   bindMemberUserId: vi.fn(),
   getApplicationAccessState: vi.fn(),
 }));
@@ -15,7 +15,7 @@ vi.mock("@/src/lib/supabase/server", () => ({
 vi.mock("@/src/lib/repository-provider", () => ({
   getRepository: () => ({
     findWorkspaceIdByMemberEmail: mocks.findWorkspaceIdByMemberEmail,
-    listWorkspaceMembershipsByUserId: mocks.listWorkspaceMembershipsByUserId,
+    getSessionAccessSnapshot: mocks.getSessionAccessSnapshot,
     bindMemberUserId: mocks.bindMemberUserId,
     getApplicationAccessState: mocks.getApplicationAccessState,
   }),
@@ -27,7 +27,13 @@ describe("getValidatedSession", () => {
   beforeEach(() => {
     mocks.getClaims.mockReset();
     mocks.findWorkspaceIdByMemberEmail.mockReset();
-    mocks.listWorkspaceMembershipsByUserId.mockReset().mockResolvedValue([{ workspaceId: "workspace_1", email: "member@example.com" }]);
+    mocks.getSessionAccessSnapshot.mockReset().mockResolvedValue({
+      workspaceId: "workspace_1",
+      email: "member@example.com",
+      userStatus: "ACTIVE",
+      workspaceStatus: "ACTIVE",
+      sessionInvalidBefore: null,
+    });
     mocks.bindMemberUserId.mockReset().mockResolvedValue(true);
     mocks.getApplicationAccessState.mockReset().mockResolvedValue({
       userStatus: "ACTIVE",
@@ -46,7 +52,7 @@ describe("getValidatedSession", () => {
     const session = await getValidatedSession(new Request("http://localhost"));
 
     expect(session).toEqual({ userId: "user_1", email: "member@example.com", workspaceId: "workspace_1" });
-    expect(mocks.listWorkspaceMembershipsByUserId).toHaveBeenCalledWith("user_1");
+    expect(mocks.getSessionAccessSnapshot).toHaveBeenCalledWith("user_1");
     expect(mocks.findWorkspaceIdByMemberEmail).not.toHaveBeenCalled();
   });
 
@@ -63,7 +69,7 @@ describe("getValidatedSession", () => {
       error: null,
     });
     mocks.findWorkspaceIdByMemberEmail.mockResolvedValue(null);
-    mocks.listWorkspaceMembershipsByUserId.mockResolvedValue([]);
+    mocks.getSessionAccessSnapshot.mockResolvedValue(null);
 
     expect(await getValidatedSession(new Request("http://localhost"))).toBeNull();
   });
@@ -87,7 +93,13 @@ describe("getValidatedSession", () => {
       data: { claims: { sub: "user_1", email: "member@example.com", iat: 1_788_172_800 } },
       error: null,
     });
-    mocks.getApplicationAccessState.mockResolvedValue({ userStatus: "ACTIVE", workspaceStatus, sessionInvalidBefore: null });
+    mocks.getSessionAccessSnapshot.mockResolvedValue({
+      workspaceId: "workspace_1",
+      email: "member@example.com",
+      userStatus: "ACTIVE",
+      workspaceStatus,
+      sessionInvalidBefore: null,
+    });
 
     expect(await getValidatedSession(new Request("http://localhost"))).toBeNull();
   });
@@ -97,7 +109,13 @@ describe("getValidatedSession", () => {
       data: { claims: { sub: "user_1", email: "member@example.com", iat: 1_788_172_800 } },
       error: null,
     });
-    mocks.getApplicationAccessState.mockResolvedValue({ userStatus: "SUSPENDED", workspaceStatus: "ACTIVE", sessionInvalidBefore: null });
+    mocks.getSessionAccessSnapshot.mockResolvedValue({
+      workspaceId: "workspace_1",
+      email: "member@example.com",
+      userStatus: "SUSPENDED",
+      workspaceStatus: "ACTIVE",
+      sessionInvalidBefore: null,
+    });
 
     expect(await getValidatedSession(new Request("http://localhost"))).toBeNull();
   });
@@ -107,7 +125,9 @@ describe("getValidatedSession", () => {
       data: { claims: { sub: "user_1", email: "member@example.com", iat: Math.floor(Date.parse("2026-08-31T09:59:00.000Z") / 1000) } },
       error: null,
     });
-    mocks.getApplicationAccessState.mockResolvedValue({
+    mocks.getSessionAccessSnapshot.mockResolvedValue({
+      workspaceId: "workspace_1",
+      email: "member@example.com",
       userStatus: "ACTIVE",
       workspaceStatus: "ACTIVE",
       sessionInvalidBefore: "2026-08-31T10:00:00.000Z",
@@ -121,7 +141,7 @@ describe("getValidatedSession", () => {
       data: { claims: { sub: "user_1", email: "Member@Example.com", iat: 1_788_172_800 } },
       error: null,
     });
-    mocks.listWorkspaceMembershipsByUserId.mockResolvedValue([]);
+    mocks.getSessionAccessSnapshot.mockResolvedValue(null);
     mocks.findWorkspaceIdByMemberEmail.mockResolvedValue("workspace_1");
 
     expect(await getValidatedSession(new Request("http://localhost"))).toMatchObject({ workspaceId: "workspace_1" });
