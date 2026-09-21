@@ -504,19 +504,20 @@ function mapDeletionRequest(record: {
 }
 
 /** Buckets ISO timestamps into UTC day counts over the trailing `days` window. */
-function bucketCountsByDay(timestamps: string[], days: number): { day: string; count: number }[] {
-  const buckets = new Map<string, number>();
+// Fills the trailing `days` UTC-day window with zeros, then overlays counts
+// grouped in SQL (date_trunc) - the dashboard/insights series no longer pull
+// raw rows into JS just to bucket them.
+function mergeDayCounts(rows: { day: string; count: number }[], days: number): { day: string; count: number }[] {
+  const counts = new Map(rows.map((row) => [row.day, Number(row.count)]));
+  const buckets: { day: string; count: number }[] = [];
   for (let offset = days - 1; offset >= 0; offset -= 1) {
     const date = new Date();
     date.setUTCHours(0, 0, 0, 0);
     date.setUTCDate(date.getUTCDate() - offset);
-    buckets.set(date.toISOString().slice(0, 10), 0);
+    const day = date.toISOString().slice(0, 10);
+    buckets.push({ day, count: counts.get(day) ?? 0 });
   }
-  for (const timestamp of timestamps) {
-    const day = timestamp.slice(0, 10);
-    if (buckets.has(day)) buckets.set(day, (buckets.get(day) ?? 0) + 1);
-  }
-  return [...buckets.entries()].map(([day, count]) => ({ day, count }));
+  return buckets;
 }
 
 export function createPrismaRepository(client = prisma): AutomationRepository {
@@ -780,22 +781,33 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       const since = new Date();
       since.setUTCHours(0, 0, 0, 0);
       since.setUTCDate(since.getUTCDate() - (days - 1));
-      const rows = await client.automationParticipant.findMany({
-        where: { workspaceId, ...(automationId ? { automationId } : {}), createdAt: { gte: since } },
-        select: { createdAt: true },
-      });
-      return bucketCountsByDay(rows.map((row) => row.createdAt.toISOString()), days);
+      // createdAt columns are timestamp(3) in UTC, so date_trunc buckets match
+      // the UTC-day slicing the old in-JS bucketing did.
+      const rows = await client.$queryRaw<{ day: string; count: number }[]>(Prisma.sql`
+        SELECT TO_CHAR(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day, COUNT(*)::int AS count
+        FROM "AutomationParticipant"
+        WHERE "workspaceId" = ${workspaceId}
+          AND "createdAt" >= ${since}
+          ${automationId ? Prisma.sql`AND "automationId" = ${automationId}` : Prisma.empty}
+        GROUP BY 1
+      `);
+      return mergeDayCounts(rows, days);
     },
 
     async countExecutionsSentPerDay(workspaceId, days, automationId) {
       const since = new Date();
       since.setUTCHours(0, 0, 0, 0);
       since.setUTCDate(since.getUTCDate() - (days - 1));
-      const rows = await client.automationExecution.findMany({
-        where: { workspaceId, ...(automationId ? { automationId } : {}), status: "SENT", createdAt: { gte: since } },
-        select: { createdAt: true },
-      });
-      return bucketCountsByDay(rows.map((row) => row.createdAt.toISOString()), days);
+      const rows = await client.$queryRaw<{ day: string; count: number }[]>(Prisma.sql`
+        SELECT TO_CHAR(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day, COUNT(*)::int AS count
+        FROM "AutomationExecution"
+        WHERE "workspaceId" = ${workspaceId}
+          AND "status" = 'SENT'
+          AND "createdAt" >= ${since}
+          ${automationId ? Prisma.sql`AND "automationId" = ${automationId}` : Prisma.empty}
+        GROUP BY 1
+      `);
+      return mergeDayCounts(rows, days);
     },
 
     async countParticipantsByMedia(workspaceId, automationId) {
@@ -2347,8 +2359,8 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
             where: {
               workspaceId,
               eventType: { in: messageTypes },
-              payload: { path: ["accountId"], equals: cursorContact.instagramAccountId },
-              AND: { payload: { path: ["recipientId"], equals: cursorContact.igScopedUserId } },
+              accountId: cursorContact.instagramAccountId,
+              recipientId: cursorContact.igScopedUserId,
             },
             orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
           });
@@ -2410,8 +2422,8 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           FROM "WebhookEvent" w
           WHERE w."workspaceId" = c."workspaceId"
             AND w."eventType" IN ('message.received', 'quick_reply.received', 'postback.received', 'story_mention.received')
-            AND w."payload"->>'accountId' = c."instagramAccountId"
-            AND w."payload"->>'recipientId' = c."igScopedUserId"
+            AND w."accountId" = c."instagramAccountId"
+            AND w."recipientId" = c."igScopedUserId"
           ORDER BY w."receivedAt" DESC, w."id" DESC
           LIMIT 1
         ) latest ON TRUE
@@ -2475,12 +2487,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async recordWebhookEvent(workspaceId, input) {
       try {
+        // Denormalize the actor columns the inbox indexes on. Only string
+        // values are copied (Facebook comment events carry pageId/senderId
+        // instead and stay NULL, which no inbox query filters on).
+        const accountId = typeof input.payload.accountId === "string" ? input.payload.accountId : null;
+        const recipientId = typeof input.payload.recipientId === "string" ? input.payload.recipientId : null;
         await client.webhookEvent.create({
           data: {
             id: createId("wevent"),
             workspaceId,
             providerEventId: input.providerEventId,
             eventType: input.eventType,
+            accountId,
+            recipientId,
             receivedAt: new Date(input.receivedAt),
             payload: input.payload as Prisma.InputJsonValue,
           },
@@ -2513,14 +2532,12 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: {
           workspaceId,
           eventType: { in: ["message.received", "quick_reply.received", "postback.received", "story_mention.received"] },
-          payload: { path: ["accountId"], equals: instagramAccountId },
-          AND: [
-            { payload: { path: ["recipientId"], equals: recipientId } },
-            ...(cursor ? [{ OR: [
-              { receivedAt: { lt: new Date(cursor.at) } },
-              { receivedAt: new Date(cursor.at), id: { lt: cursor.id } },
-            ] }] : []),
-          ],
+          accountId: instagramAccountId,
+          recipientId,
+          ...(cursor ? { OR: [
+            { receivedAt: { lt: new Date(cursor.at) } },
+            { receivedAt: new Date(cursor.at), id: { lt: cursor.id } },
+          ] } : {}),
         },
         orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
         take: options.limit + 1,

@@ -50,23 +50,32 @@ export async function POST(request: Request) {
     });
   }
 
+  // Batched concurrency instead of one contact per round trip: up to 500
+  // candidates × 2 touches used to serialize into ~1 000 sequential DB calls,
+  // and the list fetch waited on all of them. Candidates are distinct
+  // (Map-keyed), so concurrent touches can't collide.
+  const RECONCILE_BATCH = 10;
+  const candidateList = [...candidates.values()];
   let reconciled = 0;
-  for (const candidate of candidates.values()) {
-    const touched = await repository.touchContact(
-      session.workspaceId,
-      candidate.instagramAccountId,
-      candidate.igScopedUserId,
-      candidate.firstSeenAt,
-    );
-    if (candidate.lastSeenAt !== candidate.firstSeenAt) {
-      await repository.touchContact(
+  for (let index = 0; index < candidateList.length; index += RECONCILE_BATCH) {
+    const batch = await Promise.all(candidateList.slice(index, index + RECONCILE_BATCH).map(async (candidate) => {
+      const touched = await repository.touchContact(
         session.workspaceId,
         candidate.instagramAccountId,
         candidate.igScopedUserId,
-        candidate.lastSeenAt,
+        candidate.firstSeenAt,
       );
-    }
-    if (touched.created) reconciled += 1;
+      if (candidate.lastSeenAt !== candidate.firstSeenAt) {
+        await repository.touchContact(
+          session.workspaceId,
+          candidate.instagramAccountId,
+          candidate.igScopedUserId,
+          candidate.lastSeenAt,
+        );
+      }
+      return touched;
+    }));
+    reconciled += batch.filter((touched) => touched.created).length;
   }
   return NextResponse.json({ data: { reconciled } });
 }
@@ -102,6 +111,7 @@ export async function GET(request: Request) {
       identities: contacts,
       events,
       connections,
+      apiVersion: env.metaApiVersion,
       ...(env.metaTokenEncryptionKey ? {
         client: new MetaClient({ apiVersion: env.metaApiVersion }),
         tokenEncryptionKey: env.metaTokenEncryptionKey,

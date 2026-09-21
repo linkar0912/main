@@ -786,6 +786,11 @@ model WebhookEvent {
   providerEventId     String
   eventType           String
   payload             Json
+  // Denormalized from payload.accountId / payload.recipientId at write time so
+  // inbox lookups ("latest message per contact", conversation history) use a
+  // real btree index instead of per-row JSONB extraction scans.
+  accountId           String?
+  recipientId         String?
   receivedAt          DateTime  @default(now())
   processedAt         DateTime?
   version             Int       @default(1)
@@ -794,6 +799,7 @@ model WebhookEvent {
 
   @@unique([workspaceId, providerEventId])
   @@index([workspaceId, receivedAt])
+  @@index([workspaceId, accountId, recipientId, receivedAt])
 }
 
 // A Facebook Page connected to a workspace for comment-reply automation.

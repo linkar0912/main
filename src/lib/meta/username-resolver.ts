@@ -7,6 +7,82 @@ export type InstagramIdentity = {
   igScopedUserId: string;
 };
 
+export type ResolvedInstagramProfile = {
+  username?: string;
+  profilePictureUrl?: string;
+};
+
+// Resolved profiles are cached for 15 minutes (same TTL as the workspace
+// avatar cache in profile-picture.ts). Without this, every inbox/contacts
+// load - and every single avatar <img> request - re-fetched
+// GET /{ig-scoped-id}?fields=username,profile_pic from Meta, which dominated
+// page latency. Ordering never depended on these calls: the inbox sorts on
+// WebhookEvent.receivedAt in SQL.
+const PROFILE_LOOKUP_TTL_MS = 15 * 60 * 1_000;
+const PROFILE_LOOKUP_CACHE_LIMIT = 5_000;
+type CachedProfile = { expiresAt: number; value?: ResolvedInstagramProfile; pending?: Promise<ResolvedInstagramProfile> };
+const profileLookupCache = new Map<string, CachedProfile>();
+
+/** Test isolation helper: clears resolved usernames/avatars between specs. */
+export function clearResolvedProfileCache(): void {
+  profileLookupCache.clear();
+}
+
+function profileCacheKey(apiVersion: string | undefined, identity: InstagramIdentity): string {
+  return `${apiVersion ?? ""}:${identity.instagramAccountId}:${identity.igScopedUserId}`;
+}
+
+/**
+ * Cached best-effort lookup of one contact's username + profile picture.
+ * Failures resolve to {} so a stale token or missing consent grant never
+ * breaks the inbox, contacts, or avatar routes. Concurrent callers share one
+ * in-flight Meta request.
+ */
+export async function resolveInstagramProfile(options: {
+  identity: InstagramIdentity;
+  connection: InstagramConnectionRecord | undefined;
+  client: MetaClient;
+  tokenEncryptionKey: string;
+  apiVersion?: string;
+}): Promise<ResolvedInstagramProfile> {
+  if (!options.connection || options.connection.status !== "CONNECTED") return {};
+  const key = profileCacheKey(options.apiVersion, options.identity);
+  const cached = profileLookupCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    if (cached.value !== undefined) return cached.value;
+    if (cached.pending) return cached.pending;
+  }
+
+  const connection = options.connection;
+  const pending = (async (): Promise<ResolvedInstagramProfile> => {
+    try {
+      const profile = await options.client.getUserProfile({
+        igUserId: connection.igUserId,
+        accessToken: unsealSecret(connection.accessTokenEncrypted, options.tokenEncryptionKey),
+      }, options.identity.igScopedUserId);
+      const username = cleanUsername(profile.username);
+      return {
+        ...(username ? { username } : {}),
+        ...(profile.profilePictureUrl ? { profilePictureUrl: profile.profilePictureUrl } : {}),
+      };
+    } catch {
+      return {};
+    }
+  })();
+  // Insertion-ordered Map: evict the oldest live entry when the cap is hit so
+  // one-off identities can't grow the cache unbounded.
+  while (profileLookupCache.size >= PROFILE_LOOKUP_CACHE_LIMIT) {
+    const oldest = profileLookupCache.keys().next().value;
+    if (oldest === undefined) break;
+    profileLookupCache.delete(oldest);
+  }
+  profileLookupCache.set(key, { expiresAt: Date.now() + PROFILE_LOOKUP_TTL_MS, pending });
+  const value = await pending;
+  profileLookupCache.set(key, { expiresAt: Date.now() + PROFILE_LOOKUP_TTL_MS, value });
+  return value;
+}
+
+
 export function instagramIdentityKey(identity: InstagramIdentity): string {
   return `${identity.instagramAccountId}:${identity.igScopedUserId}`;
 }
@@ -23,6 +99,8 @@ export async function resolveInstagramUsernames(options: {
   client?: MetaClient;
   tokenEncryptionKey?: string;
   lookupLimit?: number;
+  /** Included in the cache key so flipping META_API_VERSION grows a fresh namespace. */
+  apiVersion?: string;
 }): Promise<Map<string, string>> {
   const usernames = new Map<string, string>();
   for (const event of options.events) {
@@ -43,18 +121,14 @@ export async function resolveInstagramUsernames(options: {
   }
 
   await Promise.all([...unresolved.entries()].slice(0, options.lookupLimit ?? 25).map(async ([key, identity]) => {
-    const connection = connections.get(identity.instagramAccountId);
-    if (!connection || connection.status !== "CONNECTED") return;
-    try {
-      const profile = await options.client!.getUserProfile({
-        igUserId: connection.igUserId,
-        accessToken: unsealSecret(connection.accessTokenEncrypted, options.tokenEncryptionKey!),
-      }, identity.igScopedUserId);
-      const username = cleanUsername(profile.username);
-      if (username) usernames.set(key, username);
-    } catch {
-      // A missing consent grant or stale token must not make Contacts or Inbox fail.
-    }
+    const profile = await resolveInstagramProfile({
+      identity,
+      connection: connections.get(identity.instagramAccountId),
+      client: options.client!,
+      tokenEncryptionKey: options.tokenEncryptionKey!,
+      ...(options.apiVersion ? { apiVersion: options.apiVersion } : {}),
+    });
+    if (profile.username) usernames.set(key, profile.username);
   }));
   return usernames;
 }

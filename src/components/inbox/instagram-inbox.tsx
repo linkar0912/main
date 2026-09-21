@@ -70,6 +70,53 @@ function optimisticContact(contact: InboxContact, operation: InboxOperation): In
 type InboxPayload = { data?: { contacts: InboxContact[]; members?: InboxMember[]; nextCursor?: string }; error?: string };
 type ConversationPayload = { data?: { messages: InboxMessage[]; nextCursor?: string }; error?: string };
 
+type InboxListSnapshot = {
+  contacts: InboxContact[];
+  members: InboxMember[];
+  nextCursor?: string;
+  fetchedAt: number;
+  // Fetcher identity ties the cache to the current session/test stub; a
+  // swapped global fetch (new login, new test) implicitly invalidates it.
+  fetcher?: typeof fetch;
+};
+
+// Stale-while-revalidate per filter set, mirroring src/lib/client/workspace-data.ts:
+// revisiting the inbox paints the last roster instantly while a background
+// refresh runs, instead of skeleton-flashing on every navigation.
+const INBOX_FRESH_FOR_MS = 120_000;
+const INBOX_CACHE_LIMIT = 20;
+const inboxFirstPageCache = new Map<string, InboxListSnapshot>();
+
+function inboxCacheKey(filters: InboxFiltersValue): string {
+  return JSON.stringify(filters);
+}
+
+function readInboxCache(filters: InboxFiltersValue): { snapshot?: InboxListSnapshot; fresh: boolean } {
+  const snapshot = inboxFirstPageCache.get(inboxCacheKey(filters));
+  if (!snapshot || snapshot.fetcher !== fetch) return { fresh: false };
+  return { snapshot, fresh: Date.now() - snapshot.fetchedAt < INBOX_FRESH_FOR_MS };
+}
+
+function writeInboxCache(filters: InboxFiltersValue, snapshot: Omit<InboxListSnapshot, "fetchedAt" | "fetcher">): void {
+  while (inboxFirstPageCache.size >= INBOX_CACHE_LIMIT) {
+    const oldest = inboxFirstPageCache.keys().next().value;
+    if (oldest === undefined) break;
+    inboxFirstPageCache.delete(oldest);
+  }
+  inboxFirstPageCache.set(inboxCacheKey(filters), { ...snapshot, fetchedAt: Date.now(), fetcher: fetch });
+}
+
+/** Applies the same optimistic operation to the cached roster so a revisit
+ *  inside the freshness window doesn't briefly resurrect pre-PATCH state. */
+function mutateInboxCache(filters: InboxFiltersValue, contactId: string, operation: InboxOperation | { action: "mark_read" }): (() => void) | undefined {
+  const snapshot = inboxFirstPageCache.get(inboxCacheKey(filters));
+  if (!snapshot || snapshot.fetcher !== fetch) return undefined;
+  const previous = snapshot.contacts;
+  snapshot.contacts = previous.map((contact) => contact.id !== contactId ? contact
+    : operation.action === "mark_read" ? { ...contact, unread: false } : optimisticContact(contact, operation));
+  return () => { snapshot.contacts = previous; };
+}
+
 /** A contact-first, text-only Instagram conversation desk. */
 export function InstagramInbox() {
   const [contacts, setContacts] = useState<InboxContact[]>([]);
@@ -80,7 +127,7 @@ export function InstagramInbox() {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [messageCursor, setMessageCursor] = useState<string>();
   const [draft, setDraft] = useState("");
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(() => readInboxCache(DEFAULT_FILTERS).snapshot !== undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [olderLoading, setOlderLoading] = useState(false);
@@ -90,6 +137,20 @@ export function InstagramInbox() {
   const messageEndRef = useRef<HTMLDivElement>(null);
 
   const loadContacts = useCallback(async (replace: boolean, cursor?: string) => {
+    const isFirstPage = replace && !cursor;
+    if (isFirstPage) {
+      const { snapshot, fresh } = readInboxCache(filters);
+      if (snapshot) {
+        // Paint instantly; a fresh snapshot needs no network at all, a stale
+        // one stays on screen while the refresh below replaces it.
+        setContacts(snapshot.contacts);
+        setMembers(snapshot.members);
+        setNextCursor(snapshot.nextCursor);
+        setError("");
+        setLoaded(true);
+        if (fresh) return;
+      }
+    }
     if (!replace) setLoadingMore(true);
     try {
       const response = await fetch(inboxUrl(filters, cursor));
@@ -98,6 +159,13 @@ export function InstagramInbox() {
       setContacts((current) => replace ? payload.data!.contacts : mergeContacts(current, payload.data!.contacts));
       setMembers(payload.data.members ?? []);
       setNextCursor(payload.data.nextCursor);
+      if (isFirstPage) {
+        writeInboxCache(filters, {
+          contacts: payload.data.contacts,
+          members: payload.data.members ?? [],
+          nextCursor: payload.data.nextCursor,
+        });
+      }
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load inbox");
@@ -117,6 +185,7 @@ export function InstagramInbox() {
 
   async function patchContact(contactId: string, operation: InboxOperation | { action: "mark_read" }) {
     const previous = contacts;
+    const rollbackCache = mutateInboxCache(filters, contactId, operation);
     if (operation.action === "mark_read") {
       setContacts((current) => current.map((contact) => contact.id === contactId ? { ...contact, unread: false } : contact));
     } else {
@@ -132,6 +201,7 @@ export function InstagramInbox() {
       if (!response.ok) throw new Error(payload.error ?? "Could not update conversation");
     } catch (caught) {
       setContacts(previous);
+      rollbackCache?.();
       setError(caught instanceof Error ? caught.message : "Could not update conversation");
     }
   }

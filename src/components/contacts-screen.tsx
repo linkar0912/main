@@ -41,10 +41,49 @@ function formatSeen(value: string): string {
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+type ContactsSnapshot = {
+  contacts: ContactRow[];
+  counts: Record<LeadStatus, number>;
+  fetchedAt: number;
+  // Fetcher identity ties the cache to the current session/test stub; a
+  // swapped global fetch (new login, new test) implicitly invalidates it.
+  fetcher?: typeof fetch;
+};
+
+// Stale-while-revalidate, mirroring src/lib/client/workspace-data.ts: revisits
+// paint cached rows instantly and refresh in the background instead of
+// re-showing the skeleton on every navigation.
+const CONTACTS_FRESH_FOR_MS = 120_000;
+const contactsCache: { snapshot?: ContactsSnapshot } = {};
+
+function readContactsCache(): ContactsSnapshot | undefined {
+  const snapshot = contactsCache.snapshot;
+  if (!snapshot || snapshot.fetcher !== fetch) return undefined;
+  return snapshot;
+}
+
+type ContactsListPayload = { count?: number; counts?: Record<LeadStatus, number>; contacts?: ContactRow[] };
+
+async function fetchContactsList(signal?: AbortSignal): Promise<ContactsSnapshot> {
+  const response = await fetch("/api/contacts?scope=all&limit=200", { signal });
+  const payload = await response.json().catch(() => ({})) as { data?: ContactsListPayload; error?: string };
+  if (!response.ok || !Array.isArray(payload.data?.contacts)) {
+    throw new Error(payload.error ?? "Could not load contacts");
+  }
+  const snapshot: ContactsSnapshot = {
+    contacts: payload.data.contacts,
+    counts: payload.data.counts ?? { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 },
+    fetchedAt: Date.now(),
+    fetcher: fetch,
+  };
+  contactsCache.snapshot = snapshot;
+  return snapshot;
+}
+
 export function ContactsScreen() {
-  const [contacts, setContacts] = useState<ContactRow[]>([]);
-  const [counts, setCounts] = useState<Record<LeadStatus, number>>({ NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 });
-  const [loaded, setLoaded] = useState(false);
+  const [contacts, setContacts] = useState<ContactRow[]>(() => readContactsCache()?.contacts ?? []);
+  const [counts, setCounts] = useState<Record<LeadStatus, number>>(() => readContactsCache()?.counts ?? { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 });
+  const [loaded, setLoaded] = useState(() => readContactsCache() !== undefined);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<LeadStatus | "">("");
@@ -52,25 +91,48 @@ export function ContactsScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/contacts", { method: "POST" })
-      .catch(() => undefined)
-      .then(() => fetch("/api/contacts?scope=all&limit=200"))
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({})) as {
-          data?: { contacts: ContactRow[]; counts: Record<LeadStatus, number> };
-          error?: string;
-        };
-        if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load contacts");
-        if (cancelled) return;
-        setContacts(payload.data.contacts);
-        setCounts(payload.data.counts);
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : "Could not load contacts");
-      })
-      .finally(() => {
-        if (!cancelled) setLoaded(true);
-      });
+    const cached = readContactsCache();
+    if (cached && Date.now() - cached.fetchedAt < CONTACTS_FRESH_FOR_MS) {
+      // Fresh cache: nothing to fetch at all this visit.
+      return () => { cancelled = true; };
+    }
+
+    // Reconciliation and the list fetch run in parallel now - the POST no
+    // longer gates first paint. If it did create contacts, one follow-up GET
+    // picks them up (the common case reconciles 0 and skips the refetch).
+    const reconcile: Promise<{ data?: { reconciled?: number } }> = fetch("/api/contacts", { method: "POST" })
+      .then(async (response) => (await response.json().catch(() => ({}))) as { data?: { reconciled?: number } })
+      .catch(() => ({}));
+
+    const apply = (snapshot: ContactsSnapshot) => {
+      if (cancelled) return;
+      setContacts(snapshot.contacts);
+      setCounts(snapshot.counts);
+      setError("");
+      setLoaded(true);
+    };
+
+    void (async () => {
+      try {
+        apply(await fetchContactsList());
+      } catch (caught: unknown) {
+        if (!cancelled) {
+          // Keep cached rows on screen if we have them; only surface the error
+          // when there is nothing to show.
+          if (!cached) setError(caught instanceof Error ? caught.message : "Could not load contacts");
+          setLoaded(true);
+        }
+      }
+      const result = await reconcile;
+      if (cancelled || !result.data?.reconciled) return;
+      try {
+        apply(await fetchContactsList());
+      } catch {
+        // The rows just painted are still valid; the next visit picks up the
+        // reconciled contacts.
+      }
+    })();
+
     return () => { cancelled = true; };
   }, []);
 

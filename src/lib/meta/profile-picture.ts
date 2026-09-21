@@ -45,6 +45,24 @@ export function clearProfilePictureCache(igUserId?: string): void {
 }
 
 /**
+ * Synchronous cache read for latency-sensitive callers (the workspace
+ * bootstrap). Returns the fresh cached value, or undefined when nothing fresh
+ * is stored - callers should then kick off loadProfilePictureUrl without
+ * awaiting it so the next fetch is a cache hit, instead of blocking the whole
+ * bootstrap payload on a live Meta round trip.
+ */
+export function peekProfilePictureUrl(
+  options: LoadOptions,
+  igUserId: string,
+): string | null | undefined {
+  const apiVersion = options.apiVersion ?? INSTAGRAM_LOGIN_API_VERSION;
+  const cached = profilePictureCache.get(`${apiVersion}:${igUserId}`);
+  if (cached && cached.expiresAt > Date.now() && cached.value !== undefined) return cached.value;
+  return undefined;
+}
+
+
+/**
  * Best-effort avatar lookup for a connected Instagram professional account.
  * Any failure resolves to null so callers can fall back to their static
  * placeholder without error handling.

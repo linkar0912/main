@@ -32,6 +32,9 @@ export default async function DashboardPage() {
 
   return (
     <DashboardScreen
+      // Server-known identity so "Hello, <name>!" paints with the first HTML
+      // instead of waiting on the client bootstrap round trip.
+      initialEmail={session.email}
       initialAutomations={automations}
       initialInsights={{
         timeseries: { days: TIMESERIES_DAYS, participantsPerDay, sentPerDay },

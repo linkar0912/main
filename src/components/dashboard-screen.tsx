@@ -34,6 +34,8 @@ export type DashboardScreenProps = {
   initialAutomations?: AutomationRecord[];
   initialInsights?: InsightsPayload;
   initialHasConnection?: boolean;
+  /** Session email from the server render, so the greeting needs no bootstrap wait. */
+  initialEmail?: string;
 };
 
 type Delta = { dir: "up" | "down" | "flat"; label: string };
@@ -101,8 +103,11 @@ function DemoBanner() {
   );
 }
 
-function DashboardGreeting() {
-  const { email } = useAccountIdentity();
+function DashboardGreeting({ fallbackEmail = "" }: { fallbackEmail?: string }) {
+  const { email: contextEmail } = useAccountIdentity();
+  // The context email arrives with the client bootstrap; the server-passed
+  // fallback paints the real name in the very first render.
+  const email = contextEmail || fallbackEmail;
   return (
     <header className="page-header home-greeting">
       <div>
@@ -199,7 +204,7 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
   );
 }
 
-export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection }: DashboardScreenProps = {}) {
+export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection, initialEmail }: DashboardScreenProps = {}) {
   const { automations, loading } = useAutomations(initialAutomations);
   const [insights, setInsights] = useState<InsightsPayload | null>(() => {
     // Seed the shared insights cache so the effect below resolves instantly
@@ -263,7 +268,7 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
       <div className="page-wrap">
         <DemoBanner />
 
-        <DashboardGreeting />
+        <DashboardGreeting fallbackEmail={initialEmail ?? ""} />
 
         {!loading && automations.length === 0 ? <section aria-label="Start here">
           <div className="quickstart-head">

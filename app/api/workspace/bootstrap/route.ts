@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { getRuntimeMode } from "@/src/lib/health";
-import { loadProfilePictureUrl } from "@/src/lib/meta/profile-picture";
+import { loadProfilePictureUrl, peekProfilePictureUrl } from "@/src/lib/meta/profile-picture";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { measureServerOperation } from "@/src/lib/server-timing";
@@ -26,13 +26,20 @@ export async function GET(request: Request) {
         ]),
     );
 
+    // The avatar rides the payload only when it's already cached: awaiting a
+    // live Meta Graph call here used to hold up the whole shell (sidebar chip,
+    // dashboard greeting) on every cold fetch. On a miss we warm the cache in
+    // the background so the next bootstrap (or window-focus refresh) serves it.
     const first = connections[0];
-    const igAvatarUrl = first
-        ? await measureServerOperation(
-            "workspace.bootstrap.avatar",
-            () => loadProfilePictureUrl(env, first.igUserId, first.accessTokenEncrypted),
-        )
-        : null;
+    let igAvatarUrl: string | null = null;
+    if (first) {
+        const cached = peekProfilePictureUrl(env, first.igUserId);
+        if (cached !== undefined) {
+            igAvatarUrl = cached;
+        } else {
+            void loadProfilePictureUrl(env, first.igUserId, first.accessTokenEncrypted);
+        }
+    }
 
     return NextResponse.json({
         data: {

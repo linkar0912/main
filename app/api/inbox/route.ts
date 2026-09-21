@@ -56,6 +56,7 @@ export async function GET(request: Request) {
     identities,
     events: [],
     connections,
+    apiVersion: env.metaApiVersion,
     ...(env.metaTokenEncryptionKey ? { client: new MetaClient({ apiVersion: env.metaApiVersion }), tokenEncryptionKey: env.metaTokenEncryptionKey } : {}),
   });
   const members = await repository.listMembers(session.workspaceId);

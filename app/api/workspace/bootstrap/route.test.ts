@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ session: vi.fn(), role: vi.fn(), connections: vi.fn(), entitlements: vi.fn(), avatar: vi.fn() }));
+const mocks = vi.hoisted(() => ({ session: vi.fn(), role: vi.fn(), connections: vi.fn(), entitlements: vi.fn(), avatar: vi.fn(), peekAvatar: vi.fn() }));
 vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.session }));
 vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({ getMemberRole: mocks.role, listConnections: mocks.connections }) }));
 vi.mock("@/src/lib/entitlements/service", () => ({ getEntitlementService: () => ({ getEffectiveEntitlements: mocks.entitlements }) }));
-vi.mock("@/src/lib/meta/profile-picture", () => ({ loadProfilePictureUrl: mocks.avatar }));
+vi.mock("@/src/lib/meta/profile-picture", () => ({ loadProfilePictureUrl: mocks.avatar, peekProfilePictureUrl: mocks.peekAvatar }));
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({ supportEmail: "help@linkar.in", platformOwnerUserIds: [], databaseUrl: "postgres://x" }) }));
 vi.mock("@/src/lib/health", () => ({ getRuntimeMode: () => "configured" }));
 const { GET } = await import("./route");
