@@ -46,7 +46,7 @@ import type {
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
-import { toMessagingWindow } from "./messaging-window";
+import { MESSAGING_WINDOW_MS, toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
 import { normalizeHelpQuery } from "./help-search";
 import { decodeInboxCursor, encodeInboxCursor } from "./inbox-cursor";
@@ -521,6 +521,106 @@ function mergeDayCounts(rows: { day: string; count: number }[], days: number): {
 }
 
 export function createPrismaRepository(client = prisma): AutomationRepository {
+  // Named function (not `this.addMember`) so acceptInvitation still works when
+  // the repository method is passed as a bare reference without its receiver.
+  async function addMember(workspaceId: string, email: string, role: MemberRole, userId?: string): Promise<{ created: boolean }> {
+    try {
+      await client.workspaceMember.create({
+        data: { id: createId("member"), workspaceId, email: email.toLowerCase(), role, userId },
+      });
+      return { created: true };
+    } catch (error) {
+      if ((error as { code?: string }).code === "P2002") return { created: false };
+      throw error;
+    }
+  }
+
+  async function claimExecutionDispatch(input: Parameters<AutomationRepository["claimExecutionDispatch"]>[0]): Promise<boolean> {
+    // Two callers share a dedupeKey: `recordExecution` first writes a
+    // PROCESSING/CLAIMED row, then `claimExecutionDispatch` advances it
+    // to DISPATCHING.
+    //
+    // dispatchOwner must be unique across all rows (the worker that
+    // generates it treats it as a one-shot lease token). Reject reuse
+    // before attempting to claim so a token recycled by mistake cannot
+    // clobber an in-flight dispatch.
+    const ownerTaken = await client.automationExecution.findFirst({
+      where: { dispatchOwner: input.dispatchOwner },
+      select: { id: true },
+    });
+    if (ownerTaken) return false;
+
+    const dispatchStartedAt = new Date(input.dispatchStartedAt);
+    const dispatchLeaseExpiresAt = new Date(input.dispatchLeaseExpiresAt);
+    // The WHERE clause below encodes the entire claimability rule - a
+    // separate read-then-upsert (the previous approach) leaves a window
+    // between the read and the write where two concurrent callers can
+    // both observe an unclaimed row and then both unconditionally
+    // overwrite it via upsert's `update` branch, each getting back a
+    // RETURNING row that looks like a successful claim. A single
+    // `updateMany` with the claimability check inlined in `where` is
+    // atomic per row (Postgres serializes concurrent UPDATEs on the same
+    // row and re-evaluates WHERE against the committed state), so only
+    // one caller's statement can ever match and flip the row - mirrors
+    // the same compare-and-set pattern already used by
+    // completeOwnedExecution/failAbandonedExecution below.
+    const claimable = {
+      workspaceId: input.workspaceId,
+      dedupeKey: input.dedupeKey,
+      status: "PROCESSING" as const,
+      OR: [
+        { dispatchStatus: { not: "DISPATCHING" as const } },
+        { dispatchOwner: null },
+        { dispatchOwner: input.dispatchOwner },
+      ],
+    };
+    const claim = {
+      dispatchStatus: "DISPATCHING" as const,
+      dispatchOwner: input.dispatchOwner,
+      dispatchStartedAt,
+      dispatchLeaseExpiresAt,
+    };
+    // Post-claim re-check: a raced create/update can leave two rows owned by
+    // the same token (ownerTaken ran before either write). Revert our row so
+    // both racers return false and the work stays claimable - eventual
+    // consistency without needing a transaction around the claim itself.
+    const confirmSoleOwner = async (): Promise<boolean> => {
+      const owned = await client.automationExecution.count({ where: { dispatchOwner: input.dispatchOwner } });
+      if (owned <= 1) return true;
+      await client.automationExecution.updateMany({
+        where: { workspaceId: input.workspaceId, dedupeKey: input.dedupeKey, dispatchOwner: input.dispatchOwner },
+        data: { dispatchOwner: null },
+      });
+      return false;
+    };
+    const claimed = await client.automationExecution.updateMany({ where: claimable, data: claim });
+    if (claimed.count === 1) return confirmSoleOwner();
+
+    // No row matched: either recordExecution has not run yet for this key
+    // (first claim), or one exists but is not currently claimable (e.g.
+    // actively dispatched by a different owner - correctly leave it
+    // alone). Try to create; a collision means the row already existed,
+    // so re-run the same atomic conditional update to find out whether it
+    // was ours to take.
+    try {
+      await client.automationExecution.create({
+        data: {
+          id: createId("execution"),
+          status: "PROCESSING",
+          dispatchStatus: "DISPATCHING",
+          ...input,
+          dispatchStartedAt,
+          dispatchLeaseExpiresAt,
+        },
+      });
+      return confirmSoleOwner();
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      const retried = await client.automationExecution.updateMany({ where: claimable, data: claim });
+      return retried.count === 1 ? confirmSoleOwner() : false;
+    }
+  }
+
   return {
     async ensureWorkspace(workspaceId, ownerEmail, ownerUserId) {
       const email = ownerEmail.toLowerCase();
@@ -677,15 +777,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async addMember(workspaceId, email, role, userId) {
-      try {
-        await client.workspaceMember.create({
-          data: { id: createId("member"), workspaceId, email: email.toLowerCase(), role, userId },
-        });
-        return { created: true };
-      } catch (error) {
-        if ((error as { code?: string }).code === "P2002") return { created: false };
-        throw error;
-      }
+      return addMember(workspaceId, email, role, userId);
     },
 
     async updateMemberRole(workspaceId, email, role) {
@@ -738,7 +830,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       });
       if (accepted.count !== 1) return null;
       const record = await client.workspaceInvitation.findUniqueOrThrow({ where: { id } });
-      await this.addMember(record.workspaceId, record.email, record.role as MemberRole, userId);
+      await addMember(record.workspaceId, record.email, record.role as MemberRole, userId);
       return mapInvitation(record);
     },
 
@@ -1376,76 +1468,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async claimExecutionDispatch(input) {
-      // Two callers share a dedupeKey: `recordExecution` first writes a
-      // PROCESSING/CLAIMED row, then `claimExecutionDispatch` advances it
-      // to DISPATCHING.
-      //
-      // dispatchOwner must be unique across all rows (the worker that
-      // generates it treats it as a one-shot lease token). Reject reuse
-      // before attempting to claim so a token recycled by mistake cannot
-      // clobber an in-flight dispatch.
-      const ownerTaken = await client.automationExecution.findFirst({
-        where: { dispatchOwner: input.dispatchOwner },
-        select: { id: true },
-      });
-      if (ownerTaken) return false;
-
-      const dispatchStartedAt = new Date(input.dispatchStartedAt);
-      const dispatchLeaseExpiresAt = new Date(input.dispatchLeaseExpiresAt);
-      // The WHERE clause below encodes the entire claimability rule - a
-      // separate read-then-upsert (the previous approach) leaves a window
-      // between the read and the write where two concurrent callers can
-      // both observe an unclaimed row and then both unconditionally
-      // overwrite it via upsert's `update` branch, each getting back a
-      // RETURNING row that looks like a successful claim. A single
-      // `updateMany` with the claimability check inlined in `where` is
-      // atomic per row (Postgres serializes concurrent UPDATEs on the same
-      // row and re-evaluates WHERE against the committed state), so only
-      // one caller's statement can ever match and flip the row - mirrors
-      // the same compare-and-set pattern already used by
-      // completeOwnedExecution/failAbandonedExecution below.
-      const claimable = {
-        workspaceId: input.workspaceId,
-        dedupeKey: input.dedupeKey,
-        status: "PROCESSING" as const,
-        OR: [
-          { dispatchStatus: { not: "DISPATCHING" as const } },
-          { dispatchOwner: null },
-          { dispatchOwner: input.dispatchOwner },
-        ],
-      };
-      const claim = {
-        dispatchStatus: "DISPATCHING" as const,
-        dispatchOwner: input.dispatchOwner,
-        dispatchStartedAt,
-        dispatchLeaseExpiresAt,
-      };
-      const claimed = await client.automationExecution.updateMany({ where: claimable, data: claim });
-      if (claimed.count === 1) return true;
-
-      // No row matched: either recordExecution has not run yet for this key
-      // (first claim), or one exists but is not currently claimable (e.g.
-      // actively dispatched by a different owner - correctly leave it
-      // alone). Try to create; a collision means the row already existed,
-      // so re-run the same atomic conditional update to find out whether it
-      // was ours to take.
-      try {
-        await client.automationExecution.create({
-          data: {
-            id: createId("execution"),
-            status: "PROCESSING",
-            dispatchStatus: "DISPATCHING",
-            ...input,
-            dispatchStartedAt,
-            dispatchLeaseExpiresAt,
-          },
-        });
-        return true;
-      } catch (error) {
-        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-        const retried = await client.automationExecution.updateMany({ where: claimable, data: claim });
-        return retried.count === 1;
-      }
+      return claimExecutionDispatch(input);
     },
 
     async getExecution(workspaceId, dedupeKey) {
@@ -1550,9 +1573,13 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           workspaceId,
           instagramAccountId,
           recipientId,
+          // A cross-source `~` cursor carries no id in this table: keep the
+          // equal-timestamp branch open so the boundary row is not skipped.
           ...(cursor ? { OR: [
             { createdAt: { lt: new Date(cursor.at) } },
-            { createdAt: new Date(cursor.at), id: { lt: cursor.id } },
+            ...(cursor.id.startsWith("delivery_")
+              ? [{ createdAt: new Date(cursor.at), id: { lt: cursor.id } }]
+              : [{ createdAt: new Date(cursor.at) }]),
           ] } : {}),
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -1960,10 +1987,17 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async expireStaleParticipants(now, reason) {
+      const nowDate = new Date(now);
+      // Rows that never got an explicit window still expire 24h after they
+      // were created - Meta's opening window cannot outlive that.
+      const createdCutoff = new Date(nowDate.getTime() - MESSAGING_WINDOW_MS);
       const result = await client.automationParticipant.updateMany({
         where: {
           state: { notIn: ["LINK_SENT", "EXPIRED", "FAILED"] },
-          messagingWindowExpiresAt: { not: null, lte: new Date(now) },
+          OR: [
+            { messagingWindowExpiresAt: { not: null, lte: nowDate } },
+            { messagingWindowExpiresAt: null, createdAt: { lte: createdCutoff } },
+          ],
         },
         data: { state: "EXPIRED", finalDeliveryError: reason },
       });
@@ -2534,9 +2568,13 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           eventType: { in: ["message.received", "quick_reply.received", "postback.received", "story_mention.received"] },
           accountId: instagramAccountId,
           recipientId,
+          // Cross-source `~` cursors have no wevent id - keep all rows at the
+          // boundary timestamp instead of applying an id tie-break.
           ...(cursor ? { OR: [
             { receivedAt: { lt: new Date(cursor.at) } },
-            { receivedAt: new Date(cursor.at), id: { lt: cursor.id } },
+            ...(cursor.id.startsWith("wevent_")
+              ? [{ receivedAt: new Date(cursor.at), id: { lt: cursor.id } }]
+              : [{ receivedAt: new Date(cursor.at) }]),
           ] } : {}),
         },
         orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
@@ -2944,7 +2982,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
             counters.sent += count;
           } else if (group.resultCode === "SUPPRESSED" || group.resultCode === "WINDOW_CLOSED") {
             counters.skipped += count;
-          } else if (group.state === "FAILED" && group.resultCode !== "RETRYABLE_REJECTION") {
+          } else if (group.state === "FAILED" || group.state === "UNKNOWN") {
             counters.failed += count;
           } else {
             counters.pending += count;

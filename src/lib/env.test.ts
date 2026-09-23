@@ -146,6 +146,7 @@ describe("Razorpay billing environment", () => {
   it("allows billing to remain entirely disabled in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("PLATFORM_OWNER_USER_IDS", "11111111-1111-4111-8111-111111111111");
+    vi.stubEnv("AUTH_SESSION_SECRET", "prod-session-secret-at-least-32-chars");
     for (const name of Object.keys(completeBillingEnv)) vi.stubEnv(name, "");
 
     expect(getServerEnv().razorpay).toEqual({

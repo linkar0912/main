@@ -49,8 +49,10 @@ function bucketLimit(bucket: SendRateLimitBucket): { max: number; windowMs: numb
 }
 
 /**
- * Fixed-window counter (INCR + PEXPIRE on first hit) rather than a sliding
- * window: one Redis round trip per call, no Lua script. This can admit
+ * Fixed-window counter: INCR and PEXPIRE run in one Redis transaction so a
+ * crash between the two can never leave an unbounded key behind. The key
+ * embeds the window index, so each window gets its own counter and the TTL
+ * only serves as garbage collection for abandoned windows. This can admit
  * slightly more than `max` right at a window boundary, which is an accepted
  * tradeoff for simplicity here - Meta doesn't publish its own algorithm
  * precisely enough to justify matching it exactly, and staying a little
@@ -66,10 +68,8 @@ export async function checkSendRateLimit(
 
   const windowIndex = Math.floor(Date.now() / limit.windowMs);
   const key = `send-rate:${bucket}:${igAccountId}:${windowIndex}`;
-  const count = await redis.incr(key);
-  if (count === 1) {
-    await redis.pexpire(key, limit.windowMs);
-  }
+  const results = await redis.multi().incr(key).pexpire(key, limit.windowMs).exec();
+  const count = Number(results?.[0]?.[1] ?? 0);
   if (count > limit.max) {
     const windowEndsAt = (windowIndex + 1) * limit.windowMs;
     return { allowed: false, retryAfterMs: Math.max(0, windowEndsAt - Date.now()) };

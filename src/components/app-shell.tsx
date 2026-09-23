@@ -132,9 +132,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   // Refresh on focus + reconnect so role / plan / avatar updates from a
   // sibling tab or a flaky network are picked up without a full reload.
   useEffect(() => {
+    let active = true;
     function onFocus() {
       void refreshWorkspaceBootstrap()
         .then((data) => {
+          if (!active) return;
           setEmail(data.email ?? "");
           setRole(data.role ?? "");
           setPlan(data.plan ?? "free");
@@ -147,7 +149,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         .catch(() => undefined);
     }
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
 
   useEffect(() => {

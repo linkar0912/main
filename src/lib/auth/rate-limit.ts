@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import Redis from "ioredis";
+import { logger } from "@/src/lib/logger";
 
 export type LoginAttemptLimiter = {
   isAllowed(key: string, now?: Date): boolean;
@@ -50,23 +51,44 @@ export class LoginRateLimitStore {
 
   async isAllowed(key: string): Promise<boolean> {
     if (!this.redis) return this.fallback.isAllowed(key);
-    const count = Number(await this.redis.get(`linkar:login:${key}`) ?? "0");
-    return count < this.maxAttempts;
+    try {
+      const count = Number(await this.redis.get(`linkar:login:${key}`) ?? "0");
+      return count < this.maxAttempts;
+    } catch (error) {
+      logger.warn("Rate limiter Redis read failed; using in-process fallback", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return this.fallback.isAllowed(key);
+    }
   }
 
   async recordFailure(key: string): Promise<void> {
     if (!this.redis) return this.fallback.recordFailure(key);
-    await this.redis.eval(
-      "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('PEXPIRE',KEYS[1],ARGV[1]) end; return n",
-      1,
-      `linkar:login:${key}`,
-      String(this.windowMs),
-    );
+    try {
+      await this.redis.eval(
+        "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('PEXPIRE',KEYS[1],ARGV[1]) end; return n",
+        1,
+        `linkar:login:${key}`,
+        String(this.windowMs),
+      );
+    } catch (error) {
+      logger.warn("Rate limiter Redis write failed; using in-process fallback", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.fallback.recordFailure(key);
+    }
   }
 
   async reset(key: string): Promise<void> {
     if (!this.redis) return this.fallback.reset(key);
-    await this.redis.del(`linkar:login:${key}`);
+    try {
+      await this.redis.del(`linkar:login:${key}`);
+    } catch (error) {
+      logger.warn("Rate limiter Redis reset failed; using in-process fallback", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.fallback.reset(key);
+    }
   }
 }
 

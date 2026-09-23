@@ -29,6 +29,24 @@ export function notificationRecentlySent(key: string, now = Date.now()): boolean
   return false;
 }
 
+function rememberNotification(key: string, now: number): void {
+  // Prune any expired entries before we touch the limit so a quiet period
+  // does not force needless eviction.
+  if (recentKeys.size >= MAX_DEDUPE_KEYS) {
+    pruneExpiredKeys(now);
+  }
+  // Only run the cap check (and possibly the eviction) when we are actually
+  // over the limit. A previous sweep may have left us exactly at it.
+  if (recentKeys.size >= MAX_DEDUPE_KEYS) {
+    // Insertion order is the original key arrival, so the first key is the
+    // oldest - no need to sort. Drop just one entry; subsequent calls will
+    // repeat the cap if the workspace keeps producing distinct dedupe keys.
+    const oldest = recentKeys.keys().next().value;
+    if (oldest !== undefined) recentKeys.delete(oldest);
+  }
+  recentKeys.set(key, now + DEDUPE_TTL_MS);
+}
+
 export function resetNotificationDedupeForTests(): void {
   recentKeys.clear();
 }
@@ -51,28 +69,15 @@ export async function notifyWorkspaceManagers(
     return false;
   }
 
-  // Prune any expired entries before we touch the limit so a quiet period
-  // does not force needless eviction.
-  if (recentKeys.size >= MAX_DEDUPE_KEYS) {
-    pruneExpiredKeys(now);
-  }
-  // Only run the cap check (and possibly the eviction) when we are actually
-  // over the limit. A previous sweep may have left us exactly at it.
-  if (recentKeys.size >= MAX_DEDUPE_KEYS) {
-    // Insertion order is the original key arrival, so the first key is the
-    // oldest - no need to sort. Drop just one entry; subsequent calls will
-    // repeat the cap if the workspace keeps producing distinct dedupe keys.
-    const oldest = recentKeys.keys().next().value;
-    if (oldest !== undefined) recentKeys.delete(oldest);
-  }
-  recentKeys.set(dedupeKey, now + DEDUPE_TTL_MS);
-
   try {
     const members = await getRepository().listMembers(workspaceId);
     const recipients = members
       .filter((member: MemberRecord) => member.role === "OWNER" || member.role === "ADMIN")
       .map((member: MemberRecord) => member.email);
-    if (recipients.length === 0) return false;
+    if (recipients.length === 0) {
+      rememberNotification(dedupeKey, now);
+      return false;
+    }
 
     // Send in parallel but log per-recipient failures so a misconfigured
     // email address (or a single transient SMTP error) does not silently
@@ -88,6 +93,12 @@ export async function notifyWorkspaceManagers(
         subject,
         error: result.reason instanceof Error ? result.reason.message : String(result.reason),
       });
+    }
+    // Record the dedupe key only when at least one send went through; if
+    // every recipient failed (e.g. the mailer is down), leave the key unset
+    // so the next event can retry instead of blocking for the full window.
+    if (failed < recipients.length) {
+      rememberNotification(dedupeKey, now);
     }
     logger.info("workspace manager notification sent", {
       workspaceId,

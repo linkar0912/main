@@ -1,8 +1,9 @@
+import { formatMonthDay } from "@/src/lib/format-date";
+
 export type DayPoint = { day: string; count: number };
 
 function formatDay(day: string): string {
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" })
-    .format(new Date(`${day}T00:00:00Z`));
+  return formatMonthDay(`${day}T00:00:00Z`);
 }
 
 function normalizeDayPoints(sent: DayPoint[], reached: DayPoint[]) {

@@ -136,21 +136,25 @@ if (!env.redisUrl) {
           }));
       }
 
-      const { linkarIngestedAt, ...event } = job.data as QueuedInstagramEvent;
-      const client = env.metaAppId ? new MetaClient({
-        apiVersion: env.metaApiVersion,
-        requestTimeoutMs: env.providerRequestTimeoutMs,
-      }) : undefined;
-      return processTimedRealtimeJob(job.id, "instagram", linkarIngestedAt, (timing) =>
-        processNormalizedEvent(event, getRepository(), {
-          client,
-          tokenEncryptionKey: env.metaTokenEncryptionKey,
-          interactionSecret: env.metaAppSecret,
-          campaignsEnabled: env.followGatedCampaignsEnabled,
-          finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
-          dispatchLeaseMs: env.dispatchLeaseMs,
-          timingObserver: timing,
-        }));
+      if (job.name === "instagram-event") {
+        const { linkarIngestedAt, ...event } = job.data as QueuedInstagramEvent;
+        const client = env.metaAppId ? new MetaClient({
+          apiVersion: env.metaApiVersion,
+          requestTimeoutMs: env.providerRequestTimeoutMs,
+        }) : undefined;
+        return processTimedRealtimeJob(job.id, "instagram", linkarIngestedAt, (timing) =>
+          processNormalizedEvent(event, getRepository(), {
+            client,
+            tokenEncryptionKey: env.metaTokenEncryptionKey,
+            interactionSecret: env.metaAppSecret,
+            campaignsEnabled: env.followGatedCampaignsEnabled,
+            finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
+            dispatchLeaseMs: env.dispatchLeaseMs,
+            timingObserver: timing,
+          }));
+      }
+
+      throw new Error("unknown_job");
     },
     { connection: redis, concurrency: env.workerConcurrency },
   );
@@ -159,7 +163,7 @@ if (!env.redisUrl) {
     logger.info("Processed queue job", { jobId: job.id, jobName: job.name });
   });
   worker.on("failed", (job, error) => {
-    logger.error("Queue job failed", { jobId: job?.id ?? "unknown", jobName: job?.name ?? "unknown", error: error.message });
+    logger.error("Queue job failed", { jobId: job?.id ?? "unknown", jobName: job?.name ?? "unknown", error: error instanceof Error ? error.message : String(error) });
   });
 
   // Drain in-flight jobs on shutdown so deploys don't kill deliveries mid-Meta-call.
@@ -193,8 +197,8 @@ if (!env.redisUrl) {
         logger.info("Instagram token refresh", { refreshed: result.refreshed, failed: result.failed });
       }
     };
-    void refreshTokens().catch((error) => logger.error("Instagram token refresh failed", { error: error.message }));
-    setInterval(() => void refreshTokens().catch((error) => logger.error("Instagram token refresh failed", { error: error.message })), 24 * 60 * 60 * 1_000).unref();
+    void refreshTokens().catch((error) => logger.error("Instagram token refresh failed", { error: error instanceof Error ? error.message : String(error) }));
+    setInterval(() => void refreshTokens().catch((error) => logger.error("Instagram token refresh failed", { error: error instanceof Error ? error.message : String(error) })), 24 * 60 * 60 * 1_000).unref();
   }
 
   const sweepParticipants = async () => {
@@ -203,8 +207,8 @@ if (!env.redisUrl) {
       logger.info("Participant retention sweep", { expired: result.expired, deleted: result.deleted });
     }
   };
-  void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error.message }));
-  setInterval(() => void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error.message })), 60 * 60 * 1_000).unref();
+  void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error instanceof Error ? error.message : String(error) }));
+  setInterval(() => void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error instanceof Error ? error.message : String(error) })), 60 * 60 * 1_000).unref();
 
   let deliveryReconciliationRunning = false;
   const runDeliveryReconciliation = async () => {
@@ -224,9 +228,9 @@ if (!env.redisUrl) {
     }
   };
   void runDeliveryReconciliation().catch((error) =>
-    logger.error("Delivery reconciliation failed", { error: error.message }));
+    logger.error("Delivery reconciliation failed", { error: error instanceof Error ? error.message : String(error) }));
   setInterval(() => void runDeliveryReconciliation().catch((error) =>
-    logger.error("Delivery reconciliation failed", { error: error.message })),
+    logger.error("Delivery reconciliation failed", { error: error instanceof Error ? error.message : String(error) })),
   DELIVERY_RECONCILIATION_INTERVAL_MS).unref();
 
   const systemMonitor = createSystemMonitor();
@@ -236,9 +240,9 @@ if (!env.redisUrl) {
       logger.info("Production system monitor", result);
     }
   };
-  void runSystemMonitor().catch((error) => logger.error("Production system monitor failed", { error: error.message }));
+  void runSystemMonitor().catch((error) => logger.error("Production system monitor failed", { error: error instanceof Error ? error.message : String(error) }));
   setInterval(() => void runSystemMonitor().catch((error) =>
-    logger.error("Production system monitor failed", { error: error.message })), SYSTEM_MONITOR_INTERVAL_MS).unref();
+    logger.error("Production system monitor failed", { error: error instanceof Error ? error.message : String(error) })), SYSTEM_MONITOR_INTERVAL_MS).unref();
 
   // Sequence scheduler: delivers drip steps that are due. Runs shortly after boot and
   // then every 15 minutes - granular enough for hour-level step delays.
@@ -256,6 +260,6 @@ if (!env.redisUrl) {
       logger.info("Sequence sweep", { ...result });
     }
   };
-  setTimeout(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error.message })), 45_000).unref();
-  setInterval(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error.message })), 15 * 60 * 1_000).unref();
+  setTimeout(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error instanceof Error ? error.message : String(error) })), 45_000).unref();
+  setInterval(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error instanceof Error ? error.message : String(error) })), 15 * 60 * 1_000).unref();
 }

@@ -437,10 +437,12 @@ function AutomationBuilderV1({
     const clamped = Math.max(0, Math.min(wizardSteps.length - 1, next));
     if (clamped > highestUnlockedStep) return;
     if (clamped > clampedStep) {
-      const validationError = validateStep(wizardSteps[clampedStep]);
-      if (validationError) {
-        setError(validationError);
-        return;
+      for (let i = clampedStep; i < clamped; i++) {
+        const validationError = validateStep(wizardSteps[i]);
+        if (validationError) {
+          setError(validationError);
+          return;
+        }
       }
     }
     setError("");
@@ -1835,10 +1837,12 @@ function AutomationBuilderV2({
     const clamped = Math.max(0, Math.min(WIZARD_STEPS.length - 1, next));
     if (clamped > highestUnlockedStep) return;
     if (clamped > activeStep) {
-      const validationError = validateStep(activeStep);
-      if (validationError) {
-        setError(validationError);
-        return;
+      for (let i = activeStep; i < clamped; i++) {
+        const validationError = validateStep(i);
+        if (validationError) {
+          setError(validationError);
+          return;
+        }
       }
     }
     setError("");

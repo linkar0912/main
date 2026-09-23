@@ -15,8 +15,11 @@ const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' ${googleAnalyticsScript}${isProduction ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
-  // Instagram media thumbnails are loaded directly from Meta's CDN in the media picker.
-  "img-src 'self' data: blob: https:",
+  // Instagram media thumbnails and avatars load directly from Meta's CDNs in
+  // the media picker and settings; the GA4 tracking-pixel fallback is an img.
+  // Arbitrary remote hosts are deliberately not allowed - user-entered
+  // preview image URLs outside this list are blocked by design.
+  "img-src 'self' data: blob: https://*.cdninstagram.com https://cdninstagram.com https://*.fbcdn.net https://fbcdn.net https://*.facebook.com https://platform-lookaside.fbsbx.com https://lookaside.facebook.net https://*.google-analytics.com https://*.googletagmanager.com",
   "font-src 'self' data:",
   `connect-src 'self' ${googleAnalyticsConnect}`,
   "frame-ancestors 'none'",
@@ -31,11 +34,11 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   // Ignored by browsers over plain HTTP (local dev), enforced once served over HTTPS.
-  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
 ];
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["127.0.0.1"],
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   reactStrictMode: true,
   // The floating dev-tools badge sits over the sidebar's bottom-left content
   // (workspace chip, sign out) on every screen - move it out of the way.

@@ -135,9 +135,17 @@ export function InstagramInbox() {
   const [error, setError] = useState("");
   const [openContactId, setOpenContactId] = useState<string | null>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const autoScrollRef = useRef(true);
+  const contactsAbortRef = useRef<AbortController | null>(null);
+  const conversationAbortRef = useRef<AbortController | null>(null);
+  const activeContactIdRef = useRef<string | null>(null);
 
   const loadContacts = useCallback(async (replace: boolean, cursor?: string) => {
     const isFirstPage = replace && !cursor;
+    contactsAbortRef.current?.abort();
+    const controller = new AbortController();
+    contactsAbortRef.current = controller;
     if (isFirstPage) {
       const { snapshot, fresh } = readInboxCache(filters);
       if (snapshot) {
@@ -153,9 +161,10 @@ export function InstagramInbox() {
     }
     if (!replace) setLoadingMore(true);
     try {
-      const response = await fetch(inboxUrl(filters, cursor));
+      const response = await fetch(inboxUrl(filters, cursor), { signal: controller.signal });
       const payload = (await response.json().catch(() => ({}))) as InboxPayload;
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load inbox");
+      if (controller.signal.aborted || contactsAbortRef.current !== controller) return;
       setContacts((current) => replace ? payload.data!.contacts : mergeContacts(current, payload.data!.contacts));
       setMembers(payload.data.members ?? []);
       setNextCursor(payload.data.nextCursor);
@@ -168,17 +177,27 @@ export function InstagramInbox() {
       }
       setError("");
     } catch (caught) {
+      if (controller.signal.aborted || contactsAbortRef.current !== controller) return;
       setError(caught instanceof Error ? caught.message : "Could not load inbox");
     } finally {
-      setLoaded(true);
-      setLoadingMore(false);
+      if (!controller.signal.aborted && contactsAbortRef.current === controller) {
+        setLoaded(true);
+        setLoadingMore(false);
+      }
     }
   }, [filters]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadContacts(true); }, filters.query ? 250 : 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      contactsAbortRef.current?.abort();
+    };
   }, [loadContacts, filters.query]);
+
+  useEffect(() => () => {
+    conversationAbortRef.current?.abort();
+  }, []);
 
   const selected = contacts.find((contact) => contact.id === selectedId) ?? null;
   const labels = useMemo(() => Array.from(new Set(contacts.flatMap((contact) => contact.tags))).sort(), [contacts]);
@@ -207,34 +226,49 @@ export function InstagramInbox() {
   }
 
   async function openConversation(contact: InboxContact) {
+    conversationAbortRef.current?.abort();
+    const controller = new AbortController();
+    conversationAbortRef.current = controller;
+    activeContactIdRef.current = contact.id;
     setSelectedId(contact.id);
     setConversationLoading(true);
     setMessages([]);
     setMessageCursor(undefined);
     setError("");
+    autoScrollRef.current = true;
     try {
-      const response = await fetch(`/api/inbox/${contact.id}`);
+      const response = await fetch(`/api/inbox/${contact.id}`, { signal: controller.signal });
       const payload = (await response.json().catch(() => ({}))) as ConversationPayload;
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load conversation");
+      if (controller.signal.aborted || activeContactIdRef.current !== contact.id) return;
       setMessages(payload.data.messages);
       setMessageCursor(payload.data.nextCursor);
       if (contact.unread) void patchContact(contact.id, { action: "mark_read" });
     } catch (caught) {
+      if (controller.signal.aborted || activeContactIdRef.current !== contact.id) return;
       setError(caught instanceof Error ? caught.message : "Could not load conversation");
     } finally {
-      setConversationLoading(false);
+      if (!controller.signal.aborted && activeContactIdRef.current === contact.id) setConversationLoading(false);
     }
   }
 
   async function loadEarlier() {
     if (!selected || !messageCursor || olderLoading) return;
     setOlderLoading(true);
+    autoScrollRef.current = false;
+    const container = messagesRef.current;
+    const previousScrollHeight = container?.scrollHeight ?? 0;
+    const previousScrollTop = container?.scrollTop ?? 0;
     try {
       const response = await fetch(`/api/inbox/${selected.id}?cursor=${encodeURIComponent(messageCursor)}`);
       const payload = (await response.json().catch(() => ({}))) as ConversationPayload;
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load earlier messages");
       setMessages((current) => mergeMessages(payload.data!.messages, current));
       setMessageCursor(payload.data.nextCursor);
+      requestAnimationFrame(() => {
+        const element = messagesRef.current;
+        if (element) element.scrollTop = previousScrollTop + (element.scrollHeight - previousScrollHeight);
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load earlier messages");
     } finally {
@@ -243,6 +277,7 @@ export function InstagramInbox() {
   }
 
   useEffect(() => {
+    if (!autoScrollRef.current) return;
     if (typeof messageEndRef.current?.scrollIntoView === "function") messageEndRef.current.scrollIntoView({ block: "nearest" });
   }, [messages]);
 
@@ -259,6 +294,7 @@ export function InstagramInbox() {
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: { message: InboxMessage }; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not send message");
+      autoScrollRef.current = true;
       setMessages((current) => [...current, payload.data!.message]);
       setContacts((current) => current.map((contact) => contact.id === selected.id
         ? { ...contact, preview: text, lastMessageAt: payload.data!.message.at, inboxStatus: "OPEN" }
@@ -278,7 +314,7 @@ export function InstagramInbox() {
     <aside className="conversation-roster" aria-label="Contacts">
       <div className="conversation-roster-head">
         <div><h2>Instagram</h2><span>{contacts.length}{nextCursor ? "+" : ""} contact{contacts.length === 1 ? "" : "s"}</span></div>
-        <InboxFilters value={filters} labels={labels} onChange={(next) => { setSelectedId(null); setFilters(next); }} />
+        <InboxFilters value={filters} labels={labels} onChange={(next) => { conversationAbortRef.current?.abort(); activeContactIdRef.current = null; setSelectedId(null); setFilters(next); }} />
       </div>
       {contacts.length === 0 ? <div className="conversation-roster-empty"><Inbox size={21} /><p>No conversations match these filters.</p></div> : <>
         <ul className="conversation-contact-list">
@@ -300,13 +336,13 @@ export function InstagramInbox() {
     <div className="conversation-panel">
       {!selected ? <div className="conversation-blank"><span><Inbox size={24} /></span><h2>Your conversations live here</h2><p>Select any contact to read the history and reply.</p></div> : <>
         <header className="conversation-header">
-          <button className="conversation-back" type="button" aria-label="Back to contacts" onClick={() => setSelectedId(null)}><ArrowLeft size={19} /></button>
+          <button className="conversation-back" type="button" aria-label="Back to contacts" onClick={() => { conversationAbortRef.current?.abort(); activeContactIdRef.current = null; setSelectedId(null); }}><ArrowLeft size={19} /></button>
           <SocialAvatar channel="instagram" name={displayName(selected)} src={selected.avatarUrl} />
           <div className="conversation-header-copy"><h2>{displayName(selected)}</h2><p>{selected.canMessage ? "Instagram · Available to reply" : "Instagram · Reply window closed"}</p></div>
           <ConversationHeaderActions contact={selected} members={members} onOperation={(operation) => void patchContact(selected.id, operation)} />
           <button className="icon-button conversation-info" type="button" aria-label={`View details for ${displayName(selected)}`} onClick={() => setOpenContactId(selected.id)}><Info size={18} /></button>
         </header>
-        <div className="conversation-messages" aria-label={`Conversation with ${displayName(selected)}`} aria-live="polite">
+        <div className="conversation-messages" ref={messagesRef} aria-label={`Conversation with ${displayName(selected)}`} aria-live="polite">
           {messageCursor && <button className="conversation-load-earlier" type="button" aria-label="Load earlier messages" disabled={olderLoading} onClick={() => void loadEarlier()}>{olderLoading ? "Loading…" : "Load earlier messages"}</button>}
           {conversationLoading ? <div className="conversation-loading">Loading conversation…</div> : messages.length === 0 ? <div className="conversation-empty"><p>No messages with this contact yet.</p></div> : messages.map((message) => <article className={`conversation-message is-${message.direction}`} key={message.id}>
             <p>{message.text}</p><footer><time dateTime={message.at}>{formatMessageTime(message.at)}</time>{message.direction === "outbound" && <span>{message.status}</span>}</footer>{message.error && <small>{message.error}</small>}

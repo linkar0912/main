@@ -50,7 +50,7 @@ describe("Razorpay webhook processing", () => {
     };
     const duplicateClient = {
       $transaction: (operation: (tx: unknown) => unknown) => operation({
-        billingWebhookEvent: { create: vi.fn().mockRejectedValue(duplicate) },
+        billingWebhookEvent: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockRejectedValue(duplicate) },
       }),
     };
     await expect(createPrismaBillingWebhookRepository(duplicateClient as never).applyEvent(input))
@@ -58,7 +58,7 @@ describe("Razorpay webhook processing", () => {
 
     const downstreamClient = {
       $transaction: (operation: (tx: unknown) => unknown) => operation({
-        billingWebhookEvent: { create: vi.fn().mockResolvedValue({ id: "receipt_1" }) },
+        billingWebhookEvent: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "receipt_1" }) },
         billingSubscription: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockRejectedValue(duplicate) },
         billingCheckoutAttempt: { findFirst: vi.fn().mockResolvedValue({ workspaceId: "ws_1", planId: "plan_creator" }) },
         workspaceEntitlement: { findUnique: vi.fn().mockResolvedValue({ planId: "plan_free" }) },
@@ -66,6 +66,23 @@ describe("Razorpay webhook processing", () => {
     };
     await expect(createPrismaBillingWebhookRepository(downstreamClient as never).applyEvent(input))
       .rejects.toMatchObject({ code: "P2002" });
+  });
+
+  it("rejects a signed payload replayed under a mutated event id", async () => {
+    const input = {
+      ...normalizeRazorpaySubscriptionEvent(JSON.parse(body().toString("utf8")), env)!,
+      eventId: "evt_mutated", payloadHash: "b".repeat(64), now: new Date("2026-09-04T12:00:00Z"),
+    };
+    const create = vi.fn();
+    const client = {
+      $transaction: (operation: (tx: unknown) => unknown) => operation({
+        billingWebhookEvent: { findFirst: vi.fn().mockResolvedValue({ id: "receipt_1" }), create },
+      }),
+    };
+
+    await expect(createPrismaBillingWebhookRepository(client as never).applyEvent(input))
+      .resolves.toEqual({ outcome: "duplicate" });
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("normalizes only the subscription fields Linkar needs", () => {

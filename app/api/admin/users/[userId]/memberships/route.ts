@@ -9,8 +9,11 @@ const Command = z.object({ action: z.enum(["ADD", "CHANGE_ROLE", "REMOVE"]), wor
 export async function POST(request: Request, context: RouteContext<"/api/admin/users/[userId]/memberships">) {
   try {
     const { userId } = await context.params;
+    const guard = await requireAdminWrite(request, { action: "user.membership", targetType: "user", targetId: userId });
     const input = Command.parse(await request.json());
-    const guard = await requireAdminWrite(request, { action: `user.membership.${input.action.toLowerCase()}`, targetType: "user", targetId: userId });
-    return adminJson({ data: await runAuditedAdminMutation(guard, () => changeAdminUserMembership(userId, input)) });
+    return adminJson({ data: await runAuditedAdminMutation(
+      { ...guard, action: `user.membership.${input.action.toLowerCase()}` },
+      () => changeAdminUserMembership(userId, input),
+    ) });
   } catch (error) { return adminRouteError(error, "user_membership_failed"); }
 }

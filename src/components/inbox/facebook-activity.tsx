@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MessageCircle, Search } from "lucide-react";
 import { SocialAvatar } from "../social-avatar";
 
@@ -21,10 +21,10 @@ function mergeItems(current: FacebookActivityItem[], incoming: FacebookActivityI
   return [...current, ...incoming.filter((item) => !ids.has(item.id))];
 }
 
-async function fetchActivityPage(cursor?: string) {
+async function fetchActivityPage(cursor?: string, signal?: AbortSignal) {
   const params = new URLSearchParams({ type: "facebook.comment.created", limit: "50" });
   if (cursor) params.set("cursor", cursor);
-  const response = await fetch(`/api/activity?${params}`);
+  const response = await fetch(`/api/activity?${params}`, { signal });
   const payload = (await response.json().catch(() => ({}))) as { data?: { items: FacebookActivityItem[]; nextCursor?: string }; error?: string };
   if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load Facebook activity");
   return payload.data;
@@ -38,19 +38,33 @@ export function FacebookActivity() {
   const [loaded, setLoaded] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const loadAbortRef = useRef<AbortController | null>(null);
+  const loadingMoreRef = useRef(false);
+
+  useEffect(() => () => loadAbortRef.current?.abort(), []);
 
   async function load(cursor?: string) {
+    if (loadingMoreRef.current) return;
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+    loadingMoreRef.current = true;
     if (cursor) setLoadingMore(true);
     try {
-      const data = await fetchActivityPage(cursor);
+      const data = await fetchActivityPage(cursor, controller.signal);
+      if (controller.signal.aborted) return;
       setItems((current) => cursor ? mergeItems(current, data.items) : data.items);
       setNextCursor(data.nextCursor);
       setError("");
     } catch (caught) {
+      if (controller.signal.aborted) return;
       setError(caught instanceof Error ? caught.message : "Could not load Facebook activity");
     } finally {
-      setLoaded(true);
-      setLoadingMore(false);
+      if (!controller.signal.aborted) {
+        setLoaded(true);
+        setLoadingMore(false);
+      }
+      loadingMoreRef.current = false;
     }
   }
 

@@ -13,6 +13,7 @@ export function billingErrorResponse(error: unknown): NextResponse {
     invalid_checkout_signature: 401,
     subscription_conflict: 409,
     provider_unavailable: 503,
+    checkout_verification_pending: 202,
   }[error.code];
   return NextResponse.json({ error: error.code }, { status });
 }

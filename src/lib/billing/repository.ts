@@ -15,6 +15,17 @@ export type OwnerSubscription = {
   id: string;
   providerSubscriptionId: string;
   status: BillingSubscriptionStatus;
+  pendingPlanId: string | null;
+  pendingInterval: BillingInterval | null;
+  cancelAtPeriodEnd: boolean;
+};
+
+export type CheckoutVerificationOutcome = "verified" | "attempt_not_found" | "subscription_not_found";
+
+export type SubscriptionIntent = {
+  pendingPlanId: string | null;
+  pendingInterval: BillingInterval | null;
+  cancelAtPeriodEnd: boolean;
 };
 
 export interface BillingRepository {
@@ -31,10 +42,11 @@ export interface BillingRepository {
   }): Promise<CheckoutClaim>;
   markCheckoutReady(attemptId: string, providerSubscriptionId: string): Promise<void>;
   markCheckoutFailed(attemptId: string, failureCode: string): Promise<void>;
-  markCheckoutVerified(workspaceId: string, providerSubscriptionId: string, verifiedAt: Date): Promise<boolean>;
+  markCheckoutVerified(workspaceId: string, providerSubscriptionId: string, verifiedAt: Date): Promise<CheckoutVerificationOutcome>;
   getSubscriptionForOwnerAction(workspaceId: string): Promise<OwnerSubscription | null>;
   recordPendingPlanChange(subscriptionId: string, planId: string, interval: BillingInterval): Promise<void>;
   recordPendingCancellation(subscriptionId: string): Promise<void>;
+  restoreSubscriptionIntent(subscriptionId: string, intent: SubscriptionIntent): Promise<void>;
 }
 
 type BillingPrismaClient = Pick<PrismaClient,
@@ -121,28 +133,26 @@ export function createPrismaBillingRepository(client: BillingPrismaClient = pris
         where: { workspaceId, providerSubscriptionId, state: BillingCheckoutState.READY },
         select: { id: true },
       });
-      if (!attempt) return false;
-      await client.$transaction([
-        client.billingCheckoutAttempt.update({
-          where: { id: attempt.id },
-          data: { state: BillingCheckoutState.VERIFIED },
-        }),
-        client.billingSubscription.updateMany({
-          where: { workspaceId, providerSubscriptionId },
-          data: { checkoutVerifiedAt: verifiedAt },
-        }),
-      ]);
-      return true;
+      if (!attempt) return "attempt_not_found";
+      const subscription = await client.billingSubscription.updateMany({
+        where: { workspaceId, providerSubscriptionId },
+        data: { checkoutVerifiedAt: verifiedAt },
+      });
+      if (subscription.count === 0) return "subscription_not_found";
+      await client.billingCheckoutAttempt.update({
+        where: { id: attempt.id },
+        data: { state: BillingCheckoutState.VERIFIED },
+      });
+      return "verified";
     },
 
     async getSubscriptionForOwnerAction(workspaceId) {
       const subscription = await client.billingSubscription.findUnique({
         where: { workspaceId },
-        select: { id: true, providerSubscriptionId: true, status: true },
+        select: { id: true, providerSubscriptionId: true, status: true, pendingPlanId: true, pendingInterval: true, cancelAtPeriodEnd: true },
       });
-      return subscription?.providerSubscriptionId
-        ? { ...subscription, providerSubscriptionId: subscription.providerSubscriptionId }
-        : null;
+      if (!subscription?.providerSubscriptionId) return null;
+      return { ...subscription, providerSubscriptionId: subscription.providerSubscriptionId };
     },
 
     async recordPendingPlanChange(subscriptionId, planId, interval) {
@@ -156,6 +166,17 @@ export function createPrismaBillingRepository(client: BillingPrismaClient = pris
       await client.billingSubscription.update({
         where: { id: subscriptionId },
         data: { cancelAtPeriodEnd: true },
+      });
+    },
+
+    async restoreSubscriptionIntent(subscriptionId, intent) {
+      await client.billingSubscription.update({
+        where: { id: subscriptionId },
+        data: {
+          pendingPlanId: intent.pendingPlanId,
+          pendingInterval: intent.pendingInterval,
+          cancelAtPeriodEnd: intent.cancelAtPeriodEnd,
+        },
       });
     },
   };

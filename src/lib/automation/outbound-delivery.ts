@@ -20,6 +20,8 @@ export type DeliveryExecutionRequest<
   claimLeaseMs: number;
   repository?: AutomationRepository;
   timingObserver?: DeliveryTimingObserver;
+  /** Treat network-level failures as retryable instead of UNKNOWN (lead webhooks). */
+  networkFailuresAreRetryable?: boolean;
   entitlementService?: {
     getMonthlyDeliveryLimit(workspaceId: string): Promise<number | null>;
   };
@@ -52,16 +54,34 @@ export const deliveryKeys = {
     `automation:${automationId}:event:${eventId}:followup:${index}`,
 };
 
-export function classifyProviderFailure(error: unknown): ProviderFailureClass {
+export function classifyProviderFailure(
+  error: unknown,
+  networkFailuresAreRetryable = false,
+): ProviderFailureClass {
   if (
     !(error instanceof MetaApiError)
     || !error.responseReceived
     || error.status === 0
-  ) return "AMBIGUOUS";
+  ) return networkFailuresAreRetryable ? "KNOWN_RETRYABLE" : "AMBIGUOUS";
   if (error.status === 408 || error.status === 429 || error.status >= 500) {
     return "KNOWN_RETRYABLE";
   }
   return "KNOWN_PERMANENT";
+}
+
+/**
+ * UNKNOWN outcomes keep the monthly usage reservation alive forever - the
+ * delivery can never be re-claimed to confirm or release it - so every path
+ * that marks a delivery UNKNOWN must release the reservation first.
+ */
+async function markUnknown(
+  repository: AutomationRepository,
+  deliveryKey: string,
+  owner: string | undefined,
+  message: string,
+): Promise<void> {
+  await repository.releaseOutboundDeliveryReservation(deliveryKey).catch(() => false);
+  await repository.markOutboundDeliveryUnknown(deliveryKey, owner, message).catch(() => false);
 }
 
 function errorMessage(error: unknown): string {
@@ -101,6 +121,7 @@ export async function executeOutboundDelivery<
     repository: suppliedRepository,
     entitlementService: suppliedEntitlementService,
     timingObserver,
+    networkFailuresAreRetryable,
     ...deliveryInput
   } = request;
   const repository = suppliedRepository ?? getRepository();
@@ -137,10 +158,9 @@ export async function executeOutboundDelivery<
     providerResult = await send(preparation.record.payload as TPayload);
   } catch (error) {
     const message = errorMessage(error);
-    const classification = classifyProviderFailure(error);
+    const classification = classifyProviderFailure(error, networkFailuresAreRetryable);
     if (classification === "AMBIGUOUS") {
-      await repository.markOutboundDeliveryUnknown(request.deliveryKey, owner, message)
-        .catch(() => false);
+      await markUnknown(repository, request.deliveryKey, owner, message);
       return { status: "UNKNOWN", error: message };
     }
 
@@ -169,14 +189,12 @@ export async function executeOutboundDelivery<
     );
     if (!completed) {
       const message = "Provider succeeded but the delivery claim could not be completed";
-      await repository.markOutboundDeliveryUnknown(request.deliveryKey, owner, message)
-        .catch(() => false);
+      await markUnknown(repository, request.deliveryKey, owner, message);
       return { status: "UNKNOWN", error: message };
     }
   } catch (error) {
     const message = errorMessage(error);
-    await repository.markOutboundDeliveryUnknown(request.deliveryKey, owner, message)
-      .catch(() => false);
+    await markUnknown(repository, request.deliveryKey, owner, message);
     return { status: "UNKNOWN", error: message };
   }
 

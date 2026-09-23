@@ -5,7 +5,7 @@ import { MetaApiError } from "../meta/client";
 import { logger } from "../logger";
 import type { FlowFollowUpJob } from "../queue";
 import { executeOutboundDelivery } from "./outbound-delivery";
-import { isWithinMessagingWindow } from "../messaging-window";
+import { isQuietNow, isWithinMessagingWindow } from "../messaging-window";
 import { checkSendRateLimit } from "./send-rate-limiter";
 
 export type FlowFollowUpRunnerOptions = {
@@ -103,6 +103,13 @@ export async function processFlowFollowUp(
   if (!mapping || mapping.workspaceId !== job.workspaceId) {
     await skip("Instagram account mapping is unavailable", "PROVIDER_REJECTED");
     return;
+  }
+
+  // Quiet hours: defer the nudge with a retryable 429 rather than messaging
+  // inside the owner's configured night window.
+  const messagingWindow = await repository.getMessagingWindow(job.workspaceId);
+  if (messagingWindow && isQuietNow(new Date(), messagingWindow)) {
+    throw new MetaApiError("Quiet hours are active for this workspace", 429, true);
   }
 
   const rateLimit = await checkSendRateLimit(mapping.connection.igUserId, "direct_message");

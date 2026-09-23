@@ -182,7 +182,7 @@ export function WorkflowGallery() {
             const tabId = `workflow-tab-${workflow.id}`;
             return (
               <button
-                key={workflow.id}
+                key={`${workflow.id}-${index}`}
                 ref={(element) => { tabRefs.current[workflow.id] = element; }}
                 id={tabId}
                 className={styles.tab}

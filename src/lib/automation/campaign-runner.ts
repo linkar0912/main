@@ -19,7 +19,7 @@ import { unsealSecret } from "../security/secrets";
 import { releaseDailySendSlots, renderTemplate, reserveDailySendSlots } from "./send-limits";
 import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
 import { checkSendRateLimit, type SendRateLimitBucket } from "./send-rate-limiter";
-import { MESSAGING_WINDOW_MS } from "../messaging-window";
+import { isQuietNow, MESSAGING_WINDOW_MS } from "../messaging-window";
 import type { DeliveryTimingObserver } from "./delivery-timing";
 
 const RECHECK_COOLDOWN_MS = 10_000;
@@ -597,114 +597,141 @@ async function guardedDelivery(
       return limited ?? currentParticipant(participant, repository);
     }
 
-    // Per-account send ceiling, checked only when Meta is actually about to be
-    // called. Distinct from the daily send limit above, which is a product
-    // setting: this one exists to keep the connected account under Meta's own
-    // throttling. A reserved slot is given back and the dispatch lease
-    // released so the participant is retried rather than spending its budget.
-    if (needsProviderAttempt) {
-      const rateLimit = await checkSendRateLimit(
-        ctx.connection.igUserId,
-        actionRateLimitBucket(spec.action),
-      );
-      if (!rateLimit.allowed) {
-        if (reservation?.allowed) {
-          await releaseDailySendSlots({ repository, automationId: participant.automationId }, reservation);
+    // Idempotent slot release covering every exit below (return or throw) so a
+    // crash between reserving and sending can never leak a daily-send slot.
+    // A fresh SENT marks the slot consumed without refunding it.
+    let slotsReleased = !reservation?.allowed;
+    const releaseSlots = async () => {
+      if (slotsReleased || !reservation) return;
+      slotsReleased = true;
+      await releaseDailySendSlots({ repository, automationId: participant.automationId }, reservation);
+    };
+
+    try {
+      // Per-account send ceiling and quiet hours, checked only when Meta is
+      // actually about to be called.
+      if (needsProviderAttempt) {
+        // Quiet hours are a workspace-level courtesy window; defer the send with
+        // a retryable 429 (same contract as the per-account rate limit below)
+        // rather than messaging inside the owner's configured night window.
+        const messagingWindow = await repository.getMessagingWindow(participant.workspaceId);
+        if (messagingWindow && isQuietNow(new Date(), messagingWindow)) {
+          await releaseSlots();
+          await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+          if (spec.onRetryablePending) {
+            await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
+          }
+          throw new MetaApiError("Quiet hours are active for this workspace", 429, true);
         }
+
+        // Distinct from the daily send limit above, which is a product
+        // setting: this one exists to keep the connected account under Meta's own
+        // throttling. A reserved slot is given back and the dispatch lease
+        // released so the participant is retried rather than spending its budget.
+        const rateLimit = await checkSendRateLimit(
+          ctx.connection.igUserId,
+          actionRateLimitBucket(spec.action),
+        );
+        if (!rateLimit.allowed) {
+          await releaseSlots();
+          await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+          if (spec.onRetryablePending) {
+            await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
+          }
+          throw new MetaApiError("Send rate limit reached for this Instagram account", 429, true);
+        }
+      }
+
+      let sentIds: { messageId?: string; recipientId?: string } = {};
+      const delivery = await executeOutboundDelivery({
+        deliveryKey,
+        workspaceId: participant.workspaceId,
+        automationId: participant.automationId,
+        participantId: participant.id,
+        instagramAccountId: participant.instagramAccountId,
+        recipientId: participant.igScopedUserId,
+        kind: "CAMPAIGN_ACTION",
+        payload: spec.payload,
+        claimLeaseMs: ctx.dispatchLeaseMs,
+        repository,
+        timingObserver: ctx.timingObserver,
+      }, async (payload) => {
+        sentIds = await spec.send(payload);
+        return { id: sentIds.messageId };
+      });
+
+      if (
+        reservation?.allowed
+        && (delivery.status === "FAILED" || delivery.status === "BUSY"
+          || (delivery.status === "SENT" && delivery.reused))
+      ) {
+        await releaseSlots();
+      }
+      if (delivery.status === "SENT" && !delivery.reused) {
+        slotsReleased = true;
+      }
+
+      if (delivery.status === "BUSY") {
+        await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+        return currentParticipant(participant, repository);
+      }
+      if (delivery.status === "FAILED" && delivery.retryable && !ctx.finalAttempt) {
         await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
         if (spec.onRetryablePending) {
           await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
         }
-        throw new MetaApiError("Send rate limit reached for this Instagram account", 429, true);
+        throw new MetaApiError(delivery.error, 503, true);
       }
-    }
-
-    let sentIds: { messageId?: string; recipientId?: string } = {};
-    const delivery = await executeOutboundDelivery({
-      deliveryKey,
-      workspaceId: participant.workspaceId,
-      automationId: participant.automationId,
-      participantId: participant.id,
-      instagramAccountId: participant.instagramAccountId,
-      recipientId: participant.igScopedUserId,
-      kind: "CAMPAIGN_ACTION",
-      payload: spec.payload,
-      claimLeaseMs: ctx.dispatchLeaseMs,
-      repository,
-      timingObserver: ctx.timingObserver,
-    }, async (payload) => {
-      sentIds = await spec.send(payload);
-      return { id: sentIds.messageId };
-    });
-
-    if (
-      reservation?.allowed
-      && (delivery.status === "FAILED" || delivery.status === "BUSY"
-        || (delivery.status === "SENT" && delivery.reused))
-    ) {
-      await releaseDailySendSlots(
-        { repository, automationId: participant.automationId },
-        reservation,
-      );
-    }
-
-    if (delivery.status === "BUSY") {
-      await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
-      return currentParticipant(participant, repository);
-    }
-    if (delivery.status === "FAILED" && delivery.retryable && !ctx.finalAttempt) {
-      await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
-      if (spec.onRetryablePending) {
-        await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
+      if (delivery.status === "FAILED" || delivery.status === "UNKNOWN") {
+        const reason = delivery.status === "UNKNOWN" ? spec.ambiguousReason : spec.failureReason;
+        await completeOwnedAction(
+          participant,
+          repository,
+          spec.action,
+          prepared.dispatchOwner,
+          "FAILED",
+          undefined,
+          reason,
+        );
+        const failed = await repository.transitionParticipant(
+          participant.id,
+          spec.allowedStates,
+          spec.onFailure(reason),
+        );
+        return failed ?? currentParticipant(participant, repository);
       }
-      throw new MetaApiError(delivery.error, 503, true);
-    }
-    if (delivery.status === "FAILED" || delivery.status === "UNKNOWN") {
-      const reason = delivery.status === "UNKNOWN" ? spec.ambiguousReason : spec.failureReason;
-      await completeOwnedAction(
+
+      if (delivery.reused) {
+        sentIds = { messageId: delivery.providerMessageId };
+      }
+      const completed = await completeOwnedAction(
         participant,
         repository,
         spec.action,
         prepared.dispatchOwner,
-        "FAILED",
+        "SENT",
+        sentIds.messageId,
         undefined,
-        reason,
+        sentIds.recipientId,
       );
-      const failed = await repository.transitionParticipant(
+      if (!completed) {
+        if (await getActionExecution(participant, repository, spec.action)) continue;
+        const patch = spec.onOwnershipLost();
+        if (!patch) return currentParticipant(participant, repository);
+        const failed = await repository.transitionParticipant(participant.id, spec.allowedStates, patch);
+        return failed ?? currentParticipant(participant, repository);
+      }
+
+      const updated = await repository.transitionParticipant(
         participant.id,
         spec.allowedStates,
-        spec.onFailure(reason),
+        spec.onSuccess(sentIds),
       );
-      return failed ?? currentParticipant(participant, repository);
+      return updated ?? currentParticipant(participant, repository);
+    } catch (error) {
+      await releaseSlots();
+      throw error;
     }
-
-    if (delivery.reused) {
-      sentIds = { messageId: delivery.providerMessageId };
-    }
-    const completed = await completeOwnedAction(
-      participant,
-      repository,
-      spec.action,
-      prepared.dispatchOwner,
-      "SENT",
-      sentIds.messageId,
-      undefined,
-      sentIds.recipientId,
-    );
-    if (!completed) {
-      if (await getActionExecution(participant, repository, spec.action)) continue;
-      const patch = spec.onOwnershipLost();
-      if (!patch) return currentParticipant(participant, repository);
-      const failed = await repository.transitionParticipant(participant.id, spec.allowedStates, patch);
-      return failed ?? currentParticipant(participant, repository);
-    }
-
-    const updated = await repository.transitionParticipant(
-      participant.id,
-      spec.allowedStates,
-      spec.onSuccess(sentIds),
-    );
-    return updated ?? currentParticipant(participant, repository);
   }
 }
 
@@ -937,32 +964,66 @@ async function sendCooldownNotice(
   );
   if (prepared.kind !== "send") return;
 
-  const providerStartedAt = performance.now();
-  ctx.timingObserver?.providerStarted();
-  try {
-    const response = await ctx.client.sendDirectMessage(
-      ctx.connection,
-      event.recipientId!,
-      {
-        type: "button_template",
-        text: COOLDOWN_NOTICE_TEXT,
-        buttons: [{
-          type: "postback",
-          title: definition.followGate.recheckButtonLabel,
-          payload: createInteractionPayload(
-            { participantId: participant.id, action: "recheck" },
-            ctx.interactionSecret,
-            event.timestamp,
-          ),
-        }],
-      },
+  const reservation = await reserveDailySendSlots({
+    repository: ctx.repository,
+    automationId: participant.automationId,
+    limit: definition.dailySendLimit,
+  }, 1);
+  if (!reservation.allowed) {
+    await releaseOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner);
+    return;
+  }
+
+  let slotsReleased = false;
+  const releaseSlots = async () => {
+    if (slotsReleased) return;
+    slotsReleased = true;
+    await releaseDailySendSlots(
+      { repository: ctx.repository, automationId: participant.automationId },
+      reservation,
     );
-    if (!response.message_id) throw new Error("Meta accepted the cooldown notice without a delivery identifier");
-    await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "SENT", response.message_id);
-  } catch {
-    await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "FAILED", undefined, "Meta cooldown notice failed");
-  } finally {
-    ctx.timingObserver?.providerFinished(performance.now() - providerStartedAt);
+  };
+
+  try {
+    const rateLimit = await checkSendRateLimit(ctx.connection.igUserId, "direct_message");
+    if (!rateLimit.allowed) {
+      await releaseSlots();
+      await releaseOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner);
+      throw new MetaApiError("Send rate limit reached for this Instagram account", 429, true);
+    }
+
+    const providerStartedAt = performance.now();
+    ctx.timingObserver?.providerStarted();
+    try {
+      const response = await ctx.client.sendDirectMessage(
+        ctx.connection,
+        event.recipientId!,
+        {
+          type: "button_template",
+          text: COOLDOWN_NOTICE_TEXT,
+          buttons: [{
+            type: "postback",
+            title: definition.followGate.recheckButtonLabel,
+            payload: createInteractionPayload(
+              { participantId: participant.id, action: "recheck" },
+              ctx.interactionSecret,
+              event.timestamp,
+            ),
+          }],
+        },
+      );
+      if (!response.message_id) throw new Error("Meta accepted the cooldown notice without a delivery identifier");
+      slotsReleased = true;
+      await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "SENT", response.message_id);
+    } catch {
+      await releaseSlots();
+      await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "FAILED", undefined, "Meta cooldown notice failed");
+    } finally {
+      ctx.timingObserver?.providerFinished(performance.now() - providerStartedAt);
+    }
+  } catch (error) {
+    await releaseSlots();
+    throw error;
   }
 }
 

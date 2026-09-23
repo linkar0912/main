@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { logger } from "@/src/lib/logger";
-import { isSafeOutboundUrl } from "@/src/lib/security/outbound-url";
+import { isSafeOutboundUrl, resolveSafeOutboundTarget } from "@/src/lib/security/outbound-url";
 
 export const runtime = "nodejs";
 
@@ -88,7 +88,8 @@ export async function GET(request: Request, context: RouteContext) {
       });
       if (link.conversionUrl) {
         try {
-          await fetch(link.conversionUrl, {
+          const target = await resolveSafeOutboundTarget(link.conversionUrl);
+          await fetch(target, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ slug, linkId: link.id, country: country ?? null, at: new Date().toISOString() }),

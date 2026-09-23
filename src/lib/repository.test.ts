@@ -908,6 +908,28 @@ describe("memory repository", () => {
     expect((await repository.getParticipant("workspace_a", "ig_123", noWindowSet.id))?.state).toBe("OPENING_SENT");
   });
 
+  it("expires non-terminal participants with no explicit window 24h after creation", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-08-19T00:00:00.000Z"));
+      const repository = createMemoryRepository();
+      const { record: created } = await repository.createParticipant({
+        ...participantInput,
+        state: "OPENING_SENT",
+      });
+
+      // Still inside the 24h window from createdAt.
+      await repository.expireStaleParticipants("2026-08-19T12:00:00.000Z", "Messaging window expired");
+      expect((await repository.getParticipant("workspace_a", "ig_123", created.id))?.state).toBe("OPENING_SENT");
+
+      // Past 24h from createdAt with no messagingWindowExpiresAt set.
+      await repository.expireStaleParticipants("2026-08-20T00:00:01.000Z", "Messaging window expired");
+      expect((await repository.getParticipant("workspace_a", "ig_123", created.id))?.state).toBe("EXPIRED");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("deletes only terminal participants updated before the cutoff, freeing the source-comment slot", async () => {
     vi.useFakeTimers();
     try {
@@ -952,9 +974,9 @@ describe("memory repository", () => {
       name: "News",
       text: "Hello",
       segment: "all_contacts",
-      total: 4,
+      total: 6,
     });
-    const deliveries = ["sent", "failed", "skipped", "pending"].map((recipient) => ({
+    const deliveries = ["sent", "failed", "skipped", "pending", "unknown", "retryable"].map((recipient) => ({
       deliveryKey: `broadcast:${broadcast.id}:ig_1:${recipient}`,
       workspaceId: "workspace_a",
       broadcastId: broadcast.id,
@@ -971,14 +993,18 @@ describe("memory repository", () => {
     await repository.failOutboundDelivery(deliveries[1].deliveryKey, "failed_owner", "rejected", false, "PROVIDER_REJECTED");
     await repository.claimOutboundDelivery(deliveries[2].deliveryKey, "skipped_owner", "2026-08-23T10:05:00.000Z");
     await repository.failOutboundDelivery(deliveries[2].deliveryKey, "skipped_owner", "suppressed", false, "SUPPRESSED");
+    await repository.claimOutboundDelivery(deliveries[4].deliveryKey, "unknown_owner", "2026-08-23T10:05:00.000Z");
+    await repository.markOutboundDeliveryUnknown(deliveries[4].deliveryKey, "unknown_owner", "network dropped");
+    await repository.claimOutboundDelivery(deliveries[5].deliveryKey, "retryable_owner", "2026-08-23T10:05:00.000Z");
+    await repository.failOutboundDelivery(deliveries[5].deliveryKey, "retryable_owner", "rate limited", true, "RETRYABLE_REJECTION");
 
     await expect(repository.reconcileBroadcastCounters("workspace_a", broadcast.id))
-      .resolves.toEqual({ total: 4, sent: 1, failed: 1, skipped: 1, pending: 1 });
+      .resolves.toEqual({ total: 6, sent: 1, failed: 3, skipped: 1, pending: 1 });
     expect(await repository.getBroadcast("workspace_a", broadcast.id)).toMatchObject({
       status: "RUNNING",
-      total: 4,
+      total: 6,
       sent: 1,
-      failed: 1,
+      failed: 3,
       skipped: 1,
     });
   });

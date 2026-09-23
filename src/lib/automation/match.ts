@@ -9,6 +9,21 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Compile a keyword as a regex, or return null when the pattern is unsafe.
+ * Rejects over-long inputs and nested quantifiers such as `(a+)+` (which
+ * enable catastrophic backtracking) while still allowing `(ab)+`.
+ */
+function safeRegex(keyword: string): RegExp | null {
+  if (keyword.length === 0 || keyword.length > 200) return null;
+  if (/\([^()]*[*+?][^()]*\)[*+]/.test(keyword)) return null;
+  try {
+    return new RegExp(keyword, "i");
+  } catch {
+    return null;
+  }
+}
+
 export function containsWholeKeyword(text: string, keyword: string): boolean {
   const candidate = normalizedText(text);
   const normalizedKeyword = normalizedText(keyword);
@@ -58,14 +73,7 @@ function matchesKeywordsWithMode(
     return normalizedKeywords.some((keyword) => normalizedText(keyword) === candidate);
   }
   if (effectiveMode === "regex") {
-    return normalizedKeywords.some((keyword) => {
-      if (keyword.length === 0 || keyword.length > 200) return false;
-      try {
-        return new RegExp(keyword, "i").test(text);
-      } catch {
-        return false;
-      }
-    });
+    return normalizedKeywords.some((keyword) => safeRegex(keyword)?.test(text) ?? false);
   }
   if (effectiveMode === "all") {
     return normalizedKeywords.every((keyword) => containsWholeKeyword(text, keyword));
@@ -95,14 +103,7 @@ export function findMatchedKeyword(
     return keywords.find((keyword) => normalizedText(keyword) === candidate);
   }
   if (mode === "regex") {
-    return keywords.find((keyword) => {
-      if (keyword.length === 0 || keyword.length > 200) return false;
-      try {
-        return new RegExp(keyword, "i").test(text);
-      } catch {
-        return false;
-      }
-    });
+    return keywords.find((keyword) => safeRegex(keyword)?.test(text) ?? false);
   }
   return keywords.find((keyword) => containsWholeKeyword(text, keyword));
 }

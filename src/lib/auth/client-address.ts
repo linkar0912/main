@@ -1,13 +1,12 @@
 export function clientAddress(request: Request, trustedProxyHops: number): string {
-    // Cloudflare sets this on every request it proxies; prefer it when present.
-    // The header is forgeable on a direct (non-CF) connection, but a direct
-    // request never sees the value set by a real Cloudflare edge, so the worst
-    // a forger can do is spoof one of the IP strings Cloudflare would have
-    // produced - the rate limiter still keys on email+IP, so the worst impact
-    // is a single bucketed throttle group. We treat CF-Connecting-IP as a
-    // hint, not as authentication.
+    // Cloudflare sets this on every request it proxies. The header is forgeable
+    // on a direct (non-CF) connection, so only honor it when the operator has
+    // told us a trusted reverse proxy sits in front of the app - the same gate
+    // X-Forwarded-For gets below. With zero trusted hops a forger could
+    // otherwise pick a fresh cf-connecting-ip per attempt and partition the
+    // rate limiter at will.
     const cloudflareIp = request.headers.get("cf-connecting-ip");
-    if (cloudflareIp) return cloudflareIp;
+    if (cloudflareIp && trustedProxyHops > 0) return cloudflareIp;
     // X-Forwarded-For is freely forgeable. Only honor it when the operator
     // has explicitly told us how many trusted reverse proxies sit in front
     // of the app (nginx, Traefik, Cloudflare without the dedicated

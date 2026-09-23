@@ -91,6 +91,14 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
     };
   }, [contactId]);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   async function saveTags() {
     if (!contact) return;
     const tags = tagDraft.split(",").map((tag) => tag.trim().toLowerCase()).filter(Boolean);

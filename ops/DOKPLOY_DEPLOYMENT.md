@@ -9,7 +9,9 @@ environment through a restricted release command.
 - `linkar-web` is a Dokploy Application with one steady-state replica and a
   start-first update policy.
 - `linkar-worker` is the singleton BullMQ worker. A release updates it only
-  after the web application is healthy on the requested commit.
+  after the web application is healthy on the requested commit. The worker
+  container runs the same image with the command `node dist/worker.js`; the
+  image's default `CMD` starts the web server instead.
 - Valkey is private, password protected, and persistent. It has no public port
   or domain.
 - PostgreSQL and Auth are hosted by Supabase.
@@ -119,8 +121,12 @@ Run migrations on the **direct** connection (port 5432), not the pooled one:
 `CREATE INDEX CONCURRENTLY`.
 
 ```bash
-DATABASE_URL="$DIRECT_URL" pnpm exec prisma migrate deploy
+pnpm db:migrate:deploy
 ```
+
+The script runs `prisma migrate deploy` with `DATABASE_URL` taken from
+`DIRECT_URL` whenever it is set (see `scripts/migrate-deploy.mjs`), falling
+back to `DATABASE_URL` only when no direct URL is configured.
 
 ### Migrations that add indexed columns
 
@@ -209,8 +215,12 @@ Run migrations on the **direct** connection (port 5432), not the pooled one:
 `CREATE INDEX CONCURRENTLY`.
 
 ```bash
-DATABASE_URL="$DIRECT_URL" pnpm exec prisma migrate deploy
+pnpm db:migrate:deploy
 ```
+
+The script runs `prisma migrate deploy` with `DATABASE_URL` taken from
+`DIRECT_URL` whenever it is set (see `scripts/migrate-deploy.mjs`), falling
+back to `DATABASE_URL` only when no direct URL is configured.
 
 ### Migrations that add indexed columns
 

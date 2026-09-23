@@ -10,6 +10,16 @@ export function formatDate(input: string | Date): string {
   return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+/**
+ * Compact "Sep 1" axis/tooltip label. Locale and time zone are pinned so a
+ * UTC day key like "2026-09-01" renders identically on every machine
+ * (see the locale note above).
+ */
+export function formatMonthDay(input: string | Date): string {
+  const date = typeof input === "string" ? new Date(input) : input;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 export function formatDateTime(input: string | Date): string {
   const date = typeof input === "string" ? new Date(input) : input;
   return date.toLocaleString("en-US", {

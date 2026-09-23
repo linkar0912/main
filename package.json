@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "check:branding": "node scripts/check-branding.mjs",
     "check:copy": "node scripts/check-customer-copy.mjs",
@@ -26,7 +29,7 @@
     "worker": "tsx src/worker.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:deploy": "node scripts/migrate-deploy.mjs",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

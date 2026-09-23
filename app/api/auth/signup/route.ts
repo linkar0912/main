@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { safeNextPath } from "@/src/lib/auth/session";
-import { LoginRateLimitStore } from "@/src/lib/auth/rate-limit";
+import { LoginRateLimitStore, loginRateLimitKey } from "@/src/lib/auth/rate-limit";
 import { clientAddress } from "@/src/lib/auth/client-address";
 import { getServerEnv } from "@/src/lib/env";
 import { getRepository } from "@/src/lib/repository-provider";
@@ -10,8 +10,9 @@ import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-// Signup attempts per IP per hour. Reuses the Redis-backed limiter: every
-// attempt is recorded, so isAllowed() acts as a simple count cap.
+// Signup attempts per identity (email+IP) per 15 minutes. Reuses the
+// Redis-backed limiter: every attempt is recorded, so isAllowed() acts as a
+// simple count cap.
 let signupLimiter: LoginRateLimitStore | undefined;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -27,10 +28,10 @@ export async function POST(request: Request) {
     const password = String(form.get("password") ?? "");
     const nextPath = safeNextPath(String(form.get("next") ?? "/automations"));
 
-    if (!(await signupLimiter.isAllowed(address))) {
+    const limitKey = loginRateLimitKey(env.authSessionSecret, email || "-", address);
+    if (!(await signupLimiter.isAllowed(limitKey))) {
         return NextResponse.redirect(new URL("/signup?error=locked", env.appUrl), 303);
     }
-    await signupLimiter.recordFailure(address);
 
     if (!EMAIL_PATTERN.test(email)) {
         return NextResponse.redirect(new URL("/signup?error=email&next=" + encodeURIComponent(nextPath), env.appUrl), 303);
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
     if (password.length < MIN_PASSWORD_LENGTH || password.length > 200) {
         return NextResponse.redirect(new URL(`/signup?error=password&email=${encodeURIComponent(email)}&next=${encodeURIComponent(nextPath)}`, env.appUrl), 303);
     }
+    await signupLimiter.recordFailure(limitKey);
 
     // Team invitations bind the new account to the inviting workspace instead of
     // provisioning a fresh one. The invite must match the signing-up email exactly.

@@ -33,7 +33,12 @@ export function evaluateFlow(
         return { status: "skipped", reason: "private reply action requires a comment ID", actions: [] };
       }
       if (!privateReplyAdded) {
-        actions.push({ type: "private_reply", commentId: event.commentId, text: action.text });
+        const variants = [action.text, ...(action.textVariants ?? [])]
+          .filter((text) => text.trim().length > 0);
+        const chosen = variants.length > 0
+          ? variants[Math.floor(Math.random() * variants.length)]
+          : action.text;
+        actions.push({ type: "private_reply", commentId: event.commentId, text: chosen });
         privateReplyAdded = true;
       }
       continue;

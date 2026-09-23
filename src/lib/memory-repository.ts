@@ -51,6 +51,7 @@ import type {
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
+import { MESSAGING_WINDOW_MS } from "./messaging-window";
 import { normalizeHelpQuery } from "./help-search";
 import { decodeInboxCursor, encodeInboxCursor } from "./inbox-cursor";
 
@@ -155,6 +156,16 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
   const helpSearches = new Map<string, HelpSearchRecord>();
   const helpFeedback = new Map<string, HelpFeedbackRecord>();
 
+  // Named function (not `this.addMember`) so acceptInvitation still works when
+  // the repository method is passed as a bare reference without its receiver.
+  async function addMember(workspaceId: string, email: string, role: MemberRole, userId?: string): Promise<{ created: boolean }> {
+    const key = `${workspaceId}:${email.toLowerCase()}`;
+    if (membersByEmail.has(key)) return { created: false };
+    membersByEmail.set(key, { id: createId("member"), workspaceId, email: email.toLowerCase(), role, userId });
+    memberWorkspacesByEmail.set(email.toLowerCase(), workspaceId);
+    return { created: true };
+  }
+
   return {
     async ensureWorkspace(workspaceId, ownerEmail, ownerUserId) {
       if (!ownerEmail) return;
@@ -253,11 +264,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async addMember(workspaceId, email, role: MemberRole, userId) {
-      const key = `${workspaceId}:${email.toLowerCase()}`;
-      if (membersByEmail.has(key)) return { created: false };
-      membersByEmail.set(key, { id: createId("member"), workspaceId, email: email.toLowerCase(), role, userId });
-      memberWorkspacesByEmail.set(email.toLowerCase(), workspaceId);
-      return { created: true };
+      return addMember(workspaceId, email, role, userId);
     },
 
     async updateMemberRole(workspaceId, email, role: MemberRole) {
@@ -296,7 +303,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       if (!record || record.acceptedAt || record.revokedAt || record.expiresAt <= nowIso) return null;
       const accepted: InvitationRecord = { ...record, acceptedAt: nowIso };
       invitationsById.set(id, accepted);
-      await this.addMember(record.workspaceId, record.email, record.role, userId);
+      await addMember(record.workspaceId, record.email, record.role, userId);
       return copy(accepted);
     },
 
@@ -1046,8 +1053,19 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           && record.recipientId === recipientId)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
       const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
-      const start = cursor ? sorted.findIndex((record) => record.id === cursor.id) + 1 : 0;
-      const page = sorted.slice(Math.max(0, start), Math.max(0, start) + options.limit + 1);
+      // A cross-source `~` cursor is not a row id in this table: position by
+      // timestamp instead so the boundary row is not skipped or re-shown.
+      let start = 0;
+      if (cursor) {
+        const found = sorted.findIndex((record) => record.id === cursor.id);
+        if (found >= 0) {
+          start = found + 1;
+        } else {
+          const byTime = sorted.findIndex((record) => record.createdAt <= cursor.at);
+          start = byTime === -1 ? sorted.length : byTime;
+        }
+      }
+      const page = sorted.slice(start, start + options.limit + 1);
       const hasMore = page.length > options.limit;
       const records = page.slice(0, options.limit);
       const last = records.at(-1);
@@ -1058,11 +1076,6 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
-      // Two concurrent callers can both observe the !existing branch and try
-      // to insert; the second set() would win and bump the id. The Prisma
-      // repository gets a transactional upsert for free; here we approximate
-      // it by re-checking after the id-allocating await and preferring the
-      // already-stored record when present.
       const existing = outboundDeliveries.get(input.deliveryKey);
       if (existing) return copy(existing);
       const timestamp = now();
@@ -1075,19 +1088,6 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         createdAt: timestamp,
         updatedAt: timestamp,
       };
-      // Re-check the map now that any interleaved caller may have inserted.
-      // If we find a different record, prefer it (matching the unique-key
-      // semantics) and discard the freshly-built one.
-      const winner = outboundDeliveries.get(input.deliveryKey);
-      if (winner && winner !== record) return copy(winner);
-      if (winner) {
-        // Same reference: we are the only writer. Keep the freshest payload
-        // but preserve the original id.
-        record.id = winner.id;
-        record.createdAt = winner.createdAt;
-        outboundDeliveries.set(input.deliveryKey, record);
-        return copy(record);
-      }
       outboundDeliveries.set(record.deliveryKey, record);
       return copy(record);
     },
@@ -1429,7 +1429,10 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       let count = 0;
       for (const [id, participant] of participants.entries()) {
         if (["LINK_SENT", "EXPIRED", "FAILED"].includes(participant.state)) continue;
-        const expiresAt = participant.messagingWindowExpiresAt ? Date.parse(participant.messagingWindowExpiresAt) : Number.NaN;
+        // Rows without an explicit window still age out 24h after creation.
+        const expiresAt = participant.messagingWindowExpiresAt
+          ? Date.parse(participant.messagingWindowExpiresAt)
+          : Date.parse(participant.createdAt) + MESSAGING_WINDOW_MS;
         if (!Number.isFinite(expiresAt) || expiresAt > nowMs) continue;
         participants.set(id, { ...participant, state: "EXPIRED", finalDeliveryError: reason, updatedAt: now() });
         count += 1;
@@ -1898,8 +1901,18 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           && event.payload.recipientId === recipientId)
         .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || b.id.localeCompare(a.id));
       const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
-      const start = cursor ? sorted.findIndex((event) => event.id === cursor.id) + 1 : 0;
-      const page = sorted.slice(Math.max(0, start), Math.max(0, start) + options.limit + 1);
+      // Cross-source `~` cursors are not ids here - fall back to timestamp.
+      let start = 0;
+      if (cursor) {
+        const found = sorted.findIndex((event) => event.id === cursor.id);
+        if (found >= 0) {
+          start = found + 1;
+        } else {
+          const byTime = sorted.findIndex((event) => event.receivedAt <= cursor.at);
+          start = byTime === -1 ? sorted.length : byTime;
+        }
+      }
+      const page = sorted.slice(start, start + options.limit + 1);
       const hasMore = page.length > options.limit;
       const records = page.slice(0, options.limit);
       const last = records.at(-1);
@@ -2277,7 +2290,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           counters.sent += 1;
         } else if (delivery.resultCode === "SUPPRESSED" || delivery.resultCode === "WINDOW_CLOSED") {
           counters.skipped += 1;
-        } else if (delivery.state === "FAILED" && !delivery.retryable) {
+        } else if (delivery.state === "FAILED" || delivery.state === "UNKNOWN") {
           counters.failed += 1;
         } else {
           counters.pending += 1;

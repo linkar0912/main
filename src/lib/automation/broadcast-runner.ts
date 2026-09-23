@@ -5,7 +5,7 @@ import { MetaApiError } from "../meta/client";
 import { logger } from "../logger";
 import type { BroadcastSendJob } from "../queue";
 import { executeOutboundDelivery } from "./outbound-delivery";
-import { isWithinMessagingWindow } from "../messaging-window";
+import { isQuietNow, isWithinMessagingWindow } from "../messaging-window";
 import { checkSendRateLimit } from "./send-rate-limiter";
 
 export type BroadcastRunnerOptions = {
@@ -104,6 +104,13 @@ export async function processBroadcastSend(
     await markKnownBroadcastOutcome(repository, job, "Meta delivery is disabled", "SUPPRESSED");
     await repository.reconcileBroadcastCounters(job.workspaceId, job.broadcastId);
     return;
+  }
+
+  // Quiet hours: defer the whole send with a retryable 429. The enqueue-side
+  // long delay is best-effort; attempts 2/3 can still land inside the window.
+  const messagingWindow = await repository.getMessagingWindow(job.workspaceId);
+  if (messagingWindow && isQuietNow(new Date(), messagingWindow)) {
+    throw new MetaApiError("Quiet hours are active for this workspace", 429, true);
   }
 
   // Per-account send ceiling. A blast fans out up to 500 recipients at once, so

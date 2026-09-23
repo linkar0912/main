@@ -26,8 +26,8 @@ const scheduleSchema = z
   )
   .refine(
     (schedule) =>
-      !schedule.startsAt || !schedule.endsAt || Date.parse(schedule.startsAt) <= Date.parse(schedule.endsAt),
-    "Schedule start must not be after its end",
+      !schedule.startsAt || !schedule.endsAt || Date.parse(schedule.startsAt) < Date.parse(schedule.endsAt),
+    "Schedule start must be before its end",
   );
 
 function normalizeSchedule(schedule: FlowSchedule | undefined): FlowSchedule | undefined {

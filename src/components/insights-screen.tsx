@@ -51,12 +51,23 @@ export function InsightsScreen() {
       const response = await fetch("/api/insights", { signal });
       const payload = (await response.json().catch(() => ({}))) as Partial<InsightsPayload> & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Could not load insights");
-      setData(payload as InsightsPayload);
+      setData({
+        funnel: payload.funnel ?? {},
+        timeseries: {
+          days: payload.timeseries?.days ?? 0,
+          participantsPerDay: payload.timeseries?.participantsPerDay ?? [],
+          sentPerDay: payload.timeseries?.sentPerDay ?? [],
+        },
+        mediaPerformance: payload.mediaPerformance ?? [],
+        capturedEmails: payload.capturedEmails ?? 0,
+        optedOut: payload.optedOut ?? 0,
+        usage: payload.usage ?? { participantsThisMonth: 0, monthlyLimit: null },
+      });
     } catch (caught: unknown) {
       if (signal?.aborted) return;
       setError(caught instanceof Error ? caught.message : "Could not load insights");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 

@@ -4,6 +4,7 @@ import type { AdminDeletionStageKind } from "@prisma/client";
 import { getServerEnv } from "@/src/lib/env";
 import { prisma } from "@/src/lib/prisma";
 import { deleteQueuedWorkspaceEventsBatch } from "@/src/lib/queue";
+import { getRepository } from "@/src/lib/repository-provider";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
 import { previewDeletion } from "./impact";
 import type { DeletionImpact } from "./types";
@@ -75,7 +76,15 @@ export async function processAdminDeletion(jobId: string): Promise<{ state: "COM
           }
         } else if (stage === "CANCEL_WORK" && current.targetKind !== "USER") {
           const workspaceIds = current.targetKind === "WORKSPACE" ? [current.targetId] : syntheticWorkspaceIds(impact);
-          await deleteQueuedWorkspaceEventsBatch(workspaceIds);
+          const repository = getRepository();
+          const providerIds = (await Promise.all(workspaceIds.map(async (workspaceId) => {
+            const [connections, pages] = await Promise.all([
+              repository.listConnections(workspaceId),
+              repository.listFacebookPages(workspaceId),
+            ]);
+            return [...connections.map((connection) => connection.igUserId), ...pages.map((page) => page.pageId)];
+          }))).flat();
+          await deleteQueuedWorkspaceEventsBatch([...workspaceIds, ...providerIds]);
           await prisma.workspace.updateMany({
             where: { id: { in: workspaceIds }, status: "ACTIVE" },
             data: { status: "SUSPENDED", deletionScheduledAt: new Date(), version: { increment: 1 } },

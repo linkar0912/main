@@ -117,6 +117,12 @@ export function SettingsScreen() {
   const [quietError, setQuietError] = useState("");
 
   useEffect(() => {
+    if (!quietSaved) return;
+    const timer = window.setTimeout(() => setQuietSaved(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [quietSaved]);
+
+  useEffect(() => {
     if (section !== "delivery") return;
     const controller = new AbortController();
     void getMessagingSettings(controller.signal)
@@ -201,7 +207,6 @@ export function SettingsScreen() {
       }
       invalidateWorkspaceResource("messaging-settings");
       setQuietSaved(true);
-      setTimeout(() => setQuietSaved(false), 2500);
     } catch (error) {
       setQuietError(error instanceof Error ? error.message : "Could not save messaging hours.");
     } finally {
@@ -241,13 +246,14 @@ export function SettingsScreen() {
    * initial state already is "loading, no error", so the reset those flags
    * would perform is a no-op on mount and only matters for the Retry path.
    */
-  async function fetchConnectionsData() {
+  async function fetchConnectionsData(signal?: AbortSignal) {
     try {
       const [connectionData, fbPages, bootstrap] = await Promise.all([
         getInstagramConnections(),
         getFacebookPages(),
         getWorkspaceBootstrap().catch(() => null),
       ]);
+      if (signal?.aborted) return;
       setConnections(connectionData);
       setFacebookPages(fbPages);
       setMode(bootstrap?.mode ?? "demo");
@@ -256,19 +262,21 @@ export function SettingsScreen() {
       // Provider health can be noticeably slower than our own connection
       // records. Do not make account names wait for those external checks.
       const [instagramHealth, facebookPageHealth] = await Promise.allSettled([
-        fetch("/api/meta/connection/health").then((response) => response.json() as Promise<{ data?: ConnectionHealth[] }>),
-        fetch("/api/facebook/connection/health").then((response) => response.json() as Promise<{ data?: FacebookHealth[] }>),
+        fetch("/api/meta/connection/health", { signal }).then((response) => response.json() as Promise<{ data?: ConnectionHealth[] }>),
+        fetch("/api/facebook/connection/health", { signal }).then((response) => response.json() as Promise<{ data?: FacebookHealth[] }>),
       ]);
+      if (signal?.aborted) return;
       if (instagramHealth.status === "fulfilled") setHealth(instagramHealth.value.data ?? []);
       if (facebookPageHealth.status === "fulfilled") setFacebookHealth(facebookPageHealth.value.data ?? []);
     } catch {
+      if (signal?.aborted) return;
       // A network blip here previously left the page silently showing "No
       // account connected" / "No Page connected" - indistinguishable from
       // actually having no connections, which reads as "your accounts got
       // disconnected" rather than "something failed to load."
       setConnectionsLoadError("Could not load your connections. Check your connection and try again.");
     } finally {
-      setConnectionsLoading(false);
+      if (!signal?.aborted) setConnectionsLoading(false);
     }
   }
 
@@ -283,7 +291,9 @@ export function SettingsScreen() {
     // Called from inside an async callback rather than directly in the effect
     // body: the state updates all happen after an await, and this is the shape
     // the sibling effects in this file already use.
-    void (async () => { await fetchConnectionsData(); })();
+    const controller = new AbortController();
+    void (async () => { await fetchConnectionsData(controller.signal); })();
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {

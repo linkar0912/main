@@ -72,6 +72,7 @@ describe("outbound delivery coordinator", () => {
 
   it("marks a status-zero failure UNKNOWN and never retries it", async () => {
     const send = vi.fn().mockRejectedValue(new MetaApiError("network", 0, false));
+    const releaseReservation = vi.spyOn(repository, "releaseOutboundDeliveryReservation");
 
     await expect(executeOutboundDelivery(request, send)).resolves.toEqual({
       status: "UNKNOWN",
@@ -83,6 +84,7 @@ describe("outbound delivery coordinator", () => {
     });
     expect(send).toHaveBeenCalledTimes(1);
     expect((await repository.getOutboundDelivery(request.deliveryKey))?.state).toBe("UNKNOWN");
+    expect(releaseReservation).toHaveBeenCalledWith(request.deliveryKey);
   });
 
   it("does not call the provider when the monthly delivery limit is exhausted", async () => {
@@ -125,6 +127,20 @@ describe("outbound delivery coordinator", () => {
       retryable,
     });
     expect(releaseReservation).toHaveBeenCalledWith(request.deliveryKey);
+  });
+
+  it("treats a network failure as retryable when the caller opts in", async () => {
+    const error = new MetaApiError("network", 0, false);
+    expect(classifyProviderFailure(error, true)).toBe("KNOWN_RETRYABLE");
+
+    await expect(executeOutboundDelivery(
+      { ...request, networkFailuresAreRetryable: true },
+      vi.fn().mockRejectedValue(error),
+    )).resolves.toEqual({ status: "FAILED", retryable: true, error: "network" });
+    expect(await repository.getOutboundDelivery(request.deliveryKey)).toMatchObject({
+      state: "FAILED",
+      retryable: true,
+    });
   });
 
   it("prepares claim and quota in one repository operation", async () => {

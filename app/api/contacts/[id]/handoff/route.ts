@@ -39,6 +39,10 @@ export async function POST(request: Request, context: RouteContext) {
   const repository = getRepository();
   const contact = await repository.getContactById(session.workspaceId, id);
   if (!contact) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+  if (assigneeUserId) {
+    const members = await repository.listMembers(session.workspaceId);
+    if (!members.some((member) => member.userId === assigneeUserId)) return NextResponse.json({ error: "Assignee is not a workspace member" }, { status: 400 });
+  }
 
   const profile = await repository.updateContactProfile(session.workspaceId, id, {
     ...(assigneeUserId !== undefined ? { assigneeUserId } : {}),

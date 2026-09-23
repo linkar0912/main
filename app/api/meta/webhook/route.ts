@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
 import { isRetryableAutomationError, processNormalizedEvent } from "@/src/lib/automation/runner";
@@ -9,6 +10,13 @@ import { verifyWebhookSignature } from "@/src/lib/security/signature";
 
 export const runtime = "nodejs";
 
+function verifyTokenEquals(candidate: string | null, expected: string): boolean {
+  if (candidate === null) return false;
+  const candidateBuffer = Buffer.from(candidate);
+  const expectedBuffer = Buffer.from(expected);
+  return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer);
+}
+
 export async function GET(request: Request) {
   const env = getServerEnv();
   const url = new URL(request.url);
@@ -16,7 +24,7 @@ export async function GET(request: Request) {
   const verifyToken = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && verifyToken === env.metaVerifyToken && challenge) {
+  if (mode === "subscribe" && verifyTokenEquals(verifyToken, env.metaVerifyToken) && challenge) {
     return new Response(challenge, { status: 200 });
   }
   return new Response("Forbidden", { status: 403 });

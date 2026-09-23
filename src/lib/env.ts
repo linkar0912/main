@@ -69,10 +69,20 @@ export type ServerEnv = {
   razorpay: RazorpayEnv;
 };
 
-function booleanEnv(value: string | undefined): boolean {
+function booleanEnv(name: string, value: string | undefined): boolean {
   if (value === undefined || value === "false") return false;
   if (value === "true") return true;
-  throw new Error("FOLLOW_GATED_CAMPAIGNS_ENABLED must be true or false");
+  throw new Error(`${name} must be true or false`);
+}
+
+const DEV_SESSION_SECRET = "dev-insecure-session-secret-change-me-32ch";
+
+function sessionSecretEnv(name: string, value: string | undefined): string {
+  const secret = value?.trim() || DEV_SESSION_SECRET;
+  if (process.env.NODE_ENV === "production" && secret === DEV_SESSION_SECRET) {
+    throw new Error(`${name} must be set to a non-placeholder value in production`);
+  }
+  return secret;
 }
 
 function optionalHexEncryptionKey(value: string | undefined, envName: string): string | undefined {
@@ -285,14 +295,12 @@ export function getServerEnv(): ServerEnv {
     googleClientId: process.env.GOOGLE_CLIENT_ID || undefined,
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || undefined,
     googleRedirectUri,
-    followGatedCampaignsEnabled: booleanEnv(process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED),
-    authSessionSecret:
-      process.env.AUTH_SESSION_SECRET?.trim()
-      ?? "dev-insecure-session-secret-change-me-32ch",
+    followGatedCampaignsEnabled: booleanEnv("FOLLOW_GATED_CAMPAIGNS_ENABLED", process.env.FOLLOW_GATED_CAMPAIGNS_ENABLED),
     platformOwnerUserIds: parseUuidList(
       "PLATFORM_OWNER_USER_IDS",
       process.env.PLATFORM_OWNER_USER_IDS,
     ),
+    authSessionSecret: sessionSecretEnv("AUTH_SESSION_SECRET", process.env.AUTH_SESSION_SECRET),
     trustedProxyHops: integerEnv("TRUSTED_PROXY_HOPS", process.env.TRUSTED_PROXY_HOPS, 0),
     workerConcurrency: integerEnv("WORKER_CONCURRENCY", process.env.WORKER_CONCURRENCY, 5),
     dispatchLeaseMs,

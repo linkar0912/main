@@ -7,7 +7,9 @@ import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 export const runtime = "nodejs";
 
 function csvCell(value: string | undefined): string {
-  const safe = value ?? "";
+  const cell = value ?? "";
+  // Neutralize spreadsheet formula injection the same way we quote commas.
+  const safe = /^[=+\-@]/.test(cell) ? `'${cell}` : cell;
   return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 

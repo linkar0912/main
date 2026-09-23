@@ -51,10 +51,6 @@ export function TrackedLinksPanel() {
   const [saving, setSaving] = useState(false);
   const [statsFor, setStatsFor] = useState<string | null>(null);
   const [stats, setStats] = useState<Record<string, Stats>>({});
-  const [origin, setOrigin] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return window.location.origin;
-  });
 
   useEffect(() => {
     let active = true;
@@ -253,7 +249,6 @@ export function TrackedLinksPanel() {
       ) : (
         <ul className="tracked-link-list">
           {links.map((link) => {
-            const fullUrl = `${origin}/r/${link.slug}`;
             const statsEntry = stats[link.slug];
             return (
               <li key={link.id}>
@@ -272,7 +267,7 @@ export function TrackedLinksPanel() {
                     className="button button-secondary button-small"
                     type="button"
                     onClick={() => {
-                      void navigator.clipboard.writeText(fullUrl);
+                      void navigator.clipboard.writeText(`${window.location.origin}/r/${link.slug}`);
                     }}
                   >
                     <Copy size={14} /> Copy URL

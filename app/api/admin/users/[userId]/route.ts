@@ -19,8 +19,8 @@ export async function GET(request: Request, context: RouteContext<"/api/admin/us
 export async function PATCH(request: Request, context: RouteContext<"/api/admin/users/[userId]">) {
   try {
     const { userId } = await context.params;
-    const input = UpdateUser.parse(await request.json());
     const guard = await requireAdminWrite(request, { action: "user.update", targetType: "user", targetId: userId });
+    const input = UpdateUser.parse(await request.json());
     return adminJson({ data: await runAuditedAdminMutation(guard, () => updateAdminUser(userId, input)) });
   } catch (error) { return adminRouteError(error, "user_update_failed"); }
 }

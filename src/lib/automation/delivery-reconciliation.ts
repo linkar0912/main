@@ -10,6 +10,8 @@ export async function reconcileExpiredDeliveryClaims(
   const expired = await repository.listExpiredDeliveryClaims(nowIso, limit);
   let unknown = 0;
   for (const delivery of expired) {
+    // Expired claims are terminal, so their usage reservation must not outlive them.
+    await repository.releaseOutboundDeliveryReservation(delivery.deliveryKey).catch(() => false);
     const marked = await repository.markOutboundDeliveryUnknown(
       delivery.deliveryKey,
       undefined,

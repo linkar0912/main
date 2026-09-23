@@ -103,8 +103,9 @@ export async function POST(request: Request) {
 
   const messagingWindow = await repository.getMessagingWindow(session.workspaceId).catch(() => null);
   const now = new Date();
-  const quietHoldMs = messagingWindow && isQuietNow(now, messagingWindow)
-    ? msUntilQuietEnd(now, messagingWindow)
+  const effectiveSendAt = scheduledFor && scheduledFor > now ? scheduledFor : now;
+  const quietHoldMs = messagingWindow && isQuietNow(effectiveSendAt, messagingWindow)
+    ? msUntilQuietEnd(effectiveSendAt, messagingWindow)
     : 0;
 
   const jobs: BroadcastSendJob[] = recipients.map((recipient, index) => ({

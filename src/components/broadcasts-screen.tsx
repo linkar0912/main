@@ -30,17 +30,20 @@ export function BroadcastsScreen() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    void refresh();
+    const controller = new AbortController();
+    void refresh(controller.signal);
+    return () => controller.abort();
   }, []);
 
-  async function refresh() {
+  async function refresh(signal?: AbortSignal) {
     try {
-      const payload = await fetch("/api/broadcasts").then((r) => r.json());
+      const payload = await fetch("/api/broadcasts", { signal }).then((r) => r.json());
+      if (signal?.aborted) return;
       setBroadcasts(payload.data ?? []);
     } catch {
       // panel is optional surface; silence fetch hiccups
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }
 

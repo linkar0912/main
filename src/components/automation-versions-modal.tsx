@@ -128,6 +128,14 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
 
 /** Modal wrapper for the history panel. */
 export function AutomationVersionsModal({ automationId, onClose, onRestored }: { automationId: string; onClose: () => void; onRestored?: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
     <div className="modal-scrim" role="presentation" onClick={onClose}>
       <div

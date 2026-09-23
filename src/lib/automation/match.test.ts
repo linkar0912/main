@@ -114,6 +114,24 @@ describe("matchesTrigger", () => {
     expect(matchesTrigger(broken, commentEvent)).toBe(false);
   });
 
+  it("rejects nested-quantifier regex patterns that enable catastrophic backtracking", () => {
+    const nestedQuantifier = "(a+)+$";
+    const flow: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "comment", match: "keyword", mode: "regex", keywords: [nestedQuantifier], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Sent" }],
+    };
+    // Fails closed rather than compiling a ReDoS-prone pattern.
+    expect(matchesTrigger(flow, { ...commentEvent, text: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!" })).toBe(false);
+    expect(findMatchedKeyword("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!", [nestedQuantifier], "regex")).toBeUndefined();
+    // Nested quantifiers are rejected, but a quantified group over a literal
+    // (no quantifier inside the group) must still compile and match.
+    const safeGroup = "(ab)+$";
+    expect(findMatchedKeyword("send ab", [safeGroup], "regex")).toBe(safeGroup);
+    expect(findMatchedKeyword("send xy", [safeGroup], "regex")).toBeUndefined();
+  });
+
   it("drops comments that match a negative keyword", () => {
     const flow: FlowDefinitionV1 = {
       version: 1,

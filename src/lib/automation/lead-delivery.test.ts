@@ -70,7 +70,7 @@ describe("lead delivery", () => {
     expect(fetcher).toHaveBeenCalledTimes(4);
   });
 
-  it("marks a timeout UNKNOWN because provider receipt is ambiguous", async () => {
+  it("retries a timeout because the webhook may not have been received", async () => {
     const repository = await seedWebhook();
     const result = await processLeadDelivery({
       deliveryKey: "lead:webhook:1",
@@ -80,6 +80,10 @@ describe("lead delivery", () => {
       lookup: publicLookup,
       fetcher: vi.fn().mockRejectedValue(new DOMException("timed out", "TimeoutError")),
     });
-    expect(result).toEqual({ status: "UNKNOWN", error: "timed out" });
+    expect(result).toEqual({ status: "FAILED", retryable: true, error: "timed out" });
+    expect(await repository.getOutboundDelivery("lead:webhook:1")).toMatchObject({
+      state: "FAILED",
+      retryable: true,
+    });
   });
 });

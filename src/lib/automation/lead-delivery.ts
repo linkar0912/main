@@ -109,5 +109,6 @@ export async function processLeadDelivery(
     payload: record.payload as LeadWebhookPayload,
     claimLeaseMs: options.claimLeaseMs ?? 30_000,
     repository,
+    networkFailuresAreRetryable: true,
   }, (payload) => postWebhook(payload, options));
 }

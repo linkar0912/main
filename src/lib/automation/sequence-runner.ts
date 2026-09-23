@@ -157,6 +157,11 @@ export async function processDueSequences(
           enrollmentId: enrollment.id,
           status: delivery.status,
         });
+        // Terminal outcomes would otherwise leave the enrollment stuck re-reading
+        // the same dead delivery on every sweep - cancel it like the other dead ends.
+        if (delivery.status === "UNKNOWN" || !delivery.retryable) {
+          await repository.cancelEnrollmentsForContact(contact.id);
+        }
         result.failed += 1;
       }
       continue;
@@ -169,10 +174,15 @@ export async function processDueSequences(
       await repository.advanceSequenceEnrollment(enrollment.id, nextIndex, null);
       continue;
     }
+    // Schedule relative to when this step was due (not wall-clock now) so a
+    // late sweep does not stretch the gap after the next step.
+    const baseMs = Number.isFinite(Date.parse(enrollment.nextSendAt ?? ""))
+      ? Date.parse(enrollment.nextSendAt!)
+      : Date.now();
     await repository.advanceSequenceEnrollment(
       enrollment.id,
       nextIndex,
-      new Date(Date.now() + nextStep.delayHours * 3_600_000).toISOString(),
+      new Date(baseMs + nextStep.delayHours * 3_600_000).toISOString(),
     );
   }
 

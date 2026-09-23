@@ -210,29 +210,37 @@ async function executeActionDelivery(
     if (!reservation.allowed) {
       return { status: "FAILED", retryable: false, error: DAILY_LIMIT_ERROR };
     }
+  }
 
+  try {
     // Comments-to-private-reply is the one Meta limit we have confirmed from
     // primary docs (750/hour per Instagram account). Checked here, before the
     // provider call, so a burst never spends its 3 retry attempts against a
     // ceiling we already know it will hit - see send-rate-limiter.ts.
-    if (request.action.type === "private_reply") {
+    if (needsProviderAttempt && request.action.type === "private_reply") {
       // Terminal, not retryable: the window only ever gets further past due.
       if (
         request.sourceEventTimestamp !== undefined
         && Date.now() - request.sourceEventTimestamp > PRIVATE_REPLY_WINDOW_MS
       ) {
-        await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation);
+        await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation!);
         return { status: "FAILED", retryable: false, error: PRIVATE_REPLY_EXPIRED_ERROR };
       }
       const rateLimit = await checkSendRateLimit(connection.igUserId, "private_reply");
       if (!rateLimit.allowed) {
-        await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation);
+        await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation!);
+        return { status: "FAILED", retryable: true, error: PROVIDER_RATE_LIMIT_ERROR };
+      }
+    } else if (needsProviderAttempt) {
+      // Non-private-reply actions share the account's DM budget; a known ceiling
+      // must not burn retry attempts either.
+      const rateLimit = await checkSendRateLimit(connection.igUserId, "direct_message");
+      if (!rateLimit.allowed) {
+        await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation!);
         return { status: "FAILED", retryable: true, error: PROVIDER_RATE_LIMIT_ERROR };
       }
     }
-  }
 
-  try {
     const result = await executeOutboundDelivery({
       deliveryKey: request.deliveryKey,
       workspaceId: request.workspaceId,
@@ -782,9 +790,18 @@ async function processFieldAnswer(
       return { matched: 1, sent: 0, skipped: 1, failed: 0 };
     }
 
+    // An answer containing an exit keyword ("no thanks") politely ends the
+    // question queue early - checked before validation so an exit phrase that
+    // fails the field's validator (e.g. "no thanks" on an email field) still
+    // ends the queue instead of re-asking. The lead keeps what was collected.
+    const exitHit = (current.exitKeywords ?? []).some(
+      (keyword) => answer.toLowerCase().includes(keyword.toLowerCase()),
+    );
+
     // Typed answers are validated before anything is stored or asked next; an
     // invalid reply re-asks the same question within the shared retry budget.
-    const validated = validateFieldAnswer(answer, current.kind);
+    const checked = validateFieldAnswer(answer, current.kind);
+    const validated = exitHit ? checked ?? "" : checked;
     if (validated === undefined) {
       const nextAttempt = contact.attempts + 1;
       if (nextAttempt > MAX_EMAIL_CAPTURE_RETRIES) {
@@ -823,11 +840,6 @@ async function processFieldAnswer(
       return { matched: 1, sent: 1, skipped: 0, failed: 0 };
     }
 
-    // An answer containing an exit keyword ("no thanks") politely ends the
-    // question queue early - the lead keeps whatever was already collected.
-    const exitHit = (current.exitKeywords ?? []).some(
-      (keyword) => answer.toLowerCase().includes(keyword.toLowerCase()),
-    );
     const remainingAfter = exitHit ? [] : rest;
     const connection = metaConnection(mapping.connection, options.tokenEncryptionKey);
     const outgoing = exitHit
@@ -970,7 +982,31 @@ export async function processNormalizedEvent(
   if (event.recipientId) {
     const optOut = await processOptOut(event, mapping, contact, repository, options);
     if (optOut) return optOut;
+  }
 
+  // Every legitimate inbound sender belongs in the workspace contact registry.
+  // Besides powering first-contact triggers and email capture, this is the source
+  // of truth for Contacts and for opening a conversation from Inbox. Touched before
+  // any early return (suppressed/paused/capture) so the registry sees every event.
+  let evaluationContext: EvaluationContext = {};
+  const needsContactTracking = automations.some(
+    (automation) =>
+      automation.definition.version === 1
+      && (automation.definition.trigger.type === "first_contact"
+        || Boolean(automation.definition.emailCapture)
+        || Boolean(automation.definition.followUps?.length)),
+  );
+  if (event.recipientId && CONTACT_TOUCH_EVENT_TYPES.includes(event.type)) {
+    const touch = await repository.touchContact(
+      mapping.workspaceId,
+      event.accountId,
+      event.recipientId,
+      new Date(event.timestamp).toISOString(),
+    );
+    if (needsContactTracking) evaluationContext = { isNewContact: touch.created };
+  }
+
+  if (event.recipientId) {
     if (contact?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
     // Human handoff: if any active participant for this sender is paused, the
     // runner stays silent. The teammate can resume from the contact modal.
@@ -994,27 +1030,6 @@ export async function processNormalizedEvent(
       options,
     );
     if (captured) return captured;
-  }
-
-  // Every legitimate inbound sender belongs in the workspace contact registry.
-  // Besides powering first-contact triggers and email capture, this is the source
-  // of truth for Contacts and for opening a conversation from Inbox.
-  let evaluationContext: EvaluationContext = {};
-  const needsContactTracking = automations.some(
-    (automation) =>
-      automation.definition.version === 1
-      && (automation.definition.trigger.type === "first_contact"
-        || Boolean(automation.definition.emailCapture)
-        || Boolean(automation.definition.followUps?.length)),
-  );
-  if (event.recipientId && CONTACT_TOUCH_EVENT_TYPES.includes(event.type)) {
-    const touch = await repository.touchContact(
-      mapping.workspaceId,
-      event.accountId,
-      event.recipientId,
-      new Date(event.timestamp).toISOString(),
-    );
-    if (needsContactTracking) evaluationContext = { isNewContact: touch.created };
   }
 
   if (options.campaignsEnabled === true) {

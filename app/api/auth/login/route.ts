@@ -23,7 +23,10 @@ export async function POST(request: Request) {
 
   const limitKey = loginRateLimitKey(env.authSessionSecret, email || "-", address);
   if (!(await loginLimiter.isAllowed(limitKey))) {
-    return NextResponse.redirect(new URL("/login?error=locked", destinationOrigin), 303);
+    return NextResponse.redirect(
+      new URL(`/login?error=locked&next=${encodeURIComponent(nextPath)}`, destinationOrigin),
+      303,
+    );
   }
 
   const supabase = await createSupabaseServerClient();

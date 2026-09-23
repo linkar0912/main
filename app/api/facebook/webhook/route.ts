@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
 import { FacebookClient } from "@/src/lib/facebook/client";
@@ -13,6 +14,13 @@ import { verifyWebhookSignature } from "@/src/lib/security/signature";
 
 export const runtime = "nodejs";
 
+function verifyTokenEquals(candidate: string | null, expected: string): boolean {
+  if (candidate === null) return false;
+  const candidateBuffer = Buffer.from(candidate);
+  const expectedBuffer = Buffer.from(expected);
+  return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer);
+}
+
 /** GET: Meta webhook verification. The same query parameters the IG route
  * accepts, but scoped to a Facebook-only verify token so the two channels
  * never share a handshake. */
@@ -24,7 +32,7 @@ export async function GET(request: Request) {
   const challenge = url.searchParams.get("hub.challenge");
   if (
     mode === "subscribe"
-    && verifyToken === env.facebookVerifyToken
+    && verifyTokenEquals(verifyToken, env.facebookVerifyToken)
     && challenge
   ) {
     return new Response(challenge, { status: 200 });

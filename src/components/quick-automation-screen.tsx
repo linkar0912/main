@@ -81,9 +81,9 @@ export function QuickAutomationScreen() {
   const selectedReel = useMemo(() => reels.find((reel) => reel.id === selectedId), [reels, selectedId]);
 
   useEffect(() => {
-    if (!selectedReel) return;
+    if (!selectedId) return;
     flowStageRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
-  }, [selectedReel]);
+  }, [selectedId]);
 
   async function retry() {
     setLoading(true);

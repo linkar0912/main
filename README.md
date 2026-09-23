@@ -54,6 +54,13 @@ pnpm worker
 `pnpm db:migrate` is Prisma's development migration command and is only for
 this local workflow.
 
+The compose file publishes Postgres and Valkey on `127.0.0.1` only, and
+Valkey requires a password. After copying `.env.example`, set:
+
+```bash
+REDIS_URL=redis://:linkar-local-redis@localhost:6379/0
+```
+
 ## Production deployment
 
 Production runs on Dokploy. A push to `main` passes CI, publishes an immutable

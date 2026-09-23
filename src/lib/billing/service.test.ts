@@ -11,14 +11,18 @@ function repository(overrides: Partial<BillingRepository> = {}): BillingReposito
     claimCheckout: vi.fn().mockResolvedValue({ kind: "create", attemptId: "attempt_1" }),
     markCheckoutReady: vi.fn().mockResolvedValue(undefined),
     markCheckoutFailed: vi.fn().mockResolvedValue(undefined),
-    markCheckoutVerified: vi.fn().mockResolvedValue(true),
+    markCheckoutVerified: vi.fn().mockResolvedValue("verified"),
     getSubscriptionForOwnerAction: vi.fn().mockResolvedValue({
       id: "billing_1",
       providerSubscriptionId: "sub_1",
       status: "ACTIVE",
+      pendingPlanId: null,
+      pendingInterval: null,
+      cancelAtPeriodEnd: false,
     }),
     recordPendingPlanChange: vi.fn().mockResolvedValue(undefined),
     recordPendingCancellation: vi.fn().mockResolvedValue(undefined),
+    restoreSubscriptionIntent: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -210,6 +214,57 @@ describe("billing service", () => {
       paymentId: "pay_1", subscriptionId: "sub_1", signature: "0".repeat(64),
     })).rejects.toEqual(new BillingServiceError("invalid_checkout_signature"));
     expect(repo.markCheckoutVerified).not.toHaveBeenCalled();
+  });
+
+  it("maps a missing ready attempt to a checkout conflict", async () => {
+    const repo = repository({ markCheckoutVerified: vi.fn().mockResolvedValue("attempt_not_found") });
+    const service = createBillingService({ repository: repo, provider: provider(), env, getEffectivePlanKey: getFreePlanKey });
+    const { createHmac } = await import("node:crypto");
+    const signature = createHmac("sha256", "checkout-secret").update("pay_1|sub_1").digest("hex");
+
+    await expect(service.verifyCheckout("ws_1", {
+      paymentId: "pay_1", subscriptionId: "sub_1", signature,
+    })).rejects.toEqual(new BillingServiceError("subscription_conflict"));
+  });
+
+  it("does not claim verification succeeded while the subscription row is still missing", async () => {
+    const repo = repository({ markCheckoutVerified: vi.fn().mockResolvedValue("subscription_not_found") });
+    const service = createBillingService({ repository: repo, provider: provider(), env, getEffectivePlanKey: getFreePlanKey });
+    const { createHmac } = await import("node:crypto");
+    const signature = createHmac("sha256", "checkout-secret").update("pay_1|sub_1").digest("hex");
+
+    await expect(service.verifyCheckout("ws_1", {
+      paymentId: "pay_1", subscriptionId: "sub_1", signature,
+    })).rejects.toEqual(new BillingServiceError("checkout_verification_pending"));
+  });
+
+  it("records the local intent before calling the provider and restores it on provider failure", async () => {
+    const calls: string[] = [];
+    const repo = repository({
+      recordPendingPlanChange: vi.fn(async () => { calls.push("local_plan"); }),
+      recordPendingCancellation: vi.fn(async () => { calls.push("local_cancel"); }),
+      restoreSubscriptionIntent: vi.fn(async () => { calls.push("restore"); }),
+    });
+    const gateway = provider();
+    gateway.updateSubscription.mockImplementation(async () => { calls.push("provider_plan"); return { id: "sub_1", status: "active" }; });
+    gateway.cancelSubscription.mockImplementation(async () => { calls.push("provider_cancel"); return { id: "sub_1", status: "active" }; });
+    const service = createBillingService({ repository: repo, provider: gateway, env, getEffectivePlanKey: getFreePlanKey });
+
+    await service.schedulePlanChange("ws_1", "growth", "ANNUAL");
+    await service.cancelAtCycleEnd("ws_1");
+    expect(calls).toEqual(["local_plan", "provider_plan", "local_cancel", "provider_cancel"]);
+
+    gateway.updateSubscription.mockRejectedValue(new Error("razorpay down"));
+    await expect(service.schedulePlanChange("ws_1", "growth", "ANNUAL")).rejects.toMatchObject({ code: "provider_unavailable" });
+    expect(repo.restoreSubscriptionIntent).toHaveBeenLastCalledWith("billing_1", {
+      pendingPlanId: null, pendingInterval: null, cancelAtPeriodEnd: false,
+    });
+
+    gateway.cancelSubscription.mockRejectedValue(new Error("razorpay down"));
+    await expect(service.cancelAtCycleEnd("ws_1")).rejects.toMatchObject({ code: "provider_unavailable" });
+    expect(repo.restoreSubscriptionIntent).toHaveBeenLastCalledWith("billing_1", {
+      pendingPlanId: null, pendingInterval: null, cancelAtPeriodEnd: false,
+    });
   });
 
   it("schedules plan changes and cancellation without changing entitlement", async () => {

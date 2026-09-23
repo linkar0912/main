@@ -122,13 +122,17 @@ export function BillingSettings() {
   async function cancelSubscription() {
     if (!view?.canManage || !window.confirm("Cancel at the end of the current billing cycle?")) return;
     setError("");
-    const response = await fetch("/api/billing/cancel", { method: "POST" });
-    if (!response.ok) {
+    try {
+      const response = await fetch("/api/billing/cancel", { method: "POST" });
+      if (!response.ok) {
+        setError("Cancellation could not be scheduled. Try again.");
+        return;
+      }
+      setMessage("Cancellation scheduled. Paid access stays active through the current billing period.");
+      await load(true).catch(() => undefined);
+    } catch {
       setError("Cancellation could not be scheduled. Try again.");
-      return;
     }
-    setMessage("Cancellation scheduled. Paid access stays active through the current billing period.");
-    await load(true).catch(() => undefined);
   }
 
   async function redeemInvite() {

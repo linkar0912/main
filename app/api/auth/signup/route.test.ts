@@ -115,12 +115,13 @@ describe("POST /api/auth/signup", () => {
     expect(mocks.ensureWorkspace).not.toHaveBeenCalled();
   });
 
-  it("locks out further attempts from the same address after too many signups", async () => {
+  it("locks out further attempts from the same identity after too many signups", async () => {
+    const email = "repeat@example.com";
     const ip = "198.51.100.9";
     for (let i = 0; i < 5; i++) {
-      await POST(signupRequest({ email: `user${i}@example.com`, password: "long-enough-password" }, ip));
+      await POST(signupRequest({ email, password: "long-enough-password" }, ip));
     }
-    const response = await POST(signupRequest({ email: "user6@example.com", password: "long-enough-password" }, ip));
+    const response = await POST(signupRequest({ email, password: "long-enough-password" }, ip));
     expect(location(response)).toContain("/signup?error=locked");
   });
 });

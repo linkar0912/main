@@ -185,22 +185,57 @@ export async function deleteQueuedWorkspaceEvents(workspaceId: string): Promise<
   return deleteQueuedWorkspaceEventsBatch([workspaceId]);
 }
 
-export async function deleteQueuedWorkspaceEventsBatch(workspaceIds: readonly string[]): Promise<void> {
+// instagram-event/facebook-event payloads never carry workspaceId - only
+// accountId (IG user id) and pageId - so workspace purges must match those
+// provider identifiers against the same target set.
+function jobMatchesWorkspaceTargets(job: Job, targets: Set<string>): boolean {
+  const data = job?.data;
+  if (!data) return false;
+  return Boolean(
+    targets.has(data.workspaceId)
+    || targets.has(data.accountId)
+    || targets.has(data.connectionId)
+    || targets.has(data.pageId)
+    || targets.has(data.igAccountId)
+    || targets.has(data.instagramAccountId),
+  );
+}
+
+async function removeJobsAllowingMissing(jobs: Job[]): Promise<void> {
+  const results = await Promise.allSettled(jobs.map((job) => job.remove()));
+  const failures = results.flatMap((result) => {
+    if (result.status !== "rejected") return [];
+    const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    if (message.includes("Missing key for job") || message.includes("no longer present")) return [];
+    return [result.reason];
+  });
+  if (failures.length > 0) throw failures[0];
+}
+
+// `identifiers` must include each workspace id AND the provider ids owned by
+// those workspaces (igUserIds, pageIds) - webhook job payloads carry those
+// instead of workspaceId.
+export async function deleteQueuedWorkspaceEventsBatch(identifiers: readonly string[]): Promise<void> {
   const queue = getWebhookQueue();
   if (!queue) return;
-  const targets = new Set(workspaceIds);
+  const targets = new Set(identifiers);
   if (targets.size === 0) return;
   const states: JobType[] = ["waiting", "delayed", "prioritized", "waiting-children", "failed", "completed"];
   let start = 0;
   for (;;) {
     const page = await queue.getJobs(states, start, start + JOB_SCAN_PAGE_SIZE - 1);
-    const matches = page.filter((job) => targets.has(job?.data?.workspaceId));
-    await Promise.all(matches.map((job) => job.remove()));
+    const matches = page.filter((job) => jobMatchesWorkspaceTargets(job, targets));
+    await removeJobsAllowingMissing(matches);
     if (page.length < JOB_SCAN_PAGE_SIZE) break;
     start += JOB_SCAN_PAGE_SIZE - matches.length;
   }
-  const active = await queue.getJobs(["active"], 0, JOB_SCAN_PAGE_SIZE - 1);
-  if (active.some((job) => targets.has(job?.data?.workspaceId))) throw new Error("workspace_jobs_active");
+  let activeStart = 0;
+  for (;;) {
+    const active = await queue.getJobs(["active"], activeStart, activeStart + JOB_SCAN_PAGE_SIZE - 1);
+    if (active.some((job) => jobMatchesWorkspaceTargets(job, targets))) throw new Error("workspace_jobs_active");
+    if (active.length < JOB_SCAN_PAGE_SIZE) break;
+    activeStart += JOB_SCAN_PAGE_SIZE;
+  }
 }
 
 async function findJobsByAccount(queue: Queue, igUserId: string, includeActive: boolean): Promise<Job[]> {

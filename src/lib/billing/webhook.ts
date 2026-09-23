@@ -166,6 +166,11 @@ export function createPrismaBillingWebhookRepository(client: WebhookPrismaClient
   return {
     async applyEvent(input) {
       return client.$transaction(async (transaction) => {
+          const replayed = await transaction.billingWebhookEvent.findFirst({
+            where: { payloadHash: input.payloadHash },
+            select: { id: true },
+          });
+          if (replayed) return { outcome: "duplicate" as const };
           let receipt: { id: string };
           try {
             receipt = await transaction.billingWebhookEvent.create({

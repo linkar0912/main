@@ -18,9 +18,13 @@ const BLOCKED_SUFFIXES = [".localhost", ".local", ".internal", ".home.arpa"];
 
 function isBlockedIpv4(hostname: string): boolean | undefined {
   const parts = hostname.split(".");
-  if (parts.length !== 4) return undefined;
   const octets = parts.map((part) => (/^\d{1,3}$/.test(part) ? Number(part) : Number.NaN));
-  if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return undefined;
+  if (octets.some((octet) => !Number.isInteger(octet))) return undefined;
+  // Every label is numeric, so this is an IPv4 literal - possibly an
+  // abbreviated one resolvers re-expand ("127.1" style padding). Only a
+  // well-formed quad can be classified against the blocklist; reject the
+  // rest rather than let them through as DNS hostnames.
+  if (parts.length !== 4 || octets.some((octet) => octet > 255)) return true;
 
   const [a, b] = octets as [number, number, number, number];
   if (a === 0) return true; // "this network"

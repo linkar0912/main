@@ -16,6 +16,7 @@ declare global {
 
 let checkoutLoad: Promise<void> | undefined;
 const CHECKOUT_LOAD_TIMEOUT_MS = 15_000;
+const CHECKOUT_COMPLETION_TIMEOUT_MS = 5 * 60 * 1_000;
 
 function loadCheckout(): Promise<void> {
   if (window.Razorpay) return Promise.resolve();
@@ -48,13 +49,22 @@ export async function openRazorpaySubscriptionCheckout(input: {
   await loadCheckout();
   if (!window.Razorpay) throw new Error("checkout_unavailable");
   return new Promise((resolve) => {
+    let settled = false;
+    let timeoutId: number | undefined;
+    const settle = (outcome: RazorpayCheckoutOutcome) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      resolve(outcome);
+    };
+    timeoutId = window.setTimeout(() => settle({ dismissed: true }), CHECKOUT_COMPLETION_TIMEOUT_MS);
     const checkout = new window.Razorpay!({
       key: input.key,
       subscription_id: input.subscriptionId,
       name: "Linkar",
       description: "Linkar workspace subscription",
-      handler: (result: RazorpayCheckoutSuccess) => resolve(result),
-      modal: { ondismiss: () => resolve({ dismissed: true }) },
+      handler: (result: RazorpayCheckoutSuccess) => settle(result),
+      modal: { ondismiss: () => settle({ dismissed: true }) },
     });
     checkout.open();
   });

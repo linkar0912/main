@@ -206,35 +206,45 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
 
 export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection, initialEmail }: DashboardScreenProps = {}) {
   const { automations, loading } = useAutomations(initialAutomations);
-  const [insights, setInsights] = useState<InsightsPayload | null>(() => {
-    // Seed the shared insights cache so the effect below resolves instantly
-    // and every later consumer (e.g. /insights) reuses the server-rendered data.
-    if (initialInsights) seedWorkspaceData({ insightsOverview: initialInsights });
-    return initialInsights ?? null;
-  });
+  const [insights, setInsights] = useState<InsightsPayload | null>(initialInsights ?? null);
   const [hasConnection, setHasConnection] = useState<boolean | null>(() => initialHasConnection ?? null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // Seed the shared insights cache so the refresh effect below resolves
+  // instantly and every later consumer (e.g. /insights) reuses the
+  // server-rendered data. Runs before the refresh effect in mount order.
   useEffect(() => {
+    if (initialInsights) seedWorkspaceData({ insightsOverview: initialInsights });
+  }, [initialInsights]);
+
+  useEffect(() => {
+    let active = true;
     function refresh() {
       // Deliberately not fetching /api/contacts for the captured-lead count:
       // /api/insights already returns it as capturedEmails off the same
       // countCapturedContacts() query, and the contacts route pages in 50
       // contact rows on top. One fewer authenticated round trip per load.
       getInsightsOverview()
-        .then((payload) => setInsights(payload))
+        .then((payload) => {
+          if (active) setInsights(payload);
+        })
         .catch(() => undefined);
       Promise.all([
         getInstagramConnections().catch(() => []),
         getFacebookPages().catch(() => []),
-      ]).then(([connections, pages]) => setHasConnection(connections.length > 0 || pages.length > 0));
+      ]).then(([connections, pages]) => {
+        if (active) setHasConnection(connections.length > 0 || pages.length > 0);
+      });
     }
     refresh();
     // Resource freshness prevents tab focus from producing a burst of repeat
     // requests. Connection mutations invalidate their own entries, while
     // older confirmed entries refresh after the shared freshness window.
     window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
 
   const activeCount = automations.filter((a) => a.status === "ACTIVE").length;

@@ -24,7 +24,7 @@ type BillingProvider = {
 };
 
 export class BillingServiceError extends Error {
-  constructor(public readonly code: "billing_not_configured" | "invalid_checkout_signature" | "subscription_conflict" | "provider_unavailable") {
+  constructor(public readonly code: "billing_not_configured" | "invalid_checkout_signature" | "subscription_conflict" | "provider_unavailable" | "checkout_verification_pending") {
     super(code);
     this.name = "BillingServiceError";
   }
@@ -176,8 +176,9 @@ export function createBillingService(dependencies: BillingServiceDependencies) {
     if (!verifyCheckoutSignature({ ...input, secret: keySecret })) {
       throw new BillingServiceError("invalid_checkout_signature");
     }
-    const updated = await dependencies.repository.markCheckoutVerified(workspaceId, input.subscriptionId, now());
-    if (!updated) throw new BillingServiceError("subscription_conflict");
+    const verification = await dependencies.repository.markCheckoutVerified(workspaceId, input.subscriptionId, now());
+    if (verification === "attempt_not_found") throw new BillingServiceError("subscription_conflict");
+    if (verification === "subscription_not_found") throw new BillingServiceError("checkout_verification_pending");
     return { status: "processing" as const };
   }
 
@@ -192,12 +193,17 @@ export function createBillingService(dependencies: BillingServiceDependencies) {
       } catch {
         throw new BillingServiceError("billing_not_configured");
       }
+      await dependencies.repository.recordPendingPlanChange(subscription.id, `plan_${plan}`, interval);
       try {
         await dependencies.provider.updateSubscription({ subscriptionId: subscription.providerSubscriptionId, planId: providerPlanId });
       } catch {
+        await dependencies.repository.restoreSubscriptionIntent(subscription.id, {
+          pendingPlanId: subscription.pendingPlanId,
+          pendingInterval: subscription.pendingInterval,
+          cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        }).catch(() => undefined);
         throw new BillingServiceError("provider_unavailable");
       }
-      await dependencies.repository.recordPendingPlanChange(subscription.id, `plan_${plan}`, interval);
       return { status: "scheduled" as const, providerSubscriptionId: subscription.providerSubscriptionId };
     }, (result) => ({ plan, interval, state: result.status, providerSubscriptionId: result.providerSubscriptionId }));
     return { status: result.status };
@@ -208,12 +214,17 @@ export function createBillingService(dependencies: BillingServiceDependencies) {
       configuredCredentials();
       const subscription = await dependencies.repository.getSubscriptionForOwnerAction(workspaceId);
       if (!subscription || subscription.status !== "ACTIVE") throw new BillingServiceError("subscription_conflict");
+      await dependencies.repository.recordPendingCancellation(subscription.id);
       try {
         await dependencies.provider.cancelSubscription(subscription.providerSubscriptionId);
       } catch {
+        await dependencies.repository.restoreSubscriptionIntent(subscription.id, {
+          pendingPlanId: subscription.pendingPlanId,
+          pendingInterval: subscription.pendingInterval,
+          cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        }).catch(() => undefined);
         throw new BillingServiceError("provider_unavailable");
       }
-      await dependencies.repository.recordPendingCancellation(subscription.id);
       return { status: "scheduled" as const, providerSubscriptionId: subscription.providerSubscriptionId };
     }, (result) => ({ state: result.status, providerSubscriptionId: result.providerSubscriptionId }));
     return { status: result.status };

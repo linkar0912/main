@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Play, Plus, RotateCw, Tr
 import { AutomationSectionNav } from "./automation-section-nav";
 import { ContextHelpLink } from "./context-help-link";
 
-type SequenceStepView = { id: string; delayHours: number; text: string };
+type SequenceStepView = { id: string; delayHours: number | string; text: string };
 type SequenceRow = {
   id: string;
   name: string;
@@ -45,20 +45,29 @@ export function SequencesScreen() {
   const [formError, setFormError] = useState("");
 
   useEffect(() => {
-    void refresh();
+    const controller = new AbortController();
+    void refresh(controller.signal);
+    return () => controller.abort();
   }, []);
 
-  async function refresh() {
+  useEffect(() => {
+    if (!justSaved) return;
+    const timer = window.setTimeout(() => setJustSaved(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [justSaved]);
+
+  async function refresh(signal?: AbortSignal) {
     setPageError("");
     try {
       const [sequenceResponse, automationResponse] = await Promise.all([
-        fetch("/api/sequences"),
-        fetch("/api/automations"),
+        fetch("/api/sequences", { signal }),
+        fetch("/api/automations", { signal }),
       ]);
       const [sequencePayload, automationPayload] = await Promise.all([
         sequenceResponse.json().catch(() => ({})) as Promise<{ data?: SequenceRow[]; error?: string }>,
         automationResponse.json().catch(() => ({})) as Promise<{ data?: { id: string; name: string; version: number }[]; error?: string }>,
       ]);
+      if (signal?.aborted) return;
       if (!sequenceResponse.ok) throw new Error(sequencePayload.error ?? "Could not load sequences.");
       if (!automationResponse.ok) throw new Error(automationPayload.error ?? "Could not load automations.");
       setSequences(sequencePayload.data ?? []);
@@ -68,9 +77,10 @@ export function SequencesScreen() {
           .map(({ id, name }) => ({ id, name })),
       );
     } catch (error) {
+      if (signal?.aborted) return;
       setPageError(error instanceof Error ? error.message : "Could not load sequences.");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }
 
@@ -145,7 +155,6 @@ export function SequencesScreen() {
         throw new Error(result.error ?? "Could not save this sequence.");
       }
       setJustSaved(true);
-      setTimeout(() => setJustSaved(false), 2500);
       resetForm();
       await refresh();
     } catch (error) {
@@ -243,7 +252,7 @@ export function SequencesScreen() {
                       min={0}
                       max={2160}
                       value={String(step.delayHours)}
-                      onChange={(e) => updateStep(index, { delayHours: Number(e.target.value) })}
+                      onChange={(e) => updateStep(index, { delayHours: e.target.value })}
                     />
                     <small>{index === 0 ? "0 = as soon as the scheduler runs after enrollment" : "hours after the previous step"}</small>
                   </label>

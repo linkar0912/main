@@ -4,7 +4,7 @@ import { executeOutboundDelivery } from "@/src/lib/automation/outbound-delivery"
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { createId } from "@/src/lib/id";
-import { encodeInboxCursor } from "@/src/lib/inbox-cursor";
+import { decodeInboxCursor, encodeInboxCursor } from "@/src/lib/inbox-cursor";
 import { buildConversation } from "@/src/lib/inbox";
 import { isWithinMessagingWindow } from "@/src/lib/messaging-window";
 import { MetaClient } from "@/src/lib/meta/client";
@@ -24,6 +24,32 @@ const patchSchema = z.discriminatedUnion("action", [
 ]);
 type Context = { params: Promise<{ contactId: string }> };
 
+// Sorts above both `delivery_` and `wevent_` ids so the equal-timestamp
+// tie-break of the *other* table includes every boundary row instead of
+// skipping rows whose ids live in a different space than the cursor.
+const CROSS_SOURCE_CURSOR_ID = "~";
+
+function scopedMessageCursors(cursor: string): { outbound: string; inbound: string } {
+  try {
+    const decoded = decodeInboxCursor(cursor, "messages");
+    if (decoded.id.startsWith("delivery_")) {
+      return {
+        outbound: cursor,
+        inbound: encodeInboxCursor({ kind: "messages", at: decoded.at, id: CROSS_SOURCE_CURSOR_ID }),
+      };
+    }
+    if (decoded.id.startsWith("wevent_")) {
+      return {
+        outbound: encodeInboxCursor({ kind: "messages", at: decoded.at, id: CROSS_SOURCE_CURSOR_ID }),
+        inbound: cursor,
+      };
+    }
+  } catch {
+    // Let the repositories surface the canonical invalid_cursor error.
+  }
+  return { outbound: cursor, inbound: cursor };
+}
+
 export async function GET(request: Request, context: Context) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -36,10 +62,10 @@ export async function GET(request: Request, context: Context) {
 
   try {
     const pageSize = parsed.data.limit + 1;
-    const options = { limit: pageSize, ...(parsed.data.cursor ? { cursor: parsed.data.cursor } : {}) };
+    const scoped = parsed.data.cursor ? scopedMessageCursors(parsed.data.cursor) : undefined;
     const [deliveries, events] = await Promise.all([
-      repository.listOutboundDeliveriesForRecipientPage(session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, options),
-      repository.listInboundEventsForRecipient(session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, options),
+      repository.listOutboundDeliveriesForRecipientPage(session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, { limit: pageSize, ...(scoped ? { cursor: scoped.outbound } : {}) }),
+      repository.listInboundEventsForRecipient(session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, { limit: pageSize, ...(scoped ? { cursor: scoped.inbound } : {}) }),
     ]);
     const newest = buildConversation(contact, deliveries.records, events.records)
       .sort((left, right) => right.at.localeCompare(left.at) || right.id.localeCompare(left.id));

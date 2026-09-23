@@ -23,12 +23,20 @@ describe("clientAddress", () => {
     expect(clientAddress(requestWith({ "x-forwarded-for": "1.2.3.4" }), -1)).toBe("unknown");
   });
 
-  it("prefers cf-connecting-ip when present (Cloudflare edge)", () => {
+  it("ignores cf-connecting-ip when trustedProxyHops is 0", () => {
+    // The header is forgeable on a direct connection, so with no trusted
+    // proxy configured it must be discarded just like X-Forwarded-For -
+    // otherwise an attacker can present a fresh client IP per attempt.
+    const request = requestWith({ "cf-connecting-ip": "203.0.113.10" });
+    expect(clientAddress(request, 0)).toBe("unknown");
+  });
+
+  it("prefers cf-connecting-ip when a trusted proxy is configured", () => {
     const request = requestWith({
       "cf-connecting-ip": "203.0.113.10",
       "x-forwarded-for": "1.2.3.4",
     });
-    expect(clientAddress(request, 0)).toBe("203.0.113.10");
+    expect(clientAddress(request, 1)).toBe("203.0.113.10");
     expect(clientAddress(request, 2)).toBe("203.0.113.10");
   });
 

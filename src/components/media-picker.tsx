@@ -66,8 +66,9 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
   // item is toggled. Kept up to date as real pages load so the data stays fresh.
   const knownSnapshots = useRef(new Map<string, MediaSnapshot>(initialSnapshots.map((snapshot) => [snapshot.id, snapshot])));
   const reportedSnapshotIds = useRef(new Set(initialSnapshots.map((snapshot) => snapshot.id)));
+  const mountedRef = useRef(true);
 
-  async function loadPage(after?: string) {
+  async function loadPage(after?: string, isActive: () => boolean = () => true) {
     const url = after ? `/api/meta/media?after=${encodeURIComponent(after)}` : "/api/meta/media";
     const response = await fetch(url);
     const payload = (await response.json().catch(() => ({}))) as {
@@ -76,6 +77,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
       error?: string;
     };
     if (!response.ok) throw new Error(payload.error ?? "Could not load your Instagram media");
+    if (!isActive()) return;
     for (const media of payload.data ?? []) {
       itemsById.current.set(media.id, media);
       knownSnapshots.current.set(media.id, toSnapshot(media));
@@ -98,7 +100,8 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
 
   useEffect(() => {
     let active = true;
-    loadPage()
+    mountedRef.current = true;
+    loadPage(undefined, () => active && mountedRef.current)
       .catch((caught: unknown) => {
         if (active) setError(caught instanceof Error ? caught.message : "Could not load your Instagram media");
       })
@@ -107,6 +110,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
       });
     return () => {
       active = false;
+      mountedRef.current = false;
     };
     // Only reload on mount; selection changes must not re-fetch the list.
   // `loadPage` intentionally captures only the mount-time selection. Selection
@@ -135,11 +139,11 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
     setLoadingMore(true);
     setError("");
     try {
-      await loadPage(cursor);
+      await loadPage(cursor, () => mountedRef.current);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load more media");
+      if (mountedRef.current) setError(caught instanceof Error ? caught.message : "Could not load more media");
     } finally {
-      setLoadingMore(false);
+      if (mountedRef.current) setLoadingMore(false);
     }
   }
 

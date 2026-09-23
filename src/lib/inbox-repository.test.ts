@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMemoryRepository } from "./memory-repository";
+import { encodeInboxCursor } from "./inbox-cursor";
 
 async function seedContact(
   repository: ReturnType<typeof createMemoryRepository>,
@@ -119,5 +120,60 @@ describe("memory inbox repository", () => {
       eventType: "facebook.comment.created",
     });
     expect(activity.records.map((event) => event.providerEventId)).toEqual(["facebook_1"]);
+  });
+
+  it("resumes outbound pagination from a cross-source ~ cursor by timestamp", async () => {
+    const repository = createMemoryRepository();
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-04T10:02:00.000Z"));
+      await repository.ensureOutboundDelivery({
+        deliveryKey: "delivery_new",
+        workspaceId: "workspace_1",
+        instagramAccountId: "ig_1",
+        recipientId: "person_1",
+        kind: "CLASSIC_ACTION",
+        payload: { text: "newer" },
+      });
+      vi.setSystemTime(new Date("2026-09-04T10:00:00.000Z"));
+      await repository.ensureOutboundDelivery({
+        deliveryKey: "delivery_boundary",
+        workspaceId: "workspace_1",
+        instagramAccountId: "ig_1",
+        recipientId: "person_1",
+        kind: "CLASSIC_ACTION",
+        payload: { text: "boundary" },
+      });
+      vi.setSystemTime(new Date("2026-09-04T09:00:00.000Z"));
+      await repository.ensureOutboundDelivery({
+        deliveryKey: "delivery_old",
+        workspaceId: "workspace_1",
+        instagramAccountId: "ig_1",
+        recipientId: "person_1",
+        kind: "CLASSIC_ACTION",
+        payload: { text: "older" },
+      });
+
+      // Cursor id is not in this table (~ from the inbound side) with at equal
+      // to the boundary row's timestamp: resume includes the boundary row and
+      // everything older, never restarts from the newest row.
+      const crossCursor = encodeInboxCursor({
+        kind: "messages",
+        at: "2026-09-04T10:00:00.000Z",
+        id: "~",
+      });
+      const resumed = await repository.listOutboundDeliveriesForRecipientPage(
+        "workspace_1",
+        "ig_1",
+        "person_1",
+        { limit: 10, cursor: crossCursor },
+      );
+      expect(resumed.records.map((record) => record.deliveryKey)).toEqual([
+        "delivery_boundary",
+        "delivery_old",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

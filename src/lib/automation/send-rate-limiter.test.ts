@@ -17,6 +17,29 @@ class FakeRedis {
     const entry = this.store.get(key);
     if (entry) entry.expiresAt = Date.now() + ms;
   }
+
+  multi() {
+    const commands: Array<() => Promise<unknown>> = [];
+    const chain = {
+      incr: (key: string) => {
+        commands.push(() => this.incr(key));
+        return chain;
+      },
+      pexpire: (key: string, ms: number) => {
+        commands.push(async () => {
+          await this.pexpire(key, ms);
+          return 1;
+        });
+        return chain;
+      },
+      exec: async (): Promise<Array<[null, unknown]>> => {
+        const results: Array<[null, unknown]> = [];
+        for (const command of commands) results.push([null, await command()]);
+        return results;
+      },
+    };
+    return chain;
+  }
 }
 
 vi.mock("ioredis", () => ({ default: FakeRedis }));

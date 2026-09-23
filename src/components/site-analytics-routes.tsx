@@ -28,26 +28,49 @@ export function SiteAnalyticsRoutes({ enabled }: { enabled: boolean }) {
   const previous = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!enabled || typeof window.gtag !== "function") return;
+    if (!enabled) return;
 
     const path = redactAnalyticsPath(pathname ?? "/");
     if (previous.current === path) return;
 
-    const location = `${window.location.origin}${path}`;
+    let cancelled = false;
+    let attempts = 0;
+    let timer: number | undefined;
 
-    // Applies to every later event, including ones GA sends on its own.
-    window.gtag("set", { page_path: path, page_location: location, page_title: document.title });
+    // The GA script is often still loading on the first navigation; retry
+    // briefly instead of silently dropping that page_view, but cap the attempts
+    // so an blocked/absent gtag does not keep a timer alive forever.
+    const send = () => {
+      if (cancelled) return;
+      if (typeof window.gtag !== "function") {
+        attempts += 1;
+        if (attempts >= 40) return;
+        timer = window.setTimeout(send, 250);
+        return;
+      }
 
-    window.gtag("event", "page_view", {
-      page_path: path,
-      page_location: location,
-      page_title: document.title,
-      // Same treatment for the referrer, which is a full in-app URL on any
-      // navigation after the first.
-      page_referrer: previous.current ? `${window.location.origin}${previous.current}` : undefined,
-    });
+      const location = `${window.location.origin}${path}`;
 
-    previous.current = path;
+      // Applies to every later event, including ones GA sends on its own.
+      window.gtag("set", { page_path: path, page_location: location, page_title: document.title });
+
+      window.gtag("event", "page_view", {
+        page_path: path,
+        page_location: location,
+        page_title: document.title,
+        // Same treatment for the referrer, which is a full in-app URL on any
+        // navigation after the first.
+        page_referrer: previous.current ? `${window.location.origin}${previous.current}` : undefined,
+      });
+
+      previous.current = path;
+    };
+
+    send();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [enabled, pathname]);
 
   return null;

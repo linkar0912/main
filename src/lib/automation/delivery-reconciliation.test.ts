@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMemoryRepository } from "../memory-repository";
 import { reconcileExpiredDeliveryClaims } from "./delivery-reconciliation";
 
@@ -18,6 +18,7 @@ describe("delivery claim reconciliation", () => {
       "worker_a",
       "2026-08-23T10:00:00.000Z",
     );
+    const releaseReservation = vi.spyOn(repository, "releaseOutboundDeliveryReservation");
 
     await expect(reconcileExpiredDeliveryClaims(
       repository,
@@ -29,5 +30,6 @@ describe("delivery claim reconciliation", () => {
       resultCode: "AMBIGUOUS",
       lastError: "Delivery claim expired before confirmation",
     });
+    expect(releaseReservation).toHaveBeenCalledWith(deliveryKey);
   });
 });
