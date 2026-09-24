@@ -3688,9 +3688,19 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .campaign-performance .funnel-cell:nth-child(odd) { border-left: 0; }
   .campaign-performance .funnel-cell:nth-child(n + 3) { border-top: 1px solid var(--line); }
   .campaign-performance .funnel-cell:last-child { grid-column: 1 / -1; }
-  .settings-summary { grid-template-columns: minmax(0, 1fr); }
-  .settings-summary-stat { border-left: 0; border-top: 1px solid var(--line); }
+  .settings-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-summary-intro { grid-column: 1 / -1; }
+  .settings-summary-stat { border-left: 0; border-top: 1px solid var(--line); grid-column: auto; padding: var(--space-3); }
+  .settings-summary-stat:last-child { border-left: 1px solid var(--line); }
+  .settings-wrap .section-nav { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; }
+  .settings-wrap .section-nav-link { flex: 0 0 auto; scroll-snap-align: start; white-space: nowrap; }
+  .settings-wrap .settings-security-link { border-left: 0; margin: 0; padding: 11px var(--space-4); }
   .settings-wrap .channel-settings-card .settings-action, .settings-wrap .channel-settings-card .settings-action .button { width: 100%; }
+}
+@media (max-width: 640px) {
+  .inbox-page-wrap .page-header { margin-bottom: var(--space-3); }
+  .inbox-page-wrap .page-lede { display: none; }
+  .conversation-desk { height: calc(100dvh - 245px); min-height: 360px; }
 }
 /* Lives in the 340px activity sidebar, where "40 reached - 50 delivered
    (125%) - 22 clicks" never fits beside the chip on one line - the old

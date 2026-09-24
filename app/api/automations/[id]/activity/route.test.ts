@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AutomationParticipantRecord } from "@/src/lib/repository";
 import { computeFunnelSummary } from "./route";
+import { clearResolvedProfileCache } from "@/src/lib/meta/username-resolver";
 
 const mocks = vi.hoisted(() => ({
   getValidatedSession: vi.fn(),
@@ -103,6 +104,7 @@ describe("computeFunnelSummary", () => {
 
 describe("GET /api/automations/[id]/activity", () => {
   beforeEach(() => {
+    clearResolvedProfileCache();
     mocks.getValidatedSession.mockReset();
     mocks.getRepository.mockReset();
     mocks.getAutomation.mockReset();
@@ -132,8 +134,8 @@ describe("GET /api/automations/[id]/activity", () => {
     mocks.listConnections.mockResolvedValue([]);
   });
 
-  function call(id = "automation_1") {
-    return GET(new Request(`http://localhost/api/automations/${id}/activity`), { params: Promise.resolve({ id }) });
+  function call(id = "automation_1", enrich = false) {
+    return GET(new Request(`http://localhost/api/automations/${id}/activity${enrich ? "?enrich=1" : ""}`), { params: Promise.resolve({ id }) });
   }
 
   it("returns 401 when there is no owner session", async () => {
@@ -222,6 +224,7 @@ describe("GET /api/automations/[id]/activity", () => {
         },
       ],
       summary: { commented: 20_001, openingSent: 15_000, optedIn: 12_000, followed: 8_000, linkSent: 6_000 },
+      needsProfileEnrichment: false,
     });
     expect(mocks.countParticipantFunnel).toHaveBeenCalledWith("workspace_a", "automation_1");
     expect(mocks.listRecentWebhookEvents).toHaveBeenCalledWith("workspace_a", 500, "comment.created");
@@ -254,7 +257,14 @@ describe("GET /api/automations/[id]/activity", () => {
     }]);
     mocks.getUserProfile.mockResolvedValue({ username: "maya.creates" });
 
-    const response = await call();
+    const fastResponse = await call();
+    const fastBody = await fastResponse.json();
+    expect(fastBody.data[0].instagramUsername).toBeUndefined();
+    expect(fastBody.needsProfileEnrichment).toBe(true);
+    expect(mocks.getUserProfile).not.toHaveBeenCalled();
+    expect(mocks.listConnections).not.toHaveBeenCalled();
+
+    const response = await call("automation_1", true);
     const body = await response.json();
 
     expect(body.data[0].instagramUsername).toBe("maya.creates");

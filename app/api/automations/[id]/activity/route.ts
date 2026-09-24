@@ -4,7 +4,7 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { MetaClient } from "@/src/lib/meta/client";
 import type { AutomationParticipantRecord } from "@/src/lib/repository";
-import { unsealSecret } from "@/src/lib/security/secrets";
+import { cachedInstagramUsername, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 import {
   computeFunnelSummary,
   type ParticipantActivitySummary,
@@ -169,32 +169,34 @@ export async function GET(request: Request, context: RouteContext) {
 
   const unresolved = participants.filter((participant) =>
     participant.igScopedUserId && !usernamesByCommentId.has(participant.sourceCommentId));
-  if (unresolved.length > 0) {
-    const env = getServerEnv();
-    if (env.metaTokenEncryptionKey) {
-      const connections = await repository.listConnections(session.workspaceId);
-      const connectionsByAccountId = new Map(connections.map((connection) => [connection.igUserId, connection]));
-      const client = new MetaClient({ apiVersion: env.metaApiVersion });
-      const profileLookups = new Map<string, Promise<string | undefined>>();
-
-      for (const participant of unresolved.slice(0, PROFILE_LOOKUP_LIMIT)) {
-        const scopedUserId = participant.igScopedUserId;
-        const connection = connectionsByAccountId.get(participant.instagramAccountId);
-        if (!scopedUserId || !connection || connection.status !== "CONNECTED") continue;
-        const lookupKey = `${participant.instagramAccountId}:${scopedUserId}`;
-        let lookup = profileLookups.get(lookupKey);
-        if (!lookup) {
-          lookup = client.getUserProfile({
-            igUserId: connection.igUserId,
-            accessToken: unsealSecret(connection.accessTokenEncrypted, env.metaTokenEncryptionKey),
-          }, scopedUserId)
-            .then(({ username }) => username.trim().replace(/^@+/, "").slice(0, 60) || undefined)
-            .catch(() => undefined);
-          profileLookups.set(lookupKey, lookup);
-        }
-        const username = await lookup;
-        if (username) usernamesByCommentId.set(participant.sourceCommentId, username);
-      }
+  const env = getServerEnv();
+  for (const participant of unresolved) {
+    if (!participant.igScopedUserId) continue;
+    const cached = cachedInstagramUsername({
+      instagramAccountId: participant.instagramAccountId,
+      igScopedUserId: participant.igScopedUserId,
+    }, env.metaApiVersion);
+    if (cached) usernamesByCommentId.set(participant.sourceCommentId, cached);
+  }
+  const missing = unresolved.filter((participant) => !usernamesByCommentId.has(participant.sourceCommentId));
+  if (new URL(request.url).searchParams.get("enrich") === "1" && missing.length > 0 && env.metaTokenEncryptionKey) {
+    const connections = await repository.listConnections(session.workspaceId);
+    const identities = missing.flatMap((participant) => participant.igScopedUserId ? [{
+      instagramAccountId: participant.instagramAccountId,
+      igScopedUserId: participant.igScopedUserId,
+    }] : []);
+    const resolved = await resolveInstagramUsernames({
+      identities,
+      events: [],
+      connections,
+      client: new MetaClient({ apiVersion: env.metaApiVersion }),
+      tokenEncryptionKey: env.metaTokenEncryptionKey,
+      lookupLimit: PROFILE_LOOKUP_LIMIT,
+      apiVersion: env.metaApiVersion,
+    });
+    for (const participant of missing) {
+      const username = resolved.get(`${participant.instagramAccountId}:${participant.igScopedUserId}`);
+      if (username) usernamesByCommentId.set(participant.sourceCommentId, username);
     }
   }
 
@@ -202,5 +204,6 @@ export async function GET(request: Request, context: RouteContext) {
     data: participants.map((participant) =>
       toActivitySummary(participant, usernamesByCommentId.get(participant.sourceCommentId))),
     summary,
+    needsProfileEnrichment: missing.length > 0 && new URL(request.url).searchParams.get("enrich") !== "1",
   });
 }

@@ -437,12 +437,14 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/automations/${automationId}/activity`)
+    const controller = new AbortController();
+    fetch(`/api/automations/${automationId}/activity`, { signal: controller.signal })
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as {
           data?: ParticipantActivitySummary[] | FacebookPageActivitySummary[];
           channel?: { provider?: string; surface?: string };
           summary?: ParticipantFunnelSummary;
+          needsProfileEnrichment?: boolean;
           error?: string;
         };
         if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load activity");
@@ -458,6 +460,19 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
           }
           setError("");
         }
+        if (active && payload.needsProfileEnrichment) {
+          void fetch(`/api/automations/${automationId}/activity?enrich=1`, { signal: controller.signal })
+            .then(async (response) => response.ok ? response.json() as Promise<{ data?: ParticipantActivitySummary[] }> : null)
+            .then((enriched) => {
+              if (!active || !enriched?.data) return;
+              const names = new Map(enriched.data.map((item) => [item.id, item.instagramUsername]));
+              setParticipants((current) => current?.map((item) => ({
+                ...item,
+                ...(names.get(item.id) ? { instagramUsername: names.get(item.id) } : {}),
+              })) ?? null);
+            })
+            .catch(() => {});
+        }
       })
       .catch((caught: unknown) => {
         if (active) setError(caught instanceof Error ? caught.message : "Could not load activity");
@@ -467,6 +482,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [automationId, reloadKey]);
 
