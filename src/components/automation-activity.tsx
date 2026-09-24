@@ -190,7 +190,9 @@ function Diagnostic({ label, tone, detail }: { label: string; tone: Tone; detail
 function FunnelStrip({ summary }: { summary: ParticipantFunnelSummary }) {
   const total = Math.max(1, summary.commented);
   return (
-    <div className="funnel-strip" aria-label="Campaign funnel">
+    <section className="campaign-performance" aria-label="Campaign funnel">
+      <div className="campaign-performance-heading"><div><p className="eyebrow">Performance overview</p><h2>From comment to delivery</h2><p>Each stage shows the people who reached it. Percentages compare with the previous stage.</p></div><strong>{Math.round((summary.linkSent / total) * 100)}% <span>overall delivery</span></strong></div>
+      <div className="funnel-strip">
       {FUNNEL_STAGES.map((stage, index) => {
         const count = summary[stage.key];
         const reach = Math.round((count / total) * 100);
@@ -198,8 +200,9 @@ function FunnelStrip({ summary }: { summary: ParticipantFunnelSummary }) {
         const conversion = previous && previous > 0 ? Math.round((count / previous) * 100) : null;
         return (
           <div className="funnel-cell" key={stage.key}>
+            <span className="funnel-step-number">{String(index + 1).padStart(2, "0")}</span>
             <div className="funnel-cell-head">
-              <strong>{count}</strong>
+              <strong>{count.toLocaleString()}</strong>
               {conversion !== null && (
                 <span
                   className={`funnel-conv${conversion < 50 ? " is-low" : ""}`}
@@ -214,7 +217,8 @@ function FunnelStrip({ summary }: { summary: ParticipantFunnelSummary }) {
           </div>
         );
       })}
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -410,6 +414,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [query, setQuery] = useState("");
   const [campaign, setCampaign] = useState<CampaignContext | null>(null);
+  const [visibleCount, setVisibleCount] = useState(25);
 
   async function retryParticipant(participantId: string) {
     setRetryingId(participantId);
@@ -519,10 +524,11 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
   // the caption renders once per group, and each row can foreground who the
   // person is (a short id, when they showed up, their A/B variant) rather
   // than what they already told you at the top of the group.
+  const visibleParticipants = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
   const groups = useMemo(() => {
     const order: string[] = [];
     const byMedia = new Map<string, ParticipantActivitySummary[]>();
-    for (const p of filtered) {
+    for (const p of visibleParticipants) {
       const key = p.sourceMediaSnapshot.id;
       if (!byMedia.has(key)) {
         order.push(key);
@@ -534,7 +540,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
       const rows = byMedia.get(key)!;
       return { key, media: rows[0].sourceMediaSnapshot, participants: rows };
     });
-  }, [filtered]);
+  }, [visibleParticipants]);
 
   if (error && !participants) return <p className="form-error" role="alert">{error}</p>;
 
@@ -579,8 +585,8 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
         <p className="activity-clicks" title="Click rate across the participants currently loaded">
           <MousePointerClick size={14} aria-hidden="true" />
           {clickStats.delivered === 0
-            ? "Link clicks appear once the first delivery goes out."
-            : `${clickStats.clicked} of ${clickStats.delivered} delivered clicked the link (${clickStats.rate}%).`}
+            ? "The latest loaded participants have no completed link deliveries."
+            : `${clickStats.clicked} of ${clickStats.delivered} latest delivered links were clicked (${clickStats.rate}%).`}
         </p>
       )}
 
@@ -591,6 +597,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
       )}
 
       <div className="feed-toolbar">
+        <div className="feed-toolbar-title"><p className="eyebrow">Activity log</p><h2>Participants</h2></div>
         <div className="filter-chips" role="group" aria-label="Filter by status">
           {FEED_FILTERS.map((filter) => (
             <button
@@ -598,7 +605,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
               type="button"
               className={`filter-chip${feedFilter === filter.key ? " is-on" : ""}`}
               aria-pressed={feedFilter === filter.key}
-              onClick={() => setFeedFilter(filter.key)}
+              onClick={() => { setFeedFilter(filter.key); setVisibleCount(25); }}
             >
               {filter.label}
               <span className="chip-count">{filterCounts[filter.key]}</span>
@@ -612,7 +619,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
             <input
               type="search"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => { setQuery(event.target.value); setVisibleCount(25); }}
               placeholder="Search keyword or caption"
               aria-label="Search participants"
             />
@@ -669,6 +676,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
           ))}
         </div>
       )}
+      {filtered.length > visibleCount && <button className="button button-secondary activity-show-more" type="button" onClick={() => setVisibleCount((count) => count + 25)}>Show 25 more participants</button>}
     </div>
   );
 }

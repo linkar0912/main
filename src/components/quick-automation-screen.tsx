@@ -22,6 +22,12 @@ type MediaPage = {
   error?: string;
 };
 
+const REELS_FRESH_FOR_MS = 120_000;
+let reelsCache: { data: QuickMedia[]; after?: string; fetchedAt: number; fetcher: typeof fetch } | undefined;
+function readReelsCache() {
+  return reelsCache?.fetcher === fetch ? reelsCache : undefined;
+}
+
 const commentTemplates = basicAutomationTemplates.filter(
   (template) => template.provider === "INSTAGRAM" && template.surface === "COMMENT",
 );
@@ -38,10 +44,10 @@ function formatDate(timestamp: string): string {
 
 export function QuickAutomationScreen() {
   const router = useRouter();
-  const [reels, setReels] = useState<QuickMedia[]>([]);
+  const [reels, setReels] = useState<QuickMedia[]>(() => readReelsCache()?.data ?? []);
   const [selectedId, setSelectedId] = useState("");
-  const [cursor, setCursor] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
+  const [cursor, setCursor] = useState<string | undefined>(() => readReelsCache()?.after);
+  const [loading, setLoading] = useState(() => !readReelsCache());
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const flowStageRef = useRef<HTMLElement>(null);
@@ -51,7 +57,9 @@ export function QuickAutomationScreen() {
     const response = await fetch(url, { signal });
     const payload = (await response.json().catch(() => ({}))) as MediaPage;
     if (!response.ok) throw new Error(payload.error ?? "Could not load your Reels");
+    if (signal?.aborted) return;
     const nextReels = (payload.data ?? []).filter((media) => media.mediaProductType === "REELS");
+    if (!after) reelsCache = { data: nextReels, after: payload.paging?.after, fetchedAt: Date.now(), fetcher: fetch };
     setReels((current) => {
       const byId = new Map(current.map((item) => [item.id, item]));
       for (const reel of nextReels) byId.set(reel.id, reel);
@@ -62,6 +70,8 @@ export function QuickAutomationScreen() {
   }, []);
 
   useEffect(() => {
+    const cached = readReelsCache();
+    if (cached && Date.now() - cached.fetchedAt < REELS_FRESH_FOR_MS) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       void loadPage(undefined, controller.signal)
@@ -135,7 +145,7 @@ export function QuickAutomationScreen() {
             <div><h2 id="choose-reel-heading">Choose a Reel</h2><p>Your latest published Reels appear first.</p></div>
           </div>
 
-          {loading ? (
+          {loading && reels.length === 0 ? (
             <div className="quick-reel-grid" aria-label="Loading Reels">
               {[0, 1, 2, 3].map((item) => <div className="quick-reel-skeleton" key={item} aria-hidden />)}
             </div>

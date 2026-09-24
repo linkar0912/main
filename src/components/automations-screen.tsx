@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, Workflow } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { AutomationList, useAutomations } from "./automation-list";
 import { CreateAutomationButton } from "./create-automation-button";
 import { DeliveryDiagnostics } from "./delivery-diagnostics";
@@ -8,7 +9,8 @@ import { ContextHelpLink } from "./context-help-link";
 import type { AutomationRecord } from "@/src/lib/repository";
 
 export function AutomationsScreen({ initialAutomations }: { initialAutomations?: AutomationRecord[] } = {}) {
-  const { automations, loading, error, setStatus, reload } = useAutomations(initialAutomations);
+  const router = useRouter();
+  const { automations, loading, error, setStatus, reload, addAutomation } = useAutomations(initialAutomations);
 
   async function duplicateAutomation(id: string) {
     const response = await fetch(`/api/automations/${id}/duplicate`, { method: "POST" });
@@ -16,7 +18,9 @@ export function AutomationsScreen({ initialAutomations }: { initialAutomations?:
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       throw new Error(payload.error ?? "Could not duplicate this automation.");
     }
-    await reload();
+    const payload = (await response.json()) as { data: AutomationRecord };
+    addAutomation(payload.data);
+    router.push(`/automations/${payload.data.id}/edit`);
   }
 
   async function deleteAutomation(id: string) {

@@ -144,7 +144,7 @@ describe("normalizeWebhook", () => {
         id: "postback_1",
         accountId: "ig_business_1",
         type: "postback.received",
-        text: "recheck-value",
+        text: "Check again",
         interactionPayload: "recheck-value",
         recipientId: "igsid_2",
         timestamp: 1710000002,

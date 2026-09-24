@@ -1089,6 +1089,7 @@ a.setup-row:hover .setup-cta, button.setup-row:hover .setup-cta { color: var(--i
 .full-list-panel { padding: var(--space-4) 0; }
 .loading-line { animation: pulse 1.2s ease-in-out infinite alternate; background: var(--surface-sunk); border-radius: 6px; height: 54px; margin: 10px 0; }
 .loading-line.short { width: 72%; }
+.inbox-workspace [hidden] { display: none !important; }
 
 /* Automation section layout (My Automations / Templates / Sequences) */
 .section-layout { align-items: start; display: grid; gap: var(--space-7, 30px); grid-template-columns: 232px minmax(0, 1fr); }
@@ -2567,6 +2568,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .settings-summary-stat:first-of-type { border-left: 0; }
   .connected-channels-list { grid-template-columns: minmax(0, 1fr); }
 }
+@media (max-width: 1020px) {
+  .settings-wrap .section-layout { grid-template-columns: minmax(0, 1fr); }
+}
 
 @media (max-width: 700px) {
   .profile-card,
@@ -3424,6 +3428,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .conversation-search:focus-within { background: var(--panel); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .12); }
 .conversation-search input { background: transparent; border: 0; color: var(--ink); min-width: 0; outline: 0; width: 100%; }
 .conversation-contact-list { list-style: none; margin: 0; overflow-y: auto; padding: 0; }
+.conversation-filter-loading { display: grid; gap: 1px; padding: var(--space-3); }
+.conversation-filter-loading .skeleton-block { display: block; height: 68px; width: 100%; }
 .conversation-contact-list li + li { border-top: 1px solid var(--line); }
 .conversation-contact-list button { align-items: center; background: transparent; border: 0; color: inherit; display: grid; gap: var(--space-3); grid-template-columns: 42px minmax(0, 1fr); min-height: 82px; padding: 14px var(--space-4); text-align: left; width: 100%; }
 .conversation-contact-list button:hover { background: color-mix(in srgb, var(--accent) 5%, var(--panel)); }
@@ -3443,6 +3449,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .conversation-load-more:disabled,
 .conversation-load-earlier:disabled { color: var(--subtle); }
 .conversation-roster-empty, .conversation-blank, .conversation-empty, .conversation-loading { color: var(--muted); display: grid; gap: var(--space-3); justify-items: center; margin: auto; max-width: 320px; padding: var(--space-6); text-align: center; }
+.conversation-loading { justify-items: stretch; margin: 0; max-width: none; width: 100%; }
+.conversation-message-skeleton { display: block; width: min(62%, 380px); height: 68px; border-radius: 18px; }
+.conversation-message-skeleton.is-reply { width: min(48%, 300px); margin-left: auto; }
 .conversation-roster-empty p, .conversation-blank p, .conversation-empty p { font-size: .8rem; margin: 0; }
 .conversation-panel { background: var(--surface-soft); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .conversation-blank span { align-items: center; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); display: flex; height: 54px; justify-content: center; width: 54px; }
@@ -3586,9 +3595,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .inbox-page-wrap { padding-inline: 0; }
   .inbox-page-wrap .page-header { padding-inline: var(--space-4); }
   .inbox-tabs { margin-inline: var(--space-4); max-width: calc(100vw - 32px); overflow-x: auto; }
-  .conversation-desk { border-left: 0; border-radius: 0; border-right: 0; height: calc(100svh - 166px); }
+  .conversation-desk { border-left: 0; border-radius: 0; border-right: 0; height: calc(100dvh - 166px); min-height: 360px; }
   .conversation-messages { padding: var(--space-4); }
-  .conversation-compose { padding-inline: var(--space-3); }
+  .conversation-compose { padding-inline: var(--space-3); padding-bottom: max(var(--space-3), env(safe-area-inset-bottom)); }
   .conversation-compose-row > button span { display: none; }
   .conversation-compose-row > button { padding-inline: 15px; }
   .contact-detail-drawer { border-radius: 0; max-width: 100%; }
@@ -3612,6 +3621,77 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 
 /* A/B report */
 .warning-text { color: var(--warning-ink); }
+
+/* Campaign analytics: a readable summary before the detailed activity log. */
+.campaign-analytics-page { max-width: 1480px; }
+.campaign-analytics-page > .page-header { margin-bottom: var(--space-5); }
+.campaign-analytics-page .page-header h1 { font-size: clamp(2.1rem, 3vw, 3.2rem); }
+.campaign-analytics-page .page-lede { max-width: 680px; }
+.campaign-analytics-page .activity-layout { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+.campaign-analytics-page .activity-side { position: static; }
+.campaign-analytics-page .insights-stack { display: grid; gap: var(--space-4); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.campaign-analytics-page .insights-stack > * { min-width: 0; }
+.campaign-analytics-page .side-panel { box-shadow: none; margin: 0; }
+.campaign-performance { background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); overflow: hidden; }
+.campaign-performance-heading { align-items: end; display: flex; gap: var(--space-4); justify-content: space-between; padding: var(--space-5) var(--space-6); }
+.campaign-performance-heading .eyebrow { margin-bottom: 6px; }
+.campaign-performance-heading h2 { font-size: clamp(1.2rem, 2vw, 1.7rem); margin: 0 0 4px; }
+.campaign-performance-heading p:last-child { color: var(--muted); font-size: .76rem; margin: 0; }
+.campaign-performance-heading > strong { color: var(--ink); flex: 0 0 auto; font-size: 1.45rem; line-height: 1; text-align: right; }
+.campaign-performance-heading > strong span { color: var(--muted); display: block; font-size: .62rem; font-weight: 700; margin-top: 7px; }
+.campaign-performance .funnel-strip { border-top: 1px solid var(--line); gap: 0; }
+.campaign-performance .funnel-cell { border: 0; border-radius: 0; min-height: 150px; padding: var(--space-5); position: relative; }
+.campaign-performance .funnel-cell + .funnel-cell { border-left: 1px solid var(--line); }
+.campaign-performance .funnel-step-number { color: var(--subtle); font-size: .63rem; font-weight: 800; letter-spacing: .1em; }
+.campaign-performance .funnel-cell-head strong { font-size: clamp(1.55rem, 2.7vw, 2.35rem); }
+.campaign-performance .funnel-cell-label { min-height: auto; }
+.campaign-performance .funnel-cell-bar { height: 6px; margin-top: auto; }
+.campaign-performance .funnel-cell-bar > span { background: var(--accent); }
+.campaign-performance .funnel-cell:last-child { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.campaign-performance .funnel-cell:last-child .funnel-cell-bar > span { background: var(--ink); }
+.campaign-analytics-page .feed-toolbar { background: var(--panel); border: 1px solid var(--line-strong); gap: var(--space-4); padding: var(--space-4); }
+.feed-toolbar-title { flex: 1 0 100%; }
+.feed-toolbar-title .eyebrow { margin-bottom: 4px; }
+.feed-toolbar-title h2 { font-size: 1.25rem; margin: 0; }
+.activity-show-more { justify-self: center; margin-bottom: var(--space-3); }
+
+/* Settings: one calm surface and compact channel management. */
+.settings-wrap { max-width: 1420px; }
+.settings-wrap .page-header h1 { font-size: clamp(2.1rem, 3vw, 3.2rem); }
+.settings-wrap .page-lede { max-width: 640px; }
+.settings-summary { background: var(--panel); border-color: var(--line-strong); color: var(--ink); grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(170px, .65fr)); margin-bottom: var(--space-5); }
+[data-theme="dark"] .settings-summary { background: var(--panel); }
+.settings-summary-intro, .settings-summary-stat { padding: var(--space-4) var(--space-5); }
+.settings-summary-intro > p { color: var(--muted); font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; }
+.settings-summary-intro > strong { font-size: 1.1rem; }
+.settings-summary-stat { border-left-color: var(--line); }
+.settings-summary-stat small { color: var(--muted); }
+.settings-summary-stat > svg { color: var(--accent); }
+.settings-wrap .section-layout { gap: var(--space-5); grid-template-columns: 200px minmax(0, 1fr); }
+.settings-wrap .section-nav { box-shadow: none; }
+.settings-wrap .section-nav-link { font-size: .8rem; }
+.settings-wrap .connected-channels-heading { margin-bottom: var(--space-2); }
+.settings-wrap .channel-settings-card { box-shadow: none; gap: var(--space-3); }
+.settings-wrap .channel-settings-header { align-items: center; flex-direction: row; flex-wrap: wrap; gap: var(--space-3); }
+.settings-wrap .channel-identity { flex: 1 1 240px; }
+.settings-wrap .channel-settings-card .settings-action { width: auto; }
+.settings-wrap .channel-settings-card .settings-action .button { white-space: nowrap; width: auto; }
+@media (max-width: 1080px) {
+  .campaign-analytics-page .insights-stack { grid-template-columns: minmax(0, 1fr); }
+  .settings-wrap .connected-channels-list { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .campaign-performance-heading { align-items: start; flex-direction: column; padding: var(--space-4); }
+  .campaign-performance-heading > strong { text-align: left; }
+  .campaign-performance .funnel-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campaign-performance .funnel-cell { min-height: 130px; padding: var(--space-4); }
+  .campaign-performance .funnel-cell:nth-child(odd) { border-left: 0; }
+  .campaign-performance .funnel-cell:nth-child(n + 3) { border-top: 1px solid var(--line); }
+  .campaign-performance .funnel-cell:last-child { grid-column: 1 / -1; }
+  .settings-summary { grid-template-columns: minmax(0, 1fr); }
+  .settings-summary-stat { border-left: 0; border-top: 1px solid var(--line); }
+  .settings-wrap .channel-settings-card .settings-action, .settings-wrap .channel-settings-card .settings-action .button { width: 100%; }
+}
 /* Lives in the 340px activity sidebar, where "40 reached - 50 delivered
    (125%) - 22 clicks" never fits beside the chip on one line - the old
    single-row flex (space-between + center) left the chip stranded next to

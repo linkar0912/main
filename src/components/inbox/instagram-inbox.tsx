@@ -67,7 +67,7 @@ function optimisticContact(contact: InboxContact, operation: InboxOperation): In
   return { ...contact, assigneeUserId: operation.assigneeUserId ?? undefined };
 }
 
-type InboxPayload = { data?: { contacts: InboxContact[]; members?: InboxMember[]; nextCursor?: string }; error?: string };
+type InboxPayload = { data?: { contacts: InboxContact[]; members?: InboxMember[]; nextCursor?: string; needsProfileEnrichment?: boolean }; error?: string };
 type ConversationPayload = { data?: { messages: InboxMessage[]; nextCursor?: string }; error?: string };
 
 type InboxListSnapshot = {
@@ -119,9 +119,9 @@ function mutateInboxCache(filters: InboxFiltersValue, contactId: string, operati
 
 /** A contact-first, text-only Instagram conversation desk. */
 export function InstagramInbox() {
-  const [contacts, setContacts] = useState<InboxContact[]>([]);
-  const [members, setMembers] = useState<InboxMember[]>([]);
-  const [nextCursor, setNextCursor] = useState<string>();
+  const [contacts, setContacts] = useState<InboxContact[]>(() => readInboxCache(DEFAULT_FILTERS).snapshot?.contacts ?? []);
+  const [members, setMembers] = useState<InboxMember[]>(() => readInboxCache(DEFAULT_FILTERS).snapshot?.members ?? []);
+  const [nextCursor, setNextCursor] = useState<string | undefined>(() => readInboxCache(DEFAULT_FILTERS).snapshot?.nextCursor);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
@@ -129,6 +129,7 @@ export function InstagramInbox() {
   const [draft, setDraft] = useState("");
   const [loaded, setLoaded] = useState(() => readInboxCache(DEFAULT_FILTERS).snapshot !== undefined);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [filterLoading, setFilterLoading] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [olderLoading, setOlderLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -174,6 +175,21 @@ export function InstagramInbox() {
           members: payload.data.members ?? [],
           nextCursor: payload.data.nextCursor,
         });
+        if (payload.data.needsProfileEnrichment) {
+          const enrichUrl = new URL(inboxUrl(filters), window.location.origin);
+          enrichUrl.searchParams.set("enrich", "1");
+          void fetch(enrichUrl.pathname + enrichUrl.search, { signal: controller.signal })
+            .then(async (response) => response.ok ? (await response.json() as InboxPayload).data : undefined)
+            .then((enriched) => {
+              if (!enriched || controller.signal.aborted || contactsAbortRef.current !== controller) return;
+              const details = new Map(enriched.contacts.map((contact) => [contact.id, contact]));
+              setContacts((current) => {
+                const next = current.map((contact) => ({ ...contact, username: details.get(contact.id)?.username ?? contact.username, avatarUrl: details.get(contact.id)?.avatarUrl || contact.avatarUrl }));
+                writeInboxCache(filters, { contacts: next, members: payload.data!.members ?? [], nextCursor: payload.data!.nextCursor });
+                return next;
+              });
+            }).catch(() => undefined);
+        }
       }
       setError("");
     } catch (caught) {
@@ -183,6 +199,7 @@ export function InstagramInbox() {
       if (!controller.signal.aborted && contactsAbortRef.current === controller) {
         setLoaded(true);
         setLoadingMore(false);
+        setFilterLoading(false);
       }
     }
   }, [filters]);
@@ -308,15 +325,20 @@ export function InstagramInbox() {
   }
 
   if (!loaded) return <ActivityContentSkeleton />;
-  if (error && contacts.length === 0) return <p className="form-error" role="alert">{error}</p>;
 
   return <section className={`conversation-desk ${selected ? "has-conversation" : ""}`} aria-label="Instagram inbox conversations">
     <aside className="conversation-roster" aria-label="Contacts">
       <div className="conversation-roster-head">
         <div><h2>Instagram</h2><span>{contacts.length}{nextCursor ? "+" : ""} contact{contacts.length === 1 ? "" : "s"}</span></div>
-        <InboxFilters value={filters} labels={labels} onChange={(next) => { conversationAbortRef.current?.abort(); activeContactIdRef.current = null; setSelectedId(null); setFilters(next); }} />
+        <InboxFilters value={filters} labels={labels} onChange={(next) => {
+          conversationAbortRef.current?.abort(); activeContactIdRef.current = null; setSelectedId(null);
+          const snapshot = readInboxCache(next).snapshot;
+          setContacts(snapshot?.contacts ?? []); setMembers(snapshot?.members ?? []);
+          setNextCursor(snapshot?.nextCursor); setFilterLoading(!snapshot); setFilters(next);
+        }} />
       </div>
-      {contacts.length === 0 ? <div className="conversation-roster-empty"><Inbox size={21} /><p>No conversations match these filters.</p></div> : <>
+      {error && contacts.length === 0 && <p className="form-error" role="alert">{error}</p>}
+      {filterLoading ? <div className="conversation-filter-loading" aria-label="Loading conversations" aria-busy="true">{[0, 1, 2, 3].map((index) => <span className="skeleton-block" key={index} />)}</div> : contacts.length === 0 ? <div className="conversation-roster-empty"><Inbox size={21} /><p>No conversations match these filters.</p></div> : <>
         <ul className="conversation-contact-list">
           {contacts.map((contact) => <li key={contact.id}>
             <button type="button" className={selectedId === contact.id ? "is-selected" : ""} aria-label={`Open conversation with ${displayName(contact)}`} onClick={() => void openConversation(contact)}>
@@ -344,7 +366,7 @@ export function InstagramInbox() {
         </header>
         <div className="conversation-messages" ref={messagesRef} aria-label={`Conversation with ${displayName(selected)}`} aria-live="polite">
           {messageCursor && <button className="conversation-load-earlier" type="button" aria-label="Load earlier messages" disabled={olderLoading} onClick={() => void loadEarlier()}>{olderLoading ? "Loading…" : "Load earlier messages"}</button>}
-          {conversationLoading ? <div className="conversation-loading">Loading conversation…</div> : messages.length === 0 ? <div className="conversation-empty"><p>No messages with this contact yet.</p></div> : messages.map((message) => <article className={`conversation-message is-${message.direction}`} key={message.id}>
+          {conversationLoading ? <div className="conversation-loading" aria-label="Loading conversation" aria-busy="true"><span className="skeleton-block conversation-message-skeleton" /><span className="skeleton-block conversation-message-skeleton is-reply" /><span className="skeleton-block conversation-message-skeleton" /></div> : messages.length === 0 ? <div className="conversation-empty"><p>No messages with this contact yet.</p></div> : messages.map((message) => <article className={`conversation-message is-${message.direction}`} key={message.id}>
             <p>{message.text}</p><footer><time dateTime={message.at}>{formatMessageTime(message.at)}</time>{message.direction === "outbound" && <span>{message.status}</span>}</footer>{message.error && <small>{message.error}</small>}
           </article>)}
           <div ref={messageEndRef} />

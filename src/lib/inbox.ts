@@ -1,4 +1,5 @@
 import { isWithinMessagingWindow } from "./messaging-window";
+import { decodeInteractionPayloadShape, isCanonicalBase64Url } from "./automation/postback";
 import type { AutomationContactRecord, OutboundDeliveryRecord, WebhookEventRecord } from "./repository";
 
 const MESSAGE_EVENT_TYPES = new Set([
@@ -39,9 +40,19 @@ function inboundIdentity(event: WebhookEventRecord): string | undefined {
   return accountId && personId ? identityKey(accountId, personId) : undefined;
 }
 
+export function presentInboxText(value: string): string {
+  const text = value.trim();
+  const parts = text.split(".");
+  if (parts.length === 2 && parts[0].length < 1024 && parts[1].length === 43 && isCanonicalBase64Url(parts[1])) {
+    const interaction = decodeInteractionPayloadShape(parts[0]);
+    if (interaction) return interaction.action === "opt_in" ? "Tapped the opt-in button" : "Checked follow status";
+  }
+  return text;
+}
+
 function eventText(event: WebhookEventRecord): string {
   return typeof event.payload.text === "string" && event.payload.text.trim()
-    ? event.payload.text.trim()
+    ? presentInboxText(event.payload.text)
     : event.eventType === "story_mention.received"
       ? "Mentioned you in a story"
       : "Instagram interaction";

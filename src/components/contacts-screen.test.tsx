@@ -8,6 +8,7 @@ const { ContactsScreen } = await import("./contacts-screen");
 const contacts = [
   {
     id: "contact_1",
+    avatarUrl: "/api/contacts/contact_1/avatar",
     email: "maya@example.com",
     igScopedUserId: "person_123456",
     instagramAccountId: "ig_1",

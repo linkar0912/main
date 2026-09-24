@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AutomationContactRecord, OutboundDeliveryRecord, WebhookEventRecord } from "./repository";
-import { buildConversation, buildInboxContacts } from "./inbox";
+import { buildConversation, buildInboxContacts, presentInboxText } from "./inbox";
+import { createInteractionPayload } from "./automation/postback";
 
 const contact: AutomationContactRecord = {
   id: "contact_1",
@@ -28,6 +29,12 @@ const inbound: WebhookEventRecord = {
 };
 
 describe("inbox projections", () => {
+  it("shows readable labels for signed interaction payloads in old conversations", () => {
+    const payload = createInteractionPayload({ participantId: "participant_1", action: "recheck" }, "test-secret");
+    expect(presentInboxText(payload)).toBe("Checked follow status");
+    expect(buildConversation(contact, [], [{ ...inbound, payload: { ...inbound.payload, text: payload } }])[0].text).toBe("Checked follow status");
+    expect(presentInboxText("A normal message. With punctuation")).toBe("A normal message. With punctuation");
+  });
   it("keeps every contact visible even when only one has a recent message", () => {
     const untouched = { ...contact, id: "contact_2", igScopedUserId: "person_2", lastSeenAt: "2026-08-15T10:00:00.000Z" };
 

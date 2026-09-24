@@ -13,6 +13,7 @@ type ContactRow = {
   instagramAccountId: string;
   igScopedUserId: string;
   instagramUsername?: string;
+  avatarUrl?: string;
   email?: string;
   state: string;
   tags: string[];
@@ -108,13 +109,16 @@ export function ContactsScreen() {
     }
 
     const knownUsernames = new Map((cached?.contacts ?? []).filter((contact) => contact.instagramUsername).map((contact) => [contact.id, contact.instagramUsername]));
+    const knownAvatars = new Map((cached?.contacts ?? []).filter((contact) => contact.avatarUrl).map((contact) => [contact.id, contact.avatarUrl]));
     const apply = (snapshot: ContactsSnapshot) => {
       if (cancelled) return;
       const contacts = snapshot.contacts.map((contact) => ({
         ...contact,
         instagramUsername: contact.instagramUsername ?? knownUsernames.get(contact.id),
+        avatarUrl: contact.avatarUrl ?? knownAvatars.get(contact.id),
       }));
       for (const contact of contacts) if (contact.instagramUsername) knownUsernames.set(contact.id, contact.instagramUsername);
+      for (const contact of contacts) if (contact.avatarUrl) knownAvatars.set(contact.id, contact.avatarUrl);
       contactsCache.snapshot = { ...snapshot, contacts };
       setContacts(contacts);
       setCounts(snapshot.counts);
@@ -125,10 +129,12 @@ export function ContactsScreen() {
       if (cancelled) return;
       for (const contact of snapshot.contacts) {
         if (contact.instagramUsername) knownUsernames.set(contact.id, contact.instagramUsername);
+        if (contact.avatarUrl) knownAvatars.set(contact.id, contact.avatarUrl);
       }
       const withNames = (contacts: ContactRow[]) => contacts.map((contact) => ({
         ...contact,
         instagramUsername: knownUsernames.get(contact.id) ?? contact.instagramUsername,
+        avatarUrl: knownAvatars.get(contact.id) ?? contact.avatarUrl,
       }));
       setContacts(withNames);
       if (contactsCache.snapshot) {
@@ -255,8 +261,8 @@ export function ContactsScreen() {
               {visible.map((contact) => (
                 <li key={contact.id} className="contact-row">
                   <div className="contact-primary">
-                    <SocialAvatar channel="instagram" name={contactName(contact)} src={`/api/contacts/${contact.id}/avatar`} />
-                    <span><strong>{contactName(contact)}</strong><small>{[contact.email, ...contact.tags].filter(Boolean).join(" · ") || contact.state.toLowerCase()}</small></span>
+                    <SocialAvatar channel="instagram" name={contactName(contact)} src={contact.avatarUrl} />
+                    <span><strong>{contactName(contact)}</strong><small>{[contact.email, ...contact.tags].filter(Boolean).join(" · ") || (contact.state === "NONE" ? "No activity yet" : contact.state.toLowerCase().replaceAll("_", " "))}</small></span>
                   </div>
                   <span className={`status-pill is-${contact.leadStatus.toLowerCase()}`}>{STATUS_LABELS[contact.leadStatus]}</span>
                   <span className="contact-score">{contact.score} pts{contact.suppressedAt ? " · opted out" : ""}</span>

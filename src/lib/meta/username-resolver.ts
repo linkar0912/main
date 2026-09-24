@@ -87,6 +87,17 @@ export function instagramIdentityKey(identity: InstagramIdentity): string {
   return `${identity.instagramAccountId}:${identity.igScopedUserId}`;
 }
 
+/** Read an already resolved name without starting a Meta request. */
+export function cachedInstagramUsername(identity: InstagramIdentity, apiVersion?: string): string | undefined {
+  const cached = profileLookupCache.get(profileCacheKey(apiVersion, identity));
+  return cached && cached.expiresAt > Date.now() ? cached.value?.username : undefined;
+}
+
+export function hasCachedInstagramAvatar(identity: InstagramIdentity, apiVersion?: string): boolean {
+  const cached = profileLookupCache.get(profileCacheKey(apiVersion, identity));
+  return Boolean(cached && cached.expiresAt > Date.now() && cached.value?.profilePictureUrl);
+}
+
 function cleanUsername(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   return value.trim().replace(/^@+/, "").slice(0, 60) || undefined;
@@ -110,6 +121,12 @@ export async function resolveInstagramUsernames(options: {
     if (!instagramAccountId || !igScopedUserId || !username) continue;
     const key = instagramIdentityKey({ instagramAccountId, igScopedUserId });
     if (!usernames.has(key)) usernames.set(key, username);
+  }
+
+  for (const identity of options.identities) {
+    const key = instagramIdentityKey(identity);
+    const cached = cachedInstagramUsername(identity, options.apiVersion);
+    if (cached && !usernames.has(key)) usernames.set(key, cached);
   }
 
   if (!options.client || !options.tokenEncryptionKey || !options.connections?.length) return usernames;

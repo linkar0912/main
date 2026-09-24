@@ -6,13 +6,14 @@ import { InstagramInbox } from "./instagram-inbox";
 
 export function InboxWorkspace() {
   const [active, setActive] = useState<"instagram" | "facebook">("instagram");
+  const [facebookOpened, setFacebookOpened] = useState(false);
+  function selectFacebook() { setFacebookOpened(true); setActive("facebook"); }
   return <div className="inbox-workspace">
     <div className="inbox-tabs" role="tablist" aria-label="Inbox channels">
-      <button type="button" role="tab" id="instagram-tab" aria-controls={active === "instagram" ? "instagram-panel" : undefined} aria-selected={active === "instagram"} onClick={() => setActive("instagram")}>Instagram conversations</button>
-      <button type="button" role="tab" id="facebook-tab" aria-controls={active === "facebook" ? "facebook-panel" : undefined} aria-selected={active === "facebook"} onClick={() => setActive("facebook")}>Facebook activity</button>
+      <button type="button" role="tab" id="instagram-tab" aria-controls="instagram-panel" aria-selected={active === "instagram"} onClick={() => setActive("instagram")}>Instagram conversations</button>
+      <button type="button" role="tab" id="facebook-tab" aria-controls="facebook-panel" aria-selected={active === "facebook"} onClick={selectFacebook}>Facebook activity</button>
     </div>
-    <div role="tabpanel" id={`${active}-panel`} aria-labelledby={`${active}-tab`} tabIndex={0}>
-      {active === "instagram" ? <InstagramInbox /> : <FacebookActivity />}
-    </div>
+    <div role="tabpanel" id="instagram-panel" aria-labelledby="instagram-tab" tabIndex={active === "instagram" ? 0 : -1} hidden={active !== "instagram"}><InstagramInbox /></div>
+    <div role="tabpanel" id="facebook-panel" aria-labelledby="facebook-tab" tabIndex={active === "facebook" ? 0 : -1} hidden={active !== "facebook"}>{facebookOpened && <FacebookActivity />}</div>
   </div>;
 }

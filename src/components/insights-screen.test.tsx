@@ -76,7 +76,7 @@ describe("InsightsScreen", () => {
     expect(within(screen.getByRole("group", { name: "Emails captured" })).getByText("7")).toBeTruthy();
     expect(screen.getByRole("img", { name: /daily replies sent and people reached/i })).toBeTruthy();
     expect(screen.getByRole("table", { name: "Top content performance" })).toBeTruthy();
-    expect(screen.getByText("reel_launch")).toBeTruthy();
+    expect(screen.getByText("Instagram post · launch")).toBeTruthy();
     expect(screen.getByRole("link", { name: /export csv/i }).getAttribute("href")).toBe("/api/insights/export");
   });
 

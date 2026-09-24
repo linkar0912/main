@@ -1801,6 +1801,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         });
       const normalizedQuery = query.query?.trim().toLowerCase();
       const filtered = rows.filter((row) => {
+        if (!row.latestInboundAt) return false;
         const contact = row.record;
         if (query.status && contact.inboxStatus !== query.status) return false;
         if (query.unread !== undefined && row.unread !== query.unread) return false;

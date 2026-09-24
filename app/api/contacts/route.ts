@@ -3,7 +3,7 @@ import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { MetaClient } from "@/src/lib/meta/client";
-import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
+import { hasCachedInstagramAvatar, instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 import { LEAD_STATUSES, type LeadStatus } from "@/src/lib/repository";
 
 export const runtime = "nodejs";
@@ -128,6 +128,7 @@ export async function GET(request: Request) {
         contacts: contacts.map((contact) => ({
           id: contact.id,
           instagramUsername: usernames.get(instagramIdentityKey(contact)),
+          avatarUrl: hasCachedInstagramAvatar(contact, env.metaApiVersion) ? `/api/contacts/${contact.id}/avatar` : undefined,
           instagramAccountId: contact.instagramAccountId,
           igScopedUserId: contact.igScopedUserId,
           email: contact.email,

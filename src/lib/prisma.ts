@@ -2402,8 +2402,8 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         }
       }
       const unreadSql = Prisma.sql`(latest."receivedAt" IS NOT NULL AND (c."inboxLastReadAt" IS NULL OR latest."receivedAt" > c."inboxLastReadAt"))`;
-      const activitySql = Prisma.sql`COALESCE(latest."receivedAt", c."lastSeenAt")`;
-      const conditions: Prisma.Sql[] = [Prisma.sql`c."workspaceId" = ${workspaceId}`];
+      const activitySql = Prisma.sql`latest."receivedAt"`;
+      const conditions: Prisma.Sql[] = [Prisma.sql`c."workspaceId" = ${workspaceId}`, Prisma.sql`latest."receivedAt" IS NOT NULL`];
       if (query.status) conditions.push(Prisma.sql`c."inboxStatus" = ${query.status}`);
       if (query.unread !== undefined) conditions.push(query.unread ? unreadSql : Prisma.sql`NOT ${unreadSql}`);
       if (query.assignment === "mine") conditions.push(Prisma.sql`c."assigneeUserId" = ${query.currentUserId ?? ""}`);

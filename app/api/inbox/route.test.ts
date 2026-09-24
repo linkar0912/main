@@ -32,7 +32,8 @@ describe("GET /api/inbox", () => {
       }],
       nextCursor: "next-page",
     });
-    mocks.getRepository.mockReturnValue({ listInboxContacts, listConnections: vi.fn().mockResolvedValue([]), listMembers: vi.fn().mockResolvedValue([]) });
+    const listConnections = vi.fn().mockResolvedValue([]);
+    mocks.getRepository.mockReturnValue({ listInboxContacts, listConnections, listMembers: vi.fn().mockResolvedValue([]) });
 
     const response = await GET(new Request("http://localhost/api/inbox?limit=40&status=open&unread=true&assignment=mine&favorite=true&label=guide&reminder=due&sort=unread&query=guide"));
     const body = await response.json();
@@ -43,6 +44,7 @@ describe("GET /api/inbox", () => {
       favorite: true, label: "guide", reminder: "due", sort: "unread", query: "guide",
     }));
     expect(body.data).toMatchObject({ nextCursor: "next-page", contacts: [expect.objectContaining({ id: "contact_1", unread: true, preview: "Need the guide" })] });
+    expect(listConnections).not.toHaveBeenCalled();
   });
 
   it("rejects invalid filters", async () => {

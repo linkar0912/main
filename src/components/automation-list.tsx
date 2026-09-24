@@ -102,6 +102,14 @@ export function useAutomations(initialData?: AutomationRecord[]) {
     }
   }
 
+  function addAutomation(automation: AutomationRecord) {
+    setAutomations((current) => {
+      const next = [automation, ...current.filter((item) => item.id !== automation.id)];
+      storeAutomations(next);
+      return next;
+    });
+  }
+
   async function setStatus(id: string, status: AutomationStatus) {
     const response = await fetch(`/api/automations/${id}`, {
       method: "PATCH",
@@ -117,7 +125,7 @@ export function useAutomations(initialData?: AutomationRecord[]) {
     });
   }
 
-  return { automations, loading, error, reload, setStatus };
+  return { automations, loading, error, reload, setStatus, addAutomation };
 }
 
 function triggerSummary(automation: AutomationRecord): string {
@@ -261,7 +269,7 @@ export function AutomationList({
     }
   }
 
-  if (loading) {
+  if (loading && automations.length === 0) {
     return <AutomationListContentSkeleton />;
   }
   if (automations.length === 0) {

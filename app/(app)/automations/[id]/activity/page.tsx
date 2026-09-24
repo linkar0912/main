@@ -7,15 +7,14 @@ export default async function AutomationActivityPage({ params }: { params: Promi
   const { id } = await params;
   return (
     <>
-      <div className="page-wrap">
+      <div className="page-wrap campaign-analytics-page">
         <Link className="back-link" href="/automations"><ArrowLeft size={16} /> Back to automations</Link>
         <header className="page-header">
           <div>
             <p className="eyebrow">Workspace / Automations / Campaign activity</p>
-            <h1>Campaign activity</h1>
+            <h1>Campaign performance</h1>
             <p className="muted page-lede">
-              Every person who hit your trigger - where they are in the journey, what was delivered,
-              and how the campaign converts.
+              See how people move from a comment to a delivered link, and follow up where a delivery needs attention.
             </p>
           </div>
         </header>

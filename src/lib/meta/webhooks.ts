@@ -165,7 +165,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
           id: stringValue(postback.mid) ?? messagingEventId(accountId, timestamp, item),
           accountId,
           type: "postback.received",
-          text: stringValue(postback.payload) ?? stringValue(postback.title) ?? "",
+          text: stringValue(postback.title) ?? stringValue(postback.payload) ?? "",
           ...(interactionPayload !== undefined ? { interactionPayload } : {}),
           recipientId,
           timestamp,

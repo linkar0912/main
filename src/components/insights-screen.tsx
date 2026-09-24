@@ -142,7 +142,7 @@ export function InsightsScreen() {
                     <table className="insights-table" aria-label="Top content performance">
                       <thead><tr><th>Post</th><th>Matched</th><th>Delivered</th><th>Clicks</th><th>Click rate</th></tr></thead>
                       <tbody>{data.mediaPerformance.map((row) => (
-                        <tr key={row.mediaId}><td className="media-id-cell" title={row.mediaId}>{row.mediaId}</td><td>{row.matched}</td><td>{row.delivered}</td><td>{row.clicked}</td><td>{row.delivered ? `${Math.round((row.clicked / row.delivered) * 100)}%` : "-"}</td></tr>
+                        <tr key={row.mediaId}><td className="media-id-cell" title={`Instagram media ID ${row.mediaId}`}>Instagram post · {row.mediaId.slice(-6)}</td><td>{row.matched}</td><td>{row.delivered}</td><td>{row.clicked}</td><td>{row.delivered ? `${Math.round((row.clicked / row.delivered) * 100)}%` : "-"}</td></tr>
                       ))}</tbody>
                     </table>
                   </div>

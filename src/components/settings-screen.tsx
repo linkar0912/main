@@ -409,20 +409,20 @@ export function SettingsScreen() {
   return (
     <>
       <div className="page-wrap settings-wrap">
-        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Manage connections, delivery defaults, billing, team access, and account safeguards.</p></div><div className="header-actions"><CopyDiagnosticsButton /><ContextHelpLink topic="connecting-instagram" /></div></header>
+        <header className="page-header"><div><p className="eyebrow">Workspace / settings</p><h1>Workspace settings</h1><p className="muted page-lede">Your connected channels, delivery preferences, billing, and team in one place.</p></div><div className="header-actions"><CopyDiagnosticsButton /><ContextHelpLink topic="connecting-instagram" /></div></header>
 
         <section className="settings-summary" aria-label="Workspace pulse">
           <div className="settings-summary-intro">
-            <p>Workspace pulse</p>
-            <strong>Your connections at a glance.</strong>
+            <p>Workspace overview</p>
+            <strong>{connectionsLoading ? "Checking your workspace…" : connectedChannelCount > 0 ? "Your channels at a glance." : "Connect a channel to get started."}</strong>
           </div>
           <div className="settings-summary-stat" role="group" aria-label="Environment status">
             <span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" />
-            <span><small>Environment</small><strong>{mode === "demo" ? "Demo mode" : "Connected mode"}</strong></span>
+            <span><small>Environment</small><strong>{connectionsLoading ? "Checking…" : mode === "demo" ? "Demo mode" : "Connected mode"}</strong></span>
           </div>
           <div className="settings-summary-stat" role="group" aria-label="Channel status">
             <Plug size={18} aria-hidden="true" />
-            <span><small>Channels</small><strong>{connectedChannelCount} connected {connectedChannelCount === 1 ? "channel" : "channels"}</strong></span>
+            <span><small>Channels</small><strong>{connectionsLoading ? "Checking…" : `${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}</strong></span>
           </div>
         </section>
 

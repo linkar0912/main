@@ -43,6 +43,7 @@ describe("POST /api/automations/[id]/duplicate", () => {
       facebookPageId: "page_1",
       name: "Page reply",
       definition: { version: 1 },
+      priority: 7,
     });
 
     const response = await POST(
@@ -56,6 +57,7 @@ describe("POST /api/automations/[id]/duplicate", () => {
       facebookPageId: "page_1",
       name: "Page reply (copy)",
       definition: { version: 1 },
+      priority: 7,
     });
   });
 });

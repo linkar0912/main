@@ -31,6 +31,7 @@ export async function POST(request: Request, context: RouteContext) {
     provider: original.provider,
     name,
     definition: original.definition,
+    priority: original.priority,
     ...(original.instagramAccountId ? { instagramAccountId: original.instagramAccountId } : {}),
     ...(original.facebookPageId ? { facebookPageId: original.facebookPageId } : {}),
   });

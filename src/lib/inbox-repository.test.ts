@@ -19,6 +19,13 @@ async function seedContact(
 }
 
 describe("memory inbox repository", () => {
+  it("keeps contacts without a conversation in Contacts rather than the Inbox", async () => {
+    const repository = createMemoryRepository();
+    await repository.touchContact("workspace_1", "ig_1", "no_messages", "2026-09-04T12:00:00.000Z");
+    await seedContact(repository, "has_message", "2026-09-04T10:00:00.000Z", "hello");
+    const page = await repository.listInboxContacts("workspace_1", { limit: 10, sort: "newest", now: "2026-09-04T13:00:00.000Z" });
+    expect(page.rows.map((row) => row.record.igScopedUserId)).toEqual(["has_message"]);
+  });
   it("paginates contacts with a stable cursor and no duplicates", async () => {
     const repository = createMemoryRepository();
     await seedContact(repository, "person_1", "2026-09-04T10:00:00.000Z", "one");
