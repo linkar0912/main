@@ -38,7 +38,7 @@ describe("ContactsScreen", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses the page-shaped Contacts loader while reconciliation is pending", () => {
+  it("uses the page-shaped Contacts loader while the contact list is pending", () => {
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
       if (String(input) === "/api/contacts") return new Promise<Response>(() => undefined);
       return Promise.resolve(new Response(JSON.stringify({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } })));
@@ -68,7 +68,7 @@ describe("ContactsScreen", () => {
     expect(screen.queryByText("@probablymansi")).toBeNull();
   });
 
-  it("reconciles historical activity before loading the contact list", async () => {
+  it("loads the list first, then adds contacts from historical activity", async () => {
     let reconciled = false;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -89,6 +89,32 @@ describe("ContactsScreen", () => {
 
     render(<ContactsScreen />);
 
+    expect(await screen.findByText("@probablymansi")).toBeTruthy();
+  });
+
+  it("shows contacts while Instagram names are still resolving", async () => {
+    let finishEnrichment: ((response: Response) => void) | undefined;
+    const enrichment = new Promise<Response>((resolve) => { finishEnrichment = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("enrich=1")) return enrichment;
+      if (url.includes("scope=all")) return new Response(JSON.stringify({ data: {
+        contacts: [{ ...contacts[1], instagramUsername: undefined }],
+        counts: { NEW: 1, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 },
+        needsProfileEnrichment: true,
+      } }));
+      if (init?.method === "POST") return new Response(JSON.stringify({ data: { reconciled: 0 } }));
+      return new Response(JSON.stringify({ data: {} }));
+    }));
+
+    render(<ContactsScreen />);
+    expect(await screen.findByText("Instagram user")).toBeTruthy();
+    expect(screen.queryByLabelText("Loading contacts")).toBeNull();
+
+    finishEnrichment?.(new Response(JSON.stringify({ data: {
+      contacts: [contacts[1]],
+      counts: { NEW: 1, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 },
+    } })));
     expect(await screen.findByText("@probablymansi")).toBeTruthy();
   });
 

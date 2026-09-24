@@ -11,20 +11,6 @@ export function RootSkeleton() {
   return <main className="root-loading" aria-busy="true" aria-live="polite"><span className="brand root-loading-logo" aria-label={PRODUCT_NAME}><span className="brand-name">{PRODUCT_NAME}</span></span></main>;
 }
 
-function AppShellSkeletonFrame({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="app-frame skeleton-shell" aria-busy="true" aria-live="polite">
-      <header className="mobile-topbar" aria-label="Loading workspace navigation"><Skeleton className="skeleton-square skeleton-square-sm" /><Skeleton className="skeleton-word skeleton-word-brand" /></header>
-      <aside className="sidebar sidebar-skeleton" data-open="false">
-        <Skeleton className="skeleton-word skeleton-word-brand" />
-        <Skeleton className="skeleton-account" />
-        <div className="skeleton-nav" aria-hidden>{Array.from({ length: 7 }, (_, index) => <Skeleton className="skeleton-nav-item" key={index} />)}</div>
-      </aside>
-      <div className="main-content">{children}</div>
-    </div>
-  );
-}
-
 function LoadingRegion({ label, className = "", children }: { label: string; className?: string; children: React.ReactNode }) {
   return <div className={`skeleton-region ${className}`.trim()} aria-label={label} aria-busy="true" aria-live="polite">{children}</div>;
 }
@@ -39,7 +25,10 @@ function PageHeaderSkeleton({ compact = false }: { compact?: boolean }) {
 }
 
 function WorkspaceScreen({ label, children, compactHeader = false }: { label: string; children: React.ReactNode; compactHeader?: boolean }) {
-  return <AppShellSkeletonFrame><main className="page-wrap skeleton-page" aria-label={label} aria-busy="true"><PageHeaderSkeleton compact={compactHeader} />{children}</main></AppShellSkeletonFrame>;
+  // Route loading.tsx files render inside the persistent (app) layout. A
+  // second app-frame here duplicated the sidebar and nested a full-width main
+  // column inside its content slot, especially breaking narrow viewports.
+  return <main className="page-wrap skeleton-page" aria-label={label} aria-busy="true"><PageHeaderSkeleton compact={compactHeader} />{children}</main>;
 }
 
 function SkeletonListRows({ count = 5, compact = false }: { count?: number; compact?: boolean }) {
@@ -117,6 +106,14 @@ export function BroadcastsSkeleton() {
 
 export function QuickAutomationSkeleton() {
   return <WorkspaceScreen label="Loading Quick Automation"><SkeletonToolbar filters={3} /><div className="skeleton-reel-grid" aria-hidden>{Array.from({ length: 4 }, (_, index) => <div className="skeleton-reel" key={index}><Skeleton className="skeleton-reel-media" /><Skeleton className="skeleton-word skeleton-row-title" /><Skeleton className="skeleton-word skeleton-row-meta" /></div>)}</div></WorkspaceScreen>;
+}
+
+export function AutomationBuilderSkeleton() {
+  return <WorkspaceScreen label="Loading automation builder"><div className="skeleton-form" aria-hidden><Skeleton className="skeleton-word skeleton-section-title" /><Skeleton className="skeleton-input" /><Skeleton className="skeleton-input is-tall" /></div><div className="skeleton-form" aria-hidden><Skeleton className="skeleton-word skeleton-section-title" /><Skeleton className="skeleton-input" /></div></WorkspaceScreen>;
+}
+
+export function AutomationActivitySkeleton() {
+  return <WorkspaceScreen label="Loading campaign activity"><div className="skeleton-detail-grid"><section className="skeleton-detail-panel"><SkeletonMetrics count={3} /><SkeletonListRows count={5} compact /></section><section className="skeleton-detail-panel"><Skeleton className="skeleton-word skeleton-section-title" /><SkeletonMetrics count={2} /></section></div></WorkspaceScreen>;
 }
 
 export function InsightsSkeleton() { return <WorkspaceScreen label="Loading Insights"><InsightsContentSkeleton /></WorkspaceScreen>; }

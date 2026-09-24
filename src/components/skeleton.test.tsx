@@ -16,11 +16,11 @@ import {
 describe("ScreenSkeleton", () => {
   afterEach(cleanup);
 
-  it("keeps the mobile drawer closed and renders a mobile topbar", () => {
+  it("renders inside the persistent app shell without duplicating navigation", () => {
     const { container } = render(<ScreenSkeleton />);
 
-    expect(container.querySelector(".sidebar")?.getAttribute("data-open")).toBe("false");
-    expect(screen.getByLabelText("Loading workspace navigation")).toBeTruthy();
+    expect(container.querySelector(".app-frame, .sidebar, .mobile-topbar")).toBeNull();
+    expect(screen.getByLabelText("Loading workspace")).toBeTruthy();
   });
 
   it("matches the Insights metric, chart, and lower-detail structure", () => {

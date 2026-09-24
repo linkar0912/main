@@ -104,7 +104,8 @@ export async function GET(request: Request) {
       repository.listRecentWebhookEvents(session.workspaceId, CONTACT_RECONCILIATION_LIMIT),
     ]);
     const env = getServerEnv();
-    const connections = env.metaTokenEncryptionKey && contacts.length
+    const enrich = url.searchParams.get("enrich") === "1";
+    const connections = enrich && env.metaTokenEncryptionKey && contacts.length
       ? await repository.listConnections(session.workspaceId)
       : [];
     const usernames = await resolveInstagramUsernames({
@@ -112,15 +113,18 @@ export async function GET(request: Request) {
       events,
       connections,
       apiVersion: env.metaApiVersion,
-      ...(env.metaTokenEncryptionKey ? {
+      ...(enrich && env.metaTokenEncryptionKey ? {
         client: new MetaClient({ apiVersion: env.metaApiVersion }),
         tokenEncryptionKey: env.metaTokenEncryptionKey,
       } : {}),
     });
+    const needsProfileEnrichment = !enrich && Boolean(env.metaTokenEncryptionKey)
+      && contacts.some((contact) => !usernames.has(instagramIdentityKey(contact)));
     return NextResponse.json({
       data: {
         count: Object.values(counts).reduce((sum, value) => sum + value, 0),
         counts,
+        needsProfileEnrichment,
         contacts: contacts.map((contact) => ({
           id: contact.id,
           instagramUsername: usernames.get(instagramIdentityKey(contact)),

@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { TemplatePickerModal } from "./template-picker-modal";
+import dynamic from "next/dynamic";
+
+const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
 
 /**
  * Every "Create/New automation" entry point in the app opens the same

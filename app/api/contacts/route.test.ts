@@ -60,7 +60,7 @@ describe("GET /api/contacts", () => {
       new Response(JSON.stringify({ username: "probablymansi" }), { status: 200 }),
     ));
 
-    const response = await GET(new Request("https://app.linkar.in/api/contacts?scope=all"));
+    const response = await GET(new Request("https://app.linkar.in/api/contacts?scope=all&enrich=1"));
     const body = await response.json();
 
     expect(body.data.contacts[0]).toMatchObject({ instagramUsername: "probablymansi" });

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -18,10 +19,11 @@ import { CreateAutomationButton } from "./create-automation-button";
 import { FailurePanel } from "./failure-panel";
 import { TrackedLinksPanel } from "./tracked-links-panel";
 import { StatusBadge } from "./status-badge";
-import { TemplatePickerModal } from "./template-picker-modal";
 import type { AutomationRecord } from "@/src/lib/repository";
 import { getFacebookPages, getInstagramConnections, getInsightsOverview, seedWorkspaceData } from "@/src/lib/client/workspace-data";
 import { ReplyVolumeChart, type DayPoint } from "./reply-volume-chart";
+
+const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
 
 type InsightsPayload = {
   timeseries?: { days?: number; participantsPerDay?: DayPoint[]; sentPerDay?: DayPoint[] };
