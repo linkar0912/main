@@ -3681,6 +3681,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .settings-wrap .connected-channels-list { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 700px) {
+  .campaign-analytics-page .feed-toolbar { flex-wrap: nowrap; }
+  .campaign-analytics-page .feed-toolbar-title { flex: none; width: 100%; }
+  .campaign-analytics-page .filter-chips, .campaign-analytics-page .feed-tools { min-width: 0; width: 100%; }
   .campaign-performance-heading { align-items: start; flex-direction: column; padding: var(--space-4); }
   .campaign-performance-heading > strong { text-align: left; }
   .campaign-performance .funnel-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -3689,6 +3692,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   .campaign-performance .funnel-cell:nth-child(n + 3) { border-top: 1px solid var(--line); }
   .campaign-performance .funnel-cell:last-child { grid-column: 1 / -1; }
   .settings-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-wrap .section-layout { grid-template-columns: minmax(0, 1fr); }
   .settings-summary-intro { grid-column: 1 / -1; }
   .settings-summary-stat { border-left: 0; border-top: 1px solid var(--line); grid-column: auto; padding: var(--space-3); }
   .settings-summary-stat:last-child { border-left: 1px solid var(--line); }
