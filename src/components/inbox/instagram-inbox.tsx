@@ -329,7 +329,7 @@ export function InstagramInbox() {
   return <section className={`conversation-desk ${selected ? "has-conversation" : ""}`} aria-label="Instagram inbox conversations">
     <aside className="conversation-roster" aria-label="Contacts">
       <div className="conversation-roster-head">
-        <div><h2>Instagram</h2><span>{contacts.length}{nextCursor ? "+" : ""} contact{contacts.length === 1 ? "" : "s"}</span></div>
+        <div><h2>Conversations</h2><span>{contacts.length}{nextCursor ? "+" : ""} contact{contacts.length === 1 ? "" : "s"}</span></div>
         <InboxFilters value={filters} labels={labels} onChange={(next) => {
           conversationAbortRef.current?.abort(); activeContactIdRef.current = null; setSelectedId(null);
           const snapshot = readInboxCache(next).snapshot;
@@ -338,7 +338,7 @@ export function InstagramInbox() {
         }} />
       </div>
       {error && contacts.length === 0 && <p className="form-error" role="alert">{error}</p>}
-      {filterLoading ? <div className="conversation-filter-loading" aria-label="Loading conversations" aria-busy="true">{[0, 1, 2, 3].map((index) => <span className="skeleton-block" key={index} />)}</div> : contacts.length === 0 ? <div className="conversation-roster-empty"><Inbox size={21} /><p>No conversations match these filters.</p></div> : <>
+      {filterLoading ? <div className="conversation-filter-loading" aria-label="Loading conversations" aria-busy="true">{[0, 1, 2, 3].map((index) => <div className="skeleton-list-row is-compact" key={index}><span className="skeleton-block skeleton-avatar" /><span className="skeleton-stack skeleton-row-copy"><span className="skeleton-block skeleton-word skeleton-row-title" /><span className="skeleton-block skeleton-word skeleton-row-meta" /></span></div>)}</div> : contacts.length === 0 ? <div className="conversation-roster-empty"><Inbox size={21} /><p>No conversations match these filters.</p></div> : <>
         <ul className="conversation-contact-list">
           {contacts.map((contact) => <li key={contact.id}>
             <button type="button" className={selectedId === contact.id ? "is-selected" : ""} aria-label={`Open conversation with ${displayName(contact)}`} onClick={() => void openConversation(contact)}>
@@ -356,7 +356,7 @@ export function InstagramInbox() {
     </aside>
 
     <div className="conversation-panel">
-      {!selected ? <div className="conversation-blank"><span><Inbox size={24} /></span><h2>Your conversations live here</h2><p>Select any contact to read the history and reply.</p></div> : <>
+      {!selected ? <div className="conversation-blank"><span><Inbox size={24} /></span><small>Ready for your next reply</small><h2>Choose a conversation</h2><p>Select someone on the left to read their messages, manage the conversation, and reply.</p></div> : <>
         <header className="conversation-header">
           <button className="conversation-back" type="button" aria-label="Back to contacts" onClick={() => { conversationAbortRef.current?.abort(); activeContactIdRef.current = null; setSelectedId(null); }}><ArrowLeft size={19} /></button>
           <SocialAvatar channel="instagram" name={displayName(selected)} src={selected.avatarUrl} />

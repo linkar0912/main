@@ -183,7 +183,7 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.connected-channels-total \.health-orb\s*{[^}]*flex:\s*0 0 8px[^}]*height:\s*8px[^}]*width:\s*8px/);
     expect(css).toMatch(/\.connected-channels-list\s*{[^}]*grid-template-columns:\s*repeat\(2/);
     expect(css).toMatch(/@media\s*\(max-width:\s*1080px\)[\s\S]*?\.connected-channels-list\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-    expect(css).toMatch(/\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(380px,\s*430px\) minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(350px,\s*390px\) minmax\(0,\s*1fr\)/);
     expect(css).toMatch(/\.conversation-roster-head\s*>\s*div:first-child\s*{[^}]*display:\s*flex/);
     expect(css).not.toMatch(/\.conversation-roster-head\s*>\s*div\s*{/);
     expect(css).toMatch(/\.conversation-messages\s*{[^}]*overflow-y:\s*auto/);

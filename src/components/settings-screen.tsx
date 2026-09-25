@@ -24,6 +24,7 @@ import { SocialAvatar } from "./social-avatar";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
+import { SettingsConnectionsContentSkeleton, Skeleton } from "./skeleton";
 import {
   clearWorkspaceDataCache,
   getFacebookPages,
@@ -414,15 +415,15 @@ export function SettingsScreen() {
         <section className="settings-summary" aria-label="Workspace pulse">
           <div className="settings-summary-intro">
             <p>Workspace overview</p>
-            <strong>{connectionsLoading ? "Checking your workspace…" : connectedChannelCount > 0 ? "Your channels at a glance." : "Connect a channel to get started."}</strong>
+            <strong>{connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-title" /> : connectedChannelCount > 0 ? "Your channels at a glance." : "Connect a channel to get started."}</strong>
           </div>
           <div className="settings-summary-stat" role="group" aria-label="Environment status">
-            <span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" />
-            <span><small>Environment</small><strong>{connectionsLoading ? "Checking…" : mode === "demo" ? "Demo mode" : "Connected mode"}</strong></span>
+            {connectionsLoading ? <Skeleton className="skeleton-avatar skeleton-status-dot" /> : <span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" />}
+            <span><small>Environment</small><strong>{connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : mode === "demo" ? "Demo mode" : "Connected mode"}</strong></span>
           </div>
           <div className="settings-summary-stat" role="group" aria-label="Channel status">
             <Plug size={18} aria-hidden="true" />
-            <span><small>Channels</small><strong>{connectionsLoading ? "Checking…" : `${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}</strong></span>
+            <span><small>Channels</small><strong>{connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : `${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}</strong></span>
           </div>
         </section>
 
@@ -433,7 +434,7 @@ export function SettingsScreen() {
           <nav className="section-nav" aria-label="Settings sections">
             <button type="button" aria-pressed={section === "connections"} className={`section-nav-link ${section === "connections" ? "is-active" : ""}`} onClick={() => setSection("connections")}>
               <Plug size={16} strokeWidth={1.9} /> Connections
-              <span className="section-nav-count">{sectionCounts.connections}</span>
+              {!connectionsLoading && <span className="section-nav-count">{sectionCounts.connections}</span>}
             </button>
             <button type="button" aria-pressed={section === "delivery"} className={`section-nav-link ${section === "delivery" ? "is-active" : ""}`} onClick={() => setSection("delivery")}>
               <Clock size={16} strokeWidth={1.9} /> Delivery
@@ -468,13 +469,13 @@ export function SettingsScreen() {
                       <h2 id="connected-channels-title">Connected channels</h2>
                       <p>Manage the accounts that listen for comments and deliver replies.</p>
                     </div>
-                    <span className="connected-channels-total" data-state={connectedChannelCount > 0 ? "ok" : "empty"} aria-label={`${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}>
+                    {!connectionsLoading && <span className="connected-channels-total" data-state={connectedChannelCount > 0 ? "ok" : "empty"} aria-label={`${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}>
                       <span className="health-orb" data-state={connectedChannelCount > 0 ? "ok" : "warn"} aria-hidden="true" />
                       {connectedChannelCount} live
-                    </span>
+                    </span>}
                   </header>
 
-                  <div className="connected-channels-list">
+                  {connectionsLoading ? <SettingsConnectionsContentSkeleton /> : <div className="connected-channels-list">
                 <section className="channel-settings-card instagram-settings-card" data-channel-card="instagram" aria-label="Instagram channel">
                   <div className="channel-settings-header">
                     <div className="channel-identity">
@@ -674,7 +675,7 @@ export function SettingsScreen() {
                     );
                   })}
                 </section>
-                  </div>
+                  </div>}
                 </section>
               </div>
             )}

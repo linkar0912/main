@@ -8,7 +8,7 @@ import {
   AdminTableSkeleton,
   AutomationsSkeleton,
   ContactsContentSkeleton,
-  InsightsSkeleton,
+  InsightsContentSkeleton,
   InlineContentSkeleton,
   ScreenSkeleton,
 } from "./skeleton";
@@ -24,18 +24,19 @@ describe("ScreenSkeleton", () => {
   });
 
   it("matches the Insights metric, chart, and lower-detail structure", () => {
-    const { container } = render(<InsightsSkeleton />);
+    const { container } = render(<InsightsContentSkeleton />);
 
-    expect(screen.getByLabelText("Loading Insights").getAttribute("aria-busy")).toBe("true");
+    expect(screen.getByLabelText("Loading insights data").getAttribute("aria-busy")).toBe("true");
     expect(container.querySelectorAll(".skeleton-metric")).toHaveLength(4);
     expect(container.querySelector(".skeleton-chart")).toBeTruthy();
     expect(container.querySelectorAll(".skeleton-detail-panel")).toHaveLength(2);
   });
 
-  it("provides content-only loaders that match Inbox and Contacts controls and rows", () => {
+  it("provides content-only loaders that match the Inbox desk and Contacts rows", () => {
     const { container, rerender } = render(<ActivityContentSkeleton />);
     expect(screen.getByLabelText("Loading inbox activity")).toBeTruthy();
-    expect(container.querySelectorAll(".skeleton-filter-line")).toHaveLength(2);
+    expect(container.querySelector(".conversation-desk-loading .conversation-roster")).toBeTruthy();
+    expect(container.querySelector(".conversation-desk-loading .conversation-panel")).toBeTruthy();
     expect(container.querySelectorAll(".skeleton-list-row").length).toBeGreaterThanOrEqual(4);
 
     rerender(<ContactsContentSkeleton />);

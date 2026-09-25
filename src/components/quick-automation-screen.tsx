@@ -4,6 +4,7 @@ import { ArrowRight, Check, Film, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { basicAutomationTemplates } from "@/src/lib/automation/templates";
+import { QuickReelsContentSkeleton } from "./skeleton";
 
 type QuickMedia = {
   id: string;
@@ -146,9 +147,7 @@ export function QuickAutomationScreen() {
           </div>
 
           {loading && reels.length === 0 ? (
-            <div className="quick-reel-grid" aria-label="Loading Reels">
-              {[0, 1, 2, 3].map((item) => <div className="quick-reel-skeleton" key={item} aria-hidden />)}
-            </div>
+            <QuickReelsContentSkeleton />
           ) : error && reels.length === 0 ? (
             <div className="empty-state quick-empty">
               <Film size={24} />

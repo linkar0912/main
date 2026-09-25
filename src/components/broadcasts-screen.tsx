@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Megaphone } from "lucide-react";
 import { AutomationSectionNav } from "./automation-section-nav";
 import { ContextHelpLink } from "./context-help-link";
+import { InlineContentSkeleton } from "./skeleton";
 
 type BroadcastRow = {
   id: string;
@@ -138,9 +139,9 @@ export function BroadcastsScreen() {
 
             <section className="panel full-list-panel">
               <div className="list-intro">
-                <div className="list-count"><Megaphone size={17} /><span>{loading ? "Loading" : `${broadcasts.length} ${broadcasts.length === 1 ? "broadcast" : "broadcasts"}`}</span></div>
+                <div className="list-count"><Megaphone size={17} /><span>{loading ? "Broadcasts" : `${broadcasts.length} ${broadcasts.length === 1 ? "broadcast" : "broadcasts"}`}</span></div>
               </div>
-              {!loading && broadcasts.length === 0 ? (
+              {loading && broadcasts.length === 0 ? <InlineContentSkeleton label="Loading broadcasts" rows={3} /> : !loading && broadcasts.length === 0 ? (
                 <p className="muted">No broadcasts sent yet - compose one above.</p>
               ) : (
                 <div className="automation-list">

@@ -24,11 +24,11 @@ function PageHeaderSkeleton({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function WorkspaceScreen({ label, children, compactHeader = false }: { label: string; children: React.ReactNode; compactHeader?: boolean }) {
+function WorkspaceScreen({ label, children, header }: { label: string; children: React.ReactNode; header?: React.ReactNode }) {
   // Route loading.tsx files render inside the persistent (app) layout. A
   // second app-frame here duplicated the sidebar and nested a full-width main
   // column inside its content slot, especially breaking narrow viewports.
-  return <main className="page-wrap skeleton-page" aria-label={label} aria-busy="true"><PageHeaderSkeleton compact={compactHeader} />{children}</main>;
+  return <main className="page-wrap skeleton-page" aria-label={label} aria-busy="true">{header ?? <PageHeaderSkeleton />}{children}</main>;
 }
 
 function SkeletonListRows({ count = 5, compact = false }: { count?: number; compact?: boolean }) {
@@ -63,13 +63,30 @@ export function InlineContentSkeleton({ label, rows = 3 }: { label: string; rows
 
 export function ActivityContentSkeleton() {
   return (
-    <LoadingRegion label="Loading inbox activity" className="skeleton-content skeleton-inbox-content">
-      <div className="skeleton-summary-line" aria-hidden><Skeleton className="skeleton-number" /><Skeleton className="skeleton-word skeleton-note" /></div>
-      <div className="skeleton-filter-line"><Skeleton className="skeleton-filter-label" /><div className="skeleton-chip-row"><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /></div></div>
-      <div className="skeleton-filter-line"><Skeleton className="skeleton-filter-label" /><div className="skeleton-chip-row"><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /></div></div>
-      <SkeletonListRows count={5} compact />
+    <LoadingRegion label="Loading inbox activity" className="conversation-desk conversation-desk-loading">
+      <div className="conversation-roster">
+        <div className="conversation-roster-head" aria-hidden>
+          <div><Skeleton className="skeleton-word skeleton-section-title" /><Skeleton className="skeleton-word skeleton-note" /></div>
+          <Skeleton className="skeleton-search" />
+          <div className="skeleton-chip-row"><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /></div>
+        </div>
+        <SkeletonListRows count={6} compact />
+      </div>
+      <div className="conversation-panel conversation-loading-panel" aria-hidden>
+        <Skeleton className="skeleton-avatar skeleton-avatar-lg" />
+        <Skeleton className="skeleton-word skeleton-section-title" />
+        <Skeleton className="skeleton-word skeleton-lede" />
+      </div>
     </LoadingRegion>
   );
+}
+
+export function QuickReelsContentSkeleton() {
+  return <LoadingRegion label="Loading Reels" className="quick-reel-grid skeleton-reel-grid">{Array.from({ length: 4 }, (_, index) => <div className="skeleton-reel" key={index}><Skeleton className="skeleton-reel-media" /><Skeleton className="skeleton-word skeleton-row-title" /><Skeleton className="skeleton-word skeleton-row-meta" /></div>)}</LoadingRegion>;
+}
+
+export function SettingsConnectionsContentSkeleton() {
+  return <LoadingRegion label="Loading connected channels" className="connected-channels-list settings-connection-skeleton">{[0, 1].map((index) => <div className="channel-settings-card" key={index}><div className="channel-identity"><Skeleton className="skeleton-avatar" /><div className="skeleton-stack skeleton-row-copy"><Skeleton className="skeleton-word skeleton-row-title" /><Skeleton className="skeleton-word skeleton-row-meta" /></div></div><SkeletonListRows count={2} compact /></div>)}</LoadingRegion>;
 }
 
 export function ContactsContentSkeleton({ withToolbar = true }: { withToolbar?: boolean } = {}) {
@@ -93,44 +110,10 @@ export function AutomationListContentSkeleton({ count = 5, withToolbar = false }
 export function ScreenSkeleton() { return <WorkspaceScreen label="Loading workspace"><SkeletonListRows count={4} /></WorkspaceScreen>; }
 
 export function DashboardSkeleton() {
-  return <WorkspaceScreen label="Loading Home"><div className="skeleton-card-grid" aria-hidden>{Array.from({ length: 3 }, (_, index) => <div className="skeleton-action-card" key={index}><Skeleton className="skeleton-avatar" /><Skeleton className="skeleton-word skeleton-row-title" /><Skeleton className="skeleton-word skeleton-row-meta" /></div>)}</div><SkeletonListRows count={4} compact /></WorkspaceScreen>;
+  return <WorkspaceScreen label="Loading Home" header={<header className="page-header home-greeting"><div><p className="eyebrow">Home</p><Skeleton className="skeleton-word skeleton-title" /><p className="muted page-lede">Welcome back - here’s how your replies performed over the last 14 days.</p></div></header>}><div className="skeleton-card-grid" aria-hidden>{Array.from({ length: 3 }, (_, index) => <div className="skeleton-action-card" key={index}><Skeleton className="skeleton-avatar" /><Skeleton className="skeleton-word skeleton-row-title" /><Skeleton className="skeleton-word skeleton-row-meta" /></div>)}</div><SkeletonListRows count={4} compact /></WorkspaceScreen>;
 }
 
-export function ActivitySkeleton() { return <WorkspaceScreen label="Loading Inbox"><ActivityContentSkeleton /></WorkspaceScreen>; }
-export function AutomationsSkeleton() { return <WorkspaceScreen label="Loading Automations"><AutomationListContentSkeleton count={5} withToolbar /></WorkspaceScreen>; }
-export function SequencesSkeleton() { return <WorkspaceScreen label="Loading Sequences"><AutomationListContentSkeleton count={4} withToolbar /></WorkspaceScreen>; }
-
-export function BroadcastsSkeleton() {
-  return <WorkspaceScreen label="Loading Broadcasts"><div className="skeleton-form" aria-hidden><Skeleton className="skeleton-word skeleton-section-title" /><Skeleton className="skeleton-input" /><Skeleton className="skeleton-input is-tall" /></div><SkeletonListRows count={3} /></WorkspaceScreen>;
-}
-
-export function QuickAutomationSkeleton() {
-  return <WorkspaceScreen label="Loading Quick Automation"><SkeletonToolbar filters={3} /><div className="skeleton-reel-grid" aria-hidden>{Array.from({ length: 4 }, (_, index) => <div className="skeleton-reel" key={index}><Skeleton className="skeleton-reel-media" /><Skeleton className="skeleton-word skeleton-row-title" /><Skeleton className="skeleton-word skeleton-row-meta" /></div>)}</div></WorkspaceScreen>;
-}
-
-export function AutomationBuilderSkeleton() {
-  return <WorkspaceScreen label="Loading automation builder"><div className="skeleton-form" aria-hidden><Skeleton className="skeleton-word skeleton-section-title" /><Skeleton className="skeleton-input" /><Skeleton className="skeleton-input is-tall" /></div><div className="skeleton-form" aria-hidden><Skeleton className="skeleton-word skeleton-section-title" /><Skeleton className="skeleton-input" /></div></WorkspaceScreen>;
-}
-
-export function AutomationActivitySkeleton() {
-  return <WorkspaceScreen label="Loading campaign activity"><div className="skeleton-detail-grid"><section className="skeleton-detail-panel"><SkeletonMetrics count={3} /><SkeletonListRows count={5} compact /></section><section className="skeleton-detail-panel"><Skeleton className="skeleton-word skeleton-section-title" /><SkeletonMetrics count={2} /></section></div></WorkspaceScreen>;
-}
-
-export function InsightsSkeleton() { return <WorkspaceScreen label="Loading Insights"><InsightsContentSkeleton /></WorkspaceScreen>; }
-
-export function SettingsSkeleton() {
-  return <WorkspaceScreen label="Loading Settings"><SkeletonMetrics count={3} /><div className="skeleton-settings-grid" aria-hidden>{Array.from({ length: 2 }, (_, index) => <section className="skeleton-detail-panel" key={index}><Skeleton className="skeleton-word skeleton-section-title" /><SkeletonListRows count={2} compact /></section>)}</div></WorkspaceScreen>;
-}
-
-export function ContactsSkeleton() { return <WorkspaceScreen label="Loading Contacts"><ContactsContentSkeleton /></WorkspaceScreen>; }
-
-export function ProfileSkeleton() {
-  return <WorkspaceScreen label="Loading Profile"><div className="skeleton-detail-grid"><section className="skeleton-detail-panel skeleton-profile-card"><Skeleton className="skeleton-avatar skeleton-avatar-lg" /><SkeletonListRows count={3} compact /></section><section className="skeleton-detail-panel"><SkeletonListRows count={3} compact /></section></div></WorkspaceScreen>;
-}
-
-export function HelpSkeleton() {
-  return <WorkspaceScreen label="Loading Help" compactHeader><SkeletonToolbar filters={0} /><div className="skeleton-detail-grid"><section className="skeleton-detail-panel"><SkeletonListRows count={4} compact /></section><section className="skeleton-detail-panel"><SkeletonListRows count={3} compact /></section></div></WorkspaceScreen>;
-}
+export function AutomationsSkeleton() { return <WorkspaceScreen label="Loading Automations" header={<header className="page-header"><div><p className="eyebrow">Workspace / automation</p><h1>Automations</h1><p className="muted page-lede">Rules that turn Instagram and Facebook signals into helpful, timely replies.</p></div></header>}><AutomationListContentSkeleton count={5} withToolbar /></WorkspaceScreen>; }
 
 function AdminPageSkeleton({ label, children }: { label: string; children: React.ReactNode }) {
   return <main className="page-wrap skeleton-page admin-skeleton-page" aria-label={label} aria-busy="true"><PageHeaderSkeleton />{children}</main>;

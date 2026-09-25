@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Play, Plus, RotateCw, Trash2 } from "lucide-react";
 import { AutomationSectionNav } from "./automation-section-nav";
 import { ContextHelpLink } from "./context-help-link";
+import { InlineContentSkeleton } from "./skeleton";
 
 type SequenceStepView = { id: string; delayHours: number | string; text: string };
 type SequenceRow = {
@@ -288,13 +289,14 @@ export function SequencesScreen() {
 
             <section className="panel full-list-panel">
               <div className="list-intro">
-                <div className="list-count"><ListOrdered size={17} /><span>{loading ? "Loading" : `${sequences.length} ${sequences.length === 1 ? "sequence" : "sequences"}`}</span></div>
+                <div className="list-count"><ListOrdered size={17} /><span>{loading ? "Sequences" : `${sequences.length} ${sequences.length === 1 ? "sequence" : "sequences"}`}</span></div>
                 {/* A Link here pointed at the page it already sits on, so the soft
                     navigation never remounted the screen and nothing refetched. */}
                 <button className="text-link" type="button" onClick={() => void refresh()}>
                   <RotateCw size={14} /> Refresh
                 </button>
               </div>
+              {loading && sequences.length === 0 && <InlineContentSkeleton label="Loading sequences" rows={3} />}
               {!loading && !pageError && sequences.length === 0 && (
                 <div className="empty-state">
                   <span className="empty-icon"><ListOrdered size={22} /></span>

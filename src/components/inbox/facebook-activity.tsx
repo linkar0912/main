@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MessageCircle, Search } from "lucide-react";
 import { SocialAvatar } from "../social-avatar";
+import { InlineContentSkeleton } from "../skeleton";
 
 type FacebookActivityItem = {
   id: string;
@@ -101,7 +102,7 @@ export function FacebookActivity() {
       <select aria-label="Filter by Facebook Page" value={page} onChange={(event) => setPage(event.target.value)}><option value="">All loaded Pages</option>{pages.map((pageId) => <option key={pageId} value={pageId}>{pageId}</option>)}</select>
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}
-    {!loaded ? <div className="facebook-activity-loading" role="status" aria-label="Loading Facebook activity"><span /><span /><span /></div> : visible.length === 0 ? <div className="facebook-activity-empty"><MessageCircle size={24} /><p>No Facebook Page comments match this view.</p></div> : <ol className="facebook-activity-list">
+    {!loaded ? <div className="facebook-activity-loading" role="status" aria-label="Loading Facebook activity"><InlineContentSkeleton label="Loading comments" rows={4} /></div> : visible.length === 0 ? <div className="facebook-activity-empty"><MessageCircle size={24} /><p>No Facebook Page comments match this view.</p></div> : <ol className="facebook-activity-list">
       {visible.map((item) => <li key={item.id}>
         <SocialAvatar channel="facebook" name={item.from ?? "Facebook commenter"} src={item.avatarUrl} />
         <div><div className="facebook-activity-topline"><strong>{item.from ?? "Facebook commenter"}</strong><time dateTime={item.at}>{new Date(item.at).toLocaleString()}</time></div><p>{item.summary ?? "Comment received"}</p><small>{item.label}{item.account ? ` · Page ${item.account}` : ""}</small></div>
