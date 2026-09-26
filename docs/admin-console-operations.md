@@ -4,6 +4,9 @@ The owner console is served only from `https://admin.linkar.in/admin`. Access is
 
 Use **System** for bounded web, PostgreSQL, Valkey, worker, queue, configuration-presence, throughput, and reconciliation status. Queue pause/resume and reconciliation commands require an operator reason and are written to the immutable audit trail. A paused queue stops new work from being claimed; resume it after the incident. Retry only known failed job IDs. The UI never exposes URLs, credentials, tokens, payloads, or stack traces.
 
+The worker process consumes two BullMQ queues: `webhooks` for realtime events and interactive follow-ups, and `bulk` for broadcasts and lead delivery. Its health endpoint is healthy only while both consumers are running and connected to Redis. During the first rollout, the realtime consumer also finishes bulk jobs that were already waiting in the old queue. The System queue cards show both queues; waiting includes prioritized jobs.
+During rollout, prefer bringing up the replacement singleton worker before the web service. If the image deploy updates both together, newly enqueued bulk jobs remain durable until the new consumer starts. Verify the worker health endpoint and both queue cards after deployment; the replacement worker can drain jobs from either queue.
+
 Use **Audit** to filter privileged events and export the fixed safe CSV projection. Export itself requires a reason and is audited. CSV cells that could be interpreted as spreadsheet formulas are neutralized.
 
 Production must set `APP_URL=https://app.linkar.in`, `NEXT_PUBLIC_APP_URL=https://app.linkar.in`, `ADMIN_URL=https://admin.linkar.in`, and `PUBLIC_SITE_URL=https://linkar.in`. OAuth callbacks belong to `app.linkar.in`; marketing and legal pages remain canonical on `linkar.in`. DNS, deployments, database administration, and secret rotation remain in Cloudflare, Dokploy, and Supabase, not inside Linkar.

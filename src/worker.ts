@@ -1,11 +1,11 @@
-import { Worker } from "bullmq";
+import { Worker, type Job } from "bullmq";
 import Redis from "ioredis";
 import { getServerEnv } from "./lib/env";
 import { logger } from "./lib/logger";
 import { MetaClient } from "./lib/meta/client";
 import { FacebookClient } from "./lib/facebook/client";
 import { getRepository } from "./lib/repository-provider";
-import { WEBHOOK_QUEUE_NAME } from "./lib/queue";
+import { BULK_QUEUE_NAME, WEBHOOK_QUEUE_NAME } from "./lib/queue";
 import { processNormalizedEvent } from "./lib/automation/runner";
 import { processNormalizedFacebookEvent } from "./lib/facebook/runner";
 import type { QueuedFacebookEvent, QueuedInstagramEvent } from "./lib/queue";
@@ -61,17 +61,11 @@ if (!env.redisUrl) {
   logger.error("Linkar worker requires REDIS_URL");
   process.exitCode = 1;
 } else {
-  // Give the container something to probe. Without this the orchestrator can
-  // only see "the process is alive", not "it can still reach its dependencies".
-  const healthServer = createWorkerHealthServer();
-  healthServer.listen(workerHealthPort(), () =>
-    logger.info("Worker health server listening", { port: workerHealthPort() }));
-  healthServer.unref();
-
   const redis = new Redis(env.redisUrl, { maxRetriesPerRequest: null });
-  const worker = new Worker(
-    WEBHOOK_QUEUE_NAME,
-    async (job) => {
+  const bulkRedis = new Redis(env.redisUrl, { maxRetriesPerRequest: null });
+  // Keep the legacy job handlers on the realtime queue while previously
+  // enqueued bulk jobs drain during rollout. New bulk jobs use their own queue.
+  const processJob = async (job: Job) => {
       if (job.name === "admin-maintenance") {
         const action = (job.data as { action?: string }).action;
         if (action === "delivery_reconciliation") {
@@ -155,16 +149,42 @@ if (!env.redisUrl) {
       }
 
       throw new Error("unknown_job");
-    },
-    { connection: redis, concurrency: env.workerConcurrency },
-  );
+  };
+  const worker = new Worker(WEBHOOK_QUEUE_NAME, processJob, {
+    connection: redis,
+    concurrency: env.workerConcurrency,
+  });
+  const bulkWorker = new Worker(BULK_QUEUE_NAME, processJob, {
+    connection: bulkRedis,
+    concurrency: 1,
+  });
+  const workers = [worker, bulkWorker];
 
-  worker.on("completed", (job) => {
-    logger.info("Processed queue job", { jobId: job.id, jobName: job.name });
+  // Dependency probes alone can be green when BullMQ has stopped consuming.
+  // Require both consumers to be running with ready Redis connections.
+  const healthServer = createWorkerHealthServer({}, async () => {
+    const ready = await Promise.all(workers.map(async (consumer, index) => {
+      if (!consumer.isRunning() || consumer.isPaused()) return false;
+      await consumer.waitUntilReady();
+      return (index === 0 ? redis : bulkRedis).status === "ready";
+    }));
+    return ready.every(Boolean);
   });
-  worker.on("failed", (job, error) => {
-    logger.error("Queue job failed", { jobId: job?.id ?? "unknown", jobName: job?.name ?? "unknown", error: error instanceof Error ? error.message : String(error) });
-  });
+  healthServer.listen(workerHealthPort(), () =>
+    logger.info("Worker health server listening", { port: workerHealthPort() }));
+  healthServer.unref();
+
+  for (const consumer of workers) {
+    consumer.on("completed", (job) => {
+      logger.info("Processed queue job", { jobId: job.id, jobName: job.name });
+    });
+    consumer.on("failed", (job, error) => {
+      logger.error("Queue job failed", { jobId: job?.id ?? "unknown", jobName: job?.name ?? "unknown", error: error instanceof Error ? error.message : String(error) });
+    });
+    consumer.on("error", (error) => {
+      logger.error("Queue worker connection error", { error: error instanceof Error ? error.message : String(error) });
+    });
+  }
 
   // Drain in-flight jobs on shutdown so deploys don't kill deliveries mid-Meta-call.
   // The dispatch-lease reconciliation recovers abandoned work, but a clean close
@@ -175,8 +195,9 @@ if (!env.redisUrl) {
     shuttingDown = true;
     logger.info("Worker shutting down", { signal });
     try {
-      await worker.close();
+      await Promise.all(workers.map((consumer) => consumer.close()));
       redis.disconnect();
+      bulkRedis.disconnect();
       process.exit(0);
     } catch (error) {
       logger.error("Worker shutdown failed", { error: error instanceof Error ? error.message : String(error) });
@@ -246,18 +267,25 @@ if (!env.redisUrl) {
 
   // Sequence scheduler: delivers drip steps that are due. Runs shortly after boot and
   // then every 15 minutes - granular enough for hour-level step delays.
+  let sequenceSweepRunning = false;
   const runSequenceSweep = async () => {
-    const repository = getRepository();
-    const client = env.metaAppId ? new MetaClient({
-      apiVersion: env.metaApiVersion,
-      requestTimeoutMs: env.providerRequestTimeoutMs,
-    }) : undefined;
-    const result = await processDueSequences(repository, {
-      client,
-      tokenEncryptionKey: env.metaTokenEncryptionKey ?? undefined,
-    });
-    if (result.processed > 0) {
-      logger.info("Sequence sweep", { ...result });
+    if (sequenceSweepRunning) return;
+    sequenceSweepRunning = true;
+    try {
+      const repository = getRepository();
+      const client = env.metaAppId ? new MetaClient({
+        apiVersion: env.metaApiVersion,
+        requestTimeoutMs: env.providerRequestTimeoutMs,
+      }) : undefined;
+      const result = await processDueSequences(repository, {
+        client,
+        tokenEncryptionKey: env.metaTokenEncryptionKey ?? undefined,
+      });
+      if (result.processed > 0) {
+        logger.info("Sequence sweep", { ...result });
+      }
+    } finally {
+      sequenceSweepRunning = false;
     }
   };
   setTimeout(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error instanceof Error ? error.message : String(error) })), 45_000).unref();

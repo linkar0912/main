@@ -6,6 +6,7 @@ import type { NormalizedEvent } from "./automation/types";
 import type { FacebookNormalizedEvent } from "./facebook/types";
 
 export const WEBHOOK_QUEUE_NAME = "linkar-webhooks";
+export const BULK_QUEUE_NAME = "linkar-bulk";
 
 export const QUEUE_PRIORITY = {
   REALTIME: 1,
@@ -29,7 +30,7 @@ export type WebhookQueueCounts = {
 // job into memory; page through instead so data-deletion sweeps stay cheap even
 // with thousands of completed/failed jobs retained.
 const JOB_SCAN_PAGE_SIZE = 500;
-export const ADMIN_QUEUE_NAMES = ["webhooks"] as const;
+export const ADMIN_QUEUE_NAMES = ["webhooks", "bulk"] as const;
 export type AdminQueueName = typeof ADMIN_QUEUE_NAMES[number];
 
 export type AdminQueueSnapshot = {
@@ -103,23 +104,34 @@ export function createLeadDeliveryJobId(deliveryKey: string): string {
 const globalForQueue = globalThis as unknown as {
   linkarWebhookQueue?: Queue;
   linkarWebhookRedis?: Redis;
+  linkarBulkQueue?: Queue;
+  linkarBulkRedis?: Redis;
 };
 
-function getWebhookQueue(): Queue | null {
+function getQueue(name: AdminQueueName): Queue | null {
   const redisUrl = getServerEnv().redisUrl;
   if (!redisUrl) return null;
-  if (globalForQueue.linkarWebhookQueue) return globalForQueue.linkarWebhookQueue;
+  if (name === "webhooks" && globalForQueue.linkarWebhookQueue) return globalForQueue.linkarWebhookQueue;
+  if (name === "bulk" && globalForQueue.linkarBulkQueue) return globalForQueue.linkarBulkQueue;
 
   const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
-  const queue = new Queue(WEBHOOK_QUEUE_NAME, { connection: redis });
-  globalForQueue.linkarWebhookRedis = redis;
-  globalForQueue.linkarWebhookQueue = queue;
+  const queue = new Queue(name === "webhooks" ? WEBHOOK_QUEUE_NAME : BULK_QUEUE_NAME, { connection: redis });
+  if (name === "webhooks") {
+    globalForQueue.linkarWebhookRedis = redis;
+    globalForQueue.linkarWebhookQueue = queue;
+  } else {
+    globalForQueue.linkarBulkRedis = redis;
+    globalForQueue.linkarBulkQueue = queue;
+  }
   return queue;
 }
 
+function getWebhookQueue(): Queue | null { return getQueue("webhooks"); }
+function getBulkQueue(): Queue | null { return getQueue("bulk"); }
+
 function adminQueue(name: string): Queue | null {
   if (!ADMIN_QUEUE_NAMES.includes(name as AdminQueueName)) throw new Error("unknown_queue");
-  return getWebhookQueue();
+  return getQueue(name as AdminQueueName);
 }
 
 function safeFailureCode(reason?: string): string | null {
@@ -132,13 +144,14 @@ export async function getAdminQueueSnapshot(name: AdminQueueName): Promise<Admin
   const queue = adminQueue(name);
   if (!queue) return { name, configured: false, paused: null, waiting: 0, active: 0, delayed: 0, completed: 0, failed: 0, oldestWaitingAgeMs: null, lastFailedCode: null };
   const [counts, paused, oldest, failed] = await Promise.all([
-    queue.getJobCounts("waiting", "active", "delayed", "completed", "failed"),
+    queue.getJobCounts("waiting", "prioritized", "active", "delayed", "completed", "failed"),
     queue.isPaused(),
-    queue.getJobs(["waiting"], 0, 0, true),
+    queue.getJobs(["waiting", "prioritized"], 0, 0, true),
     queue.getJobs(["failed"], 0, 0),
   ]);
-  const oldestTimestamp = oldest[0]?.timestamp;
-  return { name, configured: true, paused, waiting: counts.waiting ?? 0, active: counts.active ?? 0, delayed: counts.delayed ?? 0, completed: counts.completed ?? 0, failed: counts.failed ?? 0, oldestWaitingAgeMs: oldestTimestamp ? Math.max(0, Date.now() - oldestTimestamp) : null, lastFailedCode: safeFailureCode(failed[0]?.failedReason) };
+  const oldestTimestamp = oldest.reduce<number | null>((value, job) =>
+    value === null ? job.timestamp : Math.min(value, job.timestamp), null);
+  return { name, configured: true, paused, waiting: (counts.waiting ?? 0) + (counts.prioritized ?? 0), active: counts.active ?? 0, delayed: counts.delayed ?? 0, completed: counts.completed ?? 0, failed: counts.failed ?? 0, oldestWaitingAgeMs: oldestTimestamp ? Math.max(0, Date.now() - oldestTimestamp) : null, lastFailedCode: safeFailureCode(failed[0]?.failedReason) };
 }
 
 export async function setAdminQueuePaused(name: string, paused: boolean): Promise<{ name: AdminQueueName; paused: boolean }> {
@@ -216,25 +229,27 @@ async function removeJobsAllowingMissing(jobs: Job[]): Promise<void> {
 // those workspaces (igUserIds, pageIds) - webhook job payloads carry those
 // instead of workspaceId.
 export async function deleteQueuedWorkspaceEventsBatch(identifiers: readonly string[]): Promise<void> {
-  const queue = getWebhookQueue();
-  if (!queue) return;
+  const queues = [getWebhookQueue(), getBulkQueue()].filter((queue): queue is Queue => queue !== null);
+  if (queues.length === 0) return;
   const targets = new Set(identifiers);
   if (targets.size === 0) return;
   const states: JobType[] = ["waiting", "delayed", "prioritized", "waiting-children", "failed", "completed"];
-  let start = 0;
-  for (;;) {
-    const page = await queue.getJobs(states, start, start + JOB_SCAN_PAGE_SIZE - 1);
-    const matches = page.filter((job) => jobMatchesWorkspaceTargets(job, targets));
-    await removeJobsAllowingMissing(matches);
-    if (page.length < JOB_SCAN_PAGE_SIZE) break;
-    start += JOB_SCAN_PAGE_SIZE - matches.length;
-  }
-  let activeStart = 0;
-  for (;;) {
-    const active = await queue.getJobs(["active"], activeStart, activeStart + JOB_SCAN_PAGE_SIZE - 1);
-    if (active.some((job) => jobMatchesWorkspaceTargets(job, targets))) throw new Error("workspace_jobs_active");
-    if (active.length < JOB_SCAN_PAGE_SIZE) break;
-    activeStart += JOB_SCAN_PAGE_SIZE;
+  for (const queue of queues) {
+    let start = 0;
+    for (;;) {
+      const page = await queue.getJobs(states, start, start + JOB_SCAN_PAGE_SIZE - 1);
+      const matches = page.filter((job) => jobMatchesWorkspaceTargets(job, targets));
+      await removeJobsAllowingMissing(matches);
+      if (page.length < JOB_SCAN_PAGE_SIZE) break;
+      start += JOB_SCAN_PAGE_SIZE - matches.length;
+    }
+    let activeStart = 0;
+    for (;;) {
+      const active = await queue.getJobs(["active"], activeStart, activeStart + JOB_SCAN_PAGE_SIZE - 1);
+      if (active.some((job) => jobMatchesWorkspaceTargets(job, targets))) throw new Error("workspace_jobs_active");
+      if (active.length < JOB_SCAN_PAGE_SIZE) break;
+      activeStart += JOB_SCAN_PAGE_SIZE;
+    }
   }
 }
 
@@ -262,13 +277,14 @@ async function findJobsByAccount(queue: Queue, igUserId: string, includeActive: 
 }
 
 export async function deleteQueuedInstagramEvents(igUserId: string): Promise<void> {
-  const queue = getWebhookQueue();
-  if (!queue) return;
-  const removable = await findJobsByAccount(queue, igUserId, false);
-  await Promise.all(removable.map((job) => job.remove()));
-  const remaining = await findJobsByAccount(queue, igUserId, true);
-  if (remaining.length > 0) {
-    throw new Error("Instagram deletion is waiting for an active queue job to finish");
+  for (const queue of [getWebhookQueue(), getBulkQueue()]) {
+    if (!queue) continue;
+    const removable = await findJobsByAccount(queue, igUserId, false);
+    await Promise.all(removable.map((job) => job.remove()));
+    const remaining = await findJobsByAccount(queue, igUserId, true);
+    if (remaining.length > 0) {
+      throw new Error("Instagram deletion is waiting for an active queue job to finish");
+    }
   }
 }
 
@@ -305,7 +321,7 @@ export async function enqueueFacebookEvents(events: FacebookNormalizedEvent[]): 
 }
 
 export async function enqueueLeadDelivery(job: LeadDeliveryJob): Promise<boolean> {
-  const queue = getWebhookQueue();
+  const queue = getBulkQueue();
   if (!queue) return false;
   await queue.add("lead-delivery", job, {
     jobId: createLeadDeliveryJobId(job.deliveryKey),
@@ -377,16 +393,16 @@ export function isQueueConfigured(): boolean {
 }
 
 export async function getWebhookQueueCounts(): Promise<WebhookQueueCounts> {
-  const queue = getWebhookQueue();
-  if (!queue) return { state: "not_configured", waiting: 0, active: 0, delayed: 0, failed: 0 };
+  const queues = [getWebhookQueue(), getBulkQueue()].filter((queue): queue is Queue => queue !== null);
+  if (queues.length === 0) return { state: "not_configured", waiting: 0, active: 0, delayed: 0, failed: 0 };
   try {
-    const counts = await queue.getJobCounts("waiting", "active", "delayed", "failed");
+    const results = await Promise.all(queues.map((queue) => queue.getJobCounts("waiting", "prioritized", "active", "delayed", "failed")));
     return {
       state: "ok",
-      waiting: counts.waiting ?? 0,
-      active: counts.active ?? 0,
-      delayed: counts.delayed ?? 0,
-      failed: counts.failed ?? 0,
+      waiting: results.reduce((sum, counts) => sum + (counts.waiting ?? 0) + (counts.prioritized ?? 0), 0),
+      active: results.reduce((sum, counts) => sum + (counts.active ?? 0), 0),
+      delayed: results.reduce((sum, counts) => sum + (counts.delayed ?? 0), 0),
+      failed: results.reduce((sum, counts) => sum + (counts.failed ?? 0), 0),
     };
   } catch {
     return { state: "error", waiting: 0, active: 0, delayed: 0, failed: 0 };
@@ -397,7 +413,7 @@ export async function enqueueBroadcastSends(
   jobs: BroadcastSendJob[],
   baseDelayMs = 0,
 ): Promise<BroadcastEnqueueResult> {
-  const queue = getWebhookQueue();
+  const queue = getBulkQueue();
   const recipientKey = (job: BroadcastSendJob): BroadcastRecipientKey => ({
     igAccountId: job.igAccountId,
     igScopedUserId: job.igScopedUserId,
@@ -411,7 +427,7 @@ export async function enqueueBroadcastSends(
         {
           jobId: `broadcast:${job.broadcastId}:${job.igAccountId}:${job.igScopedUserId}`,
           priority: QUEUE_PRIORITY.BULK,
-          delay: baseDelayMs + Math.min(index, 600) * 1_000,
+          delay: baseDelayMs + index * 1_000,
           attempts: 2,
           backoff: { type: "fixed", delay: 5_000 },
           removeOnComplete: 500,

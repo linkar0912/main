@@ -17,12 +17,14 @@ const { deleteQueuedInstagramEvents, deleteQueuedWorkspaceEventsBatch } = await 
 
 describe("Instagram queue deletion", () => {
   beforeEach(() => {
-    state.getJobs.mockReset();
+    state.getJobs.mockReset().mockResolvedValue([]);
     delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
+    delete (globalThis as { linkarBulkQueue?: unknown }).linkarBulkQueue;
   });
 
   afterEach(() => {
     delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
+    delete (globalThis as { linkarBulkQueue?: unknown }).linkarBulkQueue;
   });
 
   it("removes both webhook and broadcast jobs belonging to the Instagram account", async () => {
@@ -31,9 +33,10 @@ describe("Instagram queue deletion", () => {
     state.getJobs
       .mockResolvedValueOnce([
         { data: { accountId: "ig_target" }, remove: webhookRemove },
-        { data: { igAccountId: "ig_target" }, remove: broadcastRemove },
         { data: { igAccountId: "ig_sibling" }, remove: vi.fn() },
       ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ data: { igAccountId: "ig_target" }, remove: broadcastRemove }])
       .mockResolvedValueOnce([]);
 
     await deleteQueuedInstagramEvents("ig_target");
@@ -59,6 +62,6 @@ describe("Instagram queue deletion", () => {
     expect(firstRemove).toHaveBeenCalledOnce();
     expect(secondRemove).toHaveBeenCalledOnce();
     expect(preservedRemove).not.toHaveBeenCalled();
-    expect(state.getJobs).toHaveBeenCalledTimes(2);
+    expect(state.getJobs).toHaveBeenCalledTimes(4);
   });
 });

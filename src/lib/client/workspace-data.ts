@@ -213,14 +213,17 @@ export function seedWorkspaceData(seed: {
   if (seed.insightsOverview !== undefined && insightsOverviewCache.value === undefined) {
     insightsOverviewCache.value = seed.insightsOverview;
     insightsOverviewCache.fetchedAt = now;
+    insightsOverviewCache.fetcher = fetch;
   }
   if (seed.instagramConnections !== undefined && connectionsCache.value === undefined) {
     connectionsCache.value = seed.instagramConnections;
     connectionsCache.fetchedAt = now;
+    connectionsCache.fetcher = fetch;
   }
   if (seed.facebookPages !== undefined && facebookPagesCache.value === undefined) {
     facebookPagesCache.value = seed.facebookPages;
     facebookPagesCache.fetchedAt = now;
+    facebookPagesCache.fetcher = fetch;
   }
 }
 
@@ -260,7 +263,7 @@ export function getInsightsOverview(signal?: AbortSignal): Promise<InsightsOverv
     insightsOverviewCache,
     "/api/insights?include=overview",
     (payload) => payload as InsightsOverview,
-    true,
+    false,
   ), signal);
 }
 

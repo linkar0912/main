@@ -4,9 +4,11 @@ import {
   getBillingView,
   getFacebookPages,
   getInstagramConnections,
+  getInsightsOverview,
   getTeamOverview,
   getWorkspaceBootstrap,
   invalidateWorkspaceResource,
+  seedWorkspaceData,
 } from "./workspace-data";
 
 describe("workspace client data cache", () => {
@@ -35,6 +37,21 @@ describe("workspace client data cache", () => {
 
     expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/workspace/bootstrap")).toHaveLength(1);
     expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/meta/connection")).toHaveLength(1);
+  });
+
+  it("uses server-seeded data without an immediate duplicate fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    seedWorkspaceData({
+      insightsOverview: { capturedEmails: 7 },
+      instagramConnections: [],
+      facebookPages: [],
+    });
+
+    expect(await getInsightsOverview()).toMatchObject({ capturedEmails: 7 });
+    expect(await getInstagramConnections()).toEqual([]);
+    expect(await getFacebookPages()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("can invalidate connection data after a disconnect", async () => {

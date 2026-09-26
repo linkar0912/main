@@ -103,6 +103,10 @@ export function InsightsContentSkeleton() {
   );
 }
 
+export function DashboardChartSkeleton() {
+  return <div className="dashboard-chart-skeleton" aria-label="Loading performance data" aria-busy="true"><SkeletonMetrics count={3} /><div className="skeleton-chart-bars" aria-hidden>{Array.from({ length: 14 }, (_, index) => <Skeleton className={`skeleton-chart-bar h-${(index % 5) + 1}`} key={index} />)}</div></div>;
+}
+
 export function AutomationListContentSkeleton({ count = 5, withToolbar = false }: { count?: number; withToolbar?: boolean }) {
   return <LoadingRegion label="Loading automations" className="skeleton-content">{withToolbar ? <SkeletonToolbar filters={3} /> : null}<SkeletonListRows count={count} /></LoadingRegion>;
 }
@@ -110,7 +114,7 @@ export function AutomationListContentSkeleton({ count = 5, withToolbar = false }
 export function ScreenSkeleton() { return <WorkspaceScreen label="Loading workspace"><SkeletonListRows count={4} /></WorkspaceScreen>; }
 
 export function DashboardSkeleton() {
-  return <WorkspaceScreen label="Loading Home" header={<header className="page-header home-greeting"><div><p className="eyebrow">Home</p><Skeleton className="skeleton-word skeleton-title" /><p className="muted page-lede">Welcome back - here’s how your replies performed over the last 14 days.</p></div></header>}><div className="skeleton-card-grid" aria-hidden>{Array.from({ length: 3 }, (_, index) => <div className="skeleton-action-card" key={index}><Skeleton className="skeleton-avatar" /><Skeleton className="skeleton-word skeleton-row-title" /><Skeleton className="skeleton-word skeleton-row-meta" /></div>)}</div><SkeletonListRows count={4} compact /></WorkspaceScreen>;
+  return <WorkspaceScreen label="Loading Home" header={<header className="page-header home-greeting"><div><p className="eyebrow">Home</p><Skeleton className="skeleton-word skeleton-title" /><p className="muted page-lede">Welcome back - here’s how your replies performed over the last 14 days.</p></div><Skeleton className="skeleton-button" /></header>}><section className="panel chart-panel"><div className="panel-heading"><div><p className="eyebrow">Performance · Last 14 days</p><h2>Reply volume</h2></div></div><DashboardChartSkeleton /></section><section className="panel automations-panel"><div className="panel-heading"><div><p className="eyebrow">At a glance</p><h2>Your automations</h2></div></div><SkeletonListRows count={4} compact /></section></WorkspaceScreen>;
 }
 
 export function AutomationsSkeleton() { return <WorkspaceScreen label="Loading Automations" header={<header className="page-header"><div><p className="eyebrow">Workspace / automation</p><h1>Automations</h1><p className="muted page-lede">Rules that turn Instagram and Facebook signals into helpful, timely replies.</p></div></header>}><AutomationListContentSkeleton count={5} withToolbar /></WorkspaceScreen>; }

@@ -28,13 +28,14 @@ describe("worker health server", () => {
     const server = createWorkerHealthServer({
       database: async () => undefined,
       redis: async () => undefined,
-    });
+    }, () => true);
 
     await withServer(server, async (baseUrl) => {
       const response = await fetch(`${baseUrl}/health`);
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toMatchObject({
         status: "ok",
+        processing: "ok",
         dependencies: { database: "ok", redis: "ok" },
       });
     });
@@ -56,6 +57,26 @@ describe("worker health server", () => {
       expect(response.status).toBe(503);
       // A failing probe must not leak the credential-bearing connection string.
       expect(await response.text()).not.toContain("secret");
+    });
+  });
+
+  it("reports 503 when BullMQ is not consuming despite healthy dependencies", async () => {
+    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
+    vi.stubEnv("REDIS_URL", "redis://:secret@valkey:6379");
+
+    const server = createWorkerHealthServer({
+      database: async () => undefined,
+      redis: async () => undefined,
+    }, () => false);
+
+    await withServer(server, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/health`);
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        status: "degraded",
+        processing: "error",
+        dependencies: { database: "ok", redis: "ok" },
+      });
     });
   });
 

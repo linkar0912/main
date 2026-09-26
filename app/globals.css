@@ -3300,6 +3300,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .skeleton-metric { align-items: center; display: flex; gap: var(--space-3); min-height: 92px; padding: var(--space-4); }
 .skeleton-metric .skeleton-stack { flex: 1; }
 .skeleton-chart { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); display: grid; gap: var(--space-5); min-height: 310px; padding: var(--space-5); }
+.dashboard-chart-skeleton { display: grid; gap: var(--space-4); min-height: 310px; }
+.dashboard-chart-skeleton .skeleton-chart-bars { height: 185px; }
 .skeleton-chart-heading { align-items: start; display: flex; justify-content: space-between; }
 .skeleton-section-title { height: 21px; width: 170px; }
 .skeleton-legend { width: 180px; }

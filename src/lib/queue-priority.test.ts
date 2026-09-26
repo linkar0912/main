@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   add: vi.fn(),
   getJob: vi.fn(),
+  names: [] as string[],
 }));
 
 vi.mock("bullmq", () => ({
   Queue: class {
+    constructor(name: string) { mocks.names.push(name); }
     add = mocks.add;
     getJob = mocks.getJob;
   },
@@ -29,6 +31,16 @@ describe("queue priority tiers", () => {
   beforeEach(() => {
     mocks.add.mockReset().mockResolvedValue(undefined);
     mocks.getJob.mockReset().mockResolvedValue(null);
+    mocks.names.length = 0;
+    delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
+    delete (globalThis as { linkarBulkQueue?: unknown }).linkarBulkQueue;
+  });
+
+  it("uses separate consumers for realtime and bulk jobs", async () => {
+    await enqueueAdminMaintenance("delivery_reconciliation");
+    await enqueueLeadDelivery({ deliveryKey: "lead_1", workspaceId: "workspace_1", kind: "LEAD_WEBHOOK" });
+
+    expect(mocks.names).toEqual(["linkar-webhooks", "linkar-bulk"]);
   });
 
   it("keeps interactive follow-ups ahead of bulk delivery", async () => {

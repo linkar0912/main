@@ -22,6 +22,7 @@ import { StatusBadge } from "./status-badge";
 import type { AutomationRecord } from "@/src/lib/repository";
 import { getFacebookPages, getInstagramConnections, getInsightsOverview, seedWorkspaceData } from "@/src/lib/client/workspace-data";
 import { ReplyVolumeChart, type DayPoint } from "./reply-volume-chart";
+import { DashboardChartSkeleton } from "./skeleton";
 
 const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
 
@@ -209,6 +210,7 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
 export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection, initialEmail }: DashboardScreenProps = {}) {
   const { automations, loading } = useAutomations(initialAutomations);
   const [insights, setInsights] = useState<InsightsPayload | null>(initialInsights ?? null);
+  const [insightsError, setInsightsError] = useState(false);
   const [hasConnection, setHasConnection] = useState<boolean | null>(() => initialHasConnection ?? null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -228,9 +230,9 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
       // contact rows on top. One fewer authenticated round trip per load.
       getInsightsOverview()
         .then((payload) => {
-          if (active) setInsights(payload);
+          if (active) { setInsights(payload); setInsightsError(false); }
         })
-        .catch(() => undefined);
+        .catch(() => { if (active) setInsightsError(true); });
       Promise.all([
         getInstagramConnections().catch(() => []),
         getFacebookPages().catch(() => []),
@@ -321,7 +323,14 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
               <h2>Reply volume</h2>
             </div>
           </div>
-          {hasPerformanceHistory ? (
+          {insightsError && insights === null ? (
+            <div className="panel-empty" role="alert">Performance data could not load. <button className="text-link" type="button" onClick={() => {
+              setInsightsError(false);
+              void getInsightsOverview().then(setInsights).catch(() => setInsightsError(true));
+            }}>Retry</button></div>
+          ) : insights === null ? (
+            <DashboardChartSkeleton />
+          ) : hasPerformanceHistory ? (
             <>
               {/* Tier one: only the two charted series. Each carries its chart
                   swatch, which binds the number to its bars and makes the

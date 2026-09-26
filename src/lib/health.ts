@@ -40,15 +40,46 @@ async function checkDatabase(): Promise<void> {
   await prisma.$queryRaw`SELECT 1`;
 }
 
-async function checkRedis(redisUrl: string): Promise<void> {
-  const { default: Redis } = await import("ioredis");
-  const redis = new Redis(redisUrl, { connectTimeout: 5_000, lazyConnect: true, maxRetriesPerRequest: 1 });
+const globalForHealth = globalThis as unknown as {
+  linkarHealthRedis?: import("ioredis").default;
+  linkarHealthRedisUrl?: string;
+  linkarHealthRedisPending?: Promise<import("ioredis").default>;
+};
 
-  try {
-    await redis.ping();
-  } finally {
-    redis.disconnect();
+async function checkRedis(redisUrl: string): Promise<void> {
+  // Health probes run repeatedly. Reconnecting to Valkey on every probe pays
+  // the TCP/TLS handshake each time and amplifies load during an incident.
+  if (globalForHealth.linkarHealthRedisUrl !== redisUrl) {
+    globalForHealth.linkarHealthRedis?.disconnect();
+    globalForHealth.linkarHealthRedis = undefined;
+    globalForHealth.linkarHealthRedisPending = undefined;
+    globalForHealth.linkarHealthRedisUrl = redisUrl;
   }
+  if (!globalForHealth.linkarHealthRedis && !globalForHealth.linkarHealthRedisPending) {
+    globalForHealth.linkarHealthRedisPending = import("ioredis").then(({ default: Redis }) => {
+      const client = new Redis(redisUrl, {
+        connectTimeout: 3_000,
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+      });
+      if (globalForHealth.linkarHealthRedisUrl !== redisUrl) client.disconnect();
+      return client;
+    });
+  }
+  let client = globalForHealth.linkarHealthRedis;
+  if (!client) {
+    try {
+      client = await globalForHealth.linkarHealthRedisPending!;
+    } catch (error) {
+      if (globalForHealth.linkarHealthRedisUrl === redisUrl) globalForHealth.linkarHealthRedisPending = undefined;
+      throw error;
+    }
+  }
+  if (globalForHealth.linkarHealthRedisUrl === redisUrl) {
+    globalForHealth.linkarHealthRedis = client;
+    globalForHealth.linkarHealthRedisPending = undefined;
+  }
+  await client.ping();
 }
 
 async function getDependencyState(configured: boolean, checker: HealthChecker): Promise<DependencyState> {

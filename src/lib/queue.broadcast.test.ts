@@ -38,10 +38,12 @@ describe("broadcast queue fan-out", () => {
   beforeEach(() => {
     state.add.mockReset().mockResolvedValue({ id: "job" });
     delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
+    delete (globalThis as { linkarBulkQueue?: unknown }).linkarBulkQueue;
   });
 
   afterEach(() => {
     delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
+    delete (globalThis as { linkarBulkQueue?: unknown }).linkarBulkQueue;
   });
 
   it("includes the Instagram account in otherwise identical recipient job IDs", async () => {
@@ -60,5 +62,16 @@ describe("broadcast queue fan-out", () => {
       accepted: [{ igAccountId: "ig_account_a", igScopedUserId: "recipient_1" }],
       rejected: [{ igAccountId: "ig_account_b", igScopedUserId: "recipient_1" }],
     });
+  });
+
+  it("keeps one-second spacing beyond 600 recipients", async () => {
+    await enqueueBroadcastSends(Array.from({ length: 602 }, (_, index) => ({
+      ...jobs[0],
+      deliveryKey: `delivery_${index}`,
+      igScopedUserId: `recipient_${index}`,
+    })));
+
+    expect(state.add.mock.calls[600][2].delay).toBe(600_000);
+    expect(state.add.mock.calls[601][2].delay).toBe(601_000);
   });
 });
