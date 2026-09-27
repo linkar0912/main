@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { History } from "lucide-react";
+import { History, X } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
 import type { FlowDefinition } from "@/src/lib/automation/types";
 
@@ -12,6 +12,7 @@ type Version = {
   version: number;
   name: string;
   definition: FlowDefinition;
+  status?: "DRAFT" | "ACTIVE" | "PAUSED";
   snapshotBy?: string;
   snapshotAt: string;
 };
@@ -68,7 +69,11 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
   }, [automationId]);
 
   async function restore(versionId: string) {
-    if (!confirm("Restoring this version will overwrite the current flow. Continue?")) return;
+    // Restoring brings back the saved on/off state too, so say so: restoring a
+    // draft snapshot switches a live automation off.
+    const target = versions.find((version) => version.id === versionId);
+    const state = target?.status === "ACTIVE" ? "switched on" : target?.status === "PAUSED" ? "paused" : "a draft (switched off)";
+    if (!confirm(`Restore v${target?.version ?? ""}? It replaces the current flow and the automation will be ${state}, as it was in that version.`)) return;
     setRestoringId(versionId);
     setError("");
     try {
@@ -109,6 +114,7 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
             <time dateTime={version.snapshotAt}>{formatDate(version.snapshotAt)}</time>
           </div>
           <p className="muted activity-summary">
+            {version.status ? `${version.status === "ACTIVE" ? "Active" : version.status === "PAUSED" ? "Paused" : "Draft"} · ` : ""}
             {summarizeTrigger(version.definition)}
             {version.snapshotBy ? ` · by ${version.snapshotBy}` : ""}
           </p>
@@ -152,7 +158,7 @@ export function AutomationVersionsModal({ automationId, onClose, onRestored }: {
             <h2>Automation versions</h2>
             <p className="muted">Each saved edit is a snapshot you can restore.</p>
           </div>
-          <button className="icon-button" type="button" aria-label="Close history" onClick={onClose}>✕</button>
+          <button className="icon-button" type="button" aria-label="Close history" onClick={onClose}><X size={16} /></button>
         </div>
         <AutomationVersionsPanel automationId={automationId} onRestored={onRestored} />
       </div>

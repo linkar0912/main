@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
-  CircleHelp,
+  ChevronDown,
   CreditCard,
   ExternalLink,
   Inbox,
@@ -24,6 +24,7 @@ import { useAccountIdentity } from "./app-shell";
 import { FacebookGlyph } from "./facebook-glyph";
 import { InstagramGlyph } from "./instagram-glyph";
 import { helpArticleMatchesQuery, normalizeHelpQuery } from "@/src/lib/help-search";
+import { PageHeader } from "./page-header";
 
 type Topic = {
   id: string;
@@ -454,7 +455,7 @@ const TOPICS: Topic[] = [
         q: "What are quiet hours?",
         a: (
           <>
-            A workspace-wide window in <Link href="/settings">Settings</Link> → Messaging quiet hours
+            A workspace-wide window in <Link href="/settings?section=delivery">Settings</Link> → Messaging quiet hours
             where Linkar holds outbound sends. Sequences, broadcasts, and follow-ups all wait it out.
             Immediate replies to someone who just messaged you are exempt.
           </>
@@ -520,7 +521,7 @@ const TOPICS: Topic[] = [
         q: "How do I invite someone?",
         a: (
           <>
-            <Link href="/settings">Settings</Link> → Members &amp; invitations. Invite by email and pick
+            <Link href="/settings?section=team">Settings</Link> → Members &amp; invitations. Invite by email and pick
             their role. Team access is a plan-gated feature, so it&apos;s available when your plan
             includes it and within your member limit.
           </>
@@ -758,14 +759,11 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
   }
 
   return (
-    <div className="page-wrap narrow-wrap">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Support</p>
-          <h1>Help</h1>
-          <p className="muted page-lede">Guides and answers for every part of the workspace - searchable in one place.</p>
-        </div>
-      </header>
+    <div className="page-wrap">
+      <PageHeader
+        title="Help"
+        description="Guides and answers for every part of the workspace - searchable in one place."
+      />
 
       <section className="help-search-shell" aria-label="Search help articles">
         <form
@@ -825,8 +823,14 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
           ) : (
             <div className="help-topic-groups">
               {visibleTopics.map((topic) => (
-                <div key={topic.id} className="help-topic-group">
-                  {showGroupLabels && <p className="help-topic-group-label">{topic.title}</p>}
+                <section key={topic.id} className="help-topic-group" aria-label={topic.title}>
+                  {showGroupLabels && (
+                    <button type="button" className="help-topic-group-head" onClick={() => selectTopic(topic.id)}>
+                      <span className="help-topic-group-icon"><topic.icon size={16} strokeWidth={1.9} /></span>
+                      <span className="help-topic-group-title">{topic.title}</span>
+                      <span className="help-topic-group-count">{topic.articles.length} {topic.articles.length === 1 ? "guide" : "guides"}</span>
+                    </button>
+                  )}
                   <div className="faq-list">
                     {topic.articles.map((article, index) => {
                       const key = `${topic.id}:${index}`;
@@ -840,7 +844,7 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
                             onClick={() => setOpenArticle(open ? null : key)}
                           >
                             {article.q}
-                            <CircleHelp className="faq-chevron" size={16} />
+                            <ChevronDown className="faq-chevron" size={16} aria-hidden />
                           </button>
                           {open && (
                             <div className="faq-answer">
@@ -877,7 +881,7 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
                       );
                     })}
                   </div>
-                </div>
+                </section>
               ))}
             </div>
           )}

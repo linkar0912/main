@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DeliveryIssueRow } from "./delivery-issue-row";
 import { InlineContentSkeleton } from "./skeleton";
@@ -51,7 +51,8 @@ function detailLine(failure: Failure): string {
  * Lists the most recent FAILED outbound deliveries so a workspace admin can
  * spot a misconfigured webhook, a token problem, or a recurring 5xx from Meta.
  */
-export function FailurePanel() {
+export function FailurePanel({ limit }: { limit?: number } = {}) {
+  const [showAll, setShowAll] = useState(false);
   const [failures, setFailures] = useState<Failure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -86,14 +87,16 @@ export function FailurePanel() {
   if (error) return <p className="form-error" role="alert">{error}</p>;
   if (failures.length === 0) {
     return (
-      <p className="muted">
-        <AlertTriangle size={14} /> No failed deliveries in the recent window. You&apos;re all clear.
+      <p className="all-clear">
+        <CheckCircle2 size={15} /> No failed deliveries in the recent window. You&apos;re all clear.
       </p>
     );
   }
+  const visible = limit && !showAll ? failures.slice(0, limit) : failures;
   return (
+    <>
     <ul className="failure-list" aria-label="Recent failed deliveries">
-      {failures.map((failure) => (
+      {visible.map((failure) => (
         <DeliveryIssueRow
           key={failure.id}
           label={friendlyKind(failure.kind)}
@@ -104,5 +107,11 @@ export function FailurePanel() {
         />
       ))}
     </ul>
+    {limit && failures.length > limit ? (
+      <button className="list-toggle" type="button" onClick={() => setShowAll((value) => !value)}>
+        {showAll ? "Show fewer" : `Show all ${failures.length}`}
+      </button>
+    ) : null}
+    </>
   );
 }

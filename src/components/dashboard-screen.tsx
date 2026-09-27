@@ -3,13 +3,15 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import {
-  ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
   CheckCircle2,
+  MailCheck,
   Plus,
+  Power,
+  Send,
+  UsersRound,
   Workflow,
   Zap,
 } from "lucide-react";
@@ -21,8 +23,10 @@ import { TrackedLinksPanel } from "./tracked-links-panel";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord } from "@/src/lib/repository";
 import { getFacebookPages, getInstagramConnections, getInsightsOverview, seedWorkspaceData } from "@/src/lib/client/workspace-data";
-import { ReplyVolumeChart, type DayPoint } from "./reply-volume-chart";
-import { DashboardChartSkeleton } from "./skeleton";
+import type { DayPoint } from "./reply-volume-chart";
+import { ReplyVolumeCard } from "./reply-volume-card";
+import { halfWindowDelta, StatGrid, StatTile } from "./stat-tile";
+import { PageHeader, SectionCard } from "./page-header";
 
 const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
 
@@ -40,41 +44,6 @@ export type DashboardScreenProps = {
   /** Session email from the server render, so the greeting needs no bootstrap wait. */
   initialEmail?: string;
 };
-
-type Delta = { dir: "up" | "down" | "flat"; label: string };
-
-function sumPoints(points: DayPoint[]): number {
-  return points.reduce((total, point) => total + point.count, 0);
-}
-
-function halfWindowDelta(points: DayPoint[]): Delta | null {
-  if (points.length < 4) return null;
-  const mid = Math.floor(points.length / 2);
-  const recent = sumPoints(points.slice(mid));
-  const previous = sumPoints(points.slice(0, mid));
-  if (recent > 0 && previous === 0) return { dir: "up", label: "new" };
-  if (previous === 0 || recent + previous === 0) return null;
-  const pct = Math.round(((recent - previous) / previous) * 100);
-  if (pct === 0) return { dir: "flat", label: "0%" };
-  return pct > 0
-    ? { dir: "up", label: `+${pct}% vs prior wk` }
-    : { dir: "down", label: `${pct}% vs prior wk` };
-}
-
-function NeutralPill({ children }: { children: ReactNode }) {
-  return <span className="delta-pill">{children}</span>;
-}
-
-function DeltaPill({ delta }: { delta?: Delta | null }) {
-  if (!delta) return null;
-  if (delta.dir === "flat") return <NeutralPill>{delta.label}</NeutralPill>;
-  return (
-    <span className="delta-pill" data-dir={delta.dir}>
-      {delta.dir === "up" ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
-      {delta.label}
-    </span>
-  );
-}
 
 function flowTriggerLabel(automation: AutomationRecord): string {
   const trigger = automation.definition.trigger as { type?: string } | undefined;
@@ -112,18 +81,21 @@ function DashboardGreeting({ fallbackEmail = "" }: { fallbackEmail?: string }) {
   // fallback paints the real name in the very first render.
   const email = contextEmail || fallbackEmail;
   return (
-    <header className="page-header home-greeting">
-      <div>
-        <p className="eyebrow">Home</p>
-        <h1>Hello, {displayNameFromEmail(email)}!</h1>
-        <p className="muted page-lede">
-          Welcome back - here’s how your replies performed over the last 14 days.
-        </p>
-      </div>
-      <Link className="button button-primary" href="/quick-automation">
-        <Zap size={17} /> Quick Automation
-      </Link>
-    </header>
+    <PageHeader
+      className="home-greeting"
+      title={`Hello, ${displayNameFromEmail(email)}!`}
+      description="Welcome back - here’s how your replies performed over the last 14 days."
+      actions={(
+        <>
+          <CreateAutomationButton className="button button-secondary">
+            <Plus size={16} /> New automation
+          </CreateAutomationButton>
+          <Link className="button button-primary" href="/quick-automation">
+            <Zap size={16} /> Quick Automation
+          </Link>
+        </>
+      )}
+    />
   );
 }
 
@@ -255,6 +227,7 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
 
   const sentPerDay = insights?.timeseries?.sentPerDay ?? [];
   const participantsPerDay = insights?.timeseries?.participantsPerDay ?? [];
+  const sumPoints = (points: DayPoint[]) => points.reduce((total, point) => total + point.count, 0);
   const sentTotal = sumPoints(sentPerDay);
   const reachedTotal = sumPoints(participantsPerDay);
   const sentDelta = halfWindowDelta(sentPerDay);
@@ -280,9 +253,9 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
   return (
     <>
       <div className="page-wrap">
-        <DemoBanner />
-
         <DashboardGreeting fallbackEmail={initialEmail ?? ""} />
+
+        <DemoBanner />
 
         {!loading && automations.length === 0 ? <section aria-label="Start here">
           <div className="quickstart-head">
@@ -316,117 +289,78 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
 
         <SetupChecklist automations={automations} hasConnection={hasConnection} loading={loading} />
 
-        <section className="panel chart-panel" aria-label="Performance over time">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Performance · Last 14 days</p>
-              <h2>Reply volume</h2>
-            </div>
-          </div>
-          {insightsError && insights === null ? (
+        <StatGrid>
+          <StatTile label="Replies sent" icon={Send} loading={insights === null} value={sentTotal} note="Last 14 days" delta={sentDelta} />
+          <StatTile label="People reached" icon={UsersRound} loading={insights === null} value={reachedTotal} note="Last 14 days" delta={reachedDelta} />
+          <StatTile label="Emails captured" icon={MailCheck} loading={insights === null} value={capturedTotal} note={`${optedOutTotal.toLocaleString()} opted out · respected`} />
+          <StatTile label="Replies that are on" icon={Power} loading={loading && automations.length === 0} value={activeCount} note={`of ${automations.length.toLocaleString()} automations`} />
+        </StatGrid>
+
+        <ReplyVolumeCard
+          sent={sentPerDay}
+          reached={participantsPerDay}
+          days={14}
+          loading={insights === null}
+          action={<Link className="text-link" href="/insights">Open insights <ArrowUpRight size={13} /></Link>}
+          placeholder={insightsError && insights === null ? (
             <div className="panel-empty" role="alert">Performance data could not load. <button className="text-link" type="button" onClick={() => {
               setInsightsError(false);
               void getInsightsOverview().then(setInsights).catch(() => setInsightsError(true));
             }}>Retry</button></div>
-          ) : insights === null ? (
-            <DashboardChartSkeleton />
-          ) : hasPerformanceHistory ? (
-            <>
-              {/* Tier one: only the two charted series. Each carries its chart
-                  swatch, which binds the number to its bars and makes the
-                  separate legend line redundant. */}
-              <div className="stat-row">
-                <div className="stat-block">
-                  <span className="stat-label">
-                    <span className="legend-swatch swatch-sent" /> Replies sent
-                  </span>
-                  <span className="stat-value-row">
-                    <strong>{sentTotal.toLocaleString()}</strong>
-                    <DeltaPill delta={sentDelta} />
-                  </span>
-                </div>
-                <div className="stat-block">
-                  <span className="stat-label">
-                    <span className="legend-swatch swatch-participants" /> People reached
-                  </span>
-                  <span className="stat-value-row">
-                    <strong>{reachedTotal.toLocaleString()}</strong>
-                    <DeltaPill delta={reachedDelta} />
-                  </span>
-                </div>
-              </div>
-              {/* Tier two: context and health, not performance - so they read as
-                  a quiet strip rather than competing cards. */}
-              <dl className="stat-meta">
-                <div className="stat-meta-item">
-                  <dt>Emails captured</dt>
-                  <dd>{capturedTotal.toLocaleString()} <span>all time</span></dd>
-                </div>
-                <div className="stat-meta-item">
-                  <dt>Opted out</dt>
-                  <dd>{optedOutTotal.toLocaleString()} <span>respected</span></dd>
-                </div>
-                <div className="stat-meta-item">
-                  <dt>Replies that are on</dt>
-                  <dd>{activeCount.toLocaleString()} <span>of {automations.length.toLocaleString()}</span></dd>
-                </div>
-              </dl>
-              <ReplyVolumeChart sent={sentPerDay} reached={participantsPerDay} days={14} compact />
-            </>
-          ) : (
+          ) : insights !== null && !hasPerformanceHistory ? (
             <p className="panel-empty">
               No activity yet - once an automation replies, you’ll see replies sent, people reached and
               emails captured here.
             </p>
-          )}
-        </section>
+          ) : undefined}
+        />
 
-        <section className="panel automations-panel" aria-label="Your automations">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">At a glance</p>
-              <h2>Your automations</h2>
-            </div>
-            <Link className="text-link" href="/automations">
-              Manage all <ArrowUpRight size={13} />
-            </Link>
-          </div>
-          {flowRows.length === 0 ? (
-            <div className="empty-state">
-              <span className="empty-icon"><Workflow size={20} /></span>
-              <h3>No automations yet</h3>
-              <p>Create your first automatic reply to start answering comments and messages.</p>
-              <CreateAutomationButton className="button button-primary">
-                <Plus size={15} /> New automation
-              </CreateAutomationButton>
-            </div>
-          ) : (
-            <div className="automation-list">
-              {flowRows.map((automation) => (
-                <Link className="automation-row" key={automation.id} href={`/automations/${automation.id}/edit`}>
-                  <span className="automation-icon">
-                    {automation.status === "ACTIVE" ? <Zap size={19} strokeWidth={1.7} /> : <Workflow size={19} strokeWidth={1.7} />}
-                  </span>
-                  <span className="automation-copy">
-                    <span className="automation-title"><strong>{automation.name}</strong><StatusBadge status={automation.status} /></span>
-                    <p>{flowTriggerLabel(automation)}</p>
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-        <section className="panel failure-panel" aria-label="Recent failures">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Health</p>
-              <h2>Recent failures</h2>
-              <p className="muted">The latest messages Linkar or Meta could not send, with the reason when available.</p>
-            </div>
-          </div>
-          <FailurePanel />
-        </section>
-        <section className="card" aria-labelledby="tracked-links-heading">
+        <div className="dashboard-columns">
+          <SectionCard
+            className="automations-panel"
+            flush
+            aria-label="Your automations"
+            title="Your automations"
+            description={automations.length > 0 ? `${activeCount} of ${automations.length} switched on` : undefined}
+            action={<Link className="text-link" href="/automations">Manage all <ArrowUpRight size={13} /></Link>}
+          >
+            {flowRows.length === 0 ? (
+              <div className="empty-state is-inline">
+                <span className="empty-icon"><Workflow size={20} /></span>
+                <h3>No automations yet</h3>
+                <p>Create your first automatic reply to start answering comments and messages.</p>
+                <CreateAutomationButton className="button button-primary">
+                  <Plus size={15} /> New automation
+                </CreateAutomationButton>
+              </div>
+            ) : (
+              <div className="automation-list">
+                {flowRows.map((automation) => (
+                  <Link className="automation-row" key={automation.id} href={`/automations/${automation.id}/edit`}>
+                    <span className="automation-icon">
+                      {automation.status === "ACTIVE" ? <Zap size={17} strokeWidth={1.8} /> : <Workflow size={17} strokeWidth={1.8} />}
+                    </span>
+                    <span className="automation-copy">
+                      <span className="automation-title"><strong>{automation.name}</strong><StatusBadge status={automation.status} /></span>
+                      <p>{flowTriggerLabel(automation)}</p>
+                    </span>
+                    <ArrowRight className="row-chevron" size={15} />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+          <SectionCard
+            className="failure-panel"
+            aria-label="Recent failures"
+            title="Recent failures"
+            description="Messages Linkar or Meta could not send, with the reason when available."
+          >
+            <FailurePanel limit={4} />
+          </SectionCard>
+        </div>
+
+        <section className="surface" aria-labelledby="tracked-links-heading">
           <TrackedLinksPanel />
         </section>
         {pickerOpen && <TemplatePickerModal onClose={() => setPickerOpen(false)} />}

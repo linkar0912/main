@@ -14,7 +14,7 @@ function stubShellFetch(role = "MEMBER", igAvatarUrl: string | null = null, plat
     if (url.includes("/api/workspace/bootstrap")) {
       return {
         ok: true,
-        json: async () => ({ data: { email: "member@example.com", role, plan: "free", igAvatarUrl, platformOwner } }),
+        json: async () => ({ data: { email: "alex.rivera@example.com", role, plan: "free", igAvatarUrl, platformOwner } }),
       } as Response;
     }
     if (url.includes("/api/contacts")) {
@@ -46,7 +46,7 @@ describe("AppShell", () => {
     navigation.pathname = "/settings";
     view.rerender(<AppShell><main>Settings</main></AppShell>);
 
-    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: "instant" });
   });
 
   it("shows the signed-in user's actual workspace role", async () => {
@@ -108,7 +108,8 @@ describe("AppShell", () => {
 
     await screen.findByText("Member");
     expect(screen.queryByRole("navigation", { name: "Workspace resources" })).toBeNull();
-    expect(document.querySelector(".app-footer")?.textContent).toMatch(/^© \d{4} Linkar$/);
+    // The copyright footer was dropped: the sidebar account block is the only chrome.
+    expect(document.querySelector(".app-footer")).toBeNull();
   });
 
   it("shows the operator-console link only to an allowlisted platform owner", async () => {

@@ -654,7 +654,7 @@ test("mobile and tablet builder progress keeps descriptive labels", async ({ pag
   for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 900 }]) {
     await page.setViewportSize(viewport);
     await page.goto("/automations/new?type=classic");
-    await expect(page.locator(".wizard-progress-label").first()).toBeVisible();
+    await expect(page.locator(".builder-step-label").first()).toBeVisible();
   }
 });
 

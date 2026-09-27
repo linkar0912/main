@@ -2,6 +2,8 @@ import { AutomationsScreen } from "@/src/components/automations-screen";
 import { getRequestSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 
+export const metadata = { title: "Automations · Linkar" };
+
 // Server-rendered list: the rows arrive inside the page payload and seed the
 // client cache (see seedAutomations in automation-list.tsx), so the first
 // paint shows confirmed automations instead of a skeleton that waits on a

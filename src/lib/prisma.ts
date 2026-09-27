@@ -998,6 +998,14 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return result.count;
     },
 
+    async resumeParticipantsBySender(workspaceId, instagramAccountId, igScopedUserId) {
+      const result = await client.automationParticipant.updateMany({
+        where: { workspaceId, instagramAccountId, igScopedUserId, pausedAt: { not: null } },
+        data: { pausedAt: null, pausedReason: null, pausedByUserId: null },
+      });
+      return result.count;
+    },
+
     async listPausedParticipantsByWorkspace(workspaceId, limit) {
       const records = await client.automationParticipant.findMany({
         where: { workspaceId, pausedAt: { not: null } },
@@ -2378,6 +2386,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: { workspaceId, ...(options.leadStatus ? { leadStatus: options.leadStatus } : {}) },
         orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
         take: options.limit,
+        ...(options.offset ? { skip: options.offset } : {}),
       });
       return records.map(mapContact);
     },

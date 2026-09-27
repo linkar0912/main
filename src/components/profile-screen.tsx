@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   ArrowUpRight,
   BadgeCheck,
+  ChevronRight,
   CircleHelp,
   ExternalLink,
   KeyRound,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAccountIdentity } from "./app-shell";
 import { Skeleton } from "./skeleton";
+import { PageHeader } from "./page-header";
 import { SocialAvatar } from "./social-avatar";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { formatDate } from "@/src/lib/format-date";
@@ -175,15 +177,16 @@ function ProfileBody({
   const hasChannel = Boolean(connection || facebookPage);
   const avatar = connection?.profilePictureUrl ?? undefined;
 
+  function channelStatusLabel(status: ConnectionStatus): string {
+    return status === "CONNECTED" ? "Connected" : status === "EXPIRED" ? "Token expired" : "Disconnected";
+  }
+
   return (
     <div className="page-wrap profile-wrap">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Account</p>
-          <h1>My Profile</h1>
-          <p className="muted page-lede">Your identity, security, and connected Instagram and Facebook channels in one place.</p>
-        </div>
-      </header>
+      <PageHeader
+        title="My Profile"
+        description="Your identity, security, and connected Instagram and Facebook channels in one place."
+      />
 
       {savedMessage && (
         <div className="notice-banner notice-success" role="status">
@@ -197,38 +200,32 @@ function ProfileBody({
         </div>
       )}
 
-      <section className="panel profile-card profile-identity" aria-label="Profile identity">
-        <div className="profile-identity-person">
-          <div className="profile-identity-avatar">
-            {avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
-              <img className="avatar avatar-large is-photo" src={avatar} alt="" />
-            ) : email ? (
-              <span className="avatar avatar-large" aria-hidden>{initialsOf(email)}</span>
+      <section className="settings-group profile-identity" aria-label="Profile identity">
+        <div className="profile-identity-top">
+          {avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+            <img className="avatar profile-avatar is-photo" src={avatar} alt="" />
+          ) : email ? (
+            <span className="avatar profile-avatar" aria-hidden>{initialsOf(email)}</span>
+          ) : (
+            <Skeleton className="profile-avatar" style={{ borderRadius: "50%" }} />
+          )}
+          <div className="profile-identity-name">
+            {email ? (
+              <>
+                <h2>{displayNameFromEmail(email)}</h2>
+                <small>{email}</small>
+              </>
             ) : (
-              <Skeleton style={{ borderRadius: "50%", flex: "0 0 76px", height: 76, width: 76 }} />
+              <>
+                <Skeleton style={{ height: 22, marginBottom: 6, width: 180 }} />
+                <Skeleton style={{ height: 13, width: 220 }} />
+              </>
             )}
-            <div className="account-summary-id">
-              <p className="eyebrow">Your account</p>
-              {email ? (
-                <>
-                  <h2>{displayNameFromEmail(email)}</h2>
-                  <small>{email}</small>
-                </>
-              ) : (
-                <>
-                  <Skeleton style={{ height: 24, marginBottom: 6, width: 190 }} />
-                  <Skeleton style={{ height: 13, width: 220 }} />
-                </>
-              )}
-            </div>
           </div>
+          <span className="plan-tag profile-plan-tag">{plan}</span>
         </div>
-        <dl className="profile-identity-facts">
-          <div>
-            <dt>Email address</dt>
-            <dd>{email || <Skeleton style={{ height: 15, width: 150 }} />}</dd>
-          </div>
+        <dl className="profile-facts">
           <div>
             <dt>Workspace role</dt>
             <dd data-tone="accent">{role ? roleLabel(role) : <Skeleton style={{ height: 15, width: 62 }} />}</dd>
@@ -244,32 +241,35 @@ function ProfileBody({
           <div>
             <dt>Email status</dt>
             <dd data-tone={emailVerified === null ? undefined : emailVerified ? "ok" : "warn"}>
-              {emailVerified === null ? <Skeleton style={{ height: 15, width: 70 }} /> : emailVerified ? "Verified" : "Unverified"}
+              {emailVerified === null ? <Skeleton style={{ height: 15, width: 70 }} /> : emailVerified ? <><BadgeCheck size={14} /> Verified</> : "Unverified"}
             </dd>
           </div>
         </dl>
         {emailVerified === false && (
-          <form action="/api/account" method="post" className="account-verify-row">
+          <form action="/api/account" method="post" className="settings-row settings-row-split profile-verify-row">
             <input type="hidden" name="action" value="resend-verification" />
-            <p className="muted">Confirm your email to keep full access to your workspace.</p>
-            <button className="button button-secondary" type="submit">
-              Resend verification email
-            </button>
+            <span className="settings-row-copy">
+              <strong>Confirm your email</strong>
+              <small>Keep full access to your workspace by verifying {email}.</small>
+            </span>
+            <button className="button button-secondary button-small" type="submit">Resend email</button>
           </form>
         )}
       </section>
 
-      <div className="profile-layout">
-        <section className="profile-main profile-account-actions" aria-label="Account actions">
-          <section className="panel profile-card profile-security-card" aria-label="Security">
-            <div className="panel-heading">
-              <div><p className="eyebrow">Security</p><h2>Password &amp; sessions</h2></div>
-              <ShieldCheck size={21} />
+      <div className="profile-columns">
+        <section className="profile-column" aria-label="Account actions">
+          <section className="settings-group" aria-label="Password">
+            <div className="settings-group-head">
+              <span className="settings-group-icon"><KeyRound size={18} /></span>
+              <div className="settings-group-copy">
+                <h3>Password</h3>
+                <p>Use at least 12 characters. Changing it keeps your other devices signed in.</p>
+              </div>
             </div>
-            <p className="muted profile-section-lede">Use a unique password and control every active session from one place.</p>
-            <form action="/api/account" method="post" className="account-form">
+            <form action="/api/account" method="post" className="profile-password-form">
               <input type="hidden" name="action" value="change-password" />
-              <div className="account-form-grid">
+              <div className="settings-row profile-password-fields">
                 <label className="field">
                   <span>Current password</span>
                   <input name="currentPassword" type="password" autoComplete="current-password" required />
@@ -279,82 +279,106 @@ function ProfileBody({
                   <input name="newPassword" type="password" autoComplete="new-password" minLength={12} required />
                 </label>
               </div>
-              <p className="muted account-form-hint">
-                At least 12 characters. Changing your password keeps your other devices signed in.
-              </p>
-              <button className="button button-secondary" type="submit">
-                <KeyRound size={15} /> Update password
+              <div className="settings-group-foot">
+                <span />
+                <button className="button button-primary button-small" type="submit">
+                  <KeyRound size={14} /> Update password
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section className="settings-group" aria-label="Sessions">
+            <div className="settings-group-head">
+              <span className="settings-group-icon"><ShieldCheck size={18} /></span>
+              <div className="settings-group-copy">
+                <h3>Sessions</h3>
+                <p>Control where you are signed in.</p>
+              </div>
+            </div>
+            <form action="/api/account" method="post" className="settings-row settings-row-split">
+              <input type="hidden" name="action" value="logout-all" />
+              <span className="settings-row-copy">
+                <strong>Sign out everywhere</strong>
+                <small>Ends every session on all your devices, including this one.</small>
+              </span>
+              <button className="button button-secondary button-small" type="submit">
+                <LogOut size={14} /> Sign out all
               </button>
             </form>
-            <div className="account-session-row">
-              <div>
-                <strong>Sign out everywhere</strong>
-                <p className="muted">Invalidates every session across all your devices - including this one.</p>
-              </div>
-              <form action="/api/account" method="post">
-                <input type="hidden" name="action" value="logout-all" />
-                <button className="button button-secondary" type="submit">
-                  <LogOut size={15} /> Sign out all
-                </button>
-              </form>
-            </div>
-          </section>
-          <section className="panel profile-card profile-links-card" aria-label="Workspace links">
-            <div className="panel-heading">
-              <div><p className="eyebrow">Quick access</p><h2>Workspace links</h2></div>
-              <Users size={19} strokeWidth={1.8} />
-            </div>
-            <nav className="related-links">
-              <Link href="/settings">Team &amp; invitations <ArrowUpRight size={13} /></Link>
-              <Link href="/help">Help centre <CircleHelp size={13} /></Link>
-              <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
-              <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
-            </nav>
           </section>
         </section>
-        <aside className="profile-side" aria-label="Profile supporting information">
-          <section className="panel profile-card profile-channels profile-channels-card" aria-label="Connected channels">
-            <div className="panel-heading">
-              <div><p className="eyebrow">Active channels</p><h2>Connected channels</h2></div>
-              <Link2 size={19} />
+
+        <aside className="profile-column" aria-label="Profile supporting information">
+          <section className="settings-group profile-channels" aria-labelledby="profile-channels-title">
+            <div className="settings-group-head">
+              <span className="settings-group-icon"><Link2 size={18} /></span>
+              <div className="settings-group-copy">
+                <h3 id="profile-channels-title">Connected channels</h3>
+                <p>{hasChannel ? "Accounts replying on your behalf." : "Nothing connected yet."}</p>
+              </div>
             </div>
-            <div className="profile-channel-list">
-              {connection ? (
-                <div className="connection-card">
-                  <SocialAvatar channel="instagram" name={`@${connection.username}`} src={connection.profilePictureUrl ?? undefined} />
-                  <div className="connection-card-id">
-                    <strong>@{connection.username}</strong>
-                    <span className="connection-status" role="status" aria-label={`Instagram ${connection.status.toLowerCase()}`}>
-                      <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
-                      {connection.status === "CONNECTED" ? "Connected" : connection.status === "EXPIRED" ? "Token expired" : "Disconnected"}
-                      {" · "}
-                      {formatDate(connection.connectedAt)}
+            <ul className="settings-rows">
+              <li className="settings-row profile-channel-row">
+                {connection ? (
+                  <>
+                    <SocialAvatar channel="instagram" name={`@${connection.username}`} src={connection.profilePictureUrl ?? undefined} />
+                    <span className="settings-row-copy">
+                      <strong>@{connection.username}</strong>
+                      <small className="connection-status" role="status" aria-label={`Instagram ${connection.status.toLowerCase()}`}>
+                        <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
+                        Instagram · {channelStatusLabel(connection.status)} · {formatDate(connection.connectedAt)}
+                      </small>
                     </span>
-                  </div>
-                </div>
-              ) : (
-                <p className="muted connection-empty">No Instagram account connected yet.</p>
-              )}
-              {facebookPage ? (
-                <div className="connection-card">
-                  <SocialAvatar channel="facebook" name={facebookPage.pageName} src={facebookPage.avatarUrl} />
-                  <div className="connection-card-id">
-                    <strong>{facebookPage.pageName}</strong>
-                    <span className="connection-status" role="status" aria-label={`Facebook ${facebookPage.status.toLowerCase()}`}>
-                      <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
-                      Facebook Page
-                      {" · "}
-                      {facebookPage.status === "CONNECTED" ? "Connected" : facebookPage.status === "EXPIRED" ? "Token expired" : "Disconnected"}
+                  </>
+                ) : (
+                  <span className="settings-row-copy"><strong>Instagram</strong><small>No Instagram account connected yet.</small></span>
+                )}
+              </li>
+              <li className="settings-row profile-channel-row">
+                {facebookPage ? (
+                  <>
+                    <SocialAvatar channel="facebook" name={facebookPage.pageName} src={facebookPage.avatarUrl} />
+                    <span className="settings-row-copy">
+                      <strong>{facebookPage.pageName}</strong>
+                      <small className="connection-status" role="status" aria-label={`Facebook ${facebookPage.status.toLowerCase()}`}>
+                        <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
+                        Facebook Page · {channelStatusLabel(facebookPage.status)}
+                      </small>
                     </span>
-                  </div>
-                </div>
-              ) : (
-                <p className="muted connection-empty">No Facebook Page connected yet.</p>
-              )}
+                  </>
+                ) : (
+                  <span className="settings-row-copy"><strong>Facebook</strong><small>No Facebook Page connected yet.</small></span>
+                )}
+              </li>
+            </ul>
+            <div className="settings-group-foot">
+              <span />
+              <Link className={`button ${hasChannel ? "button-secondary" : "button-primary"} button-small`} href="/settings">
+                {hasChannel ? "Manage channels" : "Connect a channel"} <ArrowUpRight size={14} />
+              </Link>
             </div>
-            <Link className={`button ${hasChannel ? "button-secondary" : "button-primary"} button-block`} href="/settings">
-              <Link2 size={15} /> {hasChannel ? "Manage channels" : "Connect a channel"}
-            </Link>
+          </section>
+
+          <section className="settings-group" aria-label="Workspace links">
+            <ul className="settings-rows settings-link-list">
+              {[
+                ["/settings?section=team", "Team & invitations", Users],
+                ["/help", "Help centre", CircleHelp],
+                ["/privacy", "Privacy policy", ExternalLink],
+                ["/data-deletion", "Data deletion", ExternalLink],
+              ].map(([href, label, Icon]) => {
+                const LinkIcon = Icon as typeof Users;
+                return (
+                  <li key={label as string}>
+                    <Link className="settings-row settings-link-row" href={href as string}>
+                      <span className="settings-row-copy"><strong><LinkIcon size={15} /> {label as string}</strong></span>
+                      <ChevronRight size={16} />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           </section>
         </aside>
       </div>

@@ -1,5 +1,7 @@
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
+import { getServerEnv } from "@/src/lib/env";
+import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 
 export const runtime = "nodejs";
 
@@ -12,6 +14,7 @@ const CSV_HEADER = [
     "created_at",
     "delivered_at",
     "clicked_at",
+    "instagram_username",
 ];
 
 function csvCell(value: string | undefined): string {
@@ -31,7 +34,16 @@ export async function GET(request: Request) {
     if (automationId && !await repository.getAutomation(session.workspaceId, automationId)) {
         return new Response("Automation not found", { status: 404 });
     }
-    const rows = await repository.listRecentParticipants(session.workspaceId, 5_000, automationId);
+    const [rows, events] = await Promise.all([
+        repository.listRecentParticipants(session.workspaceId, 5_000, automationId),
+        repository.listRecentWebhookEvents(session.workspaceId, 500),
+    ]);
+    // Known handles only (recent events + lookup cache); no Meta calls.
+    const usernames = await resolveInstagramUsernames({
+        identities: rows.filter((row) => row.igScopedUserId).map((row) => ({ instagramAccountId: row.instagramAccountId, igScopedUserId: row.igScopedUserId! })),
+        events,
+        apiVersion: getServerEnv().metaApiVersion,
+    });
     const lines = [CSV_HEADER.join(",")];
     for (const participant of rows) {
         lines.push([
@@ -43,6 +55,9 @@ export async function GET(request: Request) {
             csvCell(participant.createdAt),
             csvCell(participant.finalDeliveredAt),
             csvCell(participant.deliveryClickedAt),
+            csvCell(participant.igScopedUserId
+                ? usernames.get(instagramIdentityKey({ instagramAccountId: participant.instagramAccountId, igScopedUserId: participant.igScopedUserId }))
+                : undefined),
         ].join(","));
     }
 

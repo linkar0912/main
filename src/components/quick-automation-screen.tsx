@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { basicAutomationTemplates } from "@/src/lib/automation/templates";
 import { QuickReelsContentSkeleton } from "./skeleton";
+import { PageHeader } from "./page-header";
 
 type QuickMedia = {
   id: string;
@@ -50,15 +51,16 @@ export function QuickAutomationScreen() {
   const [cursor, setCursor] = useState<string | undefined>(() => readReelsCache()?.after);
   const [loading, setLoading] = useState(() => !readReelsCache());
   const [loadingMore, setLoadingMore] = useState(false);
+  const [reachedEnd, setReachedEnd] = useState(false);
   const [error, setError] = useState("");
   const flowStageRef = useRef<HTMLElement>(null);
 
-  const loadPage = useCallback(async (after?: string, signal?: AbortSignal) => {
+  const loadPage = useCallback(async (after?: string, signal?: AbortSignal): Promise<{ added: number; after?: string }> => {
     const url = after ? `/api/meta/media?after=${encodeURIComponent(after)}` : "/api/meta/media";
     const response = await fetch(url, { signal });
     const payload = (await response.json().catch(() => ({}))) as MediaPage;
     if (!response.ok) throw new Error(payload.error ?? "Could not load your Reels");
-    if (signal?.aborted) return;
+    if (signal?.aborted) return { added: 0 };
     const nextReels = (payload.data ?? []).filter((media) => media.mediaProductType === "REELS");
     if (!after) reelsCache = { data: nextReels, after: payload.paging?.after, fetchedAt: Date.now(), fetcher: fetch };
     setReels((current) => {
@@ -68,6 +70,7 @@ export function QuickAutomationScreen() {
     });
     setCursor(payload.paging?.after);
     setError("");
+    return { added: nextReels.length, after: payload.paging?.after };
   }, []);
 
   useEffect(() => {
@@ -113,7 +116,16 @@ export function QuickAutomationScreen() {
     if (!cursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      await loadPage(cursor);
+      // Instagram pages mix Reels with photos and carousels, and returns a
+      // next-page cursor even when nothing is left. Keep going (a few pages at
+      // most) until new Reels turn up, instead of a click that silently adds
+      // nothing and makes the button vanish.
+      let next: string | undefined = cursor;
+      let added = 0;
+      for (let page = 0; page < 5 && next && added === 0; page += 1) {
+        ({ added, after: next } = await loadPage(next));
+      }
+      if (added === 0 && !next) setReachedEnd(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load more Reels");
     } finally {
@@ -132,15 +144,13 @@ export function QuickAutomationScreen() {
   return (
     <>
       <div className="page-wrap quick-automation-page">
-        <header className="page-header quick-automation-header">
-          <div>
-            <p className="eyebrow">Quick automation</p>
-            <h1>Pick a Reel. Put it to work.</h1>
-            <p className="muted page-lede">Choose a published Reel, then choose what Linkar should do when someone comments.</p>
-          </div>
-        </header>
+        <PageHeader
+          className="quick-automation-header"
+          title="Pick a Reel. Put it to work."
+          description="Choose a published Reel, then choose what Linkar should do when someone comments."
+        />
 
-        <section className="quick-automation-stage" aria-labelledby="choose-reel-heading">
+        <section className="surface quick-automation-stage" aria-labelledby="choose-reel-heading">
           <div className="quick-stage-heading">
             <span className="quick-stage-number">1</span>
             <div><h2 id="choose-reel-heading">Choose a Reel</h2><p>Your latest published Reels appear first.</p></div>
@@ -193,17 +203,19 @@ export function QuickAutomationScreen() {
                   );
                 })}
               </div>
-              {cursor && (
+              {cursor && !reachedEnd ? (
                 <button type="button" className="button button-secondary quick-load-more" disabled={loadingMore} onClick={() => void loadMore()}>
                   {loadingMore ? "Loading…" : "Load more Reels"}
                 </button>
-              )}
+              ) : reachedEnd ? (
+                <p className="muted quick-reels-end">That’s all your Reels ({reels.length}).</p>
+              ) : null}
             </>
           )}
         </section>
 
         {selectedReel && (
-          <section ref={flowStageRef} className="quick-automation-stage quick-flow-stage" aria-labelledby="choose-flow-heading">
+          <section ref={flowStageRef} className="surface quick-automation-stage quick-flow-stage" aria-labelledby="choose-flow-heading">
             <div className="quick-stage-heading">
               <span className="quick-stage-number">2</span>
               <div><h2 id="choose-flow-heading">Choose what happens next</h2><p>Each option opens ready for the Reel you selected.</p></div>

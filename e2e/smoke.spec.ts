@@ -45,7 +45,8 @@ test.describe("unauthenticated visitor", () => {
 
 test("owner can sign out", async ({ page }) => {
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
 });
 

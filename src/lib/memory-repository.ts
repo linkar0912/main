@@ -455,6 +455,21 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return count;
     },
 
+    async resumeParticipantsBySender(workspaceId, instagramAccountId, igScopedUserId) {
+      let count = 0;
+      for (const [id, participant] of participants.entries()) {
+        if (
+          participant.workspaceId !== workspaceId
+          || participant.instagramAccountId !== instagramAccountId
+          || participant.igScopedUserId !== igScopedUserId
+          || !participant.pausedAt
+        ) continue;
+        participants.set(id, { ...participant, pausedAt: undefined, pausedReason: undefined, pausedByUserId: undefined, updatedAt: now() });
+        count += 1;
+      }
+      return count;
+    },
+
     async listPausedParticipantsByWorkspace(workspaceId, limit) {
       return copy(
         [...participants.values()]
@@ -1777,7 +1792,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return copy(
         filtered
           .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || a.id.localeCompare(b.id))
-          .slice(0, options.limit),
+          .slice(options.offset ?? 0, (options.offset ?? 0) + options.limit),
       );
     },
 

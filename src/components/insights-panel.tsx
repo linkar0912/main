@@ -2,13 +2,14 @@
 
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
+import { SectionCard } from "./page-header";
 import { InlineContentSkeleton } from "./skeleton";
 
 type InsightsPayload = {
   usage?: { participantsThisMonth: number; monthlyLimit: number | null };
 };
 
-export function InsightsPanel({ automationId }: { automationId?: string }) {
+export function InsightsPanel({ automationId, showExport = true }: { automationId?: string; showExport?: boolean }) {
   const [insights, setInsights] = useState<InsightsPayload | null>(null);
   const [error, setError] = useState("");
   const query = automationId ? `?automationId=${encodeURIComponent(automationId)}` : "";
@@ -42,10 +43,7 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
   return (
     <div className="insights-stack side-stack">
       {usage && (
-        <section className="panel side-panel" aria-label="Plan usage">
-          <div className="panel-heading">
-            <div><p className="eyebrow">Plan usage</p><h2>This month</h2></div>
-          </div>
+        <SectionCard className="side-panel" title="Plan usage" description="Participants counted this month." aria-label="Plan usage">
           <div className="usage-meter">
             {usagePercent !== null && usageLimit !== null && (
               <div
@@ -60,14 +58,14 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
               </div>
             )}
             <p className="muted usage-note">
-              {usage.participantsThisMonth} participant{usage.participantsThisMonth === 1 ? "" : "s"} this month
-              {usage.monthlyLimit ? ` of ${usage.monthlyLimit}` : ""} on the current plan.
+              {usage.participantsThisMonth.toLocaleString()} participant{usage.participantsThisMonth === 1 ? "" : "s"} this month
+              {usage.monthlyLimit ? ` of ${usage.monthlyLimit.toLocaleString()}` : ""} on your plan.
             </p>
           </div>
-        </section>
+        </SectionCard>
       )}
 
-      <section className="panel side-panel" aria-label="Campaign export">
+      {showExport && <section className="panel side-panel" aria-label="Campaign export">
         <div className="panel-heading">
           <div><p className="eyebrow">Raw data</p><h2>Export</h2></div>
         </div>
@@ -75,7 +73,7 @@ export function InsightsPanel({ automationId }: { automationId?: string }) {
           <Download size={14} /> Export CSV
         </a>
         <p className="muted export-note">Every matched comment, delivery, and click for this campaign.</p>
-      </section>
+      </section>}
 
       {automationId && <AbTestReport automationId={automationId} />}
     </div>
@@ -113,10 +111,7 @@ function AbTestReport({ automationId }: { automationId: string }) {
   )[0];
 
   return (
-    <section className="panel side-panel" aria-label="A/B test results">
-      <div className="panel-heading">
-        <div><p className="eyebrow">A/B test</p><h2>Opening message</h2></div>
-      </div>
+    <SectionCard className="side-panel" title="A/B test" description="Opening message variants." aria-label="A/B test results">
       <ul className="variant-list">
         {variants.map((variant) => (
           <li key={variant.variant}>
@@ -130,6 +125,6 @@ function AbTestReport({ automationId }: { automationId: string }) {
         ))}
       </ul>
       <p className="muted export-note">Variant {best.variant} is converting best so far.</p>
-    </section>
+    </SectionCard>
   );
 }

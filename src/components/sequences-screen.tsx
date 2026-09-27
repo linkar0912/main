@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Play, Plus, RotateCw, Trash2 } from "lucide-react";
-import { AutomationSectionNav } from "./automation-section-nav";
-import { ContextHelpLink } from "./context-help-link";
+import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Pencil, Play, Plus, RotateCw, Trash2 } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
 
 type SequenceStepView = { id: string; delayHours: number | string; text: string };
@@ -44,6 +42,9 @@ export function SequencesScreen() {
   const [sourceAutomationId, setSourceAutomationId] = useState("");
   const [steps, setSteps] = useState<SequenceStepView[]>(EMPTY_STEPS);
   const [formError, setFormError] = useState("");
+  // Deleting takes two clicks, like automations: a sequence can have people
+  // enrolled mid-way, and one stray click used to remove it outright.
+  const [confirmDeleteId, setConfirmDeleteId] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -189,6 +190,7 @@ export function SequencesScreen() {
       const response = await fetch(`/api/sequences/${row.id}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Could not delete this sequence.");
       setSequences((current) => current.filter((s) => s.id !== row.id));
+      setConfirmDeleteId("");
       if (editingId === row.id) resetForm();
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "Could not delete this sequence.");
@@ -197,28 +199,85 @@ export function SequencesScreen() {
 
   return (
     <>
-      <div className="page-wrap narrow-wrap">
-        <header className="page-header">
-          <div>
-            <p className="eyebrow">Workspace / automation</p>
-            <h1>Sequences</h1>
-            <p className="muted page-lede">
-              Timed follow-up campaigns. New email leads enroll automatically and get each step by
-              DM - STOP suppression respected everywhere.
-            </p>
-          </div>
-          <div className="header-actions"><ContextHelpLink topic="sequences" /></div>
-        </header>
+      <div className="automation-section">
+        {pageError && <p className="form-error" role="alert">{pageError}</p>}
 
-        <div className="section-layout">
-          <AutomationSectionNav active="sequences" />
-          <div className="section-content">
-            {pageError && <p className="form-error" role="alert">{pageError}</p>}
-            <form className="panel full-list-panel" onSubmit={save}>
-              <div className="list-intro">
-                <div className="list-count"><ListOrdered size={17} /><span>{editingId ? "Edit sequence" : "New sequence"}</span></div>
+        <div className="split-layout">
+            <section className="surface is-flush" aria-label="Your sequences">
+              <div className="surface-head">
+                <div className="surface-head-copy"><h2>{loading ? "Sequences" : `${sequences.length} ${sequences.length === 1 ? "sequence" : "sequences"}`}</h2><p>Follow-ups that run on their own.</p></div>
+                {/* A Link here pointed at the page it already sits on, so the soft
+                    navigation never remounted the screen and nothing refetched. */}
+                <button className="text-link" type="button" onClick={() => void refresh()}>
+                  <RotateCw size={14} /> Refresh
+                </button>
+              </div>
+              <div className="surface-body">
+              {loading && sequences.length === 0 && <InlineContentSkeleton label="Loading sequences" rows={3} />}
+              {!loading && !pageError && sequences.length === 0 && (
+                <div className="empty-state is-inline">
+                  <span className="empty-icon"><ListOrdered size={22} /></span>
+                  <h3>No sequences yet.</h3>
+                  <p>Create one with the form to follow up with new leads.</p>
+                </div>
+              )}
+              {sequences.map((row) => (
+                <article className="automation-row" key={row.id}>
+                  <div className="automation-icon"><ListOrdered size={19} strokeWidth={1.7} /></div>
+                  <div className="automation-copy">
+                    <div className="automation-title">
+                      <strong>{row.name}</strong>
+                      <em className="sequence-status" data-status={row.status}>{row.status}</em>
+                    </div>
+                    <p>
+                      {row.steps.length} {row.steps.length === 1 ? "step" : "steps"}
+                      <span className="row-divider">·</span> {row.enrolledCount} enrolled
+                      {row.sourceAutomationId && (
+                        <>
+                          <span className="row-divider">·</span>
+                          source: {automations.find((a) => a.id === row.sourceAutomationId)?.name ?? "removed flow"}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <div className="automation-actions">
+                  <button className="icon-button" type="button" title="Edit sequence" aria-label={`Edit ${row.name}`} onClick={() => loadForEdit(row)}><Pencil size={16} /></button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`${row.status === "ACTIVE" ? "Pause" : "Activate"} ${row.name}`}
+                    title={row.status === "ACTIVE" ? "Pause" : "Activate"}
+                    onClick={() => void toggleStatus(row)}
+                  >
+                    {row.status === "ACTIVE" ? <Pause size={16} /> : <Play size={16} />}
+                  </button>
+                  {confirmDeleteId === row.id ? (
+                    <button
+                      className="icon-button icon-danger is-confirming"
+                      type="button"
+                      aria-label={`Confirm delete ${row.name}`}
+                      title={row.enrolledCount > 0 ? `Click again to delete - ${row.enrolledCount} enrolled will stop receiving it` : "Click again to delete"}
+                      onClick={() => void remove(row)}
+                      onBlur={() => setConfirmDeleteId("")}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  ) : (
+                    <button className="icon-button icon-danger" type="button" aria-label={`Delete ${row.name}`} title="Delete" onClick={() => setConfirmDeleteId(row.id)}>
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                  </div>
+                </article>
+              ))}
+              </div>
+            </section>
+            <form className="surface composer-card" onSubmit={save} aria-label={editingId ? "Edit sequence" : "New sequence"}>
+              <div className="surface-head">
+                <div className="surface-head-copy"><h2>{editingId ? "Edit sequence" : "New sequence"}</h2><p>Timed DMs sent one after another.</p></div>
                 {justSaved && <span className="form-success" role="status"><Check size={14} /> Saved.</span>}
               </div>
+              <div className="surface-body">
               {formError && <p className="form-error" role="alert">{formError}</p>}
               <label className="field">
                 <span>Sequence name</span>
@@ -232,7 +291,7 @@ export function SequencesScreen() {
                     <option key={automation.id} value={automation.id}>{automation.name}</option>
                   ))}
                 </select>
-                <small>Pick an email-capture flow - its new leads start this sequence automatically. People who reply STOP never enroll or continue.</small>
+                <small>New leads from this flow enroll automatically; STOP replies are skipped.</small>
               </label>
 
               <p className="eyebrow field-spaced">Steps</p>
@@ -255,7 +314,7 @@ export function SequencesScreen() {
                       value={String(step.delayHours)}
                       onChange={(e) => updateStep(index, { delayHours: e.target.value })}
                     />
-                    <small>{index === 0 ? "0 = as soon as the scheduler runs after enrollment" : "hours after the previous step"}</small>
+                    <small>{index === 0 ? "0 = send right after enrollment" : "hours after the previous step"}</small>
                   </label>
                   <label className="field">
                     <span>Message</span>
@@ -285,61 +344,8 @@ export function SequencesScreen() {
                   </button>
                 </div>
               </div>
-            </form>
-
-            <section className="panel full-list-panel">
-              <div className="list-intro">
-                <div className="list-count"><ListOrdered size={17} /><span>{loading ? "Sequences" : `${sequences.length} ${sequences.length === 1 ? "sequence" : "sequences"}`}</span></div>
-                {/* A Link here pointed at the page it already sits on, so the soft
-                    navigation never remounted the screen and nothing refetched. */}
-                <button className="text-link" type="button" onClick={() => void refresh()}>
-                  <RotateCw size={14} /> Refresh
-                </button>
               </div>
-              {loading && sequences.length === 0 && <InlineContentSkeleton label="Loading sequences" rows={3} />}
-              {!loading && !pageError && sequences.length === 0 && (
-                <div className="empty-state">
-                  <span className="empty-icon"><ListOrdered size={22} /></span>
-                  <h3>No sequences yet.</h3>
-                  <p>Create one above and wire it to an email capture flow so new leads keep hearing from you.</p>
-                </div>
-              )}
-              {sequences.map((row) => (
-                <article className="automation-row" key={row.id}>
-                  <div className="automation-icon"><ListOrdered size={19} strokeWidth={1.7} /></div>
-                  <div className="automation-copy">
-                    <div className="automation-title">
-                      <strong>{row.name}</strong>
-                      <em className="sequence-status" data-status={row.status}>{row.status}</em>
-                    </div>
-                    <p>
-                      {row.steps.length} {row.steps.length === 1 ? "step" : "steps"}
-                      <span className="row-divider">·</span> {row.enrolledCount} enrolled
-                      {row.sourceAutomationId && (
-                        <>
-                          <span className="row-divider">·</span>
-                          source: {automations.find((a) => a.id === row.sourceAutomationId)?.name ?? "removed flow"}
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  <button className="icon-button" type="button" title="Edit sequence" aria-label={`Edit ${row.name}`} onClick={() => loadForEdit(row)}>✎</button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label={`${row.status === "ACTIVE" ? "Pause" : "Activate"} ${row.name}`}
-                    title={row.status === "ACTIVE" ? "Pause" : "Activate"}
-                    onClick={() => void toggleStatus(row)}
-                  >
-                    {row.status === "ACTIVE" ? <Pause size={16} /> : <Play size={16} />}
-                  </button>
-                  <button className="icon-button icon-danger" type="button" aria-label={`Delete ${row.name}`} title="Delete" onClick={() => void remove(row)}>
-                    <Trash2 size={16} />
-                  </button>
-                </article>
-              ))}
-            </section>
-          </div>
+            </form>
         </div>
       </div>
     </>

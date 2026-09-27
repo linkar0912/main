@@ -6,7 +6,7 @@ import {
   AdminDetailSkeleton,
   AdminOverviewSkeleton,
   AdminTableSkeleton,
-  AutomationsSkeleton,
+  AutomationSectionContentSkeleton,
   ContactsContentSkeleton,
   InsightsContentSkeleton,
   InlineContentSkeleton,
@@ -27,9 +27,10 @@ describe("ScreenSkeleton", () => {
     const { container } = render(<InsightsContentSkeleton />);
 
     expect(screen.getByLabelText("Loading insights data").getAttribute("aria-busy")).toBe("true");
-    expect(container.querySelectorAll(".skeleton-metric")).toHaveLength(4);
-    expect(container.querySelector(".skeleton-chart")).toBeTruthy();
-    expect(container.querySelectorAll(".skeleton-detail-panel")).toHaveLength(2);
+    // Same KPI row and Reply volume card as Home, so the two pages load alike.
+    expect(container.querySelectorAll(".kpi-grid .stat-tile")).toHaveLength(4);
+    expect(container.querySelector(".chart-panel .dashboard-chart-skeleton")).toBeTruthy();
+    expect(container.querySelectorAll(".insights-detail-grid > .surface")).toHaveLength(2);
   });
 
   it("provides content-only loaders that match the Inbox desk and Contacts rows", () => {
@@ -46,7 +47,7 @@ describe("ScreenSkeleton", () => {
   });
 
   it("uses quiet grouped rows instead of decorative separators", () => {
-    const { container } = render(<AutomationsSkeleton />);
+    const { container } = render(<AutomationSectionContentSkeleton />);
     expect(container.querySelector(".skeleton-row-bordered")).toBeNull();
     expect(container.querySelectorAll(".skeleton-list-row").length).toBeGreaterThanOrEqual(4);
   });

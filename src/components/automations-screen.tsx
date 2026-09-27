@@ -1,16 +1,37 @@
 "use client";
 
-import { Plus, Workflow } from "lucide-react";
+import { useState } from "react";
+import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AutomationList, useAutomations } from "./automation-list";
-import { CreateAutomationButton } from "./create-automation-button";
 import { DeliveryDiagnostics } from "./delivery-diagnostics";
-import { ContextHelpLink } from "./context-help-link";
 import type { AutomationRecord } from "@/src/lib/repository";
+
+type StatusFilter = "ALL" | "ACTIVE" | "PAUSED" | "DRAFT";
+const STATUS_FILTERS: Array<{ key: StatusFilter; label: string }> = [
+  { key: "ALL", label: "All" },
+  { key: "ACTIVE", label: "Active" },
+  { key: "PAUSED", label: "Paused" },
+  { key: "DRAFT", label: "Drafts" },
+];
 
 export function AutomationsScreen({ initialAutomations }: { initialAutomations?: AutomationRecord[] } = {}) {
   const router = useRouter();
   const { automations, loading, error, setStatus, reload, addAutomation } = useAutomations(initialAutomations);
+
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const counts = {
+    ALL: automations.length,
+    ACTIVE: automations.filter((automation) => automation.status === "ACTIVE").length,
+    PAUSED: automations.filter((automation) => automation.status === "PAUSED").length,
+    DRAFT: automations.filter((automation) => automation.status === "DRAFT").length,
+  };
+  const needle = query.trim().toLowerCase();
+  const visible = automations.filter((automation) =>
+    (statusFilter === "ALL" || automation.status === statusFilter)
+    && (!needle || automation.name.toLowerCase().includes(needle)));
+  const filtering = statusFilter !== "ALL" || needle !== "";
 
   async function duplicateAutomation(id: string) {
     const response = await fetch(`/api/automations/${id}/duplicate`, { method: "POST" });
@@ -34,24 +55,62 @@ export function AutomationsScreen({ initialAutomations }: { initialAutomations?:
 
   return (
     <>
-      <div className="page-wrap narrow-wrap">
-        <header className="page-header">
-          <div><p className="eyebrow">Workspace / automation</p><h1>Automations</h1><p className="muted page-lede">Rules that turn Instagram and Facebook signals into helpful, timely replies.</p></div>
-          <div className="header-actions">
-            <ContextHelpLink topic="automations" />
-            <CreateAutomationButton className="button button-primary"><Plus size={17} /> New automation</CreateAutomationButton>
-          </div>
-        </header>
-        <div className="section-content">
-            {!loading && automations.length > 0 && (
-              <div className="list-intro">
-                <div className="list-count"><Workflow size={17} /><span>{automations.length} {automations.length === 1 ? "automation" : "automations"}</span></div>
+      <div className="automation-section">
+        <div className="page-stack">
+          <section className="settings-overview automations-summary" aria-label="Automation summary">
+            {STATUS_FILTERS.map(({ key, label }) => (
+              <div className="settings-overview-cell" key={key}>
+                <small>{key === "ALL" ? "Total" : label}</small>
+                <strong>
+                  {key !== "ALL" ? <span className="status-dot" data-status={key.toLowerCase()} aria-hidden /> : null}
+                  {loading && automations.length === 0 ? "–" : counts[key]}
+                </strong>
               </div>
-            )}
-            <section className="panel full-list-panel">
-              {error ? <p className="form-error" role="alert">{error}</p> : <AutomationList automations={automations} loading={loading} onStatusChange={setStatus} onDuplicate={duplicateAutomation} onDelete={deleteAutomation} />}
-            </section>
-            {automations.length > 0 && <DeliveryDiagnostics />}
+            ))}
+          </section>
+
+          <section className="surface is-flush automations-surface" aria-label="Your automations">
+            <div className="list-toolbar">
+              <label className="list-search">
+                <Search size={16} aria-hidden />
+                <input
+                  type="search"
+                  aria-label="Search automations"
+                  placeholder="Search automations"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
+              <div className="segmented" role="group" aria-label="Filter automations by status">
+                {STATUS_FILTERS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`segmented-option ${statusFilter === key ? "is-on" : ""}`}
+                    aria-pressed={statusFilter === key}
+                    onClick={() => setStatusFilter(key)}
+                  >
+                    {label} <span className="chip-count">{counts[key]}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="surface-body">
+              {error ? (
+                <p className="form-error" role="alert">{error}</p>
+              ) : filtering && visible.length === 0 && automations.length > 0 ? (
+                <div className="empty-state is-inline">
+                  <span className="empty-icon"><Search size={20} /></span>
+                  <h3>No matching automations</h3>
+                  <p>Try another name or status.</p>
+                  <button className="button button-secondary button-small" type="button" onClick={() => { setQuery(""); setStatusFilter("ALL"); }}>Clear filters</button>
+                </div>
+              ) : (
+                <AutomationList automations={visible} loading={loading} onStatusChange={setStatus} onDuplicate={duplicateAutomation} onDelete={deleteAutomation} onChanged={() => void reload()} />
+              )}
+            </div>
+          </section>
+          {automations.length > 0 && <DeliveryDiagnostics />}
         </div>
       </div>
     </>

@@ -722,6 +722,12 @@ export interface AutomationRepository {
     userId: string,
     atIso: string,
   ): Promise<number>;
+  /** Clears the handoff pause on every participant for one sender; returns how many resumed. */
+  resumeParticipantsBySender(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+  ): Promise<number>;
   /** Returns the most recent paused participants for SLA dashboards. */
   listPausedParticipantsByWorkspace(workspaceId: string, limit: number): Promise<AutomationParticipantRecord[]>;
   /** Hot-path handoff check for one exact Instagram sender. */
@@ -980,7 +986,7 @@ export interface AutomationRepository {
   /** Returns contacts matching an optional lead-status filter, newest first. */
   listContactsByLeadStatus(
     workspaceId: string,
-    options: { leadStatus?: LeadStatus; limit: number },
+    options: { leadStatus?: LeadStatus; limit: number; offset?: number },
   ): Promise<AutomationContactRecord[]>;
   listInboxContacts(workspaceId: string, query: InboxContactQuery): Promise<InboxContactPage>;
   updateInboxState(workspaceId: string, contactId: string, patch: InboxStatePatch): Promise<AutomationContactRecord | null>;

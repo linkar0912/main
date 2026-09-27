@@ -73,3 +73,21 @@ export async function POST(request: Request, context: RouteContext) {
     },
   });
 }
+
+// DELETE /api/contacts/[id]/handoff - hand the conversation back to the
+// automations: clears the handoff pause so the runner messages them again.
+export async function DELETE(request: Request, context: RouteContext) {
+  const session = await getValidatedSession(request);
+  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { id } = await context.params;
+  const repository = getRepository();
+  const contact = await repository.getContactById(session.workspaceId, id);
+  if (!contact) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+  const resumedCount = await repository.resumeParticipantsBySender(
+    session.workspaceId,
+    contact.instagramAccountId,
+    contact.igScopedUserId,
+  );
+  logger.info("Contact handed back to automations", { workspaceId: session.workspaceId, contactId: id, resumedCount });
+  return NextResponse.json({ data: { resumedCount } });
+}

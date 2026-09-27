@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "./page-header";
 import {
   AlertTriangle,
   Check,
@@ -762,13 +763,19 @@ function AutomationBuilderV1({
         />
       ) : null}
       <div className="builder-main">
-        <div className="builder-intro">
-          <div>
-            <p className="eyebrow">Guided builder</p>
-            <h1>{automationId ? "Edit this automatic reply" : "Create an automatic reply"}</h1>
-            <p className="muted">Choose what starts the reply, write what Linkar should send, then review it before turning it on.</p>
-          </div>
-        </div>
+        <PageHeader
+          className="builder-header"
+          title={automationId ? "Edit automatic reply" : "Create an automatic reply"}
+          description="Pick the trigger, write the reply, then review before turning it on."
+          tabs={(
+            <BuilderStepTabs
+              labels={wizardSteps.map((key) => wizardLabels[key])}
+              active={clampedStep}
+              unlocked={highestUnlockedStep}
+              onSelect={goToStep}
+            />
+          )}
+        />
 
         <label className="field field-wide">
           <span>Give this reply a name</span>
@@ -816,20 +823,6 @@ function AutomationBuilderV1({
           }}
         />
 
-        <nav className="wizard-progress" aria-label="Builder steps">
-          {wizardSteps.map((key, index) => (
-            <button
-              type="button"
-              key={key}
-              className={`wizard-progress-step${index === clampedStep ? " is-active" : ""}${index < clampedStep ? " is-done" : ""}${index > highestUnlockedStep ? " is-locked" : ""}`}
-              disabled={index > highestUnlockedStep}
-              onClick={() => goToStep(index)}
-            >
-              <span className="wizard-progress-index">{index < clampedStep ? <Check size={12} /> : index + 1}</span>
-              <span className="wizard-progress-label">{wizardLabels[key]}</span>
-            </button>
-          ))}
-        </nav>
 
         <div className={`wizard-step${clampedStep === stepIndex("trigger") ? "" : " is-hidden"}`}>
         <section className="flow-step">
@@ -1581,6 +1574,35 @@ const defaultDefinitionV2: FlowDefinitionV2 = {
   delivery: { text: "", url: "", buttonLabel: "" },
 };
 
+/** Step switch for both builders - the same segmented control as the page
+ * section switches, so the editor's tabs look like every other tab set. */
+function BuilderStepTabs({ labels, active, unlocked, onSelect }: {
+  labels: string[];
+  active: number;
+  unlocked: number;
+  onSelect: (index: number) => void;
+}) {
+  return (
+    <nav className="segmented page-switch builder-steps" aria-label="Builder steps">
+      {labels.map((label, index) => (
+        <button
+          type="button"
+          key={label}
+          className={`segmented-option builder-step${index === active ? " is-active" : ""}${index < active ? " is-done" : ""}`}
+          aria-current={index === active ? "step" : undefined}
+          aria-label={`Step ${index + 1}: ${label}`}
+          title={label}
+          disabled={index > unlocked}
+          onClick={() => onSelect(index)}
+        >
+          <span className="builder-step-index" aria-hidden>{index < active ? <Check size={11} strokeWidth={3} /> : index + 1}</span>
+          <span className="builder-step-label">{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 const WIZARD_STEPS = ["Choose posts", "Comment & reply", "Ask permission", "Send link", "Limits", "Review"] as const;
 const STEP_PREVIEW_VIEW: PreviewView[] = ["post", "comments", "dm", "dm", "dm", "dm"];
 
@@ -1901,13 +1923,12 @@ function AutomationBuilderV2({
         />
       ) : null}
       <div className="builder-main">
-        <div className="builder-intro">
-          <div>
-            <p className="eyebrow">Guided builder</p>
-            <h1>{savedAutomationId ? "Edit this comment reply" : "Send a link after someone follows you"}</h1>
-            <p className="muted">Choose the comment, ask permission to message them, check their follow, and send your link.</p>
-          </div>
-        </div>
+        <PageHeader
+          className="builder-header"
+          title={savedAutomationId ? "Edit comment reply" : "Send a link after someone follows you"}
+          description="Pick the comment, ask to message, check the follow, then send your link."
+          tabs={<BuilderStepTabs labels={[...WIZARD_STEPS]} active={activeStep} unlocked={highestUnlockedStep} onSelect={goToStep} />}
+        />
 
         <label className="field field-wide">
           <span>Give this reply a name</span>
@@ -1936,20 +1957,6 @@ function AutomationBuilderV2({
           </label>
         )}
 
-        <nav className="wizard-progress" aria-label="Builder steps">
-          {WIZARD_STEPS.map((label, index) => (
-            <button
-              type="button"
-              key={label}
-              className={`wizard-progress-step${index === activeStep ? " is-active" : ""}${index < activeStep ? " is-done" : ""}${index > highestUnlockedStep ? " is-locked" : ""}`}
-              disabled={index > highestUnlockedStep}
-              onClick={() => goToStep(index)}
-            >
-              <span className="wizard-progress-index">{index < activeStep ? <Check size={12} /> : index + 1}</span>
-              <span className="wizard-progress-label">{label}</span>
-            </button>
-          ))}
-        </nav>
 
         <div className={`wizard-step${activeStep === 0 ? "" : " is-hidden"}`}>
           <section className="flow-step">

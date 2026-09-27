@@ -1,4 +1,5 @@
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { PageHeader, SectionCard } from "./page-header";
 
 type SkeletonProps = { className?: string; style?: React.CSSProperties };
 
@@ -93,31 +94,160 @@ export function ContactsContentSkeleton({ withToolbar = true }: { withToolbar?: 
   return <LoadingRegion label="Loading contacts" className="skeleton-content">{withToolbar ? <SkeletonToolbar filters={5} /> : null}<SkeletonListRows count={5} /></LoadingRegion>;
 }
 
+/** Same KPI row and Reply volume card as Home, then the two detail cards. */
 export function InsightsContentSkeleton() {
   return (
     <LoadingRegion label="Loading insights data" className="skeleton-content skeleton-insights-content">
-      <SkeletonMetrics />
-      <section className="skeleton-chart" aria-hidden><div className="skeleton-chart-heading"><div className="skeleton-stack"><Skeleton className="skeleton-word skeleton-word-eyebrow" /><Skeleton className="skeleton-word skeleton-section-title" /></div><Skeleton className="skeleton-word skeleton-legend" /></div><div className="skeleton-chart-bars">{Array.from({ length: 14 }, (_, index) => <Skeleton className={`skeleton-chart-bar h-${(index % 5) + 1}`} key={index} />)}</div></section>
-      <div className="skeleton-detail-grid" aria-hidden><section className="skeleton-detail-panel"><Skeleton className="skeleton-word skeleton-section-title" /><SkeletonListRows count={4} compact /></section><section className="skeleton-detail-panel"><Skeleton className="skeleton-word skeleton-section-title" /><SkeletonListRows count={3} compact /></section></div>
+      <KpiSkeletonRow />
+      <SectionCard className="chart-panel" title="Reply volume" description="Replies sent and people reached per day, last 14 days."><DashboardChartSkeleton /></SectionCard>
+      <div className="insights-detail-grid" aria-hidden>
+        <SectionCard title="Automation journey" description="Where people currently sit in your flows."><SkeletonListRows count={4} compact /></SectionCard>
+        <SectionCard title="Content performance" description="Top posts by matched comments."><SkeletonListRows count={3} compact /></SectionCard>
+      </div>
     </LoadingRegion>
   );
 }
 
 export function DashboardChartSkeleton() {
-  return <div className="dashboard-chart-skeleton" aria-label="Loading performance data" aria-busy="true"><SkeletonMetrics count={3} /><div className="skeleton-chart-bars" aria-hidden>{Array.from({ length: 14 }, (_, index) => <Skeleton className={`skeleton-chart-bar h-${(index % 5) + 1}`} key={index} />)}</div></div>;
+  return <div className="dashboard-chart-skeleton" aria-label="Loading performance data" aria-busy="true"><div className="skeleton-chart-bars" aria-hidden>{Array.from({ length: 14 }, (_, index) => <Skeleton className={`skeleton-chart-bar h-${(index % 5) + 1}`} key={index} />)}</div></div>;
 }
 
-export function AutomationListContentSkeleton({ count = 5, withToolbar = false }: { count?: number; withToolbar?: boolean }) {
-  return <LoadingRegion label="Loading automations" className="skeleton-content">{withToolbar ? <SkeletonToolbar filters={3} /> : null}<SkeletonListRows count={count} /></LoadingRegion>;
+/** Rows shaped like the automation table: channel tile, name over its rule,
+ * channel column, then the status switch and action icons. */
+function AutomationRowsSkeleton({ count }: { count: number }) {
+  return (
+    <div className="automation-skeleton-rows" aria-hidden>
+      {Array.from({ length: count }, (_, index) => (
+        <div className="skeleton-list-row automation-skeleton-row" key={index}>
+          <div className="automation-identity">
+            <Skeleton className="automation-skeleton-tile" />
+            <div className="skeleton-stack skeleton-row-copy">
+              <Skeleton className="skeleton-word automation-skeleton-name" />
+              <div className="automation-skeleton-rule"><Skeleton className="skeleton-word automation-skeleton-source" /><Skeleton className="automation-skeleton-keyword" /><Skeleton className="skeleton-word automation-skeleton-response" /></div>
+            </div>
+          </div>
+          <div className="skeleton-stack automation-skeleton-channel"><Skeleton className="skeleton-word skeleton-note" /><Skeleton className="skeleton-word automation-skeleton-surface" /></div>
+          <div className="automation-skeleton-actions"><Skeleton className="automation-skeleton-switch" />{Array.from({ length: 5 }, (_, icon) => <Skeleton className="automation-skeleton-icon" key={icon} />)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function AutomationListContentSkeleton({ count = 5 }: { count?: number }) {
+  return <LoadingRegion label="Loading automations" className="skeleton-content automation-skeleton-list"><AutomationRowsSkeleton count={count} /></LoadingRegion>;
 }
 
 export function ScreenSkeleton() { return <WorkspaceScreen label="Loading workspace"><SkeletonListRows count={4} /></WorkspaceScreen>; }
 
-export function DashboardSkeleton() {
-  return <WorkspaceScreen label="Loading Home" header={<header className="page-header home-greeting"><div><p className="eyebrow">Home</p><Skeleton className="skeleton-word skeleton-title" /><p className="muted page-lede">Welcome back - here’s how your replies performed over the last 14 days.</p></div><Skeleton className="skeleton-button" /></header>}><section className="panel chart-panel"><div className="panel-heading"><div><p className="eyebrow">Performance · Last 14 days</p><h2>Reply volume</h2></div></div><DashboardChartSkeleton /></section><section className="panel automations-panel"><div className="panel-heading"><div><p className="eyebrow">At a glance</p><h2>Your automations</h2></div></div><SkeletonListRows count={4} compact /></section></WorkspaceScreen>;
+/** Mirrors StatTile: icon + label, value, note. Shared by Home and Insights. */
+function KpiSkeletonRow() {
+  return (
+    <div className="kpi-grid" aria-hidden>
+      {Array.from({ length: 4 }, (_, index) => (
+        <div className="kpi-tile stat-tile" key={index}>
+          <div className="stat-block">
+            <span className="stat-label"><Skeleton className="stat-icon-skeleton" /><Skeleton className="skeleton-word skeleton-row-meta" /></span>
+            <Skeleton className="kpi-skeleton" />
+            <Skeleton className="skeleton-word skeleton-note" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-export function AutomationsSkeleton() { return <WorkspaceScreen label="Loading Automations" header={<header className="page-header"><div><p className="eyebrow">Workspace / automation</p><h1>Automations</h1><p className="muted page-lede">Rules that turn Instagram and Facebook signals into helpful, timely replies.</p></div></header>}><AutomationListContentSkeleton count={5} withToolbar /></WorkspaceScreen>; }
+export function DashboardSkeleton() {
+  return (
+    <WorkspaceScreen
+      label="Loading Home"
+      header={<PageHeader className="home-greeting" title={<Skeleton className="skeleton-word skeleton-title" />} description="Welcome back - here’s how your replies performed over the last 14 days." actions={<Skeleton className="skeleton-button" />} />}
+    >
+      <KpiSkeletonRow />
+      <SectionCard className="chart-panel" title="Reply volume" description="Replies sent and people reached per day, last 14 days."><DashboardChartSkeleton /></SectionCard>
+      <div className="dashboard-columns">
+        <SectionCard className="automations-panel" title="Your automations"><SkeletonListRows count={3} compact /></SectionCard>
+        <SectionCard title="Recent failures"><SkeletonListRows count={3} compact /></SectionCard>
+      </div>
+    </WorkspaceScreen>
+  );
+}
+
+/** Content-only placeholder for the automation sections; the persistent
+ * sections layout already renders the header and section switch, so this
+ * only mirrors the body of the section being opened. */
+export function AutomationSectionContentSkeleton({ section = "my" }: { section?: "my" | "sequences" | "broadcasts" }) {
+  if (section !== "my") {
+    return (
+      <div className="split-layout skeleton-section-content" aria-label={`Loading ${section}`} aria-busy="true">
+        <SectionCard flush className="automations-surface" title={section === "sequences" ? "Sequences" : "Broadcasts"} description={<Skeleton className="skeleton-word skeleton-row-meta" />}>
+          <AutomationRowsSkeleton count={3} />
+        </SectionCard>
+        <div className="surface skeleton-composer" aria-hidden>
+          <Skeleton className="skeleton-word skeleton-section-title" />
+          <Skeleton className="skeleton-word skeleton-row-meta" />
+          <div className="skeleton-stack"><Skeleton className="skeleton-word skeleton-note" /><Skeleton className="skeleton-input" /></div>
+          <div className="skeleton-stack"><Skeleton className="skeleton-word skeleton-note" /><Skeleton className="skeleton-input" /></div>
+          <div className="skeleton-stack"><Skeleton className="skeleton-word skeleton-note" /><Skeleton className="skeleton-input is-tall" /></div>
+          <Skeleton className="skeleton-button" />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="page-stack skeleton-section-content" aria-label="Loading automations" aria-busy="true">
+      <section className="settings-overview automations-summary" aria-hidden>
+        {["Total", "Active", "Paused", "Drafts"].map((label) => (
+          <div className="settings-overview-cell" key={label}><small>{label}</small><Skeleton className="skeleton-word automation-skeleton-count" /></div>
+        ))}
+      </section>
+      <section className="surface is-flush automations-surface" aria-hidden>
+        <div className="list-toolbar"><Skeleton className="automation-skeleton-search" /><Skeleton className="automation-skeleton-filter" /></div>
+        <div className="automation-columns"><span>Automation</span><span>Channel</span><span>Status</span></div>
+        <AutomationRowsSkeleton count={4} />
+      </section>
+    </div>
+  );
+}
+
+/** Campaign performance: KPI row, funnel bars beside the side panels, then
+ * the participant table. `withHeader` adds the page frame for the route. */
+export function CampaignPerformanceSkeleton({ withHeader = false }: { withHeader?: boolean }) {
+  const body = (
+    <div className="activity-list campaign-performance-view" aria-hidden>
+      <KpiSkeletonRow />
+      <div className="campaign-overview has-aside">
+        <SectionCard className="campaign-funnel" title="Conversion funnel" description="Share of commenters who reached each stage.">
+          <div className="funnel-bars">
+            {[100, 92, 46, 45, 45].map((width, index) => (
+              <div className="funnel-bar-row" key={index}>
+                <Skeleton className="skeleton-word skeleton-note" />
+                <span className="funnel-bar-track"><Skeleton className="funnel-bar-skeleton" style={{ width: `${width}%` }} /></span>
+                <Skeleton className="skeleton-word funnel-count-skeleton" />
+                <Skeleton className="skeleton-word funnel-count-skeleton" />
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+        <SectionCard className="side-panel" title="Plan usage" description="Participants counted this month.">
+          <Skeleton className="skeleton-word skeleton-input" style={{ height: 8 }} />
+          <Skeleton className="skeleton-word skeleton-row-meta" />
+        </SectionCard>
+      </div>
+      <SectionCard flush className="campaign-participants" title="Participants" description={<Skeleton className="skeleton-word skeleton-row-meta" />}>
+        <div className="list-toolbar"><Skeleton className="automation-skeleton-filter" /><Skeleton className="automation-skeleton-search" /></div>
+        <SkeletonListRows count={5} compact />
+      </SectionCard>
+    </div>
+  );
+  if (!withHeader) return <LoadingRegion label="Loading campaign activity">{body}</LoadingRegion>;
+  return (
+    <main className="page-wrap campaign-analytics-page skeleton-page" aria-label="Loading campaign performance" aria-busy="true">
+      <PageHeader title={<Skeleton className="skeleton-word skeleton-title-sm" />} description="Campaign performance: from comment to delivered link." actions={<><Skeleton className="skeleton-button" /><Skeleton className="skeleton-button" /></>} />
+      {body}
+    </main>
+  );
+}
 
 function AdminPageSkeleton({ label, children }: { label: string; children: React.ReactNode }) {
   return <main className="page-wrap skeleton-page admin-skeleton-page" aria-label={label} aria-busy="true"><PageHeaderSkeleton />{children}</main>;

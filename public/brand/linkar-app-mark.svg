@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Linkar app icon</title>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g transform="translate(-197.8 -179.6) scale(0.72)"><path d="M640 300 C815 300 954 423 954 580 C954 713 853 831 698 852 C626 862 560 850 510 827 L402 897 C382 910 357 894 364 871 L393 788 C339 739 306 663 306 584 C306 425 439 300 640 300 Z" fill="#000000"/><path d="M432 735 C432 688 448 653 479 626 C521 590 579 571 646 571 H658 V464 C658 444 671 437 687 450 L810 553 C825 566 825 580 810 593 L687 696 C671 710 658 703 658 683 V642 H641 C571 642 527 658 496 685 C468 710 451 742 443 772 C439 785 431 783 431 768 Z" fill="#ffffff"/></g>
+</svg>

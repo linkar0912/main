@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidatedSession }));
-vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({ listContactsByLeadStatus: mocks.listContactsByLeadStatus }) }));
+vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({ listContactsByLeadStatus: mocks.listContactsByLeadStatus, listRecentWebhookEvents: async () => [], listMembers: async () => [] }) }));
 vi.mock("@/src/lib/entitlements/service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/src/lib/entitlements/service")>()),
   getEntitlementService: () => ({ assertEntitled: mocks.assertEntitled }),

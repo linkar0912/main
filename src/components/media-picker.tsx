@@ -59,6 +59,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [reachedEnd, setReachedEnd] = useState(false);
   const [error, setError] = useState("");
   const itemsById = useRef(new Map<string, PickerMedia>());
   // Seeded once from `initialSnapshots` so a selected item this instance never fetches
@@ -68,7 +69,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
   const reportedSnapshotIds = useRef(new Set(initialSnapshots.map((snapshot) => snapshot.id)));
   const mountedRef = useRef(true);
 
-  async function loadPage(after?: string, isActive: () => boolean = () => true) {
+  async function loadPage(after?: string, isActive: () => boolean = () => true): Promise<number> {
     const url = after ? `/api/meta/media?after=${encodeURIComponent(after)}` : "/api/meta/media";
     const response = await fetch(url);
     const payload = (await response.json().catch(() => ({}))) as {
@@ -77,7 +78,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
       error?: string;
     };
     if (!response.ok) throw new Error(payload.error ?? "Could not load your Instagram media");
-    if (!isActive()) return;
+    if (!isActive()) return 0;
     for (const media of payload.data ?? []) {
       itemsById.current.set(media.id, media);
       knownSnapshots.current.set(media.id, toSnapshot(media));
@@ -96,6 +97,9 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
     }
     setItems([...itemsById.current.values()]);
     setCursor(payload.paging?.after);
+    // Instagram returns a cursor even when the next page is empty.
+    if (after && (payload.data ?? []).length === 0) setReachedEnd(true);
+    return (payload.data ?? []).length;
   }
 
   useEffect(() => {
@@ -227,11 +231,13 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
           );
         })}
       </div>
-      {cursor && (
+      {cursor && !reachedEnd ? (
         <button type="button" className="button button-secondary media-load-more" onClick={() => void loadMore()} disabled={loadingMore}>
           {loadingMore ? "Loading…" : "Load more"}
         </button>
-      )}
+      ) : reachedEnd ? (
+        <p className="muted quick-reels-end">That’s everything on your account.</p>
+      ) : null}
     </div>
   );
 }

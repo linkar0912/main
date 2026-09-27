@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Search, UsersRound } from "lucide-react";
-import { ContactDetailModal } from "./contact-detail-modal";
+import { ContactDetailModal, type ContactUpdate } from "./contact-detail-modal";
 import { ContextHelpLink } from "./context-help-link";
 import { ContactsContentSkeleton } from "./skeleton";
 import { SocialAvatar } from "./social-avatar";
+import { PageHeader } from "./page-header";
+import { useTeamMembers } from "@/src/lib/client/team-members";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 type ContactRow = {
@@ -32,10 +34,25 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   CUSTOMER: "Customer",
 };
 const STATUS_ORDER: LeadStatus[] = ["NEW", "ENGAGED", "QUALIFIED", "CUSTOMER"];
+const EMPTY_COUNTS: Record<LeadStatus, number> = { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 };
+
+// `state` tracks the DM email/field-capture conversation, not whether the
+// person has interacted - so "NONE" must not read as "No activity yet".
+const CAPTURE_STATE_LABELS: Record<string, string> = {
+  AWAITING_EMAIL: "Waiting for their email",
+  AWAITING_FIELD: "Answering questions",
+  CAPTURED: "Details captured",
+};
 
 function contactName(contact: ContactRow): string {
   const username = contact.instagramUsername?.trim().replace(/^@+/, "");
   return username ? `@${username}` : contact.email ?? "Instagram user";
+}
+
+function contactSubtitle(contact: ContactRow): string {
+  const details = [contact.email, ...contact.tags].filter(Boolean).join(" · ");
+  if (details) return details;
+  return CAPTURE_STATE_LABELS[contact.state] ?? "Instagram contact";
 }
 
 function formatSeen(value: string): string {
@@ -46,6 +63,9 @@ type ContactsSnapshot = {
   contacts: ContactRow[];
   counts: Record<LeadStatus, number>;
   needsProfileEnrichment?: boolean;
+  hasMore?: boolean;
+  /** Rows fetched by unfiltered pages - the next "All" offset. */
+  allOffset?: number;
   fetchedAt: number;
   // Fetcher identity ties the cache to the current session/test stub; a
   // swapped global fetch (new login, new test) implicitly invalidates it.
@@ -68,32 +88,80 @@ function readContactsCache(): ContactsSnapshot | undefined {
   return snapshot;
 }
 
-type ContactsListPayload = { count?: number; counts?: Record<LeadStatus, number>; contacts?: ContactRow[]; needsProfileEnrichment?: boolean };
+type ContactsListPayload = {
+  count?: number;
+  counts?: Record<LeadStatus, number>;
+  contacts?: ContactRow[];
+  needsProfileEnrichment?: boolean;
+  hasMore?: boolean;
+};
 
-async function fetchContactsList(enrich = false, signal?: AbortSignal): Promise<ContactsSnapshot> {
-  const response = await fetch(`/api/contacts?scope=all&limit=200${enrich ? "&enrich=1" : ""}`, { signal });
+const PAGE_SIZE = 200;
+
+async function fetchContactsList(
+  enrich = false,
+  signal?: AbortSignal,
+  page: { leadStatus?: LeadStatus; offset?: number } = {},
+): Promise<ContactsSnapshot> {
+  let url = `/api/contacts?scope=all&limit=${PAGE_SIZE}`;
+  if (page.leadStatus) url += `&leadStatus=${page.leadStatus}`;
+  if (page.offset) url += `&offset=${page.offset}`;
+  if (enrich) url += "&enrich=1";
+  const response = await fetch(url, { signal });
   const payload = await response.json().catch(() => ({})) as { data?: ContactsListPayload; error?: string };
   if (!response.ok || !Array.isArray(payload.data?.contacts)) {
     throw new Error(payload.error ?? "Could not load contacts");
   }
-  const snapshot: ContactsSnapshot = {
+  return {
     contacts: payload.data.contacts,
-    counts: payload.data.counts ?? { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 },
+    counts: payload.data.counts ?? EMPTY_COUNTS,
     needsProfileEnrichment: payload.data.needsProfileEnrichment,
+    hasMore: payload.data.hasMore,
     fetchedAt: Date.now(),
     fetcher: fetch,
   };
-  return snapshot;
+}
+
+/** Union by id, newest activity first - the order every server page uses. */
+function mergeRows(current: ContactRow[], incoming: ContactRow[]): ContactRow[] {
+  const byId = new Map(current.map((row) => [row.id, row]));
+  for (const row of incoming) {
+    const existing = byId.get(row.id);
+    byId.set(row.id, {
+      ...row,
+      instagramUsername: row.instagramUsername ?? existing?.instagramUsername,
+      avatarUrl: row.avatarUrl ?? existing?.avatarUrl,
+    });
+  }
+  return [...byId.values()].sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || a.id.localeCompare(b.id));
 }
 
 export function ContactsScreen() {
   const [contacts, setContacts] = useState<ContactRow[]>(() => readContactsCache()?.contacts ?? []);
-  const [counts, setCounts] = useState<Record<LeadStatus, number>>(() => readContactsCache()?.counts ?? { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 });
+  const [counts, setCounts] = useState<Record<LeadStatus, number>>(() => readContactsCache()?.counts ?? EMPTY_COUNTS);
+  const [allOffset, setAllOffset] = useState(() => readContactsCache()?.allOffset ?? readContactsCache()?.contacts.length ?? 0);
   const [loaded, setLoaded] = useState(() => readContactsCache() !== undefined);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<LeadStatus | "">("");
   const [openContactId, setOpenContactId] = useState<string | null>(null);
+  const members = useTeamMembers();
+  const autoLoadedStatus = useRef(new Set<LeadStatus>());
+
+  // Every contacts update goes through here so the module cache stays in step.
+  const commit = useCallback((rows: ContactRow[], patch: Partial<ContactsSnapshot> = {}) => {
+    setContacts(rows);
+    const previous = contactsCache.snapshot;
+    contactsCache.snapshot = {
+      counts: previous?.counts ?? EMPTY_COUNTS,
+      fetchedAt: previous?.fetchedAt ?? Date.now(),
+      fetcher: fetch,
+      ...previous,
+      ...patch,
+      contacts: rows,
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,38 +176,28 @@ export function ContactsScreen() {
       return () => { cancelled = true; };
     }
 
-    const knownUsernames = new Map((cached?.contacts ?? []).filter((contact) => contact.instagramUsername).map((contact) => [contact.id, contact.instagramUsername]));
-    const knownAvatars = new Map((cached?.contacts ?? []).filter((contact) => contact.avatarUrl).map((contact) => [contact.id, contact.avatarUrl]));
     const apply = (snapshot: ContactsSnapshot) => {
       if (cancelled) return;
-      const contacts = snapshot.contacts.map((contact) => ({
-        ...contact,
-        instagramUsername: contact.instagramUsername ?? knownUsernames.get(contact.id),
-        avatarUrl: contact.avatarUrl ?? knownAvatars.get(contact.id),
-      }));
-      for (const contact of contacts) if (contact.instagramUsername) knownUsernames.set(contact.id, contact.instagramUsername);
-      for (const contact of contacts) if (contact.avatarUrl) knownAvatars.set(contact.id, contact.avatarUrl);
-      contactsCache.snapshot = { ...snapshot, contacts };
-      setContacts(contacts);
+      const rows = mergeRows(cached?.contacts.filter((row) => snapshot.contacts.some((next) => next.id === row.id)) ?? [], snapshot.contacts);
+      contactsCache.snapshot = { ...snapshot, contacts: rows, allOffset: snapshot.contacts.length };
+      setContacts(rows);
       setCounts(snapshot.counts);
+      setAllOffset(snapshot.contacts.length);
       setError("");
       setLoaded(true);
     };
     const applyEnrichment = (snapshot: ContactsSnapshot) => {
       if (cancelled) return;
-      for (const contact of snapshot.contacts) {
-        if (contact.instagramUsername) knownUsernames.set(contact.id, contact.instagramUsername);
-        if (contact.avatarUrl) knownAvatars.set(contact.id, contact.avatarUrl);
-      }
-      const withNames = (contacts: ContactRow[]) => contacts.map((contact) => ({
-        ...contact,
-        instagramUsername: knownUsernames.get(contact.id) ?? contact.instagramUsername,
-        avatarUrl: knownAvatars.get(contact.id) ?? contact.avatarUrl,
-      }));
-      setContacts(withNames);
-      if (contactsCache.snapshot) {
-        contactsCache.snapshot = { ...contactsCache.snapshot, contacts: withNames(contactsCache.snapshot.contacts) };
-      }
+      setContacts((current) => {
+        const names = new Map(snapshot.contacts.map((row) => [row.id, row]));
+        const rows = current.map((row) => ({
+          ...row,
+          instagramUsername: names.get(row.id)?.instagramUsername ?? row.instagramUsername,
+          avatarUrl: names.get(row.id)?.avatarUrl ?? row.avatarUrl,
+        }));
+        if (contactsCache.snapshot) contactsCache.snapshot = { ...contactsCache.snapshot, contacts: rows };
+        return rows;
+      });
     };
 
     void (async () => {
@@ -193,88 +251,180 @@ export function ContactsScreen() {
     return () => { cancelled = true; };
   }, []);
 
+  const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  const loadedForStatus = status ? contacts.filter((contact) => contact.leadStatus === status).length : allOffset;
+  const availableForStatus = status ? counts[status] : total;
+  const hasMore = loaded && loadedForStatus < availableForStatus;
+
+  const loadMore = useCallback(async (target: LeadStatus | "" = status) => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    // Stage pages continue after the stage rows already on screen; loaded
+    // rows are always a prefix of that stage's newest-first order.
+    const stageOffset = target ? contacts.filter((contact) => contact.leadStatus === target).length : 0;
+    const request = target ? { leadStatus: target, offset: stageOffset } : { offset: allOffset };
+    try {
+      const page = await fetchContactsList(false, undefined, request);
+      const nextAllOffset = target ? allOffset : allOffset + page.contacts.length;
+      commit(mergeRows(contacts, page.contacts), { counts: page.counts, allOffset: nextAllOffset });
+      setCounts(page.counts);
+      setAllOffset(nextAllOffset);
+      setError("");
+      if (page.needsProfileEnrichment) {
+        void fetchContactsList(true, undefined, request)
+          .then((enriched) => setContacts((current) => {
+            const rows = mergeRows(current, enriched.contacts);
+            if (contactsCache.snapshot) contactsCache.snapshot = { ...contactsCache.snapshot, contacts: rows };
+            return rows;
+          }))
+          .catch(() => undefined);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load more contacts");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [allOffset, commit, contacts, loadingMore, status]);
+
+  // Picking a stage whose contacts are not on screen yet (the first page is
+  // the newest 200 overall) fetches that stage directly, once per stage.
+  function selectStatus(next: LeadStatus | "") {
+    setStatus(next);
+    if (!next || !loaded || autoLoadedStatus.current.has(next)) return;
+    const onScreen = contacts.filter((contact) => contact.leadStatus === next).length;
+    if (onScreen >= Math.min(counts[next], PAGE_SIZE)) return;
+    autoLoadedStatus.current.add(next);
+    void loadMore(next);
+  }
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return contacts.filter((contact) => {
       if (status && contact.leadStatus !== status) return false;
       if (!needle) return true;
-      return [contactName(contact), contact.email ?? "", contact.assigneeUserId ?? "", ...contact.tags]
+      const owner = contact.assigneeUserId ? members.get(contact.assigneeUserId) ?? contact.assigneeUserId : "";
+      return [contactName(contact), contact.email ?? "", owner, ...contact.tags]
         .join(" ")
         .toLowerCase()
         .includes(needle);
     });
-  }, [contacts, query, status]);
+  }, [contacts, members, query, status]);
 
-  const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  function applyContactUpdate(id: string, update: ContactUpdate) {
+    const previous = contacts.find((contact) => contact.id === id);
+    const rows = contacts.map((contact) => (contact.id === id ? { ...contact, ...update } : contact));
+    let nextCounts = counts;
+    if (previous && update.leadStatus && update.leadStatus !== previous.leadStatus) {
+      nextCounts = { ...counts, [previous.leadStatus]: Math.max(0, counts[previous.leadStatus] - 1), [update.leadStatus]: counts[update.leadStatus] + 1 };
+      setCounts(nextCounts);
+    }
+    commit(rows, { counts: nextCounts });
+  }
 
   return (
     <>
-      <div className="page-wrap contacts-wrap">
-        <header className="page-header">
-          <div>
-            <p className="eyebrow">Workspace / audience</p>
-            <h1>Contacts</h1>
-            <p className="muted page-lede">Every Instagram contact, lead stage, note, assignment, and conversation timeline in one place.</p>
-          </div>
-          <div className="header-actions">
-            <ContextHelpLink topic="leads" />
-            <a className="button button-secondary" href="/api/contacts/export" download><Download size={16} /> Export CSV</a>
-          </div>
-        </header>
+      <div className={`page-wrap contacts-wrap${openContactId ? " has-drawer" : ""}`}>
+        <PageHeader
+          title="Contacts"
+          description="Everyone who has interacted with your automations - track their stage, owner and notes."
+          actions={(
+            <>
+              <ContextHelpLink topic="leads" />
+              <a className="button button-secondary" href="/api/contacts/export" download><Download size={16} /> Export CSV</a>
+            </>
+          )}
+        />
 
-        <section className="contacts-toolbar panel" aria-label="Filter contacts">
+        <div className="surface is-flush contacts-surface">
+        <section className="contacts-toolbar" aria-label="Filter contacts">
           <label className="contacts-search">
             <Search size={18} aria-hidden />
             <input
               type="search"
               aria-label="Search contacts"
-              placeholder="Search Instagram handle, email, tag, or assignee"
+              placeholder="Search Instagram handle, email, tag, or owner"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
-          <div className="filter-chips" role="group" aria-label="Filter contacts by lead stage">
-            <button type="button" className={`filter-chip ${status === "" ? "is-on" : ""}`} onClick={() => setStatus("")}>All {total}</button>
+          <div className="segmented filter-chips" role="group" aria-label="Filter contacts by lead stage">
+            <button type="button" className={`segmented-option filter-chip ${status === "" ? "is-on" : ""}`} aria-pressed={status === ""} onClick={() => selectStatus("")}>All <span className="chip-count">{total}</span></button>
             {STATUS_ORDER.map((value) => (
-              <button key={value} type="button" className={`filter-chip ${status === value ? "is-on" : ""}`} onClick={() => setStatus(value)}>
-                {STATUS_LABELS[value]} {counts[value]}
+              <button key={value} type="button" className={`segmented-option filter-chip ${status === value ? "is-on" : ""}`} aria-pressed={status === value} onClick={() => selectStatus(value)}>
+                {STATUS_LABELS[value]} <span className="chip-count">{counts[value]}</span>
               </button>
             ))}
           </div>
         </section>
 
-        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        {error ? <p className="form-error contacts-error" role="alert">{error}</p> : null}
+        {query.trim() && hasMore ? (
+          <p className="muted contacts-scope-note">
+            Searching the {loadedForStatus.toLocaleString()} most recent of {availableForStatus.toLocaleString()} contacts. Load more to search further back.
+          </p>
+        ) : null}
         {!loaded ? (
           <ContactsContentSkeleton withToolbar={false} />
         ) : visible.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state is-inline">
             <span className="empty-icon"><UsersRound size={20} /></span>
-            <h2>{contacts.length === 0 ? "No contacts yet" : "No matching contacts"}</h2>
+            <h2>{contacts.length === 0 ? "No contacts yet" : loadingMore ? "Loading contacts…" : "No matching contacts"}</h2>
             <p>{contacts.length === 0 ? "Contacts appear after someone interacts with an Instagram automation." : "Try another search or lead-stage filter."}</p>
           </div>
         ) : (
-          <section className="panel contacts-panel" aria-label="Customer contacts">
+          <section className="contacts-panel" aria-label="Customer contacts">
             <div className="contacts-table-head" aria-hidden>
               <span>Contact</span><span>Stage</span><span>Engagement</span><span>Owner</span><span>Last seen</span><span />
             </div>
             <ul className="contacts-list">
               {visible.map((contact) => (
-                <li key={contact.id} className="contact-row">
+                <li
+                  key={contact.id}
+                  className={`contact-row${openContactId === contact.id ? " is-selected" : ""}`}
+                  onClick={(event) => {
+                    // The whole row toggles the panel; the button below stays the
+                    // keyboard-accessible control.
+                    if ((event.target as HTMLElement).closest("button, a")) return;
+                    setOpenContactId((current) => (current === contact.id ? null : contact.id));
+                  }}
+                >
                   <div className="contact-primary">
                     <SocialAvatar channel="instagram" name={contactName(contact)} src={contact.avatarUrl} />
-                    <span><strong>{contactName(contact)}</strong><small>{[contact.email, ...contact.tags].filter(Boolean).join(" · ") || (contact.state === "NONE" ? "No activity yet" : contact.state.toLowerCase().replaceAll("_", " "))}</small></span>
+                    <span><strong>{contactName(contact)}</strong><small>{contactSubtitle(contact)}</small></span>
                   </div>
                   <span className={`status-pill is-${contact.leadStatus.toLowerCase()}`}>{STATUS_LABELS[contact.leadStatus]}</span>
-                  <span className="contact-score">{contact.score} pts{contact.suppressedAt ? " · opted out" : ""}</span>
-                  <span className="contact-owner">{contact.assigneeUserId ?? "Unassigned"}</span>
+                  <span className="contact-score" title="Engagement score: rises with clicks, captured details and stage changes">{contact.score} pts{contact.suppressedAt ? " · opted out" : ""}</span>
+                  <span className="contact-owner">{contact.assigneeUserId ? members.get(contact.assigneeUserId) ?? "Former member" : "Unassigned"}</span>
                   <time dateTime={contact.lastSeenAt}>{formatSeen(contact.lastSeenAt)}</time>
-                  <button className="button button-ghost button-small" type="button" aria-label={`Open ${contactName(contact)}`} onClick={() => setOpenContactId(contact.id)}>Open</button>
+                  <button
+                    className="button button-ghost button-small"
+                    type="button"
+                    aria-label={`${openContactId === contact.id ? "Close" : "Open"} ${contactName(contact)}`}
+                    aria-expanded={openContactId === contact.id}
+                    onClick={() => setOpenContactId((current) => (current === contact.id ? null : contact.id))}
+                  >
+                    {openContactId === contact.id ? "Close" : "Open"}
+                  </button>
                 </li>
               ))}
             </ul>
           </section>
         )}
-        {openContactId ? <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} /> : null}
+        {hasMore && contacts.length > 0 ? (
+          <button className="list-toggle contacts-load-more" type="button" onClick={() => void loadMore()} disabled={loadingMore}>
+            {loadingMore ? "Loading…" : `Load more · ${loadedForStatus.toLocaleString()} of ${availableForStatus.toLocaleString()} shown`}
+          </button>
+        ) : null}
+        </div>
+        {openContactId ? (
+          <ContactDetailModal
+            key={openContactId}
+            contactId={openContactId}
+            initial={contacts.find((contact) => contact.id === openContactId)}
+            onClose={() => setOpenContactId(null)}
+            onUpdated={(update) => applyContactUpdate(openContactId, update)}
+          />
+        ) : null}
       </div>
     </>
   );

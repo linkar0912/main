@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Megaphone } from "lucide-react";
-import { AutomationSectionNav } from "./automation-section-nav";
-import { ContextHelpLink } from "./context-help-link";
 import { InlineContentSkeleton } from "./skeleton";
 
 type BroadcastRow = {
@@ -29,6 +27,11 @@ export function BroadcastsScreen() {
   const [scheduleStart, setScheduleStart] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [notice, setNotice] = useState("");
+  // Sending DMs a whole segment and cannot be undone, so the first press only
+  // asks; the second (Confirm) actually starts it.
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -36,13 +39,32 @@ export function BroadcastsScreen() {
     return () => controller.abort();
   }, []);
 
+  // Broadcasts go out ~1/second; poll while one is running so the sent/failed
+  // counts move instead of freezing until a reload.
+  const running = broadcasts.some((broadcast) => broadcast.status === "RUNNING" || broadcast.status === "PENDING");
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
   async function refresh(signal?: AbortSignal) {
     try {
-      const payload = await fetch("/api/broadcasts", { signal }).then((r) => r.json());
+      const response = await fetch("/api/broadcasts", { signal });
+      const payload = (await response.json().catch(() => ({}))) as { data?: BroadcastRow[]; error?: string };
       if (signal?.aborted) return;
+      if (!response.ok) throw new Error(payload.error ?? "Could not load broadcasts.");
       setBroadcasts(payload.data ?? []);
-    } catch {
-      // panel is optional surface; silence fetch hiccups
+      setLoadError("");
+    } catch (caught) {
+      if (signal?.aborted) return;
+      setLoadError(caught instanceof Error ? caught.message : "Could not load broadcasts.");
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
@@ -51,11 +73,18 @@ export function BroadcastsScreen() {
   async function send(event: React.FormEvent) {
     event.preventDefault();
     setError("");
-    if (!name.trim() || !text.trim()) return setError("Give the blast a name and a message.");
+    if (!name.trim() || !text.trim()) return setError("Give the broadcast a name and a message.");
+    const scheduledFor = scheduleStart ? new Date(scheduleStart) : null;
+    if (scheduledFor && Number.isNaN(scheduledFor.getTime())) return setError("Pick a valid schedule date.");
+    // A past time used to fall through and send immediately.
+    if (scheduledFor && scheduledFor.getTime() <= Date.now()) return setError("Pick a time in the future, or clear it to send now.");
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
     setSending(true);
     try {
-      const scheduledFor = scheduleStart ? new Date(scheduleStart) : null;
-      if (scheduledFor && Number.isNaN(scheduledFor.getTime())) return setError("Pick a valid schedule date.");
       const response = await fetch("/api/broadcasts", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -73,6 +102,7 @@ export function BroadcastsScreen() {
       setName("");
       setText("");
       setScheduleStart("");
+      setNotice(scheduledFor ? "Broadcast scheduled." : "Broadcast started - messages are going out now.");
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not start this broadcast.");
@@ -83,66 +113,21 @@ export function BroadcastsScreen() {
 
   return (
     <>
-      <div className="page-wrap narrow-wrap">
-        <header className="page-header">
-          <div>
-            <p className="eyebrow">Workspace / automation</p>
-            <h1>Broadcasts</h1>
-            <p className="muted page-lede">
-              One-off DMs to a contact segment - paced ~1/second, STOP contacts skipped automatically.
-            </p>
-          </div>
-          <div className="header-actions"><ContextHelpLink topic="sequences" /></div>
-        </header>
+      <div className="automation-section">
 
-        <div className="section-layout">
-          <AutomationSectionNav active="broadcasts" />
-          <div className="section-content">
-            <form className="panel full-list-panel" onSubmit={send}>
-              <div className="list-intro">
-                <div className="list-count"><Megaphone size={17} /><span>New broadcast</span></div>
+        <div className="split-layout">
+            <section className="surface is-flush" aria-label="Broadcast history">
+              <div className="surface-head">
+                <div className="surface-head-copy"><h2>{loading ? "Broadcasts" : `${broadcasts.length} ${broadcasts.length === 1 ? "broadcast" : "broadcasts"}`}</h2><p>Every blast you have sent or scheduled.</p></div>
               </div>
-              {error && <p className="form-error" role="alert">{error}</p>}
-              <div className="field-grid">
-                <label className="field">
-                  <span>Name</span>
-                  <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="e.g. Weekend offer" />
-                </label>
-                <label className="field">
-                  <span>Segment</span>
-                  <select value={segment} onChange={(e) => setSegment(e.target.value as Segment)}>
-                    <option value="captured_email">Leads with a captured email</option>
-                    <option value="all_contacts">All known contacts</option>
-                  </select>
-                  <small className="muted">
-                    Only people who messaged you in the last 24 hours receive a DM - Meta&apos;s
-                    messaging window. Everyone else is skipped, never spammed.
-                  </small>
-                </label>
-              </div>
-              <label className="field field-spaced">
-                <span>Message</span>
-                <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={1000} placeholder="Write the DM blast" />
-              </label>
-              <label className="field field-spaced">
-                <span>Schedule start (optional)</span>
-                <input type="datetime-local" value={scheduleStart} onChange={(e) => setScheduleStart(e.target.value)} />
-                <small className="muted">Leave empty to fan out now. Delivery also waits out quiet hours automatically.</small>
-              </label>
-              <div className="builder-footer">
-                <div />
-                <button className="button button-primary" type="submit" disabled={sending}>
-                  {sending ? "Fanning out…" : scheduleStart ? "Schedule broadcast" : "Send broadcast"}
-                </button>
-              </div>
-            </form>
-
-            <section className="panel full-list-panel">
-              <div className="list-intro">
-                <div className="list-count"><Megaphone size={17} /><span>{loading ? "Broadcasts" : `${broadcasts.length} ${broadcasts.length === 1 ? "broadcast" : "broadcasts"}`}</span></div>
-              </div>
+              <div className="surface-body">
+              {loadError ? <p className="form-error" role="alert">{loadError} <button className="text-link" type="button" onClick={() => void refresh()}>Try again</button></p> : null}
               {loading && broadcasts.length === 0 ? <InlineContentSkeleton label="Loading broadcasts" rows={3} /> : !loading && broadcasts.length === 0 ? (
-                <p className="muted">No broadcasts sent yet - compose one above.</p>
+                <div className="empty-state is-inline">
+                  <span className="empty-icon"><Megaphone size={20} /></span>
+                  <h3>No broadcasts yet</h3>
+                  <p>Compose one and it will show up here with its delivery counts.</p>
+                </div>
               ) : (
                 <div className="automation-list">
                   {broadcasts.map((broadcast) => (
@@ -163,8 +148,64 @@ export function BroadcastsScreen() {
                   ))}
                 </div>
               )}
+              </div>
             </section>
-          </div>
+            <form className="surface composer-card" onSubmit={send} aria-label="New broadcast">
+              <div className="surface-head">
+                <div className="surface-head-copy"><h2>New broadcast</h2><p>Compose once, send to a whole segment.</p></div>
+              </div>
+              <div className="surface-body">
+              {error && <p className="form-error" role="alert">{error}</p>}
+              {notice && <p className="form-success" role="status">{notice}</p>}
+              <div className="field-stack">
+                <label className="field">
+                  <span>Name</span>
+                  <input value={name} onChange={(e) => { setName(e.target.value); setConfirming(false); }} maxLength={120} placeholder="e.g. Weekend offer" />
+                </label>
+                <label className="field">
+                  <span>Segment</span>
+                  <select value={segment} onChange={(e) => { setSegment(e.target.value as Segment); setConfirming(false); }}>
+                    <option value="captured_email">Leads with a captured email</option>
+                    <option value="all_contacts">All known contacts</option>
+                  </select>
+                  <small className="muted">
+                    Only people who messaged you in the last 24 hours receive a DM - Meta&apos;s
+                    messaging window. Everyone else is skipped, never spammed.
+                  </small>
+                </label>
+              </div>
+              <label className="field field-spaced">
+                <span>Message</span>
+                <textarea value={text} onChange={(e) => { setText(e.target.value); setConfirming(false); }} rows={3} maxLength={1000} placeholder="Write the DM blast" />
+              </label>
+              <label className="field field-spaced">
+                <span>Schedule start (optional)</span>
+                <input type="datetime-local" value={scheduleStart} onChange={(e) => { setScheduleStart(e.target.value); setConfirming(false); }} />
+                <small className="muted">Leave empty to fan out now. Delivery also waits out quiet hours automatically.</small>
+              </label>
+              <div className="composer-footer">
+                {confirming ? (
+                  <div className="broadcast-confirm" role="alert">
+                    <p>
+                      {scheduleStart ? "Schedule" : "Send"} this DM to{" "}
+                      <strong>{segment === "captured_email" ? "every lead with a captured email" : "all known contacts"}</strong>?
+                      {" "}This can’t be undone.
+                    </p>
+                    <div className="button-row">
+                      <button className="button button-secondary" type="button" onClick={() => setConfirming(false)}>Cancel</button>
+                      <button className="button button-primary" type="submit" disabled={sending}>
+                        {scheduleStart ? "Confirm schedule" : "Confirm send"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="button button-primary" type="submit" disabled={sending}>
+                    {sending ? "Starting…" : scheduleStart ? "Schedule broadcast" : "Send broadcast"}
+                  </button>
+                )}
+              </div>
+              </div>
+            </form>
         </div>
       </div>
     </>

@@ -53,8 +53,9 @@ describe("TrackedLinksPanel", () => {
           },
         });
       }
-      if (url === "/api/links/link_1") {
-        return jsonResponse({ ok: true });
+      // Links are addressed by slug; the old id-based URL 404'd in production.
+      if (url === "/api/links/summer-sale") {
+        return jsonResponse({ data: { id: "link_1", slug: "summer-sale" } });
       }
       throw new Error(`Unexpected fetch ${url}`);
     });
@@ -78,6 +79,13 @@ describe("TrackedLinksPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Copy URL/i }));
     expect(clipboardWrite).toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: /Copied/i })).toBeTruthy();
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Delete /r/summer-sale" }));
+    await waitFor(() => expect(screen.queryByText("/r/summer-sale")).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith("/api/links/summer-sale", { method: "DELETE" });
+    confirmSpy.mockRestore();
   });
 
   it("surfaces server errors from /api/links", async () => {

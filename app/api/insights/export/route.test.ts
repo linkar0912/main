@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidatedSession }));
 vi.mock("@/src/lib/repository-provider", () => ({
-  getRepository: () => ({ getAutomation: mocks.getAutomation, listRecentParticipants: mocks.listRecentParticipants }),
+  getRepository: () => ({ getAutomation: mocks.getAutomation, listRecentParticipants: mocks.listRecentParticipants, listRecentWebhookEvents: async () => [] }),
 }));
 
 const { GET } = await import("./route");

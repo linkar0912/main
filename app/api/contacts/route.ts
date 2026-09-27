@@ -95,11 +95,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Invalid lead status" }, { status: 400 });
     }
     const leadStatus = leadStatusParam as LeadStatus | null;
+    const offsetParam = Number.parseInt(url.searchParams.get("offset") ?? "", 10);
+    const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
     const [counts, contacts, events] = await Promise.all([
       repository.countContactsByLeadStatus(session.workspaceId),
       repository.listContactsByLeadStatus(session.workspaceId, {
         ...(leadStatus ? { leadStatus } : {}),
         limit,
+        offset,
       }),
       repository.listRecentWebhookEvents(session.workspaceId, CONTACT_RECONCILIATION_LIMIT),
     ]);
@@ -120,10 +123,13 @@ export async function GET(request: Request) {
     });
     const needsProfileEnrichment = !enrich && Boolean(env.metaTokenEncryptionKey)
       && contacts.some((contact) => !usernames.has(instagramIdentityKey(contact)));
+    const matching = leadStatus ? counts[leadStatus] : Object.values(counts).reduce((sum, value) => sum + value, 0);
     return NextResponse.json({
       data: {
         count: Object.values(counts).reduce((sum, value) => sum + value, 0),
         counts,
+        offset,
+        hasMore: offset + contacts.length < matching,
         needsProfileEnrichment,
         contacts: contacts.map((contact) => ({
           id: contact.id,

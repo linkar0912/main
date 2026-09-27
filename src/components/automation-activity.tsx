@@ -1,24 +1,25 @@
 "use client";
 
-import Link from "next/link";
 import {
+  AlertTriangle,
   Check,
   ChevronRight,
   Clock,
   ExternalLink,
-  Minus,
+  Link2,
+  MessageCircle,
   MousePointerClick,
-  Pencil,
+  Minus,
   Radio,
   RefreshCw,
   RotateCcw,
   Search,
-  UserRound,
-  Workflow,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { InlineContentSkeleton } from "./skeleton";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { CampaignPerformanceSkeleton } from "./skeleton";
+import { SectionCard } from "./page-header";
+import { StatGrid, StatTile } from "./stat-tile";
 import type { ParticipantState } from "@/src/lib/repository";
 import { formatDateTime, formatRelativeTime } from "@/src/lib/format-date";
 import {
@@ -43,8 +44,6 @@ export type FacebookPageActivitySummary = {
   replyPreview?: string;
   createdAt: string;
 };
-
-type CampaignContext = { id: string; name: string; status: string };
 
 const FUNNEL_STAGES: { key: keyof ParticipantFunnelSummary; label: string }[] = [
   { key: "commented", label: "Commented" },
@@ -166,9 +165,10 @@ function deliveryLabel(participant: ParticipantActivitySummary): string {
   if (participant.finalDeliveryStatus === "SENT") {
     return participant.finalDeliveredAt ? `Delivered ${formatRelativeTime(participant.finalDeliveredAt)}` : "Delivered";
   }
-  if (participant.finalDeliveryStatus === "FAILED") return "Failed";
+  if (participant.finalDeliveryStatus === "FAILED" || participant.state === "FAILED") return "Needs a retry";
+  if (participant.state === "EXPIRED") return "Window closed";
   if (["SKIPPED", "SUPPRESSED", "WINDOW_CLOSED"].includes(participant.finalDeliveryStatus)) return "Skipped";
-  return "Pending";
+  return "In progress";
 }
 
 function ParticipantStateBadge({ state }: { state: ParticipantState }) {
@@ -180,89 +180,135 @@ function Diagnostic({ label, tone, detail }: { label: string; tone: Tone; detail
   return (
     <div className={`diagnostic tone-${tone}`}>
       <dt>
-        <Icon size={13} strokeWidth={2.4} /> {label}
+        <span className="diagnostic-icon" aria-hidden><Icon size={12} strokeWidth={2.6} /></span>
+        {label}
       </dt>
       <dd>{detail}</dd>
     </div>
   );
 }
 
-function FunnelStrip({ summary }: { summary: ParticipantFunnelSummary }) {
+function FunnelChart({ summary }: { summary: ParticipantFunnelSummary }) {
   const total = Math.max(1, summary.commented);
+  // The stage that loses the largest share of the previous stage is where to
+  // look first, so it gets called out instead of making the reader compare.
+  let worst = -1;
+  let worstRate = 101;
+  FUNNEL_STAGES.forEach((stage, index) => {
+    if (index === 0) return;
+    const previous = summary[FUNNEL_STAGES[index - 1].key];
+    if (previous <= 0) return;
+    const rate = (summary[stage.key] / previous) * 100;
+    if (rate < worstRate) {
+      worstRate = rate;
+      worst = index;
+    }
+  });
   return (
-    <section className="campaign-performance" aria-label="Campaign funnel">
-      <div className="campaign-performance-heading"><div><p className="eyebrow">Performance overview</p><h2>From comment to delivery</h2><p>Each stage shows the people who reached it. Percentages compare with the previous stage.</p></div><strong>{Math.round((summary.linkSent / total) * 100)}% <span>overall delivery</span></strong></div>
-      <div className="funnel-strip">
-      {FUNNEL_STAGES.map((stage, index) => {
-        const count = summary[stage.key];
-        const reach = Math.round((count / total) * 100);
-        const previous = index > 0 ? summary[FUNNEL_STAGES[index - 1].key] : null;
-        const conversion = previous && previous > 0 ? Math.round((count / previous) * 100) : null;
-        return (
-          <div className="funnel-cell" key={stage.key}>
-            <span className="funnel-step-number">{String(index + 1).padStart(2, "0")}</span>
-            <div className="funnel-cell-head">
-              <strong>{count.toLocaleString()}</strong>
-              {conversion !== null && (
-                <span
-                  className={`funnel-conv${conversion < 50 ? " is-low" : ""}`}
-                  title={`Converted from ${FUNNEL_STAGES[index - 1].label.toLowerCase()}`}
-                >
-                  {conversion}%
-                </span>
-              )}
-            </div>
-            <span className="funnel-cell-label">{stage.label}</span>
-            <span className="funnel-cell-bar"><span style={{ width: `${reach}%` }} /></span>
-          </div>
-        );
-      })}
-      </div>
-    </section>
+    <SectionCard
+      className="campaign-funnel"
+      title="Conversion funnel"
+      description="Share of commenters who reached each stage."
+      aria-label="Campaign funnel"
+    >
+      <ol className="funnel-bars">
+        {FUNNEL_STAGES.map((stage, index) => {
+          const count = summary[stage.key];
+          const reach = Math.round((count / total) * 100);
+          const previous = index > 0 ? summary[FUNNEL_STAGES[index - 1].key] : null;
+          const conversion = previous && previous > 0 ? Math.round((count / previous) * 100) : null;
+          return (
+            <li className={`funnel-bar-row${index === worst && worstRate < 90 ? " is-worst" : ""}`} key={stage.key}>
+              <span className="funnel-bar-label">{stage.label}</span>
+              <span className="funnel-bar-track" aria-hidden><span style={{ width: `${Math.max(reach, count > 0 ? 1 : 0)}%` }} /></span>
+              <strong className="funnel-bar-count">{count.toLocaleString()}</strong>
+              <span className="funnel-bar-rate">
+                {conversion === null ? `${reach}%` : (
+                  <span className={`funnel-conv${conversion < 50 ? " is-low" : ""}`} title={`Converted from ${FUNNEL_STAGES[index - 1].label.toLowerCase()}`}>
+                    {conversion}%
+                  </span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {worst > 0 && worstRate < 90 ? (
+        <p className="funnel-callout">
+          Biggest drop: <strong>{FUNNEL_STAGES[worst - 1].label}</strong> → <strong>{FUNNEL_STAGES[worst].label}</strong> ({Math.round(worstRate)}% continue)
+        </p>
+      ) : null}
+    </SectionCard>
+  );
+}
+
+function CampaignKpis({ summary, clicks, attention, loaded }: {
+  summary: ParticipantFunnelSummary;
+  clicks: { delivered: number; clicked: number; rate: number };
+  attention: number;
+  loaded: number;
+}) {
+  const deliveredRate = summary.commented > 0 ? Math.round((summary.linkSent / summary.commented) * 100) : 0;
+  return (
+    <StatGrid label="Campaign summary" className="campaign-kpis">
+      <StatTile label="Commented" icon={MessageCircle} value={summary.commented} note="People who matched the trigger" />
+      <StatTile label="Links delivered" icon={Link2} value={summary.linkSent} note={`${deliveredRate}% of commenters`} />
+      <StatTile
+        label="Link clicks"
+        icon={MousePointerClick}
+        value={clicks.delivered > 0 ? `${clicks.rate}%` : "–"}
+        note={clicks.delivered > 0 ? `${clicks.clicked} of ${clicks.delivered} recent deliveries` : "No recent deliveries yet"}
+      />
+      <StatTile label="Needs attention" icon={AlertTriangle} value={attention} note={`In the latest ${loaded.toLocaleString()}`} />
+    </StatGrid>
   );
 }
 
 function JourneyTrack({ participant }: { participant: ParticipantActivitySummary }) {
   const states = journeyStepStates(participant);
-  // Five bare dots told the reader nothing about *which* stage stalled. One
-  // caption naming the live stage does, and stays compact enough for the row.
+  // Five segments show how far they got; one line names where they are.
   const stalledAt = states.findIndex((state) => state !== "done");
   const caption = stalledAt === -1 ? "Complete" : JOURNEY_STEPS[stalledAt];
+  const stopped = participant.state === "FAILED" || participant.state === "EXPIRED";
   return (
     <div className="journey-cell">
       <ol className="journey-steps" aria-label="Participant journey">
         {JOURNEY_STEPS.map((label, index) => (
           <li key={label} className={`is-${states[index]}`} title={label}>
-            <span className="journey-step">
-              <span className="journey-dot" aria-hidden="true" />
-              <span className="journey-label sr-only">{label}</span>
-            </span>
+            <span className="journey-label sr-only">{label}</span>
           </li>
         ))}
       </ol>
-      <span className={`journey-caption${stalledAt === -1 ? " is-complete" : ""}`}>{caption}</span>
+      <span className="journey-meta">
+        {stalledAt === -1 ? null : <span className="journey-prefix">{stopped ? "Stopped at" : "Waiting on"} </span>}
+        <span className={`journey-caption${stalledAt === -1 ? " is-complete" : ""}`}>{caption}</span>
+      </span>
     </div>
   );
 }
 
 function ParticipantIdentity({ participant }: { participant: ParticipantActivitySummary }) {
   const username = participant.instagramUsername?.trim().replace(/^@+/, "");
+  const meta = [
+    participant.createdAt ? formatRelativeTime(participant.createdAt) : "",
+    participant.variantLabel ? `Variant ${participant.variantLabel}` : "",
+  ].filter(Boolean);
   return (
     <div className="row-identity">
-      <span className="participant-badge">
-        <UserRound size={12} strokeWidth={2.2} />
-        {username ? `@${username}` : "Instagram user"}
-      </span>
-      {(participant.variantLabel || participant.createdAt) && (
-        <div className="row-identity-sub">
-          {participant.variantLabel && <span className="tag-chip variant-chip">Variant {participant.variantLabel}</span>}
-          {participant.createdAt && (
-            <time className="row-time" dateTime={participant.createdAt} title={formatDateTime(participant.createdAt)}>
-              {formatRelativeTime(participant.createdAt)}
-            </time>
-          )}
-        </div>
-      )}
+      <span className="participant-initial" aria-hidden>{(username ?? "?").slice(0, 1).toUpperCase()}</span>
+      <div className="participant-copy">
+        <span className="participant-handle">{username ? `@${username}` : "Instagram user"}</span>
+        <span className="participant-meta">
+          {meta.map((item, index) => (
+            <span key={item}>
+              {index === 0 && participant.createdAt ? (
+                <time dateTime={participant.createdAt} title={formatDateTime(participant.createdAt)}>{item}</time>
+              ) : item}
+            </span>
+          ))}
+          {participant.matchedKeyword ? <span className="participant-keyword">“{participant.matchedKeyword}”</span> : null}
+        </span>
+      </div>
     </div>
   );
 }
@@ -277,22 +323,22 @@ function ActivityRow({
   retrying?: boolean;
 }) {
   const media = participant.sourceMediaSnapshot;
-  const publicReplyDetail = `${participant.publicReplyStatus}${participant.publicReplyError ? ` - ${participant.publicReplyError}` : ""}`;
-  const openingDetail = `${participant.openingStatus}${participant.openingError ? ` - ${participant.openingError}` : ""}`;
+  const publicReplyDetail = `${statusBadgeLabel(participant.publicReplyStatus)}${participant.publicReplyError ? ` - ${participant.publicReplyError}` : ""}`;
+  const openingDetail = `${statusBadgeLabel(participant.openingStatus)}${participant.openingError ? ` - ${participant.openingError}` : ""}`;
   const deliveryDetail = [
-    `${participant.finalDeliveryStatus}${participant.finalDeliveryError ? ` - ${participant.finalDeliveryError}` : ""}`,
+    `${statusBadgeLabel(participant.finalDeliveryStatus)}${participant.finalDeliveryError ? ` - ${participant.finalDeliveryError}` : ""}`,
     participant.finalDeliveredAt ? `Delivered ${formatTimestamp(participant.finalDeliveredAt)}` : "",
   ]
     .filter(Boolean)
     .join(" · ");
+  const tone = participant.state === "FAILED" ? "bad"
+    : participant.state === "EXPIRED" ? "skip"
+    : participant.finalDeliveryStatus === "SENT" ? "ok" : "wait";
 
   return (
-    <article className="activity-row">
+    <article className={`activity-row participant-row tone-${tone}`}>
       <div className="activity-row-grid">
         <ParticipantIdentity participant={participant} />
-        <span className={`keyword-chip${participant.matchedKeyword ? "" : " is-any"}`}>
-          {participant.matchedKeyword ? `“${participant.matchedKeyword}”` : "Any comment"}
-        </span>
         <JourneyTrack participant={participant} />
         <div className="row-status">
           <ParticipantStateBadge state={participant.state} />
@@ -313,10 +359,12 @@ function ActivityRow({
           </a>
         </div>
       </div>
+      {/* The summary docks into the row's action column (CSS); the panel
+          opens full width underneath. */}
       <details className="row-detail">
-        <summary className="row-detail-toggle">
-          <ChevronRight size={13} className="row-detail-chevron" aria-hidden="true" />
-          Delivery details
+        <summary className="row-detail-toggle" title="Delivery details">
+          <ChevronRight size={15} className="row-detail-chevron" aria-hidden="true" />
+          <span className="sr-only">Delivery details</span>
         </summary>
         <dl className="activity-diagnostics">
           <Diagnostic label="Public reply" tone={statusTone(participant.publicReplyStatus)} detail={publicReplyDetail} />
@@ -335,12 +383,11 @@ function ActivityRow({
 
 function ActivityTableHead() {
   return (
-    <div className="activity-table-head">
+    <div className="activity-table-head" aria-hidden="true">
       <span>Participant</span>
-      <span>Trigger</span>
       <span>Journey</span>
       <span>Status</span>
-      <span className="col-actions">Actions</span>
+      <span className="col-actions" />
     </div>
   );
 }
@@ -364,10 +411,11 @@ function FacebookPageActivityView({ activity }: { activity: FacebookPageActivity
         </div>
         <p>Public comment replies only. These replies do not open a Messenger conversation or grant messaging eligibility.</p>
       </header>
-      <div className="filter-chips facebook-result-filters" aria-label="Facebook Page activity filters">
+      <div className="segmented filter-chips facebook-result-filters" role="group" aria-label="Facebook Page activity filters">
         {filters.map((filter) => (
           <button
-            className={`filter-chip${result === filter.key ? " is-on" : ""}`}
+            className={`segmented-option filter-chip${result === filter.key ? " is-on" : ""}`}
+            aria-pressed={result === filter.key}
             key={filter.key}
             onClick={() => setResult(filter.key)}
             type="button"
@@ -403,7 +451,7 @@ function FacebookPageActivityView({ activity }: { activity: FacebookPageActivity
   );
 }
 
-export function AutomationActivity({ automationId }: { automationId: string }) {
+export function AutomationActivity({ automationId, aside }: { automationId: string; aside?: ReactNode }) {
   const [participants, setParticipants] = useState<ParticipantActivitySummary[] | null>(null);
   const [facebookActivity, setFacebookActivity] = useState<FacebookPageActivitySummary[] | null>(null);
   const [summary, setSummary] = useState<ParticipantFunnelSummary | null>(null);
@@ -413,7 +461,6 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
   const [retryingId, setRetryingId] = useState("");
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [query, setQuery] = useState("");
-  const [campaign, setCampaign] = useState<CampaignContext | null>(null);
   const [visibleCount, setVisibleCount] = useState(25);
 
   async function retryParticipant(participantId: string) {
@@ -486,31 +533,6 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
     };
   }, [automationId, reloadKey]);
 
-  // Optional context strip: shows which campaign this activity belongs to.
-  // Fails silently when the automation is unavailable or the request errors.
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/automations/${automationId}`)
-      .then(async (response) => {
-        const payload = (await response.json().catch(() => ({}))) as {
-          data?: { id?: string; name?: string; status?: string };
-          error?: string;
-        };
-        if (!response.ok || !payload.data?.name) throw new Error("No campaign context");
-        if (active) {
-          setCampaign({
-            id: payload.data.id ?? automationId,
-            name: payload.data.name,
-            status: payload.data.status ?? "DRAFT",
-          });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [automationId]);
-
   const filtered = useMemo(
     () => (participants ?? []).filter((p) => matchesFeedFilter(p, feedFilter) && matchesSearch(p, query)),
     [participants, feedFilter, query],
@@ -561,7 +583,7 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
   if (error && !participants) return <p className="form-error" role="alert">{error}</p>;
 
   if (!participants) {
-    return <InlineContentSkeleton label="Loading campaign activity" rows={4} />;
+    return <CampaignPerformanceSkeleton />;
   }
 
   if (facebookActivity) return <FacebookPageActivityView activity={facebookActivity} />;
@@ -578,68 +600,27 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
 
   const isNarrowed = feedFilter !== "all" || query.trim().length > 0;
 
+  const truncated = summary && summary.commented > participants.length;
+
   return (
-    <div className="activity-list">
-      {campaign && (
-        <div className="campaign-strip">
-          <div className="campaign-strip-id">
-            <Workflow size={15} aria-hidden="true" />
-            <span className="campaign-strip-name">{campaign.name}</span>
-            <span className={`status-badge status-${campaign.status.toLowerCase()}`}>
-              {statusBadgeLabel(campaign.status)}
-            </span>
-          </div>
-          <Link className="campaign-strip-edit" href={`/automations/${automationId}/edit`}>
-            <Pencil size={12} /> Edit campaign
-          </Link>
+    <div className="activity-list campaign-performance-view">
+      {summary && <CampaignKpis summary={summary} clicks={clickStats} attention={filterCounts.attention} loaded={participants.length} />}
+
+      {summary || aside ? (
+        <div className={`campaign-overview${aside ? " has-aside" : ""}`}>
+          {summary ? <FunnelChart summary={summary} /> : null}
+          {aside ? <aside className="campaign-aside" aria-label="Campaign insights">{aside}</aside> : null}
         </div>
-      )}
+      ) : null}
 
-      {summary && <FunnelStrip summary={summary} />}
-
-      {summary && (
-        <p className="activity-clicks" title="Click rate across the participants currently loaded">
-          <MousePointerClick size={14} aria-hidden="true" />
-          {clickStats.delivered === 0
-            ? "The latest loaded participants have no completed link deliveries."
-            : `${clickStats.clicked} of ${clickStats.delivered} latest delivered links were clicked (${clickStats.rate}%).`}
-        </p>
-      )}
-
-      {summary && summary.commented > participants.length && (
-        <p className="muted activity-truncated">
-          Showing the latest {participants.length} of {summary.commented} participants. Export CSV for the full history.
-        </p>
-      )}
-
-      <div className="feed-toolbar">
-        <div className="feed-toolbar-title"><p className="eyebrow">Activity log</p><h2>Participants</h2></div>
-        <div className="filter-chips" role="group" aria-label="Filter by status">
-          {FEED_FILTERS.map((filter) => (
-            <button
-              key={filter.key}
-              type="button"
-              className={`filter-chip${feedFilter === filter.key ? " is-on" : ""}`}
-              aria-pressed={feedFilter === filter.key}
-              onClick={() => { setFeedFilter(filter.key); setVisibleCount(25); }}
-            >
-              {filter.label}
-              <span className="chip-count">{filterCounts[filter.key]}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="feed-tools">
-          <label className="feed-search">
-            <Search size={14} aria-hidden="true" />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => { setQuery(event.target.value); setVisibleCount(25); }}
-              placeholder="Search keyword or caption"
-              aria-label="Search participants"
-            />
-          </label>
+      <SectionCard
+        flush
+        className="campaign-participants"
+        title="Participants"
+        description={truncated
+          ? `Latest ${participants.length.toLocaleString()} of ${summary.commented.toLocaleString()}. Export CSV for the full history.`
+          : "Everyone who matched this campaign, newest first."}
+        action={(
           <button
             type="button"
             className="icon-button feed-refresh"
@@ -653,46 +634,73 @@ export function AutomationActivity({ automationId }: { automationId: string }) {
           >
             <RefreshCw size={15} className={refreshing ? "is-spinning" : undefined} />
           </button>
+        )}
+      >
+        <div className="list-toolbar">
+          <div className="segmented filter-chips" role="group" aria-label="Filter by status">
+            {FEED_FILTERS.map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                className={`segmented-option filter-chip${feedFilter === filter.key ? " is-on" : ""}`}
+                aria-pressed={feedFilter === filter.key}
+                onClick={() => { setFeedFilter(filter.key); setVisibleCount(25); }}
+              >
+                {filter.label}
+                <span className="chip-count">{filterCounts[filter.key]}</span>
+              </button>
+            ))}
+          </div>
+          <label className="list-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => { setQuery(event.target.value); setVisibleCount(25); }}
+              placeholder="Search handle, keyword or caption"
+              aria-label="Search participants"
+            />
+          </label>
         </div>
-      </div>
 
-      {error && <p className="form-error" role="alert">{error}</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
 
-      {isNarrowed && (
-        <p className="muted feed-count">
-          Showing {filtered.length} of {participants.length} participant{participants.length === 1 ? "" : "s"}
-        </p>
-      )}
+        {isNarrowed && (
+          <p className="muted feed-count">
+            Showing {filtered.length} of {participants.length} participant{participants.length === 1 ? "" : "s"}
+          </p>
+        )}
 
-      {filtered.length === 0 ? (
-        <p className="muted feed-empty">No participants match this view. Try a different filter or search.</p>
-      ) : (
-        <div className="activity-groups">
-          <ActivityTableHead />
-          {groups.map((group) => (
-            <section className="activity-group" key={group.key} aria-label={group.media.caption || "Untitled Reel"}>
-              <header className="activity-group-head">
-                <span className="media-type-label">{group.media.mediaProductType ?? group.media.mediaType}</span>
-                <p className="activity-caption">{group.media.caption || "Untitled Reel"}</p>
-                <span className="activity-group-count">
-                  {group.participants.length} {group.participants.length === 1 ? "person" : "people"}
-                </span>
-              </header>
-              <div className="activity-roster">
-                {group.participants.map((participant) => (
-                  <ActivityRow
-                    key={participant.id}
-                    participant={participant}
-                    onRetry={() => void retryParticipant(participant.id)}
-                    retrying={retryingId === participant.id}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
-      {filtered.length > visibleCount && <button className="button button-secondary activity-show-more" type="button" onClick={() => setVisibleCount((count) => count + 25)}>Show 25 more participants</button>}
+        {filtered.length === 0 ? (
+          <p className="muted feed-empty">No participants match this view. Try a different filter or search.</p>
+        ) : (
+          <div className="activity-groups">
+            <ActivityTableHead />
+            {groups.map((group) => (
+              <section className="activity-group" key={group.key} aria-label={group.media.caption || "Untitled Reel"}>
+                <header className="activity-group-head">
+                  <span className="media-type-label">{group.media.mediaProductType ?? group.media.mediaType}</span>
+                  <p className="activity-caption">{group.media.caption || "Untitled Reel"}</p>
+                  <span className="activity-group-count">
+                    {group.participants.length} {group.participants.length === 1 ? "person" : "people"}
+                  </span>
+                </header>
+                <div className="activity-roster">
+                  {group.participants.map((participant) => (
+                    <ActivityRow
+                      key={participant.id}
+                      participant={participant}
+                      onRetry={() => void retryParticipant(participant.id)}
+                      retrying={retryingId === participant.id}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+        {filtered.length > visibleCount && <button className="list-toggle activity-show-more" type="button" onClick={() => setVisibleCount((count) => count + 25)}>Show 25 more participants</button>}
+      </SectionCard>
     </div>
   );
 }

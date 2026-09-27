@@ -12,9 +12,9 @@ export function InboxWorkspace() {
   function selectFacebook() { setFacebookOpened(true); setActive("facebook"); }
   return <div className="inbox-workspace">
     <div className="inbox-channel-bar">
-      <div className="inbox-tabs" role="tablist" aria-label="Inbox channels">
-        <button type="button" role="tab" id="instagram-tab" aria-controls="instagram-panel" aria-selected={active === "instagram"} onClick={() => setActive("instagram")}><InstagramGlyph size={17} />Instagram conversations</button>
-        <button type="button" role="tab" id="facebook-tab" aria-controls="facebook-panel" aria-selected={active === "facebook"} onClick={selectFacebook}><FacebookGlyph size={17} />Facebook activity</button>
+      <div className="segmented inbox-tabs" role="tablist" aria-label="Inbox channels">
+        <button type="button" role="tab" className={`segmented-option ${active === "instagram" ? "is-active" : ""}`} id="instagram-tab" aria-controls="instagram-panel" aria-selected={active === "instagram"} onClick={() => setActive("instagram")}><InstagramGlyph size={17} />Instagram conversations</button>
+        <button type="button" role="tab" className={`segmented-option ${active === "facebook" ? "is-active" : ""}`} id="facebook-tab" aria-controls="facebook-panel" aria-selected={active === "facebook"} onClick={selectFacebook}><FacebookGlyph size={17} />Facebook activity</button>
       </div>
       <span className="inbox-channel-note">Messages and comments, together</span>
     </div>

@@ -1,32 +1,41 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download, Pencil } from "lucide-react";
 import { AutomationActivity } from "@/src/components/automation-activity";
 import { InsightsPanel } from "@/src/components/insights-panel";
+import { PageHeader } from "@/src/components/page-header";
+import { StatusBadge } from "@/src/components/status-badge";
+import { getRequestSession } from "@/src/lib/auth/session";
+import { getRepository } from "@/src/lib/repository-provider";
+
+export const metadata = { title: "Campaign performance · Linkar" };
+
+// Reads the session to name the campaign in the header (see (sections)/page.tsx).
+export const dynamic = "force-dynamic";
 
 export default async function AutomationActivityPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const session = await getRequestSession();
+  const automation = session
+    ? await getRepository().getAutomation(session.workspaceId, id).catch(() => null)
+    : null;
   return (
-    <>
-      <div className="page-wrap campaign-analytics-page">
-        <Link className="back-link" href="/automations"><ArrowLeft size={16} /> Back to automations</Link>
-        <header className="page-header">
-          <div>
-            <p className="eyebrow">Workspace / Automations / Campaign activity</p>
-            <h1>Campaign performance</h1>
-            <p className="muted page-lede">
-              See how people move from a comment to a delivered link, and follow up where a delivery needs attention.
-            </p>
-          </div>
-        </header>
-        <div className="activity-layout">
-          <div className="activity-main">
-            <AutomationActivity automationId={id} />
-          </div>
-          <aside className="activity-side" aria-label="Campaign insights">
-            <InsightsPanel automationId={id} />
-          </aside>
-        </div>
-      </div>
-    </>
+    <div className="page-wrap campaign-analytics-page">
+      <PageHeader
+        back={<Link className="back-link" href="/automations"><ArrowLeft size={15} /> Back to automations</Link>}
+        title={automation ? (
+          <span className="campaign-title">{automation.name} <StatusBadge status={automation.status} /></span>
+        ) : "Campaign performance"}
+        description="Campaign performance: from comment to delivered link."
+        actions={(
+          <>
+            <a className="button button-secondary" href={`/api/insights/export?automationId=${encodeURIComponent(id)}`} download>
+              <Download size={15} /> Export CSV
+            </a>
+            <Link className="button button-primary" href={`/automations/${id}/edit`}><Pencil size={15} /> Edit automation</Link>
+          </>
+        )}
+      />
+      <AutomationActivity automationId={id} aside={<InsightsPanel automationId={id} showExport={false} />} />
+    </div>
   );
 }

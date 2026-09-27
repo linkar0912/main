@@ -16,6 +16,19 @@ export async function GET(request: Request, context: RouteContext) {
   const repository = getRepository();
   const automation = await repository.getAutomation(session.workspaceId, id);
   if (!automation) return NextResponse.json({ error: "Automation not found" }, { status: 404 });
-  const versions = await repository.listAutomationVersions(session.workspaceId, id, MAX_VERSIONS);
-  return NextResponse.json({ data: versions });
+  const [versions, members] = await Promise.all([
+    repository.listAutomationVersions(session.workspaceId, id, MAX_VERSIONS),
+    repository.listMembers(session.workspaceId),
+  ]);
+  // snapshotBy stores a user id (or "restore"); show people a name, never an id.
+  const emails = new Map(members.filter((member) => member.userId).map((member) => [member.userId!, member.email]));
+  const label = (snapshotBy?: string) => {
+    if (!snapshotBy) return undefined;
+    if (snapshotBy === session.userId) return "you";
+    if (snapshotBy === "restore") return "a restore";
+    return emails.get(snapshotBy) ?? "a former teammate";
+  };
+  return NextResponse.json({
+    data: versions.map((version) => ({ ...version, snapshotBy: label(version.snapshotBy) })),
+  });
 }

@@ -74,6 +74,21 @@ describe("human handoff repository methods", () => {
     expect(first.record.id).toBeDefined();
   });
 
+  it("resumeParticipantsBySender clears the handoff pause for that sender only", async () => {
+    const repository = createMemoryRepository();
+    await repository.createParticipant(baseParticipant);
+    await repository.createParticipant({ ...baseParticipant, sourceCommentId: "comment_2" });
+    const other = await repository.createParticipant({ ...baseParticipant, sourceCommentId: "comment_3", igScopedUserId: "other_sender" });
+    const at = "2026-08-25T10:00:00.000Z";
+    await repository.pauseParticipantsBySender("workspace_handoff", "ig_1", "sender_1", "review", "user_42", at);
+    await repository.pauseParticipant(other.record.id, "separate", "user_42", at);
+
+    expect(await repository.resumeParticipantsBySender("workspace_handoff", "ig_1", "sender_1")).toBe(2);
+    expect(await repository.hasPausedParticipant("workspace_handoff", "ig_1", "sender_1")).toBe(false);
+    expect((await repository.getParticipantById(other.record.id))!.pausedAt).toBe(at);
+    expect(await repository.resumeParticipantsBySender("workspace_handoff", "ig_1", "sender_1")).toBe(0);
+  });
+
   it("listPausedParticipantsByWorkspace returns the workspace's paused participants newest first", async () => {
     const repository = createMemoryRepository();
     const first = await repository.createParticipant(baseParticipant);

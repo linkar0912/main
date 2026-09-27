@@ -3,7 +3,10 @@
 import { Download, MailCheck, MousePointerClick, RefreshCw, Send, UsersRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { InsightsContentSkeleton } from "./skeleton";
-import { ReplyVolumeChart, type DayPoint } from "./reply-volume-chart";
+import type { DayPoint } from "./reply-volume-chart";
+import { ReplyVolumeCard } from "./reply-volume-card";
+import { halfWindowDelta, StatGrid, StatTile } from "./stat-tile";
+import { PageHeader, SectionCard } from "./page-header";
 
 type MediaPerformance = { mediaId: string; matched: number; delivered: number; clicked: number };
 type InsightsPayload = {
@@ -23,35 +26,33 @@ const FUNNEL_STAGES = [
   ["LINK_SENT", "Link delivered"],
 ] as const;
 
+// Stale-while-revalidate like contacts/automations: a revisit paints the last
+// confirmed numbers immediately and refreshes quietly in the background.
+const INSIGHTS_FRESH_FOR_MS = 60_000;
+const insightsCache: { value?: InsightsPayload; fetchedAt?: number; fetcher?: typeof fetch } = {};
+
+function readInsightsCache(): InsightsPayload | undefined {
+  return insightsCache.fetcher === fetch ? insightsCache.value : undefined;
+}
+
 function sum(points: DayPoint[]): number {
   return points.reduce((total, point) => total + point.count, 0);
 }
 
-function Metric({ label, value, note, icon: Icon }: { label: string; value: number; note: string; icon: typeof Send }) {
-  return (
-    <div className="insights-metric" role="listitem">
-      <div className="stat-block insights-metric-body" role="group" aria-label={label}>
-        <span className="stat-label"><Icon size={15} strokeWidth={1.8} /><span>{label}</span></span>
-        <span className="stat-value-row"><strong>{value.toLocaleString()}</strong></span>
-        <small className="stat-note">{note}</small>
-      </div>
-    </div>
-  );
-}
-
 export function InsightsScreen() {
-  const [data, setData] = useState<InsightsPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<InsightsPayload | null>(() => readInsightsCache() ?? null);
+  const [loading, setLoading] = useState(() => readInsightsCache() === undefined);
   const [error, setError] = useState("");
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
+    // Keep cached numbers on screen while refreshing instead of flashing skeletons.
+    if (!readInsightsCache()) setLoading(true);
     setError("");
     try {
       const response = await fetch("/api/insights", { signal });
       const payload = (await response.json().catch(() => ({}))) as Partial<InsightsPayload> & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Could not load insights");
-      setData({
+      const next: InsightsPayload = {
         funnel: payload.funnel ?? {},
         timeseries: {
           days: payload.timeseries?.days ?? 0,
@@ -62,7 +63,11 @@ export function InsightsScreen() {
         capturedEmails: payload.capturedEmails ?? 0,
         optedOut: payload.optedOut ?? 0,
         usage: payload.usage ?? { participantsThisMonth: 0, monthlyLimit: null },
-      });
+      };
+      insightsCache.value = next;
+      insightsCache.fetchedAt = Date.now();
+      insightsCache.fetcher = fetch;
+      setData(next);
     } catch (caught: unknown) {
       if (signal?.aborted) return;
       setError(caught instanceof Error ? caught.message : "Could not load insights");
@@ -73,6 +78,8 @@ export function InsightsScreen() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const cachedAt = insightsCache.fetcher === fetch ? insightsCache.fetchedAt ?? 0 : 0;
+    if (Date.now() - cachedAt < INSIGHTS_FRESH_FOR_MS) return () => controller.abort();
     const timer = window.setTimeout(() => void load(controller.signal), 0);
     return () => {
       window.clearTimeout(timer);
@@ -88,22 +95,20 @@ export function InsightsScreen() {
   return (
     <>
       <main className="page-wrap insights-page">
-        <header className="page-header insights-page-header">
-          <div>
-            <p className="eyebrow">Workspace / Insights</p>
-            <h1>Insights</h1>
-            <p className="page-subtitle">See what your automations reach, deliver, and convert.</p>
-          </div>
-          <a className="button button-secondary" href="/api/insights/export" download><Download size={16} /> Export CSV</a>
-        </header>
+        <PageHeader
+          className="insights-page-header"
+          title="Insights"
+          description="See what your automations reach, deliver, and convert."
+          actions={<a className="button button-secondary" href="/api/insights/export" download><Download size={16} /> Export CSV</a>}
+        />
 
         {loading && (
           <InsightsContentSkeleton />
         )}
 
         {!loading && error && (
-          <section className="panel insights-error">
-            <div><p className="eyebrow">Could not load</p><h2>Insights are temporarily out of reach</h2></div>
+          <section className="surface insights-error">
+            <div className="surface-head"><div className="surface-head-copy"><h2>Insights are temporarily out of reach</h2></div></div>
             <p className="form-error" role="alert">{error}</p>
             <button className="button button-secondary" type="button" onClick={() => void load()}><RefreshCw size={15} /> Try again</button>
           </section>
@@ -111,32 +116,25 @@ export function InsightsScreen() {
 
         {!loading && data && (
           <div className="insights-workspace">
-            <section className="stat-row insights-metrics" role="list" aria-label="Performance summary">
-              <Metric label="Replies sent" value={totals.sent} note="Last 14 days" icon={Send} />
-              <Metric label="People reached" value={totals.reached} note="Last 14 days" icon={UsersRound} />
-              <Metric label="Emails captured" value={data.capturedEmails} note="All time" icon={MailCheck} />
-              <Metric label="Link clicks" value={data.mediaPerformance.reduce((total, row) => total + row.clicked, 0)} note={`${data.optedOut.toLocaleString()} opted out`} icon={MousePointerClick} />
-            </section>
+            <StatGrid>
+              <StatTile label="Replies sent" icon={Send} value={totals.sent} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.sentPerDay)} />
+              <StatTile label="People reached" icon={UsersRound} value={totals.reached} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.participantsPerDay)} />
+              <StatTile label="Emails captured" icon={MailCheck} value={data.capturedEmails} note={`${data.optedOut.toLocaleString()} opted out · respected`} />
+              <StatTile label="Link clicks" icon={MousePointerClick} value={data.mediaPerformance.reduce((total, row) => total + row.clicked, 0)} note="From tracked links" />
+            </StatGrid>
 
-            <section className="panel chart-panel insights-volume" aria-label="Performance over time">
-              <div className="panel-heading insights-heading-row">
-                <div><p className="eyebrow">Last {data.timeseries.days} days</p><h2>Reply volume</h2></div>
-              </div>
-              <ReplyVolumeChart sent={data.timeseries.sentPerDay} reached={data.timeseries.participantsPerDay} days={data.timeseries.days} />
-            </section>
+            <ReplyVolumeCard sent={data.timeseries.sentPerDay} reached={data.timeseries.participantsPerDay} days={data.timeseries.days} />
 
             <div className="insights-detail-grid">
-              <section className="panel insights-journey" aria-label="Automation journey">
-                <div className="panel-heading insights-detail-heading"><div><p className="eyebrow">Live position</p><h2>Automation journey</h2></div></div>
+              <SectionCard className="insights-journey" aria-label="Automation journey" title="Automation journey" description="Where people currently sit in your flows.">
                 <ol>
                   {FUNNEL_STAGES.map(([key, label]) => (
                     <li key={key}><span>{label}</span><strong>{(data.funnel[key] ?? 0).toLocaleString()}</strong></li>
                   ))}
                 </ol>
-              </section>
+              </SectionCard>
 
-              <section className="panel insights-content" aria-label="Content performance">
-                <div className="panel-heading insights-detail-heading"><div><p className="eyebrow">Top posts</p><h2>Content performance</h2></div></div>
+              <SectionCard className="insights-content" flush aria-label="Content performance" title="Content performance" description="Top posts by matched comments.">
                 {data.mediaPerformance.length ? (
                   <div className="table-scroll">
                     <table className="insights-table" aria-label="Top content performance">
@@ -147,7 +145,7 @@ export function InsightsScreen() {
                     </table>
                   </div>
                 ) : <p className="muted insights-empty-copy">Post-level performance appears after an automation matches a comment.</p>}
-              </section>
+              </SectionCard>
             </div>
           </div>
         )}

@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
 import { SocialAvatar } from "./social-avatar";
+import { loadTeamMembers, type TeamMember } from "@/src/lib/client/team-members";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 
@@ -20,7 +23,12 @@ type ContactDetail = {
   suppressedAt?: string;
   lastSeenAt: string;
   createdAt: string;
+  /** True while a handoff has automated messages paused for this person. */
+  automationsPaused?: boolean;
 };
+
+/** Fields the Contacts table mirrors after an edit in the drawer. */
+export type ContactUpdate = Partial<Pick<ContactDetail, "leadStatus" | "assigneeUserId" | "tags" | "score">>;
 
 const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   NEW: "New",
@@ -39,6 +47,24 @@ type TimelineEntry = {
   detail?: string;
 };
 
+// Campaign participant states arrive raw (e.g. "OPENING_SENT").
+const PARTICIPANT_STATE_LABELS: Record<string, string> = {
+  COMMENT_MATCHED: "Comment matched",
+  OPENING_SENT: "Opening DM sent",
+  OPTED_IN: "Opted in",
+  FOLLOW_REQUIRED: "Asked to follow",
+  FOLLOW_VERIFIED: "Follow verified",
+  LINK_SENT: "Link delivered",
+  FAILED: "Delivery failed",
+  EXPIRED: "Expired before finishing",
+};
+
+function timelineDetail(detail: string): string {
+  if (PARTICIPANT_STATE_LABELS[detail]) return PARTICIPANT_STATE_LABELS[detail];
+  if (/^[A-Z_]+$/.test(detail)) return detail.charAt(0) + detail.slice(1).toLowerCase().replaceAll("_", " ");
+  return detail;
+}
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
@@ -48,14 +74,28 @@ function formatDate(value: string): string {
  * interaction timeline. Automatic labels ("email_captured", "opted_out",
  * "clicked") are set by the engine and cannot be removed here.
  */
-export function ContactDetailModal({ contactId, onClose }: { contactId: string; onClose: () => void }) {
-  const [contact, setContact] = useState<ContactDetail | null>(null);
+/** What the Contacts table already knows, so the drawer paints instantly. */
+export type ContactPreview = Pick<ContactDetail, "id" | "instagramUsername" | "email" | "tags" | "score" | "leadStatus" | "assigneeUserId" | "lastSeenAt" | "createdAt" | "suppressedAt" | "state">;
+
+export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
+  contactId: string;
+  initial?: ContactPreview;
+  onClose: () => void;
+  /** Lets the Contacts table reflect stage, owner and tag edits without a refetch. */
+  onUpdated?: (update: ContactUpdate) => void;
+}) {
+  const [contact, setContact] = useState<ContactDetail | null>(initial ?? null);
+  // Notes, timeline and the pause flag only exist in the full record; editing
+  // waits for it so a save can never blank notes that had not loaded yet.
+  const [detailLoaded, setDetailLoaded] = useState(false);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [error, setError] = useState("");
-  const [tagDraft, setTagDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [statusDraft, setStatusDraft] = useState<LeadStatus>("NEW");
-  const [assigneeDraft, setAssigneeDraft] = useState("");
+  const [tagDraft, setTagDraft] = useState(initial?.tags.join(", ") ?? "");
+  const [saving, setSaving] = useState<"" | "profile" | "tags" | "handoff" | "resume">("");
+  const [notice, setNotice] = useState("");
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [statusDraft, setStatusDraft] = useState<LeadStatus>(initial?.leadStatus ?? "NEW");
+  const [assigneeDraft, setAssigneeDraft] = useState(initial?.assigneeUserId ?? "");
   const [notesDraft, setNotesDraft] = useState("");
   const [profileDirty, setProfileDirty] = useState(false);
   const [showHandoffForm, setShowHandoffForm] = useState(false);
@@ -67,7 +107,7 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
 
   useEffect(() => {
     let active = true;
-    fetch(`/api/contacts/${contactId}`)
+    fetch(`/api/contacts/${contactId}${initial?.instagramUsername ? "?profile=0" : ""}`)
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as {
           data?: { contact: ContactDetail; timeline: TimelineEntry[] };
@@ -75,7 +115,9 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
         };
         if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load this contact");
         if (!active) return;
-        setContact(payload.data.contact);
+        // Keep the table's handle when the drawer skipped the lookup.
+        setContact({ ...payload.data.contact, instagramUsername: payload.data.contact.instagramUsername ?? initial?.instagramUsername });
+        setDetailLoaded(true);
         setTimeline(payload.data.timeline);
         setTagDraft(payload.data.contact.tags.join(", "));
         setStatusDraft(payload.data.contact.leadStatus);
@@ -89,7 +131,21 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
     return () => {
       active = false;
     };
+    // `initial` is a first-paint hint for this contactId, not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
+
+  useEffect(() => {
+    let active = true;
+    void loadTeamMembers().then((list) => { if (active) setMembers(list); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 2500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -101,8 +157,9 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
 
   async function saveTags() {
     if (!contact) return;
-    const tags = tagDraft.split(",").map((tag) => tag.trim().toLowerCase()).filter(Boolean);
-    setSaving(true);
+    const tags = tagDraft.split(",").map((tag) => tag.trim().toLowerCase().replace(/\s+/g, "-")).filter(Boolean);
+    setSaving("tags");
+    setError("");
     try {
       const response = await fetch(`/api/contacts/${contact.id}`, {
         method: "PATCH",
@@ -112,10 +169,13 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
       const payload = (await response.json().catch(() => ({}))) as { data?: ContactDetail; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save tags");
       setContact((current) => (current ? { ...current, tags: payload.data!.tags } : current));
+      setTagDraft(payload.data.tags.join(", "));
+      onUpdated?.({ tags: payload.data.tags });
+      setNotice("Tags saved");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save tags");
     } finally {
-      setSaving(false);
+      setSaving("");
     }
   }
 
@@ -123,7 +183,7 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
     if (!contact) return;
     const trimmedAssignee = assigneeDraft.trim();
     const trimmedNotes = notesDraft.trim();
-    setSaving(true);
+    setSaving("profile");
     setError("");
     try {
       const body: Record<string, unknown> = { leadStatus: statusDraft };
@@ -154,10 +214,12 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
       setAssigneeDraft(payload.data!.assigneeUserId ?? "");
       setNotesDraft(payload.data!.notes ?? "");
       setProfileDirty(false);
+      onUpdated?.({ leadStatus: payload.data.leadStatus, assigneeUserId: payload.data.assigneeUserId, score: payload.data.score });
+      setNotice("Profile saved");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save profile");
     } finally {
-      setSaving(false);
+      setSaving("");
     }
   }
 
@@ -168,7 +230,7 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
       setError("Add a short reason before handing this off.");
       return;
     }
-    setSaving(true);
+    setSaving("handoff");
     setError("");
     try {
       const response = await fetch(`/api/contacts/${contact.id}/handoff`, {
@@ -186,26 +248,52 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
         error?: string;
       };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not hand off this contact");
-      setContact((current) => (current ? { ...current, ...payload.data!.contact } : current));
+      const paused = handoffPause || Boolean(contact.automationsPaused);
+      setContact((current) => (current ? { ...current, ...payload.data!.contact, automationsPaused: paused } : current));
+      onUpdated?.({ assigneeUserId: payload.data.contact.assigneeUserId });
       setShowHandoffForm(false);
       setHandoffReason("");
+      setProfileDirty(false);
+      setNotice(handoffPause ? "Handed off - automations paused" : "Handed off");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not hand off this contact");
     } finally {
-      setSaving(false);
+      setSaving("");
     }
   }
 
-  return (
-    <div className="modal-scrim contact-detail-scrim" role="presentation" onClick={onClose}>
+  async function resumeAutomations() {
+    if (!contact) return;
+    setSaving("resume");
+    setError("");
+    try {
+      const response = await fetch(`/api/contacts/${contact.id}/handoff`, { method: "DELETE" });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Could not resume automations");
+      setContact((current) => (current ? { ...current, automationsPaused: false } : current));
+      setNotice("Automations resumed");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not resume automations");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  const knownAssignee = !assigneeDraft || members.some((member) => member.userId === assigneeDraft);
+
+  return portal(
+    // A side panel, not a modal: the list behind stays visible and clickable,
+    // so picking another contact switches the panel instead of closing it.
+    <div className="contact-detail-scrim" role="presentation">
       <div
         className="modal-panel contact-detail-drawer"
         role="dialog"
-        aria-modal="true"
+        aria-modal="false"
         aria-label="Contact details"
         onClick={(event) => event.stopPropagation()}
       >
         {error && <p className="form-error" role="alert">{error}</p>}
+        {notice && <p className="form-success contact-detail-notice" role="status">{notice}</p>}
         {!contact && !error && (
           <InlineContentSkeleton label="Loading contact details" rows={4} />
         )}
@@ -220,7 +308,7 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
                   {contact.suppressedAt ? " · Opted out" : ""}
                 </p>
               </div>
-              <button className="icon-button" type="button" aria-label="Close contact details" onClick={onClose}>✕</button>
+              <button className="icon-button" type="button" aria-label="Close contact details" onClick={onClose}><X size={16} /></button>
             </header>
 
             <div className="contact-chips contact-detail-chips">
@@ -249,17 +337,21 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
                 </select>
               </label>
               <label className="field">
-                <span>Assignee <em>team member id or email</em></span>
-                <input
+                <span>Owner</span>
+                <select
                   aria-label="Assignee"
                   value={assigneeDraft}
                   onChange={(event) => {
                     setAssigneeDraft(event.target.value);
                     setProfileDirty(true);
                   }}
-                  placeholder="alex@team.com"
-                  maxLength={64}
-                />
+                >
+                  <option value="">Unassigned</option>
+                  {members.map((member) => (
+                    <option key={member.userId} value={member.userId}>{member.email}</option>
+                  ))}
+                  {!knownAssignee ? <option value={assigneeDraft}>Former member</option> : null}
+                </select>
               </label>
             </div>
             <label className="field field-spaced">
@@ -273,6 +365,7 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
                 }}
                 rows={3}
                 maxLength={4000}
+                disabled={!detailLoaded}
                 placeholder="Follow up next week, prefers SMS, ..."
               />
             </label>
@@ -281,20 +374,28 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
                 className="button button-primary button-small"
                 type="button"
                 onClick={saveProfile}
-                disabled={saving || !profileDirty}
+                disabled={Boolean(saving) || !profileDirty || !detailLoaded}
               >
-                {saving ? "Saving…" : profileDirty ? "Save profile" : "Profile saved"}
+                {saving === "profile" ? "Saving…" : profileDirty ? "Save profile" : "Saved"}
               </button>
               <button
                 className="button button-secondary button-small"
                 type="button"
                 onClick={() => setShowHandoffForm((value) => !value)}
-                disabled={saving || Boolean(contact.suppressedAt)}
+                disabled={Boolean(saving) || Boolean(contact.suppressedAt) || !detailLoaded}
                 aria-expanded={showHandoffForm}
               >
                 {showHandoffForm ? "Cancel handoff" : "Hand off to team"}
               </button>
             </div>
+            {contact.automationsPaused ? (
+              <div className="contact-paused-note" role="status">
+                <span>Automated messages are paused for this person while your team handles the conversation.</span>
+                <button className="button button-secondary button-small" type="button" onClick={resumeAutomations} disabled={Boolean(saving)}>
+                  {saving === "resume" ? "Resuming…" : "Resume automations"}
+                </button>
+              </div>
+            ) : null}
             {showHandoffForm && (
               <form
                 className="field-spaced"
@@ -326,9 +427,9 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
                 <button
                   className="button button-primary button-small"
                   type="submit"
-                  disabled={saving || !handoffReason.trim()}
+                  disabled={Boolean(saving) || !handoffReason.trim()}
                 >
-                  {saving ? "Saving…" : "Confirm handoff"}
+                  {saving === "handoff" ? "Saving…" : "Confirm handoff"}
                 </button>
               </form>
             )}
@@ -337,7 +438,7 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
             <section className="contact-detail-section" aria-labelledby="contact-tags-title">
             <h3 id="contact-tags-title">Tags</h3>
             <label className="field field-spaced">
-              <span>Comma separated <em>automatic tags are kept</em></span>
+              <span>Comma separated <em>letters, numbers and dashes; automatic tags are kept</em></span>
               <input
                 aria-label="Contact tags"
                 value={tagDraft}
@@ -346,14 +447,16 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
                 maxLength={300}
               />
             </label>
-            <button className="button button-secondary button-small" type="button" onClick={saveTags} disabled={saving}>
-              {saving ? "Saving…" : "Save tags"}
+            <button className="button button-secondary button-small" type="button" onClick={saveTags} disabled={Boolean(saving) || !detailLoaded}>
+              {saving === "tags" ? "Saving…" : "Save tags"}
             </button>
             </section>
 
             <section className="contact-detail-section contact-detail-timeline" aria-labelledby="contact-timeline-title">
             <h3 id="contact-timeline-title">Timeline</h3>
-            {timeline.length === 0 ? (
+            {!detailLoaded ? (
+              <InlineContentSkeleton label="Loading timeline" rows={2} />
+            ) : timeline.length === 0 ? (
               <p className="muted">No interactions recorded yet.</p>
             ) : (
               <ul className="timeline-list">
@@ -363,7 +466,7 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
                       <span>{entry.label}</span>
                       <time dateTime={entry.at}>{formatDate(entry.at)}</time>
                     </div>
-                    {entry.detail && <p className="muted activity-summary">{entry.detail}</p>}
+                    {entry.detail && <p className="muted activity-summary">{timelineDetail(entry.detail)}</p>}
                   </li>
                 ))}
               </ul>
@@ -374,4 +477,10 @@ export function ContactDetailModal({ contactId, onClose }: { contactId: string; 
       </div>
     </div>
   );
+}
+
+// Rendered on <body> so no page stacking context (the sticky mobile top bar,
+// animated content slots) can paint over the panel.
+function portal(node: ReactNode) {
+  return typeof document === "undefined" ? node : createPortal(node, document.body);
 }

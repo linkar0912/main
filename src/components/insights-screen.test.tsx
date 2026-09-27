@@ -87,7 +87,7 @@ describe("InsightsScreen", () => {
 
     await screen.findByRole("heading", { name: "Automation journey" });
     expect(container.querySelector(".insights-journey .panel-heading > svg")).toBeNull();
-    expect(container.querySelectorAll(".insights-detail-heading")).toHaveLength(2);
+    expect(container.querySelectorAll(".insights-detail-grid .surface-head")).toHaveLength(2);
   });
 
   it("renders every chart day once in chronological order when the series arrive unsorted", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Link as LinkIcon, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, Link as LinkIcon, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { InlineContentSkeleton } from "./skeleton";
 
@@ -50,6 +50,7 @@ export function TrackedLinksPanel() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [statsFor, setStatsFor] = useState<string | null>(null);
+  const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [stats, setStats] = useState<Record<string, Stats>>({});
 
   useEffect(() => {
@@ -124,11 +125,13 @@ export function TrackedLinksPanel() {
     }
   }
 
-  async function removeLink(id: string) {
+  async function removeLink(id: string, slug: string) {
     if (!confirm("Delete this tracked link? Past clicks are kept for the lifetime of the workspace.")) return;
     setError("");
     try {
-      const response = await fetch(`/api/links/${encodeURIComponent(id)}`, { method: "DELETE" });
+      // The API addresses links by slug (/api/links/[slug]); sending the id
+      // made every delete fail with "link not found".
+      const response = await fetch(`/api/links/${encodeURIComponent(slug)}`, { method: "DELETE" });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(payload.error ?? "Could not delete the link");
@@ -141,21 +144,21 @@ export function TrackedLinksPanel() {
 
   return (
     <div className="tracked-links-stack">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Attribution</p>
-          <h2>Tracked links</h2>
-          <p className="muted">Branded /r/&lt;slug&gt; URLs with UTM tagging and click counts.</p>
+      <div className="surface-head">
+        <div className="surface-head-copy">
+          <h2 id="tracked-links-heading">Tracked links</h2>
+          <p>Short links that count clicks and tag where visitors came from.</p>
         </div>
         <button
           type="button"
-          className="button button-primary button-small"
+          className="button button-secondary button-small"
           onClick={() => setShowForm((value) => !value)}
           aria-expanded={showForm}
         >
           {showForm ? "Cancel" : (<><Plus size={14} /> New link</>)}
         </button>
       </div>
+      <div className="surface-body">
       {error && <p className="form-error" role="alert">{error}</p>}
       {showForm && (
         <form className="tracked-link-form" onSubmit={createLink}>
@@ -243,8 +246,8 @@ export function TrackedLinksPanel() {
       {loading ? (
         <InlineContentSkeleton label="Loading tracked links" rows={3} />
       ) : links.length === 0 ? (
-        <p className="muted">
-          <LinkIcon size={14} /> No tracked links yet. Add one to start counting clicks and tagging UTMs.
+        <p className="all-clear is-neutral">
+          <LinkIcon size={15} /> No tracked links yet. Add one to start counting clicks and tagging UTMs.
         </p>
       ) : (
         <ul className="tracked-link-list">
@@ -267,10 +270,17 @@ export function TrackedLinksPanel() {
                     className="button button-secondary button-small"
                     type="button"
                     onClick={() => {
-                      void navigator.clipboard.writeText(`${window.location.origin}/r/${link.slug}`);
+                      // Confirm the copy; clipboard access can be blocked, so
+                      // say so instead of failing silently.
+                      navigator.clipboard.writeText(`${window.location.origin}/r/${link.slug}`)
+                        .then(() => {
+                          setCopiedSlug(link.slug);
+                          window.setTimeout(() => setCopiedSlug((current) => (current === link.slug ? null : current)), 2000);
+                        })
+                        .catch(() => setError(`Couldn't copy - the link is ${window.location.origin}/r/${link.slug}`));
                     }}
                   >
-                    <Copy size={14} /> Copy URL
+                    {copiedSlug === link.slug ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy URL</>}
                   </button>
                   <button
                     className="button button-secondary button-small"
@@ -283,7 +293,7 @@ export function TrackedLinksPanel() {
                   <button
                     className="button button-secondary button-small"
                     type="button"
-                    onClick={() => void removeLink(link.id)}
+                    onClick={() => void removeLink(link.id, link.slug)}
                     aria-label={`Delete /r/${link.slug}`}
                   >
                     <Trash2 size={14} /> Delete
@@ -306,6 +316,7 @@ export function TrackedLinksPanel() {
           })}
         </ul>
       )}
+      </div>
     </div>
   );
 }

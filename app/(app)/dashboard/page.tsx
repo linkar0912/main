@@ -2,6 +2,8 @@ import { DashboardScreen } from "@/src/components/dashboard-screen";
 import { getRequestSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 
+export const metadata = { title: "Home · Linkar" };
+
 // force-dynamic is required: reading the session means reading server env,
 // and production env validation must run at request time, not during the
 // build's prerender pass (same reason /login is force-dynamic).

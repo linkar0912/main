@@ -30,7 +30,9 @@ export function SocialAvatar({
         />
       ) : (
         <span className="social-avatar-fallback" aria-hidden="true">
-          {channel === "instagram" ? <InstagramGlyph size={size === "large" ? 24 : 18} brand /> : <FacebookGlyph size={size === "large" ? 24 : 18} brand />}
+          {/* Placeholders stay monochrome: a brand-blue "f" on every commenter
+              without a photo read as a wall of Facebook logos. */}
+          {channel === "instagram" ? <InstagramGlyph size={size === "large" ? 24 : 18} brand /> : <FacebookGlyph size={size === "large" ? 22 : 16} />}
         </span>
       )}
     </span>

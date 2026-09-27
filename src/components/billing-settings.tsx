@@ -180,11 +180,10 @@ export function BillingSettings() {
           <h2 id="billing-title">Plan and usage</h2>
           <p className="muted">Choose the capacity that fits your conversations. GST is included.</p>
         </div>
-        <fieldset className="billing-period" aria-label="Billing period">
+        <fieldset className="segmented billing-period" aria-label="Billing period">
           <legend>Billing period</legend>
-          <label><input type="radio" name="billing-period" value="MONTHLY" checked={interval === "MONTHLY"} onChange={() => setInterval("MONTHLY")} /> Monthly</label>
-          <label><input type="radio" name="billing-period" value="ANNUAL" checked={interval === "ANNUAL"} onChange={() => setInterval("ANNUAL")} /> Annual</label>
-          <span>Save 2 months</span>
+          <label className="segmented-option"><input type="radio" name="billing-period" value="MONTHLY" checked={interval === "MONTHLY"} onChange={() => setInterval("MONTHLY")} /> Monthly</label>
+          <label className="segmented-option"><input type="radio" name="billing-period" value="ANNUAL" checked={interval === "ANNUAL"} onChange={() => setInterval("ANNUAL")} /> Annual <span className="segmented-badge">Save 2 months</span></label>
         </fieldset>
       </header>
 

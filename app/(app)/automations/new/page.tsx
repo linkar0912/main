@@ -4,6 +4,8 @@ import { AutomationBuilder } from "@/src/components/automation-builder";
 import { parseNewAutomationTarget } from "@/src/lib/automation/new-automation-target";
 import { getTemplateById } from "@/src/lib/automation/templates";
 
+export const metadata = { title: "New automation · Linkar" };
+
 type NewAutomationPageProps = {
   searchParams: Promise<{
     type?: string;

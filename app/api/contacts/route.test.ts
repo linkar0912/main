@@ -66,6 +66,19 @@ describe("GET /api/contacts", () => {
     expect(body.data.contacts[0]).toMatchObject({ instagramUsername: "probablymansi" });
   });
 
+  it("pages through contacts with an offset and says when more remain", async () => {
+    await repository.touchContact("workspace_1", "ig_1", "person_2", "2026-09-01T07:00:00.000Z");
+    await repository.touchContact("workspace_1", "ig_1", "person_3", "2026-09-01T08:00:00.000Z");
+
+    const first = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&limit=2"))).json();
+    expect(first.data.contacts.map((c: { igScopedUserId: string }) => c.igScopedUserId)).toEqual(["person_3", "person_2"]);
+    expect(first.data.hasMore).toBe(true);
+
+    const second = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&limit=2&offset=2"))).json();
+    expect(second.data.contacts.map((c: { igScopedUserId: string }) => c.igScopedUserId)).toEqual(["person_1"]);
+    expect(second.data.hasMore).toBe(false);
+  });
+
   it("filters full contacts by a valid lead status and rejects an invalid one", async () => {
     const filtered = await GET(new Request("https://app.linkar.in/api/contacts?scope=all&leadStatus=NEW"));
     expect((await filtered.json()).data.contacts).toEqual([]);

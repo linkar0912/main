@@ -191,4 +191,10 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.contact-row\s*{[^}]*border-bottom:\s*1px solid var\(--line\)/);
     expect(css).toMatch(/\.funnel-cell\s*{[^}]*min-height:\s*112px/);
   });
+
+  it("keeps the Instagram DM preview on the dark phone screen, not a page token", () => {
+    // The mock's header and composer are white-on-dark; a page background token
+    // (grey, later white) made them invisible.
+    expect(css).toMatch(/\.ig-screen-dm\s*{[^}]*background:\s*#000/);
+  });
 });

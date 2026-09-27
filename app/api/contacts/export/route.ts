@@ -3,6 +3,8 @@ import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
+import { getServerEnv } from "@/src/lib/env";
+import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 
 export const runtime = "nodejs";
 
@@ -25,7 +27,16 @@ export async function GET(request: Request) {
       ?? NextResponse.json({ error: "entitlement_check_failed" }, { status: 500 });
   }
 
-  const rows = await getRepository().listContactsByLeadStatus(session.workspaceId, { limit: 10_000 });
+  const repository = getRepository();
+  const [rows, events, members] = await Promise.all([
+    repository.listContactsByLeadStatus(session.workspaceId, { limit: 10_000 }),
+    repository.listRecentWebhookEvents(session.workspaceId, 500),
+    repository.listMembers(session.workspaceId),
+  ]);
+  // Handles we already know (recent events + lookup cache) - no Meta calls, so
+  // a 10k-row export stays fast. Unknown handles are left blank.
+  const usernames = await resolveInstagramUsernames({ identities: rows, events, apiVersion: getServerEnv().metaApiVersion });
+  const memberEmails = new Map(members.filter((member) => member.userId).map((member) => [member.userId!, member.email]));
   const header = [
     "contact_id",
     "email",
@@ -38,6 +49,9 @@ export async function GET(request: Request) {
     "opted_out",
     "last_seen_at",
     "created_at",
+    // Appended so existing imports that rely on column order keep working.
+    "instagram_username",
+    "assignee_email",
   ];
   const lines = [header.join(",")];
   for (const contact of rows) {
@@ -53,6 +67,8 @@ export async function GET(request: Request) {
       String(Boolean(contact.suppressedAt)),
       csvCell(contact.lastSeenAt),
       csvCell(contact.createdAt),
+      csvCell(usernames.get(instagramIdentityKey(contact))),
+      csvCell(contact.assigneeUserId ? memberEmails.get(contact.assigneeUserId) : undefined),
     ].join(","));
   }
 

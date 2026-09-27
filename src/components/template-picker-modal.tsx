@@ -201,10 +201,10 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
         >
           <div className="template-channel-choice">
             <span className="template-channel-context-label">Build for</span>
-            <div className="template-channel-switch" role="group" aria-label="Choose a channel">
+            <div className="segmented template-channel-switch" role="group" aria-label="Choose a channel">
               <button
                 type="button"
-                className={`template-channel-option is-instagram ${provider === "INSTAGRAM" ? "is-active" : ""}`}
+                className={`segmented-option template-channel-option is-instagram ${provider === "INSTAGRAM" ? "is-active" : ""}`}
                 aria-label="Instagram"
                 aria-pressed={provider === "INSTAGRAM"}
                 onClick={() => { setProvider("INSTAGRAM"); setCategory(null); }}
@@ -214,7 +214,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
               </button>
               <button
                 type="button"
-                className={`template-channel-option is-facebook ${provider === "FACEBOOK" ? "is-active" : ""}`}
+                className={`segmented-option template-channel-option is-facebook ${provider === "FACEBOOK" ? "is-active" : ""}`}
                 aria-label="Facebook"
                 aria-pressed={provider === "FACEBOOK"}
                 onClick={() => { setProvider("FACEBOOK"); setCategory(null); }}

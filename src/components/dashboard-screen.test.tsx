@@ -196,29 +196,24 @@ describe("DashboardScreen onboarding", () => {
 
     expect((await screen.findByText("Popular")).classList.contains("quickstart-badge")).toBe(true);
   });
-  it("replaces the performance stats with an empty state when nothing has happened yet", async () => {
+  it("replaces the chart with an empty state when nothing has happened yet", async () => {
     stubEmptyDashboardFetch();
     render(<DashboardScreen />);
 
     expect(await screen.findByText(/No activity yet/i)).toBeTruthy();
-    expect(document.querySelectorAll(".stat-block")).toHaveLength(0);
+    expect(screen.queryByRole("img", { name: /daily replies sent and people reached/i })).toBeNull();
   });
 
-  it("splits populated metrics into a headline pair and a secondary meta strip", async () => {
+  it("shows the four headline metrics as one row of tiles above the chart", async () => {
     stubDashboardFetch();
     render(<DashboardScreen />);
 
     await screen.findByRole("img", { name: /daily replies sent and people reached/i });
 
-    // Tier one: only the two charted series get full stat-block treatment.
-    const headline = document.querySelectorAll(".stat-block");
-    expect(headline).toHaveLength(2);
-    expect([...headline].some((item) => item.textContent?.includes("Replies sent"))).toBe(true);
-    expect([...headline].some((item) => item.textContent?.includes("People reached"))).toBe(true);
-
-    // Tier two: the context metrics live in the meta strip, not in cards.
-    expect(screen.getByText("Emails captured").closest(".stat-meta")).toBeTruthy();
-    expect(screen.getByText("Opted out").closest(".stat-meta")).toBeTruthy();
-    expect(screen.getByText("Replies that are on").closest(".stat-meta")).toBeTruthy();
+    const tiles = [...document.querySelectorAll(".kpi-grid .kpi-tile")];
+    expect(tiles).toHaveLength(4);
+    for (const label of ["Replies sent", "People reached", "Emails captured", "Replies that are on"]) {
+      expect(tiles.some((tile) => tile.textContent?.includes(label))).toBe(true);
+    }
   });
 });

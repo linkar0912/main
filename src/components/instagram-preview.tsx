@@ -249,14 +249,14 @@ export function InstagramPreview({
         <span className="ig-profile-updated"><span className="ig-updated-dot" /> Updated</span>
         <span className="ig-profile-id">@{username}{profileId ? ` - ID ${profileId}` : ""}</span>
       </p>
-      <div className="ig-preview-tabs" role="tablist" aria-label="Preview surface">
+      <div className="segmented is-block ig-preview-tabs" role="tablist" aria-label="Preview surface">
         {showPost && (
-          <button type="button" role="tab" aria-selected={view === "post"} className={view === "post" ? "is-active" : ""} onClick={() => onViewChange("post")}>Post</button>
+          <button type="button" role="tab" aria-selected={view === "post"} className={`segmented-option${view === "post" ? " is-active" : ""}`} onClick={() => onViewChange("post")}>Post</button>
         )}
         {showComments && (
-          <button type="button" role="tab" aria-selected={view === "comments"} className={view === "comments" ? "is-active" : ""} onClick={() => onViewChange("comments")}>Comments</button>
+          <button type="button" role="tab" aria-selected={view === "comments"} className={`segmented-option${view === "comments" ? " is-active" : ""}`} onClick={() => onViewChange("comments")}>Comments</button>
         )}
-        <button type="button" role="tab" aria-selected={view === "dm"} className={view === "dm" ? "is-active" : ""} onClick={() => onViewChange("dm")}>DM</button>
+        <button type="button" role="tab" aria-selected={view === "dm"} className={`segmented-option${view === "dm" ? " is-active" : ""}`} onClick={() => onViewChange("dm")}>DM</button>
       </div>
     </div>
   );

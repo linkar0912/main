@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
 import {
   ChartNoAxesCombined,
+  MoreHorizontal,
+  UserRound,
   CircleHelp,
   Inbox,
   LayoutDashboard,
@@ -12,40 +14,39 @@ import {
   Menu,
   Settings,
   ShieldCheck,
-  UserRound,
   UsersRound,
   Workflow,
   Zap,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { getWorkspaceBootstrap, refreshWorkspaceBootstrap } from "@/src/lib/client/workspace-data";
+import { SegmentedIndicator } from "./segmented-indicator";
 import { Skeleton } from "./skeleton";
 import { ThemeToggle } from "./theme-toggle";
 
-/** Workspace destinations in the sidebar. */
+/** Workspace destinations in the sidebar, grouped by job. */
 const workspaceNavigation = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
+  { href: "/activity", label: "Inbox", icon: Inbox },
+  { href: "/contacts", label: "Contacts", icon: UsersRound },
+];
+
+const automateNavigation = [
   { href: "/automations", label: "Automations", icon: Workflow },
   { href: "/quick-automation", label: "Quick Automation", icon: Zap },
   { href: "/insights", label: "Insights", icon: ChartNoAxesCombined },
-  { href: "/contacts", label: "Contacts", icon: UsersRound },
-  { href: "/activity", label: "Inbox", icon: Inbox },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 /** Personal destinations pinned to the bottom, like a profile drawer. */
 const accountNavigation = [
-  { href: "/profile", label: "My Profile", icon: UserRound },
+  { href: "/settings", label: "Settings", icon: Settings },
   { href: "/help", label: "Help", icon: CircleHelp },
 ];
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   // /automations must not light up while /automations/sequences or /automations/broadcasts is open.
-  if (href === "/automations") {
-    return pathname === "/automations" || pathname.startsWith("/automations/new")
-      || /^\/automations\/[^/]+\/(edit|activity)$/.test(pathname);
-  }
+  if (href === "/automations") return pathname === "/automations" || pathname.startsWith("/automations/");
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -67,6 +68,13 @@ export function useAccountIdentity(): AccountIdentityState {
 function displayRole(role: AccountIdentity["role"] | ""): string {
   if (!role) return "Workspace";
   return role.charAt(0) + role.slice(1).toLowerCase();
+}
+
+function displayNameFromEmail(email: string): string {
+  const handle = email.split("@")[0] ?? "";
+  const words = handle.replace(/[^a-zA-Z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "Your account";
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
 function initialsOf(email: string): string {
@@ -92,6 +100,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [platformOwner, setPlatformOwner] = useState(false);
   const [identityError, setIdentityError] = useState("");
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const accountRef = useRef<HTMLDivElement>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
 
   const closeDrawer = () => setDrawerOpen(false);
@@ -101,7 +111,23 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   };
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    if (!accountMenuOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!accountRef.current?.contains(event.target as Node)) setAccountMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setAccountMenuOpen(false); };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [accountMenuOpen]);
+
+  // Instant, not smooth: html has scroll-behavior: smooth for in-page anchors,
+  // and animating back to the top on every navigation made pages feel slow.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [pathname]);
 
   useEffect(() => {
@@ -193,6 +219,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
   return (
     <AccountIdentityContext.Provider value={{ email, role, plan, supportEmail, mode }}>
+      <SegmentedIndicator />
       <div className="app-frame">
       <header className="mobile-topbar" inert={drawerOpen}>
         <button
@@ -227,45 +254,29 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
 
-        {role === "" ? (
-          <Skeleton style={{ height: 52, borderRadius: 12 }} />
-        ) : (
-          <div className="workspace-chip">
-            {igAvatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
-              <img className="avatar is-photo" src={igAvatarUrl} alt="Instagram profile picture" />
-            ) : (
-              <span className="avatar" aria-hidden>{initialsOf(email)}</span>
-            )}
-            <span className="workspace-id">
-              <strong>{displayRole(role)}</strong>
-              <small>{email || `${PRODUCT_NAME} workspace`}</small>
-            </span>
-            <span className="plan-tag">{plan}</span>
-          </div>
-        )}
-
         <nav className="sidebar-nav" aria-label="Workspace sections">
-          {workspaceNavigation.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              className={`sidebar-link ${isActive(pathname, href) ? "is-active" : ""}`}
-              href={href}
-              aria-current={isActive(pathname, href) ? "page" : undefined}
-              onClick={closeDrawer}
-            >
-              <Icon size={18} strokeWidth={1.9} />
-              {label}
-            </Link>
+          {[...workspaceNavigation, ...automateNavigation].map(({ href, label, icon: Icon }, index) => (
+            <Fragment key={href}>
+              {index === workspaceNavigation.length ? <span className="sidebar-label" aria-hidden>Automate</span> : null}
+              <Link
+                className={`sidebar-link ${isActive(pathname, href) ? "is-active" : ""}`}
+                href={href}
+                aria-current={isActive(pathname, href) ? "page" : undefined}
+                onClick={closeDrawer}
+              >
+                <Icon size={17} strokeWidth={1.9} />
+                {label}
+              </Link>
+            </Fragment>
           ))}
         </nav>
 
-        <hr className="sidebar-divider" />
+        <span className="sidebar-spacer" />
 
         {platformOwner ? (
           <nav className="sidebar-nav" aria-label="Platform administration">
             <Link className="sidebar-link admin-entry-link" href="/admin" onClick={closeDrawer}>
-              <ShieldCheck size={18} strokeWidth={1.9} /> Admin
+              <ShieldCheck size={17} strokeWidth={1.9} /> Admin
             </Link>
           </nav>
         ) : null}
@@ -279,29 +290,79 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               aria-current={isActive(pathname, href) ? "page" : undefined}
               onClick={closeDrawer}
             >
-              <Icon size={18} strokeWidth={1.9} />
+              <Icon size={17} strokeWidth={1.9} />
               {label}
             </Link>
           ))}
         </nav>
 
-        <span className="sidebar-spacer" />
-
-        <ThemeToggle className="theme-toggle" showLabel />
-
-        <form action="/api/auth/logout" method="post">
-          <button className="signout-button" type="submit">
-            <LogOut size={17} strokeWidth={1.9} />
-            Sign out
-          </button>
-        </form>
+        <div className="sidebar-account" ref={accountRef}>
+          {role === "" ? (
+            identityError ? (
+              <p className="sidebar-account-error" role="alert">{identityError}</p>
+            ) : (
+              <Skeleton style={{ height: 52, borderRadius: 12 }} />
+            )
+          ) : (
+            <>
+              {accountMenuOpen ? (
+                <div className="account-menu" role="menu" aria-label="Account">
+                  <div className="account-menu-head">
+                    <strong>{displayNameFromEmail(email)}</strong>
+                    <small>{email || `${PRODUCT_NAME} workspace`}</small>
+                  </div>
+                  <Link className="account-menu-item" role="menuitem" href="/profile" onClick={() => { setAccountMenuOpen(false); closeDrawer(); }}>
+                    <UserRound size={16} strokeWidth={1.9} /> My profile
+                  </Link>
+                  <ThemeToggle className="account-menu-item" showLabel />
+                  <form action="/api/auth/logout" method="post">
+                    <button className="account-menu-item is-danger" role="menuitem" type="submit">
+                      <LogOut size={16} strokeWidth={1.9} />
+                      <span>Sign out</span>
+                    </button>
+                  </form>
+                </div>
+              ) : null}
+              <div className={`account-row ${isActive(pathname, "/profile") ? "is-active" : ""}`}>
+                <Link
+                  className="account-row-main"
+                  href="/profile"
+                  aria-label="My Profile"
+                  aria-current={isActive(pathname, "/profile") ? "page" : undefined}
+                  onClick={closeDrawer}
+                >
+                  {igAvatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+                    <img className="avatar is-photo" src={igAvatarUrl} alt="Instagram profile picture" />
+                  ) : (
+                    <span className="avatar" aria-hidden>{initialsOf(email)}</span>
+                  )}
+                  <span className="account-row-id">
+                    <strong title={email}>{displayNameFromEmail(email)}</strong>
+                    <small>
+                      <span>{displayRole(role)}</span>
+                      <span className="plan-tag">{plan}</span>
+                    </small>
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  className="account-row-more"
+                  aria-label="Account menu"
+                  aria-haspopup="menu"
+                  aria-expanded={accountMenuOpen}
+                  onClick={() => setAccountMenuOpen((open) => !open)}
+                >
+                  <MoreHorizontal size={17} />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </aside>
 
         <div className="main-content" inert={drawerOpen} aria-hidden={drawerOpen || undefined}>
           <div className="app-content-slot">{children}</div>
-          <footer className="app-footer">
-            <small>© {new Date().getFullYear()} {PRODUCT_NAME}</small>
-          </footer>
         </div>
       </div>
     </AccountIdentityContext.Provider>

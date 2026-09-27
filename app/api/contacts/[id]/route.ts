@@ -31,15 +31,19 @@ export async function GET(
   const contact = await repository.getContactById(session.workspaceId, id);
   if (!contact) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
 
-  const [timeline, events] = await Promise.all([
+  // The Contacts table already shows the handle, so it asks to skip the
+  // lookup (500 events + a possible Meta call made every open take ~2s).
+  const skipProfile = new URL(request.url).searchParams.get("profile") === "0";
+  const [timeline, events, automationsPaused] = await Promise.all([
     repository.getContactTimeline(session.workspaceId, id, MAX_TIMELINE_ENTRIES),
-    repository.listRecentWebhookEvents(session.workspaceId, 500),
+    skipProfile ? Promise.resolve([]) : repository.listRecentWebhookEvents(session.workspaceId, 500),
+    repository.hasPausedParticipant(session.workspaceId, contact.instagramAccountId, contact.igScopedUserId),
   ]);
   const env = getServerEnv();
-  const connections = env.metaTokenEncryptionKey
+  const connections = env.metaTokenEncryptionKey && !skipProfile
     ? await repository.listConnections(session.workspaceId)
     : [];
-  const usernames = await resolveInstagramUsernames({
+  const usernames = skipProfile ? new Map<string, string>() : await resolveInstagramUsernames({
     identities: [contact],
     events,
     connections,
@@ -66,6 +70,7 @@ export async function GET(
         suppressedAt: contact.suppressedAt,
         lastSeenAt: contact.lastSeenAt,
         createdAt: contact.createdAt,
+        automationsPaused,
       },
       timeline,
     },
