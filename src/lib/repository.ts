@@ -1116,6 +1116,8 @@ export interface AutomationRepository {
     options: { limit: number; cursor?: string; eventType?: string },
   ): Promise<InboxRecordPage<WebhookEventRecord>>;
   deleteOldWebhookEvents(before: string): Promise<number>;
+  /** Re-applies inbound events received since `since` to their contacts' inbox ordering. */
+  reconcileContactLastInbound(since: string): Promise<number>;
   recordHelpSearch(
     workspaceId: string,
     input: Omit<HelpSearchRecord, "id" | "workspaceId">,

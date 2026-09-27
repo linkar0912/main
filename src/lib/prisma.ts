@@ -1703,7 +1703,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async prepareOutboundDelivery(input) {
       const { owner, leaseUntil, periodStart, monthlyLimit, ...deliveryInput } = input;
       const periodStartDate = new Date(`${periodStart}T00:00:00.000Z`);
-      return client.$transaction(async (transaction) => {
+      const claim = await client.$transaction(async (transaction) => {
         const existing = await transaction.outboundDelivery.upsert({
           where: { deliveryKey: input.deliveryKey },
           create: {
@@ -1719,10 +1719,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           || existing.state === "UNKNOWN"
           || (existing.state === "FAILED" && !existing.retryable)
         ) {
-          return { status: "TERMINAL" as const, record: mapOutboundDelivery(existing) };
+          return { result: { status: "TERMINAL" as const, record: mapOutboundDelivery(existing) } };
         }
         if (existing.state === "CLAIMED") {
-          return { status: "BUSY" as const, record: mapOutboundDelivery(existing) };
+          return { result: { status: "BUSY" as const, record: mapOutboundDelivery(existing) } };
         }
 
         const [claimed] = await transaction.outboundDelivery.updateManyAndReturn({
@@ -1745,82 +1745,104 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
             where: { deliveryKey: input.deliveryKey },
           });
           return {
-            status: winner.state === "CLAIMED" ? "BUSY" as const : "TERMINAL" as const,
-            record: mapOutboundDelivery(winner),
+            result: {
+              status: winner.state === "CLAIMED" ? "BUSY" as const : "TERMINAL" as const,
+              record: mapOutboundDelivery(winner),
+            },
           };
         }
+        return { claimed };
+      });
+      if (!claim.claimed) return claim.result;
+      const { claimed } = claim;
 
-        await transaction.workspaceUsagePeriod.upsert({
-          where: {
-            workspaceId_periodStart: {
-              workspaceId: claimed.workspaceId,
-              periodStart: periodStartDate,
-            },
-          },
-          create: { workspaceId: claimed.workspaceId, periodStart: periodStartDate },
-          update: {},
-        });
-        const inserted = await transaction.$queryRaw<Array<{ deliveryKey: string }>>(Prisma.sql`
-          INSERT INTO "WorkspaceUsageReservation" ("deliveryKey", "workspaceId", "periodStart")
-          VALUES (${input.deliveryKey}, ${claimed.workspaceId}, ${periodStartDate})
-          ON CONFLICT ("deliveryKey") DO NOTHING
-          RETURNING "deliveryKey"
+      // The monthly counter is one row per workspace that every send updates,
+      // so it is reserved in a single autocommit statement after the claim
+      // commits: the row lock is then held for that statement alone rather than
+      // across the transaction's remaining network round trips. The claim makes
+      // this delivery key exclusive to this caller, so the reservation check
+      // cannot race another caller for the same key.
+      let usage: { alreadyReserved: boolean; counted: boolean };
+      try {
+        const withinLimit = monthlyLimit === null
+          ? Prisma.sql`TRUE`
+          : Prisma.sql`"WorkspaceUsagePeriod"."deliveriesReserved" < ${monthlyLimit}`;
+        const firstFits = monthlyLimit === null ? Prisma.sql`TRUE` : Prisma.sql`${monthlyLimit} > 0`;
+        const [row] = await client.$queryRaw<Array<{ alreadyReserved: boolean; counted: boolean }>>(Prisma.sql`
+          WITH existing AS (
+            SELECT 1 FROM "WorkspaceUsageReservation" WHERE "deliveryKey" = ${input.deliveryKey}
+          ), counted AS (
+            INSERT INTO "WorkspaceUsagePeriod" ("workspaceId", "periodStart", "deliveriesReserved", "updatedAt")
+            SELECT ${claimed.workspaceId}, ${periodStartDate}::date, 1, NOW()
+            WHERE NOT EXISTS (SELECT 1 FROM existing) AND ${firstFits}
+            ON CONFLICT ("workspaceId", "periodStart") DO UPDATE
+              SET "deliveriesReserved" = "WorkspaceUsagePeriod"."deliveriesReserved" + 1,
+                  "updatedAt" = NOW()
+              WHERE ${withinLimit}
+            RETURNING 1
+          ), reserved AS (
+            INSERT INTO "WorkspaceUsageReservation" ("deliveryKey", "workspaceId", "periodStart")
+            SELECT ${input.deliveryKey}, ${claimed.workspaceId}, ${periodStartDate}::date FROM counted
+            ON CONFLICT ("deliveryKey") DO NOTHING
+            RETURNING 1
+          )
+          SELECT EXISTS (SELECT 1 FROM existing) AS "alreadyReserved",
+                 EXISTS (SELECT 1 FROM counted) AS "counted"
         `);
-        if (inserted.length === 0) {
-          return { status: "CLAIMED" as const, record: mapOutboundDelivery(claimed) };
-        }
-
-        const usage = await transaction.workspaceUsagePeriod.updateMany({
-          where: {
-            workspaceId: claimed.workspaceId,
-            periodStart: periodStartDate,
-            ...(monthlyLimit === null ? {} : { deliveriesReserved: { lt: monthlyLimit } }),
-          },
-          data: { deliveriesReserved: { increment: 1 } },
-        });
-        if (usage.count === 1) {
-          return { status: "CLAIMED" as const, record: mapOutboundDelivery(claimed) };
-        }
-
-        await transaction.workspaceUsageReservation.delete({
-          where: { deliveryKey: input.deliveryKey },
-        });
-        const rejected = await transaction.outboundDelivery.update({
-          where: { deliveryKey: input.deliveryKey },
+        usage = row!;
+      } catch (error) {
+        // An expired claim is reconciled as UNKNOWN (possibly sent) and never
+        // retried, so hand the delivery back as retryable before failing.
+        await client.outboundDelivery.updateMany({
+          where: { deliveryKey: input.deliveryKey, state: "CLAIMED", claimOwner: owner },
           data: {
             state: "FAILED",
-            retryable: false,
-            resultCode: "SUPPRESSED",
+            retryable: true,
             claimOwner: null,
             claimExpiresAt: null,
-            lastError: "Monthly delivery limit reached",
+            lastError: "Usage reservation failed",
           },
-        });
-        return { status: "QUOTA_REJECTED" as const, record: mapOutboundDelivery(rejected) };
+        }).catch(() => undefined);
+        throw error;
+      }
+      if (usage.alreadyReserved || usage.counted) {
+        return { status: "CLAIMED" as const, record: mapOutboundDelivery(claimed) };
+      }
+
+      const rejected = await client.outboundDelivery.update({
+        where: { deliveryKey: input.deliveryKey },
+        data: {
+          state: "FAILED",
+          retryable: false,
+          resultCode: "SUPPRESSED",
+          claimOwner: null,
+          claimExpiresAt: null,
+          lastError: "Monthly delivery limit reached",
+        },
       });
+      return { status: "QUOTA_REJECTED" as const, record: mapOutboundDelivery(rejected) };
     },
 
     async releaseOutboundDeliveryReservation(deliveryKey) {
-      return client.$transaction(async (transaction) => {
-        const [reservation] = await transaction.$queryRaw<Array<{
-          workspaceId: string;
-          periodStart: Date;
-        }>>(Prisma.sql`
+      // One statement, so the shared counter row is locked only while it runs.
+      const [row] = await client.$queryRaw<Array<{ released: boolean }>>(Prisma.sql`
+        WITH released AS (
           DELETE FROM "WorkspaceUsageReservation"
           WHERE "deliveryKey" = ${deliveryKey}
           RETURNING "workspaceId", "periodStart"
-        `);
-        if (!reservation) return false;
-        await transaction.workspaceUsagePeriod.updateMany({
-          where: {
-            workspaceId: reservation.workspaceId,
-            periodStart: reservation.periodStart,
-            deliveriesReserved: { gt: 0 },
-          },
-          data: { deliveriesReserved: { decrement: 1 } },
-        });
-        return true;
-      });
+        ), decremented AS (
+          UPDATE "WorkspaceUsagePeriod" p
+          SET "deliveriesReserved" = p."deliveriesReserved" - 1,
+              "updatedAt" = NOW()
+          FROM released r
+          WHERE p."workspaceId" = r."workspaceId"
+            AND p."periodStart" = r."periodStart"
+            AND p."deliveriesReserved" > 0
+          RETURNING 1
+        )
+        SELECT EXISTS (SELECT 1 FROM released) AS "released"
+      `);
+      return row?.released ?? false;
     },
 
     async claimOutboundDelivery(deliveryKey, owner, leaseUntil) {
@@ -2465,27 +2487,22 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async listInboxContacts(workspaceId, query) {
-      const messageTypes = ["message.received", "quick_reply.received", "postback.received", "story_mention.received"];
       const cursor = query.cursor ? decodeInboxCursor(query.cursor, "contacts") : undefined;
       let cursorUnread = false;
       if (cursor && query.sort === "unread") {
-        const cursorContact = await client.automationContact.findFirst({ where: { id: cursor.id, workspaceId } });
-        if (cursorContact) {
-          const latest = await client.webhookEvent.findFirst({
-            where: {
-              workspaceId,
-              eventType: { in: messageTypes },
-              accountId: cursorContact.instagramAccountId,
-              recipientId: cursorContact.igScopedUserId,
-            },
-            orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
-          });
-          cursorUnread = Boolean(latest && (!cursorContact.inboxLastReadAt || latest.receivedAt > cursorContact.inboxLastReadAt));
-        }
+        const cursorContact = await client.automationContact.findFirst({
+          where: { id: cursor.id, workspaceId },
+          select: { lastInboundAt: true, inboxLastReadAt: true },
+        });
+        const latestAt = cursorContact?.lastInboundAt;
+        cursorUnread = Boolean(latestAt && (!cursorContact.inboxLastReadAt || latestAt > cursorContact.inboxLastReadAt));
       }
-      const unreadSql = Prisma.sql`(latest."receivedAt" IS NOT NULL AND (c."inboxLastReadAt" IS NULL OR latest."receivedAt" > c."inboxLastReadAt"))`;
-      const activitySql = Prisma.sql`latest."receivedAt"`;
-      const conditions: Prisma.Sql[] = [Prisma.sql`c."workspaceId" = ${workspaceId}`, Prisma.sql`latest."receivedAt" IS NOT NULL`];
+      // lastInboundAt/lastInboundPreview are maintained by database triggers
+      // (migration 20260927140000_contact_last_inbound), so the list is a plain
+      // indexed scan of AutomationContact.
+      const unreadSql = Prisma.sql`(c."lastInboundAt" IS NOT NULL AND (c."inboxLastReadAt" IS NULL OR c."lastInboundAt" > c."inboxLastReadAt"))`;
+      const activitySql = Prisma.sql`c."lastInboundAt"`;
+      const conditions: Prisma.Sql[] = [Prisma.sql`c."workspaceId" = ${workspaceId}`, Prisma.sql`c."lastInboundAt" IS NOT NULL`];
       if (query.status) conditions.push(Prisma.sql`c."inboxStatus" = ${query.status}`);
       if (query.unread !== undefined) conditions.push(query.unread ? unreadSql : Prisma.sql`NOT ${unreadSql}`);
       if (query.assignment === "mine") conditions.push(Prisma.sql`c."assigneeUserId" = ${query.currentUserId ?? ""}`);
@@ -2500,7 +2517,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           c."igScopedUserId" ILIKE ${pattern}
           OR COALESCE(c."email", '') ILIKE ${pattern}
           OR c."tags"::text ILIKE ${pattern}
-          OR COALESCE(latest."preview", '') ILIKE ${pattern}
+          OR COALESCE(c."lastInboundPreview", '') ILIKE ${pattern}
         )`);
       }
       if (cursor) {
@@ -2524,25 +2541,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       };
       const rows = await client.$queryRaw<RawRow[]>(Prisma.sql`
         SELECT c.*,
-          latest."receivedAt" AS "latestInboundAt",
-          latest."preview" AS "preview",
+          c."lastInboundAt" AS "latestInboundAt",
+          c."lastInboundPreview" AS "preview",
           ${unreadSql} AS "unread"
         FROM "AutomationContact" c
-        LEFT JOIN LATERAL (
-          SELECT w."receivedAt",
-            CASE
-              WHEN NULLIF(BTRIM(w."payload"->>'text'), '') IS NOT NULL THEN BTRIM(w."payload"->>'text')
-              WHEN w."eventType" = 'story_mention.received' THEN 'Mentioned you in a story'
-              ELSE 'Instagram interaction'
-            END AS "preview"
-          FROM "WebhookEvent" w
-          WHERE w."workspaceId" = c."workspaceId"
-            AND w."eventType" IN ('message.received', 'quick_reply.received', 'postback.received', 'story_mention.received')
-            AND w."accountId" = c."instagramAccountId"
-            AND w."recipientId" = c."igScopedUserId"
-          ORDER BY w."receivedAt" DESC, w."id" DESC
-          LIMIT 1
-        ) latest ON TRUE
         WHERE ${Prisma.join(conditions, " AND ")}
         ORDER BY ${order}
         LIMIT ${query.limit + 1}
@@ -2703,8 +2705,42 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async deleteOldWebhookEvents(before) {
-      const result = await client.webhookEvent.deleteMany({ where: { receivedAt: { lt: new Date(before) } } });
+      const cutoff = new Date(before);
+      const result = await client.webhookEvent.deleteMany({ where: { receivedAt: { lt: cutoff } } });
+      // A contact whose latest message is older than the cutoff has no messages
+      // left, so it leaves the inbox exactly as it did when the list was
+      // computed from WebhookEvent.
+      await client.automationContact.updateMany({
+        where: { lastInboundAt: { lt: cutoff } },
+        data: { lastInboundAt: null, lastInboundPreview: null },
+      });
       return result.count;
+    },
+
+    async reconcileContactLastInbound(since) {
+      // The runner records an event and creates its contact concurrently. The
+      // database triggers cover either order once both have committed, but two
+      // transactions committing at the same moment can each miss the other's
+      // row. This sweep re-applies recent events to close that window.
+      return client.$executeRaw(Prisma.sql`
+        UPDATE "AutomationContact" c
+        SET "lastInboundAt" = e."receivedAt",
+            "lastInboundPreview" = public.linkar_inbound_preview(e."payload", e."eventType")
+        FROM (
+          SELECT DISTINCT ON (w."workspaceId", w."accountId", w."recipientId")
+            w."workspaceId", w."accountId", w."recipientId", w."receivedAt", w."payload", w."eventType"
+          FROM "WebhookEvent" w
+          WHERE w."receivedAt" >= ${new Date(since)}
+            AND w."eventType" IN ('message.received', 'quick_reply.received', 'postback.received', 'story_mention.received')
+            AND w."accountId" IS NOT NULL
+            AND w."recipientId" IS NOT NULL
+          ORDER BY w."workspaceId", w."accountId", w."recipientId", w."receivedAt" DESC, w."id" DESC
+        ) e
+        WHERE c."workspaceId" = e."workspaceId"
+          AND c."instagramAccountId" = e."accountId"
+          AND c."igScopedUserId" = e."recipientId"
+          AND (c."lastInboundAt" IS NULL OR c."lastInboundAt" < e."receivedAt")
+      `);
     },
 
     async recordHelpSearch(workspaceId, input) {
