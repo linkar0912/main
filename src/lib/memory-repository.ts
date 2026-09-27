@@ -1999,6 +1999,11 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return { records: records.map(copy), ...(hasMore && last ? { nextCursor: encodeInboxCursor({ kind: "activity", at: last.receivedAt, id: last.id }) } : {}) };
     },
 
+    async reconcileContactLastInbound() {
+      // The memory inbox derives each contact's latest message on read.
+      return 0;
+    },
+
     async deleteOldWebhookEvents(before) {
       const beforeMs = Date.parse(before);
       let count = 0;

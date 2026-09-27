@@ -29,6 +29,8 @@ import { reportDatabaseLatency } from "./lib/database-latency";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 const SYSTEM_MONITOR_INTERVAL_MS = 5 * 60 * 1_000;
+const INBOX_RECONCILE_INTERVAL_MS = 2 * 60 * 1_000;
+const INBOX_RECONCILE_WINDOW_MS = 10 * 60 * 1_000;
 const SEQUENCE_SWEEP_INTERVAL_MS = 60 * 1_000;
 /** Caps one tick at 20 batches (500 steps) so a huge backlog can't pin the worker. */
 const SEQUENCE_MAX_ROUNDS_PER_TICK = 20;
@@ -255,6 +257,15 @@ if (!env.redisUrl) {
   };
   void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error instanceof Error ? error.message : String(error) }));
   setInterval(() => void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error instanceof Error ? error.message : String(error) })), 60 * 60 * 1_000).unref();
+
+  // Closes the rare window where an inbound event and its new contact commit at
+  // the same instant and neither database trigger sees the other's row.
+  const reconcileInbox = async () => {
+    const since = new Date(Date.now() - INBOX_RECONCILE_WINDOW_MS).toISOString();
+    const fixed = await getRepository().reconcileContactLastInbound(since);
+    if (fixed) logger.info("Inbox ordering reconciled", { contacts: fixed });
+  };
+  setInterval(() => void reconcileInbox().catch((error) => logger.error("Inbox reconciliation failed", { error: error instanceof Error ? error.message : String(error) })), INBOX_RECONCILE_INTERVAL_MS).unref();
 
   let deliveryReconciliationRunning = false;
   const runDeliveryReconciliation = async () => {

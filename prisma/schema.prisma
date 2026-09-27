@@ -550,6 +550,8 @@ model AutomationParticipant {
   @@index([workspaceId, automationId, updatedAt])
   @@index([messagingWindowExpiresAt])
   @@index([pausedAt])
+  @@index([workspaceId, createdAt])
+  @@index([automationId])
 }
 
 // Branded short links the workspace can drop into DMs. The destination URL is
@@ -646,6 +648,11 @@ model AutomationContact {
   inboxFavorite           Boolean              @default(false)
   inboxReminderAt         DateTime?
   inboxLastReadAt         DateTime?
+  // Latest inbound message, kept by database triggers on WebhookEvent and
+  // AutomationContact so the inbox list can sort and page without a
+  // per-contact lookup. Cleared when retention deletes the underlying events.
+  lastInboundAt           DateTime?
+  lastInboundPreview      String?
   version                 Int                  @default(1)
   lastSeenAt              DateTime             @default(now())
   createdAt               DateTime             @default(now())
@@ -659,6 +666,7 @@ model AutomationContact {
   @@index([workspaceId, inboxStatus, lastSeenAt, id])
   @@index([workspaceId, inboxReminderAt, id])
   @@index([workspaceId, lastSeenAt, id])
+  @@index([workspaceId, lastInboundAt, id])
 }
 
 // A timed drip campaign: ordered steps, each sent to enrolled contacts after a delay.
@@ -696,7 +704,8 @@ model SequenceEnrollment {
 
   @@unique([sequenceId, contactId])
   @@index([state, nextSendAt])
-  @@index([contactId])
+  @@index([contactId, workspaceId])
+  @@index([sequenceId, workspaceId])
 }
 
 // A one-off DM blast to a segment of the contact registry.
@@ -739,7 +748,9 @@ model AutomationExecution {
   automation             Automation      @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, dedupeKey])
-  @@index([workspaceId, createdAt])
+  // status is included so the dashboard's per-day counts are index-only scans.
+  @@index([workspaceId, createdAt, status])
+  @@index([automationId])
 }
 
 model OutboundDelivery {
