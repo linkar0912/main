@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { isMarketingPath, marketingHref } from "@/src/lib/site-routing";
+import { LinkarMark } from "../linkar-mark";
 import styles from "./marketing-footer.module.css";
 
 const columns = [
@@ -73,6 +74,7 @@ export function MarketingFooter({ compact = false, siteOrigin }: MarketingFooter
         <div className={styles.topGrid}>
           <div className={styles.brand}>
             <Link className={styles.brandLink} href={marketingHref("/#top", siteOrigin)} aria-label="Linkar home">
+              <LinkarMark size={30} />
               <span>Linkar</span>
             </Link>
             <p>Linkar keeps repeatable conversations moving and makes human attention count.</p>

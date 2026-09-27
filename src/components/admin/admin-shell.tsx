@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { LinkarMark } from "@/src/components/linkar-mark";
 import { ThemeToggle } from "@/src/components/theme-toggle";
 
 const operatorNavigation = [
@@ -106,6 +107,7 @@ export function AdminShell({
           <Menu size={20} />
         </button>
         <Link className="brand" href="/admin" aria-label={`${PRODUCT_NAME} operator overview`}>
+          <LinkarMark className="brand-mark" />
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
         <span className="admin-operator-rail">LINKAR OPERATOR</span>
@@ -125,6 +127,7 @@ export function AdminShell({
         tabIndex={-1}
       >
         <Link className="sidebar-brand" href="/admin">
+          <LinkarMark className="brand-mark" />
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
 

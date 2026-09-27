@@ -73,7 +73,31 @@ export type CampaignRunnerOptions = {
   finalAttempt?: boolean;
   dispatchLeaseMs?: number;
   timingObserver?: DeliveryTimingObserver;
+  /**
+   * Automations the caller already loaded for this account. A participant's
+   * campaign is resolved from here before falling back to a database read, so
+   * the realtime path doesn't pay a round trip for a record it already holds.
+   */
+  activeAutomations?: AutomationRecord[];
+  /**
+   * The caller already looked up a participant for this comment and found none,
+   * so processCampaignEvent can skip repeating that lookup for every campaign.
+   */
+  sourceParticipantChecked?: boolean;
 };
+
+type FollowStatusRead =
+  | { ok: true; response: Awaited<ReturnType<CampaignRunnerClient["getUserFollowStatus"]>> }
+  | { ok: false; error: unknown };
+
+async function loadParticipantAutomation(
+  participant: AutomationParticipantRecord,
+  repository: AutomationRepository,
+  options: Pick<CampaignRunnerOptions, "activeAutomations">,
+): Promise<AutomationRecord | null> {
+  return options.activeAutomations?.find((automation) => automation.id === participant.automationId)
+    ?? await repository.getAutomation(participant.workspaceId, participant.automationId);
+}
 
 export type CampaignMapping = {
   workspaceId: string;
@@ -534,14 +558,24 @@ async function guardedDelivery(
   ctx: Pick<DeliveryContext, "client" | "connection" | "repository" | "finalAttempt" | "dispatchLeaseMs" | "timingObserver">,
 ): Promise<AutomationParticipantRecord> {
   const { repository } = ctx;
+  const deliveryKey = deliveryKeys.campaignAction(participant.id, spec.action);
   for (; ;) {
-    const prepared = await prepareDeliveryAction(
-      participant,
-      repository,
-      spec.action,
-      spec.externalEventId,
-      ctx.dispatchLeaseMs,
-    );
+    // The ledger and quiet-hours reads don't depend on the dispatch claim, so
+    // they ride along with it instead of adding two serial round trips before
+    // the Meta call. A ledger row only ever moves forward (to SENT/FAILED/
+    // UNKNOWN), so reading it slightly early can at worst make us reserve a
+    // slot that executeOutboundDelivery - which stays authoritative - hands back.
+    const [prepared, ledgerBefore, messagingWindow] = await Promise.all([
+      prepareDeliveryAction(
+        participant,
+        repository,
+        spec.action,
+        spec.externalEventId,
+        ctx.dispatchLeaseMs,
+      ),
+      repository.getOutboundDelivery(deliveryKey),
+      repository.getMessagingWindow(participant.workspaceId),
+    ]);
 
     if (prepared.kind === "in_flight") return currentParticipant(participant, repository);
 
@@ -574,8 +608,6 @@ async function guardedDelivery(
 
     // prepared.kind === "send": this worker owns the compatibility dispatch lease;
     // the shared ledger is authoritative for whether Meta may be called.
-    const deliveryKey = deliveryKeys.campaignAction(participant.id, spec.action);
-    const ledgerBefore = await repository.getOutboundDelivery(deliveryKey);
     const needsProviderAttempt = !ledgerBefore
       || ledgerBefore.state === "PENDING"
       || (ledgerBefore.state === "FAILED" && ledgerBefore.retryable);
@@ -614,7 +646,6 @@ async function guardedDelivery(
         // Quiet hours are a workspace-level courtesy window; defer the send with
         // a retryable 429 (same contract as the per-account rate limit below)
         // rather than messaging inside the owner's configured night window.
-        const messagingWindow = await repository.getMessagingWindow(participant.workspaceId);
         if (messagingWindow && isQuietNow(new Date(), messagingWindow)) {
           await releaseSlots();
           await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
@@ -1157,12 +1188,15 @@ export async function processExistingCampaignParticipant(
   mapping: CampaignMapping,
   repository: AutomationRepository,
   options: CampaignRunnerOptions,
+  knownAutomation?: AutomationRecord,
 ): Promise<CampaignRunnerResult> {
   if (["LINK_SENT", "EXPIRED", "FAILED"].includes(participant.state)) {
     return handledResult(participant.id);
   }
 
-  const automation = await repository.getAutomation(participant.workspaceId, participant.automationId);
+  const automation = knownAutomation?.id === participant.automationId
+    ? knownAutomation
+    : await loadParticipantAutomation(participant, repository, options);
   if (!automation || automation.definition.version !== 2) {
     await repository.transitionParticipant(participant.id, [participant.state], {
       state: "FAILED",
@@ -1228,7 +1262,7 @@ export async function processCampaignEvent(
   repository: AutomationRepository,
   options: CampaignRunnerOptions,
 ): Promise<CampaignRunnerResult> {
-  if (event.type === "comment.created" && event.commentId) {
+  if (event.type === "comment.created" && event.commentId && !options.sourceParticipantChecked) {
     const existing = await repository.findParticipantBySource(
       mapping.workspaceId,
       event.accountId,
@@ -1337,7 +1371,7 @@ export async function processCampaignEvent(
     sourceMediaSnapshot: snapshot,
     ...(match.keyword ? { matchedKeyword: match.keyword } : {}),
   });
-  return processExistingCampaignParticipant(created.record, mapping, repository, options);
+  return processExistingCampaignParticipant(created.record, mapping, repository, options, campaign);
 }
 
 async function failInteractionParticipant(
@@ -1390,11 +1424,40 @@ export async function processPendingCampaignInteraction(
     return { handled: true, result: handledResult(undefined, { failed: 1 }) };
   }
 
-  const automation = await repository.getAutomation(mapping.workspaceId, participant.automationId);
+  const automation = await loadParticipantAutomation(participant, repository, options);
   if (!automation || automation.definition.version !== 2) {
     return { handled: true, result: handledResult(participant.id, { failed: 1 }) };
   }
   const definition = automation.definition;
+
+  // Asking Meta whether the person follows is a read with no side effects, and
+  // it is the slowest step before the final DM. For an opt-in tap, start it now
+  // so it overlaps the OPTED_IN transition and the claim below instead of
+  // running after them. The result is only acted on once the claim is won,
+  // exactly as before; a lost claim just discards it.
+  let followStatusRead: Promise<FollowStatusRead> | undefined;
+  const startFollowStatusRead = (): Promise<FollowStatusRead> => {
+    followStatusRead ??= options.client!
+      .getUserFollowStatus(
+        metaConnection(mapping.connection, options.tokenEncryptionKey!),
+        event.recipientId!,
+      )
+      .then(
+        (response) => ({ ok: true as const, response }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+    return followStatusRead;
+  };
+  const followCheckNeeded = definition.followGate.required !== false || payload.action !== "opt_in";
+  const canCallMeta = Boolean(options.client && options.tokenEncryptionKey);
+  if (
+    payload.action === "opt_in"
+    && followCheckNeeded
+    && canCallMeta
+    && (participant.state === "OPENING_SENT" || participant.state === "OPTED_IN")
+  ) {
+    startFollowStatusRead();
+  }
 
   const purposeAllowed = payload.action === "opt_in"
     ? ["OPENING_SENT", "OPTED_IN", "FOLLOW_VERIFIED"].includes(participant.state)
@@ -1571,7 +1634,11 @@ export async function processPendingCampaignInteraction(
 
   let follows: boolean;
   try {
-    const response = await options.client.getUserFollowStatus(ctx.connection, event.recipientId);
+    // Opt-in taps already started this read above; rechecks start it here,
+    // after the claim, so competing recheck taps don't each spend a Meta call.
+    const read = await startFollowStatusRead();
+    if (!read.ok) throw read.error;
+    const response = read.response;
     if (response.isUserFollowingBusiness !== true && response.isUserFollowingBusiness !== false) {
       throw new Error("Meta did not return follower status");
     }

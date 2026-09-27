@@ -465,6 +465,68 @@ describe("follow-gated campaign runner", () => {
     });
   });
 
+  it("asks Meta for follow status on an opt-in tap before the opt-in bookkeeping finishes", async () => {
+    const harness = await openParticipant();
+    vi.mocked(harness.client.getUserFollowStatus).mockResolvedValue({ isUserFollowingBusiness: true });
+    const order: string[] = [];
+    vi.mocked(harness.client.getUserFollowStatus).mockImplementation(async () => {
+      order.push("follow_status");
+      return { isUserFollowingBusiness: true };
+    });
+    const claimExecution = harness.repository.claimExecution.bind(harness.repository);
+    vi.spyOn(harness.repository, "claimExecution").mockImplementation(async (input) => {
+      order.push("claim");
+      return claimExecution(input);
+    });
+
+    const result = await processPendingCampaignInteraction(
+      interactionEvent(harness.optInPayload, NOW + 1_000),
+      harness.mapping,
+      harness.repository,
+      harness.options,
+    );
+
+    expect(result).toMatchObject({ handled: true, result: { sent: 1 } });
+    expect(order.indexOf("follow_status")).toBeLessThan(order.indexOf("claim"));
+    expect(harness.client.getUserFollowStatus).toHaveBeenCalledTimes(1);
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves the participant's campaign from preloaded automations without a database read", async () => {
+    const harness = await openParticipant();
+    vi.mocked(harness.client.getUserFollowStatus).mockResolvedValue({ isUserFollowingBusiness: true });
+    const getAutomation = vi.spyOn(harness.repository, "getAutomation");
+
+    const result = await processPendingCampaignInteraction(
+      interactionEvent(harness.optInPayload, NOW + 1_000),
+      harness.mapping,
+      harness.repository,
+      { ...harness.options, activeAutomations: [automation] },
+    );
+
+    expect(result).toMatchObject({ handled: true, result: { sent: 1 } });
+    expect(getAutomation).not.toHaveBeenCalled();
+  });
+
+  it("skips the per-campaign participant lookup when the caller already checked the comment", async () => {
+    const harness = await createHarness();
+    const findParticipantBySource = vi.spyOn(harness.repository, "findParticipantBySource");
+    const getAutomation = vi.spyOn(harness.repository, "getAutomation");
+
+    const result = await processCampaignEvent(
+      commentEvent,
+      automation,
+      harness.mapping,
+      harness.repository,
+      { ...harness.options, sourceParticipantChecked: true },
+    );
+
+    expect(result).toMatchObject({ handled: true, sent: 1 });
+    expect(findParticipantBySource).not.toHaveBeenCalled();
+    // The new participant's campaign is the one just matched - no re-read.
+    expect(getAutomation).not.toHaveBeenCalled();
+  });
+
   it("prompts an opted-in non-follower with attached profile and signed recheck buttons", async () => {
     const harness = await openParticipant();
     vi.mocked(harness.client.getUserFollowStatus).mockResolvedValue({ isUserFollowingBusiness: false });
