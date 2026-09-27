@@ -73,7 +73,11 @@
 }
 
 .wordmark {
-  max-inline-size: 8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .3em;
+  max-inline-size: 10rem;
+  white-space: nowrap;
   color: inherit;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
   font-size: clamp(1.45rem, 1.7vw, 1.9rem);
@@ -85,6 +89,12 @@
     max-inline-size 260ms ease,
     opacity 180ms ease,
     transform 260ms ease;
+}
+
+.wordmarkMark {
+  flex: 0 0 auto;
+  block-size: 1.15em;
+  inline-size: auto;
 }
 
 .language {

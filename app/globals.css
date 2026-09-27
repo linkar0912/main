@@ -510,12 +510,10 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
   padding: var(--space-1) var(--space-2) var(--space-4);
 }
 .brand-mark {
-  align-items: center;
-  display: inline-flex;
+  display: block;
   flex: 0 0 auto;
-  height: 30px;
-  justify-content: center;
-  width: 30px;
+  height: 1.3em;
+  width: auto;
 }
 .brand-name { white-space: nowrap; }
 .brand { align-items: center; display: inline-flex; font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif; font-size: 1rem; font-weight: 800; gap: 9px; letter-spacing: -.03em; }
@@ -3251,6 +3249,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   min-height: 100vh;
 }
 .root-loading-logo {
+  align-items: center;
+  display: inline-flex;
+  gap: 12px;
   animation: pulse 1.4s ease-in-out infinite alternate;
   color: var(--ink-strong);
   font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif;

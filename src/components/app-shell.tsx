@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { LinkarMark } from "@/src/components/linkar-mark";
 import { getWorkspaceBootstrap, refreshWorkspaceBootstrap } from "@/src/lib/client/workspace-data";
 import { SegmentedIndicator } from "./segmented-indicator";
 import { Skeleton } from "./skeleton";
@@ -233,6 +234,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           <Menu size={20} />
         </button>
         <Link className="brand" href="/dashboard" aria-label={`${PRODUCT_NAME} overview`}>
+          <LinkarMark className="brand-mark" />
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
       </header>
@@ -251,6 +253,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         tabIndex={-1}
       >
         <Link className="sidebar-brand" href="/dashboard">
+          <LinkarMark className="brand-mark" />
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
 

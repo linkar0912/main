@@ -6,6 +6,7 @@ import { FacebookGlyph } from "../facebook-glyph";
 import { InstagramGlyph } from "../instagram-glyph";
 import { ButtonRoll } from "./button-roll";
 import { ThemeToggle } from "../theme-toggle";
+import { LinkarMark } from "../linkar-mark";
 import { marketingHref } from "@/src/lib/site-routing";
 import styles from "./marketing-header.module.css";
 
@@ -220,6 +221,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
             href={marketingHref("/#top", siteOrigin)}
             aria-label="Linkar home"
           >
+            <LinkarMark className={styles.wordmarkMark} />
             Linkar
           </Link>
           <div className={styles.language} aria-label="Language: English">

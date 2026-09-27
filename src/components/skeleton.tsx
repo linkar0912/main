@@ -1,5 +1,6 @@
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { PageHeader, SectionCard } from "./page-header";
+import { LinkarMark } from "./linkar-mark";
 
 type SkeletonProps = { className?: string; style?: React.CSSProperties };
 
@@ -9,7 +10,7 @@ export function Skeleton({ className = "", style }: SkeletonProps) {
 }
 
 export function RootSkeleton() {
-  return <main className="root-loading" aria-busy="true" aria-live="polite"><span className="brand root-loading-logo" aria-label={PRODUCT_NAME}><span className="brand-name">{PRODUCT_NAME}</span></span></main>;
+  return <main className="root-loading" aria-busy="true" aria-live="polite"><span className="brand root-loading-logo" aria-label={PRODUCT_NAME}><LinkarMark className="brand-mark" /><span className="brand-name">{PRODUCT_NAME}</span></span></main>;
 }
 
 function LoadingRegion({ label, className = "", children }: { label: string; className?: string; children: React.ReactNode }) {

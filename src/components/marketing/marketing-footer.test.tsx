@@ -72,7 +72,7 @@ describe("MarketingFooter", () => {
       .find((link) => link.className.includes("brandLink"));
     expect(brandLink).toBeTruthy();
     if (!brandLink) throw new Error("Brand link is missing");
-    expect(brandLink.querySelector("svg")).toBeNull();
+    expect(brandLink.querySelector("svg.linkar-mark")?.getAttribute("aria-hidden")).toBe("true");
     expect(brandLink.textContent).toBe("Linkar");
     // The 22rem "LINKAR" stamp is gone, along with the ~900px of footer height
     // it needed. The brand link is the only place the name is set large now.

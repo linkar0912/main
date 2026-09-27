@@ -1034,11 +1034,12 @@ export async function processNormalizedEvent(
   }
 
   if (options.campaignsEnabled === true) {
+    const campaignOptions = { ...options, activeAutomations: automations };
     const interaction = await processPendingCampaignInteraction(
       event,
       mapping,
       repository,
-      options,
+      campaignOptions,
     );
     if (interaction.handled) return interaction.result;
 
@@ -1049,10 +1050,15 @@ export async function processNormalizedEvent(
         event.commentId,
       );
       if (participant) {
-        return processExistingCampaignParticipant(participant, mapping, repository, options);
+        return processExistingCampaignParticipant(participant, mapping, repository, campaignOptions);
       }
     }
 
+    // The comment's participant lookup just ran above, so each campaign below
+    // can skip repeating it - that was one serial round trip per campaign.
+    const perCampaignOptions = event.type === "comment.created" && event.commentId
+      ? { ...campaignOptions, sourceParticipantChecked: true }
+      : campaignOptions;
     for (const campaign of automations) {
       if (campaign.definition.version !== 2) continue;
       const campaignResult = await processCampaignEvent(
@@ -1060,7 +1066,7 @@ export async function processNormalizedEvent(
         campaign,
         mapping,
         repository,
-        options,
+        perCampaignOptions,
       );
       if (campaignResult.handled) return campaignResult;
     }

@@ -61,13 +61,13 @@ describe("AppShell", () => {
     expect(screen.queryByTitle("Open my profile")).toBeNull();
   });
 
-  it("renders only the Linkar wordmark in the sidebar, without the logo mark", async () => {
+  it("renders the Linkar mark beside the wordmark in the sidebar", async () => {
     stubShellFetch();
 
     render(<AppShell><main>Workspace</main></AppShell>);
 
     await screen.findByText("Member");
-    expect(document.querySelector(".sidebar-brand .brand-mark")).toBeNull();
+    expect(document.querySelector(".sidebar-brand svg.brand-mark")).toBeTruthy();
     expect(screen.getAllByText("Linkar").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Linkar" }).getAttribute("href")).toBe("/dashboard");
   });

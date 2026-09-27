@@ -8,20 +8,25 @@ texture behind hero panels.
 
 ## Logo - wordmark and app mark
 
-The Linkar wordmark keeps the approved lettering: `Linkar` in the existing
-Bricolage Grotesque display style, weight 800, with tight negative tracking.
-The separate app mark is a custom interlocking-link symbol. The logo assets
-are monochrome black on white, with no volt/yellow accent:
+The app mark is the interlocking "L" link; the wordmark is `Linkar` in
+Bricolage Grotesque 800 with tight negative tracking. Both are monochrome -
+black on light surfaces, white on dark ones - with no volt/yellow accent.
 
+- `public/brand/linkar-app-mark.svg` / `.png` - mark, black.
+- `public/brand/linkar-app-mark-white.svg` / `.png` - mark, white (dark surfaces).
+- `public/brand/linkar-logo.svg` / `.png` - mark + wordmark lockup, black.
+- `public/brand/linkar-logo-white.svg` / `.png` - lockup, white.
 - `public/brand/linkar-wordmark.svg` - wordmark only.
-- `public/brand/linkar-app-mark.svg` / `.png` - standalone app mark.
-- `public/brand/linkar-logo.svg` / `.png` - app mark paired with the unchanged
-  wordmark.
 
-Use the combined lockup in brand spots (sidebar, mobile topbar, auth hero,
-cards, and loading splash). Use the standalone mark where a square app icon is
-needed. The former bubble-and-bolt glyph in `src/components/linkar-mark.tsx`
-was removed; this new app mark is a deliberate replacement for the app icon.
+In the UI the mark is rendered by `LinkarMark` (`src/components/linkar-mark.tsx`),
+an inline SVG that paints with `currentColor`, so it follows the theme on its
+own. It sits beside the live-text wordmark in the app topbar and sidebar, the
+operator console, the loading splash, and the marketing header/footer (which
+also covers the auth screens).
+
+Browser and home-screen icons are generated from the same mark:
+`app/icon.svg` (switches to white in dark browser chrome), `app/favicon.ico`
+(16/32/48), `app/icon.png` (512) and `app/apple-icon.png` (180).
 
 ## Color
 
