@@ -117,9 +117,9 @@ export function InsightsScreen() {
         {!loading && data && (
           <div className="insights-workspace">
             <StatGrid>
-              <StatTile label="Replies sent" icon={Send} value={totals.sent} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.sentPerDay)} />
-              <StatTile label="People reached" icon={UsersRound} value={totals.reached} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.participantsPerDay)} />
-              <StatTile label="Emails captured" icon={MailCheck} value={data.capturedEmails} note={`${data.optedOut.toLocaleString()} opted out · respected`} />
+              <StatTile label="Replies sent" icon={Send} value={totals.sent} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.sentPerDay)} trend={data.timeseries.sentPerDay} />
+              <StatTile label="People reached" icon={UsersRound} value={totals.reached} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.participantsPerDay)} trend={data.timeseries.participantsPerDay} />
+              <StatTile label="Emails captured" icon={MailCheck} value={data.capturedEmails} note={`${data.optedOut.toLocaleString()} opted out, respected`} />
               <StatTile label="Link clicks" icon={MousePointerClick} value={data.mediaPerformance.reduce((total, row) => total + row.clicked, 0)} note="From tracked links" />
             </StatGrid>
 

@@ -943,7 +943,21 @@ export async function processNormalizedEvent(
 ): Promise<RunnerResult | CampaignRunnerResult> {
   const mapping = await repository.findWorkspaceByInstagramAccount(event.accountId);
   if (!mapping) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
-  if (await repository.getWorkspaceStatus(mapping.workspaceId) !== "ACTIVE") {
+
+  // Everything the gatekeeping below needs is a read keyed only by the mapping
+  // and the sender, so fetch it in one parallel round instead of four serial
+  // ones - this sits directly in front of the first Meta send.
+  const [workspaceStatus, automations, contact, isPaused] = await Promise.all([
+    repository.getWorkspaceStatus(mapping.workspaceId),
+    repository.listActiveAutomationsForInstagramAccount(mapping.workspaceId, event.accountId),
+    event.recipientId
+      ? repository.getContact(mapping.workspaceId, event.accountId, event.recipientId)
+      : Promise.resolve(null),
+    event.recipientId
+      ? repository.hasPausedParticipant(mapping.workspaceId, event.accountId, event.recipientId)
+      : Promise.resolve(false),
+  ]);
+  if (workspaceStatus !== "ACTIVE") {
     return { matched: 0, sent: 0, skipped: 0, failed: 0 };
   }
 
@@ -968,17 +982,9 @@ export async function processNormalizedEvent(
     });
   });
 
-  const automations = await repository.listActiveAutomationsForInstagramAccount(
-    mapping.workspaceId,
-    event.accountId,
-  );
-
   // Opt-outs win over everything: a STOP-style reply permanently suppresses the
   // sender and is answered once. Suppressed senders are invisible to every engine
   // (classic, campaign, capture, comments) from here on.
-  const contact = event.recipientId
-    ? await repository.getContact(mapping.workspaceId, event.accountId, event.recipientId)
-    : null;
   if (event.recipientId) {
     const optOut = await processOptOut(event, mapping, contact, repository, options);
     if (optOut) return optOut;
@@ -1010,11 +1016,6 @@ export async function processNormalizedEvent(
     if (contact?.suppressedAt) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
     // Human handoff: if any active participant for this sender is paused, the
     // runner stays silent. The teammate can resume from the contact modal.
-    const isPaused = await repository.hasPausedParticipant(
-      mapping.workspaceId,
-      event.accountId,
-      event.recipientId,
-    );
     if (isPaused) return { matched: 0, sent: 0, skipped: 1, failed: 0 };
   }
 

@@ -64,16 +64,16 @@ export function InlineContentSkeleton({ label, rows = 3 }: { label: string; rows
 
 export function ActivityContentSkeleton() {
   return (
-    <LoadingRegion label="Loading inbox activity" className="conversation-desk conversation-desk-loading">
-      <div className="conversation-roster">
-        <div className="conversation-roster-head" aria-hidden>
-          <div><Skeleton className="skeleton-word skeleton-section-title" /><Skeleton className="skeleton-word skeleton-note" /></div>
+    <LoadingRegion label="Loading inbox activity" className="ibx-desk ibx-desk-loading">
+      <div className="ibx-list">
+        <div className="ibx-list-head" aria-hidden>
+          <Skeleton className="skeleton-word skeleton-section-title" />
           <Skeleton className="skeleton-search" />
           <div className="skeleton-chip-row"><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /></div>
         </div>
         <SkeletonListRows count={6} compact />
       </div>
-      <div className="conversation-panel conversation-loading-panel" aria-hidden>
+      <div className="ibx-thread ibx-thread-blank" aria-hidden>
         <Skeleton className="skeleton-avatar skeleton-avatar-lg" />
         <Skeleton className="skeleton-word skeleton-section-title" />
         <Skeleton className="skeleton-word skeleton-lede" />
@@ -147,8 +147,8 @@ function KpiSkeletonRow() {
       {Array.from({ length: 4 }, (_, index) => (
         <div className="kpi-tile stat-tile" key={index}>
           <div className="stat-block">
-            <span className="stat-label"><Skeleton className="stat-icon-skeleton" /><Skeleton className="skeleton-word skeleton-row-meta" /></span>
-            <Skeleton className="kpi-skeleton" />
+            <span className="stat-head"><span className="stat-label"><Skeleton className="stat-icon-skeleton" /><Skeleton className="skeleton-word skeleton-row-meta" /></span></span>
+            <span className="stat-value-row"><Skeleton className="kpi-skeleton" /></span>
             <Skeleton className="skeleton-word skeleton-note" />
           </div>
         </div>

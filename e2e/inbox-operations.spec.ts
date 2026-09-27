@@ -46,7 +46,7 @@ test("Inbox paginates conversations and supports operational state", async ({ pa
   await expect(page.getByLabel(/attach|image|note/i)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Back to contacts" }).click();
-  await page.getByLabel("Conversation status").selectOption("closed");
+  await page.getByRole("group", { name: "Conversation status" }).getByRole("button", { name: "Closed" }).click();
   await expect.poll(() => inboxRequests.some((url) => url.includes("status=closed"))).toBe(true);
 });
 
@@ -60,7 +60,7 @@ test("Facebook activity is paginated and never exposes a Messenger composer", as
   });
 
   await page.goto("/activity");
-  await page.getByRole("tab", { name: "Facebook activity" }).click();
+  await page.getByRole("tab", { name: "Facebook comments" }).click();
   await expect(page.getByText("Guide please")).toBeVisible();
   await expect(page.getByText(/Facebook Messenger is not enabled/i)).toBeVisible();
   await page.getByRole("button", { name: "Load more Facebook activity" }).click();

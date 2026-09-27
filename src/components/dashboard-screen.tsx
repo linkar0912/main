@@ -290,10 +290,10 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
         <SetupChecklist automations={automations} hasConnection={hasConnection} loading={loading} />
 
         <StatGrid>
-          <StatTile label="Replies sent" icon={Send} loading={insights === null} value={sentTotal} note="Last 14 days" delta={sentDelta} />
-          <StatTile label="People reached" icon={UsersRound} loading={insights === null} value={reachedTotal} note="Last 14 days" delta={reachedDelta} />
-          <StatTile label="Emails captured" icon={MailCheck} loading={insights === null} value={capturedTotal} note={`${optedOutTotal.toLocaleString()} opted out · respected`} />
-          <StatTile label="Replies that are on" icon={Power} loading={loading && automations.length === 0} value={activeCount} note={`of ${automations.length.toLocaleString()} automations`} />
+          <StatTile label="Replies sent" icon={Send} loading={insights === null} value={sentTotal} note="Last 14 days" delta={sentDelta} trend={sentPerDay} />
+          <StatTile label="People reached" icon={UsersRound} loading={insights === null} value={reachedTotal} note="Last 14 days" delta={reachedDelta} trend={participantsPerDay} />
+          <StatTile label="Emails captured" icon={MailCheck} loading={insights === null} value={capturedTotal} note={`${optedOutTotal.toLocaleString()} opted out, respected`} />
+          <StatTile label="Replies that are on" icon={Power} loading={loading && automations.length === 0} value={activeCount} note={`Out of ${automations.length.toLocaleString()} automations`} />
         </StatGrid>
 
         <ReplyVolumeCard

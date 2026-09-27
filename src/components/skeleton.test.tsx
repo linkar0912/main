@@ -36,8 +36,8 @@ describe("ScreenSkeleton", () => {
   it("provides content-only loaders that match the Inbox desk and Contacts rows", () => {
     const { container, rerender } = render(<ActivityContentSkeleton />);
     expect(screen.getByLabelText("Loading inbox activity")).toBeTruthy();
-    expect(container.querySelector(".conversation-desk-loading .conversation-roster")).toBeTruthy();
-    expect(container.querySelector(".conversation-desk-loading .conversation-panel")).toBeTruthy();
+    expect(container.querySelector(".ibx-desk-loading .ibx-list")).toBeTruthy();
+    expect(container.querySelector(".ibx-desk-loading .ibx-thread")).toBeTruthy();
     expect(container.querySelectorAll(".skeleton-list-row").length).toBeGreaterThanOrEqual(4);
 
     rerender(<ContactsContentSkeleton />);

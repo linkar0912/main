@@ -157,9 +157,9 @@ describe("workspace palette contract", () => {
   });
 
   it("uses separators only at meaningful section boundaries", () => {
-    expect(css).toMatch(/\.conversation-desk\s*{[^}]*border:\s*1px solid var\(--line-strong\)/);
-    expect(css).toMatch(/\.conversation-contact-list li\s*\+\s*li\s*{[^}]*border-top:\s*1px solid var\(--line\)/);
-    expect(css).not.toMatch(/\.conversation-message\s*{[^}]*border-bottom/);
+    expect(css).toMatch(/\.ibx-desk\s*{[^}]*border:\s*1px solid var\(--line\)/);
+    expect(css).toMatch(/\.ibx-list\s*{[^}]*border-right:\s*1px solid var\(--line\)/);
+    expect(css).not.toMatch(/\.ibx-bubble\s*{[^}]*border-bottom/);
     expect(css).not.toMatch(/\.insights-metrics\s*{[^}]*border-block/);
     expect(css).not.toMatch(/\.insights-journey li\s*{[^}]*border/);
     expect(css).not.toMatch(/\.facebook-activity-header\s*{[^}]*border/);
@@ -183,11 +183,10 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.connected-channels-total \.health-orb\s*{[^}]*flex:\s*0 0 8px[^}]*height:\s*8px[^}]*width:\s*8px/);
     expect(css).toMatch(/\.connected-channels-list\s*{[^}]*grid-template-columns:\s*repeat\(2/);
     expect(css).toMatch(/@media\s*\(max-width:\s*1080px\)[\s\S]*?\.connected-channels-list\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-    expect(css).toMatch(/\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(350px,\s*390px\) minmax\(0,\s*1fr\)/);
-    expect(css).toMatch(/\.conversation-roster-head\s*>\s*div:first-child\s*{[^}]*display:\s*flex/);
-    expect(css).not.toMatch(/\.conversation-roster-head\s*>\s*div\s*{/);
-    expect(css).toMatch(/\.conversation-messages\s*{[^}]*overflow-y:\s*auto/);
-    expect(css).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.conversation-desk\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/\.ibx-desk\s*{[^}]*grid-template-columns:\s*minmax\(300px,\s*360px\) minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/\.ibx-messages\s*{[^}]*overflow-y:\s*auto/);
+    expect(css).toMatch(/\.ibx-list-body\s*{[^}]*overflow-y:\s*auto/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.ibx-desk\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
     expect(css).toMatch(/\.contact-row\s*{[^}]*border-bottom:\s*1px solid var\(--line\)/);
     expect(css).toMatch(/\.funnel-cell\s*{[^}]*min-height:\s*112px/);
   });

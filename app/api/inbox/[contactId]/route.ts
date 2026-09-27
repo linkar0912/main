@@ -113,16 +113,21 @@ export async function POST(request: Request, context: Context) {
   if (!text) return NextResponse.json({ error: "Message text is required" }, { status: 400 });
   if (text.length > MAX_MESSAGE_LENGTH) return NextResponse.json({ error: `Message must be ${MAX_MESSAGE_LENGTH} characters or fewer` }, { status: 400 });
 
+  const env = getServerEnv();
+  if (!env.metaTokenEncryptionKey) return NextResponse.json({ error: "Instagram messaging is not configured" }, { status: 503 });
   const repository = getRepository();
-  const contact = await repository.getContactById(session.workspaceId, contactId);
+  // The contact lookup and the connection list are independent; the window
+  // check needs the contact's ids. Running the reads side by side keeps the
+  // pre-send validation to two round trips instead of four.
+  const [contact, connections] = await Promise.all([
+    repository.getContactById(session.workspaceId, contactId),
+    repository.listConnections(session.workspaceId),
+  ]);
   if (!contact) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
   if (contact.suppressedAt) return NextResponse.json({ error: "This contact has opted out" }, { status: 409 });
   const inbound = await repository.listInboundEventsForRecipient(session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, { limit: 1 });
   if (!isWithinMessagingWindow(inbound.records[0]?.receivedAt)) return NextResponse.json({ error: "The 24-hour Instagram reply window has closed" }, { status: 409 });
 
-  const env = getServerEnv();
-  if (!env.metaTokenEncryptionKey) return NextResponse.json({ error: "Instagram messaging is not configured" }, { status: 503 });
-  const connections = await repository.listConnections(session.workspaceId);
   const connection = connections.find((candidate) => candidate.igUserId === contact.instagramAccountId && candidate.status === "CONNECTED");
   if (!connection) return NextResponse.json({ error: "The Instagram account is not connected" }, { status: 409 });
 

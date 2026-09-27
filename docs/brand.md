@@ -6,21 +6,22 @@ interaction color, a bright yellow secondary block color, chunky friendly
 type, uppercase mono buttons, pill-shaped confidence, and a faint graph-paper
 texture behind hero panels.
 
-## Logo - the wordmark
+## Logo - wordmark and app mark
 
-Linkar has no icon mark. The brand signs itself with the **wordmark alone**:
-`PRODUCT_NAME` set in the display face (Bricolage Grotesque, weight 800, tight
-negative tracking), which is what the sidebar brand, the mobile topbar, and the
-loading splash all render.
+The Linkar wordmark keeps the approved lettering: `Linkar` in the existing
+Bricolage Grotesque display style, weight 800, with tight negative tracking.
+The separate app mark is a custom interlocking-link symbol. The logo assets
+are monochrome black on white, with no volt/yellow accent:
 
-There was previously a bubble-and-bolt glyph in
-`src/components/linkar-mark.tsx`; it was removed, along with the component, and
-no icon should be reintroduced without a deliberate decision here first.
+- `public/brand/linkar-wordmark.svg` - wordmark only.
+- `public/brand/linkar-app-mark.svg` / `.png` - standalone app mark.
+- `public/brand/linkar-logo.svg` / `.png` - app mark paired with the unchanged
+  wordmark.
 
-- Use the wordmark in **brand spots**: sidebar brand, mobile topbar, auth hero
-  + cards, loading splash.
-- Use `InstagramGlyph` / `FacebookGlyph` only where the icon literally means
-  that channel (connections, public page, help content).
+Use the combined lockup in brand spots (sidebar, mobile topbar, auth hero,
+cards, and loading splash). Use the standalone mark where a square app icon is
+needed. The former bubble-and-bolt glyph in `src/components/linkar-mark.tsx`
+was removed; this new app mark is a deliberate replacement for the app icon.
 
 ## Color
 
@@ -28,7 +29,7 @@ no icon should be reintroduced without a deliberate decision here first.
 |---|---|---|
 | `--ink` | `#17181d` | Body text, primary CTAs (black pills), dark panels |
 | `--ink-strong` | `#0b0c10` | Hover state of ink surfaces |
-| `--volt` | `#fff100` | The signature. Logo bolt, plan sticker, active nav pill, energy moments |
+| `--volt` | `#fff100` | Secondary signature for plan stickers, active nav pills, and energy moments |
 | `--volt-deep` | `#f7cd21` | Volt borders/hover on dark |
 | `--accent` | `#fa0cf7` | Magenta - ManyChat's real CTA/interaction color. Links, focus rings, active data, primary chart series |
 | `--accent-hover` | `#c807c4` | Hover/pressed state of accent surfaces |

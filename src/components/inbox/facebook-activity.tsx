@@ -17,6 +17,12 @@ type FacebookActivityItem = {
   summary?: string;
 };
 
+function formatWhen(value: string): string {
+  const date = new Date(value);
+  if (date.toDateString() === new Date().toDateString()) return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function mergeItems(current: FacebookActivityItem[], incoming: FacebookActivityItem[]) {
   const ids = new Set(current.map((item) => item.id));
   return [...current, ...incoming.filter((item) => !ids.has(item.id))];
@@ -94,20 +100,26 @@ export function FacebookActivity() {
     return items.filter((item) => (!page || item.account === page) && (!needle || `${item.from ?? ""} ${item.summary ?? ""} ${item.account ?? ""}`.toLowerCase().includes(needle)));
   }, [items, page, query]);
 
-  return <section className="facebook-activity" aria-label="Facebook Page activity">
-    <header className="facebook-activity-heading"><div><h2>Page comments</h2><p>Comments collected from your connected Facebook Pages.</p></div><span>{loaded ? `${visible.length} loaded` : "Loading"}</span></header>
-    <div className="facebook-activity-notice"><MessageCircle size={18} aria-hidden="true" /><p><strong>Public comments only.</strong> Facebook Messenger is not enabled.</p></div>
-    <div className="facebook-activity-tools">
-      <label className="conversation-search"><Search size={17} aria-hidden="true" /><span className="sr-only">Search Facebook activity</span><input type="search" aria-label="Search Facebook activity" placeholder="Search comments or people" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-      <select aria-label="Filter by Facebook Page" value={page} onChange={(event) => setPage(event.target.value)}><option value="">All loaded Pages</option>{pages.map((pageId) => <option key={pageId} value={pageId}>{pageId}</option>)}</select>
+  return <section className="ibx-fb" aria-label="Facebook Page activity">
+    <header className="ibx-fb-head">
+      <div className="ibx-list-title"><h2>Page comments</h2><span>{loaded ? `${visible.length.toLocaleString()} loaded` : "Loading"}</span></div>
+      <p className="ibx-fb-note"><MessageCircle size={15} aria-hidden="true" /><span><strong>Public comments only.</strong> Facebook Messenger is not enabled, so replies to these go out through your comment automations.</span></p>
+    </header>
+    <div className="ibx-fb-tools">
+      <label className="ibx-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search Facebook activity" placeholder="Search comments or people" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+      {pages.length > 1 && <select className="ibx-select" aria-label="Filter by Facebook Page" value={page} onChange={(event) => setPage(event.target.value)}><option value="">All Pages</option>{pages.map((pageId) => <option key={pageId} value={pageId}>{pageId}</option>)}</select>}
     </div>
-    {error && <p className="form-error" role="alert">{error}</p>}
-    {!loaded ? <div className="facebook-activity-loading" role="status" aria-label="Loading Facebook activity"><InlineContentSkeleton label="Loading comments" rows={4} /></div> : visible.length === 0 ? <div className="facebook-activity-empty"><MessageCircle size={24} /><p>No Facebook Page comments match this view.</p></div> : <ol className="facebook-activity-list">
+    {error && <p className="ibx-banner is-error" role="alert">{error}</p>}
+    {!loaded ? <div className="ibx-fb-loading" role="status" aria-label="Loading Facebook activity"><InlineContentSkeleton label="Loading comments" rows={4} /></div> : visible.length === 0 ? <div className="ibx-list-empty"><MessageCircle size={22} aria-hidden="true" /><p>{items.length === 0 ? "No Page comments yet. New comments on your connected Facebook Pages appear here." : "No Facebook Page comments match this view."}</p></div> : <ol className="ibx-fb-list">
       {visible.map((item) => <li key={item.id}>
         <SocialAvatar channel="facebook" name={item.from ?? "Facebook commenter"} src={item.avatarUrl} />
-        <div><div className="facebook-activity-topline"><strong>{item.from ?? "Facebook commenter"}</strong><time dateTime={item.at}>{new Date(item.at).toLocaleString()}</time></div><p>{item.summary ?? "Comment received"}</p><small>{item.label}{item.account ? ` · Page ${item.account}` : ""}</small></div>
+        <div className="ibx-fb-copy">
+          <div className="ibx-row-top"><strong>{item.from ?? "Facebook commenter"}</strong><time dateTime={item.at} title={new Date(item.at).toLocaleString()}>{formatWhen(item.at)}</time></div>
+          <p>{item.summary ?? "Comment received"}</p>
+          <small>{item.account ? `On Page ${item.account}` : item.label}</small>
+        </div>
       </li>)}
     </ol>}
-    {nextCursor && <button type="button" className="button button-secondary facebook-load-more" aria-label="Load more Facebook activity" disabled={loadingMore} onClick={() => void load(nextCursor)}>{loadingMore ? "Loading…" : error ? "Retry loading more" : "Load more activity"}</button>}
+    {nextCursor && <button type="button" className="ibx-load-more" aria-label="Load more Facebook activity" disabled={loadingMore} onClick={() => void load(nextCursor)}>{loadingMore ? "Loading…" : error ? "Retry loading more" : "Load more"}</button>}
   </section>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Inbox, Info, Send } from "lucide-react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, Inbox, Info, RotateCcw, Star, UserRound } from "lucide-react";
 import { ContactDetailModal } from "../contact-detail-modal";
 import { ActivityContentSkeleton } from "../skeleton";
 import { SocialAvatar } from "../social-avatar";
@@ -19,20 +19,51 @@ const DEFAULT_FILTERS: InboxFiltersValue = {
   reminder: "all",
   sort: "newest",
 };
+const MAX_MESSAGE_LENGTH = 1_000;
+/** Messages this close together from the same side read as one burst. */
+const GROUP_GAP_MS = 5 * 60_000;
 
 function displayName(contact: InboxContact): string {
   return contact.username ? `@${contact.username.replace(/^@+/, "")}` : `Instagram contact ·${contact.id.slice(-5)}`;
 }
 
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function daysAgo(value: string): number {
+  return Math.round((startOfDay(new Date()) - startOfDay(new Date(value))) / 86_400_000);
+}
+
 function formatListTime(value: string): string {
   const date = new Date(value);
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const age = daysAgo(value);
+  if (age <= 0) return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  if (age === 1) return "Yesterday";
+  if (age < 7) return date.toLocaleDateString(undefined, { weekday: "short" });
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function formatMessageTime(value: string): string {
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function formatDayLabel(value: string): string {
+  const age = daysAgo(value);
+  if (age <= 0) return "Today";
+  if (age === 1) return "Yesterday";
+  const date = new Date(value);
+  return date.toLocaleDateString(undefined, age < 7 ? { weekday: "long" } : { weekday: "short", month: "short", day: "numeric", ...(date.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}) });
+}
+
+function formatBubbleTime(value: string): string {
+  return new Date(value).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+function isReminderDue(value?: string): boolean {
+  return value ? Date.parse(value) <= Date.now() : false;
+}
+
+function formatReminder(value: string): string {
+  if (isReminderDue(value)) return "Reminder due";
+  const date = new Date(value);
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function inboxUrl(filters: InboxFiltersValue, cursor?: string): string {
@@ -65,6 +96,12 @@ function optimisticContact(contact: InboxContact, operation: InboxOperation): In
   if (operation.action === "set_favorite") return { ...contact, favorite: operation.favorite };
   if (operation.action === "set_reminder") return { ...contact, reminderAt: operation.reminderAt ?? undefined };
   return { ...contact, assigneeUserId: operation.assigneeUserId ?? undefined };
+}
+
+function newClientKey(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
 type InboxPayload = { data?: { contacts: InboxContact[]; members?: InboxMember[]; nextCursor?: string; needsProfileEnrichment?: boolean }; error?: string };
@@ -106,15 +143,52 @@ function writeInboxCache(filters: InboxFiltersValue, snapshot: Omit<InboxListSna
   inboxFirstPageCache.set(inboxCacheKey(filters), { ...snapshot, fetchedAt: Date.now(), fetcher: fetch });
 }
 
-/** Applies the same optimistic operation to the cached roster so a revisit
+/** Applies the same optimistic change to the cached roster so a revisit
  *  inside the freshness window doesn't briefly resurrect pre-PATCH state. */
-function mutateInboxCache(filters: InboxFiltersValue, contactId: string, operation: InboxOperation | { action: "mark_read" }): (() => void) | undefined {
+function mutateInboxCache(filters: InboxFiltersValue, contactId: string, update: (contact: InboxContact) => InboxContact): (() => void) | undefined {
   const snapshot = inboxFirstPageCache.get(inboxCacheKey(filters));
   if (!snapshot || snapshot.fetcher !== fetch) return undefined;
   const previous = snapshot.contacts;
-  snapshot.contacts = previous.map((contact) => contact.id !== contactId ? contact
-    : operation.action === "mark_read" ? { ...contact, unread: false } : optimisticContact(contact, operation));
+  snapshot.contacts = previous.map((contact) => contact.id === contactId ? update(contact) : contact);
   return () => { snapshot.contacts = previous; };
+}
+
+type MessageGroup = { key: string; day?: string; direction: InboxMessage["direction"]; messages: InboxMessage[] };
+
+/** Splits a thread into day sections and same-sender bursts. */
+function groupMessages(messages: InboxMessage[]): MessageGroup[] {
+  const groups: MessageGroup[] = [];
+  let lastDay = "";
+  for (const message of messages) {
+    const day = new Date(message.at).toDateString();
+    const previous = groups.at(-1);
+    const lastAt = previous?.messages.at(-1)?.at;
+    const continues = previous
+      && day === lastDay
+      && previous.direction === message.direction
+      && lastAt !== undefined
+      && Math.abs(Date.parse(message.at) - Date.parse(lastAt)) < GROUP_GAP_MS;
+    if (continues) {
+      previous.messages.push(message);
+    } else {
+      groups.push({ key: message.id, direction: message.direction, messages: [message], ...(day !== lastDay ? { day: message.at } : {}) });
+    }
+    lastDay = day;
+  }
+  return groups;
+}
+
+function DeliveryState({ message, onRetry }: { message: InboxMessage; onRetry: (message: InboxMessage) => void }) {
+  if (message.direction !== "outbound") return null;
+  if (message.status === "sending") return <span className="ibx-state is-sending"><Clock3 size={12} aria-hidden="true" />Sending</span>;
+  if (message.status === "failed") {
+    return <span className="ibx-state is-failed">
+      <AlertCircle size={12} aria-hidden="true" />Not sent
+      {message.clientKey && <button type="button" onClick={() => onRetry(message)}><RotateCcw size={12} aria-hidden="true" />Retry</button>}
+    </span>;
+  }
+  if (message.status === "unknown") return <span className="ibx-state">Delivery unconfirmed</span>;
+  return <span className="ibx-state is-sent"><Check size={12} aria-hidden="true" />Sent</span>;
 }
 
 /** A contact-first, text-only Instagram conversation desk. */
@@ -132,11 +206,12 @@ export function InstagramInbox() {
   const [filterLoading, setFilterLoading] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [olderLoading, setOlderLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState("");
+  const [listError, setListError] = useState("");
+  const [threadError, setThreadError] = useState("");
   const [openContactId, setOpenContactId] = useState<string | null>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const autoScrollRef = useRef(true);
   const contactsAbortRef = useRef<AbortController | null>(null);
   const conversationAbortRef = useRef<AbortController | null>(null);
@@ -155,7 +230,7 @@ export function InstagramInbox() {
         setContacts(snapshot.contacts);
         setMembers(snapshot.members);
         setNextCursor(snapshot.nextCursor);
-        setError("");
+        setListError("");
         setLoaded(true);
         if (fresh) return;
       }
@@ -191,10 +266,10 @@ export function InstagramInbox() {
             }).catch(() => undefined);
         }
       }
-      setError("");
+      setListError("");
     } catch (caught) {
       if (controller.signal.aborted || contactsAbortRef.current !== controller) return;
-      setError(caught instanceof Error ? caught.message : "Could not load inbox");
+      setListError(caught instanceof Error ? caught.message : "Could not load inbox");
     } finally {
       if (!controller.signal.aborted && contactsAbortRef.current === controller) {
         setLoaded(true);
@@ -218,15 +293,18 @@ export function InstagramInbox() {
 
   const selected = contacts.find((contact) => contact.id === selectedId) ?? null;
   const labels = useMemo(() => Array.from(new Set(contacts.flatMap((contact) => contact.tags))).sort(), [contacts]);
+  const memberNames = useMemo(() => new Map(members.map((member) => [member.userId, member.email.split("@")[0]])), [members]);
+  const groups = useMemo(() => groupMessages(messages), [messages]);
+  const filtersActive = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
+
+  function updateContact(contactId: string, update: (contact: InboxContact) => InboxContact) {
+    setContacts((current) => current.map((contact) => contact.id === contactId ? update(contact) : contact));
+    return mutateInboxCache(filters, contactId, update);
+  }
 
   async function patchContact(contactId: string, operation: InboxOperation | { action: "mark_read" }) {
     const previous = contacts;
-    const rollbackCache = mutateInboxCache(filters, contactId, operation);
-    if (operation.action === "mark_read") {
-      setContacts((current) => current.map((contact) => contact.id === contactId ? { ...contact, unread: false } : contact));
-    } else {
-      setContacts((current) => current.map((contact) => contact.id === contactId ? optimisticContact(contact, operation) : contact));
-    }
+    const rollbackCache = updateContact(contactId, (contact) => operation.action === "mark_read" ? { ...contact, unread: false } : optimisticContact(contact, operation));
     try {
       const response = await fetch(`/api/inbox/${contactId}`, {
         method: "PATCH",
@@ -238,11 +316,19 @@ export function InstagramInbox() {
     } catch (caught) {
       setContacts(previous);
       rollbackCache?.();
-      setError(caught instanceof Error ? caught.message : "Could not update conversation");
+      setThreadError(caught instanceof Error ? caught.message : "Could not update conversation");
     }
   }
 
+  function closeConversation() {
+    conversationAbortRef.current?.abort();
+    activeContactIdRef.current = null;
+    setSelectedId(null);
+    setThreadError("");
+  }
+
   async function openConversation(contact: InboxContact) {
+    if (activeContactIdRef.current === contact.id && !threadError) return;
     conversationAbortRef.current?.abort();
     const controller = new AbortController();
     conversationAbortRef.current = controller;
@@ -251,7 +337,8 @@ export function InstagramInbox() {
     setConversationLoading(true);
     setMessages([]);
     setMessageCursor(undefined);
-    setError("");
+    setThreadError("");
+    setDraft("");
     autoScrollRef.current = true;
     try {
       const response = await fetch(`/api/inbox/${contact.id}`, { signal: controller.signal });
@@ -263,7 +350,7 @@ export function InstagramInbox() {
       if (contact.unread) void patchContact(contact.id, { action: "mark_read" });
     } catch (caught) {
       if (controller.signal.aborted || activeContactIdRef.current !== contact.id) return;
-      setError(caught instanceof Error ? caught.message : "Could not load conversation");
+      setThreadError(caught instanceof Error ? caught.message : "Could not load conversation");
     } finally {
       if (!controller.signal.aborted && activeContactIdRef.current === contact.id) setConversationLoading(false);
     }
@@ -287,7 +374,7 @@ export function InstagramInbox() {
         if (element) element.scrollTop = previousScrollTop + (element.scrollHeight - previousScrollHeight);
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load earlier messages");
+      setThreadError(caught instanceof Error ? caught.message : "Could not load earlier messages");
     } finally {
       setOlderLoading(false);
     }
@@ -298,88 +385,168 @@ export function InstagramInbox() {
     if (typeof messageEndRef.current?.scrollIntoView === "function") messageEndRef.current.scrollIntoView({ block: "nearest" });
   }, [messages]);
 
-  async function sendMessage() {
-    if (!selected || !selected.canMessage || !draft.trim() || sending) return;
-    const text = draft.trim();
-    setSending(true);
-    setError("");
+  // Grow the composer with its content, up to the CSS max-height.
+  useLayoutEffect(() => {
+    const element = composerRef.current;
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
+  }, [draft, selectedId]);
+
+  /** Posts one message. The bubble is already on screen; this only settles it. */
+  async function deliver(contactId: string, pending: InboxMessage) {
     try {
-      const response = await fetch(`/api/inbox/${selected.id}`, {
+      const response = await fetch(`/api/inbox/${contactId}`, {
         method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-        body: JSON.stringify({ text }),
+        headers: { "content-type": "application/json", "idempotency-key": pending.clientKey! },
+        body: JSON.stringify({ text: pending.text }),
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: { message: InboxMessage }; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not send message");
-      autoScrollRef.current = true;
-      setMessages((current) => [...current, payload.data!.message]);
-      setContacts((current) => current.map((contact) => contact.id === selected.id
-        ? { ...contact, preview: text, lastMessageAt: payload.data!.message.at, inboxStatus: "OPEN" }
-        : contact));
-      setDraft("");
+      const sent = payload.data.message;
+      if (activeContactIdRef.current === contactId) {
+        setMessages((current) => current.map((message) => message.id === pending.id ? { ...sent, clientKey: pending.clientKey } : message));
+      }
+      updateContact(contactId, (contact) => ({ ...contact, preview: pending.text, lastMessageAt: sent.at, inboxStatus: "OPEN" }));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not send message");
-    } finally {
-      setSending(false);
+      const reason = caught instanceof Error ? caught.message : "Could not send message";
+      if (activeContactIdRef.current === contactId) {
+        setMessages((current) => current.map((message) => message.id === pending.id ? { ...message, status: "failed", error: reason } : message));
+      }
     }
+  }
+
+  function sendMessage() {
+    const text = draft.trim();
+    if (!selected || !selected.canMessage || !text || text.length > MAX_MESSAGE_LENGTH) return;
+    const clientKey = newClientKey();
+    const pending: InboxMessage = { id: `local_${clientKey}`, direction: "outbound", text, at: new Date().toISOString(), status: "sending", clientKey };
+    autoScrollRef.current = true;
+    setMessages((current) => [...current, pending]);
+    setDraft("");
+    setThreadError("");
+    void deliver(selected.id, pending);
+  }
+
+  function retryMessage(message: InboxMessage) {
+    if (!selected || !message.clientKey) return;
+    const pending = { ...message, status: "sending" as const, error: undefined };
+    setMessages((current) => current.map((candidate) => candidate.id === message.id ? pending : candidate));
+    // Same idempotency key: if the first attempt actually reached Meta, the
+    // server returns that delivery instead of sending a duplicate.
+    void deliver(selected.id, pending);
   }
 
   if (!loaded) return <ActivityContentSkeleton />;
 
-  return <section className={`conversation-desk ${selected ? "has-conversation" : ""}`} aria-label="Instagram inbox conversations">
-    <aside className="conversation-roster" aria-label="Contacts">
-      <div className="conversation-roster-head">
-        <div><h2>Conversations</h2><span>{contacts.length}{nextCursor ? "+" : ""} contact{contacts.length === 1 ? "" : "s"}</span></div>
+  const tooLong = draft.trim().length > MAX_MESSAGE_LENGTH;
+
+  return <section className={`ibx-desk ${selected ? "has-thread" : ""}`} aria-label="Instagram inbox conversations">
+    <aside className="ibx-list" aria-label="Contacts">
+      <div className="ibx-list-head">
+        <div className="ibx-list-title">
+          <h2>Messages</h2>
+          <span>{contacts.length}{nextCursor ? "+" : ""} {contacts.length === 1 && !nextCursor ? "person" : "people"}</span>
+        </div>
         <InboxFilters value={filters} labels={labels} onChange={(next) => {
-          conversationAbortRef.current?.abort(); activeContactIdRef.current = null; setSelectedId(null);
+          closeConversation();
           const snapshot = readInboxCache(next).snapshot;
           setContacts(snapshot?.contacts ?? []); setMembers(snapshot?.members ?? []);
           setNextCursor(snapshot?.nextCursor); setFilterLoading(!snapshot); setFilters(next);
         }} />
       </div>
-      {error && contacts.length === 0 && <p className="form-error" role="alert">{error}</p>}
-      {filterLoading ? <div className="conversation-filter-loading" aria-label="Loading conversations" aria-busy="true">{[0, 1, 2, 3].map((index) => <div className="skeleton-list-row is-compact" key={index}><span className="skeleton-block skeleton-avatar" /><span className="skeleton-stack skeleton-row-copy"><span className="skeleton-block skeleton-word skeleton-row-title" /><span className="skeleton-block skeleton-word skeleton-row-meta" /></span></div>)}</div> : contacts.length === 0 ? <div className="conversation-roster-empty"><Inbox size={21} /><p>No conversations match these filters.</p></div> : <>
-        <ul className="conversation-contact-list">
-          {contacts.map((contact) => <li key={contact.id}>
-            <button type="button" className={selectedId === contact.id ? "is-selected" : ""} aria-label={`Open conversation with ${displayName(contact)}`} onClick={() => void openConversation(contact)}>
-              <span className="conversation-avatar-wrap"><SocialAvatar channel="instagram" name={displayName(contact)} src={contact.avatarUrl} />{contact.unread && <span className="conversation-unread-dot" aria-label="Unread" />}</span>
-              <span className="conversation-contact-copy">
-                <span className="conversation-contact-topline"><strong>{displayName(contact)}</strong>{contact.favorite && <span aria-label="Favourite">★</span>}<time dateTime={contact.lastMessageAt}>{formatListTime(contact.lastMessageAt)}</time></span>
-                <span className="conversation-preview">{contact.preview}</span>
-                <span className="conversation-contact-state">{contact.inboxStatus === "OPEN" ? "Open" : "Closed"}{contact.assigneeUserId ? " · Assigned" : " · Unassigned"}</span>
-              </span>
-            </button>
-          </li>)}
-        </ul>
-        {nextCursor && <button className="conversation-load-more" type="button" aria-label="Load more conversations" disabled={loadingMore} onClick={() => void loadContacts(false, nextCursor)}>{loadingMore ? "Loading…" : "Load more conversations"}</button>}
-      </>}
+
+      <div className="ibx-list-body">
+        {listError && <p className="ibx-banner is-error" role="alert"><AlertCircle size={15} aria-hidden="true" />{listError}<button type="button" onClick={() => void loadContacts(true)}>Try again</button></p>}
+        {filterLoading ? <div className="ibx-list-loading" aria-label="Loading conversations" aria-busy="true">
+          {[0, 1, 2, 3, 4].map((index) => <div className="ibx-row-skeleton" key={index}><span className="skeleton-block skeleton-avatar" /><span className="skeleton-stack skeleton-row-copy"><span className="skeleton-block skeleton-word skeleton-row-title" /><span className="skeleton-block skeleton-word skeleton-row-meta" /></span></div>)}
+        </div> : contacts.length === 0 ? <div className="ibx-list-empty">
+          <Inbox size={22} aria-hidden="true" />
+          {filtersActive ? <>
+            <p>No conversations match these filters.</p>
+            <button type="button" className="ibx-link-button" onClick={() => { setFilterLoading(!readInboxCache(DEFAULT_FILTERS).snapshot); setFilters(DEFAULT_FILTERS); }}>Clear filters</button>
+          </> : <p>No messages yet. When someone DMs your Instagram account, they show up here.</p>}
+        </div> : <>
+          <ul className="ibx-rows">
+            {contacts.map((contact) => {
+              const assignee = contact.assigneeUserId ? memberNames.get(contact.assigneeUserId) ?? "Assigned" : undefined;
+              const reminderDue = isReminderDue(contact.reminderAt);
+              return <li key={contact.id}>
+                <button type="button" className={`ibx-row ${selectedId === contact.id ? "is-selected" : ""} ${contact.unread ? "is-unread" : ""}`} aria-current={selectedId === contact.id ? "true" : undefined} aria-label={`Open conversation with ${displayName(contact)}`} onClick={() => void openConversation(contact)}>
+                  <span className="ibx-avatar"><SocialAvatar channel="instagram" name={displayName(contact)} src={contact.avatarUrl} />{contact.unread && <span className="ibx-unread-dot" aria-label="Unread" />}</span>
+                  <span className="ibx-row-copy">
+                    <span className="ibx-row-top">
+                      <strong>{displayName(contact)}</strong>
+                      {contact.favorite && <Star className="ibx-row-star" size={12} fill="currentColor" aria-label="Favourite" />}
+                      <time dateTime={contact.lastMessageAt}>{formatListTime(contact.lastMessageAt)}</time>
+                    </span>
+                    <span className="ibx-row-preview">{contact.preview}</span>
+                    {(contact.inboxStatus === "CLOSED" || assignee || contact.reminderAt || !contact.canMessage) && <span className="ibx-row-tags">
+                      {contact.inboxStatus === "CLOSED" && <span className="ibx-tag">Closed</span>}
+                      {contact.reminderAt && <span className={`ibx-tag ${reminderDue ? "is-due" : ""}`}><BellRing size={11} aria-hidden="true" />{formatReminder(contact.reminderAt)}</span>}
+                      {assignee && <span className="ibx-tag"><UserRound size={11} aria-hidden="true" />{assignee}</span>}
+                      {!contact.canMessage && contact.inboxStatus !== "CLOSED" && <span className="ibx-tag is-muted">Window closed</span>}
+                    </span>}
+                  </span>
+                </button>
+              </li>;
+            })}
+          </ul>
+          {nextCursor && <button className="ibx-load-more" type="button" aria-label="Load more conversations" disabled={loadingMore} onClick={() => void loadContacts(false, nextCursor)}>{loadingMore ? "Loading…" : "Load more"}</button>}
+        </>}
+      </div>
     </aside>
 
-    <div className="conversation-panel">
-      {!selected ? <div className="conversation-blank"><span><Inbox size={24} /></span><small>Ready for your next reply</small><h2>Choose a conversation</h2><p>Select someone on the left to read their messages, manage the conversation, and reply.</p></div> : <>
-        <header className="conversation-header">
-          <button className="conversation-back" type="button" aria-label="Back to contacts" onClick={() => { conversationAbortRef.current?.abort(); activeContactIdRef.current = null; setSelectedId(null); }}><ArrowLeft size={19} /></button>
-          <SocialAvatar channel="instagram" name={displayName(selected)} src={selected.avatarUrl} />
-          <div className="conversation-header-copy"><h2>{displayName(selected)}</h2><p>{selected.canMessage ? "Instagram · Available to reply" : "Instagram · Reply window closed"}</p></div>
+    <div className="ibx-thread">
+      {!selected ? <div className="ibx-thread-blank">
+        <span className="ibx-blank-mark"><Inbox size={22} aria-hidden="true" /></span>
+        <h2>Pick a conversation</h2>
+        <p>Choose someone from the list to read the thread and reply.</p>
+      </div> : <>
+        <header className="ibx-thread-head">
+          <button className="ibx-back" type="button" aria-label="Back to contacts" onClick={closeConversation}><ArrowLeft size={19} /></button>
+          <button className="ibx-who" type="button" aria-label={`View details for ${displayName(selected)}`} onClick={() => setOpenContactId(selected.id)}>
+            <SocialAvatar channel="instagram" name={displayName(selected)} src={selected.avatarUrl} />
+            <span className="ibx-who-copy">
+              <strong className="ibx-who-name">{displayName(selected)}</strong>
+              <span className={`ibx-window ${selected.canMessage ? "is-open" : ""}`}>{selected.canMessage ? "Can reply now" : "Reply window closed"}</span>
+            </span>
+            <Info className="ibx-who-info" size={16} aria-hidden="true" />
+          </button>
           <ConversationHeaderActions contact={selected} members={members} onOperation={(operation) => void patchContact(selected.id, operation)} />
-          <button className="icon-button conversation-info" type="button" aria-label={`View details for ${displayName(selected)}`} onClick={() => setOpenContactId(selected.id)}><Info size={18} /></button>
         </header>
-        <div className="conversation-messages" ref={messagesRef} aria-label={`Conversation with ${displayName(selected)}`} aria-live="polite">
-          {messageCursor && <button className="conversation-load-earlier" type="button" aria-label="Load earlier messages" disabled={olderLoading} onClick={() => void loadEarlier()}>{olderLoading ? "Loading…" : "Load earlier messages"}</button>}
-          {conversationLoading ? <div className="conversation-loading" aria-label="Loading conversation" aria-busy="true"><span className="skeleton-block conversation-message-skeleton" /><span className="skeleton-block conversation-message-skeleton is-reply" /><span className="skeleton-block conversation-message-skeleton" /></div> : messages.length === 0 ? <div className="conversation-empty"><p>No messages with this contact yet.</p></div> : messages.map((message) => <article className={`conversation-message is-${message.direction}`} key={message.id}>
-            <p>{message.text}</p><footer><time dateTime={message.at}>{formatMessageTime(message.at)}</time>{message.direction === "outbound" && <span>{message.status}</span>}</footer>{message.error && <small>{message.error}</small>}
-          </article>)}
+
+        <div className="ibx-messages" ref={messagesRef} aria-label={`Conversation with ${displayName(selected)}`} aria-live="polite">
+          {messageCursor && <button className="ibx-load-earlier" type="button" aria-label="Load earlier messages" disabled={olderLoading} onClick={() => void loadEarlier()}>{olderLoading ? "Loading…" : "Load earlier messages"}</button>}
+          {conversationLoading ? <div className="ibx-thread-loading" aria-label="Loading conversation" aria-busy="true">
+            <span className="skeleton-block ibx-bubble-skeleton" /><span className="skeleton-block ibx-bubble-skeleton is-out" /><span className="skeleton-block ibx-bubble-skeleton is-short" />
+          </div> : messages.length === 0 ? <div className="ibx-thread-empty"><p>No messages with this contact yet.</p></div> : groups.map((group) => <Fragment key={group.key}>
+            {group.day && <div className="ibx-day" role="separator"><span>{formatDayLabel(group.day)}</span></div>}
+            <div className={`ibx-group is-${group.direction}`}>
+              {group.messages.map((message, index) => <article className={`ibx-bubble is-${message.direction} ${message.status === "failed" ? "is-failed" : ""} ${message.status === "sending" ? "is-sending" : ""}`} key={message.id}>
+                <p>{message.text}</p>
+                {index === group.messages.length - 1 && <footer><time dateTime={message.at}>{formatBubbleTime(message.at)}</time><DeliveryState message={message} onRetry={retryMessage} /></footer>}
+                {message.error && <small>{message.error}</small>}
+              </article>)}
+            </div>
+          </Fragment>)}
           <div ref={messageEndRef} />
         </div>
-        <div className="conversation-compose">
-          {!selected.canMessage && <p className="conversation-window-note">The 24-hour Instagram reply window has closed. This contact can message you to reopen it.</p>}
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <div className="conversation-compose-row">
-            <textarea aria-label={`Message ${displayName(selected)}`} placeholder={selected.canMessage ? "Write a reply…" : "Waiting for this contact to message again"} rows={2} maxLength={1000} value={draft} disabled={!selected.canMessage || sending} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendMessage(); } }} />
-            <button type="button" aria-label="Send message" onClick={() => void sendMessage()} disabled={!selected.canMessage || !draft.trim() || sending}><Send size={18} /><span>{sending ? "Sending" : "Send"}</span></button>
+
+        {threadError && <p className="ibx-banner is-error ibx-thread-error" role="alert"><AlertCircle size={15} aria-hidden="true" />{threadError}</p>}
+
+        {selected.canMessage ? <form className="ibx-composer" onSubmit={(event) => { event.preventDefault(); sendMessage(); }}>
+          <div className={`ibx-composer-field ${tooLong ? "is-over" : ""}`}>
+            <textarea ref={composerRef} aria-label={`Message ${displayName(selected)}`} placeholder="Write a reply" rows={1} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); }
+            }} />
+            <button type="submit" aria-label="Send message" disabled={!draft.trim() || tooLong}><ArrowUp size={18} strokeWidth={2.4} /></button>
           </div>
-          <small>Text only · {draft.length}/1000 · Enter to send, Shift+Enter for a new line</small>
-        </div>
+          <small className="ibx-composer-hint">{draft.length > MAX_MESSAGE_LENGTH * 0.8 ? <span className={tooLong ? "is-over" : ""}>{draft.trim().length}/{MAX_MESSAGE_LENGTH} characters</span> : <span>Enter to send, Shift+Enter for a new line</span>}</small>
+        </form> : <div className="ibx-window-note" role="note">
+          <Clock3 size={16} aria-hidden="true" />
+          <p><strong>The 24-hour Instagram reply window has closed.</strong> You can reply again as soon as {displayName(selected)} sends you a new message.</p>
+        </div>}
       </>}
     </div>
     {openContactId && <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} />}

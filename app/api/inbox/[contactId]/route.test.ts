@@ -98,6 +98,7 @@ describe("/api/inbox/[contactId]", () => {
   it("rejects a manual reply when no recent inbound message opened the window", async () => {
     mocks.getRepository.mockReturnValue({
       getContactById: vi.fn().mockResolvedValue(contact),
+      listConnections: vi.fn().mockResolvedValue([]),
       listInboundEventsForRecipient: vi.fn().mockResolvedValue({ records: [] }),
     });
 

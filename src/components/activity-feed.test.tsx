@@ -60,7 +60,7 @@ describe("ActivityFeed", () => {
     render(<ActivityFeed />);
     fireEvent.click(await screen.findByRole("button", { name: /open conversation with @arjun/i }));
 
-    expect(await screen.findByText("The 24-hour Instagram reply window has closed. This contact can message you to reopen it.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(true);
+    expect(await screen.findByText("The 24-hour Instagram reply window has closed.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send message" })).toBeNull();
   });
 });

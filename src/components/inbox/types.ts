@@ -13,7 +13,16 @@ export type InboxContact = {
   reminderAt?: string;
   assigneeUserId?: string;
 };
-export type InboxMessage = { id: string; direction: "inbound" | "outbound"; text: string; at: string; status: "received" | "sending" | "sent" | "failed" | "unknown"; error?: string };
+export type InboxMessage = {
+  id: string;
+  direction: "inbound" | "outbound";
+  text: string;
+  at: string;
+  status: "received" | "sending" | "sent" | "failed" | "unknown";
+  error?: string;
+  /** Client-only: idempotency key of an optimistic send, reused on retry. */
+  clientKey?: string;
+};
 export type InboxMember = { userId: string; email: string; role: string };
 export type InboxFiltersValue = {
   query: string;

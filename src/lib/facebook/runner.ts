@@ -115,34 +115,39 @@ export async function processNormalizedFacebookEvent(
 ): Promise<FacebookRunnerResult> {
   const mapping = await repository.findWorkspaceByFacebookPage(event.pageId);
   if (!mapping) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
-  if (await repository.getWorkspaceStatus(mapping.workspaceId) !== "ACTIVE") {
+  // Status and the automation list are independent reads; fetch them together
+  // so the first reply isn't queued behind two serial round trips.
+  const [workspaceStatus, pageAutomations] = await Promise.all([
+    repository.getWorkspaceStatus(mapping.workspaceId),
+    repository.listAutomationsForFacebookPage(mapping.workspaceId, event.pageId),
+  ]);
+  if (workspaceStatus !== "ACTIVE") {
     return { matched: 0, sent: 0, skipped: 0, failed: 0 };
   }
 
   // Persist a compact activity-inbox summary. Same idempotency contract as
-  // the IG path: never throw, never block event processing.
-  try {
-    await repository.recordWebhookEvent(mapping.workspaceId, {
-      providerEventId: event.id,
-      eventType: "facebook.comment.created",
-      receivedAt: new Date().toISOString(),
-      payload: {
-        pageId: event.pageId,
-        postId: event.postId,
-        commentId: event.commentId,
-        ...(event.senderId ? { senderId: event.senderId } : {}),
-        ...(event.senderName ? { senderName: event.senderName } : {}),
-        text: (event.text ?? "").slice(0, 500),
-      },
-    });
-  } catch (error) {
+  // the IG path: never throw, never block event processing - the reply does
+  // not wait on this write.
+  void repository.recordWebhookEvent(mapping.workspaceId, {
+    providerEventId: event.id,
+    eventType: "facebook.comment.created",
+    receivedAt: new Date().toISOString(),
+    payload: {
+      pageId: event.pageId,
+      postId: event.postId,
+      commentId: event.commentId,
+      ...(event.senderId ? { senderId: event.senderId } : {}),
+      ...(event.senderName ? { senderName: event.senderName } : {}),
+      text: (event.text ?? "").slice(0, 500),
+    },
+  }).catch((error) => {
     logger.warn("Failed to persist Facebook webhook activity", {
       eventId: event.id,
       error: error instanceof Error ? error.message : String(error),
     });
-  }
+  });
 
-  const automations = (await repository.listAutomationsForFacebookPage(mapping.workspaceId, event.pageId))
+  const automations = pageAutomations
     .filter(
       (automation) =>
         automation.status === "ACTIVE"
