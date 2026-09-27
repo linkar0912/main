@@ -2,6 +2,7 @@ import { Queue, type Job, type JobType } from "bullmq";
 import Redis from "ioredis";
 import { createHash } from "node:crypto";
 import { getServerEnv } from "./env";
+import type { ManualReplyEcho } from "./automation/manual-reply";
 import type { NormalizedEvent } from "./automation/types";
 import type { FacebookNormalizedEvent } from "./facebook/types";
 
@@ -299,6 +300,38 @@ export async function enqueueWebhookEvents(events: NormalizedEvent[]): Promise<n
     }),
   );
   return events.length;
+}
+
+/**
+ * Echoes are judged a few seconds after they arrive: Meta often echoes an
+ * automated send before its message id is recorded, and the delay lets that
+ * record land so the send isn't mistaken for a teammate's reply.
+ */
+export const MANUAL_REPLY_ECHO_DELAY_MS = 8_000;
+
+export function createManualReplyEchoJobOptions(echo: ManualReplyEcho) {
+  return {
+    data: echo,
+    options: {
+      jobId: `echo_${createHash("sha256").update(`${echo.accountId}\0${echo.messageId}`).digest("base64url")}`,
+      priority: QUEUE_PRIORITY.INTERACTIVE,
+      delay: MANUAL_REPLY_ECHO_DELAY_MS,
+      attempts: 4,
+      backoff: { type: "fixed" as const, delay: 15_000 },
+      removeOnComplete: 1_000,
+      removeOnFail: 1_000,
+    },
+  };
+}
+
+export async function enqueueManualReplyEchoes(echoes: ManualReplyEcho[]): Promise<number> {
+  const queue = getWebhookQueue();
+  if (!queue) return 0;
+  await Promise.all(echoes.map((echo) => {
+    const job = createManualReplyEchoJobOptions(echo);
+    return queue.add("instagram-echo", job.data, job.options);
+  }));
+  return echoes.length;
 }
 
 /**

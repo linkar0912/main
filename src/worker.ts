@@ -7,12 +7,13 @@ import { FacebookClient } from "./lib/facebook/client";
 import { getRepository } from "./lib/repository-provider";
 import { BULK_QUEUE_NAME, WEBHOOK_QUEUE_NAME } from "./lib/queue";
 import { processNormalizedEvent } from "./lib/automation/runner";
+import { processManualReplyEcho, type ManualReplyEcho } from "./lib/automation/manual-reply";
 import { processNormalizedFacebookEvent } from "./lib/facebook/runner";
 import type { QueuedFacebookEvent, QueuedInstagramEvent } from "./lib/queue";
 import { refreshInstagramToken } from "./lib/meta/oauth";
 import { refreshExpiringInstagramTokens } from "./lib/meta/token-refresh";
 import { sweepStaleParticipants } from "./lib/automation/participant-retention";
-import { processDueSequences } from "./lib/automation/sequence-runner";
+import { processDueSequences, SEQUENCE_BATCH_SIZE } from "./lib/automation/sequence-runner";
 import { processBroadcastSend, type BroadcastRunnerOptions } from "./lib/automation/broadcast-runner";
 import type { BroadcastSendJob, LeadDeliveryJob } from "./lib/queue";
 import { reconcileExpiredDeliveryClaims } from "./lib/automation/delivery-reconciliation";
@@ -24,9 +25,13 @@ import { reconcileUsageReservations } from "./lib/admin/system/usage-reconciliat
 import { processAdminDeletion } from "./lib/admin/deletion/processor";
 import { createDeliveryTiming } from "./lib/automation/delivery-timing";
 import { createSystemMonitor } from "./lib/admin/system/monitor";
+import { reportDatabaseLatency } from "./lib/database-latency";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 const SYSTEM_MONITOR_INTERVAL_MS = 5 * 60 * 1_000;
+const SEQUENCE_SWEEP_INTERVAL_MS = 60 * 1_000;
+/** Caps one tick at 20 batches (500 steps) so a huge backlog can't pin the worker. */
+const SEQUENCE_MAX_ROUNDS_PER_TICK = 20;
 
 async function processTimedRealtimeJob<T>(
   jobId: string | undefined,
@@ -130,6 +135,19 @@ if (!env.redisUrl) {
           }));
       }
 
+      if (job.name === "instagram-echo") {
+        const outcome = await processManualReplyEcho(job.data as ManualReplyEcho, getRepository());
+        // An automated send is still settling; look again shortly. On the last
+        // attempt leave automations running - never pause on a guess.
+        if (outcome === "undecided" && job.attemptsMade + 1 < Number(job.opts.attempts ?? 1)) {
+          throw new Error("manual_reply_undecided");
+        }
+        if (outcome === "paused") {
+          logger.info("Automations paused after a manual reply", { jobId: job.id ?? "unknown" });
+        }
+        return { outcome };
+      }
+
       if (job.name === "instagram-event") {
         const { linkarIngestedAt, ...event } = job.data as QueuedInstagramEvent;
         const client = env.metaAppId ? new MetaClient({
@@ -173,6 +191,13 @@ if (!env.redisUrl) {
   healthServer.listen(workerHealthPort(), () =>
     logger.info("Worker health server listening", { port: workerHealthPort() }));
   healthServer.unref();
+
+  // One startup reading of the database round trip. A cross-region database
+  // adds this latency to every query on the comment → DM path, so surface it.
+  if (env.databaseUrl) {
+    void import("./lib/prisma").then(({ prisma }) =>
+      reportDatabaseLatency("worker", () => prisma.$queryRaw`SELECT 1`));
+  }
 
   for (const consumer of workers) {
     consumer.on("completed", (job) => {
@@ -266,7 +291,9 @@ if (!env.redisUrl) {
     logger.error("Production system monitor failed", { error: error instanceof Error ? error.message : String(error) })), SYSTEM_MONITOR_INTERVAL_MS).unref();
 
   // Sequence scheduler: delivers drip steps that are due. Runs shortly after boot and
-  // then every 15 minutes - granular enough for hour-level step delays.
+  // then every minute, so a step lands within a minute of its delay instead of up
+  // to 15 minutes late. A full batch means more steps are waiting, so the sweep
+  // keeps draining (bounded per tick) rather than leaving a backlog for the next.
   let sequenceSweepRunning = false;
   const runSequenceSweep = async () => {
     if (sequenceSweepRunning) return;
@@ -277,17 +304,27 @@ if (!env.redisUrl) {
         apiVersion: env.metaApiVersion,
         requestTimeoutMs: env.providerRequestTimeoutMs,
       }) : undefined;
-      const result = await processDueSequences(repository, {
-        client,
-        tokenEncryptionKey: env.metaTokenEncryptionKey ?? undefined,
-      });
-      if (result.processed > 0) {
-        logger.info("Sequence sweep", { ...result });
+      const totals = { processed: 0, sent: 0, failed: 0, cancelled: 0 };
+      for (let round = 0; round < SEQUENCE_MAX_ROUNDS_PER_TICK; round += 1) {
+        const result = await processDueSequences(repository, {
+          client,
+          tokenEncryptionKey: env.metaTokenEncryptionKey ?? undefined,
+        });
+        totals.processed += result.processed;
+        totals.sent += result.sent;
+        totals.failed += result.failed;
+        totals.cancelled += result.cancelled;
+        // Stop when the queue is drained, or when a round touched nothing
+        // (every row was skipped), so a tick can never spin on the same rows.
+        if (result.fetched < SEQUENCE_BATCH_SIZE || result.processed === 0) break;
+      }
+      if (totals.processed > 0) {
+        logger.info("Sequence sweep", totals);
       }
     } finally {
       sequenceSweepRunning = false;
     }
   };
   setTimeout(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error instanceof Error ? error.message : String(error) })), 45_000).unref();
-  setInterval(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error instanceof Error ? error.message : String(error) })), 15 * 60 * 1_000).unref();
+  setInterval(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error instanceof Error ? error.message : String(error) })), SEQUENCE_SWEEP_INTERVAL_MS).unref();
 }

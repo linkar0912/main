@@ -144,9 +144,9 @@ function triggerParts(automation: AutomationRecord): { source: string; keywords:
   if (trigger.type === "optin") return { source: "Opt-in tap", keywords: [] };
   if (trigger.type === "first_contact") return { source: "First-time contact", keywords: [] };
   if (trigger.type === "story_mention") return { source: "Story mention", keywords: [] };
-  const noun = trigger.type === "comment" ? "comment" : "DM";
+  const noun = trigger.type === "comment" ? "comment" : trigger.type === "story_reply" ? "Story reply" : "DM";
   if (trigger.match === "any" || trigger.keywords.length === 0) return { source: `Any ${noun}`, keywords: [] };
-  return { source: noun === "comment" ? "Comment has" : "DM has", keywords: trigger.keywords };
+  return { source: `${noun === "comment" ? "Comment" : noun} has`, keywords: trigger.keywords };
 }
 
 function TriggerRule({ automation }: { automation: AutomationRecord }) {

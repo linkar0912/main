@@ -35,6 +35,7 @@ import {
   type DeliveryExecutionResult,
 } from "./outbound-delivery";
 import { processLeadDelivery } from "./lead-delivery";
+import { contactAutomationsPaused } from "./manual-reply";
 import type { DeliveryTimingObserver } from "./delivery-timing";
 
 export type AutomationRunnerClient = CampaignRunnerClient;
@@ -1003,13 +1004,26 @@ export async function processNormalizedEvent(
         || Boolean(automation.definition.followUps?.length)),
   );
   if (event.recipientId && CONTACT_TOUCH_EVENT_TYPES.includes(event.type)) {
+    // `contact` was read in the parallel round above, so the touch is a single
+    // write instead of a read-then-write in front of every send.
     const touch = await repository.touchContact(
       mapping.workspaceId,
       event.accountId,
       event.recipientId,
       new Date(event.timestamp).toISOString(),
+      contact,
     );
     if (needsContactTracking) evaluationContext = { isNewContact: touch.created };
+  }
+  // A reply to a Story belongs to a matching story-reply flow when one exists;
+  // generic DM flows then stay quiet so the person gets a single answer.
+  if (event.storyId) {
+    const storyContext = evaluationContext;
+    const storyReplyClaimed = automations.some((automation) =>
+      automation.definition.version === 1
+      && automation.definition.trigger.type === "story_reply"
+      && evaluateFlow(automation.definition, event, storyContext).status !== "skipped");
+    evaluationContext = { ...evaluationContext, storyReplyClaimed };
   }
 
   if (event.recipientId) {
@@ -1017,6 +1031,9 @@ export async function processNormalizedEvent(
     // Human handoff: if any active participant for this sender is paused, the
     // runner stays silent. The teammate can resume from the contact modal.
     if (isPaused) return { matched: 0, sent: 0, skipped: 1, failed: 0 };
+    // A teammate replied to this person by hand (Instagram app or Linkar
+    // inbox): automations stay out of the conversation until the pause ends.
+    if (contactAutomationsPaused(contact, event.timestamp)) return { matched: 0, sent: 0, skipped: 1, failed: 0 };
   }
 
   // Email-capture conversations take precedence over everything else: a DM carrying

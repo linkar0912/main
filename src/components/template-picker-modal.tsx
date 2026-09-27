@@ -13,6 +13,7 @@ import {
   MessageCircle,
   MessageSquare,
   Plus,
+  Reply,
   Search,
   UserPlus,
   X,
@@ -25,13 +26,14 @@ const CATEGORY_ICONS: Record<TemplateTriggerType, typeof MessageCircle> = {
   comment: MessageSquare,
   message: MessageCircle,
   story_mention: AtSign,
+  story_reply: Reply,
   first_contact: UserPlus,
   referral: Link2,
   optin: CheckCircle2,
 };
 
 // Order categories the way a person thinks about them, not alphabetically.
-const CATEGORY_ORDER: TemplateTriggerType[] = ["comment", "message", "story_mention", "first_contact", "referral", "optin"];
+const CATEGORY_ORDER: TemplateTriggerType[] = ["comment", "message", "story_reply", "story_mention", "first_contact", "referral", "optin"];
 
 type PickerItem = {
   id: string;

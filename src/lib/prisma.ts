@@ -293,6 +293,8 @@ function mapContact(record: {
   notes: string | null;
   sourceAutomationId: string | null;
   suppressedAt: Date | null;
+  automationsPausedUntil?: Date | null;
+  automationsPausedReason?: string | null;
   inboxStatus: string;
   inboxFavorite: boolean;
   inboxReminderAt: Date | null;
@@ -324,6 +326,8 @@ function mapContact(record: {
     fields: (record as unknown as { fields?: Record<string, string> | null }).fields ?? undefined,
     awaitingFields: (record as unknown as { awaitingFields?: { id: string; question: string }[] | null }).awaitingFields ?? undefined,
     suppressedAt: record.suppressedAt?.toISOString(),
+    automationsPausedUntil: record.automationsPausedUntil?.toISOString(),
+    automationsPausedReason: record.automationsPausedReason ?? undefined,
     lastSeenAt: record.lastSeenAt.toISOString(),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -1018,6 +1022,70 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async hasPausedParticipant(workspaceId, instagramAccountId, igScopedUserId) {
       return Boolean(await client.automationParticipant.findFirst({
         where: { workspaceId, instagramAccountId, igScopedUserId, pausedAt: { not: null } },
+        select: { id: true },
+      }));
+    },
+
+    async pauseContactAutomations(workspaceId, instagramAccountId, igScopedUserId, untilIso, reason) {
+      const until = new Date(untilIso);
+      const result = await client.automationContact.updateMany({
+        where: {
+          workspaceId,
+          instagramAccountId,
+          igScopedUserId,
+          OR: [{ automationsPausedUntil: null }, { automationsPausedUntil: { lt: until } }],
+        },
+        data: { automationsPausedUntil: until, automationsPausedReason: reason },
+      });
+      if (result.count > 0) return true;
+      // Either no contact, or it's already paused for at least as long.
+      return Boolean(await client.automationContact.findUnique({
+        where: { workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId } },
+        select: { id: true },
+      }));
+    },
+
+    async resumeContactAutomations(workspaceId, contactId) {
+      const result = await client.automationContact.updateMany({
+        where: { workspaceId, id: contactId, automationsPausedUntil: { not: null } },
+        data: { automationsPausedUntil: null, automationsPausedReason: null },
+      });
+      return result.count > 0;
+    },
+
+    async hasAutomatedOutboundMessage(workspaceId, providerMessageId) {
+      return Boolean(await client.outboundDelivery.findFirst({
+        where: { providerMessageId, workspaceId, kind: { not: "MANUAL_INBOX" } },
+        select: { id: true },
+      }));
+    },
+
+    async listRecentAutomatedDeliveryPayloads(workspaceId, instagramAccountId, sinceIso, limit) {
+      const rows = await client.outboundDelivery.findMany({
+        where: { workspaceId, instagramAccountId, kind: { not: "MANUAL_INBOX" }, createdAt: { gte: new Date(sinceIso) } },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        select: { payload: true },
+      });
+      return rows.map((row) => (row.payload && typeof row.payload === "object" ? row.payload as Record<string, unknown> : {}));
+    },
+
+    async hasInFlightAutomatedDelivery(workspaceId, instagramAccountId, sinceIso) {
+      return Boolean(await client.outboundDelivery.findFirst({
+        where: {
+          state: "CLAIMED",
+          workspaceId,
+          instagramAccountId,
+          kind: { not: "MANUAL_INBOX" },
+          createdAt: { gte: new Date(sinceIso) },
+        },
+        select: { id: true },
+      }));
+    },
+
+    async hasExecutionWithProviderMessage(workspaceId, providerMessageId, sinceIso) {
+      return Boolean(await client.automationExecution.findFirst({
+        where: { workspaceId, createdAt: { gte: new Date(sinceIso) }, providerMessageId },
         select: { id: true },
       }));
     },
@@ -2022,12 +2090,17 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return result.count;
     },
 
-    async touchContact(workspaceId, instagramAccountId, igScopedUserId, seenAt) {
-      const existing = await client.automationContact.findUnique({
-        where: {
-          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
-        },
-      });
+    async touchContact(workspaceId, instagramAccountId, igScopedUserId, seenAt, known) {
+      const existing = known === undefined
+        ? await client.automationContact.findUnique({
+          where: {
+            workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
+          },
+          select: { id: true, createdAt: true, lastSeenAt: true },
+        })
+        : known
+          ? { id: known.id, createdAt: new Date(known.createdAt), lastSeenAt: new Date(known.lastSeenAt) }
+          : null;
       if (existing) {
         const updated = await client.automationContact.update({
           where: { id: existing.id },
@@ -2881,31 +2954,34 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async listDueSequenceSends(nowIso, limit): Promise<DueSequenceSend[]> {
+      // Filter on the sequence, workspace and contact in the query itself.
+      // Filtering after `take` let enrollments of paused sequences, suspended
+      // workspaces or suppressed contacts - which stay due forever - fill the
+      // whole batch and stall every other sequence,
+      // and loading each row's sequence and contact separately cost two serial
+      // queries per enrollment.
       const enrollments = await client.sequenceEnrollment.findMany({
-        where: { state: "ACTIVE", nextSendAt: { lte: new Date(nowIso) } },
+        where: {
+          state: "ACTIVE",
+          nextSendAt: { lte: new Date(nowIso) },
+          sequence: { status: "ACTIVE", workspace: { status: "ACTIVE" } },
+          contact: { suppressedAt: null },
+        },
         orderBy: { nextSendAt: "asc" },
         take: limit,
+        include: { sequence: true, contact: true },
       });
-      const due: DueSequenceSend[] = [];
-      for (const enrollment of enrollments) {
-        const sequenceRow = await client.automationSequence.findUnique({ where: { id: enrollment.sequenceId } });
-        const contactRow = await client.automationContact.findUnique({ where: { id: enrollment.contactId } });
-        if (!sequenceRow || !contactRow || contactRow.suppressedAt) continue;
-        if (sequenceRow.workspaceId !== enrollment.workspaceId) continue;
-        if (sequenceRow.status !== "ACTIVE") continue;
-        due.push({
-          enrollment: {
-            ...enrollment,
-            state: enrollment.state as SequenceEnrollmentRecord["state"],
-            nextSendAt: enrollment.nextSendAt?.toISOString(),
-            enrolledAt: enrollment.enrolledAt.toISOString(),
-            updatedAt: enrollment.updatedAt.toISOString(),
-          },
-          sequence: mapSequenceRow(sequenceRow),
-          contact: mapContact(contactRow),
-        });
-      }
-      return due;
+      return enrollments.map(({ sequence, contact, ...enrollment }) => ({
+        enrollment: {
+          ...enrollment,
+          state: enrollment.state as SequenceEnrollmentRecord["state"],
+          nextSendAt: enrollment.nextSendAt?.toISOString(),
+          enrolledAt: enrollment.enrolledAt.toISOString(),
+          updatedAt: enrollment.updatedAt.toISOString(),
+        },
+        sequence: mapSequenceRow(sequence),
+        contact: mapContact(contact),
+      }));
     },
 
     async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso) {

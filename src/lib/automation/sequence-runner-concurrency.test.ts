@@ -77,6 +77,19 @@ describe("sequence delivery claims", () => {
     expect(due).toHaveLength(0);
   });
 
+  it("backs a retryable failure off instead of leaving it at the head of the due queue", async () => {
+    const { repository, client, options } = await sequenceHarness();
+    vi.mocked(client.sendDirectMessage).mockRejectedValue(new MetaApiError("Meta 503", 503, true));
+
+    const result = await processDueSequences(repository, options);
+
+    expect(result).toMatchObject({ fetched: 1, failed: 1 });
+    expect(await repository.listDueSequenceSends(new Date().toISOString(), 10)).toHaveLength(0);
+    const later = await repository.listDueSequenceSends(new Date(Date.now() + 5 * 60_000).toISOString(), 10);
+    expect(later).toHaveLength(1);
+    expect(later[0]!.enrollment.currentStepIndex).toBe(0);
+  });
+
   it("schedules the next step from the due step's nextSendAt, not wall-clock now", async () => {
     const repository = createMemoryRepository();
     await repository.upsertConnection({

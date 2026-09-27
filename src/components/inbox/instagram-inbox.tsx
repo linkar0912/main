@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, Inbox, Info, RotateCcw, Star, UserRound } from "lucide-react";
+import { Fragment, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, Inbox, Info, PauseCircle, RotateCcw, Star, UserRound } from "lucide-react";
 import { ContactDetailModal } from "../contact-detail-modal";
 import { ActivityContentSkeleton } from "../skeleton";
 import { SocialAvatar } from "../social-avatar";
@@ -66,6 +66,18 @@ function formatReminder(value: string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function isAutomationPaused(contact: InboxContact): boolean {
+  return Boolean(contact.automationsPausedUntil && Date.parse(contact.automationsPausedUntil) > Date.now());
+}
+
+function formatPauseEnd(value: string): string {
+  const date = new Date(value);
+  const sameDay = date.toDateString() === new Date().toDateString();
+  return sameDay
+    ? date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : date.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+}
+
 function inboxUrl(filters: InboxFiltersValue, cursor?: string): string {
   const params = new URLSearchParams();
   if (cursor) params.set("cursor", cursor);
@@ -89,6 +101,34 @@ function mergeContacts(current: InboxContact[], incoming: InboxContact[]): Inbox
 function mergeMessages(older: InboxMessage[], current: InboxMessage[]): InboxMessage[] {
   const seen = new Set(older.map((message) => message.id));
   return [...older, ...current.filter((message) => !seen.has(message.id))];
+}
+
+/**
+ * Folds the newest server page of a conversation into what's on screen.
+ * Server rows win for anything they both hold (status updates), messages
+ * from older pages stay, and an optimistic bubble still in flight is kept
+ * while its server copy is hidden so the send never shows twice.
+ */
+export function mergeLiveMessages(current: InboxMessage[], latest: InboxMessage[]): InboxMessage[] {
+  const local = current.filter((message) => message.id.startsWith("local_"));
+  const inFlightTexts = new Set(local.map((message) => message.text));
+  const byId = new Map<string, InboxMessage>();
+  for (const message of current) {
+    if (!message.id.startsWith("local_")) byId.set(message.id, message);
+  }
+  for (const message of latest) {
+    if (message.direction === "outbound" && inFlightTexts.has(message.text) && !byId.has(message.id)) continue;
+    const existing = byId.get(message.id);
+    byId.set(message.id, existing?.clientKey ? { ...message, clientKey: existing.clientKey } : message);
+  }
+  const settled = [...byId.values()].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  return [...settled, ...local];
+}
+
+/** Keeps pages already scrolled into view while the first page refreshes in place. */
+export function mergeLiveContacts(current: InboxContact[], firstPage: InboxContact[]): InboxContact[] {
+  const fresh = new Set(firstPage.map((contact) => contact.id));
+  return [...firstPage, ...current.filter((contact) => !fresh.has(contact.id))];
 }
 
 function optimisticContact(contact: InboxContact, operation: InboxOperation): InboxContact {
@@ -121,6 +161,8 @@ type InboxListSnapshot = {
 // revisiting the inbox paints the last roster instantly while a background
 // refresh runs, instead of skeleton-flashing on every navigation.
 const INBOX_FRESH_FOR_MS = 120_000;
+/** How often an open inbox checks for new messages while the tab is visible. */
+export const INBOX_LIVE_REFRESH_MS = 8_000;
 const INBOX_CACHE_LIMIT = 20;
 const inboxFirstPageCache = new Map<string, InboxListSnapshot>();
 
@@ -291,6 +333,58 @@ export function InstagramInbox() {
     conversationAbortRef.current?.abort();
   }, []);
 
+  // Live updates: new DMs and replies show up without a reload. Polls quietly
+  // while the tab is visible (and immediately when it becomes visible again),
+  // never while a page of results or a conversation is still loading.
+  const liveBusy = loadingMore || filterLoading || conversationLoading || olderLoading;
+  const liveGuardRef = useRef({ filtersKey: inboxCacheKey(DEFAULT_FILTERS), busy: false, inFlight: false });
+  useEffect(() => {
+    liveGuardRef.current.filtersKey = inboxCacheKey(filters);
+    liveGuardRef.current.busy = liveBusy;
+  }, [filters, liveBusy]);
+  const refreshLive = useEffectEvent(async () => {
+    const guard = liveGuardRef.current;
+    if (guard.inFlight || liveBusy || document.visibilityState !== "visible") return;
+    guard.inFlight = true;
+    const requestFilters = filters;
+    const requestKey = inboxCacheKey(filters);
+    const openId = selectedId;
+    const stillCurrent = () => guard.filtersKey === requestKey && !guard.busy;
+    try {
+      const listResponse = await fetch(inboxUrl(requestFilters));
+      const listPayload = (await listResponse.json().catch(() => ({}))) as InboxPayload;
+      if (listResponse.ok && listPayload.data && stillCurrent()) {
+        const page = listPayload.data;
+        setContacts((existing) => mergeLiveContacts(existing, page.contacts));
+        if (page.members) setMembers(page.members);
+        writeInboxCache(requestFilters, { contacts: page.contacts, members: page.members ?? [], nextCursor: page.nextCursor });
+      }
+      if (openId && activeContactIdRef.current === openId) {
+        const threadResponse = await fetch(`/api/inbox/${openId}`);
+        const threadPayload = (await threadResponse.json().catch(() => ({}))) as ConversationPayload;
+        if (threadResponse.ok && threadPayload.data && activeContactIdRef.current === openId && !guard.busy) {
+          const latest = threadPayload.data.messages;
+          setMessages((existing) => mergeLiveMessages(existing, latest));
+          const openContact = listPayload.data?.contacts.find((contact) => contact.id === openId);
+          if (openContact?.unread) void patchContact(openId, { action: "mark_read" });
+        }
+      }
+    } catch {
+      // Live refresh is opportunistic; the next tick (or a manual action) retries.
+    } finally {
+      guard.inFlight = false;
+    }
+  });
+  useEffect(() => {
+    const timer = window.setInterval(() => void refreshLive(), INBOX_LIVE_REFRESH_MS);
+    const onVisible = () => { if (document.visibilityState === "visible") void refreshLive(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
   const selected = contacts.find((contact) => contact.id === selectedId) ?? null;
   const labels = useMemo(() => Array.from(new Set(contacts.flatMap((contact) => contact.tags))).sort(), [contacts]);
   const memberNames = useMemo(() => new Map(members.map((member) => [member.userId, member.email.split("@")[0]])), [members]);
@@ -317,6 +411,22 @@ export function InstagramInbox() {
       setContacts(previous);
       rollbackCache?.();
       setThreadError(caught instanceof Error ? caught.message : "Could not update conversation");
+    }
+  }
+
+  const [resumingId, setResumingId] = useState<string | null>(null);
+
+  async function resumeAutomations(contactId: string) {
+    setResumingId(contactId);
+    try {
+      const response = await fetch(`/api/contacts/${contactId}/handoff`, { method: "DELETE" });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Could not resume automations");
+      updateContact(contactId, (contact) => ({ ...contact, automationsPausedUntil: undefined }));
+    } catch (caught) {
+      setThreadError(caught instanceof Error ? caught.message : "Could not resume automations");
+    } finally {
+      setResumingId(null);
     }
   }
 
@@ -401,13 +511,20 @@ export function InstagramInbox() {
         headers: { "content-type": "application/json", "idempotency-key": pending.clientKey! },
         body: JSON.stringify({ text: pending.text }),
       });
-      const payload = (await response.json().catch(() => ({}))) as { data?: { message: InboxMessage }; error?: string };
+      const payload = (await response.json().catch(() => ({}))) as { data?: { message: InboxMessage; automationsPausedUntil?: string }; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not send message");
       const sent = payload.data.message;
       if (activeContactIdRef.current === contactId) {
         setMessages((current) => current.map((message) => message.id === pending.id ? { ...sent, clientKey: pending.clientKey } : message));
       }
-      updateContact(contactId, (contact) => ({ ...contact, preview: pending.text, lastMessageAt: sent.at, inboxStatus: "OPEN" }));
+      const pausedUntil = payload.data.automationsPausedUntil;
+      updateContact(contactId, (contact) => ({
+        ...contact,
+        preview: pending.text,
+        lastMessageAt: sent.at,
+        inboxStatus: "OPEN",
+        ...(pausedUntil ? { automationsPausedUntil: pausedUntil } : {}),
+      }));
     } catch (caught) {
       const reason = caught instanceof Error ? caught.message : "Could not send message";
       if (activeContactIdRef.current === contactId) {
@@ -481,11 +598,12 @@ export function InstagramInbox() {
                       <time dateTime={contact.lastMessageAt}>{formatListTime(contact.lastMessageAt)}</time>
                     </span>
                     <span className="ibx-row-preview">{contact.preview}</span>
-                    {(contact.inboxStatus === "CLOSED" || assignee || contact.reminderAt || !contact.canMessage) && <span className="ibx-row-tags">
+                    {(contact.inboxStatus === "CLOSED" || assignee || contact.reminderAt || !contact.canMessage || isAutomationPaused(contact)) && <span className="ibx-row-tags">
                       {contact.inboxStatus === "CLOSED" && <span className="ibx-tag">Closed</span>}
                       {contact.reminderAt && <span className={`ibx-tag ${reminderDue ? "is-due" : ""}`}><BellRing size={11} aria-hidden="true" />{formatReminder(contact.reminderAt)}</span>}
                       {assignee && <span className="ibx-tag"><UserRound size={11} aria-hidden="true" />{assignee}</span>}
                       {!contact.canMessage && contact.inboxStatus !== "CLOSED" && <span className="ibx-tag is-muted">Window closed</span>}
+                      {isAutomationPaused(contact) && <span className="ibx-tag"><PauseCircle size={11} aria-hidden="true" />Bot paused</span>}
                     </span>}
                   </span>
                 </button>
@@ -532,6 +650,12 @@ export function InstagramInbox() {
           </Fragment>)}
           <div ref={messageEndRef} />
         </div>
+
+        {isAutomationPaused(selected) && <p className="ibx-banner is-paused" role="status">
+          <PauseCircle size={15} aria-hidden="true" />
+          <span>Automations are paused for {displayName(selected)} until {formatPauseEnd(selected.automationsPausedUntil!)} because someone on your team replied.</span>
+          <button type="button" disabled={resumingId === selected.id} onClick={() => void resumeAutomations(selected.id)}>{resumingId === selected.id ? "Resuming…" : "Resume automations"}</button>
+        </p>}
 
         {threadError && <p className="ibx-banner is-error ibx-thread-error" role="alert"><AlertCircle size={15} aria-hidden="true" />{threadError}</p>}
 

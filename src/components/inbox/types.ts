@@ -12,6 +12,8 @@ export type InboxContact = {
   favorite: boolean;
   reminderAt?: string;
   assigneeUserId?: string;
+  /** Automations are silent for this person until then (a teammate replied by hand). */
+  automationsPausedUntil?: string;
 };
 export type InboxMessage = {
   id: string;

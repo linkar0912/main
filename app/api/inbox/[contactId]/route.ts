@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { MANUAL_REPLY_PAUSE_MS, MANUAL_REPLY_REASON } from "@/src/lib/automation/manual-reply";
 import { executeOutboundDelivery } from "@/src/lib/automation/outbound-delivery";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
@@ -147,5 +148,11 @@ export async function POST(request: Request, context: Context) {
   if (result.status === "BUSY") return NextResponse.json({ error: "This message is already sending" }, { status: 409 });
   if (result.status === "FAILED" || result.status === "UNKNOWN") return NextResponse.json({ error: result.error }, { status: 502 });
   const sentAt = new Date().toISOString();
-  return NextResponse.json({ data: { message: { id: result.providerMessageId ?? deliveryKey, direction: "outbound", text, at: sentAt, status: "sent" } } }, { status: 201 });
+  // A teammate is talking to this person now; keep automations out of the
+  // conversation until the pause ends or someone resumes them.
+  const automationsPausedUntil = new Date(Date.parse(sentAt) + MANUAL_REPLY_PAUSE_MS).toISOString();
+  await repository.pauseContactAutomations(
+    session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, automationsPausedUntil, MANUAL_REPLY_REASON,
+  ).catch(() => false);
+  return NextResponse.json({ data: { message: { id: result.providerMessageId ?? deliveryKey, direction: "outbound", text, at: sentAt, status: "sent" }, automationsPausedUntil } }, { status: 201 });
 }

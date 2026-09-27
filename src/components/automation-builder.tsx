@@ -232,12 +232,12 @@ function AutomationBuilderV1({
   );
   const [triggerType, setTriggerType] = useState<ClassicTriggerType>(initialDefinition.trigger.type);
   const [triggerMatch, setTriggerMatch] = useState<"keyword" | "any">(
-    initialDefinition.trigger.type === "comment" || initialDefinition.trigger.type === "message"
+    initialDefinition.trigger.type === "comment" || initialDefinition.trigger.type === "message" || initialDefinition.trigger.type === "story_reply"
       ? initialDefinition.trigger.match
       : "keyword",
   );
   const [keywords, setKeywords] = useState(
-    initialDefinition.trigger.type === "comment" || initialDefinition.trigger.type === "message"
+    initialDefinition.trigger.type === "comment" || initialDefinition.trigger.type === "message" || initialDefinition.trigger.type === "story_reply"
       ? commaSeparated(initialDefinition.trigger.keywords)
       : "",
   );
@@ -341,7 +341,7 @@ function AutomationBuilderV1({
     };
   }, [triggerType]);
 
-  const usesTextTrigger = triggerType === "comment" || triggerType === "message";
+  const usesTextTrigger = triggerType === "comment" || triggerType === "message" || triggerType === "story_reply";
   const isFacebook = channel === "FACEBOOK";
   const allowedActionTypes = classicActionOptions(triggerType, isFacebook);
   const hasEmailStep = triggerType !== "comment";
@@ -500,7 +500,7 @@ function AutomationBuilderV1({
       setActions((current) => (current.every((action) => action.type === "private_reply") ? current : [newClassicAction("private_reply")]));
       setTriggerMatch((current) => current);
     }
-    if (value === "message" || value === "referral" || value === "optin" || value === "first_contact" || value === "story_mention") {
+    if (value === "message" || value === "referral" || value === "optin" || value === "first_contact" || value === "story_mention" || value === "story_reply") {
       setActions((current) => current.filter((action) => action.type !== "private_reply").length > 0
         ? current.filter((action) => action.type !== "private_reply")
         : [newClassicAction("send_text")]);
@@ -526,9 +526,9 @@ function AutomationBuilderV1({
               : {}),
             ...(replyOncePerUser ? { replyOncePerUser: true } : {}),
           }
-        : triggerType === "message"
+        : triggerType === "message" || triggerType === "story_reply"
           ? {
-              type: "message",
+              type: triggerType,
               match: triggerMatch,
               keywords: triggerMatch === "keyword" ? parseKeywords(keywords) : [],
             }
@@ -847,6 +847,7 @@ function AutomationBuilderV1({
                     <option value="comment">{isFacebook ? "Facebook Page comment" : "Instagram comment"}</option>
                     {!isFacebook && <option value="message">Instagram DM</option>}
                     {!isFacebook && <option value="first_contact">First-time contact</option>}
+                    {!isFacebook && <option value="story_reply">Story reply</option>}
                     {!isFacebook && <option value="story_mention">Story mention</option>}
                     {!isFacebook && <option value="referral">Referral link tap</option>}
                     {!isFacebook && <option value="optin">Permission button tap</option>}
@@ -864,7 +865,7 @@ function AutomationBuilderV1({
                       onChange={(event) => setTriggerMatch(event.target.value as "keyword" | "any")}
                     >
                       <option value="keyword">A keyword</option>
-                      <option value="any">Any {triggerType === "comment" ? "comment" : "message"}</option>
+                      <option value="any">Any {triggerType === "comment" ? "comment" : triggerType === "story_reply" ? "Story reply" : "message"}</option>
                     </select>
                     <ChevronDown size={16} />
                   </span>
@@ -1469,7 +1470,7 @@ function AutomationBuilderV1({
             </div>
             <ul className="review-summary" data-testid="review-summary">
               <li>
-                Starts when there is {triggerType === "comment" ? "a comment" : triggerType === "message" ? "a message" : triggerType === "referral" ? "a referral-link tap" : triggerType === "optin" ? "a permission-button tap" : triggerType === "first_contact" ? "a first message" : "a Story mention"}
+                Starts when there is {triggerType === "comment" ? "a comment" : triggerType === "message" ? "a message" : triggerType === "referral" ? "a referral-link tap" : triggerType === "optin" ? "a permission-button tap" : triggerType === "first_contact" ? "a first message" : triggerType === "story_reply" ? "a reply to your Story" : "a Story mention"}
                 {usesTextTrigger ? (triggerMatch === "keyword" ? ` containing “${parseKeywords(keywords).join("”, “") || "add a keyword"}”` : " (any text)") : ""}
               </li>
               <li>{actions.length} message{actions.length === 1 ? "" : "s"} ready to send</li>

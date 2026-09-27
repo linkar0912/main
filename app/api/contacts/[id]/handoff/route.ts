@@ -83,11 +83,15 @@ export async function DELETE(request: Request, context: RouteContext) {
   const repository = getRepository();
   const contact = await repository.getContactById(session.workspaceId, id);
   if (!contact) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
-  const resumedCount = await repository.resumeParticipantsBySender(
-    session.workspaceId,
-    contact.instagramAccountId,
-    contact.igScopedUserId,
-  );
-  logger.info("Contact handed back to automations", { workspaceId: session.workspaceId, contactId: id, resumedCount });
-  return NextResponse.json({ data: { resumedCount } });
+  const [resumedCount, contactResumed] = await Promise.all([
+    repository.resumeParticipantsBySender(
+      session.workspaceId,
+      contact.instagramAccountId,
+      contact.igScopedUserId,
+    ),
+    // Also clears the pause set when a teammate replied by hand.
+    repository.resumeContactAutomations(session.workspaceId, id),
+  ]);
+  logger.info("Contact handed back to automations", { workspaceId: session.workspaceId, contactId: id, resumedCount, contactResumed });
+  return NextResponse.json({ data: { resumedCount, contactResumed } });
 }

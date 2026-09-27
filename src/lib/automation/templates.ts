@@ -125,6 +125,7 @@ function conciseDescription(template: LegacyInstagramTemplate): string {
     case "comment": return "When someone comments, Linkar sends the reply you saved.";
     case "message": return "When someone sends a matching message, Linkar replies with the information you saved.";
     case "story_mention": return "When someone mentions you in a Story, Linkar sends your saved reply.";
+    case "story_reply": return "When someone replies to your Story, Linkar sends the reply you saved.";
     case "first_contact": return "When someone messages you for the first time, Linkar sends a warm welcome.";
     case "referral": return "When someone arrives from an ad or referral link, Linkar welcomes them in a message.";
     case "optin": return "When someone agrees to receive a message, Linkar confirms what happens next.";
@@ -137,6 +138,8 @@ function naturalSteps(template: LegacyInstagramTemplate): string[] {
     ? trigger.match === "any" ? "Someone comments on your post or Reel." : "Someone comments using a word you choose."
     : trigger.type === "message"
       ? trigger.match === "any" ? "Someone sends you a new message." : "Someone messages you using a word you choose."
+      : trigger.type === "story_reply"
+        ? trigger.match === "any" ? "Someone replies to your Instagram Story." : "Someone replies to your Story using a word you choose."
       : trigger.type === "story_mention" ? "Someone mentions you in an Instagram Story."
         : trigger.type === "first_contact" ? "Someone starts their first conversation with you."
           : trigger.type === "referral" ? "Someone opens your chat from an ad or referral link."
@@ -261,6 +264,28 @@ const legacyInstagramTemplates: LegacyInstagramTemplate[] = [
             text: "Here’s a little thank-you gift for you.",
             buttonLabel: "Claim your gift 🎁",
             url: "https://example.com/gift",
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: "story-reply-link",
+    title: "Story Reply Link",
+    description: "Ask followers to reply to your Story with a keyword and send them the link automatically. Replies that don't match stay in your inbox for you.",
+    icon: "reply",
+    setup: {
+      name: "Story reply link",
+      definition: {
+        version: 1,
+        trigger: { type: "story_reply", match: "keyword", keywords: ["link"] },
+        conditions: [],
+        actions: [
+          {
+            type: "send_button",
+            text: "Thanks for replying to my Story! Here’s the link you asked for.",
+            buttonLabel: "Open the link",
+            url: "https://example.com",
           },
         ],
       },
@@ -654,6 +679,7 @@ const TRIGGER_LABELS: Record<TemplateTriggerType, string> = {
   comment: "Post & Reel comments",
   message: "Instagram messages",
   story_mention: "Story mentions",
+  story_reply: "Story replies",
   first_contact: "First message",
   referral: "People arriving from ads",
   optin: "Permission button taps",

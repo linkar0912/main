@@ -4,7 +4,8 @@ import { logger } from "@/src/lib/logger";
 import { isRetryableAutomationError, processNormalizedEvent } from "@/src/lib/automation/runner";
 import { MetaClient } from "@/src/lib/meta/client";
 import { normalizeWebhook } from "@/src/lib/meta/webhooks";
-import { enqueueWebhookEvents } from "@/src/lib/queue";
+import { enqueueManualReplyEchoes, enqueueWebhookEvents } from "@/src/lib/queue";
+import { normalizeManualReplyEchoes, processManualReplyEcho } from "@/src/lib/automation/manual-reply";
 import { getRepository } from "@/src/lib/repository-provider";
 import { verifyWebhookSignature } from "@/src/lib/security/signature";
 
@@ -47,7 +48,24 @@ export async function POST(request: Request) {
   }
 
   const events = normalizeWebhook(payload);
-  const enqueued = await enqueueWebhookEvents(events);
+  const echoes = normalizeManualReplyEchoes(payload);
+  const [enqueued, echoesEnqueued] = await Promise.all([
+    enqueueWebhookEvents(events),
+    enqueueManualReplyEchoes(echoes),
+  ]);
+  if (echoes.length > 0 && echoesEnqueued === 0) {
+    // No queue (demo/self-hosted): judge echoes inline. There is no delayed
+    // retry here, so an undecided echo simply leaves automations running.
+    const repository = getRepository();
+    for (const echo of echoes) {
+      await processManualReplyEcho(echo, repository).catch((error) => {
+        logger.warn("Inline manual-reply echo processing failed", {
+          accountId: echo.accountId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+  }
   let retryableFailure = false;
   if (events.length > 0 && enqueued === 0) {
     // No Redis queue configured (demo/self-hosted without REDIS_URL): fall back to

@@ -64,6 +64,12 @@ const referralTrigger = z.object({ type: z.literal("referral") });
 const optinTrigger = z.object({ type: z.literal("optin") });
 const firstContactTrigger = z.object({ type: z.literal("first_contact") });
 const storyMentionTrigger = z.object({ type: z.literal("story_mention") });
+const storyReplyTrigger = z.object({
+  type: z.literal("story_reply"),
+  match: z.enum(["keyword", "any"]),
+  keywords: z.array(keyword),
+  mode: z.enum(["any", "all", "exact", "regex", "contains"]).optional(),
+});
 
 // DM email collection: the runner sends `promptText` after the flow's actions, waits
 // for the person's next message, and either stores it as their email (replying with
@@ -187,6 +193,7 @@ const flowV1Schema = z
       optinTrigger,
       firstContactTrigger,
       storyMentionTrigger,
+      storyReplyTrigger,
     ]),
     conditions: z.array(condition),
     actions: z.array(action).min(1).max(3),
@@ -434,11 +441,12 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
           ...(parsed.trigger.replyPerMedia ? { replyPerMedia: parsed.trigger.replyPerMedia } : {}),
           ...(parsed.trigger.replyOncePerUser ? { replyOncePerUser: true } : {}),
         }
-      : parsed.trigger.type === "message"
+      : parsed.trigger.type === "message" || parsed.trigger.type === "story_reply"
         ? {
-            type: "message" as const,
+            type: parsed.trigger.type,
             match: parsed.trigger.match,
             keywords: normalizeKeywords(parsed.trigger.keywords),
+            ...(parsed.trigger.mode ? { mode: parsed.trigger.mode } : {}),
           }
         : { type: parsed.trigger.type };
   return {

@@ -613,41 +613,45 @@ model TrackedLinkClick {
 // Powers once-only first-contact greetings (first_contact triggers) and stores emails
 // captured by DM email-capture flows.
 model AutomationContact {
-  id                   String               @id
-  workspaceId          String
-  instagramAccountId   String
-  igScopedUserId       String
-  email                String?
-  state                ContactState         @default(NONE)
-  awaitingAutomationId String?
-  awaitingSince        DateTime?
-  attempts             Int                  @default(0)
+  id                      String               @id
+  workspaceId             String
+  instagramAccountId      String
+  igScopedUserId          String
+  email                   String?
+  state                   ContactState         @default(NONE)
+  awaitingAutomationId    String?
+  awaitingSince           DateTime?
+  attempts                Int                  @default(0)
   // Manual + automatic labels ("email_captured", "opted_out", "clicked").
-  tags                 String[]             @default([])
+  tags                    String[]             @default([])
   // Engagement score bumped by the repository on notable interactions.
-  score                Int                  @default(0)
+  score                   Int                  @default(0)
   // Mini-CRM pipeline stage. Auto-defaults to NEW for every fresh contact.
-  leadStatus           LeadStatus           @default(NEW)
+  leadStatus              LeadStatus           @default(NEW)
   // Team member currently responsible for this contact. Null = unassigned.
-  assigneeUserId       String?
+  assigneeUserId          String?
   // Free-form internal notes. Max 4 000 characters; surface trimmed in the UI.
-  notes                String?
+  notes                   String?
   // Automation that first brought this contact into the workspace (source attribution).
-  sourceAutomationId   String?
-  fields               Json?
-  awaitingFields       Json?
-  suppressedAt         DateTime?
+  sourceAutomationId      String?
+  fields                  Json?
+  awaitingFields          Json?
+  suppressedAt            DateTime?
+  // Automations stay silent for this person until this time - set when a
+  // teammate replies by hand, cleared by "Resume automations".
+  automationsPausedUntil  DateTime?
+  automationsPausedReason String?
   // Human-inbox workflow state. This is separate from suppression and lead status.
-  inboxStatus          String               @default("OPEN")
-  inboxFavorite        Boolean              @default(false)
-  inboxReminderAt      DateTime?
-  inboxLastReadAt      DateTime?
-  version              Int                  @default(1)
-  lastSeenAt           DateTime             @default(now())
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
-  workspace            Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  enrollments          SequenceEnrollment[]
+  inboxStatus             String               @default("OPEN")
+  inboxFavorite           Boolean              @default(false)
+  inboxReminderAt         DateTime?
+  inboxLastReadAt         DateTime?
+  version                 Int                  @default(1)
+  lastSeenAt              DateTime             @default(now())
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  workspace               Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  enrollments             SequenceEnrollment[]
 
   @@unique([workspaceId, instagramAccountId, igScopedUserId])
   @@unique([id, workspaceId])
@@ -768,6 +772,7 @@ model OutboundDelivery {
   @@index([workspaceId, kind, createdAt])
   @@index([workspaceId, instagramAccountId, recipientId, createdAt])
   @@index([broadcastId, state])
+  @@index([providerMessageId])
 }
 
 model AutomationDailySendCounter {

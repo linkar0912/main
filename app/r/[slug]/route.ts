@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { logger } from "@/src/lib/logger";
+import { afterResponse } from "@/src/lib/after-response";
 import { isSafeOutboundUrl, resolveSafeOutboundTarget } from "@/src/lib/security/outbound-url";
 
 export const runtime = "nodejs";
@@ -77,38 +78,6 @@ export async function GET(request: Request, context: RouteContext) {
   const ipHash = hashIp(readForwardedFor(request));
   const country = readCountry(request);
   const userAgent = readUserAgent(request);
-  // Recording the click is best-effort: a failure must never block the redirect.
-  void (async () => {
-    try {
-      await repository.recordTrackedLinkClick(link.id, {
-        workspaceId: link.workspaceId,
-        ipHash,
-        ...(userAgent ? { userAgent } : {}),
-        ...(country ? { country } : {}),
-      });
-      if (link.conversionUrl) {
-        try {
-          const target = await resolveSafeOutboundTarget(link.conversionUrl);
-          await fetch(target, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ slug, linkId: link.id, country: country ?? null, at: new Date().toISOString() }),
-            signal: AbortSignal.timeout(CONVERSION_CALLBACK_TIMEOUT_MS),
-          });
-        } catch (error) {
-          logger.warn("Conversion callback failed", {
-            linkId: link.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-    } catch (error) {
-      logger.warn("Failed to record tracked-link click", {
-        linkId: link.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  })();
   const finalDestination = appendUtm(link.destination, link);
   if (!finalDestination) {
     // Destination is unparseable or not publicly routable. Treat it the same
@@ -121,5 +90,32 @@ export async function GET(request: Request, context: RouteContext) {
     });
     return new NextResponse("This link is unavailable", { status: 404 });
   }
+  // Only a link that actually forwards counts as a click. Recording (and the
+  // conversion callback) runs after the redirect is sent and is best-effort:
+  // a failure must never block or delay the visitor.
+  afterResponse("Tracked-link click recording", async () => {
+    await repository.recordTrackedLinkClick(link.id, {
+      workspaceId: link.workspaceId,
+      ipHash,
+      ...(userAgent ? { userAgent } : {}),
+      ...(country ? { country } : {}),
+    });
+    if (link.conversionUrl) {
+      try {
+        const target = await resolveSafeOutboundTarget(link.conversionUrl);
+        await fetch(target, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ slug, linkId: link.id, country: country ?? null, at: new Date().toISOString() }),
+          signal: AbortSignal.timeout(CONVERSION_CALLBACK_TIMEOUT_MS),
+        });
+      } catch (error) {
+        logger.warn("Conversion callback failed", {
+          linkId: link.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  });
   return NextResponse.redirect(finalDestination, 302);
 }

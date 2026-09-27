@@ -14,7 +14,7 @@ export const instagramCapabilities: readonly ChannelCapability[] = [
   {
     id: "instagram-messaging",
     target: { provider: "INSTAGRAM", surface: "MESSAGING" },
-    triggers: ["message", "referral", "optin", "first_contact", "story_mention"],
+    triggers: ["message", "referral", "optin", "first_contact", "story_mention", "story_reply"],
     actions: ["send_text", "send_link", "send_button", "send_image", "quick_replies"],
     actionSemantics: {
       send_text: "message",
