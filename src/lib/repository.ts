@@ -327,6 +327,10 @@ export type AutomationContactRecord = {
   awaitingFields?: { id: string; question: string; kind?: "text" | "email" | "phone" | "number"; exitKeywords?: string[] }[];
   /** Set when the person opted out (STOP/unsubscribe); every automated send is skipped. */
   suppressedAt?: string;
+  /** Automations stay silent for this person until then (a teammate replied by hand). */
+  automationsPausedUntil?: string;
+  /** Why automations are paused ("manual_reply" or a handoff reason). */
+  automationsPausedReason?: string;
   /** Manual + automatic labels ("email_captured", "opted_out", "clicked", ...). */
   tags: string[];
   /** Engagement score; the repository bumps it on notable interactions. */
@@ -732,6 +736,32 @@ export interface AutomationRepository {
   listPausedParticipantsByWorkspace(workspaceId: string, limit: number): Promise<AutomationParticipantRecord[]>;
   /** Hot-path handoff check for one exact Instagram sender. */
   hasPausedParticipant(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<boolean>;
+  /**
+   * Silences every automation for one person until `untilIso`. Never shortens
+   * an existing pause. Returns false when there is no contact row to pause.
+   */
+  pauseContactAutomations(
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+    untilIso: string,
+    reason: string,
+  ): Promise<boolean>;
+  /** Clears the contact-level pause; returns whether a pause was cleared. */
+  resumeContactAutomations(workspaceId: string, contactId: string): Promise<boolean>;
+  /** Whether an automated delivery (anything but a manual inbox reply) produced this Meta message id. */
+  hasAutomatedOutboundMessage(workspaceId: string, providerMessageId: string): Promise<boolean>;
+  /** Payloads of automated (non-manual) deliveries from this account created since `sinceIso`, newest first. */
+  listRecentAutomatedDeliveryPayloads(
+    workspaceId: string,
+    instagramAccountId: string,
+    sinceIso: string,
+    limit: number,
+  ): Promise<Record<string, unknown>[]>;
+  /** Whether an automated delivery from this account is mid-send (claimed, no outcome yet). */
+  hasInFlightAutomatedDelivery(workspaceId: string, instagramAccountId: string, sinceIso: string): Promise<boolean>;
+  /** Whether an automation step (not a person) sent this Meta message id since `sinceIso`. */
+  hasExecutionWithProviderMessage(workspaceId: string, providerMessageId: string, sinceIso: string): Promise<boolean>;
   findWorkspaceIdByMemberEmail(email: string): Promise<string | null>;
   listAutomations(workspaceId: string): Promise<AutomationRecord[]>;
   /** Active Instagram automations that are unpinned or pinned to this account. */
@@ -898,11 +928,17 @@ export interface AutomationRepository {
     restoredBy?: string,
   ): Promise<AutomationRecord | null>;
   // Contact registry (first-contact detection + DM email capture).
+  /**
+   * `known` is the caller's own read of this contact from the same event
+   * (null = not found). Passing it skips the lookup, making the touch a single
+   * write on the realtime path; leave it undefined to look the contact up.
+   */
   touchContact(
     workspaceId: string,
     instagramAccountId: string,
     igScopedUserId: string,
     seenAt: string,
+    known?: AutomationContactRecord | null,
   ): Promise<TouchContactResult>;
   getContact(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<AutomationContactRecord | null>;
   /** Resolves the distinct Instagram identities needed by read-heavy inbox views in one operation. */

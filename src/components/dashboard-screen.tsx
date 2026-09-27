@@ -50,6 +50,7 @@ function flowTriggerLabel(automation: AutomationRecord): string {
   if (trigger?.type === "message") return "Words in a message";
   if (trigger?.type === "first_contact") return "First-message welcome";
   if (trigger?.type === "story_mention") return "Story mentions";
+  if (trigger?.type === "story_reply") return "Story replies";
   return "Comment replies";
 }
 

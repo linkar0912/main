@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   enqueueWebhookEvents: vi.fn(),
+  enqueueManualReplyEchoes: vi.fn(),
   processNormalizedEvent: vi.fn(),
   findWorkspaceByInstagramAccount: vi.fn(),
   getWorkspaceStatus: vi.fn(),
@@ -17,7 +18,10 @@ vi.mock("@/src/lib/security/signature", () => ({ verifyWebhookSignature: () => t
 vi.mock("@/src/lib/meta/webhooks", () => ({ normalizeWebhook: () => [{
   id: "event_1", accountId: "ig_1", type: "message.received", text: "hi", recipientId: "person_1", timestamp: 1,
 }] }));
-vi.mock("@/src/lib/queue", () => ({ enqueueWebhookEvents: mocks.enqueueWebhookEvents }));
+vi.mock("@/src/lib/queue", () => ({
+  enqueueWebhookEvents: mocks.enqueueWebhookEvents,
+  enqueueManualReplyEchoes: mocks.enqueueManualReplyEchoes,
+}));
 vi.mock("@/src/lib/automation/runner", () => ({
   processNormalizedEvent: mocks.processNormalizedEvent,
   isRetryableAutomationError: (error: unknown) => Boolean((error as { retryable?: boolean })?.retryable),
@@ -32,6 +36,7 @@ const { POST } = await import("./route");
 describe("POST /api/meta/webhook", () => {
   beforeEach(() => {
     mocks.enqueueWebhookEvents.mockReset().mockResolvedValue(0);
+    mocks.enqueueManualReplyEchoes.mockReset().mockResolvedValue(0);
     mocks.processNormalizedEvent.mockReset().mockResolvedValue({ sent: 1 });
     mocks.findWorkspaceByInstagramAccount.mockReset().mockResolvedValue({ workspaceId: "workspace_1" });
     mocks.getWorkspaceStatus.mockReset().mockResolvedValue("ACTIVE");

@@ -49,6 +49,19 @@ export type FirstContactTrigger = {
   type: "first_contact";
 };
 
+/**
+ * Fires when someone replies to one of the account's Stories (a DM carrying
+ * `reply_to.story`). Optional keywords narrow it the same way a message
+ * trigger does; a matching story-reply flow owns the reply, so generic DM
+ * flows stay quiet for that message.
+ */
+export type StoryReplyTrigger = {
+  type: "story_reply";
+  match: "keyword" | "any";
+  keywords: string[];
+  mode?: "any" | "all" | "exact" | "regex" | "contains";
+};
+
 // Fires when someone mentions the account in their Instagram Story (delivered by Meta
 // as a messages-webhook attachment of type story_mention).
 export type StoryMentionTrigger = {
@@ -170,7 +183,7 @@ export function withinSchedule(schedule: FlowSchedule | undefined, at: Date): bo
 
 export type FlowDefinitionV1 = {
   version: 1;
-  trigger: CommentTrigger | MessageTrigger | ReferralTrigger | OptInTrigger | FirstContactTrigger | StoryMentionTrigger;
+  trigger: CommentTrigger | MessageTrigger | ReferralTrigger | OptInTrigger | FirstContactTrigger | StoryMentionTrigger | StoryReplyTrigger;
   conditions: FlowCondition[];
   actions: FlowAction[];
   /** Optional per-automation daily cap on Meta sends, enforced by the runner. */
@@ -249,6 +262,8 @@ export type NormalizedEvent = {
   commentId?: string;
   mediaId?: string;
   recipientId?: string;
+  /** Set on a DM that replies to one of the account's Stories: the story's id. */
+  storyId?: string;
   /** Comment author handle from the webhook payload, for {username} personalization. */
   senderUsername?: string;
   interactionPayload?: string;
@@ -262,6 +277,8 @@ export type NormalizedEvent = {
  */
 export type EvaluationContext = {
   isNewContact?: boolean;
+  /** An active story-reply flow matches this story reply, so plain DM flows step aside. */
+  storyReplyClaimed?: boolean;
 };
 
 export type ExecutionAction =

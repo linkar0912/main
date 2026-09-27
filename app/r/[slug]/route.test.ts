@@ -53,6 +53,35 @@ describe("GET /r/[slug]", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
+  it("does not count a click or fire the conversion callback for a link it refuses to forward", async () => {
+    await repository.createTrackedLink("workspace_1", {
+      slug: "bad",
+      destination: "javascript:alert(1)",
+      conversionUrl: "https://hooks.example.com/conversion",
+    });
+    const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const response = await GET(new Request("http://localhost/r/bad"), context("bad"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(response.status).toBe(404);
+    expect(recordClick).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("counts a click for a link that forwards", async () => {
+    await repository.createTrackedLink("workspace_1", { slug: "good", destination: "https://example.com/" });
+    const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
+
+    const response = await GET(new Request("http://localhost/r/good"), context("good"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(response.status).toBe(302);
+    expect(recordClick).toHaveBeenCalledTimes(1);
+  });
+
   it("410s an expired link before touching the destination", async () => {
     await repository.createTrackedLink("workspace_1", {
       slug: "old",

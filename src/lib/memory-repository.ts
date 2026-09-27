@@ -487,6 +487,57 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         && Boolean(participant.pausedAt));
     },
 
+    async pauseContactAutomations(workspaceId, instagramAccountId, igScopedUserId, untilIso, reason) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      const contact = id ? contacts.get(id) : undefined;
+      if (!id || !contact) return false;
+      if (!contact.automationsPausedUntil || contact.automationsPausedUntil < untilIso) {
+        contacts.set(id, { ...contact, automationsPausedUntil: untilIso, automationsPausedReason: reason, updatedAt: now() });
+      }
+      return true;
+    },
+
+    async resumeContactAutomations(workspaceId, contactId) {
+      const contact = contacts.get(contactId);
+      if (!contact || contact.workspaceId !== workspaceId || !contact.automationsPausedUntil) return false;
+      contacts.set(contactId, { ...contact, automationsPausedUntil: undefined, automationsPausedReason: undefined, updatedAt: now() });
+      return true;
+    },
+
+    async hasAutomatedOutboundMessage(workspaceId, providerMessageId) {
+      return [...outboundDeliveries.values()].some((delivery) =>
+        delivery.workspaceId === workspaceId
+        && delivery.providerMessageId === providerMessageId
+        && delivery.kind !== "MANUAL_INBOX");
+    },
+
+    async listRecentAutomatedDeliveryPayloads(workspaceId, instagramAccountId, sinceIso, limit) {
+      return copy([...outboundDeliveries.values()]
+        .filter((delivery) => delivery.workspaceId === workspaceId
+          && delivery.instagramAccountId === instagramAccountId
+          && delivery.kind !== "MANUAL_INBOX"
+          && delivery.createdAt >= sinceIso)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit)
+        .map((delivery) => delivery.payload as Record<string, unknown>));
+    },
+
+    async hasInFlightAutomatedDelivery(workspaceId, instagramAccountId, sinceIso) {
+      return [...outboundDeliveries.values()].some((delivery) =>
+        delivery.workspaceId === workspaceId
+        && delivery.instagramAccountId === instagramAccountId
+        && delivery.state === "CLAIMED"
+        && delivery.kind !== "MANUAL_INBOX"
+        && delivery.createdAt >= sinceIso);
+    },
+
+    async hasExecutionWithProviderMessage(workspaceId, providerMessageId, sinceIso) {
+      return [...executions.values()].some((execution) =>
+        execution.workspaceId === workspaceId
+        && execution.providerMessageId === providerMessageId
+        && execution.createdAt >= sinceIso);
+    },
+
     async findWorkspaceIdByMemberEmail(email) {
       return memberWorkspacesByEmail.get(email.toLowerCase()) ?? null;
     },

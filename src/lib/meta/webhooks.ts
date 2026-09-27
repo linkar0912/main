@@ -150,12 +150,17 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
         }
         const quickReply = record(message.quick_reply);
         const interactionPayload = payloadValue(quickReply?.payload);
+        // A reply to one of the account's Stories arrives as an ordinary DM with
+        // `reply_to.story`; it stays a message (inbox, keyword flows) and carries
+        // the story id so story-reply flows can pick it up.
+        const storyId = stringValue(record(record(message.reply_to)?.story)?.id);
         events.push({
           id: messageId,
           accountId,
           type: interactionPayload !== undefined ? "quick_reply.received" : "message.received",
           text: stringValue(message.text) ?? "",
           ...(interactionPayload !== undefined ? { interactionPayload } : {}),
+          ...(storyId ? { storyId } : {}),
           recipientId,
           timestamp,
         });

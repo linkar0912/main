@@ -157,12 +157,19 @@ export function matchesTrigger(
     if (event.type !== "optin.received") return false;
   } else if (trigger.type === "story_mention") {
     if (event.type !== "story_mention.received") return false;
+  } else if (trigger.type === "story_reply") {
+    if (event.type !== "message.received" || !event.storyId) return false;
+    if (trigger.match === "keyword"
+      && !matchesKeywordsWithMode(event.text, trigger.keywords, trigger.mode)) return false;
   } else if (trigger.type === "first_contact") {
     if (!context.isNewContact) return false;
     if (!CONVERSATION_EVENT_TYPES.includes(event.type)) return false;
   } else {
     const messageTrigger = trigger as MessageTrigger;
     if (event.type !== "message.received" && event.type !== "postback.received") return false;
+    // A story-reply flow owns replies to Stories; plain DM flows stay quiet so
+    // the person doesn't get two answers to one message.
+    if (event.storyId && context.storyReplyClaimed) return false;
     if (messageTrigger.match === "keyword"
       && !matchesKeywordsWithMode(event.text, messageTrigger.keywords, messageTrigger.mode)) return false;
   }

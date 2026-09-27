@@ -22,7 +22,12 @@ export type SequenceRunnerOptions = {
   claimLeaseMs?: number;
 };
 
+export const SEQUENCE_BATCH_SIZE = 25;
+const SEQUENCE_RETRY_BACKOFF_MS = 2 * 60 * 1_000;
+
 export type SequenceSweepResult = {
+  /** Due rows this sweep read; equal to the batch size when more are waiting. */
+  fetched: number;
   processed: number;
   sent: number;
   failed: number;
@@ -39,8 +44,9 @@ export async function processDueSequences(
   repository: AutomationRepository,
   options: SequenceRunnerOptions,
 ): Promise<SequenceSweepResult> {
-  const result: SequenceSweepResult = { processed: 0, sent: 0, failed: 0, cancelled: 0 };
-  const due = await repository.listDueSequenceSends(new Date().toISOString(), options.batchSize ?? 25);
+  const result: SequenceSweepResult = { fetched: 0, processed: 0, sent: 0, failed: 0, cancelled: 0 };
+  const due = await repository.listDueSequenceSends(new Date().toISOString(), options.batchSize ?? SEQUENCE_BATCH_SIZE);
+  result.fetched = due.length;
   if (due.length === 0) return result;
 
   // Without Meta credentials there is nothing to deliver - leave everything as-is
@@ -163,6 +169,16 @@ export async function processDueSequences(
           await repository.cancelEnrollmentsForContact(contact.id);
         }
         result.failed += 1;
+      }
+      if (delivery.status === "BUSY" || (delivery.status === "FAILED" && delivery.retryable)) {
+        // Back the step off briefly instead of leaving it at the head of the due
+        // queue, where it would be retried immediately and crowd out steps
+        // that can actually go out.
+        await repository.advanceSequenceEnrollment(
+          enrollment.id,
+          enrollment.currentStepIndex,
+          new Date(Date.now() + SEQUENCE_RETRY_BACKOFF_MS).toISOString(),
+        );
       }
       continue;
     }

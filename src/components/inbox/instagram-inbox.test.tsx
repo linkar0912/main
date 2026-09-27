@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { InstagramInbox } from "./instagram-inbox";
+import type { InboxContact } from "./types";
+import { INBOX_LIVE_REFRESH_MS, InstagramInbox, mergeLiveContacts, mergeLiveMessages } from "./instagram-inbox";
 
 const aanya = {
   id: "contact_1", username: "aanya", avatarUrl: "/api/contacts/contact_1/avatar", preview: "Need the guide",
@@ -12,6 +13,64 @@ const arjun = { ...aanya, id: "contact_2", username: "arjun", preview: "Pricing"
 
 describe("InstagramInbox", () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it("shows a new conversation and a new reply without a reload", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let contacts = [{ ...aanya, unread: false }];
+    let thread = [{ id: "m1", direction: "inbound", text: "Need the guide", at: "2026-09-04T10:00:00.000Z", status: "received" }];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/inbox") return new Response(JSON.stringify({ data: { contacts, members: [] } }), { status: 200 });
+      if (url === "/api/inbox/contact_1" && !init?.method) return new Response(JSON.stringify({ data: { messages: thread } }), { status: 200 });
+      return new Response(JSON.stringify({ data: {} }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      render(<InstagramInbox />);
+      fireEvent.click(await screen.findByRole("button", { name: /open conversation with @aanya/i }));
+      await screen.findByText("Need the guide", { selector: "p" });
+
+      contacts = [{ ...arjun, preview: "Hi there" }, { ...aanya, unread: false }];
+      thread = [...thread, { id: "m2", direction: "inbound", text: "Still there?", at: "2026-09-04T10:05:00.000Z", status: "received" }];
+      await act(async () => { await vi.advanceTimersByTimeAsync(INBOX_LIVE_REFRESH_MS); });
+
+      expect(await screen.findByRole("button", { name: /open conversation with @arjun/i })).toBeTruthy();
+      expect(await screen.findByText("Still there?")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not poll while the tab is hidden", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ data: { contacts: [aanya], members: [] } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    try {
+      render(<InstagramInbox />);
+      await screen.findByRole("button", { name: /open conversation with @aanya/i });
+      const callsAfterLoad = fetchMock.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(INBOX_LIVE_REFRESH_MS * 3); });
+      expect(fetchMock.mock.calls.length).toBe(callsAfterLoad);
+    } finally {
+      visibility.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("merges live pages without duplicating an in-flight send or dropping older pages", () => {
+    const received = { id: "m1", direction: "inbound" as const, text: "Hi", at: "2026-09-04T10:00:00.000Z", status: "received" as const };
+    const pending = { id: "local_k1", direction: "outbound" as const, text: "On my way", at: "2026-09-04T10:01:00.000Z", status: "sending" as const, clientKey: "k1" };
+    const serverCopy = { id: "m2", direction: "outbound" as const, text: "On my way", at: "2026-09-04T10:01:01.000Z", status: "sent" as const };
+    const reply = { id: "m3", direction: "inbound" as const, text: "Great", at: "2026-09-04T10:02:00.000Z", status: "received" as const };
+
+    expect(mergeLiveMessages([received, pending], [received, serverCopy, reply]).map((message) => message.id))
+      .toEqual(["m1", "m3", "local_k1"]);
+    expect(mergeLiveMessages([received, { ...serverCopy, clientKey: "k1" }], [received, serverCopy, reply]).map((message) => message.id))
+      .toEqual(["m1", "m2", "m3"]);
+    expect(mergeLiveContacts([aanya, arjun] as InboxContact[], [{ ...arjun, preview: "New" }] as InboxContact[]).map((contact) => [contact.id, contact.preview]))
+      .toEqual([["contact_2", "New"], ["contact_1", "Need the guide"]]);
+  });
 
   it("keeps everyday filters visible and reveals advanced filters on demand", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { contacts: [aanya], members: [] } }), { status: 200 })));

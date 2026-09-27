@@ -74,6 +74,7 @@ describe("/api/inbox/[contactId]", () => {
       getContactById: vi.fn().mockResolvedValue(contact),
       listInboundEventsForRecipient: vi.fn().mockResolvedValue({ records: [inbound] }),
       listConnections: vi.fn().mockResolvedValue([{ igUserId: "ig_1", status: "CONNECTED", accessTokenEncrypted: "sealed" }]),
+      pauseContactAutomations: vi.fn().mockResolvedValue(true),
     };
     mocks.getRepository.mockReturnValue(repository);
 
@@ -86,6 +87,11 @@ describe("/api/inbox/[contactId]", () => {
 
     expect(response.status).toBe(201);
     expect(body.data.message).toMatchObject({ direction: "outbound", text: "Hi there", status: "sent" });
+    // A teammate took over the conversation, so automations step back.
+    expect(repository.pauseContactAutomations).toHaveBeenCalledWith(
+      "workspace_1", "ig_1", "person_1", body.data.automationsPausedUntil, "manual_reply",
+    );
+    expect(Date.parse(body.data.automationsPausedUntil)).toBeGreaterThan(Date.now());
     expect(mocks.executeOutboundDelivery).toHaveBeenCalledWith(expect.objectContaining({
       deliveryKey: "manual-inbox:workspace_1:contact_1:reply_1",
       kind: "MANUAL_INBOX",

@@ -83,6 +83,9 @@ export async function GET(request: Request) {
       favorite: record.inboxFavorite,
       reminderAt: record.inboxReminderAt,
       assigneeUserId: record.assigneeUserId,
+      ...(record.automationsPausedUntil && Date.parse(record.automationsPausedUntil) > Date.now()
+        ? { automationsPausedUntil: record.automationsPausedUntil }
+        : {}),
     })),
     members: members.map(({ userId, email, role }) => ({ userId, email, role })).filter((member) => member.userId),
     nextCursor: page.nextCursor,

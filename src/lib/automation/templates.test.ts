@@ -79,7 +79,7 @@ describe("premade automation templates", () => {
     // engine can actually fire on, and email collectors must carry full copy.
     for (const template of basicAutomationTemplates) {
       const definition = template.setup!.definition;
-      expect(["comment", "message", "referral", "optin", "first_contact", "story_mention"]).toContain(
+      expect(["comment", "message", "referral", "optin", "first_contact", "story_mention", "story_reply"]).toContain(
         definition.trigger.type,
       );
       if (definition.emailCapture) {
@@ -97,6 +97,11 @@ describe("premade automation templates", () => {
   it("replies to story mentions via the story_mention trigger", () => {
     const story = getTemplateById("story-mention-reply")!;
     expect(story.setup!.definition.trigger.type).toBe("story_mention");
+  });
+
+  it("sends a link to Story replies via the story_reply trigger", () => {
+    const story = getTemplateById("story-reply-link")!;
+    expect(story.setup!.definition.trigger).toMatchObject({ type: "story_reply", match: "keyword", keywords: ["link"] });
   });
 
   it("captures emails with the email-capture template", () => {
@@ -144,7 +149,7 @@ describe("premade automation templates", () => {
 
   it("covers every trigger type the engine supports across the recipe set", () => {
     const covered = new Set(basicAutomationTemplates.map((template) => template.setup!.definition.trigger.type));
-    expect(covered).toEqual(new Set(["comment", "message", "referral", "optin", "first_contact", "story_mention"]));
+    expect(covered).toEqual(new Set(["comment", "message", "referral", "optin", "first_contact", "story_mention", "story_reply"]));
   });
 
   it("ships the India-first D2C and creator recipes", () => {

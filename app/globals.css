@@ -6053,6 +6053,11 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 
 .ibx-banner { align-items: center; border-radius: 10px; display: flex; flex-wrap: wrap; font-size: .78rem; gap: 8px; line-height: 1.4; margin: 0 12px 10px; padding: 9px 12px; }
 .ibx-banner.is-error { background: var(--danger-soft); color: var(--danger); }
+.ibx-banner.is-paused { background: var(--accent-soft); color: var(--ink); }
+[data-theme="dark"] .ibx-banner.is-paused { background: rgba(250, 12, 247, .12); color: var(--ink); }
+.ibx-banner.is-paused span { flex: 1 1 16rem; }
+.ibx-banner.is-paused button { color: var(--accent); }
+.ibx-banner button:disabled { cursor: default; opacity: .6; }
 [data-theme="dark"] .ibx-banner.is-error { color: #ff8a80; }
 .ibx-banner button { background: transparent; border: 0; color: inherit; cursor: pointer; font-weight: 750; margin-left: auto; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
 

@@ -4,6 +4,7 @@ import { getServerEnv } from "@/src/lib/env";
 import { MetaClient } from "@/src/lib/meta/client";
 import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 import { getRepository } from "@/src/lib/repository-provider";
+import { contactAutomationsPaused } from "@/src/lib/automation/manual-reply";
 import { LEAD_STATUSES, type LeadStatus } from "@/src/lib/repository";
 
 export const runtime = "nodejs";
@@ -34,11 +35,13 @@ export async function GET(
   // The Contacts table already shows the handle, so it asks to skip the
   // lookup (500 events + a possible Meta call made every open take ~2s).
   const skipProfile = new URL(request.url).searchParams.get("profile") === "0";
-  const [timeline, events, automationsPaused] = await Promise.all([
+  const [timeline, events, participantPaused] = await Promise.all([
     repository.getContactTimeline(session.workspaceId, id, MAX_TIMELINE_ENTRIES),
     skipProfile ? Promise.resolve([]) : repository.listRecentWebhookEvents(session.workspaceId, 500),
     repository.hasPausedParticipant(session.workspaceId, contact.instagramAccountId, contact.igScopedUserId),
   ]);
+  // Paused either by a handoff (per participant) or because a teammate replied by hand.
+  const automationsPaused = participantPaused || contactAutomationsPaused(contact, Date.now());
   const env = getServerEnv();
   const connections = env.metaTokenEncryptionKey && !skipProfile
     ? await repository.listConnections(session.workspaceId)

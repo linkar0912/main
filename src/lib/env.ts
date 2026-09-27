@@ -302,7 +302,7 @@ export function getServerEnv(): ServerEnv {
     ),
     authSessionSecret: sessionSecretEnv("AUTH_SESSION_SECRET", process.env.AUTH_SESSION_SECRET),
     trustedProxyHops: integerEnv("TRUSTED_PROXY_HOPS", process.env.TRUSTED_PROXY_HOPS, 0),
-    workerConcurrency: integerEnv("WORKER_CONCURRENCY", process.env.WORKER_CONCURRENCY, 5),
+    workerConcurrency: integerEnv("WORKER_CONCURRENCY", process.env.WORKER_CONCURRENCY, 15),
     dispatchLeaseMs,
     providerRequestTimeoutMs,
     privateReplyRateLimitPerHour: integerEnv(

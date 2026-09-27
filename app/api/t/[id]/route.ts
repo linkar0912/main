@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { afterResponse } from "@/src/lib/after-response";
 import { logger } from "@/src/lib/logger";
 import { getRepository } from "@/src/lib/repository-provider";
 import { isSafeOutboundUrl } from "@/src/lib/security/outbound-url";
@@ -53,26 +54,31 @@ export async function GET(
     }
 
     // First click wins; repeat taps still forward but do not double-count.
-    const recorded = await repository.markDeliveryClicked(id, new Date().toISOString());
-    if (recorded) {
-        logger.info("delivery link clicked", {
-            participantId: id,
-            automationId: participant.automationId,
-            workspaceId: participant.workspaceId,
-            automationStatus: automation.status,
-        });
-    } else if (automation.status !== "ACTIVE") {
-        // Detect lingering clicks against a paused / draft campaign. The
-        // visitor still gets redirected (the message was sent earlier and
-        // cannot be recalled), but the log line lets operators see that a
-        // pause did not stop a follow-up click.
-        logger.info("delivery link clicked after automation was paused", {
-            participantId: id,
-            automationId: participant.automationId,
-            workspaceId: participant.workspaceId,
-            automationStatus: automation.status,
-        });
-    }
+    // Counting happens after the redirect is sent, so the tap isn't held on
+    // a database write the visitor doesn't need.
+    const automationStatus = automation.status;
+    afterResponse("Delivery click recording", async () => {
+        const recorded = await repository.markDeliveryClicked(id, new Date().toISOString());
+        if (recorded) {
+            logger.info("delivery link clicked", {
+                participantId: id,
+                automationId: participant.automationId,
+                workspaceId: participant.workspaceId,
+                automationStatus,
+            });
+        } else if (automationStatus !== "ACTIVE") {
+            // Detect lingering clicks against a paused / draft campaign. The
+            // visitor still gets redirected (the message was sent earlier and
+            // cannot be recalled), but the log line lets operators see that a
+            // pause did not stop a follow-up click.
+            logger.info("delivery link clicked after automation was paused", {
+                participantId: id,
+                automationId: participant.automationId,
+                workspaceId: participant.workspaceId,
+                automationStatus,
+            });
+        }
+    });
 
     return NextResponse.redirect(targetUrl, 302);
 }
