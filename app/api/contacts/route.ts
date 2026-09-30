@@ -119,6 +119,7 @@ export async function GET(request: Request) {
       ...(enrich && env.metaTokenEncryptionKey ? {
         client: new MetaClient({ apiVersion: env.metaApiVersion }),
         tokenEncryptionKey: env.metaTokenEncryptionKey,
+        remember: (entries) => repository.rememberContactUsernames(session.workspaceId, entries),
       } : {}),
     });
     const needsProfileEnrichment = !enrich && Boolean(env.metaTokenEncryptionKey)

@@ -619,6 +619,8 @@ model AutomationContact {
   workspaceId             String
   instagramAccountId      String
   igScopedUserId          String
+  // Instagram handle, from comment webhooks or Meta's profile lookup.
+  instagramUsername       String?
   email                   String?
   state                   ContactState         @default(NONE)
   awaitingAutomationId    String?

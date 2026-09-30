@@ -1,4 +1,5 @@
 import { createId } from "./id";
+import { describeInboundWithoutText } from "./inbox";
 import { tallyVariantPerformance } from "./insights/variant-performance";
 import type {
   AutomationRecord,
@@ -164,6 +165,23 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     membersByEmail.set(key, { id: createId("member"), workspaceId, email: email.toLowerCase(), role, userId });
     memberWorkspacesByEmail.set(email.toLowerCase(), workspaceId);
     return { created: true };
+  }
+
+  function latestSenderUsername(workspaceId: string, accountId: string, recipientId: string): { instagramUsername?: string } {
+    const latest = [...webhookEvents.values()]
+      .filter((event) => event.workspaceId === workspaceId && event.payload.accountId === accountId
+        && event.payload.recipientId === recipientId
+        && typeof event.payload.senderUsername === "string" && event.payload.senderUsername.trim())
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0];
+    return latest ? { instagramUsername: latest.payload.senderUsername as string } : {};
+  }
+
+  function rememberContactUsernames(workspaceId: string, entries: Array<{ instagramAccountId: string; igScopedUserId: string; username: string }>): void {
+    for (const { instagramAccountId, igScopedUserId, username } of entries) {
+      const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
+      const existing = id ? contacts.get(id) : undefined;
+      if (id && existing && existing.instagramUsername !== username) contacts.set(id, { ...existing, instagramUsername: username, updatedAt: now() });
+    }
   }
 
   return {
@@ -1542,6 +1560,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         workspaceId,
         instagramAccountId,
         igScopedUserId,
+        // Mirrors the AutomationContact_username_on_create trigger.
+        ...latestSenderUsername(workspaceId, instagramAccountId, igScopedUserId),
         state: "NONE",
         attempts: 0,
         tags: [],
@@ -1567,6 +1587,10 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
       const record = id ? contacts.get(id) : undefined;
       return record ? copy(record) : null;
+    },
+
+    async rememberContactUsernames(workspaceId, entries) {
+      rememberContactUsernames(workspaceId, entries);
     },
 
     async getContactsByInstagramIdentities(workspaceId, identities) {
@@ -1862,7 +1886,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           const unread = Boolean(latestInboundAt && (!record.inboxLastReadAt || latestInboundAt > record.inboxLastReadAt));
           const text = typeof latest?.payload.text === "string" && latest.payload.text.trim()
             ? latest.payload.text.trim()
-            : latest?.eventType === "story_mention.received" ? "Mentioned you in a story" : "No messages yet";
+            : latest ? describeInboundWithoutText(latest.eventType, latest.payload.attachmentType) : "No messages yet";
           return { record: copy(record), preview: text, ...(latestInboundAt ? { latestInboundAt } : {}), unread };
         });
       const normalizedQuery = query.query?.trim().toLowerCase();
@@ -1949,6 +1973,11 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         receivedAt: input.receivedAt,
         payload: copy(input.payload),
       });
+      // Mirrors the WebhookEvent_contact_username trigger.
+      const { accountId, recipientId, senderUsername } = input.payload;
+      if (typeof accountId === "string" && typeof recipientId === "string" && typeof senderUsername === "string" && senderUsername.trim()) {
+        rememberContactUsernames(workspaceId, [{ instagramAccountId: accountId, igScopedUserId: recipientId, username: senderUsername.trim().replace(/^@+/, "") }]);
+      }
     },
 
     async listRecentWebhookEvents(workspaceId, limit, eventType) {

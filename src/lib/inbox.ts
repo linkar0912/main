@@ -27,6 +27,8 @@ export type InboxMessage = {
   at: string;
   status: "received" | "sending" | "sent" | "failed" | "unknown";
   error?: string;
+  /** Photo, reel, voice note... sent by the contact; `url` may expire on Meta's CDN. */
+  attachment?: { type: string; label: string; url?: string };
 };
 
 function identityKey(accountId: string, personId: string): string {
@@ -50,12 +52,48 @@ export function presentInboxText(value: string): string {
   return text;
 }
 
+// Mirrored by public.linkar_inbound_preview (see the inbound_attachment_labels
+// migration) so the list preview and the conversation read the same.
+const ATTACHMENT_LABELS: Record<string, string> = {
+  image: "Sent a photo",
+  video: "Sent a video",
+  audio: "Sent a voice message",
+  file: "Sent a file",
+  share: "Shared a post",
+  ig_post: "Shared a post",
+  ig_reel: "Shared a reel",
+  reel: "Shared a reel",
+  animated_image_share: "Sent a GIF",
+  sticker: "Sent a sticker",
+  like_heart: "Sent a ❤️",
+  unsupported: "Sent a message Instagram doesn't share with apps",
+};
+
+/** Human label for an inbound event that carries no text. */
+export function describeInboundWithoutText(eventType: string, attachmentType?: unknown): string {
+  if (typeof attachmentType === "string" && attachmentType) return ATTACHMENT_LABELS[attachmentType] ?? "Sent an attachment";
+  if (eventType === "story_mention.received") return "Mentioned you in a story";
+  if (eventType === "quick_reply.received") return "Tapped a quick reply";
+  if (eventType === "postback.received") return "Tapped a button";
+  // Text-less DMs recorded before attachment kinds were stored.
+  return "Sent an attachment";
+}
+
 function eventText(event: WebhookEventRecord): string {
   return typeof event.payload.text === "string" && event.payload.text.trim()
     ? presentInboxText(event.payload.text)
-    : event.eventType === "story_mention.received"
-      ? "Mentioned you in a story"
-      : "Instagram interaction";
+    : describeInboundWithoutText(event.eventType, event.payload.attachmentType);
+}
+
+function eventAttachment(event: WebhookEventRecord): InboxMessage["attachment"] {
+  const type = event.payload.attachmentType;
+  if (typeof type !== "string" || !type) return undefined;
+  const url = event.payload.attachmentUrl;
+  return {
+    type,
+    label: describeInboundWithoutText(event.eventType, type),
+    ...(typeof url === "string" && url.startsWith("https://") ? { url } : {}),
+  };
 }
 
 function deliveryText(delivery: OutboundDeliveryRecord): string | undefined {
@@ -117,7 +155,11 @@ export function buildConversation(
   const key = identityKey(contact.instagramAccountId, contact.igScopedUserId);
   const inbound: InboxMessage[] = events.flatMap((event) => {
     if (inboundIdentity(event) !== key) return [];
-    return [{ id: event.id, direction: "inbound", text: eventText(event), at: event.receivedAt, status: "received" }];
+    const attachment = eventAttachment(event);
+    return [{
+      id: event.id, direction: "inbound", text: eventText(event), at: event.receivedAt, status: "received",
+      ...(attachment ? { attachment } : {}),
+    }];
   });
   const outbound: InboxMessage[] = deliveries.flatMap((delivery) => {
     if (delivery.workspaceId !== contact.workspaceId

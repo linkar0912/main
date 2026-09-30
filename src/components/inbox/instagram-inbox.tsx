@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, Inbox, Info, PauseCircle, RotateCcw, Star, UserRound } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, ExternalLink, Inbox, Info, PauseCircle, RotateCcw, Star, UserRound } from "lucide-react";
 import { ContactDetailModal } from "../contact-detail-modal";
 import { ActivityContentSkeleton } from "../skeleton";
 import { SocialAvatar } from "../social-avatar";
@@ -218,6 +218,37 @@ function groupMessages(messages: InboxMessage[]): MessageGroup[] {
     lastDay = day;
   }
   return groups;
+}
+
+const IMAGE_ATTACHMENTS = new Set(["image", "animated_image_share", "sticker"]);
+const ATTACHMENT_LINK_LABELS: Record<string, string> = {
+  video: "Watch video",
+  audio: "Play voice message",
+  file: "Open file",
+  share: "Open post",
+  ig_post: "Open post",
+  ig_reel: "Open reel",
+  reel: "Open reel",
+};
+
+/** Text plus whatever the contact attached. Meta's CDN links expire, so a
+ *  photo that no longer loads falls back to its label. */
+function MessageBody({ message }: { message: InboxMessage }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const attachment = message.attachment;
+  const url = attachment?.url;
+  const showImage = Boolean(url && attachment && IMAGE_ATTACHMENTS.has(attachment.type) && !imageFailed);
+  const showText = !showImage || message.text !== attachment?.label;
+  return <>
+    {showImage && <a className="ibx-attachment-image" href={url} target="_blank" rel="noopener noreferrer">
+      {/* eslint-disable-next-line @next/next/no-img-element -- expiring Meta CDN URL, not a static asset */}
+      <img src={url} alt={attachment!.label} loading="lazy" referrerPolicy="no-referrer" onError={() => setImageFailed(true)} />
+    </a>}
+    {showText && <p>{message.text}</p>}
+    {url && attachment && !showImage && ATTACHMENT_LINK_LABELS[attachment.type] && <a className="ibx-attachment-link" href={url} target="_blank" rel="noopener noreferrer">
+      {ATTACHMENT_LINK_LABELS[attachment.type]} <ExternalLink size={12} aria-hidden="true" />
+    </a>}
+  </>;
 }
 
 function DeliveryState({ message, onRetry }: { message: InboxMessage; onRetry: (message: InboxMessage) => void }) {
@@ -642,7 +673,7 @@ export function InstagramInbox() {
             {group.day && <div className="ibx-day" role="separator"><span>{formatDayLabel(group.day)}</span></div>}
             <div className={`ibx-group is-${group.direction}`}>
               {group.messages.map((message, index) => <article className={`ibx-bubble is-${message.direction} ${message.status === "failed" ? "is-failed" : ""} ${message.status === "sending" ? "is-sending" : ""}`} key={message.id}>
-                <p>{message.text}</p>
+                <MessageBody message={message} />
                 {index === group.messages.length - 1 && <footer><time dateTime={message.at}>{formatBubbleTime(message.at)}</time><DeliveryState message={message} onRetry={retryMessage} /></footer>}
                 {message.error && <small>{message.error}</small>}
               </article>)}

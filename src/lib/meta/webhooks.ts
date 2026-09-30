@@ -60,6 +60,21 @@ function storyMentionAttachment(message: JsonRecord): JsonRecord | null {
   return null;
 }
 
+/**
+ * DMs without text (photos, reels, voice notes, stickers, hearts) are still
+ * messages. Keep the first attachment's kind and link so the inbox can show
+ * what was sent instead of an empty bubble. Automations keep matching on
+ * `text` alone.
+ */
+function messageAttachment(message: JsonRecord): { attachmentType: string; attachmentUrl?: string } | undefined {
+  const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+  const first = record(attachments[0]);
+  const type = stringValue(first?.type) ?? (message.is_unsupported === true ? "unsupported" : undefined);
+  if (!type) return undefined;
+  const url = stringValue(record(first?.payload)?.url);
+  return { attachmentType: type.slice(0, 40), ...(url && /^https:\/\//.test(url) ? { attachmentUrl: url.slice(0, 2000) } : {}) };
+}
+
 export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
   const root = record(payload);
   const entries = Array.isArray(root?.entry) ? root.entry : [];
@@ -161,6 +176,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
           text: stringValue(message.text) ?? "",
           ...(interactionPayload !== undefined ? { interactionPayload } : {}),
           ...(storyId ? { storyId } : {}),
+          ...messageAttachment(message),
           recipientId,
           timestamp,
         });

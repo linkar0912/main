@@ -19,7 +19,7 @@ const contentSecurityPolicy = [
   // the media picker and settings; the GA4 tracking-pixel fallback is an img.
   // Arbitrary remote hosts are deliberately not allowed - user-entered
   // preview image URLs outside this list are blocked by design.
-  "img-src 'self' data: blob: https://*.cdninstagram.com https://cdninstagram.com https://*.fbcdn.net https://fbcdn.net https://*.facebook.com https://platform-lookaside.fbsbx.com https://lookaside.facebook.net https://*.google-analytics.com https://*.googletagmanager.com",
+  "img-src 'self' data: blob: https://*.cdninstagram.com https://cdninstagram.com https://*.fbcdn.net https://fbcdn.net https://*.facebook.com https://platform-lookaside.fbsbx.com https://lookaside.fbsbx.com https://lookaside.facebook.net https://*.google-analytics.com https://*.googletagmanager.com",
   "font-src 'self' data:",
   `connect-src 'self' ${googleAnalyticsConnect}`,
   "frame-ancestors 'none'",

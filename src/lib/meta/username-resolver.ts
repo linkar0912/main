@@ -1,10 +1,13 @@
 import type { MetaClient } from "./client";
 import type { InstagramConnectionRecord, WebhookEventRecord } from "../repository";
+import { logger } from "../logger";
 import { unsealSecret } from "../security/secrets";
 
 export type InstagramIdentity = {
   instagramAccountId: string;
   igScopedUserId: string;
+  /** Handle already stored on the contact; wins over any lookup. */
+  instagramUsername?: string;
 };
 
 export type ResolvedInstagramProfile = {
@@ -65,7 +68,15 @@ export async function resolveInstagramProfile(options: {
         ...(username ? { username } : {}),
         ...(profile.profilePictureUrl ? { profilePictureUrl: profile.profilePictureUrl } : {}),
       };
-    } catch {
+    } catch (error) {
+      // Still best-effort, but say why: an app without advanced access to
+      // instagram_business_manage_messages gets an error here for every
+      // non-tester, which otherwise just looks like anonymous contacts.
+      logger.warn("Instagram profile lookup failed", {
+        instagramAccountId: options.identity.instagramAccountId,
+        status: (error as { status?: unknown }).status,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return {};
     }
   })();
@@ -112,8 +123,14 @@ export async function resolveInstagramUsernames(options: {
   lookupLimit?: number;
   /** Included in the cache key so flipping META_API_VERSION grows a fresh namespace. */
   apiVersion?: string;
+  /** Persists handles fetched from Meta in this call. Failures are ignored. */
+  remember?: (entries: Array<{ instagramAccountId: string; igScopedUserId: string; username: string }>) => Promise<void>;
 }): Promise<Map<string, string>> {
   const usernames = new Map<string, string>();
+  for (const identity of options.identities) {
+    const username = cleanUsername(identity.instagramUsername);
+    if (username) usernames.set(instagramIdentityKey(identity), username);
+  }
   for (const event of options.events) {
     const instagramAccountId = typeof event.payload.accountId === "string" ? event.payload.accountId : undefined;
     const igScopedUserId = typeof event.payload.recipientId === "string" ? event.payload.recipientId : undefined;
@@ -137,6 +154,7 @@ export async function resolveInstagramUsernames(options: {
     if (!usernames.has(key)) unresolved.set(key, identity);
   }
 
+  const fetched: Array<{ instagramAccountId: string; igScopedUserId: string; username: string }> = [];
   await Promise.all([...unresolved.entries()].slice(0, options.lookupLimit ?? 25).map(async ([key, identity]) => {
     const profile = await resolveInstagramProfile({
       identity,
@@ -145,7 +163,14 @@ export async function resolveInstagramUsernames(options: {
       tokenEncryptionKey: options.tokenEncryptionKey!,
       ...(options.apiVersion ? { apiVersion: options.apiVersion } : {}),
     });
-    if (profile.username) usernames.set(key, profile.username);
+    if (!profile.username) return;
+    usernames.set(key, profile.username);
+    fetched.push({ instagramAccountId: identity.instagramAccountId, igScopedUserId: identity.igScopedUserId, username: profile.username });
   }));
+  if (fetched.length && options.remember) {
+    await options.remember(fetched).catch((error) => logger.warn("Failed to store Instagram usernames", {
+      error: error instanceof Error ? error.message : String(error),
+    }));
+  }
   return usernames;
 }

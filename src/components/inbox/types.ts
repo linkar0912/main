@@ -22,6 +22,8 @@ export type InboxMessage = {
   at: string;
   status: "received" | "sending" | "sent" | "failed" | "unknown";
   error?: string;
+  /** Photo, reel, voice note... the contact sent. `url` is Meta's CDN link and can expire. */
+  attachment?: { type: string; label: string; url?: string };
   /** Client-only: idempotency key of an optimistic send, reused on retry. */
   clientKey?: string;
 };

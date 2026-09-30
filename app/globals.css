@@ -6173,6 +6173,9 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .ibx-group.is-inbound .ibx-bubble:not(:last-child) { border-bottom-left-radius: 6px; }
 .ibx-group.is-outbound .ibx-bubble:not(:first-child) { border-top-right-radius: 6px; }
 .ibx-group.is-outbound .ibx-bubble:not(:last-child) { border-bottom-right-radius: 6px; }
+.ibx-attachment-image { display: block; margin: -3px -8px 4px; }
+.ibx-attachment-image img { border-radius: 12px; display: block; max-height: 320px; max-width: 100%; object-fit: cover; }
+.ibx-attachment-link { align-items: center; color: inherit; display: inline-flex; font-size: .78rem; font-weight: 600; gap: 4px; margin-top: 4px; text-decoration: underline; text-underline-offset: 2px; }
 .ibx-bubble.is-sending { opacity: .72; }
 .ibx-bubble.is-failed { background: var(--danger-soft); color: var(--ink); outline: 1px solid var(--danger-line); }
 .ibx-bubble footer { align-items: center; display: flex; flex-wrap: wrap; font-size: .66rem; gap: 8px; justify-content: flex-end; margin-top: 3px; opacity: .7; }

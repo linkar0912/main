@@ -46,13 +46,14 @@ export async function GET(
   const connections = env.metaTokenEncryptionKey && !skipProfile
     ? await repository.listConnections(session.workspaceId)
     : [];
-  const usernames = skipProfile ? new Map<string, string>() : await resolveInstagramUsernames({
+  const usernames = await resolveInstagramUsernames({
     identities: [contact],
     events,
     connections,
-    ...(env.metaTokenEncryptionKey ? {
+    ...(env.metaTokenEncryptionKey && !skipProfile ? {
       client: new MetaClient({ apiVersion: env.metaApiVersion }),
       tokenEncryptionKey: env.metaTokenEncryptionKey,
+      remember: (entries) => repository.rememberContactUsernames(session.workspaceId, entries),
     } : {}),
   });
   return NextResponse.json({

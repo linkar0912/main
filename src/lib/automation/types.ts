@@ -267,6 +267,9 @@ export type NormalizedEvent = {
   /** Comment author handle from the webhook payload, for {username} personalization. */
   senderUsername?: string;
   interactionPayload?: string;
+  /** First attachment on a DM ("image", "ig_reel", "like_heart", ...). */
+  attachmentType?: string;
+  attachmentUrl?: string;
   timestamp: number;
 };
 

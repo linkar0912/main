@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   const env = getServerEnv();
   const identities = page.rows.map((row) => row.record);
   const usernames = new Map(identities.flatMap((identity) => {
-    const username = cachedInstagramUsername(identity, env.metaApiVersion);
+    const username = identity.instagramUsername ?? cachedInstagramUsername(identity, env.metaApiVersion);
     return username ? [[instagramIdentityKey(identity), username] as const] : [];
   }));
   if (parsed.data.enrich && env.metaTokenEncryptionKey && identities.length) {
@@ -63,6 +63,7 @@ export async function GET(request: Request) {
     const enriched = await resolveInstagramUsernames({
       identities, events: [], connections, apiVersion: env.metaApiVersion,
       client: new MetaClient({ apiVersion: env.metaApiVersion }), tokenEncryptionKey: env.metaTokenEncryptionKey,
+      remember: (entries) => repository.rememberContactUsernames(session.workspaceId, entries),
     });
     for (const [key, username] of enriched) usernames.set(key, username);
   }

@@ -60,6 +60,34 @@ describe("normalizeWebhook", () => {
     }]);
   });
 
+  it("keeps the kind and link of text-less DMs such as photos, reels and hearts", () => {
+    const message = (mid: string, body: Record<string, unknown>) => ({
+      sender: { id: "person_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000000, message: { mid, ...body },
+    });
+    const events = normalizeWebhook({
+      object: "instagram",
+      entry: [{
+        id: "ig_business_1",
+        time: 1710000000,
+        messaging: [
+          message("m_photo", { attachments: [{ type: "image", payload: { url: "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=1" } }] }),
+          message("m_reel", { attachments: [{ type: "ig_reel", payload: { url: "https://www.instagram.com/reel/abc/", title: "A reel" } }] }),
+          message("m_heart", { attachments: [{ type: "like_heart" }] }),
+          message("m_unsupported", { is_unsupported: true }),
+          message("m_text", { text: "hello" }),
+        ],
+      }],
+    });
+
+    expect(events.map(({ id, type, text, attachmentType, attachmentUrl }) => ({ id, type, text, attachmentType, attachmentUrl }))).toEqual([
+      { id: "m_photo", type: "message.received", text: "", attachmentType: "image", attachmentUrl: "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=1" },
+      { id: "m_reel", type: "message.received", text: "", attachmentType: "ig_reel", attachmentUrl: "https://www.instagram.com/reel/abc/" },
+      { id: "m_heart", type: "message.received", text: "", attachmentType: "like_heart", attachmentUrl: undefined },
+      { id: "m_unsupported", type: "message.received", text: "", attachmentType: "unsupported", attachmentUrl: undefined },
+      { id: "m_text", type: "message.received", text: "hello", attachmentType: undefined, attachmentUrl: undefined },
+    ]);
+  });
+
   it("normalizes an inbound message and skips unsupported changes", () => {
     const events = normalizeWebhook({
       object: "instagram",

@@ -314,6 +314,8 @@ export type AutomationContactRecord = {
   workspaceId: string;
   instagramAccountId: string;
   igScopedUserId: string;
+  /** Instagram handle without "@", when known. */
+  instagramUsername?: string;
   email?: string;
   state: ContactState;
   /** Automation that asked for the email while state is AWAITING_EMAIL. */
@@ -941,6 +943,11 @@ export interface AutomationRepository {
     known?: AutomationContactRecord | null,
   ): Promise<TouchContactResult>;
   getContact(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<AutomationContactRecord | null>;
+  /** Stores Instagram handles resolved from Meta so they survive restarts and replicas. */
+  rememberContactUsernames(
+    workspaceId: string,
+    entries: Array<{ instagramAccountId: string; igScopedUserId: string; username: string }>,
+  ): Promise<void>;
   /** Resolves the distinct Instagram identities needed by read-heavy inbox views in one operation. */
   getContactsByInstagramIdentities(
     workspaceId: string,

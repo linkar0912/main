@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AutomationContactRecord, OutboundDeliveryRecord, WebhookEventRecord } from "./repository";
-import { buildConversation, buildInboxContacts, presentInboxText } from "./inbox";
+import { buildConversation, buildInboxContacts, describeInboundWithoutText, presentInboxText } from "./inbox";
 import { createInteractionPayload } from "./automation/postback";
 
 const contact: AutomationContactRecord = {
@@ -35,6 +35,20 @@ describe("inbox projections", () => {
     expect(buildConversation(contact, [], [{ ...inbound, payload: { ...inbound.payload, text: payload } }])[0].text).toBe("Checked follow status");
     expect(presentInboxText("A normal message. With punctuation")).toBe("A normal message. With punctuation");
   });
+  it("describes text-less messages by what was sent instead of a generic label", () => {
+    const photo = { ...inbound, id: "event_photo", payload: { accountId: "ig_1", recipientId: "person_1", text: "", attachmentType: "image", attachmentUrl: "https://lookaside.fbsbx.com/x" } };
+    const legacy = { ...inbound, id: "event_legacy", receivedAt: "2026-09-03T10:01:00.000Z", payload: { accountId: "ig_1", recipientId: "person_1", text: "" } };
+    const button = { ...inbound, id: "event_button", eventType: "postback.received", receivedAt: "2026-09-03T10:02:00.000Z", payload: { accountId: "ig_1", recipientId: "person_1", text: "" } };
+
+    const conversation = buildConversation(contact, [], [photo, legacy, button]);
+
+    expect(conversation.map((message) => message.text)).toEqual(["Sent a photo", "Sent an attachment", "Tapped a button"]);
+    expect(conversation[0].attachment).toEqual({ type: "image", label: "Sent a photo", url: "https://lookaside.fbsbx.com/x" });
+    expect(conversation[1].attachment).toBeUndefined();
+    expect(describeInboundWithoutText("message.received", "ig_reel")).toBe("Shared a reel");
+    expect(describeInboundWithoutText("message.received", "something_new")).toBe("Sent an attachment");
+  });
+
   it("keeps every contact visible even when only one has a recent message", () => {
     const untouched = { ...contact, id: "contact_2", igScopedUserId: "person_2", lastSeenAt: "2026-08-15T10:00:00.000Z" };
 

@@ -974,6 +974,8 @@ export async function processNormalizedEvent(
         ...(event.senderUsername ? { senderUsername: event.senderUsername } : {}),
         ...(event.mediaId ? { mediaId: event.mediaId } : {}),
         ...(event.commentId ? { commentId: event.commentId } : {}),
+        ...(event.attachmentType ? { attachmentType: event.attachmentType } : {}),
+        ...(event.attachmentUrl ? { attachmentUrl: event.attachmentUrl } : {}),
         text: (event.text ?? "").slice(0, 500),
       },
     }).catch((error) => {

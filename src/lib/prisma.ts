@@ -281,6 +281,7 @@ function mapContact(record: {
   workspaceId: string;
   instagramAccountId: string;
   igScopedUserId: string;
+  instagramUsername?: string | null;
   email: string | null;
   state: AutomationContactRecord["state"];
   awaitingAutomationId: string | null;
@@ -308,6 +309,7 @@ function mapContact(record: {
     workspaceId: record.workspaceId,
     instagramAccountId: record.instagramAccountId,
     igScopedUserId: record.igScopedUserId,
+    instagramUsername: record.instagramUsername ?? undefined,
     email: record.email ?? undefined,
     state: record.state,
     awaitingAutomationId: record.awaitingAutomationId ?? undefined,
@@ -2166,6 +2168,13 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         },
       });
       return record ? mapContact(record) : null;
+    },
+
+    async rememberContactUsernames(workspaceId, entries) {
+      await Promise.all(entries.map(({ instagramAccountId, igScopedUserId, username }) => client.automationContact.updateMany({
+        where: { workspaceId, instagramAccountId, igScopedUserId, OR: [{ instagramUsername: null }, { instagramUsername: { not: username } }] },
+        data: { instagramUsername: username },
+      })));
     },
 
     async getContactsByInstagramIdentities(workspaceId, identities) {
