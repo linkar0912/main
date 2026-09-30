@@ -25,3 +25,23 @@ describe("outbound delivery ledger migration", () => {
     expect(sql).toContain('CHECK ("reserved" >= 0)');
   });
 });
+
+describe("outbound delivery kind constraint", () => {
+  it("allows every OutboundDeliveryKind the code writes", async () => {
+    const { readdir } = await import("node:fs/promises");
+    const migrations = (await readdir("prisma/migrations")).filter((name) => /^\d/.test(name)).sort();
+    let allowed: string[] = [];
+    for (const name of migrations) {
+      const sql = await readFile(`prisma/migrations/${name}/migration.sql`, "utf8").catch(() => "");
+      const matches = [...sql.matchAll(/"OutboundDelivery_kind_check" CHECK \("kind" IN \(([^)]*)\)\)/g)];
+      const last = matches.at(-1);
+      if (last) allowed = [...last[1].matchAll(/'([A-Z_]+)'/g)].map((match) => match[1]);
+    }
+    const repository = await readFile("src/lib/repository.ts", "utf8");
+    const union = /export type OutboundDeliveryKind =([^;]+);/.exec(repository)?.[1] ?? "";
+    const kinds = [...union.matchAll(/"([A-Z_]+)"/g)].map((match) => match[1]);
+
+    expect(kinds).toContain("MANUAL_INBOX");
+    expect([...allowed].sort()).toEqual([...kinds].sort());
+  });
+});
