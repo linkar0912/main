@@ -2321,6 +2321,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .admin-back-link { border-top: 1px solid var(--line); margin-top: var(--space-3); padding-top: var(--space-4); }
 .admin-entry-link { background: color-mix(in srgb, var(--honey) 20%, transparent); color: var(--ink); }
 .admin-resource-page { max-width: 1360px; }
+.admin-frame .page-wrap { min-width: 0; width: 100%; }
 .admin-count-badge, .admin-inline-count, .admin-back-inline { align-items: center; display: inline-flex; gap: 7px; }
 .admin-count-badge { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 999px; font-family: var(--font-mono); font-size: .72rem; font-weight: 800; padding: 10px 14px; }
 .admin-filter-bar { align-items: end; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); display: flex; gap: var(--space-3); margin-bottom: var(--space-4); padding: var(--space-4); }
@@ -2329,7 +2330,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .admin-input-icon > svg { color: var(--muted); left: 13px; position: absolute; }
 .admin-input-icon input { padding-left: 40px; width: 100%; }
 .admin-table-panel { overflow: hidden; padding: 0; }
-.admin-table-scroll { overflow-x: auto; }
+.admin-table-scroll { overflow-x: auto; position: relative; }
 .admin-table { border-collapse: collapse; min-width: 820px; width: 100%; }
 .admin-table th { background: var(--surface-soft); color: var(--muted); font-size: .66rem; letter-spacing: .08em; padding: 13px var(--space-4); text-align: left; text-transform: uppercase; }
 .admin-table td { border-top: 1px solid var(--line); font-size: .8rem; padding: var(--space-4); vertical-align: middle; }

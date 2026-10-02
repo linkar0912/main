@@ -25,6 +25,7 @@ export async function POST(request: Request) {
       context,
       () => requestSyntheticAccountCleanup({ ...input, context }),
       {
+        allowReplay: true,
         before: { impactDigest: input.impactDigest },
         summarize: (job) => ({ id: job.id, state: job.state, targetKind: job.targetKind }),
       },

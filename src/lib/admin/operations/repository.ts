@@ -1,5 +1,6 @@
 import "server-only";
 
+import { z } from "zod";
 import { getServerEnv } from "@/src/lib/env";
 import { prisma } from "@/src/lib/prisma";
 import { boundedAdminLimit } from "../accounts-repository";
@@ -32,9 +33,11 @@ function page(items: CommonRecord[], kind: AdminOperationKind, limit: number, se
   return { items: selected, nextCursor: hasMore && last ? encodeAdminCursor({ id: last.id, createdAt: last.createdAt }, secret) : null };
 }
 
-function providerFor(input: { instagramAccountId?: string | null; facebookPageId?: string | null; kind?: string; eventType?: string }): "instagram" | "facebook" | undefined {
+function providerFor(input: { provider?: string; instagramAccountId?: string | null; facebookPageId?: string | null; kind?: string; eventType?: string }): "instagram" | "facebook" | undefined {
+  if (input.provider === "FACEBOOK") return "facebook";
+  if (input.provider === "INSTAGRAM") return "instagram";
   if (input.facebookPageId || input.kind?.toLowerCase().includes("facebook") || input.eventType?.toLowerCase().startsWith("facebook")) return "facebook";
-  if (input.instagramAccountId || input.kind || input.eventType) return "instagram";
+  if (input.instagramAccountId || (input.eventType && !input.eventType.startsWith("facebook."))) return "instagram";
   return undefined;
 }
 
@@ -47,10 +50,16 @@ const actions: Record<AdminOperationKind, string[]> = {
 export function createAdminOperationsRepository(client: Client = prisma, secret = getServerEnv().authSessionSecret) {
   return {
     async list(kind: AdminOperationKind, filter: AdminOperationFilter): Promise<AdminOperationPage> {
+      const statuses = {
+        automation: ["DRAFT", "ACTIVE", "PAUSED"], sequence: ["DRAFT", "ACTIVE", "PAUSED"], broadcast: ["PENDING", "RUNNING", "COMPLETED", "CANCELLED"],
+        contact: ["ACTIVE", "SUPPRESSED"], tracked_link: ["ACTIVE", "DISABLED"], delivery: ["PENDING", "CLAIMED", "SENT", "FAILED", "UNKNOWN", "CANCELLED"], webhook: ["RECEIVED", "PROCESSED"],
+      };
+      if (filter.status) z.enum(statuses[kind] as [string, ...string[]]).parse(filter.status);
+      if (filter.provider && (kind === "tracked_link" || (filter.provider === "facebook" && ["sequence", "broadcast", "contact"].includes(kind)))) return { items: [], nextCursor: null };
       const limit = boundedAdminLimit(filter.limit);
       const workspace = { select: { id: true, name: true } } as const;
       if (kind === "automation") {
-        const rows = await client.automation.findMany({ where: { workspaceId: filter.workspaceId, status: filter.status as never, name: filter.text ? { contains: filter.text, mode: "insensitive" } : undefined, createdAt: dateWhere(filter), ...cursorWhere(filter, secret, "createdAt"), ...(filter.provider === "facebook" ? { facebookPageId: { not: null } } : filter.provider === "instagram" ? { facebookPageId: null } : {}) }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: limit + 1, select: { id: true, name: true, status: true, version: true, createdAt: true, updatedAt: true, instagramAccountId: true, facebookPageId: true, workspace, _count: { select: { executions: true, participants: true } } } });
+        const rows = await client.automation.findMany({ where: { workspaceId: filter.workspaceId, status: filter.status as never, name: filter.text ? { contains: filter.text, mode: "insensitive" } : undefined, createdAt: dateWhere(filter), ...cursorWhere(filter, secret, "createdAt"), ...(filter.provider ? { provider: filter.provider === "facebook" ? "FACEBOOK" : "INSTAGRAM" } : {}) }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: limit + 1, select: { id: true, name: true, status: true, version: true, createdAt: true, updatedAt: true, provider: true, instagramAccountId: true, facebookPageId: true, workspace, _count: { select: { executions: true, participants: true } } } });
         return page(rows.map((row) => ({ id: row.id, workspace: row.workspace, title: row.name, status: row.status, version: row.version, provider: providerFor(row), createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), metrics: { executions: row._count.executions, participants: row._count.participants } })), kind, limit, secret);
       }
       if (kind === "sequence") {
@@ -70,10 +79,10 @@ export function createAdminOperationsRepository(client: Client = prisma, secret 
         return page(rows.map((row) => ({ id: row.id, workspace: row.workspace, title: row.slug, status: row.disabledAt ? "DISABLED" : "ACTIVE", version: row.version, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), metrics: { clicks: row._count.clicks } })), kind, limit, secret);
       }
       if (kind === "delivery") {
-        const rows = await client.outboundDelivery.findMany({ where: { workspaceId: filter.workspaceId, state: filter.status, kind: filter.text ? { contains: filter.text, mode: "insensitive" } : undefined, createdAt: dateWhere(filter), ...cursorWhere(filter, secret, "createdAt") }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: limit + 1, select: { id: true, kind: true, state: true, version: true, resultCode: true, lastError: true, attemptCount: true, createdAt: true, updatedAt: true, instagramAccountId: true, workspace } });
+        const rows = await client.outboundDelivery.findMany({ where: { workspaceId: filter.workspaceId, state: filter.status, ...(filter.provider === "instagram" ? { instagramAccountId: { not: null }, AND: [{ kind: { not: { startsWith: "FACEBOOK_" } } }] } : filter.provider === "facebook" ? { AND: [{ kind: { startsWith: "FACEBOOK_" } }] } : {}), kind: filter.text ? { contains: filter.text, mode: "insensitive" } : undefined, createdAt: dateWhere(filter), ...cursorWhere(filter, secret, "createdAt") }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: limit + 1, select: { id: true, kind: true, state: true, version: true, resultCode: true, lastError: true, attemptCount: true, createdAt: true, updatedAt: true, instagramAccountId: true, workspace } });
         return page(rows.map((row) => ({ id: row.id, workspace: row.workspace, title: row.kind, status: row.state, version: row.version, provider: providerFor(row), createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), metrics: { attempts: row.attemptCount }, safeErrorCode: safeCode(row.resultCode) ?? (row.lastError ? "ERROR_RECORDED" : undefined) })), kind, limit, secret);
       }
-      const rows = await client.webhookEvent.findMany({ where: { workspaceId: filter.workspaceId, ...(filter.status === "PROCESSED" ? { processedAt: { not: null } } : filter.status === "RECEIVED" ? { processedAt: null } : {}), eventType: filter.text ? { contains: filter.text, mode: "insensitive" } : undefined, receivedAt: dateWhere(filter), ...cursorWhere(filter, secret, "receivedAt") }, orderBy: [{ receivedAt: "desc" }, { id: "asc" }], take: limit + 1, select: { id: true, eventType: true, processedAt: true, version: true, adminReprocessCount: true, receivedAt: true, workspace } });
+      const rows = await client.webhookEvent.findMany({ where: { workspaceId: filter.workspaceId, ...(filter.status === "PROCESSED" ? { processedAt: { not: null } } : filter.status === "RECEIVED" ? { processedAt: null } : {}), ...(filter.provider ? { AND: [{ eventType: filter.provider === "facebook" ? { startsWith: "facebook." } : { not: { startsWith: "facebook." } } }] } : {}), eventType: filter.text ? { contains: filter.text, mode: "insensitive" } : undefined, receivedAt: dateWhere(filter), ...cursorWhere(filter, secret, "receivedAt") }, orderBy: [{ receivedAt: "desc" }, { id: "asc" }], take: limit + 1, select: { id: true, eventType: true, processedAt: true, version: true, adminReprocessCount: true, receivedAt: true, workspace } });
       return page(rows.map((row) => ({ id: row.id, workspace: row.workspace, title: row.eventType, status: row.processedAt ? "PROCESSED" : "RECEIVED", version: row.version, provider: providerFor(row), createdAt: row.receivedAt.toISOString(), updatedAt: (row.processedAt ?? row.receivedAt).toISOString(), metrics: { adminReprocesses: row.adminReprocessCount } })), kind, limit, secret);
     },
 
@@ -82,7 +91,7 @@ export function createAdminOperationsRepository(client: Client = prisma, secret 
       const workspace = { select: { id: true, name: true } } as const;
       let item: AdminOperationItem | null = null;
       let attributes: AdminOperationDetail["attributes"] = {};
-      if (kind === "automation") { const r = await client.automation.findUnique({ where: { id }, select: { id: true, name: true, status: true, version: true, priority: true, createdAt: true, updatedAt: true, instagramAccountId: true, facebookPageId: true, workspace } }); if (r) { item = { id, kind, workspace: r.workspace, title: r.name, status: r.status, version: r.version, provider: providerFor(r), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }; attributes = { priority: r.priority, channelScoped: Boolean(r.instagramAccountId || r.facebookPageId) }; } }
+      if (kind === "automation") { const r = await client.automation.findUnique({ where: { id }, select: { id: true, name: true, status: true, version: true, priority: true, createdAt: true, updatedAt: true, provider: true, instagramAccountId: true, facebookPageId: true, workspace } }); if (r) { item = { id, kind, workspace: r.workspace, title: r.name, status: r.status, version: r.version, provider: providerFor(r), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }; attributes = { priority: r.priority, channelScoped: Boolean(r.instagramAccountId || r.facebookPageId) }; } }
       else if (kind === "sequence") { const r = await client.automationSequence.findUnique({ where: { id }, select: { id: true, name: true, status: true, version: true, sourceAutomationId: true, createdAt: true, updatedAt: true, workspace } }); if (r) { item = { id, kind, workspace: r.workspace, title: r.name, status: r.status, version: r.version, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }; attributes = { sourceAutomationId: r.sourceAutomationId }; } }
       else if (kind === "broadcast") { const r = await client.broadcast.findUnique({ where: { id }, select: { id: true, name: true, segment: true, status: true, version: true, total: true, sent: true, failed: true, skipped: true, createdAt: true, completedAt: true, workspace } }); if (r) { item = { id, kind, workspace: r.workspace, title: r.name, status: r.status, version: r.version, createdAt: r.createdAt.toISOString(), updatedAt: (r.completedAt ?? r.createdAt).toISOString(), metrics: { total: r.total, sent: r.sent, failed: r.failed, skipped: r.skipped } }; attributes = { segment: r.segment }; } }
       else if (kind === "contact") { const r = await client.automationContact.findUnique({ where: { id }, select: { id: true, email: true, igScopedUserId: true, leadStatus: true, score: true, suppressedAt: true, version: true, createdAt: true, updatedAt: true, workspace } }); if (r) { item = { id, kind, workspace: r.workspace, title: r.email ?? `Instagram user ${r.igScopedUserId.slice(-6)}`, status: r.suppressedAt ? "SUPPRESSED" : "ACTIVE", version: r.version, provider: "instagram", createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }; attributes = { email: r.email, leadStatus: r.leadStatus, score: r.score }; } }

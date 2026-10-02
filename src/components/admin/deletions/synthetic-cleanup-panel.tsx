@@ -1,4 +1,6 @@
 "use client";
+import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -98,7 +100,7 @@ export function SyntheticCleanupPanel() {
       </dl>
       <p className="form-warning">Owned workspaces are removed first. Account identities are rechecked again immediately before permanent deletion.</p>
       <label>Type exactly <code>{preview.confirmationPhrase}</code><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label>
-      <p className="muted">This single-use challenge expires {new Date(preview.challenge.expiresAt).toLocaleString()}.</p>
+      <p className="muted">This single-use challenge expires {formatAdminDateTime(preview.challenge.expiresAt)}.</p>
       <button className="button button-danger" type="button" disabled={busy || !submissionKey || confirmation !== preview.confirmationPhrase || preview.count === 0} onClick={() => void queueCleanup()}>Queue permanent cleanup</button>
     </div> : null}
     {message ? <p role="status" className="admin-command-message">{message}</p> : null}

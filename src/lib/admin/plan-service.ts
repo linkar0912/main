@@ -51,9 +51,10 @@ export async function listAdminPlans() {
 }
 
 export async function createAdminPlan(input: z.infer<typeof PlanValuesSchema> & { key: string }) {
-  const values = PlanValuesSchema.parse(input);
+  const { key, ...raw } = input;
+  const values = PlanValuesSchema.parse(raw);
   try {
-    return serialize(await prisma.planDefinition.create({ data: { id: createId("plan"), key: planKey(input.key), ...values }, select: planSelect }));
+    return serialize(await prisma.planDefinition.create({ data: { id: createId("plan"), key: planKey(key), ...values }, select: planSelect }));
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") throw new AdminWorkspaceError(409, "plan_key_conflict");
     throw error;
@@ -91,10 +92,15 @@ export async function updateAdminWorkspaceEntitlement(workspaceId: string, input
 }
 
 export async function loadAdminWorkspaceEntitlement(workspaceId: string) {
-  const periodStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
-  const [record, usage] = await Promise.all([
+  const now = new Date();
+  const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const [record, usage, premium] = await Promise.all([
     prisma.workspaceEntitlement.findUnique({ where: { workspaceId }, include: { plan: true } }),
     prisma.workspaceUsagePeriod.findUnique({ where: { workspaceId_periodStart: { workspaceId, periodStart } } }),
+    prisma.premiumInviteRedemption.findFirst({
+      where: { workspaceId, startsAt: { lte: now }, expiresAt: { gt: now } },
+      orderBy: { expiresAt: "desc" }, include: { plan: true },
+    }),
   ]);
   if (!record) throw new AdminWorkspaceError(404, "workspace_entitlement_missing");
   const overrides = EntitlementOverridesSchema.parse(record.overrides);
@@ -104,7 +110,9 @@ export async function loadAdminWorkspaceEntitlement(workspaceId: string) {
     plan: { id: record.plan.id, key: record.plan.key, name: record.plan.name },
     defaults,
     overrides,
-    effective: { ...defaults, ...overrides },
+    effective: premium ? Object.fromEntries([...limitKeys, ...featureKeys].map((key) => [key, premium.plan[key]])) : { ...defaults, ...overrides },
+    effectivePlan: premium ? { id: premium.plan.id, key: premium.plan.key, name: premium.plan.name } : { id: record.plan.id, key: record.plan.key, name: record.plan.name },
+    premiumExpiresAt: premium?.expiresAt.toISOString() ?? null,
     version: record.version,
     usage: { deliveriesReserved: usage?.deliveriesReserved ?? 0, broadcastsCreated: usage?.broadcastsCreated ?? 0, periodStart: periodStart.toISOString() },
   };

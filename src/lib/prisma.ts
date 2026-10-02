@@ -1855,6 +1855,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         },
         data: {
           state: "CLAIMED",
+          version: { increment: 1 },
           retryable: false,
           claimOwner: owner,
           claimExpiresAt: new Date(leaseUntil),
@@ -1870,6 +1871,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: { deliveryKey, state: "CLAIMED", claimOwner: owner },
         data: {
           state: "SENT",
+          version: { increment: 1 },
           retryable: false,
           resultCode: "DELIVERED",
           claimOwner: null,
@@ -1887,6 +1889,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: { deliveryKey, state: "CLAIMED", claimOwner: owner },
         data: {
           state: "FAILED",
+          version: { increment: 1 },
           retryable,
           resultCode,
           claimOwner: null,
@@ -1906,6 +1909,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         },
         data: {
           state: "UNKNOWN",
+          version: { increment: 1 },
           retryable: false,
           resultCode: "AMBIGUOUS",
           claimOwner: null,
@@ -3110,7 +3114,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           counters.total += count;
           if (group.state === "SENT" || group.resultCode === "DELIVERED") {
             counters.sent += count;
-          } else if (group.resultCode === "SUPPRESSED" || group.resultCode === "WINDOW_CLOSED") {
+          } else if (group.state === "CANCELLED" || group.resultCode === "SUPPRESSED" || group.resultCode === "WINDOW_CLOSED") {
             counters.skipped += count;
           } else if (group.state === "FAILED" || group.state === "UNKNOWN") {
             counters.failed += count;
@@ -3119,16 +3123,21 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           }
         }
         const completed = counters.pending === 0;
+        const data = {
+          total: counters.total,
+          sent: counters.sent,
+          failed: counters.failed,
+          skipped: counters.skipped,
+          version: { increment: 1 },
+        };
         await transaction.broadcast.updateMany({
-          where: { id: broadcastId, workspaceId },
-          data: {
-            total: counters.total,
-            sent: counters.sent,
-            failed: counters.failed,
-            skipped: counters.skipped,
-            status: completed ? "COMPLETED" : "RUNNING",
-            completedAt: completed ? new Date() : null,
-          },
+          where: { id: broadcastId, workspaceId, status: { not: "CANCELLED" } },
+          data: { ...data, status: completed ? "COMPLETED" : "RUNNING", completedAt: completed ? new Date() : null },
+        });
+        // Cancellation remains terminal even when an in-flight worker finishes.
+        await transaction.broadcast.updateMany({
+          where: { id: broadcastId, workspaceId, status: "CANCELLED" },
+          data,
         });
         return counters;
       });

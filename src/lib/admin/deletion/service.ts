@@ -5,8 +5,16 @@ import type { AdminWriteContext } from "../request-guard";
 import { AdminWorkspaceError } from "../workspace-service";
 import { enqueueAdminDeletion } from "@/src/lib/queue";
 import { previewDeletion } from "./impact";
-import { createDeletionJob, getDeletionJobByIdempotencyKey, requestDeletionCancellation, resetFailedDeletion } from "./repository";
+import { createDeletionJob, getDeletionJobByIdempotencyKey, requestDeletionCancellation, resetFailedDeletion, markDeletionEnqueueFailed } from "./repository";
 import type { DeletionTarget } from "./types";
+
+export async function queueDeletionJob(job: { id: string; version: number }) {
+  const queued = await enqueueAdminDeletion(job.id).catch(() => false);
+  if (!queued) {
+    await markDeletionEnqueueFailed(job.id, job.version);
+    throw new AdminWorkspaceError(503, "deletion_queue_unavailable");
+  }
+}
 
 export async function prepareDeletion(target: DeletionTarget, actor: { userId: string; sessionId: string }) {
   const preview = await previewDeletion(target);
@@ -24,10 +32,10 @@ export async function requestPermanentDeletion(input: {
 }) {
   const existing = await getDeletionJobByIdempotencyKey(input.context.idempotencyKey);
   if (existing) {
-    if (existing.targetKind !== input.target.kind || existing.targetId !== input.target.id || existing.impactDigest !== input.impactDigest) {
+    if (existing.targetKind !== input.target.kind || existing.targetId !== input.target.id || existing.impactDigest !== input.impactDigest || existing.includeAuthUsers !== input.includeAuthUsers || existing.requestedByUserId !== input.context.owner.userId) {
       throw new AdminWorkspaceError(409, "idempotency_conflict");
     }
-    if (!await enqueueAdminDeletion(existing.id)) throw new AdminWorkspaceError(503, "deletion_queue_unavailable");
+    await queueDeletionJob(existing);
     return existing;
   }
   const fresh = await previewDeletion(input.target);
@@ -39,12 +47,12 @@ export async function requestPermanentDeletion(input: {
     expectedVersion: fresh.impactDigest, confirmation: input.confirmation,
   });
   const job = await createDeletionJob({ target: input.target, preview: fresh, includeAuthUsers: input.includeAuthUsers, context: input.context });
-  if (!await enqueueAdminDeletion(job.id)) throw new AdminWorkspaceError(503, "deletion_queue_unavailable");
+  await queueDeletionJob(job);
   return job;
 }
 
 export async function changeDeletionJob(id: string, action: "cancel" | "retry", context: AdminWriteContext) {
   const job = action === "cancel" ? await requestDeletionCancellation(id, context.owner.userId) : await resetFailedDeletion(id);
-  if (action === "retry" && !await enqueueAdminDeletion(id)) throw new AdminWorkspaceError(503, "deletion_queue_unavailable");
+  if (job) await queueDeletionJob(job);
   return job;
 }

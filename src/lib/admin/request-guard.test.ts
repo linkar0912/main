@@ -52,6 +52,7 @@ describe("admin request guard", () => {
     [{ "content-type": "application/json" }, 403, "origin_required"],
     [{ origin: "https://evil.test", "content-type": "application/json" }, 403, "origin_mismatch"],
     [{ origin: "https://app.linkar.in", "content-type": "text/plain" }, 415, "json_required"],
+    [{ origin: "https://app.linkar.in", "content-type": "application/json-injected" }, 415, "json_required"],
   ])("rejects unsafe write transport %#", async (headers, status, code) => {
     await expect(
       requireAdminWrite(writeRequest(headers), {
@@ -122,4 +123,18 @@ describe("admin request guard", () => {
     expect(result.owner.aal).toBe("aal1");
     expect(mocks.getPlatformOwnerSession).not.toHaveBeenCalled();
   });
+});
+
+it("scopes audit correlation to the action, target, owner, and session", async () => {
+  const headers = { origin: "https://app.linkar.in", "content-type": "application/json", "x-admin-reason": "Review access", "idempotency-key": "same-key-for-test-0001" };
+  const options = { action: "workspace.suspend", targetType: "workspace", targetId: "w1" };
+  // This test is outside the describe's beforeEach, so set its fixtures explicitly.
+  mocks.getServerEnv.mockReturnValue({ appUrl: "https://app.linkar.in", authSessionSecret: "test-only", trustedProxyHops: 0 });
+  mocks.getPlatformOwnerSession.mockResolvedValue(OWNER);
+  const first = await requireAdminWrite(writeRequest(headers), options);
+  const replay = await requireAdminWrite(writeRequest(headers), options);
+  const other = await requireAdminWrite(writeRequest(headers), { ...options, targetId: "w2" });
+  const otherWorkspace = await requireAdminWrite(writeRequest(headers), { ...options, workspaceId: "w2" });
+  expect(otherWorkspace.requestId).not.toBe(first.requestId);
+  expect(replay.requestId).toBe(first.requestId); expect(other.requestId).not.toBe(first.requestId);
 });

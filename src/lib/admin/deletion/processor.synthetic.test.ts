@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 const mocks = vi.hoisted(() => ({
   jobFind: vi.fn(),
   jobUpdate: vi.fn(),
+  jobUpdateMany: vi.fn(),
   stageFind: vi.fn(),
   stageUpdate: vi.fn(),
   workspaceUpdateMany: vi.fn(),
@@ -20,7 +21,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({ platformOwnerUserIds: ["protected_admin"] }) }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: {
-  adminDeletionJob: { findUnique: mocks.jobFind, update: mocks.jobUpdate },
+  adminDeletionJob: { findUnique: mocks.jobFind, update: mocks.jobUpdate, updateMany: mocks.jobUpdateMany },
   adminDeletionStage: { findUnique: mocks.stageFind, update: mocks.stageUpdate },
   workspace: { updateMany: mocks.workspaceUpdateMany, deleteMany: mocks.workspaceDeleteMany },
   workspaceMember: { deleteMany: mocks.memberDeleteMany, count: vi.fn() },
@@ -69,6 +70,7 @@ describe("synthetic deletion processor", () => {
     vi.clearAllMocks();
     mocks.jobFind.mockResolvedValue(job);
     mocks.jobUpdate.mockResolvedValue(job);
+    mocks.jobUpdateMany.mockResolvedValue({ count: 1 });
     mocks.stageFind.mockResolvedValue(null);
     mocks.stageUpdate.mockResolvedValue({});
     mocks.workspaceUpdateMany.mockResolvedValue({ count: 1 });
@@ -97,4 +99,23 @@ describe("synthetic deletion processor", () => {
     await expect(processAdminDeletion("del_batch")).rejects.toThrow("auth_identity_changed");
     expect(mocks.deleteUser).not.toHaveBeenCalled();
   });
+  it("honors cancellation that arrives between the last check and the irreversible update", async () => {
+    let cancelled = false;
+    mocks.jobFind.mockImplementation(async () => cancelled ? { ...job, cancelRequestedAt: new Date() } : job);
+    mocks.jobUpdateMany.mockImplementation(async () => { cancelled = true; return { count: 0 }; });
+    await expect(processAdminDeletion("del_batch")).resolves.toEqual({ state: "CANCELLED" });
+    expect(mocks.workspaceDeleteMany).not.toHaveBeenCalled();
+    expect(mocks.deleteUser).not.toHaveBeenCalled();
+    expect(mocks.jobUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "del_batch", irreversibleAt: null, cancelRequestedAt: null } }));
+  });
+
+  it("does not expose raw infrastructure errors in durable job or stage codes", async () => {
+    mocks.deleteQueuedBatch.mockRejectedValueOnce(new Error("redis://username:private-token@example.com"));
+    await expect(processAdminDeletion("del_batch")).rejects.toThrow("private-token");
+    const recorded = JSON.stringify([...mocks.jobUpdate.mock.calls, ...mocks.stageUpdate.mock.calls]);
+    expect(recorded).not.toContain("private-token");
+    expect(recorded).toContain("DELETION_STAGE_FAILED");
+    expect(mocks.workspaceUpdateMany).toHaveBeenCalledBefore(mocks.deleteQueuedBatch);
+  });
+
 });

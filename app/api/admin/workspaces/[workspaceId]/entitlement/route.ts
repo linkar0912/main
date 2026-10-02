@@ -12,6 +12,6 @@ export async function GET(request: Request, context: RouteContext<"/api/admin/wo
   catch (error) { return adminRouteError(error, "workspace_entitlement_unavailable"); }
 }
 export async function PATCH(request: Request, context: RouteContext<"/api/admin/workspaces/[workspaceId]/entitlement">) {
-  try { const { workspaceId } = await context.params; const input = UpdateEntitlement.parse(await request.json()); const guard = await requireAdminWrite(request, { action: "workspace.entitlement.update", targetType: "workspace", targetId: workspaceId }); return adminJson({ data: await runAuditedAdminMutation(guard, () => updateAdminWorkspaceEntitlement(workspaceId, input)) }); }
+  try { const { workspaceId } = await context.params; const input = UpdateEntitlement.parse(await request.json()); const guard = await requireAdminWrite(request, { action: "workspace.entitlement.update", targetType: "workspace", targetId: workspaceId, workspaceId }); return adminJson({ data: await runAuditedAdminMutation(guard, () => updateAdminWorkspaceEntitlement(workspaceId, input)) }); }
   catch (error) { return adminRouteError(error, "workspace_entitlement_update_failed"); }
 }

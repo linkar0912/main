@@ -65,7 +65,7 @@ function asInputJson(value: unknown): Prisma.InputJsonValue {
   return redactAdminAuditValue(value) as Prisma.InputJsonValue;
 }
 
-export async function appendAdminAuditEvent(input: AdminAuditInput): Promise<void> {
+export async function appendAdminAuditEvent(input: AdminAuditInput, options: { allowReplay?: boolean } = {}): Promise<void> {
   try {
     await prisma.adminAuditEvent.create({
       data: {
@@ -89,9 +89,12 @@ export async function appendAdminAuditEvent(input: AdminAuditInput): Promise<voi
       },
     });
   } catch (error) {
-    // requestId is derived from the idempotency key. Replaying the same
-    // request must not append a second phase or block the idempotent command.
-    if ((error as { code?: string }).code === "P2002") return;
+    // A duplicate attempt must stop before side effects: silently dropping
+    // it would execute a second command without recording its outcome.
+    if ((error as { code?: string }).code === "P2002") {
+      if (input.phase === "ATTEMPT" && !options.allowReplay) throw Object.assign(new Error("operation_already_requested"), { status: 409, code: "operation_already_requested" });
+      return;
+    }
     throw error;
   }
 }

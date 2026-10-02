@@ -1,0 +1,8 @@
+
+ RUN  v4.1.11 /Users/tejastelkar/Desktop/Software Projects/linkar
+
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  14:40:38
+   Duration  400ms (transform 156ms, setup 11ms, import 299ms, tests 25ms, environment 0ms)

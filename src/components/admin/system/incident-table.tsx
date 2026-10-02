@@ -1,3 +1,4 @@
+import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
 import { AlertTriangle, CheckCircle2, CircleAlert } from "lucide-react";
 
 import type { AdminIncidentSummary } from "@/src/lib/admin/system/types";
@@ -41,7 +42,7 @@ export function IncidentTable({ incidents, now }: { incidents: AdminIncidentSumm
                   <td data-label="Incident"><strong>{incident.title}</strong><small>{incident.detail}</small></td>
                   <td data-label="Service"><code>{incident.source}</code></td>
                   <td data-label="Duration">{durationLabel(incident, now)}</td>
-                  <td data-label="Last seen"><time dateTime={incident.lastSeenAt}>{new Date(incident.lastSeenAt).toLocaleString()}</time></td>
+                  <td data-label="Last seen"><time dateTime={incident.lastSeenAt}>{formatAdminDateTime(incident.lastSeenAt)}</time></td>
                 </tr>
               );
             })}

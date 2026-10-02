@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 const forbidden = new RegExp(["DM", "Setu"].join(""), "gi");
 const emDash = /\u2014/g;
-const ignored = /^(?:node_modules\/|\.next\/|coverage\/|dist\/|build\/|\.superpowers\/|docs\/superpowers\/|docs\/research\/|AGENTS\.md$|supabase\/config\.toml$)/;
+const ignored = /^(?:node_modules\/|\.next\/|coverage\/|dist\/|build\/|\.superpowers\/|docs\/archive\/|AGENTS\.md$|supabase\/config\.toml$)/;
 // git ls-files reports tracked files even when deleted in the working tree
 // (unstaged deletions); skip anything missing on disk.
 const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })

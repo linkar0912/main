@@ -1,5 +1,7 @@
 # Linkar
 
+Documentation: [current runbooks and historical records](docs/README.md).
+
 Owner operations: [admin console runbook](docs/admin-console-operations.md) and [permanent deletion runbook](docs/admin-console-deletion-runbook.md).
 
 Linkar is an India-first Instagram and Facebook Page automation MVP. It provides deterministic Instagram comment and inbound-DM replies plus public replies to top-level Facebook Page comments through Meta’s official APIs. There is no AI integration in this version.
@@ -141,3 +143,22 @@ Follow [`docs/meta-app-review.md`](docs/meta-app-review.md) for the Meta dashboa
 - `/api/meta/webhook`
 
 Actual App Review submission still requires the founder’s Meta developer account, real App ID/secret, public deployment, business/test accounts, and any Meta-requested verification or advanced access.
+
+## Repository layout and generated output
+
+- `app/`: Next.js pages, route handlers, and routing conventions
+- `src/components/`: application and marketing UI
+- `src/lib/`: domain logic, integrations, data access, and shared utilities
+- `src/worker.ts`: background worker entry point
+- `prisma/`: database schema and migration history
+- `scripts/`: maintenance, validation, and build helpers
+- `e2e/`: browser tests; unit tests live beside the code they exercise
+- `public/`: current brand exports and application assets
+- `docs/`: current guidance, release notes, audits, and archived design records
+- `ops/` and `.github/`: deployment operations and CI workflows
+
+Run `pnpm clean` to remove build output, test reports, browser test state,
+review caches, and TypeScript incremental metadata. Rebuild before `pnpm start`.
+The command preserves source, migrations, installed dependencies, environment
+files, and editor configuration. Build and test outputs are ignored by Git
+and excluded from the Docker build context.

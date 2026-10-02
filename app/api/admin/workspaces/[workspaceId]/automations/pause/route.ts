@@ -10,7 +10,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/w
   try {
     const { workspaceId } = await context.params;
     const input = PauseCommand.parse(await request.json());
-    const guard = await requireAdminWrite(request, { action: "workspace.automations.pause_all", targetType: "workspace", targetId: workspaceId });
+    const guard = await requireAdminWrite(request, { action: "workspace.automations.pause_all", targetType: "workspace", targetId: workspaceId, workspaceId });
     return adminJson({ data: await runAuditedAdminMutation(guard, () => pauseAdminWorkspaceAutomations(workspaceId, input.version)) });
   } catch (error) {
     return adminRouteError(error, "workspace_pause_failed");

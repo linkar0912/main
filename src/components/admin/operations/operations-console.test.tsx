@@ -10,3 +10,23 @@ describe("OperationsConsole", () => {
   it("switches tabs and synchronizes filters to the URL", async () => { render(<OperationsConsole kind="delivery" page={{ items: [item], nextCursor: null }} filters={{ kind: "delivery" }} />); await userEvent.click(screen.getByRole("button", { name: "webhook" })); expect(push).toHaveBeenCalledWith("/admin/operations?kind=webhook"); await userEvent.type(screen.getByRole("textbox", { name: "Workspace ID" }), "w1"); await userEvent.click(screen.getByRole("button", { name: "Apply filters" })); expect(push).toHaveBeenLastCalledWith(expect.stringContaining("workspaceId=w1")); });
   it("opens a safe detail drawer and restores an explicit action surface", async () => { vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { ...item, attributes: { retryable: true, hasProviderReceipt: false }, allowedActions: ["retry", "cancel_pending"] } }) })); render(<OperationsConsole kind="delivery" page={{ items: [item], nextCursor: null }} filters={{ kind: "delivery" }} />); await userEvent.click(screen.getByRole("button", { name: "Inspect AUTOMATION_DM" })); expect(await screen.findByRole("dialog", { name: "Operation detail" })).toBeTruthy(); expect(screen.getByRole("button", { name: "retry" })).toBeTruthy(); expect(screen.queryByText("private message body")).toBeNull(); });
 });
+
+it("removes cleared filters and resets the form when URL filters change", async () => {
+  const props = { kind: "delivery" as const, page: { items: [item], nextCursor: null } };
+  const { rerender } = render(<OperationsConsole {...props} filters={{ kind: "delivery", text: "old", status: "FAILED" }} />);
+  await userEvent.clear(screen.getByRole("textbox", { name: "Text" }));
+  await userEvent.clear(screen.getByRole("textbox", { name: "Status" }));
+  await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+  expect(push).toHaveBeenLastCalledWith("/admin/operations?kind=delivery");
+  rerender(<OperationsConsole {...props} filters={{ kind: "delivery", text: "new" }} />);
+  expect((screen.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("new");
+});
+it("Escape closes a nested confirmation without closing its detail drawer", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { ...item, attributes: {}, allowedActions: ["retry"] } }) }));
+  render(<OperationsConsole kind="delivery" page={{ items: [item], nextCursor: null }} filters={{}} />);
+  await userEvent.click(screen.getByRole("button", { name: "Inspect AUTOMATION_DM" }));
+  await userEvent.click(await screen.findByRole("button", { name: "retry" }));
+  expect(screen.getAllByRole("dialog")).toHaveLength(2);
+  await userEvent.keyboard("{Escape}");
+  expect(screen.getByRole("dialog", { name: "Operation detail" })).toBeTruthy();
+});

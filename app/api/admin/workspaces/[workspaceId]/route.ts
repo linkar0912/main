@@ -26,7 +26,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
   try {
     const { workspaceId } = await context.params;
     const input = UpdateWorkspace.parse(await request.json());
-    const guard = await requireAdminWrite(request, { action: "workspace.update", targetType: "workspace", targetId: workspaceId });
+    const guard = await requireAdminWrite(request, { action: "workspace.update", targetType: "workspace", targetId: workspaceId, workspaceId });
     const workspace = await runAuditedAdminMutation(guard, () => updateAdminWorkspace(workspaceId, input), {
       summarize: (result) => ({ id: result.id, name: result.name, slug: result.slug, status: result.status, version: result.version }),
     });

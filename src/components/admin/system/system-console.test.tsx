@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react"; import userEvent from "@testing-library/user-event"; import { afterEach, describe, expect, it, vi } from "vitest"; vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) })); const { SystemConsole } = await import("./system-console"); afterEach(cleanup); const snapshot = { overall: "degraded" as const, generatedAt: "2026-08-31T10:00:00.000Z", release: "abc123", web: { state: "healthy" as const }, database: { state: "healthy" as const }, redis: { state: "unavailable" as const, detail: "Probe failed" }, worker: { state: "degraded" as const, detail: "No heartbeat" }, queues: [{ name: "webhooks" as const, configured: true, paused: false, waiting: 2, active: 1, delayed: 0, completed: 20, failed: 1, oldestWaitingAgeMs: 2000, lastFailedCode: "PROVIDER_REJECTED" }], stuckClaims: 1, webhookThroughput: { lastHour: 40 }, deletionJobs: { queued: 0, running: 0, failed: 0 }, billing: { configured: false, failedWebhooksLastHour: 1, driftedSubscriptions: 0 }, incidents: [], configurationPresence: [{ requirement: "Database", present: true }], capabilities: { followGatedCampaigns: "enabled" as const }, reconciliation: { expiredDeliveryClaims: 1 }, rateLimits: { state: "healthy" as const } };
+import { act, cleanup, render, screen } from "@testing-library/react"; import userEvent from "@testing-library/user-event"; import { afterEach, describe, expect, it, vi } from "vitest"; vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) })); const { SystemConsole } = await import("./system-console"); afterEach(cleanup); const snapshot = { overall: "degraded" as const, generatedAt: "2026-08-31T10:00:00.000Z", release: "abc123", web: { state: "healthy" as const }, database: { state: "healthy" as const }, redis: { state: "unavailable" as const, detail: "Probe failed" }, worker: { state: "degraded" as const, detail: "No heartbeat" }, queues: [{ name: "webhooks" as const, configured: true, paused: false, waiting: 2, active: 1, delayed: 0, completed: 20, failed: 1, oldestWaitingAgeMs: 2000, lastFailedCode: "PROVIDER_REJECTED" }], stuckClaims: 1, webhookThroughput: { lastHour: 40 }, deletionJobs: { queued: 0, running: 0, failed: 0 }, billing: { configured: false, failedWebhooksLastHour: 1, driftedSubscriptions: 0 }, incidents: [], configurationPresence: [{ requirement: "Database", present: true }], capabilities: { followGatedCampaigns: "enabled" as const }, reconciliation: { expiredDeliveryClaims: 1 }, rateLimits: { state: "healthy" as const } };
 describe("SystemConsole", () => { it("labels partial outages in text rather than color alone", () => { render(<SystemConsole snapshot={snapshot} />); expect(screen.getByText(/Unavailable · Probe failed/)).toBeTruthy(); expect(screen.getByText(/degraded · No heartbeat/)).toBeTruthy(); expect(screen.getByText("Latest failure:", { exact: false })).toBeTruthy(); }); it("requires a reason dialog before pausing a queue", async () => { render(<SystemConsole snapshot={snapshot} />); await userEvent.click(screen.getByRole("button", { name: "Pause queue" })); expect(screen.getByRole("dialog", { name: "pause" })).toBeTruthy(); expect(screen.getByRole("textbox", { name: "Operator reason" })).toBeTruthy(); }); });
 
 describe("incident operations view", () => {
@@ -22,4 +22,19 @@ describe("incident operations view", () => {
     expect(screen.getByText("No incidents in the last 24 hours")).toBeTruthy();
     expect(screen.getByText("Razorpay needs configuration")).toBeTruthy();
   });
+});
+
+it("ages a snapshot even when refreshes fail", () => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date(snapshot.generatedAt));
+  try {
+    render(<SystemConsole snapshot={snapshot} />);
+    expect(screen.queryByText(/· Stale/)).toBeNull();
+    act(() => vi.advanceTimersByTime(65_000));
+    expect(screen.getByText(/· Stale/)).toBeTruthy();
+  } finally { cleanup(); vi.useRealTimers(); }
+});
+it("does not label an unknown queue pause state as running", () => {
+  render(<SystemConsole snapshot={{ ...snapshot, queues: [{ ...snapshot.queues[0], paused: null }] }} />);
+  expect(screen.queryByText("Running")).toBeNull();
+  expect((screen.getByRole("button", { name: "Pause queue" }) as HTMLButtonElement).disabled).toBe(true);
 });

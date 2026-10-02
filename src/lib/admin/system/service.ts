@@ -108,13 +108,13 @@ export function createAdminSystemService(dependencies: {
       let worker: AdminProbe = { state: "degraded", detail: "Worker heartbeat endpoint not configured" };
       if (workerUrl) {
         worker = await bounded(async () => {
-          const response = await fetch(workerUrl, { cache: "no-store" });
+          const response = await fetch(workerUrl, { cache: "no-store", signal: AbortSignal.timeout(3_000) });
           return response.ok ? { state: "healthy" as const } : { state: "degraded" as const, detail: "Worker health returned degraded" };
         }).catch(() => ({ state: "unavailable", detail: "Worker health unavailable" }));
       }
 
-      const queues = queueResults.filter((item): item is NonNullable<typeof item> => item !== null);
-      const degraded = !health || database.state !== "healthy" || redis.state !== "healthy" || worker.state !== "healthy" || queueResults.some((item) => item === null);
+      const queues = queueResults.map((item, index) => item ?? { name: ADMIN_QUEUE_NAMES[index], configured: Boolean(env.redisUrl), paused: null, waiting: 0, active: 0, delayed: 0, completed: 0, failed: 0, oldestWaitingAgeMs: null, lastFailedCode: null });
+      const degraded = !health || health.status !== "ok" || database.state !== "healthy" || redis.state !== "healthy" || worker.state !== "healthy" || operational === null || queueResults.some((item) => item === null || !item.configured || item.paused !== false);
       const billingConfigured = razorpayConfigured(env);
       return {
         overall: degraded ? "degraded" : "healthy",
@@ -133,6 +133,7 @@ export function createAdminSystemService(dependencies: {
           failedWebhooksLastHour: operational?.failedBillingWebhooksLastHour ?? null,
           driftedSubscriptions: operational?.driftedSubscriptions ?? null,
         },
+        operationalDataAvailable: operational !== null,
         incidents: (operational?.incidents ?? []).map((incident) => ({
           ...incident,
           firstSeenAt: incident.firstSeenAt.toISOString(),
@@ -151,7 +152,7 @@ export function createAdminSystemService(dependencies: {
         ],
         capabilities: { followGatedCampaigns: health?.capabilities.followGatedCampaigns ?? (env.followGatedCampaignsEnabled ? "enabled" : "disabled") },
         reconciliation: { expiredDeliveryClaims: operational?.stuckClaims ?? null },
-        rateLimits: env.redisUrl ? { state: "healthy" } : { state: "unavailable", detail: "Redis-backed limits unavailable" },
+        rateLimits: redis.state === "healthy" ? { state: "healthy" } : { state: "unavailable", detail: "Redis-backed limits unavailable" },
       };
     },
   };

@@ -1,3 +1,4 @@
+import { PlatformOwnerAuthError } from "@/src/lib/admin/authorization";
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/src/components/admin/admin-shell";
@@ -9,7 +10,8 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
   let owner;
   try {
     owner = await getPlatformOwnerIdentity();
-  } catch {
+  } catch (error) {
+    if (!(error instanceof PlatformOwnerAuthError)) throw error;
     redirect("/dashboard");
   }
   return <AdminShell owner={{ email: owner.email }}>{children}</AdminShell>;

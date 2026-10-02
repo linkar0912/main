@@ -43,7 +43,7 @@ export function WorkspacesScreen({ page, search = "" }: { page: CursorPage<Admin
         ) : (
           <div className="admin-table-scroll">
             <table className="admin-table">
-              <thead><tr><th>Workspace</th><th>Status</th><th>Plan</th><th>Members</th><th>Automations</th><th><span className="sr-only">Open</span></th></tr></thead>
+              <thead><tr><th>Workspace</th><th>Status</th><th>Assigned plan</th><th>Members</th><th>Automations</th><th><span className="sr-only">Open</span></th></tr></thead>
               <tbody>{page.items.map((workspace) => (
                 <tr key={workspace.id}>
                   <td><strong>{workspace.name}</strong><small>{workspace.slug} · {workspace.id}</small></td>

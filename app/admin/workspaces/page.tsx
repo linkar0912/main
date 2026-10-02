@@ -9,7 +9,7 @@ async function WorkspaceData({ searchParams }: { searchParams: SearchParams }) {
   const cursor = typeof input.cursor === "string" ? input.cursor : null;
   const search = typeof input.search === "string" ? input.search : "";
   const page = await getAdminAccountsRepository().listAdminWorkspaces({ cursor, search });
-  return <WorkspacesScreen page={page} search={search} />;
+  return <WorkspacesScreen key={search} page={page} search={search} />;
 }
 
 export default function AdminWorkspacesPage({ searchParams }: { searchParams: SearchParams }) {

@@ -98,7 +98,7 @@ export async function loadAdminOverview(sources: AdminOverviewSources = producti
       kind: "failure",
       at: failure.createdAt.toISOString(),
       title: "Automation delivery failed",
-      detail: safeDetail(failure.reason, "No failure reason was recorded."),
+      detail: failure.reason && /^[A-Z][A-Z0-9_]{1,79}$/.test(failure.reason) ? failure.reason : "Delivery failed. Inspect the delivery record for its result code.",
       status: "failed",
       workspaceId: failure.workspaceId,
       targetId: failure.automationId,
@@ -138,7 +138,7 @@ const productionSources: AdminOverviewSources = {
     const [activeWorkspaces, suspendedWorkspaces, users, instagram, facebook, activeAutomations] = await Promise.all([
       prisma.workspace.count({ where: { status: "ACTIVE" } }),
       prisma.workspace.count({ where: { status: { in: ["SUSPENDED", "DELETION_PENDING"] } } }),
-      prisma.$queryRaw<Array<{ count: bigint }>>`SELECT COUNT(DISTINCT COALESCE("userId", lower("email"))) AS "count" FROM "WorkspaceMember"`,
+      prisma.$queryRaw<Array<{ count: bigint }>>`SELECT COUNT(DISTINCT member."userId") AS "count" FROM "WorkspaceMember" member LEFT JOIN "PlatformUserControl" control ON control."userId" = member."userId" WHERE member."userId" IS NOT NULL AND (control."status" IS NULL OR control."status" = 'ACTIVE')`,
       prisma.instagramConnection.count({ where: { status: "CONNECTED" } }),
       prisma.facebookPageConnection.count({ where: { status: "CONNECTED" } }),
       prisma.automation.count({ where: { status: "ACTIVE" } }),

@@ -21,3 +21,17 @@ describe("admin operations repository", () => {
     expect(JSON.stringify(detail)).not.toMatch(/accessToken|payload|messageBody|private/);
   });
 });
+
+it("rejects unknown statuses before reaching Prisma", async () => {
+  const findMany = vi.fn();
+  const repository = createAdminOperationsRepository({ automation: { findMany } } as never, SECRET);
+  await expect(repository.list("automation", { status: "NOT_A_STATUS" })).rejects.toBeInstanceOf(Error);
+  expect(findMany).not.toHaveBeenCalled();
+});
+it("uses the actual automation provider even before an account is bound", async () => {
+  const findMany = vi.fn().mockResolvedValue([{ id: "a", name: "Unbound", provider: "FACEBOOK", status: "DRAFT", version: 1, createdAt: at, updatedAt: at, instagramAccountId: null, facebookPageId: null, _count: { executions: 0, participants: 0 }, workspace: { id: "w", name: "Workspace" } }]);
+  const repository = createAdminOperationsRepository({ automation: { findMany } } as never, SECRET);
+  const result = await repository.list("automation", { provider: "facebook" });
+  expect(findMany.mock.calls[0][0].where).toMatchObject({ provider: "FACEBOOK" });
+  expect(result.items[0].provider).toBe("facebook");
+});

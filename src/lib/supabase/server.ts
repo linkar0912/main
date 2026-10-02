@@ -9,13 +9,17 @@ import { sharedAuthCookieDomain } from "@/src/lib/auth/cookie-domain";
  * Components (read-only - setAll is a caught no-op there; proxy.ts refreshes
  * the session for that path instead, per @supabase/ssr's documented pattern).
  */
-export async function createSupabaseServerClient() {
+export async function createSupabaseServerClient(options: { fetchTimeoutMs?: number } = {}) {
   const env = getServerEnv();
   const cookieStore = await cookies();
   const domain = sharedAuthCookieDomain(env);
 
   return createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
     ...(domain ? { cookieOptions: { domain } } : {}),
+    ...(options.fetchTimeoutMs ? { global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+      const timeout = AbortSignal.timeout(options.fetchTimeoutMs!);
+      return fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout });
+    } } } : {}),
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: (cookiesToSet) => {

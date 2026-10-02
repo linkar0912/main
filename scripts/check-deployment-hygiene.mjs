@@ -26,7 +26,7 @@ const retiredArtifacts = new Set([
 function shouldInspect(relativePath) {
   const normalized = relativePath.split(path.sep).join("/");
 
-  if (normalized.startsWith("docs/superpowers/")) return false;
+  if (normalized.startsWith("docs/archive/")) return false;
   if (/(?:\.test|\.spec)\.[cm]?[jt]sx?$/.test(normalized)) return false;
 
   const rootFiles = new Set([

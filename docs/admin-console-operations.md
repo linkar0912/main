@@ -1,6 +1,6 @@
 # Linkar owner console operations
 
-The owner console is served only from `https://admin.linkar.in/admin`. Access is granted by exact Supabase Auth UUIDs in `PLATFORM_OWNER_USER_IDS`; email addresses are never authorization inputs. Sign in on the admin host, enroll a TOTP factor under **Security**, and reach AAL2 before opening operational pages. Admin sessions remain host-scoped and are not shared with the customer app.
+The owner console is served only from `https://admin.linkar.in/admin`. Access is granted by exact Supabase Auth UUIDs in `PLATFORM_OWNER_USER_IDS`; email addresses are never authorization inputs. Sign in on the admin host, enroll a TOTP factor under **Security**, and reach AAL2 before opening operational pages. When the app and admin hosts share an eligible parent domain, Supabase cookies use that domain to support the login handoff. Admin access still requires the exact owner UUID and AAL2 on each protected request.
 
 Use **System** for bounded web, PostgreSQL, Valkey, worker, queue, configuration-presence, throughput, and reconciliation status. Queue pause/resume and reconciliation commands require an operator reason and are written to the immutable audit trail. A paused queue stops new work from being claimed; resume it after the incident. Retry only known failed job IDs. The UI never exposes URLs, credentials, tokens, payloads, or stack traces.
 

@@ -10,7 +10,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/w
   try {
     const { workspaceId } = await context.params;
     const input = LifecycleCommand.parse(await request.json());
-    const guard = await requireAdminWrite(request, { action: `workspace.${input.action.toLowerCase()}`, targetType: "workspace", targetId: workspaceId });
+    const guard = await requireAdminWrite(request, { action: `workspace.${input.action.toLowerCase()}`, targetType: "workspace", targetId: workspaceId, workspaceId });
     const workspace = await runAuditedAdminMutation(guard, () => setAdminWorkspaceLifecycle(workspaceId, {
       ...input,
       reason: guard.reason,

@@ -32,9 +32,12 @@ const mocks = vi.hoisted(() => ({
   createAdminChallenge: vi.fn(),
   consumeAdminChallenge: vi.fn(),
   appendAdminAuditEvent: vi.fn(),
+  transaction: vi.fn(),
+  sql: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/src/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/admin/authorization", () => ({
   getPlatformOwnerIdentity: mocks.getPlatformOwnerIdentity,
 }));
@@ -183,4 +186,27 @@ describe("/api/admin/security", () => {
     expect(await response.json()).toEqual({ error: "last_verified_factor" });
     expect(mocks.createAdminChallenge).not.toHaveBeenCalled();
   });
+  it("serializes concurrent factor removals and checks the remaining inventory inside the lock", async () => {
+    let factors = [verifiedFactor, { ...verifiedFactor, id: "factor-backup", friendly_name: "Backup" }];
+    let previous: Promise<unknown> = Promise.resolve();
+    mocks.sql.mockResolvedValue(1);
+    mocks.transaction.mockImplementation((work) => {
+      const next = previous.then(() => work({ $executeRaw: mocks.sql }));
+      previous = next.catch(() => undefined);
+      return next;
+    });
+    mocks.listFactors.mockImplementation(async () => ({ data: { all: factors }, error: null }));
+    mocks.consumeAdminChallenge.mockResolvedValue(undefined);
+    mocks.unenroll.mockImplementation(async ({ factorId }) => {
+      factors = factors.filter((factor) => factor.id !== factorId);
+      return { data: { id: factorId }, error: null };
+    });
+    const remove = (factorId: string) => POST(request({ action: "unenroll", factorId, confirmation: "Remove factor", challengeToken: "challenge-token-long-enough" }));
+    const responses = await Promise.all([remove("factor-verified"), remove("factor-backup")]);
+    expect(responses.map((response) => response.status)).toEqual([200, 409]);
+    expect(mocks.unenroll).toHaveBeenCalledOnce();
+    expect(factors).toHaveLength(1);
+    expect(mocks.sql).toHaveBeenCalledBefore(mocks.listFactors);
+  });
+
 });

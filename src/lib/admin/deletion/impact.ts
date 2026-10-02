@@ -27,6 +27,7 @@ export function deletionConfirmationPhrase(target: DeletionTarget): string {
 async function previewUser(id: string): Promise<DeletionImpact> {
   if (getServerEnv().platformOwnerUserIds.includes(id.toLowerCase())) throw new AdminWorkspaceError(403, "protected_target");
   const auth = await createSupabaseAdminClient().auth.admin.getUserById(id);
+  if (auth.error && auth.error.status !== 404) throw new AdminWorkspaceError(502, "auth_lookup_failed");
   if (auth.error || !auth.data.user) throw new AdminWorkspaceError(404, "user_not_found");
   const memberships = await prisma.workspaceMember.findMany({ where: { userId: id }, select: { workspaceId: true, role: true } });
   if (memberships.some((membership) => membership.role === "OWNER")) throw new AdminWorkspaceError(409, "owner_transfer_required");

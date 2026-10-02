@@ -1,5 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+export class AdminCursorError extends Error {
+  readonly status = 422;
+  readonly code = "invalid_cursor";
+  constructor() { super("invalid_cursor"); this.name = "AdminCursorError"; }
+}
+
 export type AdminCursorValue = { createdAt: string; id: string };
 
 function signature(payload: string, secret: string): string {
@@ -33,6 +39,6 @@ export function decodeAdminCursor(cursor: string, secret: string): AdminCursorVa
     }
     return { id: value.id, createdAt: value.createdAt };
   } catch {
-    throw new Error("invalid_cursor");
+    throw new AdminCursorError();
   }
 }

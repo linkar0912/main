@@ -970,13 +970,17 @@ export async function processNormalizedEvent(
       receivedAt: new Date().toISOString(),
       payload: {
         accountId: event.accountId,
+        ...(event.storyId ? { storyId: event.storyId } : {}),
+        ...(event.interactionPayload ? { interactionPayload: event.interactionPayload } : {}),
         ...(event.recipientId ? { recipientId: event.recipientId } : {}),
         ...(event.senderUsername ? { senderUsername: event.senderUsername } : {}),
         ...(event.mediaId ? { mediaId: event.mediaId } : {}),
         ...(event.commentId ? { commentId: event.commentId } : {}),
         ...(event.attachmentType ? { attachmentType: event.attachmentType } : {}),
         ...(event.attachmentUrl ? { attachmentUrl: event.attachmentUrl } : {}),
-        text: (event.text ?? "").slice(0, 500),
+        text: event.text ?? "",
+        replayVersion: 1,
+        timestamp: event.timestamp,
       },
     }).catch((error) => {
     logger.warn("Failed to persist webhook activity", {

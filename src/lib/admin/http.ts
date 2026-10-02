@@ -38,6 +38,7 @@ function auditInput(context: AdminWriteContext, phase: "ATTEMPT" | "SUCCESS" | "
     action: context.action,
     targetType: context.targetType,
     targetId: context.targetId,
+    workspaceId: context.workspaceId,
     reason: context.reason,
     before: data.before,
     after: data.after,
@@ -51,9 +52,10 @@ function auditInput(context: AdminWriteContext, phase: "ATTEMPT" | "SUCCESS" | "
 export async function runAuditedAdminMutation<T>(
   context: AdminWriteContext,
   operation: () => Promise<T>,
-  options: { before?: unknown; summarize?: (result: T) => unknown } = {},
+  options: { before?: unknown; summarize?: (result: T) => unknown; allowReplay?: boolean } = {},
 ): Promise<T> {
-  await appendAdminAuditEvent(auditInput(context, "ATTEMPT", { before: options.before }));
+  if (options.allowReplay) await appendAdminAuditEvent(auditInput(context, "ATTEMPT", { before: options.before }), { allowReplay: true });
+  else await appendAdminAuditEvent(auditInput(context, "ATTEMPT", { before: options.before }));
   try {
     const result = await operation();
     await appendAdminAuditEvent(auditInput(context, "SUCCESS", {
@@ -64,7 +66,9 @@ export async function runAuditedAdminMutation<T>(
   } catch (error) {
     await appendAdminAuditEvent(auditInput(context, "FAILURE", {
       before: options.before,
-      errorCode: error instanceof Error ? error.message.slice(0, 200) : "operation_failed",
+      errorCode: typeof error === "object" && error !== null && "code" in error
+        && typeof error.code === "string" && /^[a-zA-Z][a-zA-Z0-9_]{1,79}$/.test(error.code)
+        ? error.code : "operation_failed",
     }));
     throw error;
   }

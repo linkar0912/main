@@ -37,7 +37,7 @@ export async function getDeletionJobByIdempotencyKey(idempotencyKey: string) {
 
 export async function requestDeletionCancellation(id: string, actorUserId: string) {
   const updated = await prisma.adminDeletionJob.updateMany({
-    where: { id, state: { in: ["QUEUED", "RUNNING"] }, irreversibleAt: null },
+    where: { id, state: { in: ["QUEUED", "RUNNING", "FAILED", "CANCELLING"] }, irreversibleAt: null },
     data: { state: "CANCELLING", cancelRequestedAt: new Date(), cancelledByUserId: actorUserId, version: { increment: 1 } },
   });
   if (updated.count !== 1) throw Object.assign(new Error("irreversible"), { status: 409, code: "irreversible" });
@@ -48,6 +48,13 @@ export async function resetFailedDeletion(id: string) {
   const updated = await prisma.adminDeletionJob.updateMany({ where: { id, state: "FAILED" }, data: { state: "QUEUED", terminalErrorCode: null, finishedAt: null, version: { increment: 1 } } });
   if (updated.count !== 1) throw Object.assign(new Error("job_not_retryable"), { status: 409, code: "job_not_retryable" });
   return getDeletionJob(id);
+}
+
+export async function markDeletionEnqueueFailed(id: string, version: number) {
+  await prisma.adminDeletionJob.updateMany({
+    where: { id, version, state: "QUEUED" },
+    data: { state: "FAILED", terminalErrorCode: "DELETION_QUEUE_UNAVAILABLE", finishedAt: new Date(), version: { increment: 1 } },
+  });
 }
 
 export const activeDeletionStates: AdminDeletionJobState[] = ["QUEUED", "RUNNING", "CANCELLING"];

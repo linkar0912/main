@@ -30,6 +30,7 @@ export type AdminSystemSnapshot = {
   deletionJobs: { queued: number | null; running: number | null; failed: number | null };
   billing: { configured: boolean; failedWebhooksLastHour: number | null; driftedSubscriptions: number | null };
   incidents: AdminIncidentSummary[];
+  operationalDataAvailable?: boolean;
   configurationPresence: Array<{ requirement: string; present: boolean }>;
   capabilities: { followGatedCampaigns: "enabled" | "disabled" };
   reconciliation: { expiredDeliveryClaims: number | null };

@@ -1,3 +1,4 @@
+import { prisma } from "@/src/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -208,9 +209,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       targetType: "mfa_factor",
       targetId: input.factorId,
     });
-    const { supabase, factors } = await loadAdminSecurityFactors();
-    const factor = removableFactor(factors, input.factorId);
-    await audited(context, async () => {
+    await audited(context, () => prisma.$transaction(async (transaction) => {
+      // Serialize removals across app instances, then count fresh factors.
+      await transaction.$executeRaw`SELECT set_config('lock_timeout', '5000', true)`;
+      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${context.owner.userId}, 0))`;
+      const { supabase, factors } = await loadAdminSecurityFactors({ fetchTimeoutMs: 5_000 });
+      const factor = removableFactor(factors, input.factorId);
       await consumeAdminChallenge({
         userId: context.owner.userId,
         sessionId: context.owner.sessionId,
@@ -224,7 +228,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       const result = await supabase.auth.mfa.unenroll({ factorId: factor.id });
       if (result.error || !result.data) throw new SecurityRouteError(502, "mfa_provider_error");
       return { factorId: factor.id, removed: true };
-    }, (result) => result);
+    }, { maxWait: 5_000, timeout: 30_000 }), (result) => result);
 
     return noStoreJson({ data: { removed: true } });
   } catch (error) {

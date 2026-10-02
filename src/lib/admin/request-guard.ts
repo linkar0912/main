@@ -31,6 +31,7 @@ export type AdminWriteOptions = {
   action: string;
   targetType: string;
   targetId: string;
+  workspaceId?: string;
 };
 
 export type AdminWriteContext = AdminWriteOptions & {
@@ -87,7 +88,7 @@ function buildAdminWriteContext(
   }
 
   const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.startsWith("application/json")) {
+  if (contentType.split(";")[0].trim() !== "application/json") {
     throw new AdminRequestError(415, "json_required");
   }
 
@@ -107,7 +108,7 @@ function buildAdminWriteContext(
     owner,
     reason,
     idempotencyKey,
-    requestId: `admin_req_${hmac(env.authSessionSecret, "idempotency", idempotencyKey)}`,
+    requestId: `admin_req_${hmac(env.authSessionSecret, "idempotency", JSON.stringify([owner.userId, owner.sessionId, options.action, options.targetType, options.targetId, options.workspaceId ?? null, idempotencyKey]))}`,
     origin: normalizedOrigin,
     ipHash: hmac(env.authSessionSecret, "client-address", address),
     userAgent: (request.headers.get("user-agent") ?? "unknown").slice(0, 1_000),

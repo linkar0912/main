@@ -17,10 +17,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const guard = await requireAdminWrite(request, { action: "user.create", targetType: "user", targetId: "" });
     const input = CreateUser.parse(await request.json());
+    const guard = await requireAdminWrite(request, { action: `user.${input.mode.toLowerCase()}`, targetType: "user", targetId: input.email.toLowerCase() });
     const user = await runAuditedAdminMutation(
-      { ...guard, action: `user.${input.mode.toLowerCase()}`, targetId: input.email.toLowerCase() },
+      guard,
       () => createAdminUser(input),
     );
     return adminJson({ data: user }, { status: 201 });

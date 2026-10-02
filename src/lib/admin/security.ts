@@ -34,8 +34,8 @@ export function safeSecurityFactors(data: { all?: Array<Record<string, unknown>>
   })).filter((factor) => factor.id.length > 0);
 }
 
-export async function loadAdminSecurityFactors() {
-  const supabase = await createSupabaseServerClient();
+export async function loadAdminSecurityFactors(options: { fetchTimeoutMs?: number } = {}) {
+  const supabase = await createSupabaseServerClient(options);
   const { data, error } = await supabase.auth.mfa.listFactors();
   if (error || !data) throw new AdminSecurityProviderError();
   return { supabase, factors: safeSecurityFactors(data) };

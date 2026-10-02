@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Users,
   WalletCards,
+  Trash2,
 } from "lucide-react";
 
 import { PRODUCT_NAME } from "@/src/lib/branding";
@@ -32,6 +33,7 @@ const operatorNavigation = [
   { href: "/admin/operations", label: "Operations", icon: Activity },
   { href: "/admin/integrations", label: "Integrations", icon: Cable },
   { href: "/admin/system", label: "System", icon: ChartNoAxesCombined },
+  { href: "/admin/deletions", label: "Deletions", icon: Trash2 },
   { href: "/admin/audit", label: "Audit", icon: FileClock },
   { href: "/admin/security", label: "Security", icon: KeyRound },
 ] as const;
@@ -49,13 +51,21 @@ export function AdminShell({
 }>) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const restoreMenuFocus = useRef(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
 
   function closeDrawer(restoreFocus = false) {
     setDrawerOpen(false);
-    if (restoreFocus) menuButtonRef.current?.focus();
+    restoreMenuFocus.current = restoreFocus;
   }
+
+  useEffect(() => {
+    if (!drawerOpen && restoreMenuFocus.current) {
+      restoreMenuFocus.current = false;
+      menuButtonRef.current?.focus();
+    }
+  }, [drawerOpen]);
 
   useEffect(() => {
     window.scrollTo(0, 0);

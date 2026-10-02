@@ -2389,7 +2389,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       for (const delivery of rows) {
         if (delivery.state === "SENT" || delivery.resultCode === "DELIVERED") {
           counters.sent += 1;
-        } else if (delivery.resultCode === "SUPPRESSED" || delivery.resultCode === "WINDOW_CLOSED") {
+        } else if (delivery.state === "CANCELLED" || delivery.resultCode === "SUPPRESSED" || delivery.resultCode === "WINDOW_CLOSED") {
           counters.skipped += 1;
         } else if (delivery.state === "FAILED" || delivery.state === "UNKNOWN") {
           counters.failed += 1;
@@ -2406,8 +2406,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           sent: counters.sent,
           failed: counters.failed,
           skipped: counters.skipped,
-          status: completed ? "COMPLETED" : "RUNNING",
-          completedAt: completed ? (broadcast.completedAt ?? now()) : undefined,
+          status: broadcast.status === "CANCELLED" ? "CANCELLED" : completed ? "COMPLETED" : "RUNNING",
+          completedAt: broadcast.status === "CANCELLED" ? broadcast.completedAt : completed ? (broadcast.completedAt ?? now()) : undefined,
         });
       }
       return counters;

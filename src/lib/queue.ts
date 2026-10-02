@@ -137,7 +137,8 @@ function adminQueue(name: string): Queue | null {
 
 function safeFailureCode(reason?: string): string | null {
   if (!reason) return null;
-  const candidate = reason.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 64);
+  // Never turn a provider exception (which may contain credentials) into a code.
+  const candidate = reason.trim();
   return /^[A-Z][A-Z0-9_]{1,63}$/.test(candidate) ? candidate : "ERROR_RECORDED";
 }
 
@@ -172,20 +173,25 @@ export async function retryAdminQueueJobs(name: string, jobIds: string[]): Promi
 
 export async function enqueueAdminMaintenance(action: "delivery_reconciliation" | "usage_reconciliation"): Promise<boolean> {
   const queue = getWebhookQueue(); if (!queue) return false;
-  await queue.add("admin-maintenance", { action }, { jobId: `admin-maintenance:${action}`, priority: QUEUE_PRIORITY.MAINTENANCE, removeOnComplete: true, removeOnFail: 100, attempts: 2, backoff: { type: "fixed", delay: 5_000 } });
+  const existing = await queue.getJob(`admin-maintenance_${action}`);
+  if (existing) {
+    if (await existing.getState() === "failed") await existing.retry("failed");
+    return true;
+  }
+  await queue.add("admin-maintenance", { action }, { jobId: `admin-maintenance_${action}`, priority: QUEUE_PRIORITY.MAINTENANCE, removeOnComplete: true, removeOnFail: 100, attempts: 2, backoff: { type: "fixed", delay: 5_000 } });
   return true;
 }
 
 export async function enqueueAdminDeletion(jobId: string): Promise<boolean> {
   const queue = getWebhookQueue();
   if (!queue) return false;
-  const existing = await queue.getJob(`admin-deletion:${jobId}`);
+  const existing = await queue.getJob(`admin-deletion_${createHash("sha256").update(jobId).digest("base64url")}`);
   if (existing) {
     if (await existing.getState() === "failed") await existing.retry("failed");
     return true;
   }
   await queue.add("admin-deletion", { jobId }, {
-    jobId: `admin-deletion:${jobId}`,
+    jobId: `admin-deletion_${createHash("sha256").update(jobId).digest("base64url")}`,
     priority: QUEUE_PRIORITY.MAINTENANCE,
     attempts: getServerEnv().deletionJobAttempts,
     backoff: { type: "exponential", delay: getServerEnv().deletionJobBackoffMs },
@@ -289,13 +295,14 @@ export async function deleteQueuedInstagramEvents(igUserId: string): Promise<voi
   }
 }
 
-export async function enqueueWebhookEvents(events: NormalizedEvent[]): Promise<number> {
+export async function enqueueWebhookEvents(events: NormalizedEvent[], retryId?: string): Promise<number> {
   const queue = getWebhookQueue();
   if (!queue) return 0;
 
   await Promise.all(
     events.map((event) => {
       const job = createInstagramEventJobOptions(event);
+      if (retryId) job.options.jobId = createHash("sha256").update(`${job.options.jobId}\0admin\0${retryId}`).digest("base64url");
       return queue.add("instagram-event", job.data, job.options);
     }),
   );
@@ -341,23 +348,24 @@ export async function enqueueManualReplyEchoes(echoes: ManualReplyEcho[]): Promi
  * up a second Redis connection and lets the same concurrency setting cover
  * both channels.
  */
-export async function enqueueFacebookEvents(events: FacebookNormalizedEvent[]): Promise<number> {
+export async function enqueueFacebookEvents(events: FacebookNormalizedEvent[], retryId?: string): Promise<number> {
   const queue = getWebhookQueue();
   if (!queue) return 0;
   await Promise.all(
     events.map((event) => {
       const job = createFacebookEventJobOptions(event);
+      if (retryId) job.options.jobId = createHash("sha256").update(`${job.options.jobId}\0admin\0${retryId}`).digest("base64url");
       return queue.add("facebook-event", job.data, job.options);
     }),
   );
   return events.length;
 }
 
-export async function enqueueLeadDelivery(job: LeadDeliveryJob): Promise<boolean> {
+export async function enqueueLeadDelivery(job: LeadDeliveryJob, retryId?: string): Promise<boolean> {
   const queue = getBulkQueue();
   if (!queue) return false;
   await queue.add("lead-delivery", job, {
-    jobId: createLeadDeliveryJobId(job.deliveryKey),
+    jobId: createLeadDeliveryJobId(retryId ? `${job.deliveryKey}\0admin\0${retryId}` : job.deliveryKey),
     priority: QUEUE_PRIORITY.BULK,
     attempts: 3,
     backoff: { type: "exponential", delay: 1_000 },
@@ -445,6 +453,7 @@ export async function getWebhookQueueCounts(): Promise<WebhookQueueCounts> {
 export async function enqueueBroadcastSends(
   jobs: BroadcastSendJob[],
   baseDelayMs = 0,
+  retryId?: string,
 ): Promise<BroadcastEnqueueResult> {
   const queue = getBulkQueue();
   const recipientKey = (job: BroadcastSendJob): BroadcastRecipientKey => ({
@@ -458,7 +467,7 @@ export async function enqueueBroadcastSends(
         "broadcast-send",
         job,
         {
-          jobId: `broadcast:${job.broadcastId}:${job.igAccountId}:${job.igScopedUserId}`,
+          jobId: `broadcast_${createHash("sha256").update(JSON.stringify(retryId ? [job.broadcastId, job.igAccountId, job.igScopedUserId, "admin", retryId] : [job.broadcastId, job.igAccountId, job.igScopedUserId])).digest("base64url")}`,
           priority: QUEUE_PRIORITY.BULK,
           delay: baseDelayMs + index * 1_000,
           attempts: 2,

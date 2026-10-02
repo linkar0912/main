@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
 import { getServerEnv } from "@/src/lib/env";
 import { createId } from "@/src/lib/id";
 import { prisma } from "@/src/lib/prisma";
+import { Prisma } from "@prisma/client";
 import type { MemberRole } from "@/src/lib/repository";
 
 export class AdminWorkspaceError extends Error {
@@ -23,6 +24,7 @@ function slugValue(value: string): string {
 
 async function targetUser(userId: string) {
   const result = await createSupabaseAdminClient().auth.admin.getUserById(userId);
+  if (result.error && result.error.status !== 404) throw new AdminWorkspaceError(502, "auth_provider_unavailable");
   if (result.error || !result.data.user?.email) throw new AdminWorkspaceError(404, "user_not_found");
   return { id: result.data.user.id, email: result.data.user.email.toLowerCase() };
 }
@@ -105,19 +107,28 @@ export async function changeAdminWorkspaceMember(workspaceId: string, input: {
   const member = await prisma.workspaceMember.findFirst({ where: { workspaceId, userId: user.id } });
   if (!member) throw new AdminWorkspaceError(404, "member_not_found");
   if (input.action === "CHANGE_ROLE") {
+    await protectPlatformOwner(member.userId);
     if (member.role === "OWNER") throw new AdminWorkspaceError(409, "owner_transfer_required");
     if (!input.role) throw new AdminWorkspaceError(422, "role_required");
-    return prisma.workspaceMember.update({ where: { id: member.id }, data: { role: input.role }, select: { userId: true, email: true, role: true } });
+    const changed = await prisma.workspaceMember.updateMany({ where: { id: member.id, role: { not: "OWNER" } }, data: { role: input.role } });
+    if (changed.count !== 1) throw new AdminWorkspaceError(409, "owner_transfer_required");
+    return prisma.workspaceMember.findUniqueOrThrow({ where: { id: member.id }, select: { userId: true, email: true, role: true } });
   }
 
-  return prisma.$transaction(async (transaction) => {
+  try { return await prisma.$transaction(async (transaction) => {
+    const member = await transaction.workspaceMember.findFirst({ where: { workspaceId, userId: user.id } });
+    if (!member) throw new AdminWorkspaceError(404, "member_not_found");
     const currentOwner = await transaction.workspaceMember.findFirst({ where: { workspaceId, role: "OWNER" } });
     if (!currentOwner) throw new AdminWorkspaceError(409, "workspace_owner_missing");
     await protectPlatformOwner(currentOwner.userId);
     if (currentOwner.id === member.id) return { userId: member.userId, email: member.email, role: member.role };
     await transaction.workspaceMember.update({ where: { id: currentOwner.id }, data: { role: "ADMIN" } });
     return transaction.workspaceMember.update({ where: { id: member.id }, data: { role: "OWNER" }, select: { userId: true, email: true, role: true } });
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if ((error as { code?: string }).code === "P2034") throw new AdminWorkspaceError(409, "ownership_conflict");
+    throw error;
+  }
 }
 
 export async function removeAdminWorkspaceMember(workspaceId: string, userId: string) {
@@ -125,7 +136,8 @@ export async function removeAdminWorkspaceMember(workspaceId: string, userId: st
   if (!member) throw new AdminWorkspaceError(404, "member_not_found");
   await protectPlatformOwner(member.userId);
   if (member.role === "OWNER") throw new AdminWorkspaceError(409, "owner_transfer_required");
-  await prisma.workspaceMember.delete({ where: { id: member.id } });
+  const removed = await prisma.workspaceMember.deleteMany({ where: { id: member.id, role: { not: "OWNER" } } });
+  if (removed.count !== 1) throw new AdminWorkspaceError(409, "owner_transfer_required");
   return { removed: true, userId };
 }
 
@@ -144,7 +156,7 @@ export async function setAdminWorkspaceLifecycle(workspaceId: string, input: {
   }
   const status = input.action === "SUSPEND" ? "SUSPENDED" : "ACTIVE";
   const changed = await prisma.workspace.updateMany({
-    where: { id: workspaceId, version: input.version },
+    where: { id: workspaceId, version: input.version, deletionScheduledAt: null, status: { in: ["ACTIVE", "SUSPENDED"] } },
     data: {
       status,
       version: { increment: 1 },
@@ -161,6 +173,8 @@ export async function setAdminWorkspaceLifecycle(workspaceId: string, input: {
 }
 
 export async function pauseAdminWorkspaceAutomations(workspaceId: string, version: number) {
+  const protectedMember = await prisma.workspaceMember.findFirst({ where: { workspaceId, userId: { in: getServerEnv().platformOwnerUserIds } }, select: { userId: true } });
+  await protectPlatformOwner(protectedMember?.userId);
   return prisma.$transaction(async (transaction) => {
     const workspace = await transaction.workspace.updateMany({
       where: { id: workspaceId, version },
@@ -169,7 +183,7 @@ export async function pauseAdminWorkspaceAutomations(workspaceId: string, versio
     if (workspace.count !== 1) throw new AdminWorkspaceError(409, "stale_version");
     const paused = await transaction.automation.updateMany({
       where: { workspaceId, status: "ACTIVE" },
-      data: { status: "PAUSED" },
+      data: { status: "PAUSED", version: { increment: 1 } },
     });
     return { paused: paused.count, version: version + 1 };
   });
@@ -177,7 +191,7 @@ export async function pauseAdminWorkspaceAutomations(workspaceId: string, versio
 
 function formulaSafe(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
-  const escaped = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  const escaped = /^[=+\-@\t\r\n]/.test(text) ? `'${text}` : text;
   return /[",\n\r]/.test(escaped) ? `"${escaped.replace(/"/g, '""')}"` : escaped;
 }
 

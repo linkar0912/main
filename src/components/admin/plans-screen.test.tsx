@@ -141,3 +141,16 @@ describe("PlansScreen", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+it("saves a plan without sending serialized timestamps or other response metadata", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: {} }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<PlansScreen plans={[{ ...growthPlan, createdAt: "2026-01-01", updatedAt: "2026-01-02" } as typeof growthPlan]} />);
+  const form = screen.getByRole("button", { name: "Save plan" }).closest("form")!;
+  fireEvent.change(within(form).getByLabelText("Operator reason"), { target: { value: "Update limits" } });
+  fireEvent.click(within(form).getByRole("button", { name: "Save plan" }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+  const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+  expect(body.version).toBe(2);
+  expect(body).not.toHaveProperty("createdAt"); expect(body).not.toHaveProperty("updatedAt");
+});

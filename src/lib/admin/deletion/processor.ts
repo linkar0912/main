@@ -14,9 +14,12 @@ import { assertSyntheticCleanupInventory, canDeleteSyntheticAuthUser } from "./s
 const STAGES: AdminDeletionStageKind[] = ["VALIDATE", "CANCEL_WORK", "DISCONNECT_PROVIDERS", "MARK_IRREVERSIBLE", "DELETE_TENANT_DATA", "DELETE_AUTH_USER", "FINALIZE"];
 
 function safeCode(error: unknown): string {
-  const message = error instanceof Error ? error.message : "deletion_stage_failed";
-  return message.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 80) || "DELETION_STAGE_FAILED";
+  const message = error instanceof Error ? error.message : "";
+  const codes = ["deletion_job_not_found", "synthetic_inventory_missing", "impact_changed", "workspace_not_found", "protected_target", "owner_transfer_required", "synthetic_identity_missing", "auth_user_lookup_failed", "auth_identity_changed", "auth_user_delete_failed", "synthetic_inventory_changed", "shared_test_workspace_requires_review"];
+  return codes.includes(message) ? message.toUpperCase() : "DELETION_STAGE_FAILED";
 }
+
+class DeletionCancelled extends Error {}
 
 async function completeStage(jobId: string, stage: AdminDeletionStageKind, operation: () => Promise<void>) {
   const existing = await prisma.adminDeletionStage.findUnique({ where: { jobId_stage: { jobId, stage } } });
@@ -26,7 +29,7 @@ async function completeStage(jobId: string, stage: AdminDeletionStageKind, opera
     await operation();
     await prisma.adminDeletionStage.update({ where: { jobId_stage: { jobId, stage } }, data: { state: "COMPLETED", completedAt: new Date(), safeErrorCode: null } });
   } catch (error) {
-    await prisma.adminDeletionStage.update({ where: { jobId_stage: { jobId, stage } }, data: { state: "FAILED", safeErrorCode: safeCode(error) } });
+    await prisma.adminDeletionStage.update({ where: { jobId_stage: { jobId, stage } }, data: { state: error instanceof DeletionCancelled ? "PENDING" : "FAILED", safeErrorCode: error instanceof DeletionCancelled ? null : safeCode(error) } });
     throw error;
   }
 }
@@ -48,7 +51,7 @@ async function markCancelled(jobId: string, targetKind: "USER" | "WORKSPACE" | "
 }
 
 export async function processAdminDeletion(jobId: string): Promise<{ state: "COMPLETED" | "CANCELLED" }> {
-  let job = await prisma.adminDeletionJob.findUnique({ where: { id: jobId } });
+  const job = await prisma.adminDeletionJob.findUnique({ where: { id: jobId } });
   if (!job) throw new Error("deletion_job_not_found");
   if (job.state === "COMPLETED") return { state: "COMPLETED" };
   if (job.state === "CANCELLED") return { state: "CANCELLED" };
@@ -84,11 +87,11 @@ export async function processAdminDeletion(jobId: string): Promise<{ state: "COM
             ]);
             return [...connections.map((connection) => connection.igUserId), ...pages.map((page) => page.pageId)];
           }))).flat();
-          await deleteQueuedWorkspaceEventsBatch([...workspaceIds, ...providerIds]);
           await prisma.workspace.updateMany({
             where: { id: { in: workspaceIds }, status: "ACTIVE" },
             data: { status: "SUSPENDED", deletionScheduledAt: new Date(), version: { increment: 1 } },
           });
+          await deleteQueuedWorkspaceEventsBatch([...workspaceIds, ...providerIds]);
         } else if (stage === "DISCONNECT_PROVIDERS" && current.targetKind === "WORKSPACE") {
           // The suspended workspace cannot dispatch. Provider credentials remain
           // intact until the irreversible boundary so cancellation is honest.
@@ -110,8 +113,25 @@ export async function processAdminDeletion(jobId: string): Promise<{ state: "COM
         } else if (stage === "MARK_IRREVERSIBLE") {
           if (current.targetKind === "SYNTHETIC_ACCOUNTS") {
             assertSyntheticCleanupInventory(current.impactDigest, await loadSyntheticAccountInventory());
+          } else if (current.targetKind === "USER") {
+            if (getServerEnv().platformOwnerUserIds.includes(current.targetId.toLowerCase())) throw new Error("protected_target");
+            if (await prisma.workspaceMember.count({ where: { userId: current.targetId, role: "OWNER" } })) throw new Error("owner_transfer_required");
+          } else {
+            if (await prisma.workspaceMember.count({ where: { workspaceId: current.targetId, userId: { in: getServerEnv().platformOwnerUserIds } } })) throw new Error("protected_target");
           }
-          await prisma.adminDeletionJob.update({ where: { id: jobId }, data: { irreversibleAt: new Date(), version: { increment: 1 } } });
+          if (!current.irreversibleAt) {
+            // Cancellation and the irreversible boundary compete on the same row.
+            // Once cancellation wins, no destructive stage may start.
+            const marked = await prisma.adminDeletionJob.updateMany({
+              where: { id: jobId, irreversibleAt: null, cancelRequestedAt: null },
+              data: { irreversibleAt: new Date(), version: { increment: 1 } },
+            });
+            if (marked.count !== 1) {
+              const latest = await prisma.adminDeletionJob.findUnique({ where: { id: jobId } });
+              if (latest?.cancelRequestedAt && !latest.irreversibleAt) throw new DeletionCancelled();
+              if (!latest?.irreversibleAt) throw new Error("deletion_job_not_found");
+            }
+          }
         } else if (stage === "DELETE_AUTH_USER") {
           const storedAccounts = current.targetKind === "SYNTHETIC_ACCOUNTS" ? impact.syntheticAccounts ?? [] : [];
           const userIds = current.targetKind === "USER" ? [current.targetId] : current.includeAuthUsers ? impact.memberUserIds : [];
@@ -137,6 +157,10 @@ export async function processAdminDeletion(jobId: string): Promise<{ state: "COM
     await prisma.adminDeletionJob.update({ where: { id: jobId }, data: { state: "COMPLETED", progress: 100, currentStage: "FINALIZE", finishedAt: new Date(), terminalErrorCode: null, version: { increment: 1 } } });
     return { state: "COMPLETED" };
   } catch (error) {
+    if (error instanceof DeletionCancelled) {
+      await markCancelled(jobId, job.targetKind, job.targetId, impact);
+      return { state: "CANCELLED" };
+    }
     await prisma.adminDeletionJob.update({ where: { id: jobId }, data: { state: "FAILED", finishedAt: new Date(), terminalErrorCode: safeCode(error), version: { increment: 1 } } });
     throw error;
   }

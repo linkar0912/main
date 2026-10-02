@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   try {
     const input = Input.parse(await request.json());
     const context = await requireAdminWrite(request, { action: "deletion.create", targetType: input.target.kind, targetId: input.target.id });
-    const data = await runAuditedAdminMutation(context, () => requestPermanentDeletion({ ...input, context }), { summarize: (job) => ({ id: job.id, state: job.state, targetKind: job.targetKind, targetId: job.targetId }) });
+    const data = await runAuditedAdminMutation(context, () => requestPermanentDeletion({ ...input, context }), { allowReplay: true, summarize: (job) => ({ id: job.id, state: job.state, targetKind: job.targetKind, targetId: job.targetId }) });
     return adminJson({ data }, { status: 202 });
   } catch (error) { return adminRouteError(error, "deletion_request_failed"); }
 }

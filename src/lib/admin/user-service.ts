@@ -56,19 +56,23 @@ export async function setAdminUserAccess(userId: string, input: {
   actorUserId: string;
 }) {
   assertUserTargetAllowed(userId);
+  if (!["BAN", "UNBAN"].includes(input.action)) {
+    const found = await createSupabaseAdminClient().auth.admin.getUserById(userId);
+    if (found.error && found.error.status !== 404) throw new AdminWorkspaceError(502, "auth_provider_unavailable");
+    if (found.error || !found.data.user) throw new AdminWorkspaceError(404, "user_not_found");
+  }
   const now = new Date();
   if (input.action === "BAN" || input.action === "UNBAN") {
     const result = await createSupabaseAdminClient().auth.admin.updateUserById(userId, {
       ban_duration: input.action === "BAN" ? "876000h" : "none",
     });
     if (result.error) authFailure(result.error, input.action === "BAN" ? "user_ban_failed" : "user_unban_failed");
-    if (input.action === "BAN") {
-      await prisma.platformUserControl.upsert({
+    const banned = input.action === "BAN";
+    await prisma.platformUserControl.upsert({
         where: { userId },
-        create: { userId, status: "SUSPENDED", suspendedAt: now, suspendedReason: input.reason, suspendedByUserId: input.actorUserId, sessionInvalidBefore: now },
-        update: { status: "SUSPENDED", suspendedAt: now, suspendedReason: input.reason, suspendedByUserId: input.actorUserId, sessionInvalidBefore: now },
+        create: { userId, status: banned ? "SUSPENDED" : "ACTIVE", suspendedAt: banned ? now : null, suspendedReason: banned ? input.reason : null, suspendedByUserId: banned ? input.actorUserId : null, sessionInvalidBefore: now },
+        update: { status: banned ? "SUSPENDED" : "ACTIVE", suspendedAt: banned ? now : null, suspendedReason: banned ? input.reason : null, suspendedByUserId: banned ? input.actorUserId : null, ...(banned ? { sessionInvalidBefore: now } : {}) },
       });
-    }
     return { userId, action: input.action, at: now.toISOString() };
   }
 
@@ -107,6 +111,7 @@ export async function sendAdminPasswordReset(userId: string) {
   assertUserTargetAllowed(userId);
   const client = createSupabaseAdminClient();
   const found = await client.auth.admin.getUserById(userId);
+  if (found.error && found.error.status !== 404) throw new AdminWorkspaceError(502, "auth_provider_unavailable");
   const email = found.data.user?.email;
   if (found.error || !email) throw new AdminWorkspaceError(404, "user_not_found");
   const reset = await client.auth.resetPasswordForEmail(email, { redirectTo: `${getServerEnv().appUrl}/auth/confirm` });
@@ -121,10 +126,14 @@ export async function changeAdminUserMembership(userId: string, input: {
 }) {
   assertUserTargetAllowed(userId);
   const found = await createSupabaseAdminClient().auth.admin.getUserById(userId);
+  if (found.error && found.error.status !== 404) throw new AdminWorkspaceError(502, "auth_provider_unavailable");
   const email = found.data.user?.email;
   if (found.error || !email) throw new AdminWorkspaceError(404, "user_not_found");
 
   return prisma.$transaction(async (transaction) => {
+    const workspace = await transaction.workspace.findUnique({ where: { id: input.workspaceId }, select: { deletionScheduledAt: true } });
+    if (!workspace) throw new AdminWorkspaceError(404, "workspace_not_found");
+    if (workspace.deletionScheduledAt) throw new AdminWorkspaceError(409, "deletion_in_progress");
     const existing = await transaction.workspaceMember.findFirst({ where: { workspaceId: input.workspaceId, userId } });
     if (input.action === "ADD") {
       if (existing) throw new AdminWorkspaceError(409, "member_exists");

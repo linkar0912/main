@@ -1,0 +1,143 @@
+import { describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
+vi.mock("node:dns/promises", () => ({ lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]) }));
+const routeState=vi.hoisted(()=>({repository:null as unknown,callbacks:[] as (()=>Promise<void>)[]}));
+vi.mock("./repository-provider",()=>({getRepository:()=>routeState.repository}));
+vi.mock("./after-response",()=>({afterResponse:(_label:string,callback:()=>Promise<void>)=>routeState.callbacks.push(callback)}));
+import dns from "node:dns";
+import { lookup as preflightLookup } from "node:dns/promises";
+import { createServer } from "node:http";
+import { GET as trackedLinkGET } from "../../app/r/[slug]/route";
+import { Job } from "bullmq";
+import { createMemoryRepository } from "./memory-repository";
+import { sealSecret } from "./security/secrets";
+import { processFlowFollowUp } from "./automation/followup-runner";
+import { processDueSequences } from "./automation/sequence-runner";
+import { processLeadDelivery } from "./automation/lead-delivery";
+import { createBillingService } from "./billing/service";
+import { createPrismaEntitlementRepository } from "./entitlements/repository";
+import { normalizeWebhook } from "./meta/webhooks";
+import { processNormalizedEvent } from "./automation/runner";
+import { createPrismaRepository } from "./prisma";
+
+const key = "a".repeat(64);
+async function seed() {
+  const repository = createMemoryRepository([{ id: "auto_1", workspaceId: "ws_1", name: "Offer", status: "ACTIVE", version: 1, priority: 0, definition: { version: 1, trigger: { type: "message", match: "any", keywords: [] }, conditions: [], actions: [{ type: "send_text", text: "Hi" }] }, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]);
+  await repository.upsertConnection({workspaceId:"ws_1",igUserId:"ig_1",username:"creator",status:"CONNECTED",accessTokenEncrypted:sealSecret("token",key)});
+  await repository.touchContact("ws_1","ig_1","lead_1",new Date().toISOString());
+  await repository.pauseContactAutomations("ws_1","ig_1","lead_1",new Date(Date.now()+43_200_000).toISOString(),"manual_reply");
+  const client = {sendDirectMessage:vi.fn().mockResolvedValue({message_id:"m_1"})};
+  return {repository,client};
+}
+
+describe("audit: reproduce observed defects without external services",()=>{
+  it("conversion fetch follows a redirect to loopback without validating it",async()=>{
+    let privateHits=0;
+    const server=createServer((request,response)=>{
+      if(request.url==="/external") {const address=server.address() as {port:number};response.writeHead(307,{Location:`http://127.0.0.1:${address.port}/private`}).end();}
+      else {privateHits++;response.writeHead(200).end();}
+    });
+    await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+    const address=server.address() as {port:number};
+    const lookup=vi.spyOn(dns,"lookup").mockImplementation(((_host:unknown,opts:unknown,callback:unknown)=>{
+      const cb=callback as (...args:unknown[])=>void;
+      if((opts as {all?:boolean}).all) cb(null,[{address:"127.0.0.1",family:4}]);else cb(null,"127.0.0.1",4);
+    }) as never);
+    try {
+      const repository=createMemoryRepository();routeState.repository=repository;routeState.callbacks=[];
+      await repository.createTrackedLink("ws_1",{slug:"audit",destination:"https://example.com/",conversionUrl:`http://public.audit.test:${address.port}/external`});
+      vi.mocked(preflightLookup).mockClear();
+      await trackedLinkGET(new Request("http://localhost/r/audit"),{params:Promise.resolve({slug:"audit"})});
+      await routeState.callbacks[0]();
+      expect(privateHits).toBe(1);
+      expect(preflightLookup).toHaveBeenCalledTimes(1);
+    } finally { lookup.mockRestore();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve())); }
+  });
+  it("DNS rebinding reaches loopback after preflight approves a public IP",async()=>{
+    let hits=0;
+    const server=createServer((_request,response)=>{hits++;response.writeHead(200).end();});
+    await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+    const address=server.address() as {port:number};
+    const lookup=vi.spyOn(dns,"lookup").mockImplementation(((_host:unknown,opts:unknown,callback:unknown)=>{
+      const cb=callback as (...args:unknown[])=>void;
+      if((opts as {all?:boolean}).all) cb(null,[{address:"127.0.0.1",family:4}]);
+      else cb(null,"127.0.0.1",4);
+    }) as never);
+    try {
+      const repository=createMemoryRepository();
+      await repository.ensureOutboundDelivery({deliveryKey:"rebind_1",workspaceId:"ws_1",kind:"LEAD_WEBHOOK",payload:{url:`http://rebind.audit.test:${address.port}/lead`,body:{email:"lead@example.com"}}});
+      const result=await processLeadDelivery({deliveryKey:"rebind_1",workspaceId:"ws_1",kind:"LEAD_WEBHOOK"},repository);
+      expect(result.status).toBe("SENT");
+      expect(hits).toBe(1);
+    } finally { lookup.mockRestore();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve())); }
+  });
+  it("a fresh second-based comment is rejected as an expired private reply",async()=>{
+    const timestamp=Math.floor(Date.now()/1000);
+    const event=normalizeWebhook({object:"instagram",entry:[{id:"ig_1",time:timestamp,changes:[{field:"comments",value:{id:"comment_1",text:"guide",from:{id:"lead_1"}}}]}]})[0];
+    const repository=createMemoryRepository([{id:"auto_1",workspaceId:"ws_1",name:"Guide",status:"ACTIVE",version:1,priority:0,definition:{version:1,trigger:{type:"comment",match:"keyword",keywords:["guide"],mediaIds:[]},conditions:[],actions:[{type:"private_reply",text:"Your guide"}]},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}]);
+    await repository.upsertConnection({workspaceId:"ws_1",igUserId:"ig_1",username:"creator",status:"CONNECTED",accessTokenEncrypted:sealSecret("token",key)});
+    const client={sendPrivateReply:vi.fn().mockResolvedValue({message_id:"m_1"})};
+    const result=await processNormalizedEvent(event,repository,{client:client as never,tokenEncryptionKey:key});
+    expect(new Date(event.timestamp).getUTCFullYear()).toBe(1970);
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+    expect(result.failed).toBe(1);
+  });
+  it("concurrent contact snapshots can move lastSeenAt backwards",async()=>{
+    const old=new Date("2026-10-01T00:00:00Z");
+    let stored=old;
+    const row={id:"contact_1",workspaceId:"ws_1",instagramAccountId:"ig_1",igScopedUserId:"lead_1",createdAt:old,updatedAt:old,lastSeenAt:old,state:"NONE",tags:[],score:0,leadStatus:"NEW",attempts:0};
+    const client={automationContact:{update:vi.fn(async ({data}:{data:{lastSeenAt:Date}})=>{stored=data.lastSeenAt;return {...row,...data};})}};
+    const repository=createPrismaRepository(client as never);
+    const known={...row,createdAt:old.toISOString(),lastSeenAt:old.toISOString()} as never;
+    await repository.touchContact("ws_1","ig_1","lead_1","2026-10-02T02:00:00Z",known);
+    await repository.touchContact("ws_1","ig_1","lead_1","2026-10-02T01:00:00Z",known);
+    expect(stored.toISOString()).toBe("2026-10-02T01:00:00.000Z");
+  });
+  it.each(["broadcast:b_1:ig_1:lead_1","admin-deletion:deletion_1","admin-maintenance:usage_reconciliation"])("BullMQ rejects %s",jobId=>{
+    expect(()=>Job.prototype.validateOptions.call({opts:{jobId}} as never,{data:"{}"} as never)).toThrow("Custom Id cannot contain :");
+  });
+  it("a 48-hour-old DM is recorded as newly received for the inbox reply window",async()=>{
+    const repository=createMemoryRepository();
+    await repository.upsertConnection({workspaceId:"ws_1",igUserId:"ig_1",username:"creator",status:"CONNECTED",accessTokenEncrypted:sealSecret("token",key)});
+    const record=vi.spyOn(repository,"recordWebhookEvent");
+    const timestamp=Date.now()-48*3_600_000;
+    await processNormalizedEvent({id:"old_dm",accountId:"ig_1",recipientId:"lead_1",type:"message.received",timestamp,text:"old hello"},repository);
+    expect(Date.parse(record.mock.calls[0][1].receivedAt)-timestamp).toBeGreaterThan(47*3_600_000);
+  });
+  it("a due follow-up sends to a manually paused contact",async()=>{
+    const {repository,client}=await seed();
+    await processFlowFollowUp({deliveryKey:"follow_1",workspaceId:"ws_1",automationId:"auto_1",instagramAccountId:"ig_1",recipientId:"lead_1",delayMinutes:1,message:{type:"text",text:"Nudge"}},repository,{client,tokenEncryptionKey:key});
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
+  });
+  it("a due sequence sends to a manually paused contact",async()=>{
+    const {repository,client}=await seed();
+    const contact=await repository.getContact("ws_1","ig_1","lead_1");
+    const sequence=await repository.createSequence("ws_1",{name:"Sequence",status:"ACTIVE",steps:[{id:"s_1",delayHours:0,text:"Nudge"}]});
+    await repository.enrollContactInSequence("ws_1",sequence.id,contact!.id,0,new Date().toISOString());
+    await processDueSequences(repository,{client,tokenEncryptionKey:key});
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
+  });
+  it("a checked webhook hostname is passed to fetch without binding its checked IP",async()=>{
+    const repository=createMemoryRepository();
+    await repository.ensureOutboundDelivery({deliveryKey:"lead_1",workspaceId:"ws_1",kind:"LEAD_WEBHOOK",payload:{url:"https://hooks.example.com/lead",body:{email:"lead@example.com"}}});
+    const fetcher=vi.fn().mockResolvedValue(new Response(null,{status:200}));
+    await processLeadDelivery({deliveryKey:"lead_1",workspaceId:"ws_1",kind:"LEAD_WEBHOOK"},repository,{lookup:async()=>[{address:"93.184.216.34",family:4}],fetcher});
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0].hostname).toBe("hooks.example.com");
+    expect(fetcher.mock.calls[0][1].dispatcher).toBeUndefined();
+  });
+  it("checkout creates a new subscription without checking the active one",async()=>{
+    const repository={claimCheckout:vi.fn().mockResolvedValue({kind:"create",attemptId:"attempt_2"}),markCheckoutReady:vi.fn(),getSubscriptionForOwnerAction:vi.fn().mockResolvedValue({status:"ACTIVE",providerSubscriptionId:"sub_existing"})};
+    const provider={createSubscription:vi.fn().mockResolvedValue({id:"sub_new",status:"created"})};
+    const service=createBillingService({repository:repository as never,provider:provider as never,env:{razorpay:{keyId:"test",keySecret:"test",webhookSecret:"test",planIds:{creator:{MONTHLY:"plan_test"},growth:{},agency:{}}}},getEffectivePlanKey:async()=>"creator"});
+    await service.createCheckout("ws_1","creator","MONTHLY");
+    expect(provider.createSubscription).toHaveBeenCalledTimes(1);
+    expect(repository.getSubscriptionForOwnerAction).not.toHaveBeenCalled();
+  });
+  it("entitlement lookup does not inspect an expired cancelled subscription",async()=>{
+    const client={workspaceEntitlement:{findUnique:vi.fn().mockResolvedValue({plan:{key:"creator",name:"Creator"},overrides:{}})},premiumInviteRedemption:{findFirst:vi.fn().mockResolvedValue(null)},billingSubscription:{findUnique:vi.fn().mockResolvedValue({status:"CANCELLED",currentPeriodEnd:new Date("2026-09-01")})}};
+    const repo=createPrismaEntitlementRepository(client as never,()=>new Date("2026-10-02"));
+    expect(await repo.getWorkspaceEntitlement("ws_1")).toMatchObject({plan:{key:"creator"}});
+    expect(client.billingSubscription.findUnique).not.toHaveBeenCalled();
+  });
+});

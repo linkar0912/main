@@ -10,7 +10,8 @@ export type OutboundDeliveryState =
   | "CLAIMED"
   | "SENT"
   | "FAILED"
-  | "UNKNOWN";
+  | "UNKNOWN"
+  | "CANCELLED";
 export type OutboundDeliveryResultCode =
   | "DELIVERED"
   | "PROVIDER_REJECTED"
@@ -560,7 +561,7 @@ export function broadcastSegmentCutoff(segment: BroadcastSegment, now: Date): Da
   const days = segment === "inactive_7d" ? 7 : segment === "inactive_30d" ? 30 : 0;
   return days === 0 ? null : new Date(now.getTime() - days * 24 * 60 * 60 * 1_000);
 }
-export type BroadcastStatus = "PENDING" | "RUNNING" | "COMPLETED";
+export type BroadcastStatus = "PENDING" | "RUNNING" | "COMPLETED" | "CANCELLED";
 
 export type BroadcastRecord = {
   id: string;

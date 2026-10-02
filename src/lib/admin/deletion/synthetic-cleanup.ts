@@ -2,7 +2,7 @@ import "server-only";
 
 import { consumeAdminChallenge, createAdminChallenge } from "../challenges";
 import { AdminWorkspaceError } from "../workspace-service";
-import { enqueueAdminDeletion } from "@/src/lib/queue";
+import { queueDeletionJob } from "./service";
 import { loadSyntheticAccountInventory } from "./synthetic-inventory";
 import { createDeletionJob, getDeletionJobByIdempotencyKey } from "./repository";
 import type { AdminWriteContext } from "../request-guard";
@@ -75,10 +75,10 @@ export async function requestSyntheticAccountCleanup(input: {
 }) {
   const existing = await getDeletionJobByIdempotencyKey(input.context.idempotencyKey);
   if (existing) {
-    if (existing.targetKind !== "SYNTHETIC_ACCOUNTS" || existing.impactDigest !== input.impactDigest) {
+    if (existing.targetKind !== "SYNTHETIC_ACCOUNTS" || existing.targetId !== SYNTHETIC_CLEANUP_TARGET.id || existing.requestedByUserId !== input.context.owner.userId || !existing.includeAuthUsers || existing.impactDigest !== input.impactDigest) {
       throw new AdminWorkspaceError(409, "idempotency_conflict");
     }
-    if (!await enqueueAdminDeletion(existing.id)) throw new AdminWorkspaceError(503, "deletion_queue_unavailable");
+    await queueDeletionJob(existing);
     return existing;
   }
 
@@ -107,6 +107,6 @@ export async function requestSyntheticAccountCleanup(input: {
     includeAuthUsers: true,
     context: input.context,
   });
-  if (!await enqueueAdminDeletion(job.id)) throw new AdminWorkspaceError(503, "deletion_queue_unavailable");
+  await queueDeletionJob(job);
   return job;
 }

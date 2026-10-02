@@ -138,7 +138,9 @@ export async function processNormalizedFacebookEvent(
       commentId: event.commentId,
       ...(event.senderId ? { senderId: event.senderId } : {}),
       ...(event.senderName ? { senderName: event.senderName } : {}),
-      text: (event.text ?? "").slice(0, 500),
+      text: event.text ?? "",
+        replayVersion: 1,
+        timestamp: event.timestamp,
     },
   }).catch((error) => {
     logger.warn("Failed to persist Facebook webhook activity", {

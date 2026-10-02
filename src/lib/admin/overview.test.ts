@@ -70,6 +70,6 @@ describe("loadAdminOverview", () => {
       loadAuditEvents: async () => [],
     }));
 
-    expect(dto.operatorTape[0].detail).toHaveLength(500);
+    expect(dto.operatorTape[0].detail).toBe("Delivery failed. Inspect the delivery record for its result code.");
   });
 });

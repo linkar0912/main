@@ -1,0 +1,1165 @@
+{
+  "scope": [
+    "app/admin",
+    "app/api/admin",
+    "src/components/admin",
+    "src/lib/admin"
+  ],
+  "method": "Read every source and test file in full; inspect command callers and worker transitions; review final modifications. Hashes identify the final reviewed contents, not a proof of bug absence.",
+  "files": 192,
+  "lines": 8964,
+  "entries": [
+    {
+      "path": "app/admin/audit/loading.tsx",
+      "lines": 2,
+      "sha256": "dca1c4d56ec8766796a1316ec2ca5ff5480e46c6a98e20f8638a7ffe668208c5",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/audit/page.tsx",
+      "lines": 27,
+      "sha256": "7c1b96adbfe2c19b25b70959b903b067160c1b02a7241942f741327180a15151",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/deletions/loading.tsx",
+      "lines": 2,
+      "sha256": "dca1c4d56ec8766796a1316ec2ca5ff5480e46c6a98e20f8638a7ffe668208c5",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/deletions/page.tsx",
+      "lines": 5,
+      "sha256": "66dcc14a8efb3d978a2ac1bd06969a6f3616fe9779548b47cb24165b2231e677",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/error.tsx",
+      "lines": 5,
+      "sha256": "da9fef7a4fcaf1dec3ddc0abab3026e94d5ba5a17ab2e3b2ded5a3b3da98dcd7",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/integrations/loading.tsx",
+      "lines": 1,
+      "sha256": "c5e92c082edf2ca139e8c7245884c261928f4b669083e650c6934c4520ccb0f7",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/integrations/page.tsx",
+      "lines": 13,
+      "sha256": "2932b92b486244228a186a74cdaab7ef4a3ec11fe9ec6da67e6f4234f2fd0527",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/layout.tsx",
+      "lines": 18,
+      "sha256": "47221ce1b4a19d60039563079f0d8cae89d061e0d1116d48f533b99958a96afa",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/loading.tsx",
+      "lines": 5,
+      "sha256": "c45498c9d646c6def0ee47a04f2aaaf4666dd90d8e20d128e83f594370ffe8f9",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/operations/error.tsx",
+      "lines": 1,
+      "sha256": "bb690ade782627f7b9e75e4cf3fa2356d5278f931b67fe4834f8c699c26b811f",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/operations/loading.tsx",
+      "lines": 1,
+      "sha256": "c5e92c082edf2ca139e8c7245884c261928f4b669083e650c6934c4520ccb0f7",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/operations/page.tsx",
+      "lines": 26,
+      "sha256": "3c0315bbceff6924454a0757616fd96c469457ba4c707e4cbc196e6b480c2e1f",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/page.tsx",
+      "lines": 11,
+      "sha256": "0757370d97e439b860a9f7424ec937a37aa854a25764761b9223f854146d7a02",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/plans/loading.tsx",
+      "lines": 2,
+      "sha256": "1b07b589c70b8b421492ac9ffa799a0a89afad2c0d4a688914f0e8448dec492c",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/plans/page.tsx",
+      "lines": 6,
+      "sha256": "aa751ee41e6d1ba78824fbb8ad662ea566d289b37646f44323f6b71e9256863b",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/security/loading.tsx",
+      "lines": 5,
+      "sha256": "98262747d2a86a879e2abf432292a32645fc84a0818390ff2198e0b30f71056c",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/security/page.tsx",
+      "lines": 20,
+      "sha256": "65246fdf2bc0cded7b7e82e43176ed65ca73b340e903506cfafc2daee8dac4ea",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/system/data-deletions/page.tsx",
+      "lines": 13,
+      "sha256": "2c7d6719c99074b66ece7df565a247314efaddb265d6aa3b39a187e1aaf137c5",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/system/error.tsx",
+      "lines": 1,
+      "sha256": "943853c7d8f219c42b575161224ffdfd0b1d1a0777432941373133ff7f4c1fa4",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/system/loading.tsx",
+      "lines": 1,
+      "sha256": "c5e92c082edf2ca139e8c7245884c261928f4b669083e650c6934c4520ccb0f7",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/system/page.tsx",
+      "lines": 6,
+      "sha256": "755a14791507b7d870c212ade7b029304817b9697e832e17c986cadd22b7cf30",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/users/[userId]/loading.tsx",
+      "lines": 2,
+      "sha256": "5f026eda5d4e51505b752cfb76bee1e8e38f43c8d1788fbdfec64775ca8b489e",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/users/[userId]/page.tsx",
+      "lines": 7,
+      "sha256": "1fdab17cd6a150a89928a7bb7c20f46c06fde7361ba53a33c75259de3b7fde1f",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/users/loading.tsx",
+      "lines": 2,
+      "sha256": "39e84f0b958bcad92f812053e65e7650bf0c7e640c583ebdd5afe9ca9902648a",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/users/page.tsx",
+      "lines": 7,
+      "sha256": "b8af4d3084dddf21255d98d6a188409f6fb5496356e60a4731027e584a0a024a",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/workspaces/[workspaceId]/loading.tsx",
+      "lines": 5,
+      "sha256": "9c1bb5e8d47e27928bfffcf471183dc99c45dd21b0b6d98153b1c6219336f2f2",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/workspaces/[workspaceId]/page.tsx",
+      "lines": 25,
+      "sha256": "b3b7e7d1baf70ba8871e5d376d6e912950c7cf76a4b12ed6469612d0cbaef8aa",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/workspaces/loading.tsx",
+      "lines": 5,
+      "sha256": "ad83e9fd0d569c0751cd66fc491c70dd62ea3c2b5e9e34a607fd1e171ca2e7ab",
+      "reviewed": true
+    },
+    {
+      "path": "app/admin/workspaces/page.tsx",
+      "lines": 17,
+      "sha256": "0ac103be794ab0d5200639d576e3bbf8533888e61ae295998d41938ffa2164ba",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/audit/export/route.ts",
+      "lines": 7,
+      "sha256": "b638dc05faf13ce269c21ca3809ab6e14bf1599bbfb23c1f4c2601fd7fcec48b",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/audit/route.ts",
+      "lines": 7,
+      "sha256": "557588a69b831b4e0c2fdc708a1195ecf19c698d82f3b3f5249b8bd4532b519b",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/compliance/data-deletions/route.ts",
+      "lines": 4,
+      "sha256": "641c927d4eca8ba473f8269d95231c076efa16bcc609a22f3c6ffa7e1b74ddc2",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/deletions/[id]/route.ts",
+      "lines": 20,
+      "sha256": "9f7152c928ff67bfcf2cd8973cb001625015380ab2799b5bc7512566b80c570f",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/deletions/preview/route.ts",
+      "lines": 14,
+      "sha256": "7654076afc770cd3bd6b3c2e81e90e40852da8d39f86b63d3d2e7ff4dc67b9ba",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/deletions/route.ts",
+      "lines": 25,
+      "sha256": "36e4d76c80c0d7a9bee6eca6200360359f544b548cacd3aaa1bac6768ab8edb2",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/deletions/synthetic/preview/route.test.ts",
+      "lines": 45,
+      "sha256": "bb31ba03faca9e88cc7307e9c680e3b55b2a0ee1cc1a2e532d10e12e417ab22d",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/deletions/synthetic/preview/route.ts",
+      "lines": 19,
+      "sha256": "93f16fb78fab2771578b6f36be25488719578ae9a3bb2cded80f20c74a5c66e4",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/deletions/synthetic/route.test.ts",
+      "lines": 47,
+      "sha256": "d216d54867d5be0f4fc622a0b7426f405631a02791e7a03a75bc5f179f833655",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/deletions/synthetic/route.ts",
+      "lines": 37,
+      "sha256": "daf542469c4f4639bc65e0787ab16e17bbf39191af246a4078dba24101e9754d",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/integrations/[provider]/[id]/route.test.ts",
+      "lines": 5,
+      "sha256": "68ffb323256bb5c45700664a6f038ac9d8873589af2ccd8d36e34bd8a7259c62",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/integrations/[provider]/[id]/route.ts",
+      "lines": 13,
+      "sha256": "9b618361ac95b4ccc69c7da252f2a763d9d493d79b7d75f99c6b322680545abf",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/integrations/route.test.ts",
+      "lines": 5,
+      "sha256": "e0856d5ef52e6f31f5b8106d36eb647836c1d4d0f88e7675099f0046451337d8",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/integrations/route.ts",
+      "lines": 4,
+      "sha256": "3c0e568a8eb2788fca45dbd35a413633b264d5d90b9546906887cf6eb4ba4e51",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/invite-codes/[id]/route.ts",
+      "lines": 14,
+      "sha256": "132a2db72e9bfca112e7404295ea8d5735f31c41bf8782371d4bf1c4f77b6cc3",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/invite-codes/route.test.ts",
+      "lines": 70,
+      "sha256": "d2cb0e22f7b76b1e44b35310e7a582fc680aa7919eedfbbfacec27f4d135d524",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/invite-codes/route.ts",
+      "lines": 40,
+      "sha256": "8c4323cef5511df6b21764526aaf59c25e203ba88c013636ecc4f069651a5bee",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/operations/[kind]/[id]/route.test.ts",
+      "lines": 10,
+      "sha256": "cd924cb239e89b1087ab1bce939b5dee6bb77f44c04d02e2d2bb0776a9181f9a",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/operations/[kind]/[id]/route.ts",
+      "lines": 20,
+      "sha256": "54f6d2dfd6f2ec732e01aaac5d2c1e3e1948c43c2c3d292937bfb631823a8cfc",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/operations/[kind]/route.test.ts",
+      "lines": 7,
+      "sha256": "936360ce0c431c7d1a8de11358887b9cfaeb86b03097337d99e8ba32266c32e0",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/operations/[kind]/route.ts",
+      "lines": 12,
+      "sha256": "4dd5f4054f345dbec1a4d2244fc858ab716c3ad1934c053920c68843fc8509b2",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/overview/route.test.ts",
+      "lines": 57,
+      "sha256": "9bf7361e1f1910f8ef984a809e48dd94601dbbdb078afcdd2677b5e000050d95",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/overview/route.ts",
+      "lines": 26,
+      "sha256": "864e2b5ce79730bba11b71e1725752d6d8667e7108c511fb62f11c9f1bd0f608",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/plans/[planId]/route.ts",
+      "lines": 24,
+      "sha256": "fa7cc3f6b1472553d4eca527db2efb28151573f24b8d0aa1fb663699f60f34a6",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/plans/route.test.ts",
+      "lines": 10,
+      "sha256": "13af96344dd0f03386c81f91c7784f104e8ccc63d2768f10a5b75677996f88c3",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/plans/route.ts",
+      "lines": 20,
+      "sha256": "75d31f255d573b333ae9deaa457779d6ea54311d90caad6857ff701a9d15b3ea",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/security/route.test.ts",
+      "lines": 212,
+      "sha256": "84571f746f8e083a0be89ca12ed7a0ccb6897afe49ddfaf35db7210ee5258bf0",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/security/route.ts",
+      "lines": 237,
+      "sha256": "b835f8cc4329eef83e01e2a3975660719d62d8ea1fbc7d6346da9fefbaab207b",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/system/queues/[queue]/route.test.ts",
+      "lines": 3,
+      "sha256": "b2ad1a222c45d5ba36839a4677a57862f4abcdd3811424e070af68902ac9e867",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/system/queues/[queue]/route.ts",
+      "lines": 6,
+      "sha256": "508f275544fab02136547c3b2d012ffab67215c57f479bbae1863d354c25b3e4",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/system/route.test.ts",
+      "lines": 3,
+      "sha256": "05468d4ccb9009f98e549be11f3676a774ec67b85347b7992d8a61c4ebba30f5",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/system/route.ts",
+      "lines": 8,
+      "sha256": "3642d169b1a55907fb156c8a723b78596329f8795985c775e1938501a8085c2c",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/users/[userId]/access/route.test.ts",
+      "lines": 14,
+      "sha256": "466e29acde85310d60e0028734d089a0a64c022de3b2c67be77f6ccde28cf4bb",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/users/[userId]/access/route.ts",
+      "lines": 20,
+      "sha256": "d4644610bf0c456218c0029808d9259b91a2f08f2688892b7fc73a056e6a3b17",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/users/[userId]/memberships/route.ts",
+      "lines": 19,
+      "sha256": "240dbf7829d2bc36e3c99b94b5171ae8c9511b40aa74fad089cc8cdd22959e1b",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/users/[userId]/reset/route.ts",
+      "lines": 12,
+      "sha256": "3c44017cbea0865607ed21a1e3ffe7f5ba758ba6dd4729ce9645386475ac795c",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/users/[userId]/route.ts",
+      "lines": 26,
+      "sha256": "d1a4e4df02a1cdf3f85ed7fe18c75a6d2846fc98b21b69ea9a412eb6aa175c65",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/users/route.test.ts",
+      "lines": 17,
+      "sha256": "a8e94b38329f93eb0b8d069de665bf78c3c3a018d99ec1f040caff63aa6e4f9b",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/users/route.ts",
+      "lines": 28,
+      "sha256": "ac10fc4b5a24f2f35e0be3e9ea5ba486c398aad002660415d7e93bdc7d1d5f8c",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/automations/pause/route.test.ts",
+      "lines": 25,
+      "sha256": "b592afe7c63ea4e7d8111a88d9caf66e6ef27d2a6b3cd05637a0e6e46415b675",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/automations/pause/route.ts",
+      "lines": 18,
+      "sha256": "befb957b89830301235462f10bb2012cf90f570be7a1e532814c0babdad620c1",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/entitlement/route.test.ts",
+      "lines": 9,
+      "sha256": "bc6b45f982a411f6e96952a6e02526dd977873ae1976f170d456913ec9c4f6b5",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/entitlement/route.ts",
+      "lines": 17,
+      "sha256": "f00ba4551c1c4f6668351bfdbf5fa027e349ff884b076345267a7447e5d007d3",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/export/route.test.ts",
+      "lines": 20,
+      "sha256": "6944a8a7ffaeef39a8d6e7a745b98f8b3493654f8b35131e48d09d832f38be37",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/export/route.ts",
+      "lines": 25,
+      "sha256": "16fec976f3087f8a42173040026379198e84200e12dbdfdbf121f4f765270ad4",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/lifecycle/route.test.ts",
+      "lines": 53,
+      "sha256": "5212f391ef30fdcfb353cc22c2af93e707e70066eaa98385ede544367c69857a",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/lifecycle/route.ts",
+      "lines": 23,
+      "sha256": "b73fcfc437269fff3cbc135c0c57c4863ba1952b6ade8f6b4b1167bea360c980",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/members/route.ts",
+      "lines": 35,
+      "sha256": "ef87029058ae950881aa4a3a723026c31798839a2e02086b996247a98bb40502",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/[workspaceId]/route.ts",
+      "lines": 37,
+      "sha256": "f6091aa6266251a4617139d3d8ed54ed5c88b83adc7a268f647f531d6aac0321",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/route.test.ts",
+      "lines": 69,
+      "sha256": "daf32c6e63a1d41a2d09554071b3146e2c94cde12112896cbd80114958a0690e",
+      "reviewed": true
+    },
+    {
+      "path": "app/api/admin/workspaces/route.ts",
+      "lines": 40,
+      "sha256": "d51157880a5b4e473fb37ed85d1dd5a375e7aa143959fae90fa4f39e8b324611",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/admin-overview-screen.test.tsx",
+      "lines": 53,
+      "sha256": "7fcc5b5854f9a7960993883406967da4e748c5e1949962c4829aa59e6f695918",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/admin-overview-screen.tsx",
+      "lines": 103,
+      "sha256": "8f9b87df624511b9b92571862ecf2b33a0406d1bd5129ba8ce8ed04517b96309",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/admin-route-guard.test.tsx",
+      "lines": 17,
+      "sha256": "7488e7f6d1bdd44cca6ef0b24f7faaeb67165af4fca880db2e8c7a0667cdbe6b",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/admin-route-guard.tsx",
+      "lines": 24,
+      "sha256": "0f1ed85d50c783d568243ccd7f0990878c449eb2a541281017fc4b7d28a632ac",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/admin-security-screen.test.tsx",
+      "lines": 115,
+      "sha256": "92d0f114d5166023b8ef1291e0fabc6425207bd47b763479b4098d7ddcd430f9",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/admin-security-screen.tsx",
+      "lines": 325,
+      "sha256": "582580158f74e094d631da7ad9ce4121fb4a51b6bf588e3684e84e7aa77eda93",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/admin-shell.test.tsx",
+      "lines": 48,
+      "sha256": "9e53d7cc6261c1b9d99205953e7b81b78bf30157985f8c10c46113961aec1aa1",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/admin-shell.tsx",
+      "lines": 184,
+      "sha256": "01e5a6b6cb0fe10fb1bfe5ec0888ec3fe8ab4202fbc01b118a22c35f4230599b",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/audit/audit-console.tsx",
+      "lines": 14,
+      "sha256": "3e30cd4325995867ac41395bb4f9c2d3c6ba158582773932ecd4a3216d036b34",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/deletions/deletion-console.tsx",
+      "lines": 16,
+      "sha256": "cbfc7221002ed9f8e7db7539f34c62c61fee2f3893a6970575f6da1d96b809c5",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/deletions/deletion-wizard.tsx",
+      "lines": 53,
+      "sha256": "1d3c15ab076cab9b46cb9d809965d7892e0405448b722cdcdf0fe53f872b1a53",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/deletions/synthetic-cleanup-panel.test.tsx",
+      "lines": 67,
+      "sha256": "0322eba7c1113c37c1b190dc4c0322cba063942ef36e81db3d2a900eada13fb1",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/deletions/synthetic-cleanup-panel.tsx",
+      "lines": 108,
+      "sha256": "d9f6547c68f2e1fad5fb780b17921349ab29abc332746a5ba3ad8ec2aa277a31",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/integrations/integrations-console.test.tsx",
+      "lines": 8,
+      "sha256": "51d929e8a152327de9bbd3f2cc6a086b91fdbde4ef25f3dcf8684448005fe7bb",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/integrations/integrations-console.tsx",
+      "lines": 16,
+      "sha256": "8d38bcad55b273b514bc47b84b25aaccd72a42cdb016b5b988bb13b8e6e5e95b",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/operations/operation-actions.test.tsx",
+      "lines": 28,
+      "sha256": "54bfc217f33c23e2f31b2380527e734ed173a3d1e5101840ba72c10572137e41",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/operations/operation-actions.tsx",
+      "lines": 61,
+      "sha256": "bf764ab186e3b506a433b2207eeda348c42f5b3becb4060e22f9b54e035332b0",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/operations/operation-detail-drawer.tsx",
+      "lines": 11,
+      "sha256": "d72be08ab3201b625de5dda14fdde7e0b8a1efe5985e9705749ec76257801829",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/operations/operations-console.test.tsx",
+      "lines": 32,
+      "sha256": "c7d4aa3d598b832fe8619d78463dc4591266cba524652ac64b3ba53f66e51100",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/operations/operations-console.tsx",
+      "lines": 12,
+      "sha256": "f52416db34efa04febda36f0b5df4c53eaab5c9f8239f38406073d690f423b34",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/plans-screen.test.tsx",
+      "lines": 156,
+      "sha256": "f7dad0b038c351f1bb04d034b6aa279756a40a8e7b0d1e1da517a5d0f12ab045",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/plans-screen.tsx",
+      "lines": 75,
+      "sha256": "2deda778054ca03c1b057b445ab7e4dcde65dc70e5b41b43a4de83e05436506a",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/shared/cursor-table.tsx",
+      "lines": 4,
+      "sha256": "f1c14d658c58d01ccb3a78a01214e0d9eb73108db9c0d17d3149c6a16c32fd90",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/shared/date-format.test.ts",
+      "lines": 7,
+      "sha256": "f23ac7a062dc4d3401cf702bfc7e43a84e5f5f78565a0f69131f821260cfd62d",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/shared/date-format.ts",
+      "lines": 11,
+      "sha256": "5fe7c986b9a053ba8394628a481e284ee0f804dc345ea60e8b32ea68fe3e8373",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/shared/filter-bar.tsx",
+      "lines": 4,
+      "sha256": "7559b7d864187fa0df21aaf96579442311df0667266fca14e7183e8cffea3b2c",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/shared/reason-dialog.test.tsx",
+      "lines": 20,
+      "sha256": "de7c9bc556e93bd612714c43cc3a5a9f0690f5ac09ad7416c6caae68ab591e34",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/shared/reason-dialog.tsx",
+      "lines": 4,
+      "sha256": "363578c2cca998479232da4da427ccadec568c0bf49be3ba1564ae10a4c15892",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/shared/use-admin-dialog.ts",
+      "lines": 52,
+      "sha256": "3d504600e83253c9a8f7d32228787074c30e72f980367eaeba92e97eb3864c92",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/system/incident-table.test.tsx",
+      "lines": 20,
+      "sha256": "66fb3ccca447ad98384f39c91f0e94fc356a6d5be561ecf0eccccbcfbfdb218e",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/system/incident-table.tsx",
+      "lines": 54,
+      "sha256": "4e78dd2f6d853c632a52f34159e7cb128273163b494252aa292f9f14b0c3e0d1",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/system/system-console.test.tsx",
+      "lines": 40,
+      "sha256": "f3d4a5ba65b03592962c94b7795b21e8252aa7ecb4b39f63b28f46b03e9ea730",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/system/system-console.tsx",
+      "lines": 161,
+      "sha256": "ca313b0bcd0ad9319716db1c9448c43e3caeedf1568c8d850dfbad3af712c20b",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/user-detail-screen.test.tsx",
+      "lines": 8,
+      "sha256": "34b8b171f10a968ed48f8c2c262550348ddcaaa6338244a70807aa17c2c4aede",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/user-detail-screen.tsx",
+      "lines": 53,
+      "sha256": "52ae4043327f18395eb139eb399b70297a9c6df9e3187496b358fe5554e4dc16",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/users-screen.test.tsx",
+      "lines": 8,
+      "sha256": "b439291227afb0580ee079675f0f03fe0266a3ee9672640ea552a028fedba745",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/users-screen.tsx",
+      "lines": 59,
+      "sha256": "87fbd2a5d4dd5e6d153c9ca16ba37b16be0292a35a60cf6a20751a02c350ca7f",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/workspace-detail-screen.test.tsx",
+      "lines": 30,
+      "sha256": "da937744d55234ccffb57590a2e243c3f0e11fc6cdc500a258a7ee2bd069cdd2",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/workspace-detail-screen.tsx",
+      "lines": 141,
+      "sha256": "53331adf42c272f70b1eca53b13760b4a179c566cd82871b7468aeb563d8ba38",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/workspaces-screen.test.tsx",
+      "lines": 20,
+      "sha256": "ac23c9cf2fcbcbc77f4d0d0de02244f866ce34b95b831588ea9b1fe186d44d36",
+      "reviewed": true
+    },
+    {
+      "path": "src/components/admin/workspaces-screen.tsx",
+      "lines": 68,
+      "sha256": "d5782d0726456a28342d3051ea7781cb0ce53dfe7997c64bb4923dcd07c74b33",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/accounts-provider.ts",
+      "lines": 15,
+      "sha256": "31b25fde33ab6757bf5fa84b44cc875197ac455bd39646befde889d2da1af02d",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/accounts-repository.test.ts",
+      "lines": 61,
+      "sha256": "83ee584d3ce521afdfe5d3b312fc3000934e8c836284e240fa8d4738aaf5fb7f",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/accounts-repository.ts",
+      "lines": 62,
+      "sha256": "566ba3476511676880328029d309ce31be5050a853f9d3fed78a453e64a8b8ce",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/audit/export.test.ts",
+      "lines": 3,
+      "sha256": "cb965c1ba327ee068545f1b735400aeb5b5b4bb400e6604de58b5f51b23f82bb",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/audit/export.ts",
+      "lines": 10,
+      "sha256": "8277b28de7122df6b8e8adaf40eb8e85957480a917c0663f578cdc20a530b19c",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/audit/query-schema.test.ts",
+      "lines": 10,
+      "sha256": "7c5e46797cfc1969f097652a881cd8c2c00452dbf8bc4674176d17fffee14188",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/audit/query-schema.ts",
+      "lines": 15,
+      "sha256": "566855fddce47d920ad19447a71cfa637bf5b0267a24b64a84e617ab2752936f",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/audit/repository.ts",
+      "lines": 38,
+      "sha256": "239987d9906ab624d9f7c3958fb5abb3ced647f087cc41ec246b9db0d9bda308",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/audit.test.ts",
+      "lines": 83,
+      "sha256": "85981cb563e7b3cb916ca90788eccfcb8a367bba777f8b103b74dd0bf0a4d66b",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/audit.ts",
+      "lines": 100,
+      "sha256": "ffcbc516a77fa21f6ccb3d0358a2c2e87695315de808651b1f551276ad00a009",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/authorization.test.ts",
+      "lines": 118,
+      "sha256": "4a7e5aad274e246968275b3fb595e68ba950d08fc4f5903749c315eb65116bde",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/authorization.ts",
+      "lines": 74,
+      "sha256": "4ea6cc725e4abf0f58cda0e55399610dfa97dc3246ef9ca8b9c1369b48d44108",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/challenges.test.ts",
+      "lines": 70,
+      "sha256": "91dd453fdf340c25fc03dcf6a70206f8fac0c49143f7375dadbeb323efd4fbe3",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/challenges.ts",
+      "lines": 146,
+      "sha256": "11c6cf1852e668043796e99a57df2c27319bb6bccd518ef6aa6b25c9ed207efe",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/compliance/repository.ts",
+      "lines": 6,
+      "sha256": "47be940dea57d598a29350d48248331a8263b458ee689d78dd0a1a4aff7a4f65",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/cursor.test.ts",
+      "lines": 21,
+      "sha256": "10d1a55c26bc727db61247d7ad19bf10c2cef12670e85e3ff98d0d9fdc8335a4",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/cursor.ts",
+      "lines": 44,
+      "sha256": "5cfbd930337c8f42369e602ac7bc24ace73e6ab42720683e6704ecd43b19c175",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/impact.test.ts",
+      "lines": 20,
+      "sha256": "54a396dfb71fc6afd996cda45d236aa27d3bc5a2a9ed68a7aa7c314687565b06",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/impact.ts",
+      "lines": 81,
+      "sha256": "bfe8468e335fb282b6a81ba3a0b37d6545dc752b39d511e643c4d86bb8174a8a",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/processor.synthetic.test.ts",
+      "lines": 121,
+      "sha256": "55df26deb59c0f4fac2e4bc009a00f7ced7ec85952f7d05a054535f9518b5ebb",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/processor.ts",
+      "lines": 167,
+      "sha256": "6f2ea7399cd9287aefde65dc1f3fe33b46ab4e21127f3b92415d5d14b516c911",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/repository.ts",
+      "lines": 60,
+      "sha256": "59e3e7103098b931241c882318e3375c44ccc5b7f196ed89b6f85c6a357debd6",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/service.test.ts",
+      "lines": 24,
+      "sha256": "9547480c069861a551693fe91fb064ac6c1c23afbebf4c1315ff9d1e706b7aed",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/service.ts",
+      "lines": 58,
+      "sha256": "6ee3a243a42532ed255b181d2e9c90d03ee15ad2bff67126b6db00d8e3f445f5",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/synthetic-accounts.test.ts",
+      "lines": 82,
+      "sha256": "48b7b1bded7e2c0020524264b76e455897b56b7caa85e8889c94063e68e732d7",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/synthetic-accounts.ts",
+      "lines": 106,
+      "sha256": "4060e5244502312d6c955e4a885f9d0237ce53e7f4f3e111a20480c9c9855d8d",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/synthetic-cleanup-safety.test.ts",
+      "lines": 39,
+      "sha256": "2a6a482a0bc95dc010b814445410fa041df0273d4688b7becdd436a097d5aa91",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/synthetic-cleanup-safety.ts",
+      "lines": 26,
+      "sha256": "6fcbd1a5e358df5443f115a7becb6de4992bae58b897457b86b7e59798dc910b",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/synthetic-cleanup.test.ts",
+      "lines": 136,
+      "sha256": "010060ad93f0d77cc8534b131aa3422e70719d1409fe9efdb99316f46ae825d4",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/synthetic-cleanup.ts",
+      "lines": 112,
+      "sha256": "33705477c730b1c076b25d92a761e2b466e9fd1924bd8bb13d4a1071145fa12b",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/synthetic-inventory.ts",
+      "lines": 26,
+      "sha256": "e3226a6fb797009e89c4757e710991ded424259a881d70edbbfb81b436138333",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/deletion/types.ts",
+      "lines": 19,
+      "sha256": "bddfb3afa2b64726b83cadcf2e859f4af51cc69d85cf5a5d24b3c55986833ef4",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/http.test.ts",
+      "lines": 22,
+      "sha256": "0cde877276a5b9c6bcb1b5b65b164cde8b3c97f01c5b6076a0090d7cd3f181d0",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/http.ts",
+      "lines": 75,
+      "sha256": "8475459eb88dffd853d6bc4fa77bc8a8ad3a1b1d1a258bdc9d4ab4b49f425532",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/integrations/repository.test.ts",
+      "lines": 29,
+      "sha256": "c52126b4633a5d29d994f1b00b979cbaf810f41be028bb1fee6f30986b5ec721",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/integrations/repository.ts",
+      "lines": 53,
+      "sha256": "552fffd9d5a994a7102558ebc5f9e695bed37d6cb70488a2d9ba42834dfbcbe9",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/integrations/service.test.ts",
+      "lines": 5,
+      "sha256": "0fb76d6395c145884e9fb202c82f715138fdbd802221d362496bced4cf73b52e",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/integrations/service.ts",
+      "lines": 61,
+      "sha256": "1c73a345aaff548f427d2f68e511000b8e9a3ccdf2c1f85ff93c9e2906137c26",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/integrations/types.ts",
+      "lines": 5,
+      "sha256": "d9435453474d768f5e7774b5cea8737afd11a25b379fed56e02ad849775ade93",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/memory-accounts-repository.ts",
+      "lines": 56,
+      "sha256": "925002b82a4c6f917ff1f6f64c8c0fff01a12e6f6097df82ecde6054f85654d4",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/operations/query-schema.ts",
+      "lines": 13,
+      "sha256": "f8e92e1469851f2f976ed3949b2f850644e68ceea4191aeb4ee0dd3ca8845d2c",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/operations/repository.test.ts",
+      "lines": 37,
+      "sha256": "dd5f25e18b87199af52cdeff93d8a4f22f333978aefd60e0e2d3b3870070754c",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/operations/repository.ts",
+      "lines": 107,
+      "sha256": "ce3c917abc5dbf9cfc215f21b19a9bd3c1d07690897e877bc65322d14f294bad",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/operations/service.test.ts",
+      "lines": 62,
+      "sha256": "ed589591bb3d855966bde3a2cf7b8fa16204180837fb6967345868e1c2f95a07",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/operations/service.ts",
+      "lines": 197,
+      "sha256": "fdda32c86220f7c22826f31d3d39321f70dd672fb799ed12f3fc1b18bb472d67",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/operations/types.ts",
+      "lines": 34,
+      "sha256": "fd52f9afc9585e5270ff31b1558b529191cb18374ca7a9427ba0d30a596961ec",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/overview.test.ts",
+      "lines": 75,
+      "sha256": "755218fd19663600be8f1b7e04b4974b2cba0ed639a388ba7626732ac2d93f38",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/overview.ts",
+      "lines": 177,
+      "sha256": "02b7fc7b973edcb6972b06d15ddf943de0c4b8a41284a53c0637f6c07db5f085",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/plan-service.test.ts",
+      "lines": 34,
+      "sha256": "122c0beb26b50ed5fc1dffe3c7934c546d0500e0c6003bc04716e38f97db6ff7",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/plan-service.ts",
+      "lines": 119,
+      "sha256": "a9b88711092ac4d356e0f74bb121c63d6b5834e1358b5795dff64dcf13c01c72",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/prisma-accounts-repository.ts",
+      "lines": 181,
+      "sha256": "a521dc6055d80fc2a37ed3fd107eff93e19a18793d0c7df5f1af82de7daa4334",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/request-guard.test.ts",
+      "lines": 140,
+      "sha256": "4bdfcf4424be765f699e89def8e8a536a5e3f24f227f927323525a0aa647fd90",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/request-guard.ts",
+      "lines": 116,
+      "sha256": "d71be30db1946183f16b087a50eb4dfc7daf50e840ad3fdc398b6ccbf45c303b",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/security.ts",
+      "lines": 59,
+      "sha256": "4221485bead7ec6ea8fa04b4cc5e3d8d1e65aa649232c0ec5efd7a1177731769",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/alerts.test.ts",
+      "lines": 53,
+      "sha256": "3b61d1685c3893434f40c44c4e799195cfd9b90907ee6e1850fdf98bdf5cebaf",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/alerts.ts",
+      "lines": 100,
+      "sha256": "f2a1983f7d3bcdc9cde05d6089a14eb00c266c8efd69ddc83057b572ef463e1d",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/commands.test.ts",
+      "lines": 3,
+      "sha256": "cdc96658f2670921a4a7e72f171205a0d585536f105551732c1dcae969430483",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/commands.ts",
+      "lines": 6,
+      "sha256": "27348f7c2b1beba3663686cb0e6695f54fa908e48407603a2eba6edfbd30f3bd",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/incidents.test.ts",
+      "lines": 104,
+      "sha256": "9349dca84a58525f8de8df41a115d97341015b6060ecfc0039daaed9bd3f806d",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/incidents.ts",
+      "lines": 211,
+      "sha256": "a8b16aaacbfae80b836a83933eb2fe28221e21dce9779d7a3f0848f6e8e4b340",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/monitor.test.ts",
+      "lines": 38,
+      "sha256": "7fafd7fc4b9756ea53ef1a005f8f6dba71161b6a4551955aad6ed591e1cedd46",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/monitor.ts",
+      "lines": 37,
+      "sha256": "eb6dc9821601e354c250c8816732d3e62367c35775ef1a0d8a10ab235b1faa4a",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/service.test.ts",
+      "lines": 40,
+      "sha256": "6baa11967c5869fced8a5400dd5060a83bbd1923881c27d14a818865a8fa66d5",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/service.ts",
+      "lines": 165,
+      "sha256": "1f517d99a5270fe6ab398d27a5f294f8dd22f14d4d9d1b9a0498acdb953d70f5",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/types.ts",
+      "lines": 38,
+      "sha256": "cdffb51d84e174506c679be91da1144f44e0e3a4dc781f20051176b29381a481",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/usage-reconciliation.test.ts",
+      "lines": 20,
+      "sha256": "2be042068ecc9b9584663932d543d9327c3a2a877ab7eecd784278dac439ec75",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/system/usage-reconciliation.ts",
+      "lines": 42,
+      "sha256": "e28152881881d4cbc3c09a4b0dec590fcc0a3e6f9f699b9dcb70eaf2d202a922",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/user-service.test.ts",
+      "lines": 35,
+      "sha256": "fbabdc9d4ee3d58bad4bc32bfae54e25b9eeedc4203297c1c2be53968ed31942",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/user-service.ts",
+      "lines": 156,
+      "sha256": "1dc6040ac2d4fe5a504516387ea034665ae20f0e3e94387f3016c4bca29e0f3d",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/workspace-service.test.ts",
+      "lines": 18,
+      "sha256": "4e7d3610f6da9f7d6d9110219801f698527bf480ebd822ebd9bc04aa4ba3331d",
+      "reviewed": true
+    },
+    {
+      "path": "src/lib/admin/workspace-service.ts",
+      "lines": 219,
+      "sha256": "86caa637c2bc29393c165ffda5b2eed9f8e963e52d74f966e9336ee29da10d34",
+      "reviewed": true
+    }
+  ]
+}

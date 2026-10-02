@@ -1,4 +1,6 @@
 "use client";
+import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -51,7 +53,7 @@ export function UsersScreen({ page, search = "" }: { page: CursorPage<AdminUserS
       </form>
     </section>
     <form className="admin-filter-bar" role="search" onSubmit={searchUsers}><label className="field admin-search-field"><span>Search users</span><span className="admin-input-icon"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Email address" /></span></label><button className="button button-secondary" type="submit">Search</button></form>
-    <section className="panel admin-table-panel" aria-label="User identities">{page.items.length === 0 ? <div className="empty-state"><h2>No users found</h2><p>Try a different email search.</p></div> : <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>User</th><th>Status</th><th>Workspaces</th><th>Last sign in</th><th><span className="sr-only">Open</span></th></tr></thead><tbody>{page.items.map((user) => <tr key={user.id}><td><strong>{user.email}</strong><small>{user.id}</small></td><td><span className={`status-pill is-${user.status.toLowerCase()}`}>{user.status.toLowerCase()}</span></td><td>{user.workspaceCount}</td><td>{user.lastSignInAt ? new Date(user.lastSignInAt).toLocaleString() : "Never"}</td><td><Link className="button button-ghost button-small" href={`/admin/users/${user.id}`} aria-label={`Open ${user.email}`}>Open <ArrowRight size={15} /></Link></td></tr>)}</tbody></table></div>}</section>
+    <section className="panel admin-table-panel" aria-label="User identities">{page.items.length === 0 ? <div className="empty-state"><h2>No users found</h2><p>Try a different email search.</p></div> : <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>User</th><th>Status</th><th>Workspaces</th><th>Last sign in</th><th><span className="sr-only">Open</span></th></tr></thead><tbody>{page.items.map((user) => <tr key={user.id}><td><strong>{user.email}</strong><small>{user.id}</small></td><td><span className={`status-pill is-${user.status.toLowerCase()}`}>{user.status.toLowerCase()}</span></td><td>{user.workspaceCount}</td><td>{user.lastSignInAt ? formatAdminDateTime(user.lastSignInAt) : "Never"}</td><td><Link className="button button-ghost button-small" href={`/admin/users/${user.id}`} aria-label={`Open ${user.email}`}>Open <ArrowRight size={15} /></Link></td></tr>)}</tbody></table></div>}</section>
     <nav className="admin-pagination" aria-label="User pagination"><span className="muted">Supabase identities joined to Linkar memberships.</span>{page.nextCursor ? <Link className="button button-secondary" href={`/admin/users?${new URLSearchParams({ ...(search ? { search } : {}), cursor: page.nextCursor })}`}>Next page <ArrowRight size={16} /></Link> : <span className="muted">End of results</span>}</nav>
   </main>;
 }

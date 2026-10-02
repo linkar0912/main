@@ -8,6 +8,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "clean": "node scripts/clean.mjs",
     "check:branding": "node scripts/check-branding.mjs",
     "check:copy": "node scripts/check-customer-copy.mjs",
     "check:deployment-hygiene": "node scripts/check-deployment-hygiene.mjs",
@@ -40,7 +41,7 @@
     "bullmq": "6.1.2",
     "ioredis": "6.0.0",
     "lucide-react": "1.33.0",
-    "next": "16.3.1",
+    "next": "16.3.6",
     "prisma": "6.19.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -57,9 +58,8 @@
     "@types/react-dom": "^19.2.4",
     "esbuild": "^0.28.2",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.1",
+    "eslint-config-next": "16.3.6",
     "jsdom": "26.1.0",
-    "playwright": "1.62.1",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   }

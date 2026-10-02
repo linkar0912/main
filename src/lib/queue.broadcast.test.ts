@@ -49,10 +49,11 @@ describe("broadcast queue fan-out", () => {
   it("includes the Instagram account in otherwise identical recipient job IDs", async () => {
     await enqueueBroadcastSends(jobs);
 
-    expect(state.add.mock.calls.map((call) => call[2].jobId)).toEqual([
-      "broadcast:broadcast_1:ig_account_a:recipient_1",
-      "broadcast:broadcast_1:ig_account_b:recipient_1",
-    ]);
+    const ids = state.add.mock.calls.map((call) => call[2].jobId);
+    expect(ids.every((id) => /^broadcast_[A-Za-z0-9_-]+$/.test(id))).toBe(true);
+    expect(new Set(ids).size).toBe(2);
+    await enqueueBroadcastSends(jobs);
+    expect(state.add.mock.calls.slice(2).map((call) => call[2].jobId)).toEqual(ids);
   });
 
   it("returns exact accepted and rejected recipients after a partial queue failure", async () => {
@@ -74,4 +75,14 @@ describe("broadcast queue fan-out", () => {
     expect(state.add.mock.calls[600][2].delay).toBe(600_000);
     expect(state.add.mock.calls[601][2].delay).toBe(601_000);
   });
+  it("gives each explicit retry a new job ID while retaining stable provider delivery keys", async () => {
+    await enqueueBroadcastSends([jobs[0]]);
+    await enqueueBroadcastSends([jobs[0]], 0, "admin-retry-v2");
+    await enqueueBroadcastSends([jobs[0]], 0, "admin-retry-v2");
+    const calls = state.add.mock.calls;
+    expect(calls[0][2].jobId).not.toBe(calls[1][2].jobId);
+    expect(calls[1][2].jobId).toBe(calls[2][2].jobId);
+    expect(calls.map((call) => call[1].deliveryKey)).toEqual([jobs[0].deliveryKey, jobs[0].deliveryKey, jobs[0].deliveryKey]);
+  });
+
 });

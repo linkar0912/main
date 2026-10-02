@@ -265,6 +265,7 @@ describe("Prisma outbound delivery ledger", () => {
       },
       data: {
         state: "CLAIMED",
+        version: { increment: 1 },
         retryable: false,
         claimOwner: "worker_a",
         claimExpiresAt: new Date("2026-08-23T10:05:00.000Z"),
@@ -305,5 +306,27 @@ describe("Prisma outbound delivery ledger", () => {
       3,
     )).rejects.toThrow("utcDate must use YYYY-MM-DD");
     expect(queryRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe("broadcast reconciliation after admin cancellation", () => {
+  it("counts cancelled recipients as skipped and preserves terminal broadcast cancellation", async () => {
+    let broadcast = { status: "CANCELLED", completedAt: new Date(0), sent: 0, skipped: 0 };
+    const updateMany = vi.fn(async ({ where, data }) => {
+      const matches = typeof where.status === "string" ? broadcast.status === where.status : broadcast.status !== where.status.not;
+      if (matches) broadcast = { ...broadcast, ...data };
+      return { count: matches ? 1 : 0 };
+    });
+    const transaction = {
+      outboundDelivery: { groupBy: vi.fn().mockResolvedValue([
+        { state: "CANCELLED", resultCode: null, _count: { _all: 2 } },
+        { state: "SENT", resultCode: "DELIVERED", _count: { _all: 1 } },
+      ]) },
+      broadcast: { updateMany },
+    };
+    const client = { $transaction: async (work: (tx: unknown) => unknown) => work(transaction) } as unknown as typeof prisma;
+    const counters = await createPrismaRepository(client).reconcileBroadcastCounters("workspace_1", "broadcast_1");
+    expect(counters).toEqual({ total: 3, sent: 1, skipped: 2, failed: 0, pending: 0 });
+    expect(broadcast).toMatchObject({ status: "CANCELLED", completedAt: new Date(0), sent: 1, skipped: 2 });
   });
 });

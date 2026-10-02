@@ -78,13 +78,13 @@ describe("deployment repository hygiene", () => {
     const retiredHost = ["Host", "inger"].join("");
     const root = await createFixture({
       "scripts/example.test.ts": `const fixture = "${retiredHost}";\n`,
-      "docs/superpowers/specs/history.md": `${retiredHost} migration record\n`,
+      "docs/archive/planning/specs/history.md": `${retiredHost} migration record\n`,
     });
 
     await expect(
       findRetiredDeploymentArtifacts(root, [
         "scripts/example.test.ts",
-        "docs/superpowers/specs/history.md",
+        "docs/archive/planning/specs/history.md",
       ]),
     ).resolves.toEqual([]);
   });

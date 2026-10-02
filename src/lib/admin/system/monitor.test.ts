@@ -6,7 +6,7 @@ const { createSystemMonitor } = await import("./monitor");
 
 describe("system monitor", () => {
   it("snapshots, reconciles, then dispatches pending lifecycle alerts", async () => {
-    const snapshot = { generatedAt: "2026-09-05T06:00:00Z" };
+    const snapshot = { generatedAt: "2026-09-05T06:00:00Z", stuckClaims: 0, deletionJobs: { failed: 0 }, billing: { failedWebhooksLastHour: 0, driftedSubscriptions: 0 }, queues: [] };
     const candidates = [{ fingerprint: "component:redis:unavailable" }];
     const dependencies = {
       snapshot: vi.fn().mockResolvedValue(snapshot),
@@ -18,7 +18,7 @@ describe("system monitor", () => {
     const monitor = createSystemMonitor(dependencies as never);
     await expect(monitor.run()).resolves.toMatchObject({ candidates: 1, lifecycleChanges: 1, alertsDelivered: 1 });
     expect(dependencies.evaluate).toHaveBeenCalledWith(snapshot, expect.any(Date));
-    expect(dependencies.reconcile).toHaveBeenCalledWith(candidates, expect.anything(), expect.any(Date));
+    expect(dependencies.reconcile).toHaveBeenCalledWith(candidates, expect.anything(), expect.any(Date), new Set());
     expect(dependencies.dispatch).toHaveBeenCalledWith(expect.any(Date));
   });
 
@@ -26,7 +26,7 @@ describe("system monitor", () => {
     let release!: () => void;
     const pending = new Promise<void>((resolve) => { release = resolve; });
     const monitor = createSystemMonitor({
-      snapshot: vi.fn().mockImplementation(() => pending.then(() => ({ generatedAt: new Date().toISOString() }))),
+      snapshot: vi.fn().mockImplementation(() => pending.then(() => ({ generatedAt: new Date().toISOString(), stuckClaims: 0, deletionJobs: { failed: 0 }, billing: { failedWebhooksLastHour: 0, driftedSubscriptions: 0 }, queues: [] }))),
       evaluate: vi.fn().mockReturnValue([]), reconcile: vi.fn().mockResolvedValue([]),
       dispatch: vi.fn().mockResolvedValue({ attempted: 0, delivered: 0 }), now: () => new Date(),
     } as never);

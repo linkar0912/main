@@ -30,6 +30,7 @@ export const prismaIncidentAlertRepository: IncidentAlertRepository = {
           { status: "RESOLVED", recoverySentAt: null },
         ],
       },
+      take: 100,
       orderBy: [{ severity: "desc" }, { firstSeenAt: "asc" }],
       select: {
         id: true, status: true, severity: true, source: true, title: true,
@@ -78,8 +79,8 @@ export async function dispatchPendingIncidentAlerts(options: {
   let delivered = 0;
   for (const incident of pending) {
     if (options.recipients.length === 0) continue;
-    const results = await Promise.all(options.recipients.map((recipient) => options.send(emailFor(incident, recipient, options.adminUrl))));
-    if (!results.every((result) => result.delivered)) continue;
+    const results = await Promise.allSettled(options.recipients.map((recipient) => options.send(emailFor(incident, recipient, options.adminUrl))));
+    if (!results.every((result) => result.status === "fulfilled" && result.value.delivered)) continue;
     if (incident.status === "RESOLVED") await options.repository.markRecoverySent(incident.id, options.now);
     else await options.repository.markNotificationSent(incident.id, options.now);
     delivered += 1;

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { dispatchConfiguredIncidentAlerts } from "./alerts";
-import { evaluateSystemIncidents, prismaIncidentRepository, reconcileSystemIncidents } from "./incidents";
+import { evaluateSystemIncidents, prismaIncidentRepository, reconcileSystemIncidents, unobservedIncidentFingerprints } from "./incidents";
 import { getAdminSystemService } from "./service";
 
 export function createSystemMonitor(dependencies: {
@@ -26,7 +26,7 @@ export function createSystemMonitor(dependencies: {
         const now = dependencies.now();
         const snapshot = await dependencies.snapshot();
         const candidates = dependencies.evaluate(snapshot, now);
-        const lifecycle = await dependencies.reconcile(candidates, prismaIncidentRepository, now);
+        const lifecycle = await dependencies.reconcile(candidates, prismaIncidentRepository, now, unobservedIncidentFingerprints(snapshot));
         const alerts = await dependencies.dispatch(now);
         return { skipped: false, candidates: candidates.length, lifecycleChanges: lifecycle.length, alertsDelivered: alerts.delivered } as const;
       } finally {

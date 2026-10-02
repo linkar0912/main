@@ -62,6 +62,7 @@ export function createPrismaAdminAccountsRepository(
             ...(search ? [{ OR: [
               { name: { contains: search, mode: "insensitive" as const } },
               { slug: { contains: search, mode: "insensitive" as const } },
+              { id: { contains: search, mode: "insensitive" as const } },
             ] }] : []),
             ...(cursor ? [{ OR: [
               { createdAt: { lt: new Date(cursor.createdAt) } },
@@ -111,7 +112,7 @@ export function createPrismaAdminAccountsRepository(
       const cursor = query.cursor ? decodeAdminCursor(query.cursor, cursorSecret) : null;
       const search = query.search?.trim().toLowerCase();
       const authUsers: User[] = [];
-      for (let page = 1; page <= 10 && authUsers.length < 10_000; page += 1) {
+      for (let page = 1; ; page += 1) {
         const result = await authAdmin.auth.admin.listUsers({ page, perPage: 1000 });
         if (result.error) throw result.error;
         authUsers.push(...result.data.users);
@@ -146,6 +147,7 @@ export function createPrismaAdminAccountsRepository(
 
     async getAdminUser(id) {
       const result = await authAdmin.auth.admin.getUserById(id);
+      if (result.error && result.error.status !== 404) throw Object.assign(new Error("auth_provider_unavailable"), { status: 502, code: "auth_provider_unavailable" });
       const email = result.data.user?.email;
       if (result.error || !email) return null;
       const [control, memberships] = await Promise.all([

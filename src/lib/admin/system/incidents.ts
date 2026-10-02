@@ -84,7 +84,11 @@ export function evaluateSystemIncidents(snapshot: IncidentSnapshot, now = new Da
 
   for (const queue of snapshot.queues) {
     const source = `queue:${queue.name}`;
-    if (queue.configured && queue.paused) {
+    if (!queue.configured || queue.paused === null) {
+      incidents.push(candidate(`${source}:unavailable`, source, `${queue.name} queue unavailable`, "The queue probe did not provide an observed state.", "CRITICAL"));
+      continue;
+    }
+    if (queue.paused) {
       incidents.push(candidate(`${source}:paused`, source, `${queue.name} queue paused`, "Queue processing is paused.", "WARNING"));
     }
     const criticalBacklog = queue.waiting >= 500 || (queue.oldestWaitingAgeMs ?? 0) >= 30 * 60_000;
@@ -123,10 +127,25 @@ export interface IncidentRepository {
   resolve(id: string, now: Date): Promise<Record<string, unknown> & { id: string }>;
 }
 
+export function unobservedIncidentFingerprints(snapshot: IncidentSnapshot): Set<string> {
+  const unknown = new Set<string>();
+  if (snapshot.stuckClaims === null) unknown.add("deliveries:expired-claims");
+  if (snapshot.deletionJobs.failed === null) unknown.add("deletions:failed");
+  if (snapshot.billing.failedWebhooksLastHour === null) unknown.add("billing:webhooks:failed");
+  if (snapshot.billing.driftedSubscriptions === null) unknown.add("billing:subscriptions:drift");
+  for (const queue of snapshot.queues) {
+    if (!queue.configured || queue.paused === null) {
+      for (const suffix of ["paused", "backlog", "failed"]) unknown.add(`queue:${queue.name}:${suffix}`);
+    }
+  }
+  return unknown;
+}
+
 export async function reconcileSystemIncidents(
   candidates: SystemIncidentCandidate[],
   repository: IncidentRepository,
   now = new Date(),
+  unobserved: ReadonlySet<string> = new Set(),
 ): Promise<IncidentLifecycleEvent[]> {
   const active = await repository.listActive();
   const activeByFingerprint = new Map(active.map((incident) => [incident.fingerprint, incident]));
@@ -149,7 +168,7 @@ export async function reconcileSystemIncidents(
   }
 
   for (const current of active) {
-    if (!seen.has(current.fingerprint)) {
+    if (!seen.has(current.fingerprint) && !unobserved.has(current.fingerprint)) {
       events.push({ kind: "RESOLVED", incident: await repository.resolve(current.id, now) });
     }
   }

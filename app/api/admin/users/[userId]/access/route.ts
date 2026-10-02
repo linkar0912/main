@@ -9,10 +9,10 @@ const Command = z.object({ action: z.enum(["SUSPEND", "RESTORE", "REVOKE_LINKAR_
 export async function POST(request: Request, context: RouteContext<"/api/admin/users/[userId]/access">) {
   try {
     const { userId } = await context.params;
-    const guard = await requireAdminWrite(request, { action: "user.access", targetType: "user", targetId: userId });
     const input = Command.parse(await request.json());
+    const guard = await requireAdminWrite(request, { action: `user.access.${input.action.toLowerCase()}`, targetType: "user", targetId: userId });
     const data = await runAuditedAdminMutation(
-      { ...guard, action: `user.access.${input.action.toLowerCase()}` },
+      guard,
       () => setAdminUserAccess(userId, { ...input, reason: guard.reason, actorUserId: guard.owner.userId }),
     );
     return adminJson({ data });

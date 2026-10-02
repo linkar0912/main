@@ -1,4 +1,6 @@
 "use client";
+import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -19,7 +21,11 @@ function probeLabel(state: string, detail?: string): string {
 
 export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
   const router = useRouter();
-  const [renderedAt] = useState(Date.now);
+  const [renderedAt, setRenderedAt] = useState(() => Date.parse(snapshot.generatedAt));
+  useEffect(() => {
+    const timer = window.setInterval(() => setRenderedAt(Date.now()), 5_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +92,7 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
           <span className={`admin-ops-signal is-${activeIncidents > 0 ? "attention" : "healthy"}`} aria-hidden>
             {activeIncidents > 0 ? <CircleX size={22} /> : <CircleCheck size={22} />}
           </span>
-          <div><strong>{activeIncidents > 0 ? activeLabel : "No active incidents"}</strong><small>Snapshot {new Date(snapshot.generatedAt).toLocaleString()}{stale ? " · Stale" : ""}</small></div>
+          <div><strong>{snapshot.operationalDataAvailable === false ? "Incident status unavailable" : activeIncidents > 0 ? activeLabel : "No active incidents"}</strong><small>Snapshot {formatAdminDateTime(snapshot.generatedAt)}{stale ? " · Stale" : ""}</small></div>
         </div>
         <div className="admin-ops-fact"><span>Razorpay</span><strong>{snapshot.billing.configured ? "Ready" : "Needs configuration"}</strong></div>
         <div className="admin-ops-fact"><span>Billing webhooks failed</span><strong>{snapshot.billing.failedWebhooksLastHour ?? "Unavailable"}</strong></div>
@@ -103,23 +109,23 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
         ))}
       </section>
 
-      <IncidentTable incidents={snapshot.incidents} now={new Date(renderedAt).toISOString()} />
+      {snapshot.operationalDataAvailable === false ? <p className="form-error" role="status">Operational data could not be loaded. Incident and workload counts are unavailable.</p> : <IncidentTable incidents={snapshot.incidents} now={new Date(renderedAt).toISOString()} />}
 
       <div className="admin-system-layout">
         <section className="panel admin-operations-panel" aria-labelledby="queue-heading">
           <div className="admin-section-heading"><div><h2 id="queue-heading">Queue operations</h2><p>Live workload and bounded operator controls.</p></div></div>
           {snapshot.queues.map((queue) => (
             <div className="admin-queue-row" key={queue.name}>
-              <div className="admin-queue-name"><strong>{queue.name}</strong><span>{!queue.configured ? "Unavailable" : queue.paused ? "Paused" : "Running"}</span></div>
+              <div className="admin-queue-name"><strong>{queue.name}</strong><span>{!queue.configured || queue.paused === null ? "Unavailable" : queue.paused ? "Paused" : "Running"}</span></div>
               <dl>
-                <div><dt>Waiting</dt><dd>{queue.waiting}</dd></div>
-                <div><dt>Active</dt><dd>{queue.active}</dd></div>
-                <div><dt>Delayed</dt><dd>{queue.delayed}</dd></div>
-                <div><dt>Failed</dt><dd>{queue.failed}</dd></div>
+                <div><dt>Waiting</dt><dd>{queue.configured && queue.paused !== null ? queue.waiting : "Unavailable"}</dd></div>
+                <div><dt>Active</dt><dd>{queue.configured && queue.paused !== null ? queue.active : "Unavailable"}</dd></div>
+                <div><dt>Delayed</dt><dd>{queue.configured && queue.paused !== null ? queue.delayed : "Unavailable"}</dd></div>
+                <div><dt>Failed</dt><dd>{queue.configured && queue.paused !== null ? queue.failed : "Unavailable"}</dd></div>
               </dl>
               <div className="admin-queue-action">
-                {queue.lastFailedCode ? <small>Latest failure: <code>{queue.lastFailedCode}</code></small> : <small>No recorded failures</small>}
-                <button className="button button-secondary button-small" disabled={!queue.configured} type="button" onClick={() => setPending({ type: "queue", queue: queue.name, action: queue.paused ? "resume" : "pause" })}>{queue.paused ? "Resume queue" : "Pause queue"}</button>
+                {queue.lastFailedCode ? <small>Latest failure: <code>{queue.lastFailedCode}</code></small> : <small>{queue.paused === null ? "Failure history unavailable" : "No recorded failures"}</small>}
+                <button className="button button-secondary button-small" disabled={!queue.configured || queue.paused === null} type="button" onClick={() => setPending({ type: "queue", queue: queue.name, action: queue.paused ? "resume" : "pause" })}>{queue.paused ? "Resume queue" : "Pause queue"}</button>
               </div>
             </div>
           ))}
@@ -149,7 +155,7 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
         </aside>
       </div>
 
-      {pending ? <ReasonDialog title={pending.action.replaceAll("_", " ")} warning="This command changes live Linkar runtime state and is recorded in the immutable audit trail." busy={busy} onCancel={() => setPending(null)} onConfirm={execute} /> : null}
+      {pending ? <ReasonDialog error={error} title={pending.action.replaceAll("_", " ")} warning="This command changes live Linkar runtime state and is recorded in the immutable audit trail." busy={busy} onCancel={() => setPending(null)} onConfirm={execute} /> : null}
     </main>
   );
 }

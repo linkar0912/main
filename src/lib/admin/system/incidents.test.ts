@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const { evaluateSystemIncidents, reconcileSystemIncidents } = await import("./incidents");
+const { evaluateSystemIncidents, reconcileSystemIncidents, unobservedIncidentFingerprints } = await import("./incidents");
 
 const healthySnapshot = {
   overall: "healthy" as const,
@@ -89,4 +89,16 @@ describe("system incident lifecycle", () => {
     expect(repository.open).toHaveBeenCalledTimes(1);
     expect(repository.resolve).toHaveBeenCalledWith("i_recovered", expect.any(Date));
   });
+});
+
+it("preserves existing metric incidents while probes are unavailable and resolves them after an observed recovery", async () => {
+  const repository = {
+    listActive: vi.fn().mockResolvedValue([{ id: "backlog", fingerprint: "queue:webhooks:backlog", severity: "WARNING", status: "OPEN" }, { id: "claims", fingerprint: "deliveries:expired-claims", severity: "WARNING", status: "OPEN" }]),
+    open: vi.fn(), refresh: vi.fn(), resolve: vi.fn().mockImplementation(async (id) => ({ id })),
+  };
+  const snapshot = { ...healthySnapshot, stuckClaims: null, queues: [{ name: "webhooks", configured: true, paused: null, waiting: 0, failed: 0, oldestWaitingAgeMs: null }] };
+  await reconcileSystemIncidents([], repository as never, new Date(), unobservedIncidentFingerprints(snapshot));
+  expect(repository.resolve).not.toHaveBeenCalled();
+  await reconcileSystemIncidents([], repository as never, new Date(), unobservedIncidentFingerprints(healthySnapshot));
+  expect(repository.resolve).toHaveBeenCalledTimes(2);
 });
