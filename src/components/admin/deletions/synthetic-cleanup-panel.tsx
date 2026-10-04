@@ -1,9 +1,10 @@
 "use client";
-import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
-
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { adminCommand, adminErrorMessage, adminIdempotencyKey } from "../shared/admin-request";
 
 type CleanupPreview = {
   count: number;
@@ -15,9 +16,7 @@ type CleanupPreview = {
   challenge: { token: string; expiresAt: string };
 };
 
-function readableError(error: unknown): string {
-  return error instanceof Error ? error.message.replaceAll("_", " ") : "Cleanup request failed";
-}
+type Message = { tone: "error" | "success"; text: string };
 
 export function SyntheticCleanupPanel() {
   const router = useRouter();
@@ -26,35 +25,24 @@ export function SyntheticCleanupPanel() {
   const [preview, setPreview] = useState<CleanupPreview | null>(null);
   const [submissionKey, setSubmissionKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
 
-  async function request(path: string, body: unknown, idempotencyKey = `synthetic-cleanup-${crypto.randomUUID()}`) {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-admin-reason": reason,
-        "idempotency-key": idempotencyKey,
-      },
-      body: JSON.stringify(body),
-    });
-    const result = await response.json() as { data?: CleanupPreview; error?: string };
-    if (!response.ok) throw new Error(result.error ?? "synthetic_cleanup_failed");
-    return result;
+  function request(path: string, body: unknown, idempotencyKey = adminIdempotencyKey("synthetic-cleanup")) {
+    return adminCommand<CleanupPreview>(path, { body, reason, fallback: "synthetic_cleanup_failed", idempotencyKey });
   }
 
   async function loadPreview() {
     setBusy(true);
     setMessage(null);
     try {
-      const result = await request("/api/admin/deletions/synthetic/preview", {});
-      setPreview(result.data ?? null);
-      setSubmissionKey(`synthetic-cleanup-${crypto.randomUUID()}`);
+      setPreview(await request("/api/admin/deletions/synthetic/preview", {}) ?? null);
+      // One key for the whole submission, so a retried click replays instead of queueing twice.
+      setSubmissionKey(adminIdempotencyKey("synthetic-cleanup"));
       setConfirmation("");
     } catch (error) {
       setPreview(null);
       setSubmissionKey(null);
-      setMessage(readableError(error));
+      setMessage({ tone: "error", text: adminErrorMessage(error, "Cleanup request failed") });
     } finally {
       setBusy(false);
     }
@@ -73,10 +61,10 @@ export function SyntheticCleanupPanel() {
       setPreview(null);
       setSubmissionKey(null);
       setConfirmation("");
-      setMessage("Permanent cleanup queued. Progress is shown below.");
+      setMessage({ tone: "success", text: "Permanent cleanup queued. Progress is shown below." });
       router.refresh();
     } catch (error) {
-      setMessage(readableError(error));
+      setMessage({ tone: "error", text: adminErrorMessage(error, "Cleanup request failed") });
     } finally {
       setBusy(false);
     }
@@ -88,7 +76,10 @@ export function SyntheticCleanupPanel() {
       <h2 id="synthetic-cleanup-title">Clean up synthetic accounts</h2>
       <p className="muted">Matches only owner-[numbers], member-[numbers], and signout-[numbers] at example.com. Every other email is preserved.</p>
     </div>
-    <label>Operator reason<textarea value={reason} onChange={(event) => { setReason(event.target.value); setPreview(null); setSubmissionKey(null); }} rows={3} /></label>
+    <label className="field">
+      <span>Operator reason</span>
+      <textarea value={reason} maxLength={500} onChange={(event) => { setReason(event.target.value); setPreview(null); setSubmissionKey(null); }} rows={3} />
+    </label>
     <button className="button button-secondary" type="button" disabled={busy || reason.trim().length < 3} onClick={() => void loadPreview()}>Preview test accounts</button>
     {preview ? <div className="admin-impact-preview">
       <div><p className="eyebrow">Current production impact</p><h3>{preview.count} accounts match</h3></div>
@@ -99,10 +90,13 @@ export function SyntheticCleanupPanel() {
         <div><dt>Protected owners excluded</dt><dd>{preview.protectedAccountsExcluded}</dd></div>
       </dl>
       <p className="form-warning">Owned workspaces are removed first. Account identities are rechecked again immediately before permanent deletion.</p>
-      <label>Type exactly <code>{preview.confirmationPhrase}</code><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label>
+      <label className="field">
+        <span>Type exactly <code>{preview.confirmationPhrase}</code></span>
+        <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
+      </label>
       <p className="muted">This single-use challenge expires {formatAdminDateTime(preview.challenge.expiresAt)}.</p>
       <button className="button button-danger" type="button" disabled={busy || !submissionKey || confirmation !== preview.confirmationPhrase || preview.count === 0} onClick={() => void queueCleanup()}>Queue permanent cleanup</button>
     </div> : null}
-    {message ? <p role="status" className="admin-command-message">{message}</p> : null}
+    {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "form-error" : "form-success"}>{message.text}</p> : null}
   </section>;
 }

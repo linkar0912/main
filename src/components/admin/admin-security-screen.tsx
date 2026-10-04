@@ -46,7 +46,8 @@ function idempotencyKey(): string {
 }
 
 async function readJson(response: Response): Promise<Record<string, unknown>> {
-  return await response.json() as Record<string, unknown>;
+  // An outage page is not JSON; treat it as an empty body so the caller reports a safe message.
+  return await response.json().catch(() => ({})) as Record<string, unknown>;
 }
 
 function messageFor(error: unknown): string {
@@ -308,12 +309,12 @@ export function AdminSecurityScreen({
               <textarea value={removal.reason} onChange={(event) => setRemoval({ ...removal, reason: event.target.value })} />
             </label>
             <label className="field field-wide">
-              <span>Type {removal.confirmationPhrase}</span>
-              <input value={removal.confirmation} onChange={(event) => setRemoval({ ...removal, confirmation: event.target.value })} />
+              <span>Type <code>{removal.confirmationPhrase}</code></span>
+              <input value={removal.confirmation} autoComplete="off" spellCheck={false} onChange={(event) => setRemoval({ ...removal, confirmation: event.target.value })} />
             </label>
             <div className="admin-security-actions">
-              <button className="button button-secondary" type="button" onClick={() => setRemoval(null)}>Cancel</button>
-              <button className="button button-primary" type="submit" disabled={busy || removal.reason.trim().length < 3 || removal.confirmation !== removal.confirmationPhrase}>
+              <button className="button button-secondary" type="button" disabled={busy} onClick={() => setRemoval(null)}>Cancel</button>
+              <button className="button button-danger" type="submit" disabled={busy || removal.reason.trim().length < 3 || removal.confirmation !== removal.confirmationPhrase}>
                 Remove factor
               </button>
             </div>

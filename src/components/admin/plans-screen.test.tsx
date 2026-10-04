@@ -136,7 +136,7 @@ describe("PlansScreen", () => {
     fillInviteForm("creator");
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("invite plan unavailable");
+    expect(alert.textContent).toContain("Invite plan unavailable");
     fireEvent.click(within(alert).getByRole("button", { name: "Dismiss notification" }));
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -153,4 +153,32 @@ it("saves a plan without sending serialized timestamps or other response metadat
   const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
   expect(body.version).toBe(2);
   expect(body).not.toHaveProperty("createdAt"); expect(body).not.toHaveProperty("updatedAt");
+});
+
+describe("PlansScreen retirement", () => {
+  it("asks for confirmation and a reason before retiring a plan", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PlansScreen plans={[growthPlan]} />);
+    const card = screen.getByRole("heading", { name: "Growth", level: 2 }).closest("form");
+    if (!card) throw new Error("Plan card not found");
+
+    fireEvent.click(within(card).getByRole("button", { name: "Retire plan" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Confirming without a reason used to send an empty reason that the server rejected.
+    fireEvent.click(within(card).getByRole("button", { name: "Confirm retire" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("Add an operator reason before retiring a plan.");
+
+    fireEvent.change(within(card).getByLabelText("Operator reason"), { target: { value: "Replaced by Scale" } });
+    fireEvent.click(within(card).getByRole("button", { name: "Confirm retire" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(fetchMock).toHaveBeenCalledWith("/api/admin/plans/p_growth", expect.objectContaining({ method: "DELETE", body: JSON.stringify({ version: 2 }) }));
+  });
+
+  it("keeps a retired plan read-only", () => {
+    render(<PlansScreen plans={[retiredPlan]} />);
+    expect(screen.queryByRole("button", { name: "Save plan" })).toBeNull();
+    expect(screen.getByText(/Retired plans are read-only/)).toBeTruthy();
+  });
 });

@@ -74,6 +74,9 @@
      tuned to sit on --leaf-soft as an icon/fill, not as pill or badge text on
      a dark panel. */
   --success-ink: var(--leaf);
+  /* Fill colours for status dots and markers; previously referenced but never defined. */
+  --success: var(--success-ink);
+  --warning: var(--warning-ink);
   /* Skeleton shimmer. Previously hardcoded light grays with no dark-mode
      counterpart, so every route-level loading screen flashed near-white on the
      dark canvas before the real page swapped in. */
@@ -3558,19 +3561,64 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 }
 
 /* Owner command-center extensions: destructive workflows and audit inspection. */
-.admin-system-links { display: flex; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-5) var(--space-7) 0; }
+.admin-system-links { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 auto; max-width: 1360px; padding: 28px var(--workspace-gutter) 0; width: 100%; }
+.admin-system-links + .page-wrap { padding-top: var(--space-5); }
 .admin-deletion-wizard { display: grid; gap: var(--space-4); margin-bottom: var(--space-6); }
+.admin-deletion-wizard > .button, .admin-impact-preview > .button { justify-self: start; }
 .synthetic-cleanup-panel { background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 7%, var(--panel)), var(--panel) 48%); border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); }
-.synthetic-cleanup-panel > .button { justify-self: start; }
 .admin-impact-preview { background: var(--surface-soft); border: 1px solid var(--line-strong); border-radius: var(--radius-md); display: grid; gap: var(--space-3); padding: var(--space-5); }
 .admin-impact-preview code { overflow-wrap: anywhere; }
 .admin-command-message { font-weight: 700; margin: 0; }
-.admin-audit-export { align-items: end; display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: flex-end; margin-bottom: var(--space-4); }
-.admin-audit-export label { min-width: min(100%, 320px); }
-.data-table td small { color: var(--muted); display: block; font-size: .7rem; overflow-wrap: anywhere; }
-.data-table details { max-width: 360px; }
-.data-table pre { font-size: .68rem; max-height: 240px; overflow: auto; white-space: pre-wrap; }
-@media (max-width: 720px) { .admin-system-links { padding: var(--space-4) var(--space-4) 0; } }
+.admin-audit-export { align-items: end; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-4); }
+.admin-audit-export .field { flex: 1 1 280px; max-width: 480px; }
+.admin-audit-filter { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) 170px auto; }
+.admin-table.admin-audit-table td:last-child, .admin-table.admin-audit-table th:last-child { text-align: left; }
+.admin-audit-table details { max-width: 360px; }
+.admin-audit-table summary { cursor: pointer; font-weight: 700; }
+.admin-audit-table details p { margin: var(--space-2) 0; overflow-wrap: anywhere; }
+.admin-audit-table pre { background: var(--surface-soft); border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: .68rem; margin: 0; max-height: 240px; overflow: auto; padding: var(--space-3); white-space: pre-wrap; }
+.admin-job-reason { border-bottom: 1px solid var(--line); max-width: none; padding: var(--space-4); }
+.admin-job-reason input { max-width: 480px; }
+.admin-job-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
+.admin-table-panel > .panel-heading { margin: 0; padding: var(--space-5) var(--space-4) var(--space-4); }
+.admin-table-panel > .form-error { padding: var(--space-3) var(--space-4); }
+.admin-table-empty { color: var(--muted); padding: var(--space-6) var(--space-4) !important; text-align: center !important; }
+
+/* Admin screens keep the two-column header: title on the left, state or action on the right. */
+.admin-frame .page-header { align-items: flex-end; flex-direction: row; gap: var(--space-5); justify-content: space-between; }
+.admin-frame .page-header > div:first-child { min-width: 0; }
+.admin-frame .page-header > :not(div:first-child) { flex: 0 0 auto; }
+.admin-frame .admin-detail-header { align-items: center; }
+.admin-frame button:disabled { cursor: not-allowed; }
+.admin-frame .status-pill { background: var(--surface-soft); border: 1px solid var(--line-strong); border-radius: 999px; color: var(--slate); display: inline-block; font-size: .68rem; font-weight: 800; justify-self: start; letter-spacing: .02em; line-height: 1; padding: 5px 10px; white-space: nowrap; }
+.admin-frame .status-pill::first-letter { text-transform: uppercase; }
+.admin-frame .status-pill.is-ok { background: var(--green-soft); border-color: var(--green-line); color: var(--success-ink); }
+.admin-frame .status-pill.is-warn { background: var(--amber-soft); border-color: var(--amber-line); color: var(--warning-ink); }
+.admin-frame .status-pill.is-bad { background: var(--danger-soft); border-color: var(--danger-line); color: var(--danger); }
+.admin-table td .status-pill + small { margin-top: 6px; }
+.admin-table th:last-child { text-align: right; }
+.button-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.button-danger:hover { box-shadow: var(--shadow-lift); filter: brightness(.92); }
+.admin-frame .form-error[role="alert"], .admin-frame .form-success[role="status"] { border: 1px solid; border-radius: var(--radius-sm); margin-bottom: var(--space-4); padding: var(--space-3) var(--space-4); }
+.admin-frame .form-error[role="alert"] { background: var(--danger-soft); border-color: var(--danger-line); }
+.admin-frame .form-success[role="status"] { background: var(--green-soft); border-color: var(--green-line); color: var(--success-ink); }
+.admin-reason-dialog .form-error[role="alert"] { margin-bottom: 0; }
+.admin-field-hint { color: var(--muted); font-size: var(--type-meta); margin: 0; }
+.admin-plan-fields { border: 0; display: grid; gap: var(--space-4); margin: 0; min-width: 0; padding: 0; }
+.admin-plan-fields:disabled { opacity: .7; }
+.admin-invalid-filters { align-items: flex-start; display: grid; gap: var(--space-3); justify-items: start; }
+.admin-detail-drawer > .form-error, .admin-detail-drawer > [role="status"] { clear: both; }
+.admin-queue-name span.is-paused { color: var(--warning-ink); }
+.admin-queue-name span.is-unavailable { color: var(--danger); }
+.admin-queue-row dd { overflow-wrap: anywhere; }
+
+@media (max-width: 720px) {
+  .admin-system-links { padding: var(--space-4) 18px 0; }
+  .admin-frame .page-header { align-items: flex-start; flex-direction: column; gap: var(--space-4); }
+  .admin-audit-filter { grid-template-columns: 1fr; }
+  .admin-audit-export { align-items: stretch; flex-direction: column; }
+  .admin-audit-export .field { flex: 0 0 auto; max-width: none; }
+}
 
 /* ═════════════════════════════════════════════════════════════════════════════
    Workspace layout system

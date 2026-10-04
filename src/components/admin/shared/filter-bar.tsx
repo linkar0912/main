@@ -1,4 +1,66 @@
 "use client";
+
 import { FormEvent, useState } from "react";
 import { Search } from "lucide-react";
-export function FilterBar({ initial, onApply }: { initial: { workspaceId?: string; status?: string; text?: string; provider?: string }; onApply: (filters: Record<string, string>) => void }) { const [workspaceId, setWorkspaceId] = useState(initial.workspaceId ?? ""); const [status, setStatus] = useState(initial.status ?? ""); const [text, setText] = useState(initial.text ?? ""); const [provider, setProvider] = useState(initial.provider ?? ""); function submit(event: FormEvent) { event.preventDefault(); onApply({ workspaceId: workspaceId.trim(), status: status.trim(), text: text.trim(), provider }); } return <form className="admin-filter-bar admin-operations-filter" onSubmit={submit}><label className="field"><span>Workspace ID</span><input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} /></label><label className="field"><span>Status</span><input value={status} onChange={(event) => setStatus(event.target.value.toUpperCase())} placeholder="All" /></label><label className="field"><span>Provider</span><select value={provider} onChange={(event) => setProvider(event.target.value)}><option value="">All</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option></select></label><label className="field admin-search-field"><span>Text</span><span className="admin-input-icon"><Search size={16} /><input value={text} onChange={(event) => setText(event.target.value)} /></span></label><button className="button button-secondary" type="submit">Apply filters</button></form>; }
+
+import { humanizeAdminCode } from "./admin-request";
+
+type Filters = { workspaceId?: string; status?: string; text?: string; provider?: string };
+
+export function FilterBar({
+  initial,
+  statuses,
+  showProvider = true,
+  onApply,
+}: {
+  initial: Filters;
+  /** States valid for the selected resource kind. */
+  statuses: readonly string[];
+  showProvider?: boolean;
+  onApply: (filters: Record<string, string>) => void;
+}) {
+  const [workspaceId, setWorkspaceId] = useState(initial.workspaceId ?? "");
+  // A status carried over from another resource kind is not offered, so it is dropped.
+  const [status, setStatus] = useState(initial.status && statuses.includes(initial.status) ? initial.status : "");
+  const [text, setText] = useState(initial.text ?? "");
+  const [provider, setProvider] = useState(showProvider ? initial.provider ?? "" : "");
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    onApply({ workspaceId: workspaceId.trim(), status, text: text.trim(), provider });
+  }
+
+  return (
+    <form className="admin-filter-bar admin-operations-filter" onSubmit={submit}>
+      <label className="field">
+        <span>Workspace ID</span>
+        <input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} />
+      </label>
+      <label className="field">
+        <span>Status</span>
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="">All</option>
+          {statuses.map((item) => <option value={item} key={item}>{humanizeAdminCode(item.toLowerCase())}</option>)}
+        </select>
+      </label>
+      {showProvider ? (
+        <label className="field">
+          <span>Provider</span>
+          <select value={provider} onChange={(event) => setProvider(event.target.value)}>
+            <option value="">All</option>
+            <option value="instagram">Instagram</option>
+            <option value="facebook">Facebook</option>
+          </select>
+        </label>
+      ) : null}
+      <label className="field admin-search-field">
+        <span>Text</span>
+        <span className="admin-input-icon">
+          <Search size={16} aria-hidden />
+          <input value={text} onChange={(event) => setText(event.target.value)} />
+        </span>
+      </label>
+      <button className="button button-secondary" type="submit">Apply filters</button>
+    </form>
+  );
+}

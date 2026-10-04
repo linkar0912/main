@@ -6,6 +6,7 @@ import { prisma } from "@/src/lib/prisma";
 import { boundedAdminLimit } from "../accounts-repository";
 import { decodeAdminCursor, encodeAdminCursor } from "../cursor";
 import type { AdminOperationDetail, AdminOperationFilter, AdminOperationItem, AdminOperationKind, AdminOperationPage } from "./types";
+import { adminOperationStatuses } from "./types";
 
 type Client = typeof prisma;
 type CommonRecord = Omit<AdminOperationItem, "kind">;
@@ -50,11 +51,7 @@ const actions: Record<AdminOperationKind, string[]> = {
 export function createAdminOperationsRepository(client: Client = prisma, secret = getServerEnv().authSessionSecret) {
   return {
     async list(kind: AdminOperationKind, filter: AdminOperationFilter): Promise<AdminOperationPage> {
-      const statuses = {
-        automation: ["DRAFT", "ACTIVE", "PAUSED"], sequence: ["DRAFT", "ACTIVE", "PAUSED"], broadcast: ["PENDING", "RUNNING", "COMPLETED", "CANCELLED"],
-        contact: ["ACTIVE", "SUPPRESSED"], tracked_link: ["ACTIVE", "DISABLED"], delivery: ["PENDING", "CLAIMED", "SENT", "FAILED", "UNKNOWN", "CANCELLED"], webhook: ["RECEIVED", "PROCESSED"],
-      };
-      if (filter.status) z.enum(statuses[kind] as [string, ...string[]]).parse(filter.status);
+      if (filter.status) z.enum(adminOperationStatuses[kind] as [string, ...string[]]).parse(filter.status);
       if (filter.provider && (kind === "tracked_link" || (filter.provider === "facebook" && ["sequence", "broadcast", "contact"].includes(kind)))) return { items: [], nextCursor: null };
       const limit = boundedAdminLimit(filter.limit);
       const workspace = { select: { id: true, name: true } } as const;

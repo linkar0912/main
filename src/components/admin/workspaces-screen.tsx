@@ -6,6 +6,7 @@ import { FormEvent, useState } from "react";
 import { ArrowRight, Boxes, Search, Users } from "lucide-react";
 
 import type { AdminWorkspaceSummary, CursorPage } from "@/src/lib/admin/accounts-repository";
+import { StatusPill } from "./shared/status-pill";
 
 export function WorkspacesScreen({ page, search = "" }: { page: CursorPage<AdminWorkspaceSummary>; search?: string }) {
   const router = useRouter();
@@ -39,7 +40,7 @@ export function WorkspacesScreen({ page, search = "" }: { page: CursorPage<Admin
 
       <section className="panel admin-table-panel" aria-label="Workspace accounts">
         {page.items.length === 0 ? (
-          <div className="empty-state"><h2>No workspaces found</h2><p>Try a different search term.</p></div>
+          <div className="empty-state"><h2>No workspaces found</h2><p>{search ? "Try a different search term." : "Workspaces will be listed here once created."}</p></div>
         ) : (
           <div className="admin-table-scroll">
             <table className="admin-table">
@@ -47,7 +48,7 @@ export function WorkspacesScreen({ page, search = "" }: { page: CursorPage<Admin
               <tbody>{page.items.map((workspace) => (
                 <tr key={workspace.id}>
                   <td><strong>{workspace.name}</strong><small>{workspace.slug} · {workspace.id}</small></td>
-                  <td><span className={`status-pill is-${workspace.status.toLowerCase()}`}>{workspace.status.toLowerCase()}</span></td>
+                  <td><StatusPill status={workspace.status} /></td>
                   <td><strong>{workspace.planName}</strong><small>{workspace.planKey}</small></td>
                   <td><span className="admin-inline-count"><Users size={15} /> {workspace.memberCount}</span></td>
                   <td>{workspace.automationCount}</td>

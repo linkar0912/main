@@ -1,8 +1,7 @@
-import { PlatformOwnerAuthError } from "@/src/lib/admin/authorization";
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/src/components/admin/admin-shell";
-import { getPlatformOwnerIdentity } from "@/src/lib/admin/authorization";
+import { getPlatformOwnerIdentity, PlatformOwnerAuthError } from "@/src/lib/admin/authorization";
 
 export const dynamic = "force-dynamic";
 

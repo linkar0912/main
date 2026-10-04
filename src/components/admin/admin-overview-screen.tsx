@@ -8,6 +8,8 @@ import {
   Users,
 } from "lucide-react";
 
+import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { StatusPill } from "@/src/components/admin/shared/status-pill";
 import { MetricCard } from "@/src/components/metric-card";
 import type { AdminOverviewDTO } from "@/src/lib/admin/overview";
 
@@ -17,13 +19,13 @@ function stateLabel(name: string, state: string): string {
   return `${name} degraded`;
 }
 
-function conciseTime(value: string): string {
-  return value.replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
-}
+const queueTone = { ok: "healthy", not_configured: "pending", error: "failed" } as const;
 
 export function AdminOverviewScreen({ overview }: { overview: AdminOverviewDTO }) {
   const connectionTotal = overview.connections.instagram + overview.connections.facebook;
   const queueDepth = overview.queue.waiting + overview.queue.active + overview.queue.delayed;
+  // Counts are zero-filled when the queue cannot be read; do not present that as an empty queue.
+  const queueKnown = overview.queue.state === "ok";
 
   return (
     <main className="page-wrap admin-overview">
@@ -66,9 +68,9 @@ export function AdminOverviewScreen({ overview }: { overview: AdminOverviewDTO }
             ))}
           </div>
           <div className="admin-queue-strip">
-            <span><strong>{queueDepth}</strong> in flight</span>
-            <span><strong>{overview.queue.failed}</strong> failed</span>
-            <span className={`status-pill is-${overview.queue.state}`}>Queue {overview.queue.state.replace("_", " ")}</span>
+            <span><strong>{queueKnown ? queueDepth : "–"}</strong> in flight</span>
+            <span><strong>{queueKnown ? overview.queue.failed : "–"}</strong> failed</span>
+            <StatusPill status={queueTone[overview.queue.state]} label={stateLabel("Queue", overview.queue.state)} />
           </div>
         </article>
 
@@ -90,7 +92,7 @@ export function AdminOverviewScreen({ overview }: { overview: AdminOverviewDTO }
                   <div>
                     <div className="admin-tape-title"><strong>{item.title}</strong><span>{item.kind}</span></div>
                     <p>{item.detail}</p>
-                    <small><time dateTime={item.at}>{conciseTime(item.at)}</time>{item.workspaceId ? ` · ${item.workspaceId}` : ""}</small>
+                    <small><time dateTime={item.at}>{formatAdminDateTime(item.at)}</time>{item.workspaceId ? ` · ${item.workspaceId}` : ""}</small>
                   </div>
                 </li>
               ))}

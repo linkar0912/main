@@ -1,18 +1,28 @@
 "use client";
-import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
-
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, CircleCheck, CircleX, Database, Gauge, RadioTower, Server } from "lucide-react";
 
+import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
 import type { AdminSystemSnapshot } from "@/src/lib/admin/system/types";
+import { adminCommand, adminErrorMessage } from "../shared/admin-request";
 import { ReasonDialog } from "../shared/reason-dialog";
 import { IncidentTable } from "./incident-table";
 
 type Pending =
   | { type: "queue"; queue: string; action: "pause" | "resume" }
   | { type: "system"; action: "run_delivery_reconciliation" | "run_usage_reconciliation" };
+
+function commandLabel(pending: Pending): string {
+  const action = pending.action.replaceAll("_", " ");
+  return pending.type === "queue" ? `${action} ${pending.queue} queue` : action;
+}
+
+function queueState(queue: AdminSystemSnapshot["queues"][number]): "unavailable" | "paused" | "running" {
+  if (!queue.configured || queue.paused === null) return "unavailable";
+  return queue.paused ? "paused" : "running";
+}
 
 function probeLabel(state: string, detail?: string): string {
   const label = state === "unavailable" ? "Unavailable" : state;
@@ -38,24 +48,29 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
     return () => clearInterval(timer);
   }, [pending, router]);
 
+  function openCommand(next: Pending) {
+    setError(null);
+    setNotice(null);
+    setPending(next);
+  }
+
+  function cancelCommand() {
+    setError(null);
+    setPending(null);
+  }
+
   async function execute(reason: string) {
     if (!pending) return;
     setBusy(true);
     setError(null);
     try {
       const url = pending.type === "queue" ? `/api/admin/system/queues/${pending.queue}` : "/api/admin/system";
-      const response = await fetch(url, {
-        method: pending.type === "queue" ? "PATCH" : "POST",
-        headers: { "content-type": "application/json", "x-admin-reason": reason, "idempotency-key": `admin-${crypto.randomUUID()}` },
-        body: JSON.stringify({ action: pending.action }),
-      });
-      const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error ?? "system_command_failed");
-      setNotice(`${pending.action.replaceAll("_", " ")} accepted`);
+      await adminCommand(url, { method: pending.type === "queue" ? "PATCH" : "POST", body: { action: pending.action }, reason, fallback: "system_command_failed" });
+      setNotice(`${commandLabel(pending)} accepted`);
       setPending(null);
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message.replaceAll("_", " ") : "System command failed");
+      setError(adminErrorMessage(cause, "System command failed"));
     } finally {
       setBusy(false);
     }
@@ -84,7 +99,6 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
         </span>
       </header>
 
-      {error ? <div className="form-error" role="alert">{error}</div> : null}
       {notice ? <div className="form-success" role="status">{notice}</div> : null}
 
       <section className="panel admin-ops-summary" aria-label="Production status summary">
@@ -114,26 +128,30 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
       <div className="admin-system-layout">
         <section className="panel admin-operations-panel" aria-labelledby="queue-heading">
           <div className="admin-section-heading"><div><h2 id="queue-heading">Queue operations</h2><p>Live workload and bounded operator controls.</p></div></div>
-          {snapshot.queues.map((queue) => (
-            <div className="admin-queue-row" key={queue.name}>
-              <div className="admin-queue-name"><strong>{queue.name}</strong><span>{!queue.configured || queue.paused === null ? "Unavailable" : queue.paused ? "Paused" : "Running"}</span></div>
-              <dl>
-                <div><dt>Waiting</dt><dd>{queue.configured && queue.paused !== null ? queue.waiting : "Unavailable"}</dd></div>
-                <div><dt>Active</dt><dd>{queue.configured && queue.paused !== null ? queue.active : "Unavailable"}</dd></div>
-                <div><dt>Delayed</dt><dd>{queue.configured && queue.paused !== null ? queue.delayed : "Unavailable"}</dd></div>
-                <div><dt>Failed</dt><dd>{queue.configured && queue.paused !== null ? queue.failed : "Unavailable"}</dd></div>
-              </dl>
-              <div className="admin-queue-action">
-                {queue.lastFailedCode ? <small>Latest failure: <code>{queue.lastFailedCode}</code></small> : <small>{queue.paused === null ? "Failure history unavailable" : "No recorded failures"}</small>}
-                <button className="button button-secondary button-small" disabled={!queue.configured || queue.paused === null} type="button" onClick={() => setPending({ type: "queue", queue: queue.name, action: queue.paused ? "resume" : "pause" })}>{queue.paused ? "Resume queue" : "Pause queue"}</button>
+          {snapshot.queues.map((queue) => {
+            const state = queueState(queue);
+            const count = (value: number) => state === "unavailable" ? "–" : value;
+            return (
+              <div className="admin-queue-row" key={queue.name}>
+                <div className="admin-queue-name"><strong>{queue.name}</strong><span className={`is-${state}`}>{state === "unavailable" ? "Unavailable" : state === "paused" ? "Paused" : "Running"}</span></div>
+                <dl>
+                  <div><dt>Waiting</dt><dd>{count(queue.waiting)}</dd></div>
+                  <div><dt>Active</dt><dd>{count(queue.active)}</dd></div>
+                  <div><dt>Delayed</dt><dd>{count(queue.delayed)}</dd></div>
+                  <div><dt>Failed</dt><dd>{count(queue.failed)}</dd></div>
+                </dl>
+                <div className="admin-queue-action">
+                  {queue.lastFailedCode ? <small>Latest failure: <code>{queue.lastFailedCode}</code></small> : <small>{state === "unavailable" ? "Failure history unavailable" : "No recorded failures"}</small>}
+                  <button className="button button-secondary button-small" disabled={state === "unavailable"} type="button" onClick={() => openCommand({ type: "queue", queue: queue.name, action: queue.paused ? "resume" : "pause" })}>{queue.paused ? "Resume queue" : "Pause queue"}</button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <div className="admin-maintenance-row">
             <div><strong>Reconciliation</strong><small>{snapshot.reconciliation.expiredDeliveryClaims === null ? "Expired claim count unavailable" : `${snapshot.reconciliation.expiredDeliveryClaims} expired delivery claims`}</small></div>
             <div className="admin-command-actions">
-              <button className="button button-secondary button-small" onClick={() => setPending({ type: "system", action: "run_delivery_reconciliation" })}>Reconcile deliveries</button>
-              <button className="button button-secondary button-small" onClick={() => setPending({ type: "system", action: "run_usage_reconciliation" })}>Reconcile usage</button>
+              <button className="button button-secondary button-small" type="button" onClick={() => openCommand({ type: "system", action: "run_delivery_reconciliation" })}>Reconcile deliveries</button>
+              <button className="button button-secondary button-small" type="button" onClick={() => openCommand({ type: "system", action: "run_usage_reconciliation" })}>Reconcile usage</button>
             </div>
           </div>
         </section>
@@ -142,7 +160,7 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
           <div className="admin-section-heading"><div><h2 id="posture-heading">Readiness</h2><p>Presence checks only. Values stay secret.</p></div></div>
           <ul className="admin-readiness-list">
             {snapshot.configurationPresence.map((item) => (
-              <li key={item.requirement}><span className={`health-orb`} data-state={item.present ? "ok" : "warn"} aria-hidden /><span>{item.requirement}</span><strong>{item.present ? "Ready" : "Missing"}</strong></li>
+              <li key={item.requirement}><span className="health-orb" data-state={item.present ? "ok" : "warn"} aria-hidden /><span>{item.requirement}</span><strong>{item.present ? "Ready" : "Missing"}</strong></li>
             ))}
           </ul>
           <dl className="admin-posture-metrics">
@@ -155,7 +173,16 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
         </aside>
       </div>
 
-      {pending ? <ReasonDialog error={error} title={pending.action.replaceAll("_", " ")} warning="This command changes live Linkar runtime state and is recorded in the immutable audit trail." busy={busy} onCancel={() => setPending(null)} onConfirm={execute} /> : null}
+      {pending ? (
+        <ReasonDialog
+          error={error}
+          title={commandLabel(pending)}
+          warning="This command changes live Linkar runtime state and is recorded in the immutable audit trail."
+          busy={busy}
+          onCancel={cancelCommand}
+          onConfirm={execute}
+        />
+      ) : null}
     </main>
   );
 }

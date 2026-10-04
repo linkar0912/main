@@ -15,7 +15,7 @@ it("removes cleared filters and resets the form when URL filters change", async 
   const props = { kind: "delivery" as const, page: { items: [item], nextCursor: null } };
   const { rerender } = render(<OperationsConsole {...props} filters={{ kind: "delivery", text: "old", status: "FAILED" }} />);
   await userEvent.clear(screen.getByRole("textbox", { name: "Text" }));
-  await userEvent.clear(screen.getByRole("textbox", { name: "Status" }));
+  await userEvent.selectOptions(screen.getByRole("combobox", { name: "Status" }), "");
   await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
   expect(push).toHaveBeenLastCalledWith("/admin/operations?kind=delivery");
   rerender(<OperationsConsole {...props} filters={{ kind: "delivery", text: "new" }} />);
@@ -29,4 +29,14 @@ it("Escape closes a nested confirmation without closing its detail drawer", asyn
   expect(screen.getAllByRole("dialog")).toHaveLength(2);
   await userEvent.keyboard("{Escape}");
   expect(screen.getByRole("dialog", { name: "Operation detail" })).toBeTruthy();
+});
+
+it("drops the status filter when switching to a kind with different states", async () => {
+  // FAILED exists for deliveries only; carrying it to automations made the list reject the filter.
+  render(<OperationsConsole kind="delivery" page={{ items: [item], nextCursor: null }} filters={{ kind: "delivery", status: "FAILED", workspaceId: "w1", provider: "instagram" }} />);
+  expect((screen.getByRole("combobox", { name: "Status" }) as HTMLSelectElement).value).toBe("FAILED");
+  await userEvent.click(screen.getByRole("button", { name: "automation" }));
+  expect(push).toHaveBeenLastCalledWith("/admin/operations?kind=automation&workspaceId=w1&provider=instagram");
+  await userEvent.click(screen.getByRole("button", { name: "tracked link" }));
+  expect(push).toHaveBeenLastCalledWith("/admin/operations?kind=tracked_link&workspaceId=w1");
 });

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { z } from "zod";
 import { AdminRouteGuard } from "@/src/components/admin/admin-route-guard";
 import { OperationsConsole } from "@/src/components/admin/operations/operations-console";
@@ -20,7 +21,15 @@ async function Data({ searchParams }: { searchParams: Params }) {
   } catch (error) {
     if (!(error instanceof z.ZodError || error instanceof AdminCursorError)) throw error;
   }
-  if (!result) return <main className="page-wrap"><h1>Operations</h1><p role="alert">Invalid operation filters. Clear the filters and try again.</p><a href="/admin/operations">Clear filters</a></main>;
+  if (!result) {
+    return (
+      <main className="page-wrap admin-resource-page admin-invalid-filters">
+        <h1>Operations</h1>
+        <p role="alert">Invalid operation filters. Clear the filters and try again.</p>
+        <Link className="button button-secondary" href={`/admin/operations?kind=${kind}`}>Clear filters</Link>
+      </main>
+    );
+  }
   return <OperationsConsole kind={kind} page={result.page} filters={result.filters} />;
 }
 export default function OperationsPage({ searchParams }: { searchParams: Params }) { return <AdminRouteGuard><Data searchParams={searchParams} /></AdminRouteGuard>; }

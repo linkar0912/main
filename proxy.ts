@@ -16,7 +16,7 @@ export async function proxy(request: NextRequest) {
   const env = getServerEnv();
 
   const hostname = resolveRequestHostname(request.headers, request.nextUrl.hostname);
-  const hostRedirect = resolveHostRedirect(hostname, request.nextUrl.pathname);
+  const hostRedirect = resolveHostRedirect(hostname, request.nextUrl.pathname, new URL(env.adminUrl).host);
   if (hostRedirect) {
     const baseUrl = hostRedirect.target === "admin" ? env.adminUrl : hostRedirect.target === "app" ? env.appUrl : env.publicSiteUrl;
     const destination = new URL(hostRedirect.pathname, baseUrl);

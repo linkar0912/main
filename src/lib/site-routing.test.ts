@@ -30,6 +30,17 @@ describe("site host routing", () => {
     expect(resolveHostRedirect("admin.linkar.in", "/dashboard")).toEqual({ target: "app", pathname: "/dashboard" });
   });
 
+  it("serves owner surfaces in place when the configured admin origin is the current host", () => {
+    // Local development and preview deployments set ADMIN_URL to their own
+    // origin. Redirecting there again would loop forever.
+    expect(resolveHostRedirect("localhost:3000", "/admin", "localhost:3000")).toBeNull();
+    expect(resolveHostRedirect("localhost:3000", "/api/admin/system", "localhost")).toBeNull();
+    expect(resolveHostRedirect("preview.example.com", "/admin/audit", "PREVIEW.example.com")).toBeNull();
+    // Any other host still hands owner routes to the configured admin origin.
+    expect(resolveHostRedirect("app.linkar.in", "/admin", "localhost:3000")).toEqual({ target: "admin", pathname: "/admin" });
+    expect(resolveHostRedirect("localhost:3000", "/admin")).toEqual({ target: "admin", pathname: "/admin" });
+  });
+
   it("moves marketing and legal paths from the app host to the marketing host", () => {
     expect(resolveHostRedirect("app.linkar.in", "/")).toEqual({
       target: "app",

@@ -70,12 +70,18 @@ export function resolveRequestHostname(headers: HeaderReader, fallbackHostname: 
   return fallbackHostname;
 }
 
-/** Returns the canonical host/path destination for a known public host. */
-export function resolveHostRedirect(hostname: string, pathname: string): HostRedirect | null {
+/**
+ * Returns the canonical host/path destination for a known public host.
+ *
+ * `adminHost` is the host of the configured admin origin. Owner routes are
+ * served in place there: outside production (local development, previews) the
+ * admin origin is the app's own origin, and redirecting to it again would loop.
+ */
+export function resolveHostRedirect(hostname: string, pathname: string, adminHost: string = ADMIN_HOST): HostRedirect | null {
   const host = normalizeHostname(hostname);
 
   if (ADMIN_ROUTE_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix))) {
-    return host === ADMIN_HOST ? null : { target: "admin", pathname };
+    return host === ADMIN_HOST || host === normalizeHostname(adminHost) ? null : { target: "admin", pathname };
   }
 
   if (host === MARKETING_HOST && APP_ROUTE_PREFIXES.some((prefix) => matchesPathPrefix(pathname, prefix))) {

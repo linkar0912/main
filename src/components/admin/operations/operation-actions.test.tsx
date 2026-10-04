@@ -24,5 +24,5 @@ it("keeps server errors visible inside the confirmation dialog", async () => {
   await userEvent.type(screen.getByRole("textbox", { name: "Operator reason" }), "pause for review");
   await userEvent.click(screen.getByRole("button", { name: "Confirm action" }));
   expect(screen.getByRole("dialog").contains(screen.getByRole("alert"))).toBe(true);
-  expect(screen.getByRole("alert").textContent).toBe("stale version");
+  expect(screen.getByRole("alert").textContent).toBe("Stale version");
 });
