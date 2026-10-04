@@ -74,7 +74,7 @@ export function SyntheticCleanupPanel() {
     <div>
       <p className="eyebrow">Generated test data</p>
       <h2 id="synthetic-cleanup-title">Clean up synthetic accounts</h2>
-      <p className="muted">Matches only owner-[numbers], member-[numbers], and signout-[numbers] at example.com. Every other email is preserved.</p>
+      <p className="muted">Matches only generated Linkar test addresses: owner-, member-, signout-, release-verify and probe-deploy accounts followed by numbers at example.com, and the internal preview account. Every other email is preserved.</p>
     </div>
     <label className="field">
       <span>Operator reason</span>

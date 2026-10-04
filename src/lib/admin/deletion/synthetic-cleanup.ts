@@ -60,7 +60,7 @@ function previewFromInventory(inventory: Awaited<ReturnType<typeof loadSynthetic
       memberUserIds: inventory.accounts.map((account) => account.userId),
       syntheticAccounts: inventory.accounts,
       warnings: [
-        "Only accounts matching Linkar's three fixed generated-test email patterns are included.",
+        "Only accounts matching Linkar's fixed generated-test email patterns are included.",
         "Owned workspaces are removed before the remaining Auth identities.",
       ],
     },

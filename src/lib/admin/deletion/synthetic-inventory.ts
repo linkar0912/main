@@ -14,13 +14,13 @@ export async function loadSyntheticAccountInventory() {
       if (result.error) throw result.error;
       return result.data.users.map((user) => ({ id: user.id, email: user.email }));
     },
-    listMemberships: (userIds) => prisma.workspaceMember.findMany({
-      where: { userId: { in: userIds } },
-      select: { userId: true, workspaceId: true, role: true },
+    listMemberships: (userIds, emails) => prisma.workspaceMember.findMany({
+      where: { OR: [{ userId: { in: userIds } }, { userId: null, email: { in: emails } }] },
+      select: { userId: true, email: true, workspaceId: true, role: true },
     }),
     listOwnedWorkspaceMemberships: (workspaceIds) => prisma.workspaceMember.findMany({
       where: { workspaceId: { in: workspaceIds } },
-      select: { userId: true, workspaceId: true, role: true },
+      select: { userId: true, email: true, workspaceId: true, role: true },
     }),
   });
 }

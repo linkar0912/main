@@ -91,6 +91,8 @@ describe("synthetic deletion processor", () => {
     expect(mocks.loadInventory).toHaveBeenCalledTimes(2);
     expect(mocks.getUserById).toHaveBeenCalledWith("user_1");
     expect(mocks.workspaceDeleteMany.mock.invocationCallOrder[0]).toBeLessThan(mocks.deleteUser.mock.invocationCallOrder[0]);
+    // Memberships never linked to a user id are matched by the stored account email.
+    expect(mocks.memberDeleteMany).toHaveBeenCalledWith({ where: { OR: [{ userId: { in: ["user_1"] } }, { userId: null, email: { in: ["owner-1@example.com"] } }] } });
   });
 
   it("preserves an Auth identity whose email changed after tenant cleanup", async () => {

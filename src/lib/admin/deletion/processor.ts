@@ -100,9 +100,11 @@ export async function processAdminDeletion(jobId: string): Promise<{ state: "COM
           if (current.targetKind === "WORKSPACE") await prisma.workspace.deleteMany({ where: { id: current.targetId } });
           else if (current.targetKind === "SYNTHETIC_ACCOUNTS") {
             const userIds = impact.syntheticAccounts?.map((account) => account.userId) ?? [];
+            const emails = impact.syntheticAccounts?.map((account) => account.email) ?? [];
             await prisma.$transaction([
               prisma.workspace.deleteMany({ where: { id: { in: syntheticWorkspaceIds(impact) } } }),
-              prisma.workspaceMember.deleteMany({ where: { userId: { in: userIds } } }),
+              // Includes memberships that were never linked to a user id and are matched by email.
+              prisma.workspaceMember.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { userId: null, email: { in: emails } }] } }),
               prisma.platformUserControl.deleteMany({ where: { userId: { in: userIds } } }),
             ]);
           }
