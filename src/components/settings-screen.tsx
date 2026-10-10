@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { BillingSettings } from "./billing-settings";
 import { ContextHelpLink } from "./context-help-link";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
+import { InlineConfirm } from "./inline-confirm";
 import { InstagramGlyph } from "./instagram-glyph";
 import { FacebookGlyph } from "./facebook-glyph";
 import { SocialAvatar } from "./social-avatar";
@@ -36,6 +37,7 @@ import {
   getTeamOverview,
   getWorkspaceBootstrap,
   invalidateWorkspaceResource,
+  notifyWorkspaceChanged,
   type FacebookPageSummary,
   type TeamOverview,
 } from "@/src/lib/client/workspace-data";
@@ -80,6 +82,57 @@ type FacebookHealth = {
 };
 
 const SETTINGS_SECTIONS = ["connections", "delivery", "billing", "team", "policies"] as const;
+
+/** The browser's own zone, so a new quiet-hours window starts in local time. */
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+const FALLBACK_TIME_ZONES = ["UTC", "Asia/Kolkata", "Asia/Dubai", "Asia/Singapore", "Europe/London", "Europe/Berlin", "America/New_York", "America/Los_Angeles", "Australia/Sydney"];
+
+/** Every IANA zone the runtime knows, always including the current value. */
+function timeZoneOptions(current: string): string[] {
+  let zones: string[];
+  try {
+    zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : FALLBACK_TIME_ZONES;
+  } catch {
+    zones = FALLBACK_TIME_ZONES;
+  }
+  const all = new Set(["UTC", ...zones]);
+  if (current) all.add(current);
+  return [...all].sort((a, b) => (a === "UTC" ? -1 : b === "UTC" ? 1 : a.localeCompare(b)));
+}
+
+type QuietHours = { enabled: boolean; start: number; end: number; timezone: string };
+
+function sameQuietHours(a: QuietHours, b: QuietHours): boolean {
+  if (a.enabled !== b.enabled) return false;
+  // The window fields only matter while quiet hours are on.
+  return !a.enabled || (a.start === b.start && a.end === b.end && a.timezone === b.timezone);
+}
+
+type InviteErrorPayload = { error?: string; limit?: number } | null;
+
+function inviteErrorMessage(payload: InviteErrorPayload): string {
+  switch (payload?.error) {
+    case "already_member":
+      return "That person is already in the workspace.";
+    case "invalid_email":
+      return "Enter a valid email address.";
+    case "limit_reached":
+      return typeof payload.limit === "number"
+        ? `Your plan includes ${payload.limit} team ${payload.limit === 1 ? "seat" : "seats"}, and pending invitations count toward them. Revoke an invitation or upgrade in Billing to add someone.`
+        : "Your plan has no team seats left, and pending invitations count toward the limit. Revoke an invitation or upgrade in Billing to add someone.";
+    case "entitlement_required":
+      return "Your current plan does not include teammates. Upgrade in Billing to invite people to this workspace.";
+    default:
+      return "Could not send the invitation.";
+  }
+}
 type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 export function SettingsScreen() {
@@ -123,9 +176,15 @@ export function SettingsScreen() {
   };
   const [disconnectingId, setDisconnectingId] = useState("");
   const [disconnectError, setDisconnectError] = useState("");
+  // Disconnecting stops every automation on that account, so it takes a
+  // second, explicit step that names the account.
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState<{ channel: "instagram" | "facebook"; id: string } | null>(null);
   const [team, setTeam] = useState<TeamOverview | null>(null);
   const [teamManageable, setTeamManageable] = useState(true);
   const [teamError, setTeamError] = useState("");
+  const [teamNotice, setTeamNotice] = useState("");
+  const [confirmingRevokeId, setConfirmingRevokeId] = useState("");
+  const [revokingId, setRevokingId] = useState("");
   const [teamLoadError, setTeamLoadError] = useState("");
   const [connectionsLoadError, setConnectionsLoadError] = useState("");
   const [connectionsLoading, setConnectionsLoading] = useState(true);
@@ -136,6 +195,9 @@ export function SettingsScreen() {
   const [quietStart, setQuietStart] = useState(22);
   const [quietEnd, setQuietEnd] = useState(8);
   const [quietTz, setQuietTz] = useState("UTC");
+  // What the server holds, so the status line can say "not saved yet"
+  // instead of claiming quiet hours are on before Save is pressed.
+  const [quietPersisted, setQuietPersisted] = useState<QuietHours>({ enabled: false, start: 22, end: 8, timezone: "UTC" });
   const [quietSaved, setQuietSaved] = useState(false);
   const [quietBusy, setQuietBusy] = useState(false);
   const [quietError, setQuietError] = useState("");
@@ -156,6 +218,12 @@ export function SettingsScreen() {
           setQuietStart(data.startHour);
           setQuietEnd(data.endHour);
           setQuietTz(data.timezone);
+          setQuietPersisted({ enabled: true, start: data.startHour, end: data.endHour, timezone: data.timezone });
+        } else {
+          // Nothing saved yet: offer the browser's own zone rather than UTC.
+          const local = browserTimeZone();
+          setQuietTz(local);
+          setQuietPersisted((current) => ({ ...current, timezone: local }));
         }
       })
       .catch(() => undefined);
@@ -200,6 +268,7 @@ export function SettingsScreen() {
       // the connections/health fetched on initial mount would otherwise stay
       // stale and still show "No Page connected" until a manual reload.
       clearWorkspaceDataCache("connections");
+      notifyWorkspaceChanged();
       const [fbPages, fbHealthResponse] = await Promise.all([
         getFacebookPages(),
         fetch("/api/facebook/connection/health"),
@@ -230,6 +299,7 @@ export function SettingsScreen() {
         throw new Error(payload.error ?? "Could not save messaging hours.");
       }
       invalidateWorkspaceResource("messaging-settings");
+      setQuietPersisted({ enabled, start: quietStart, end: quietEnd, timezone: quietTz.trim() || "UTC" });
       setQuietSaved(true);
     } catch (error) {
       setQuietError(error instanceof Error ? error.message : "Could not save messaging hours.");
@@ -254,6 +324,9 @@ export function SettingsScreen() {
       });
       if (!response.ok) throw new Error("Could not disconnect Instagram");
       clearWorkspaceDataCache("connections");
+      // The sidebar avatar comes from the connected account.
+      notifyWorkspaceChanged();
+      setConfirmingDisconnect(null);
       setConnections((current) => current.filter((connection) => connection.id !== id));
       setHealth((current) => current.filter((entry) => entry.id !== id));
     } catch (error) {
@@ -344,6 +417,8 @@ export function SettingsScreen() {
     if (inviteBusy) return;
     setInviteBusy(true);
     setTeamError("");
+    setTeamNotice("");
+    const invitedEmail = inviteEmail.trim();
     try {
       const response = await fetch("/api/team/invitations", {
         method: "POST",
@@ -351,26 +426,45 @@ export function SettingsScreen() {
         body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
       });
       if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(payload?.error === "already_member" ? "That person is already in the workspace." : "Could not send the invitation.");
+        const payload = await response.json().catch(() => null) as InviteErrorPayload;
+        throw new Error(inviteErrorMessage(payload));
       }
-      setInviteEmail("");
-      await refreshTeam();
     } catch (error) {
       setTeamError(error instanceof Error ? error.message : "Could not send the invitation.");
+      setInviteBusy(false);
+      return;
+    }
+    // The invitation exists from here on. A failed list refresh must not read
+    // as a failed invite, or people send it again.
+    setInviteEmail("");
+    setTeamNotice(`Invitation sent to ${invitedEmail}.`);
+    try {
+      await refreshTeam();
+    } catch {
+      setTeamError("The team list could not refresh. Reload the page to see the new invitation.");
     } finally {
       setInviteBusy(false);
     }
   }
 
   async function revokeInvitation(id: string) {
+    if (revokingId) return;
+    setRevokingId(id);
     setTeamError("");
+    setTeamNotice("");
     try {
       const response = await fetch(`/api/team/invitations?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Could not revoke the invitation.");
-      await refreshTeam();
+      setConfirmingRevokeId("");
+      await refreshTeam().catch(() => {
+        // Already revoked on the server: drop the row locally instead of
+        // reporting a failure for an action that worked.
+        setTeam((current) => current ? { ...current, invitations: current.invitations.filter((invitation) => invitation.id !== id) } : current);
+      });
     } catch (error) {
       setTeamError(error instanceof Error ? error.message : "Could not revoke the invitation.");
+    } finally {
+      setRevokingId("");
     }
   }
 
@@ -405,6 +499,7 @@ export function SettingsScreen() {
   };
 
   async function disconnectFacebook(id: string) {
+    if (facebookBusyId === id) return;
     setFacebookBusyId(id);
     setFacebookError("");
     try {
@@ -415,6 +510,8 @@ export function SettingsScreen() {
       });
       if (!response.ok) throw new Error("Could not disconnect Facebook Page");
       clearWorkspaceDataCache("connections");
+      notifyWorkspaceChanged();
+      setConfirmingDisconnect(null);
       setFacebookPages((current) => current.filter((page) => page.id !== id));
       setFacebookHealth((current) => current.filter((entry) => entry.id !== id));
     } catch (error) {
@@ -456,6 +553,7 @@ export function SettingsScreen() {
   ];
 
   const timeOptions = Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>);
+  const quietDirty = !sameQuietHours({ enabled: quietEnabled, start: quietStart, end: quietEnd, timezone: quietTz }, quietPersisted);
 
   return (
     <div className="page-wrap settings-wrap">
@@ -564,12 +662,24 @@ export function SettingsScreen() {
                                     className="connection-disconnect"
                                     type="button"
                                     disabled={disconnectingId === connection.id}
-                                    onClick={() => void disconnect(connection.id)}
+                                    aria-expanded={confirmingDisconnect?.id === connection.id}
+                                    onClick={() => setConfirmingDisconnect({ channel: "instagram", id: connection.id })}
                                   >
                                     {disconnectingId === connection.id ? "Disconnecting…" : "Disconnect"}
                                   </button>
                                 </div>
                               </div>
+                              {confirmingDisconnect?.channel === "instagram" && confirmingDisconnect.id === connection.id ? (
+                                <InlineConfirm
+                                  label={`Confirm disconnecting @${connection.username}`}
+                                  message={<>Disconnect <strong>@{connection.username}</strong>? Every automation on this account stops replying to comments and messages until you connect it again.</>}
+                                  confirmLabel={`Disconnect @${connection.username}`}
+                                  busyLabel="Disconnecting…"
+                                  busy={disconnectingId === connection.id}
+                                  onConfirm={() => void disconnect(connection.id)}
+                                  onCancel={() => setConfirmingDisconnect(null)}
+                                />
+                              ) : null}
                               {accountHealth ? (
                                 <div
                                   className="channel-health"
@@ -661,12 +771,24 @@ export function SettingsScreen() {
                                     className="connection-disconnect"
                                     type="button"
                                     disabled={facebookBusyId === page.id}
-                                    onClick={() => void disconnectFacebook(page.id)}
+                                    aria-expanded={confirmingDisconnect?.id === page.id}
+                                    onClick={() => setConfirmingDisconnect({ channel: "facebook", id: page.id })}
                                   >
                                     {facebookBusyId === page.id ? "Disconnecting…" : "Disconnect"}
                                   </button>
                                 </div>
                               </div>
+                              {confirmingDisconnect?.channel === "facebook" && confirmingDisconnect.id === page.id ? (
+                                <InlineConfirm
+                                  label={`Confirm disconnecting ${page.pageName}`}
+                                  message={<>Disconnect <strong>{page.pageName}</strong>? Every automation on this Page stops replying to comments until you connect it again.</>}
+                                  confirmLabel={`Disconnect ${page.pageName}`}
+                                  busyLabel="Disconnecting…"
+                                  busy={facebookBusyId === page.id}
+                                  onConfirm={() => void disconnectFacebook(page.id)}
+                                  onCancel={() => setConfirmingDisconnect(null)}
+                                />
+                              ) : null}
                               {pageHealth ? (
                                 <div
                                   className="channel-health"
@@ -727,7 +849,11 @@ export function SettingsScreen() {
                   <div className="settings-row settings-row-split">
                     <div className="settings-row-copy">
                       <strong>Hold automated DMs during quiet hours</strong>
-                      <small className="delivery-status" data-enabled={quietEnabled}>{quietEnabled ? "Quiet hours enabled" : "Quiet hours disabled"}</small>
+                      <small className="delivery-status" data-enabled={quietEnabled} data-unsaved={quietDirty || undefined}>
+                        {quietDirty
+                          ? quietEnabled ? "Quiet hours on, not saved yet" : "Quiet hours off, not saved yet"
+                          : quietEnabled ? "Quiet hours enabled" : "Quiet hours disabled"}
+                      </small>
                     </div>
                     <label className="settings-switch">
                       <input type="checkbox" role="switch" aria-label="Hold automated DMs during quiet hours" checked={quietEnabled} onChange={(event) => setQuietEnabled(event.target.checked)} />
@@ -753,18 +879,20 @@ export function SettingsScreen() {
                   <div className="settings-row settings-row-split" data-disabled={!quietEnabled}>
                     <div className="settings-row-copy">
                       <strong>Timezone</strong>
-                      <small>An IANA name, for example Asia/Kolkata or Europe/Berlin.</small>
+                      <small>The quiet window follows this clock.</small>
                     </div>
                     <div className="settings-inline-fields">
                       <label className="field">
                         <span>Workspace timezone</span>
-                        <input value={quietTz} disabled={!quietEnabled} onChange={(e) => setQuietTz(e.target.value)} placeholder="Europe/Berlin" />
+                        <select value={quietTz} disabled={!quietEnabled} onChange={(e) => setQuietTz(e.target.value)}>
+                          {timeZoneOptions(quietTz).map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}
+                        </select>
                       </label>
                     </div>
                   </div>
                 </div>
                 <div className="settings-group-foot">
-                  {quietSaved ? <span className="form-success" role="status"><Check size={15} /> Saved.</span> : <span />}
+                  {quietSaved ? <span className="form-success" role="status"><Check size={15} /> Saved.</span> : quietDirty ? <span className="muted">Unsaved changes</span> : <span />}
                   <button className="button button-primary button-small" type="button" disabled={quietBusy} onClick={() => void saveMessagingWindow(quietEnabled)}>
                     {quietBusy ? "Saving…" : "Save messaging hours"}
                   </button>
@@ -787,7 +915,7 @@ export function SettingsScreen() {
                   <li className="settings-row settings-row-split">
                     <span className="settings-row-copy">
                       <strong><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" /> {mode === "demo" ? "Demo mode" : "Connected mode"}</strong>
-                      <small>{mode === "demo" ? "The workspace runs on sample data until DATABASE_URL and Meta credentials are configured." : "This workspace is configured for live Meta-backed delivery."}</small>
+                      <small>{mode === "demo" ? "Live delivery isn't set up for this workspace yet, so it runs on sample data." : "This workspace delivers live replies through Instagram and Facebook."}</small>
                     </span>
                     <Link className="text-link" href="/support">Setup guidance <ExternalLink size={13} /></Link>
                   </li>
@@ -802,6 +930,7 @@ export function SettingsScreen() {
                 <h2 id="team-title">Team</h2>
                 <p>Who can work in this workspace. Invitations expire after 7 days and must be accepted with the invited email address.</p>
               </header>
+              {teamNotice && <p className="form-success" role="status"><Check size={15} /> {teamNotice}</p>}
               {teamError && <p className="form-error" role="alert">{teamError}</p>}
               {teamLoadError && <p className="form-error" role="alert">{teamLoadError}</p>}
               {teamManageable && team ? (
@@ -830,7 +959,27 @@ export function SettingsScreen() {
                             <span className="avatar avatar-small is-pending" aria-hidden>{invitation.email.slice(0, 2).toUpperCase()}</span>
                             <span><strong>{invitation.email}</strong><small>{invitation.role} · invitation expires {formatDate(invitation.expiresAt)}</small></span>
                           </span>
-                          <button className="text-link" type="button" onClick={() => void revokeInvitation(invitation.id)}>Revoke</button>
+                          <button
+                            className="text-link"
+                            type="button"
+                            disabled={revokingId === invitation.id}
+                            aria-expanded={confirmingRevokeId === invitation.id}
+                            aria-label={`Revoke invitation for ${invitation.email}`}
+                            onClick={() => setConfirmingRevokeId(invitation.id)}
+                          >
+                            {revokingId === invitation.id ? "Revoking…" : "Revoke"}
+                          </button>
+                          {confirmingRevokeId === invitation.id ? (
+                            <InlineConfirm
+                              label={`Confirm revoking the invitation for ${invitation.email}`}
+                              message={<>Revoke the invitation for <strong>{invitation.email}</strong>? Their invite link stops working right away.</>}
+                              confirmLabel="Revoke invitation"
+                              busyLabel="Revoking…"
+                              busy={revokingId === invitation.id}
+                              onConfirm={() => void revokeInvitation(invitation.id)}
+                              onCancel={() => setConfirmingRevokeId("")}
+                            />
+                          ) : null}
                         </li>
                       ))}
                     </ul>

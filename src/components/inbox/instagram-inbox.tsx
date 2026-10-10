@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, ExternalLink, Inbox, Info, PauseCircle, RotateCcw, Star, UserRound } from "lucide-react";
-import { ContactDetailModal } from "../contact-detail-modal";
+import { ContactDetailModal, type ContactUpdate } from "../contact-detail-modal";
+import { formatDateParts, formatShortDate, formatTime } from "@/src/lib/format-date";
 import { ActivityContentSkeleton } from "../skeleton";
 import { SocialAvatar } from "../social-avatar";
 import { ConversationHeaderActions, type InboxOperation } from "./conversation-header-actions";
@@ -36,12 +37,11 @@ function daysAgo(value: string): number {
 }
 
 function formatListTime(value: string): string {
-  const date = new Date(value);
   const age = daysAgo(value);
-  if (age <= 0) return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  if (age <= 0) return formatTime(value);
   if (age === 1) return "Yesterday";
-  if (age < 7) return date.toLocaleDateString(undefined, { weekday: "short" });
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (age < 7) return formatDateParts(value, { weekday: "short" });
+  return formatShortDate(value);
 }
 
 function formatDayLabel(value: string): string {
@@ -49,11 +49,11 @@ function formatDayLabel(value: string): string {
   if (age <= 0) return "Today";
   if (age === 1) return "Yesterday";
   const date = new Date(value);
-  return date.toLocaleDateString(undefined, age < 7 ? { weekday: "long" } : { weekday: "short", month: "short", day: "numeric", ...(date.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}) });
+  return formatDateParts(date, age < 7 ? { weekday: "long" } : { weekday: "short", month: "short", day: "numeric", ...(date.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}) });
 }
 
 function formatBubbleTime(value: string): string {
-  return new Date(value).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return formatTime(value);
 }
 
 function isReminderDue(value?: string): boolean {
@@ -62,8 +62,7 @@ function isReminderDue(value?: string): boolean {
 
 function formatReminder(value: string): string {
   if (isReminderDue(value)) return "Reminder due";
-  const date = new Date(value);
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatShortDate(value);
 }
 
 function isAutomationPaused(contact: InboxContact): boolean {
@@ -74,8 +73,8 @@ function formatPauseEnd(value: string): string {
   const date = new Date(value);
   const sameDay = date.toDateString() === new Date().toDateString();
   return sameDay
-    ? date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-    : date.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+    ? formatTime(date)
+    : formatDateParts(date, { weekday: "short", hour: "numeric", minute: "2-digit" });
 }
 
 function inboxUrl(filters: InboxFiltersValue, cursor?: string): string {
@@ -282,6 +281,9 @@ export function InstagramInbox() {
   const [listError, setListError] = useState("");
   const [threadError, setThreadError] = useState("");
   const [openContactId, setOpenContactId] = useState<string | null>(null);
+  // Screen readers hear only newly arrived inbound messages, not every
+  // re-render of the thread (sends, status changes, loading earlier pages).
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
   const messageEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -395,7 +397,16 @@ export function InstagramInbox() {
         const threadPayload = (await threadResponse.json().catch(() => ({}))) as ConversationPayload;
         if (threadResponse.ok && threadPayload.data && activeContactIdRef.current === openId && !guard.busy) {
           const latest = threadPayload.data.messages;
+          const known = new Set(messages.map((message) => message.id));
+          const arrived = latest.filter((message) => message.direction === "inbound" && !known.has(message.id));
           setMessages((existing) => mergeLiveMessages(existing, latest));
+          if (arrived.length > 0) {
+            const from = contacts.find((contact) => contact.id === openId);
+            const name = from ? displayName(from) : "this contact";
+            setLiveAnnouncement(arrived.length === 1
+              ? `New message from ${name}: ${arrived[0].text}`
+              : `${arrived.length} new messages from ${name}. Latest: ${arrived[arrived.length - 1].text}`);
+          }
           const openContact = listPayload.data?.contacts.find((contact) => contact.id === openId);
           if (openContact?.unread) void patchContact(openId, { action: "mark_read" });
         }
@@ -466,6 +477,17 @@ export function InstagramInbox() {
     activeContactIdRef.current = null;
     setSelectedId(null);
     setThreadError("");
+    setLiveAnnouncement("");
+  }
+
+  /** Mirrors stage, owner and tag edits from the contact drawer into the list. */
+  function applyContactUpdate(contactId: string, update: ContactUpdate) {
+    const fields: Partial<InboxContact> = {};
+    if (update.leadStatus) fields.leadStatus = update.leadStatus;
+    if (update.tags) fields.tags = update.tags;
+    // Present-but-undefined means the owner was cleared.
+    if ("assigneeUserId" in update) fields.assigneeUserId = update.assigneeUserId;
+    updateContact(contactId, (contact) => ({ ...contact, ...fields }));
   }
 
   async function openConversation(contact: InboxContact) {
@@ -479,6 +501,7 @@ export function InstagramInbox() {
     setMessages([]);
     setMessageCursor(undefined);
     setThreadError("");
+    setLiveAnnouncement("");
     setDraft("");
     autoScrollRef.current = true;
     try {
@@ -665,7 +688,7 @@ export function InstagramInbox() {
           <ConversationHeaderActions contact={selected} members={members} onOperation={(operation) => void patchContact(selected.id, operation)} />
         </header>
 
-        <div className="ibx-messages" ref={messagesRef} aria-label={`Conversation with ${displayName(selected)}`} aria-live="polite">
+        <div className="ibx-messages" ref={messagesRef} aria-label={`Conversation with ${displayName(selected)}`}>
           {messageCursor && <button className="ibx-load-earlier" type="button" aria-label="Load earlier messages" disabled={olderLoading} onClick={() => void loadEarlier()}>{olderLoading ? "Loading…" : "Load earlier messages"}</button>}
           {conversationLoading ? <div className="ibx-thread-loading" aria-label="Loading conversation" aria-busy="true">
             <span className="skeleton-block ibx-bubble-skeleton" /><span className="skeleton-block ibx-bubble-skeleton is-out" /><span className="skeleton-block ibx-bubble-skeleton is-short" />
@@ -704,6 +727,7 @@ export function InstagramInbox() {
         </div>}
       </>}
     </div>
-    {openContactId && <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} />}
+    <p className="sr-only ibx-live-announcement" role="status" aria-atomic="true">{liveAnnouncement}</p>
+    {openContactId && <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} onUpdated={(update) => applyContactUpdate(openContactId, update)} />}
   </section>;
 }

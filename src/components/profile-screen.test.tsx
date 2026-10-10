@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -203,5 +203,50 @@ describe("ProfileScreen", () => {
     expect(screen.getByRole("img", { name: "Linkar Page profile photo" })).toBeTruthy();
     expect(screen.getByText(/Facebook Page/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /manage channels/i }).getAttribute("href")).toBe("/settings");
+  });
+
+  it("lists every connected Instagram account and Facebook Page, not just the first", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/meta/connection")) {
+        return { ok: true, json: async () => ({ data: [
+          { id: "c1", igUserId: "ig_1", username: "studio_one", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" },
+          { id: "c2", igUserId: "ig_2", username: "studio_two", status: "EXPIRED", connectedAt: "2026-08-22T00:00:00.000Z" },
+        ] }) } as Response;
+      }
+      if (url.includes("/api/facebook/connection")) {
+        return { ok: true, json: async () => ({ data: [
+          { id: "fb_1", pageId: "page_1", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-30T00:00:00.000Z" },
+          { id: "fb_2", pageId: "page_2", pageName: "Acme Studio", status: "CONNECTED", connectedAt: "2026-08-30T00:00:00.000Z" },
+        ] }) } as Response;
+      }
+      throw new Error(`Unexpected fetch to ${url}`);
+    }));
+
+    render(<ProfileScreen email="owner@example.com" memberSince="2026-08-20T00:00:00.000Z" emailVerified={true} role="OWNER" />);
+
+    const channels = await screen.findByRole("region", { name: "Connected channels" });
+    expect(await within(channels).findByText("@studio_one")).toBeTruthy();
+    expect(within(channels).getByText("@studio_two")).toBeTruthy();
+    expect(within(channels).getByText("Acme Co")).toBeTruthy();
+    expect(within(channels).getByText("Acme Studio")).toBeTruthy();
+  });
+
+  it("asks before signing out of every device", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ data: [] }) }) as unknown as Response));
+    render(<ProfileScreen email="owner@example.com" memberSince="2026-08-20T00:00:00.000Z" emailVerified={true} role="OWNER" />);
+
+    const signOutAll = screen.getByRole("button", { name: /Sign out all/ });
+    // The first click no longer submits the form.
+    expect(signOutAll.getAttribute("type")).toBe("button");
+    fireEvent.click(signOutAll);
+
+    const confirm = screen.getByRole("group", { name: "Confirm signing out everywhere" });
+    const submit = within(confirm).getByRole("button", { name: "Sign out everywhere" });
+    expect(submit.getAttribute("type")).toBe("submit");
+    expect(submit.closest("form")?.querySelector<HTMLInputElement>('input[name="action"]')?.value).toBe("logout-all");
+
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("group", { name: "Confirm signing out everywhere" })).toBeNull();
   });
 });

@@ -304,6 +304,21 @@ export function refreshWorkspaceBootstrap(): Promise<WorkspaceBootstrap> {
   return getWorkspaceBootstrap();
 }
 
+/** Window event the app shell listens for to re-read the bootstrap. */
+export const WORKSPACE_CHANGE_EVENT = "linkar-workspace-change";
+
+/**
+ * Call after anything that changes what the shell shows - a billing change,
+ * a connected or disconnected channel. Both identity caches are dropped (plan,
+ * avatar and role live there) and the shell is told to refetch right away,
+ * instead of showing the old plan or avatar until the next window focus.
+ */
+export function notifyWorkspaceChanged(): void {
+  invalidateWorkspaceResource("bootstrap");
+  invalidateWorkspaceResource("account-profile");
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(WORKSPACE_CHANGE_EVENT));
+}
+
 /** Clear after connection mutations; the no-argument form is also useful at a
  * session boundary and keeps isolated component tests deterministic. */
 export function clearWorkspaceDataCache(scope: "connections" | "all" = "all"): void {

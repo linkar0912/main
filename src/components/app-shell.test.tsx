@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({ pathname: "/dashboard" }));
@@ -7,6 +7,7 @@ const navigation = vi.hoisted(() => ({ pathname: "/dashboard" }));
 vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
 
 const { AppShell } = await import("./app-shell");
+const { notifyWorkspaceChanged } = await import("@/src/lib/client/workspace-data");
 
 function stubShellFetch(role = "MEMBER", igAvatarUrl: string | null = null, platformOwner = false) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -157,5 +158,57 @@ describe("AppShell", () => {
 
     await waitFor(() => expect(document.activeElement).toBe(menuButton));
     expect(mainContent?.hasAttribute("inert")).toBe(false);
+  });
+
+  it("gives page content one main landmark and a skip link to it", async () => {
+    stubShellFetch();
+    render(<AppShell><div>Workspace</div></AppShell>);
+
+    const main = screen.getByRole("main");
+    expect(main.id).toBe("main-content");
+    expect(main.textContent).toContain("Workspace");
+    const skip = screen.getByRole("link", { name: "Skip to content" });
+    expect(skip.getAttribute("href")).toBe("#main-content");
+    // First in the tab order, ahead of the sidebar.
+    expect(document.querySelector("a[href], button")).toBe(skip);
+    await screen.findByText("Member");
+  });
+
+  it("uses a disclosure for the account menu and returns focus to its toggle on Escape", async () => {
+    stubShellFetch();
+    render(<AppShell><main>Workspace</main></AppShell>);
+    await screen.findByText("Member");
+
+    const toggle = screen.getByRole("button", { name: "Account menu" });
+    expect(toggle.hasAttribute("aria-haspopup")).toBe(false);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.getAttribute("aria-controls")).toBe("account-menu");
+    // No menu roles without the menu keyboard pattern behind them.
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
+    expect(document.getElementById("account-menu")?.textContent).toContain("Sign out");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(document.getElementById("account-menu")).toBeNull());
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  it("re-reads the workspace identity when another screen reports a change", async () => {
+    let plan = "free";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/workspace/bootstrap")) {
+        return { ok: true, json: async () => ({ data: { email: "alex.rivera@example.com", role: "OWNER", plan, platformOwner: false } }) } as Response;
+      }
+      throw new Error(`Unexpected fetch to ${url}`);
+    }));
+    render(<AppShell><main>Workspace</main></AppShell>);
+    expect(await screen.findByText("free")).toBeTruthy();
+
+    plan = "growth";
+    await act(async () => { notifyWorkspaceChanged(); });
+
+    expect(await screen.findByText("growth")).toBeTruthy();
   });
 });

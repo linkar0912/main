@@ -8,6 +8,7 @@ import { ContactsContentSkeleton } from "./skeleton";
 import { SocialAvatar } from "./social-avatar";
 import { PageHeader } from "./page-header";
 import { useTeamMembers } from "@/src/lib/client/team-members";
+import { formatDateTime } from "@/src/lib/format-date";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 type ContactRow = {
@@ -53,10 +54,6 @@ function contactSubtitle(contact: ContactRow): string {
   const details = [contact.email, ...contact.tags].filter(Boolean).join(" · ");
   if (details) return details;
   return CAPTURE_STATE_LABELS[contact.state] ?? "Instagram contact";
-}
-
-function formatSeen(value: string): string {
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 type ContactsSnapshot = {
@@ -122,6 +119,30 @@ async function fetchContactsList(
   };
 }
 
+/** Newest activity first - the order every server page uses. */
+function compareRows(a: ContactRow, b: ContactRow): number {
+  return b.lastSeenAt.localeCompare(a.lastSeenAt) || a.id.localeCompare(b.id);
+}
+
+/**
+ * Where the next server page for `stage` starts. Rows fetched for a stage are
+ * a prefix of that stage's server order, so their count is the offset - except
+ * for rows moved into the stage here in the drawer. The server now lists those
+ * in the new stage at their own position, which may lie past what has been
+ * fetched; counting them anyway would skip a row on the next page. They only
+ * count when they sort inside the fetched prefix. `movedFrom` maps a moved
+ * contact to the stage the server last listed it under.
+ */
+export function stagePageOffset(rows: ContactRow[], stage: LeadStatus, movedFrom: ReadonlyMap<string, LeadStatus>): number {
+  const movedIn = (row: ContactRow) => movedFrom.has(row.id) && movedFrom.get(row.id) !== row.leadStatus;
+  let boundary: ContactRow | undefined;
+  for (const row of rows) {
+    if (row.leadStatus !== stage || movedIn(row)) continue;
+    if (!boundary || compareRows(row, boundary) > 0) boundary = row;
+  }
+  return rows.filter((row) => row.leadStatus === stage && (!movedIn(row) || (boundary !== undefined && compareRows(row, boundary) <= 0))).length;
+}
+
 /** Union by id, newest activity first - the order every server page uses. */
 function mergeRows(current: ContactRow[], incoming: ContactRow[]): ContactRow[] {
   const byId = new Map(current.map((row) => [row.id, row]));
@@ -133,7 +154,7 @@ function mergeRows(current: ContactRow[], incoming: ContactRow[]): ContactRow[] 
       avatarUrl: row.avatarUrl ?? existing?.avatarUrl,
     });
   }
-  return [...byId.values()].sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || a.id.localeCompare(b.id));
+  return [...byId.values()].sort(compareRows);
 }
 
 export function ContactsScreen() {
@@ -148,6 +169,9 @@ export function ContactsScreen() {
   const [openContactId, setOpenContactId] = useState<string | null>(null);
   const members = useTeamMembers();
   const autoLoadedStatus = useRef(new Set<LeadStatus>());
+  // Contacts whose stage changed in the drawer -> the stage the server last
+  // listed them under. Keeps stage pagination offsets honest (stagePageOffset).
+  const movedFrom = useRef(new Map<string, LeadStatus>());
 
   // Every contacts update goes through here so the module cache stays in step.
   const commit = useCallback((rows: ContactRow[], patch: Partial<ContactsSnapshot> = {}) => {
@@ -179,6 +203,7 @@ export function ContactsScreen() {
     const apply = (snapshot: ContactsSnapshot) => {
       if (cancelled) return;
       const rows = mergeRows(cached?.contacts.filter((row) => snapshot.contacts.some((next) => next.id === row.id)) ?? [], snapshot.contacts);
+      movedFrom.current.clear();
       contactsCache.snapshot = { ...snapshot, contacts: rows, allOffset: snapshot.contacts.length };
       setContacts(rows);
       setCounts(snapshot.counts);
@@ -259,12 +284,14 @@ export function ContactsScreen() {
   const loadMore = useCallback(async (target: LeadStatus | "" = status) => {
     if (loadingMore) return;
     setLoadingMore(true);
-    // Stage pages continue after the stage rows already on screen; loaded
-    // rows are always a prefix of that stage's newest-first order.
-    const stageOffset = target ? contacts.filter((contact) => contact.leadStatus === target).length : 0;
+    // Stage pages continue after the stage rows already fetched; those are
+    // always a prefix of that stage's newest-first order.
+    const stageOffset = target ? stagePageOffset(contacts, target, movedFrom.current) : 0;
     const request = target ? { leadStatus: target, offset: stageOffset } : { offset: allOffset };
     try {
       const page = await fetchContactsList(false, undefined, request);
+      // Rows the server just returned are back in step with its order.
+      for (const row of page.contacts) movedFrom.current.delete(row.id);
       const nextAllOffset = target ? allOffset : allOffset + page.contacts.length;
       commit(mergeRows(contacts, page.contacts), { counts: page.counts, allOffset: nextAllOffset });
       setCounts(page.counts);
@@ -315,6 +342,7 @@ export function ContactsScreen() {
     const rows = contacts.map((contact) => (contact.id === id ? { ...contact, ...update } : contact));
     let nextCounts = counts;
     if (previous && update.leadStatus && update.leadStatus !== previous.leadStatus) {
+      if (!movedFrom.current.has(id)) movedFrom.current.set(id, previous.leadStatus);
       nextCounts = { ...counts, [previous.leadStatus]: Math.max(0, counts[previous.leadStatus] - 1), [update.leadStatus]: counts[update.leadStatus] + 1 };
       setCounts(nextCounts);
     }
@@ -395,7 +423,7 @@ export function ContactsScreen() {
                   <span className={`status-pill is-${contact.leadStatus.toLowerCase()}`}>{STATUS_LABELS[contact.leadStatus]}</span>
                   <span className="contact-score" title="Engagement score: rises with clicks, captured details and stage changes">{contact.score} pts{contact.suppressedAt ? " · opted out" : ""}</span>
                   <span className="contact-owner">{contact.assigneeUserId ? members.get(contact.assigneeUserId) ?? "Former member" : "Unassigned"}</span>
-                  <time dateTime={contact.lastSeenAt}>{formatSeen(contact.lastSeenAt)}</time>
+                  <time dateTime={contact.lastSeenAt}>{formatDateTime(contact.lastSeenAt)}</time>
                   <button
                     className="button button-ghost button-small"
                     type="button"

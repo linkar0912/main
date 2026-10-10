@@ -462,3 +462,167 @@ describe("SettingsScreen webhook health panel", () => {
     expect(await screen.findByText("@creator_two: Some fields need a reconnect")).toBeTruthy();
   });
 });
+
+type Handler = (url: string, init?: RequestInit) => { status?: number; body: unknown } | undefined;
+
+/** Answers the always-on connection requests, then defers to `handler`. */
+function stubSettingsFetch(handler: Handler, options: { connections?: unknown[]; pages?: unknown[]; mode?: string } = {}) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const custom = handler(url, init);
+    const reply = custom ?? (
+      url.includes("/api/workspace/bootstrap") ? { body: { data: { email: "owner@example.com", role: "OWNER", plan: "free", mode: options.mode ?? "configured" } } }
+        : url.includes("/health") ? { body: { data: [] } }
+          : url.startsWith("/api/meta/connection") ? { body: { data: options.connections ?? [] } }
+            : url.startsWith("/api/facebook/connection") ? { body: { data: options.pages ?? [] } }
+              : undefined
+    );
+    if (!reply) throw new Error(`Unexpected fetch to ${url}`);
+    const status = reply.status ?? 200;
+    return { ok: status < 400, status, json: async () => reply.body } as unknown as Response;
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+const creator = { id: "connection_1", igUserId: "ig_1", username: "creator", status: "CONNECTED", connectedAt: "2026-08-21T00:00:00.000Z" };
+
+describe("SettingsScreen confirmations and team feedback", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/settings");
+  });
+
+  it("asks before disconnecting, names the account, and refreshes the shell afterwards", async () => {
+    const fetchMock = stubSettingsFetch((_url, init) => (init?.method === "DELETE" ? { body: { ok: true } } : undefined), { connections: [creator] });
+    const changed = vi.fn();
+    window.addEventListener("linkar-workspace-change", changed);
+    try {
+      await act(async () => { render(<SettingsScreen />); });
+      fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+
+      // One click only opens the confirmation; nothing is deleted yet.
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+      const confirm = screen.getByRole("group", { name: "Confirm disconnecting @creator" });
+      expect(confirm.textContent).toMatch(/automation on this account stops/i);
+      expect(document.activeElement?.textContent).toBe("Cancel");
+
+      fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("group", { name: /Confirm disconnecting/ })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Disconnect @creator" })); });
+
+      expect(fetchMock).toHaveBeenCalledWith("/api/meta/connection", expect.objectContaining({ method: "DELETE", body: JSON.stringify({ id: "connection_1" }) }));
+      expect(await screen.findByText("No account connected")).toBeTruthy();
+      expect(changed).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("linkar-workspace-change", changed);
+    }
+  });
+
+  it("confirms a Facebook Page disconnect by name", async () => {
+    const page = { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" };
+    const fetchMock = stubSettingsFetch((_url, init) => (init?.method === "DELETE" ? { body: { ok: true } } : undefined), { pages: [page] });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Disconnect Acme Co" })); });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/facebook/connection", expect.objectContaining({ method: "DELETE" }));
+    expect(await screen.findByText("No Page connected")).toBeTruthy();
+  });
+
+  it("reports a sent invitation even when the team list then fails to refresh", async () => {
+    let teamLoads = 0;
+    stubSettingsFetch((url, init) => {
+      if (!url.startsWith("/api/team/invitations")) return undefined;
+      if (init?.method === "POST") return { status: 201, body: { id: "inv_1", email: "new@example.com", role: "MEMBER" } };
+      teamLoads += 1;
+      return teamLoads === 1 ? { body: { members: [{ email: "owner@example.com", role: "OWNER" }], invitations: [] } } : { status: 500, body: {} };
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Team/ }));
+    fireEvent.change(await screen.findByLabelText("Invite by email"), { target: { value: "new@example.com" } });
+    await act(async () => { fireEvent.submit(screen.getByLabelText("Invite by email").closest("form")!); });
+
+    expect(await screen.findByText("Invitation sent to new@example.com.")).toBeTruthy();
+    expect(screen.getByText(/team list could not refresh/i)).toBeTruthy();
+    expect(screen.queryByText("Could not send the invitation.")).toBeNull();
+  });
+
+  it("explains a full plan instead of a generic invitation failure", async () => {
+    stubSettingsFetch((url, init) => {
+      if (!url.startsWith("/api/team/invitations")) return undefined;
+      if (init?.method === "POST") return { status: 409, body: { error: "limit_reached", capability: "members", used: 3, limit: 3 } };
+      return { body: { members: [{ email: "owner@example.com", role: "OWNER" }], invitations: [] } };
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Team/ }));
+    fireEvent.change(await screen.findByLabelText("Invite by email"), { target: { value: "new@example.com" } });
+    await act(async () => { fireEvent.submit(screen.getByLabelText("Invite by email").closest("form")!); });
+
+    expect(await screen.findByText(/Your plan includes 3 team seats/)).toBeTruthy();
+  });
+
+  it("revokes an invitation only after confirming, with a pending state", async () => {
+    let finishRevoke: (() => void) | undefined;
+    let revoked = false;
+    const fetchMock = stubSettingsFetch((url, init) => {
+      if (!url.startsWith("/api/team/invitations") || init?.method === "DELETE") return undefined;
+      return { body: { members: [{ email: "owner@example.com", role: "OWNER" }], invitations: revoked ? [] : [{ id: "inv_1", email: "pending@example.com", role: "MEMBER", expiresAt: "2026-10-17T00:00:00.000Z" }] } };
+    });
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (init?.method !== "DELETE") return answer(input, init);
+      await new Promise<void>((resolve) => { finishRevoke = resolve; });
+      revoked = true;
+      return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Team/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke invitation for pending@example.com" }));
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Revoke invitation" }));
+    expect((await screen.findAllByText("Revoking…")).length).toBeGreaterThan(0);
+    expect((screen.getByRole("button", { name: "Revoke invitation for pending@example.com" }) as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => { finishRevoke?.(); });
+    await vi.waitFor(() => expect(screen.queryByText("pending@example.com")).toBeNull());
+  });
+
+  it("marks quiet-hours changes as unsaved and defaults the timezone to the browser's", async () => {
+    stubSettingsFetch((url) => (url === "/api/workspace/messaging" ? { body: { data: null } } : undefined));
+    const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Delivery/ }));
+    await vi.waitFor(() => expect((screen.getByLabelText("Workspace timezone") as HTMLSelectElement).value).toBe(browserZone));
+    expect(screen.getByLabelText("Workspace timezone").tagName).toBe("SELECT");
+    expect(screen.getByText("Quiet hours disabled")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Hold automated DMs during quiet hours" }));
+    // Not "enabled" until it is actually saved.
+    expect(screen.queryByText("Quiet hours enabled")).toBeNull();
+    expect(screen.getByText("Quiet hours on, not saved yet")).toBeTruthy();
+
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save messaging hours" })); });
+    expect(await screen.findByText("Quiet hours enabled")).toBeTruthy();
+  });
+
+  it("describes demo mode in plain language", async () => {
+    stubSettingsFetch((url) => (url === "/api/workspace/messaging" ? { body: { data: null } } : undefined), { mode: "demo" });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Delivery/ }));
+
+    expect(await screen.findByText(/Live delivery isn't set up for this workspace yet/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/DATABASE_URL|credentials/);
+  });
+});
