@@ -2,8 +2,10 @@
 
 import { CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { DeliveryIssueRow } from "./delivery-issue-row";
+import { attemptsLabel, DeliveryIssueRow, deliveryKindLabel } from "./delivery-issue-row";
 import { InlineContentSkeleton } from "./skeleton";
+import { relativeTimeLabel } from "./workspace-primitives";
+import { formatDateTime } from "@/src/lib/format-date";
 
 type Failure = {
   id: string;
@@ -14,38 +16,6 @@ type Failure = {
   attemptCount: number;
   updatedAt: string;
 };
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-function friendlyKind(kind: string): string {
-  switch (kind) {
-    case "CLASSIC_ACTION":
-      return "Reply";
-    case "EMAIL_CAPTURE":
-      return "Email capture";
-    case "CAMPAIGN_ACTION":
-      return "Campaign";
-    case "SEQUENCE_STEP":
-      return "Sequence";
-    case "BROADCAST_RECIPIENT":
-      return "Broadcast";
-    case "LEAD_EMAIL":
-      return "Lead email";
-    case "LEAD_WEBHOOK":
-      return "Lead webhook";
-    case "FLOW_FOLLOWUP":
-      return "Follow-up";
-    default:
-      return kind;
-  }
-}
-
-function detailLine(failure: Failure): string {
-  const attempt = `Attempt ${failure.attemptCount}`;
-  return failure.recipientId ? `${attempt} · recipient ${failure.recipientId}` : attempt;
-}
 
 /**
  * Lists the most recent FAILED outbound deliveries so a workspace admin can
@@ -88,7 +58,7 @@ export function FailurePanel({ limit }: { limit?: number } = {}) {
   if (failures.length === 0) {
     return (
       <p className="all-clear">
-        <CheckCircle2 size={15} /> No failed deliveries in the recent window. You&apos;re all clear.
+        <CheckCircle2 size={15} aria-hidden /> No failed deliveries in the recent window. Everything sent.
       </p>
     );
   }
@@ -99,11 +69,13 @@ export function FailurePanel({ limit }: { limit?: number } = {}) {
       {visible.map((failure) => (
         <DeliveryIssueRow
           key={failure.id}
-          label={friendlyKind(failure.kind)}
+          label={deliveryKindLabel(failure.kind)}
           lastError={failure.lastError}
-          detail={detailLine(failure)}
+          // Plain retry count; the Instagram-scoped person ID is noise here.
+          detail={attemptsLabel(failure.attemptCount)}
           timestamp={failure.updatedAt}
-          timeLabel={formatDate(failure.updatedAt)}
+          timeLabel={relativeTimeLabel(failure.updatedAt)}
+          timeTitle={formatDateTime(failure.updatedAt)}
         />
       ))}
     </ul>
