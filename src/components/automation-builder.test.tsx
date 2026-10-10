@@ -1344,7 +1344,7 @@ describe("AutomationBuilder", () => {
       fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
 
       const summary = screen.getByTestId("review-summary");
-      expect(summary.textContent).toContain("from Oct 10, 2026");
+      expect(summary.textContent).toContain("from 10 Oct 2026");
       expect(summary.textContent).not.toContain("2026-10-10T14:30");
     });
   });
