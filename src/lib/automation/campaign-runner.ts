@@ -616,6 +616,7 @@ async function guardedDelivery(
       ? await reserveDailySendSlots({
         repository,
         automationId: participant.automationId,
+        workspaceId: participant.workspaceId,
         limit: spec.dailySendLimit,
       }, 1)
       : undefined;
@@ -1001,6 +1002,7 @@ async function sendCooldownNotice(
   const reservation = await reserveDailySendSlots({
     repository: ctx.repository,
     automationId: participant.automationId,
+    workspaceId: participant.workspaceId,
     limit: definition.dailySendLimit,
   }, 1);
   if (!reservation.allowed) {

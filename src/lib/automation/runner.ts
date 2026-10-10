@@ -206,6 +206,7 @@ async function executeActionDelivery(
     reservation = await reserveDailySendSlots({
       repository,
       automationId: request.automationId,
+      workspaceId: request.workspaceId,
       limit: request.dailySendLimit,
     }, 1);
     if (!reservation.allowed) {

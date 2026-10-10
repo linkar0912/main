@@ -506,7 +506,12 @@ async function reserveSlots(
   automation: AutomationRecord,
 ): Promise<SendLimitReservation> {
   return reserveDailySendSlots(
-    { automationId: automation.id, repository, limit: automation.definition.dailySendLimit },
+    {
+      automationId: automation.id,
+      workspaceId: automation.workspaceId,
+      repository,
+      limit: automation.definition.dailySendLimit,
+    },
     1,
   );
 }
