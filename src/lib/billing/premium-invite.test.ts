@@ -65,6 +65,17 @@ describe("premium invite codes", () => {
     expect(client.premiumInviteCode.create).not.toHaveBeenCalled();
   });
 
+  it("reports revoking an unknown invite as a 404, not a server error", async () => {
+    const missing = Object.assign(new Error("Record to update not found."), { code: "P2025" });
+    const client = { premiumInviteCode: { update: vi.fn().mockRejectedValue(missing) } };
+    const service = createPremiumInviteService(client as never);
+
+    await expect(service.revoke("invite_missing")).rejects.toMatchObject({ status: 404, code: "invite_code_not_found" });
+
+    client.premiumInviteCode.update.mockResolvedValue({ id: "invite_1", revokedAt: new Date() });
+    await expect(service.revoke("invite_1")).resolves.toMatchObject({ id: "invite_1" });
+  });
+
   it("redeems a valid code for exactly 30 days", async () => {
     const now = new Date("2026-09-05T10:00:00.000Z");
     const code = { id: "code_1", planId: "plan_agency", durationDays: 30, expiresAt: null, revokedAt: null, plan: { key: "agency", name: "Agency" } };

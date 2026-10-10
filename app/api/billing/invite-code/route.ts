@@ -12,24 +12,33 @@ const invalid = new Set(["invite_code_invalid", "invite_code_expired", "invite_c
 export async function POST(request: Request) {
   const guard = await requireBillingOwner(request);
   if (!guard.ok) return guard.error;
+  const body: unknown = await request.json().catch(() => undefined);
+  if (body === undefined) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  const parsed = Input.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "invite_code_invalid" }, { status: 422 });
   try {
-    const input = Input.parse(await request.json());
     const data = await getPremiumInviteService().redeem({
-      code: input.code,
+      code: parsed.data.code,
       workspaceId: guard.session.workspaceId,
       userId: guard.session.userId,
     });
+    // Entitlements are cached per process for up to 30 seconds
+    // (createEntitlementService's cacheTtlMs), so this clears only this
+    // instance; other web instances and the worker pick the invite plan up
+    // when their entry expires. `refresh` tells the client to drop its own
+    // cached workspace data now.
     getEntitlementService().invalidateWorkspace(guard.session.workspaceId);
     return NextResponse.json({
       data: {
         plan: data.plan,
         expiresAt: data.expiresAt,
       },
+      refresh: true,
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : "invite_code_redemption_failed";
     if (conflicts.has(code)) return NextResponse.json({ error: code }, { status: 409 });
-    if (invalid.has(code) || error instanceof z.ZodError) return NextResponse.json({ error: error instanceof z.ZodError ? "invite_code_invalid" : code }, { status: 422 });
+    if (invalid.has(code)) return NextResponse.json({ error: code }, { status: 422 });
     return NextResponse.json({ error: "invite_code_redemption_failed" }, { status: 500 });
   }
 }
