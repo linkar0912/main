@@ -14,6 +14,14 @@ type FetchOverrides = {
   facebookPages?: unknown;
 };
 
+const defaultConnection = {
+  id: "conn_default",
+  igUserId: "17841400000000099",
+  username: "default.brand",
+  status: "CONNECTED",
+  connectedAt: "2026-08-20T00:00:00.000Z",
+};
+
 function stubFetch(overrides: FetchOverrides = {}) {
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -21,7 +29,9 @@ function stubFetch(overrides: FetchOverrides = {}) {
       return { ok: true, json: async () => overrides.media ?? { data: [], paging: {} } } as Response;
     }
     if (url.endsWith("/api/meta/connection") || url.includes("/api/meta/connection?")) {
-      return { ok: true, json: async () => overrides.connection ?? { data: [] } } as Response;
+      // Every automation must be pinned to an account, so the default
+      // workspace has one connected (tests that need none pass { data: [] }).
+      return { ok: true, json: async () => overrides.connection ?? { data: [defaultConnection] } } as Response;
     }
     if (url.endsWith("/api/facebook/connection") || url.includes("/api/facebook/connection?")) {
       return { ok: true, json: async () => overrides.facebookPages ?? { data: [] } } as Response;
@@ -113,10 +123,32 @@ describe("AutomationBuilder", () => {
     stubFetch();
     render(<AutomationBuilder />);
 
-    fireEvent.click(screen.getByRole("button", { name: /open phone mockup/i }));
+    // The accessible name matches the visible "Preview" label.
+    fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
     expect(screen.getByLabelText(/message preview/i).classList.contains("is-open")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /^close phone mockup$/i }));
     expect(screen.getByLabelText(/message preview/i).classList.contains("is-open")).toBe(false);
+  });
+
+  it("treats the open mobile preview as a dialog: focus moves in, Escape closes, focus returns", () => {
+    stubFetch();
+    render(<AutomationBuilder initialDefinition={{
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["menu"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Hi" }],
+    }} />);
+
+    const trigger = screen.getByRole("button", { name: /^preview$/i });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: /message preview/i })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /^close phone mockup$/i }));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByLabelText(/message preview/i).classList.contains("is-open")).toBe(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("keeps editing version 1 definitions on the legacy single-reply form", async () => {
@@ -539,7 +571,7 @@ describe("AutomationBuilder", () => {
     render(<AutomationBuilder />);
 
     const secondStage = screen.getByRole("button", { name: /comment & reply/i });
-    const reviewStage = screen.getByRole("button", { name: /review/i });
+    const reviewStage = screen.getByRole("button", { name: /: review$/i });
     expect(secondStage).toHaveProperty("disabled", true);
     expect(reviewStage).toHaveProperty("disabled", true);
 
@@ -568,7 +600,7 @@ describe("AutomationBuilder", () => {
     render(<AutomationBuilder initialDefinition={legacyDefinition} initialName="Classic flow" />);
 
     const conditionStage = screen.getByRole("button", { name: /who should get it/i });
-    const reviewStage = screen.getByRole("button", { name: /review/i });
+    const reviewStage = screen.getByRole("button", { name: /: review$/i });
     expect(conditionStage).toHaveProperty("disabled", true);
     expect(reviewStage).toHaveProperty("disabled", true);
 
@@ -977,7 +1009,7 @@ describe("AutomationBuilder", () => {
     stubFetch();
     render(<AutomationBuilder automationId="automation_edit" initialName="Existing campaign" initialDefinition={existingDefinition} />);
 
-    const review = screen.getByRole("button", { name: /review/i });
+    const review = screen.getByRole("button", { name: /: review$/i });
     expect((review as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(review);
     expect(screen.getByRole("heading", { name: /review before you save/i }).closest(".wizard-step")?.classList.contains("is-hidden")).toBe(false);
@@ -998,7 +1030,7 @@ describe("AutomationBuilder", () => {
     fireEvent.click(screen.getByRole("button", { name: /limits/i }));
     expect((screen.getByLabelText(/^priority$/i) as HTMLInputElement).value).toBe("8");
     fireEvent.change(screen.getByLabelText(/^priority$/i), { target: { value: "11" } });
-    fireEvent.click(screen.getByRole("button", { name: /review/i }));
+    fireEvent.click(screen.getByRole("button", { name: /: review$/i }));
     fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/automations/automation_edit", expect.anything()));
@@ -1018,7 +1050,7 @@ describe("AutomationBuilder", () => {
     stubFetch({ patchOk: false, patchResponse: { error: "invalid_channel_target" } });
     render(<AutomationBuilder automationId="automation_edit" initialName="Existing campaign" initialDefinition={existingDefinition} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /review/i }));
+    fireEvent.click(screen.getByRole("button", { name: /: review$/i }));
     fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
 
     const alert = await screen.findByRole("alert");
@@ -1150,6 +1182,245 @@ describe("AutomationBuilder", () => {
         timestamp: "2026-08-20T08:00:00.000Z",
       },
     ]);
+  });
+
+  describe("classic builder target, saving and editing", () => {
+    const dmKeyword: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["menu"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Here's the menu" }],
+    };
+    const twoAccounts = {
+      data: [
+        { id: "conn_old", igUserId: "1111", username: "expired.acct", status: "EXPIRED", connectedAt: "2026-08-01T00:00:00.000Z" },
+        { id: "conn_live", igUserId: "2222", username: "live.acct", status: "CONNECTED", connectedAt: "2026-08-02T00:00:00.000Z" },
+      ],
+    };
+
+    afterEach(() => {
+      window.history.replaceState(null, "", "/");
+    });
+
+    it("pins a new classic automation to the first CONNECTED account instead of sending null", async () => {
+      const fetchMock = stubFetch({ connection: twoAccounts });
+      render(<AutomationBuilder variant="classic" initialDefinition={dmKeyword} initialName="Menu" />);
+
+      const accountSelect = await screen.findByLabelText("Instagram account") as HTMLSelectElement;
+      await waitFor(() => expect(accountSelect.value).toBe("2222"));
+      // No "All connected accounts" escape hatch - the API always required a pin.
+      expect(Array.from(accountSelect.options).map((option) => option.value)).toEqual(["1111", "2222"]);
+      expect(screen.queryByText(/all connected accounts/i)).toBeNull();
+
+      for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
+      const body = JSON.parse(String(findRequest(fetchMock, (url) => url === "/api/automations").body));
+      expect(body).toMatchObject({ provider: "INSTAGRAM", instagramAccountId: "2222", facebookPageId: null });
+    });
+
+    it("always says which account a single-account workspace runs on", async () => {
+      stubFetch();
+      render(<AutomationBuilder variant="classic" />);
+      expect((await screen.findByTestId("instagram-account-used")).textContent).toContain("@default.brand");
+    });
+
+    it("stops on the first step with a Settings link when no Instagram account is connected", async () => {
+      stubFetch({ connection: { data: [] } });
+      render(<AutomationBuilder variant="classic" initialName="Menu" />);
+
+      const link = await screen.findByRole("link", { name: /connect an instagram account/i });
+      expect(link.getAttribute("href")).toBe("/settings");
+      fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      expect((await screen.findByRole("alert")).textContent).toMatch(/connect an instagram account/i);
+    });
+
+    it("PATCHes the created automation on every save after the first instead of POSTing duplicates", async () => {
+      window.history.replaceState(null, "", "/automations/new?type=classic");
+      const fetchMock = stubFetch({ createResponse: { data: { id: "automation_created" } } });
+      render(<AutomationBuilder variant="classic" initialDefinition={dmKeyword} initialName="Menu" />);
+
+      for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+      await screen.findByText(/saved to your workspace/i);
+      expect(window.location.pathname).toBe("/automations/automation_created/edit");
+
+      fireEvent.click(screen.getByRole("button", { name: /save & activate/i }));
+      await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PATCH")).toBe(true));
+
+      const writes = fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST" || (init as RequestInit | undefined)?.method === "PATCH");
+      expect(writes.map(([url, init]) => [String(url), (init as RequestInit).method])).toEqual([
+        ["/api/automations", "POST"],
+        ["/api/automations/automation_created", "PATCH"],
+      ]);
+      expect(screen.getByRole("heading", { name: /edit automatic reply/i })).toBeTruthy();
+    });
+
+    it.each([
+      ["DM keyword", dmKeyword],
+      ["Story reply", { ...dmKeyword, trigger: { type: "story_reply", match: "any", keywords: [] } } as FlowDefinitionV1],
+    ])("lets a %s automation send any DM action type, including on added messages", async (_label, definition) => {
+      const fetchMock = stubFetch();
+      render(<AutomationBuilder initialDefinition={definition} initialName="Rich reply" />);
+
+      const actionStep = definition.trigger.type === "message" || definition.trigger.type === "story_reply" ? 2 : 1;
+      for (let i = 0; i < actionStep; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+
+      const first = screen.getByLabelText("What Linkar should send in step 1") as HTMLSelectElement;
+      expect(Array.from(first.options).map((option) => option.value)).toEqual(
+        ["send_text", "send_image", "send_link", "send_button", "quick_replies"],
+      );
+      fireEvent.click(screen.getByRole("button", { name: /add another message/i }));
+      fireEvent.change(screen.getByLabelText("What Linkar should send in step 2"), { target: { value: "send_link" } });
+      fireEvent.change(screen.getByLabelText("Step 2 message"), { target: { value: "Grab it here" } });
+      fireEvent.change(screen.getByLabelText("Step 2 link URL"), { target: { value: "https://acme.test/menu" } });
+
+      for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
+      const body = JSON.parse(String(findRequest(fetchMock, (url) => url === "/api/automations").body));
+      expect(body.definition.actions[1]).toEqual({ type: "send_link", text: "Grab it here", url: "https://acme.test/menu" });
+    });
+
+    it("blocks the first step with a Settings link when the Facebook channel has no connected Page", async () => {
+      stubFetch({
+        facebookPages: { data: [
+          { id: "fb_old", pageId: "999", pageName: "Old Page", status: "DISCONNECTED", connectedAt: "2026-08-01T00:00:00.000Z" },
+        ] },
+      });
+      render(<AutomationBuilder variant="classic" initialName="Page replies" />);
+
+      fireEvent.change(screen.getByLabelText("Channel"), { target: { value: "FACEBOOK" } });
+      const link = await screen.findByRole("link", { name: /connect a facebook page/i });
+      expect(link.getAttribute("href")).toBe("/settings");
+      // A disconnected Page is not offered.
+      expect(screen.queryByLabelText("Facebook Page")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      expect((await screen.findByRole("alert")).textContent).toMatch(/connect a facebook page/i);
+      expect(screen.getByRole("button", { name: /step 1: when this happens/i }).getAttribute("aria-current")).toBe("step");
+    });
+
+    it("lists only connected Pages in the builder Page picker", async () => {
+      stubFetch({
+        facebookPages: { data: [
+          { id: "fb_live", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+          { id: "fb_old", pageId: "999", pageName: "Old Page", status: "EXPIRED", connectedAt: "2026-08-01T00:00:00.000Z" },
+        ] },
+      });
+      render(<AutomationBuilder variant="classic" />);
+
+      const select = await screen.findByLabelText("Facebook Page") as HTMLSelectElement;
+      expect(Array.from(select.options).map((option) => option.textContent)).toEqual(["Select a connected Page", "Acme Co"]);
+    });
+
+    it("picks comment-trigger posts with the media picker instead of pasted IDs", async () => {
+      const fetchMock = stubFetch({ media: { data: [reel], paging: {} } });
+      render(<AutomationBuilder variant="classic" initialName="Guide" />);
+
+      expect(screen.queryByLabelText("Post IDs")).toBeNull();
+      fireEvent.click(await screen.findByRole("checkbox", { name: /giveaway reel/i }));
+
+      for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
+      const body = JSON.parse(String(findRequest(fetchMock, (url) => url === "/api/automations").body));
+      expect(body.definition.trigger.mediaIds).toEqual(["media_1"]);
+    });
+
+    it("points captured emails at Contacts and formats the schedule in review", async () => {
+      stubFetch();
+      render(<AutomationBuilder initialDefinition={dmKeyword} initialName="Menu" />);
+      for (let i = 0; i < 3; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.click(screen.getByLabelText(/ask for the person.s email/i));
+      expect(screen.getByText(/saved to Contacts/i)).toBeTruthy();
+      expect(screen.queryByText(/My Automations page/i)).toBeNull();
+
+      fireEvent.change(screen.getByLabelText("Email prompt"), { target: { value: "Email?" } });
+      fireEvent.change(screen.getByLabelText("Email confirmation message"), { target: { value: "Thanks" } });
+      fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.change(screen.getByLabelText("Schedule start"), { target: { value: "2026-10-10T14:30" } });
+      fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+
+      const summary = screen.getByTestId("review-summary");
+      expect(summary.textContent).toContain("from Oct 10, 2026");
+      expect(summary.textContent).not.toContain("2026-10-10T14:30");
+    });
+  });
+
+  describe("unsaved changes guard", () => {
+    function addLink(href: string) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.textContent = "Back to automations";
+      document.body.appendChild(link);
+      return link;
+    }
+
+    /** Clicks the link and reports whether the guard (a document capture
+     * listener) cancelled it, then stops jsdom from attempting navigation. */
+    function clickLink(link: HTMLAnchorElement): boolean {
+      // The guard also stops propagation, so the target listener only runs
+      // (and only needs to cancel jsdom's navigation) when the click got through.
+      let reachedLink = false;
+      const record = (event: Event) => {
+        reachedLink = true;
+        event.preventDefault();
+      };
+      link.addEventListener("click", record);
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+      link.dispatchEvent(event);
+      link.removeEventListener("click", record);
+      return !reachedLink && event.defaultPrevented;
+    }
+
+    it("does nothing while the builder is untouched", () => {
+      stubFetch();
+      const confirm = vi.spyOn(window, "confirm");
+      render(<AutomationBuilder variant="classic" />);
+      const link = addLink("/automations");
+
+      expect(clickLink(link)).toBe(false);
+      expect(confirm).not.toHaveBeenCalled();
+      link.remove();
+    });
+
+    it("confirms before an in-app link discards edits and blocks the navigation when declined", () => {
+      stubFetch();
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<AutomationBuilder variant="classic" />);
+      fireEvent.change(screen.getByLabelText(/reply name/i), { target: { value: "Edited" } });
+      const link = addLink("/automations");
+
+      expect(clickLink(link)).toBe(true);
+      expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/unsaved changes/i));
+
+      const beforeUnload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(beforeUnload);
+      expect(beforeUnload.defaultPrevented).toBe(true);
+      link.remove();
+    });
+
+    it("stops guarding once the edits are saved", async () => {
+      stubFetch();
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<AutomationBuilder initialDefinition={{
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: ["menu"] },
+        conditions: [],
+        actions: [{ type: "send_text", text: "Hi" }],
+      }} />);
+      fireEvent.change(screen.getByLabelText(/reply name/i), { target: { value: "Menu" } });
+      for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+      await screen.findByText(/saved to your workspace/i);
+
+      const link = addLink("/automations");
+      expect(clickLink(link)).toBe(false);
+      expect(confirm).not.toHaveBeenCalled();
+      link.remove();
+    });
   });
 
   it("does not expose the removed Test run tool in either builder", () => {
