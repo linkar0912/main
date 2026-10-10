@@ -126,6 +126,7 @@ describe("/api/admin/security", () => {
   });
 
   it("enrolls TOTP for an AAL1 owner without placing the secret in audit data", async () => {
+    mocks.listFactors.mockResolvedValue({ data: { all: [], totp: [], phone: [], webauthn: [] }, error: null });
     mocks.enroll.mockResolvedValue({
       data: {
         id: "factor-new",
@@ -143,12 +144,44 @@ describe("/api/admin/security", () => {
     expect(body).toEqual({
       data: {
         factorId: "factor-new",
+        friendlyName: "Linkar Operator",
         qrCode: "<svg>private</svg>",
         secret: "PRIVATESECRET",
         uri: "otpauth://private",
       },
     });
     expect(JSON.stringify(mocks.appendAdminAuditEvent.mock.calls)).not.toContain("PRIVATESECRET");
+    expect(mocks.requireAdminIdentityWrite).toHaveBeenCalledOnce();
+    expect(mocks.requireAdminWrite).not.toHaveBeenCalled();
+  });
+
+  it("adds a backup factor only through the AAL2 guard and with a distinct friendly name", async () => {
+    const existing = [
+      { ...verifiedFactor, friendly_name: "Linkar Operator" },
+      { ...verifiedFactor, id: "factor-stale", friendly_name: "Linkar Operator 2", status: "unverified" },
+    ];
+    mocks.listFactors.mockResolvedValue({ data: { all: existing }, error: null });
+    mocks.enroll.mockResolvedValue({
+      data: { id: "factor-backup", type: "totp", totp: { qr_code: "<svg />", secret: "SECRET", uri: "otpauth://x" } },
+      error: null,
+    });
+
+    const response = await POST(request({ action: "enroll" }));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).data).toMatchObject({ factorId: "factor-backup", friendlyName: "Linkar Operator 3" });
+    expect(mocks.enroll).toHaveBeenCalledWith(expect.objectContaining({ friendlyName: "Linkar Operator 3" }));
+    expect(mocks.requireAdminWrite).toHaveBeenCalledOnce();
+    expect(mocks.requireAdminIdentityWrite).not.toHaveBeenCalled();
+  });
+
+  it("refuses a backup enrollment when the session has not reached AAL2", async () => {
+    mocks.requireAdminWrite.mockRejectedValue({ status: 403, code: "mfa_required" });
+
+    const response = await POST(request({ action: "enroll" }));
+
+    expect(response.status).toBe(403);
+    expect(mocks.enroll).not.toHaveBeenCalled();
   });
 
   it("rejects a verification code that is not exactly six digits", async () => {
