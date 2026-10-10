@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearWorkspaceDataCache,
+  getAccountProfile,
   getBillingView,
   getFacebookPages,
   getInstagramConnections,
@@ -8,7 +9,9 @@ import {
   getTeamOverview,
   getWorkspaceBootstrap,
   invalidateWorkspaceResource,
+  notifyWorkspaceChanged,
   seedWorkspaceData,
+  WORKSPACE_CHANGE_EVENT,
 } from "./workspace-data";
 
 describe("workspace client data cache", () => {
@@ -164,5 +167,31 @@ describe("workspace client data cache", () => {
     await expect(cancelledCaller).rejects.toMatchObject({ name: "AbortError" });
     await expect(activeCaller).resolves.toMatchObject({ entitlementPlanKey: "growth" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the identity caches and tells the shell to refetch after a workspace change", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/workspace/bootstrap") return { ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }) } as Response;
+      if (url === "/api/account") return { ok: true, json: async () => ({ data: { id: "user_1", email: "owner@example.com", plan: "free" } }) } as Response;
+      if (url === "/api/billing") return { ok: true, json: async () => ({ data: { catalog: [], canManage: true, billingConfigured: true, entitlementPlanKey: "free", deliveriesUsed: 0, subscription: null } }) } as Response;
+      throw new Error(`Unexpected fetch to ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const target = new EventTarget();
+    vi.stubGlobal("window", target);
+    const listener = vi.fn();
+    target.addEventListener(WORKSPACE_CHANGE_EVENT, listener);
+
+    await Promise.all([getWorkspaceBootstrap(), getAccountProfile(), getBillingView()]);
+    notifyWorkspaceChanged();
+    await Promise.all([getWorkspaceBootstrap(), getAccountProfile(), getBillingView()]);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(WORKSPACE_CHANGE_EVENT).toBe("linkar-workspace-change");
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/workspace/bootstrap")).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/account")).toHaveLength(2);
+    // Billing owns its own cache; the helper only touches shell identity.
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/billing")).toHaveLength(1);
   });
 });

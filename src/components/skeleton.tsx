@@ -30,7 +30,7 @@ function WorkspaceScreen({ label, children, header }: { label: string; children:
   // Route loading.tsx files render inside the persistent (app) layout. A
   // second app-frame here duplicated the sidebar and nested a full-width main
   // column inside its content slot, especially breaking narrow viewports.
-  return <main className="page-wrap skeleton-page" aria-label={label} aria-busy="true">{header ?? <PageHeaderSkeleton />}{children}</main>;
+  return <div className="page-wrap skeleton-page" role="region" aria-label={label} aria-busy="true">{header ?? <PageHeaderSkeleton />}{children}</div>;
 }
 
 function SkeletonListRows({ count = 5, compact = false }: { count?: number; compact?: boolean }) {
@@ -243,10 +243,10 @@ export function CampaignPerformanceSkeleton({ withHeader = false }: { withHeader
   );
   if (!withHeader) return <LoadingRegion label="Loading campaign activity">{body}</LoadingRegion>;
   return (
-    <main className="page-wrap campaign-analytics-page skeleton-page" aria-label="Loading campaign performance" aria-busy="true">
+    <div className="page-wrap campaign-analytics-page skeleton-page" role="region" aria-label="Loading campaign performance" aria-busy="true">
       <PageHeader title={<Skeleton className="skeleton-word skeleton-title-sm" />} description="Campaign performance: from comment to delivered link." actions={<><Skeleton className="skeleton-button" /><Skeleton className="skeleton-button" /></>} />
       {body}
-    </main>
+    </div>
   );
 }
 

@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { LinkarMark } from "@/src/components/linkar-mark";
-import { getWorkspaceBootstrap, refreshWorkspaceBootstrap } from "@/src/lib/client/workspace-data";
+import { getWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT } from "@/src/lib/client/workspace-data";
 import { SegmentedIndicator } from "./segmented-indicator";
 import { Skeleton } from "./skeleton";
 import { ThemeToggle } from "./theme-toggle";
@@ -102,6 +102,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [identityError, setIdentityError] = useState("");
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
+  const accountMenuButtonRef = useRef<HTMLButtonElement>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -116,7 +117,13 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     const onPointer = (event: PointerEvent) => {
       if (!accountRef.current?.contains(event.target as Node)) setAccountMenuOpen(false);
     };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setAccountMenuOpen(false); };
+    // A disclosure, not an ARIA menu: Tab moves through its links as usual,
+    // and Escape closes it and hands focus back to the toggle.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setAccountMenuOpen(false);
+      accountMenuButtonRef.current?.focus();
+    };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -157,7 +164,9 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   }, []);
 
   // Refresh on focus + reconnect so role / plan / avatar updates from a
-  // sibling tab or a flaky network are picked up without a full reload.
+  // sibling tab or a flaky network are picked up without a full reload, and
+  // right away when this tab changes billing or a channel connection
+  // (notifyWorkspaceChanged in workspace-data.ts).
   useEffect(() => {
     let active = true;
     function onFocus() {
@@ -176,9 +185,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         .catch(() => undefined);
     }
     window.addEventListener("focus", onFocus);
+    window.addEventListener(WORKSPACE_CHANGE_EVENT, onFocus);
     return () => {
       active = false;
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener(WORKSPACE_CHANGE_EVENT, onFocus);
     };
   }, []);
 
@@ -221,6 +232,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   return (
     <AccountIdentityContext.Provider value={{ email, role, plan, supportEmail, mode }}>
       <SegmentedIndicator />
+      <a className="skip-link" href="#main-content">Skip to content</a>
       <div className="app-frame">
       <header className="mobile-topbar" inert={drawerOpen}>
         <button
@@ -309,17 +321,17 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           ) : (
             <>
               {accountMenuOpen ? (
-                <div className="account-menu" role="menu" aria-label="Account">
+                <div className="account-menu" id="account-menu">
                   <div className="account-menu-head">
                     <strong>{displayNameFromEmail(email)}</strong>
                     <small>{email || `${PRODUCT_NAME} workspace`}</small>
                   </div>
-                  <Link className="account-menu-item" role="menuitem" href="/profile" onClick={() => { setAccountMenuOpen(false); closeDrawer(); }}>
+                  <Link className="account-menu-item" href="/profile" onClick={() => { setAccountMenuOpen(false); closeDrawer(); }}>
                     <UserRound size={16} strokeWidth={1.9} /> My profile
                   </Link>
                   <ThemeToggle className="account-menu-item" showLabel />
                   <form action="/api/auth/logout" method="post">
-                    <button className="account-menu-item is-danger" role="menuitem" type="submit">
+                    <button className="account-menu-item is-danger" type="submit">
                       <LogOut size={16} strokeWidth={1.9} />
                       <span>Sign out</span>
                     </button>
@@ -349,10 +361,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   </span>
                 </Link>
                 <button
+                  ref={accountMenuButtonRef}
                   type="button"
                   className="account-row-more"
                   aria-label="Account menu"
-                  aria-haspopup="menu"
+                  aria-controls={accountMenuOpen ? "account-menu" : undefined}
                   aria-expanded={accountMenuOpen}
                   onClick={() => setAccountMenuOpen((open) => !open)}
                 >
@@ -364,9 +377,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </div>
       </aside>
 
-        <div className="main-content" inert={drawerOpen} aria-hidden={drawerOpen || undefined}>
+        {/* The one landmark for page content; screens render plain wrappers
+            inside it. tabIndex lets the skip link move focus here. */}
+        <main id="main-content" className="main-content" tabIndex={-1} inert={drawerOpen} aria-hidden={drawerOpen || undefined}>
           <div className="app-content-slot">{children}</div>
-        </div>
+        </main>
       </div>
     </AccountIdentityContext.Provider>
   );
