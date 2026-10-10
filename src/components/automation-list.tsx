@@ -52,18 +52,22 @@ export function clearAutomationsCache(): void {
 }
 
 export function useAutomations(initialData?: AutomationRecord[]) {
-  // Server-provided rows win for the first render. The module cache is shared
-  // across requests during SSR, so reading it first could render stale (or
-  // another session's) rows and then mismatch on hydration.
+  // Server-provided rows win for the first render. The module cache lives for
+  // the whole server process during SSR and is shared by every request, so it
+  // is only ever read or written in the browser - otherwise one workspace's
+  // seeded rows would render for the next request that arrives without
+  // initialData.
   const [automations, setAutomations] = useState<AutomationRecord[]>(() => {
+    const inBrowser = typeof window !== "undefined";
     if (initialData) {
-      seedAutomations(initialData);
+      if (inBrowser) seedAutomations(initialData);
       return initialData;
     }
-    return automationsCache.value ?? [];
+    return inBrowser ? automationsCache.value ?? [] : [];
   });
   const seededFromServer = useRef(initialData !== undefined);
-  const [loading, setLoading] = useState(() => initialData === undefined && readFreshAutomations() === undefined);
+  const [loading, setLoading] = useState(() =>
+    initialData === undefined && (typeof window === "undefined" || readFreshAutomations() === undefined));
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -243,6 +247,11 @@ export function AutomationList({
 }) {
   const [pendingId, setPendingId] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState("");
+  const confirmDeleteRef = useRef<HTMLButtonElement>(null);
+  // Move focus onto the confirmation so blur/Escape can back out of it.
+  useEffect(() => {
+    if (confirmDeleteId) confirmDeleteRef.current?.focus();
+  }, [confirmDeleteId]);
   const [historyForId, setHistoryForId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const usernames = useConnectionUsernames();
@@ -346,7 +355,7 @@ export function AutomationList({
             {facebookPageChip(automation)}
           </div>
           {!compact && (
-            <div className="automation-actions" aria-label={`Actions for ${automation.name}`}>
+            <div className="automation-actions" role="group" aria-label={`Actions for ${automation.name}`}>
               <button
                 className="status-switch"
                 type="button"
@@ -404,15 +413,25 @@ export function AutomationList({
               )}
               {onDelete && (
                 confirmDeleteId === automation.id ? (
+                  // Spelled out rather than a recoloured trash icon, and it backs
+                  // out on blur or Escape so a stray click later can't delete.
                   <button
-                    className="icon-button icon-danger is-confirming"
+                    className="button button-danger button-small is-confirming"
                     type="button"
                     disabled={pending}
+                    ref={confirmDeleteRef}
                     aria-label={`Confirm delete ${automation.name}`}
-                    title="Click again to permanently delete"
+                    title="Permanently delete this automation"
                     onClick={() => void runAction(automation.id, () => onDelete(automation.id))}
+                    onBlur={() => { if (!pending) setConfirmDeleteId(""); }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.stopPropagation();
+                        setConfirmDeleteId("");
+                      }
+                    }}
                   >
-                    <Trash2 size={15} />
+                    Confirm delete?
                   </button>
                 ) : (
                   <button

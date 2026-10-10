@@ -18,6 +18,13 @@ type AutomationOption = { id: string; name: string };
 const EMPTY_STEPS: SequenceStepView[] = [{ id: "step-initial", delayHours: 0, text: "" }];
 
 /**
+ * Mirrors MAX_STEP_DELAY_HOURS in src/lib/automation/sequence.ts: Meta only
+ * accepts an automated DM inside the 24-hour messaging window, so the API
+ * rejects any gap of 24 hours or more.
+ */
+const MAX_STEP_DELAY_HOURS = 23;
+
+/**
  * Step ids only have to be unique within one submitted sequence, but they used to
  * be `step-${Date.now()}` - two clicks inside the same millisecond produced a
  * duplicate pair, which the API rejects outright. The counter makes that
@@ -67,7 +74,7 @@ export function SequencesScreen() {
       ]);
       const [sequencePayload, automationPayload] = await Promise.all([
         sequenceResponse.json().catch(() => ({})) as Promise<{ data?: SequenceRow[]; error?: string }>,
-        automationResponse.json().catch(() => ({})) as Promise<{ data?: { id: string; name: string; version: number }[]; error?: string }>,
+        automationResponse.json().catch(() => ({})) as Promise<{ data?: { id: string; name: string; definition?: { version?: number } }[]; error?: string }>,
       ]);
       if (signal?.aborted) return;
       if (!sequenceResponse.ok) throw new Error(sequencePayload.error ?? "Could not load sequences.");
@@ -75,7 +82,9 @@ export function SequencesScreen() {
       setSequences(sequencePayload.data ?? []);
       setAutomations(
         (automationPayload.data ?? [])
-          .filter((automation) => automation.version === 1)
+          // Classic (definition v1) flows are the only ones that can enroll into a
+          // sequence. `Automation.version` is an edit counter, not the flow shape.
+          .filter((automation) => automation.definition?.version === 1)
           .map(({ id, name }) => ({ id, name })),
       );
     } catch (error) {
@@ -120,7 +129,7 @@ export function SequencesScreen() {
   function addStep() {
     setSteps((current) => [
       ...current,
-      { id: nextStepId(), delayHours: 24, text: "" },
+      { id: nextStepId(), delayHours: MAX_STEP_DELAY_HOURS, text: "" },
     ]);
   }
 
@@ -129,6 +138,9 @@ export function SequencesScreen() {
     setFormError("");
     if (!name.trim()) return setFormError("Give the sequence a name.");
     if (steps.some((step) => !step.text.trim())) return setFormError("Every step needs a message.");
+    if (steps.some((step) => Number(step.delayHours) > MAX_STEP_DELAY_HOURS)) {
+      return setFormError(`Each step can wait at most ${MAX_STEP_DELAY_HOURS} hours - Meta only allows automated messages within 24 hours of the person's last message.`);
+    }
 
     const payload = {
       name: name.trim(),
@@ -310,11 +322,14 @@ export function SequencesScreen() {
                     <input
                       type="number"
                       min={0}
-                      max={2160}
+                      max={MAX_STEP_DELAY_HOURS}
                       value={String(step.delayHours)}
                       onChange={(e) => updateStep(index, { delayHours: e.target.value })}
                     />
-                    <small>{index === 0 ? "0 = send right after enrollment" : "hours after the previous step"}</small>
+                    <small>
+                      {index === 0 ? "0 = send right after enrollment" : "hours after the previous step"}
+                      {` - up to ${MAX_STEP_DELAY_HOURS}, because Meta only allows automated messages within 24 hours of the person’s last message.`}
+                    </small>
                   </label>
                   <label className="field">
                     <span>Message</span>

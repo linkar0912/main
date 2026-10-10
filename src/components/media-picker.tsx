@@ -151,6 +151,18 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
     }
   }
 
+  async function retryFirstPage() {
+    setLoading(true);
+    setError("");
+    try {
+      await loadPage(undefined, () => mountedRef.current);
+    } catch (caught) {
+      if (mountedRef.current) setError(caught instanceof Error ? caught.message : "Could not load your Instagram media");
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }
+
   function toggle(id: string) {
     const nextIds = selectedIds.includes(id) ? selectedIds.filter((value) => value !== id) : [...selectedIds, id];
     const snapshots = nextIds
@@ -176,8 +188,14 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
     );
   }
 
-  if (error) {
-    return <p className="form-error" role="alert">{error}</p>;
+  // Nothing loaded yet, so there is no grid or selection to keep on screen.
+  if (error && items.length === 0) {
+    return (
+      <div className="media-picker">
+        <p className="form-error" role="alert">{error}</p>
+        <button type="button" className="button button-secondary button-small" onClick={() => void retryFirstPage()}>Retry</button>
+      </div>
+    );
   }
 
   if (items.length === 0) {
@@ -186,6 +204,15 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
 
   return (
     <div className="media-picker">
+      {/* A failed "Load more" keeps the grid and the selection already made. */}
+      {error ? (
+        <div className="field-support">
+          <p className="form-error" role="alert">{error}</p>
+          <button type="button" className="button button-secondary button-small" onClick={() => void loadMore()} disabled={loadingMore}>
+            {loadingMore ? "Retrying…" : "Retry"}
+          </button>
+        </div>
+      ) : null}
       <div className="media-grid">
         {items.map((media) => {
           const selected = selectedIds.includes(media.id);

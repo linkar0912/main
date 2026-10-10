@@ -181,6 +181,32 @@ describe("DashboardScreen onboarding", () => {
     expect(screen.queryByText("Paused")).toBeNull();
   });
 
+  it("labels referral and opt-in automations by their real trigger, not as comment replies", async () => {
+    const base = {
+      workspaceId: "workspace_1", provider: "INSTAGRAM" as const, status: "ACTIVE" as const, version: 1, priority: 0,
+      createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z",
+    };
+    automationState.automations = [
+      { ...base, id: "a_referral", name: "Ref flow", definition: { version: 1, trigger: { type: "referral" }, conditions: [], actions: [] } },
+      { ...base, id: "a_optin", name: "Optin flow", definition: { version: 1, trigger: { type: "optin" }, conditions: [], actions: [] } },
+    ];
+    stubDashboardFetch();
+    render(<DashboardScreen />);
+
+    expect(await screen.findByText("Referral link taps")).toBeTruthy();
+    expect(screen.getByText("Permission button taps")).toBeTruthy();
+    expect(screen.queryByText("Comment replies")).toBeNull();
+  });
+
+  it("tags the Start here recipe cards as templates", async () => {
+    stubDashboardFetch();
+    render(<DashboardScreen />);
+
+    const startHere = await screen.findByRole("region", { name: "Start here" });
+    expect(within(startHere).getAllByText("Template")).toHaveLength(3);
+    expect(within(startHere).queryByText("Quick Automation")).toBeNull();
+  });
+
   it("renders activity as one continuous chart field", async () => {
     stubDashboardFetch();
     render(<DashboardScreen />);

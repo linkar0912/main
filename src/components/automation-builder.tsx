@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "./page-header";
 import {
   AlertTriangle,
@@ -33,6 +33,9 @@ import { AutomationPriorityField } from "./automation-builder/delivery-controls-
 import { ChannelReviewItem } from "./automation-builder/review-section";
 import { ActionNotice } from "./action-notice";
 import { toReadableApiError } from "@/src/lib/validation-error";
+import { formatDateTime } from "@/src/lib/format-date";
+import { useFocusTrap } from "./use-focus-trap";
+import { useUnsavedChangesGuard } from "./automation-builder/unsaved-changes";
 
 type AutomationBuilderProps = {
   automationId?: string;
@@ -45,11 +48,13 @@ type AutomationBuilderProps = {
   onSaved?: (automation: unknown) => void;
 };
 
-type ConnectionSummary = { username: string; igUserId: string; avatarUrl?: string };
+type ConnectionSummary = { username: string; igUserId: string; avatarUrl?: string; status?: string };
 
-/** Every Instagram account connected to this workspace, for the account picker and previews. */
-function useInstagramConnections(): ConnectionSummary[] {
+/** Every Instagram account connected to this workspace, for the account picker and previews.
+ * `loaded` lets callers tell "none connected" apart from "still loading". */
+function useInstagramConnections(): { connections: ConnectionSummary[]; loaded: boolean } {
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     let active = true;
     getInstagramConnections()
@@ -61,23 +66,37 @@ function useInstagramConnections(): ConnectionSummary[] {
             .map((connection) => ({
               username: connection.username,
               igUserId: connection.igUserId ?? "",
+              ...(connection.status ? { status: connection.status } : {}),
               ...(connection.profilePictureUrl ? { avatarUrl: connection.profilePictureUrl } : {}),
             })),
         );
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoaded(true);
+      });
     return () => {
       active = false;
     };
   }, []);
-  return connections;
+  return { connections, loaded };
+}
+
+/** The account an automation pins to when nobody picked one: the first
+ * CONNECTED account (an expired one would only fail at send time), falling
+ * back to any account so an all-expired workspace still shows something. */
+function defaultInstagramAccountId(connections: { igUserId?: string; status?: string }[]): string {
+  return connections.find((item) => item.igUserId && item.status === "CONNECTED")?.igUserId
+    || connections.find((item) => item.igUserId)?.igUserId
+    || "";
 }
 
 /** Every Facebook Page connected to this workspace, for the page picker and the
  * Facebook preview. Mirrors `useInstagramConnections` so the two channels
  * can be interchanged by the channel toggle. */
-function useFacebookPages(): FacebookPageSummary[] {
+function useFacebookPages(): { pages: FacebookPageSummary[]; loaded: boolean } {
   const [pages, setPages] = useState<FacebookPageSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     let active = true;
     getFacebookPages()
@@ -85,18 +104,27 @@ function useFacebookPages(): FacebookPageSummary[] {
         if (!active) return;
         setPages(data);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoaded(true);
+      });
     return () => {
       active = false;
     };
   }, []);
-  return pages;
+  return { pages, loaded };
 }
 
-/** The workspace's first connected Instagram account, so the phone preview shows the real
- * handle, account ID and profile photo instead of placeholders. Degrades to null when nothing is connected. */
-function useConnectedInstagram(): ConnectionSummary | null {
-  return useInstagramConnections()[0] ?? null;
+/**
+ * After the first save of a new automation, point the address bar at its edit
+ * route so a reload (or Back/Forward) opens the saved automation instead of a
+ * blank builder that would POST a duplicate. replaceState keeps the mounted
+ * builder - and its success notice - in place; Next.js syncs its router to it.
+ */
+function adoptEditUrl(id: string) {
+  if (typeof window === "undefined") return;
+  if (!window.location.pathname.startsWith("/automations/new")) return;
+  window.history.replaceState(window.history.state, "", `/automations/${encodeURIComponent(id)}/edit`);
 }
 
 const QUICK_REPLY_LABEL_MAX_LENGTH = 20;
@@ -191,6 +219,12 @@ function localInputToIso(value: string): string | undefined {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 }
 
+/** Pretty-prints a datetime-local value ("2026-10-10T14:30") for the review step. */
+function formatScheduleInput(value: string): string {
+  const iso = localInputToIso(value);
+  return iso ? formatDateTime(iso) : value;
+}
+
 function isoToLocalInput(value: string | undefined): string {
   if (!value) return "";
   const date = new Date(value);
@@ -220,10 +254,12 @@ function AutomationBuilderV1({
 }) {
   const [name, setName] = useState(initialName);
   const [instagramAccountId, setInstagramAccountId] = useState(initialInstagramAccountId);
+  // Every save after the first PATCHes this id; without it each click POSTed a duplicate.
+  const [savedAutomationId, setSavedAutomationId] = useState(automationId);
   const [channel, setChannel] = useState<"INSTAGRAM" | "FACEBOOK">(
     initialFacebookPageId ? "FACEBOOK" : "INSTAGRAM",
   );
-  const facebookPages = useFacebookPages();
+  const { pages: facebookPages, loaded: facebookPagesLoaded } = useFacebookPages();
   // Default the channel off; once a Facebook page is selected the preview +
   // pin all use Facebook. If both fields are set on the server, the API will
   // return 400 so we clear the other channel when the user picks one.
@@ -312,34 +348,28 @@ function AutomationBuilderV1({
   const [highestUnlockedStep, setHighestUnlockedStep] = useState(automationId ? 99 : 0);
   const [previewView, setPreviewView] = useState<PreviewView>(initialDefinition.trigger.type === "comment" ? "post" : "dm");
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
-  const connections = useInstagramConnections();
-  const connection = connections[0] ?? null;
-  // Classic flows reference media by pasted IDs; pull thumbnails so the phone
-  // preview can render the real post. Display-only - never saved.
+  const previewRef = useRef<HTMLElement>(null);
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
+  useFocusTrap(previewRef, {
+    active: mobilePreviewOpen,
+    onEscape: () => setMobilePreviewOpen(false),
+    initialFocusRef: previewCloseRef,
+  });
+  const { connections, loaded: connectionsLoaded } = useInstagramConnections();
+  // Same rule as the campaign builder: an unpicked account defaults to the
+  // first connected one, because the API requires every automation to be pinned.
+  const selectedInstagramAccountId = instagramAccountId || defaultInstagramAccountId(connections);
+  const connection = connections.find((item) => item.igUserId === selectedInstagramAccountId) ?? connections[0] ?? null;
+  const connectedFacebookPageIds = new Set(
+    facebookPages.filter((page) => page.status === "CONNECTED").map((page) => page.pageId),
+  );
+  // Thumbnails reported by the post picker so the phone preview can render
+  // the real post. Display-only - never saved.
   const [mediaThumbs, setMediaThumbs] = useState<Record<string, { thumbnailUrl?: string; isReel?: boolean }>>({});
-  useEffect(() => {
-    if (triggerType !== "comment") return;
-    let active = true;
-    fetch("/api/meta/media")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { id: string; thumbnailUrl?: string; mediaUrl?: string; mediaProductType?: string }[] } | null) => {
-        if (!active || !payload?.data) return;
-        const index: Record<string, { thumbnailUrl?: string; isReel?: boolean }> = {};
-        for (const media of payload.data) {
-          const thumbnailUrl = media.thumbnailUrl ?? media.mediaUrl;
-          if (!thumbnailUrl && media.mediaProductType !== "REELS") continue;
-          index[media.id] = {
-            ...(thumbnailUrl ? { thumbnailUrl } : {}),
-            ...(media.mediaProductType === "REELS" ? { isReel: true } : {}),
-          };
-        }
-        setMediaThumbs(index);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [triggerType]);
+  const onMediaIndexChange = useCallback(
+    (index: Record<string, { thumbnailUrl?: string; isReel?: boolean }>) => setMediaThumbs(index),
+    [],
+  );
 
   const usesTextTrigger = triggerType === "comment" || triggerType === "message" || triggerType === "story_reply";
   const isFacebook = channel === "FACEBOOK";
@@ -393,9 +423,26 @@ function AutomationBuilderV1({
     return key === "trigger" || key === "condition" ? "post" : "dm";
   }
 
+  /** Where the automation will run; checked on the first step so a missing
+   * Page or account surfaces before the person writes the whole flow. */
+  function targetError(): string | null {
+    if (channel === "FACEBOOK") {
+      if (facebookPageId) return null;
+      return facebookPagesLoaded && connectedFacebookPageIds.size === 0
+        ? "Connect a Facebook Page in Settings before building a Page automation."
+        : "Select a connected Facebook Page.";
+    }
+    if (connectionsLoaded && !selectedInstagramAccountId) {
+      return "Connect an Instagram account in Settings before saving this automation.";
+    }
+    return null;
+  }
+
   function validateStep(key: (typeof wizardSteps)[number]): string | null {
     if (key === "trigger") {
       if (!name.trim()) return "Give this automation a name first.";
+      const target = targetError();
+      if (target) return target;
       if (usesTextTrigger && triggerMatch === "keyword" && parseKeywords(keywords).length === 0) {
         return "Add at least one keyword.";
       }
@@ -630,6 +677,15 @@ function AutomationBuilderV1({
     };
   }
 
+  /** Everything a save persists, for unsaved-changes tracking. Uses the raw
+   * account pick rather than the defaulted one, so connections arriving after
+   * mount don't read as an edit. */
+  function dirtySnapshot(): string {
+    return JSON.stringify({ name, channel, instagramAccountId, facebookPageId, priority, definition: buildDefinition() });
+  }
+  const [savedSnapshot, setSavedSnapshot] = useState(dirtySnapshot);
+  useUnsavedChangesGuard(dirtySnapshot() !== savedSnapshot);
+
   async function save(intent: "draft" | "activate") {
     setError("");
     setSavedIntent(null);
@@ -699,20 +755,31 @@ function AutomationBuilderV1({
         status: intent === "activate" ? "ACTIVE" : "DRAFT",
       };
       if (channel === "FACEBOOK") {
-        if (!facebookPageId) throw new Error("Select a connected Facebook Page before saving.");
+        if (!facebookPageId) throw new Error(targetError() ?? "Select a connected Facebook Page before saving.");
         body.facebookPageId = facebookPageId;
         body.instagramAccountId = null;
       } else {
-        body.instagramAccountId = instagramAccountId || null;
+        // The API requires a pin; "all accounts" (null) was always a 400.
+        // A save racing the first connections load resolves the default itself.
+        const accountId = selectedInstagramAccountId
+          || defaultInstagramAccountId(await getInstagramConnections().catch(() => []));
+        if (!accountId) throw new Error("Connect an Instagram account in Settings before saving this automation.");
+        body.instagramAccountId = accountId;
         body.facebookPageId = null;
       }
-      const response = await fetch(automationId ? `/api/automations/${automationId}` : "/api/automations", {
-        method: automationId ? "PATCH" : "POST",
+      const snapshot = dirtySnapshot();
+      const response = await fetch(savedAutomationId ? `/api/automations/${savedAutomationId}` : "/api/automations", {
+        method: savedAutomationId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: { id?: string }; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");
+      if (payload.data.id) {
+        if (!savedAutomationId) adoptEditUrl(payload.data.id);
+        setSavedAutomationId(payload.data.id);
+      }
+      setSavedSnapshot(snapshot);
       onSaved?.(payload.data);
       setSavedIntent(intent);
     } catch (caught) {
@@ -765,7 +832,7 @@ function AutomationBuilderV1({
       <div className="builder-main">
         <PageHeader
           className="builder-header"
-          title={automationId ? "Edit automatic reply" : "Create an automatic reply"}
+          title={savedAutomationId ? "Edit automatic reply" : "Create an automatic reply"}
           description="Pick the trigger, write the reply, then review before turning it on."
           tabs={(
             <BuilderStepTabs
@@ -790,10 +857,12 @@ function AutomationBuilderV1({
 
         <ChannelSelector
           channel={channel}
-          instagramAccountId={instagramAccountId}
+          instagramAccountId={selectedInstagramAccountId}
           facebookPageId={facebookPageId}
           instagramConnections={connections}
+          instagramLoaded={connectionsLoaded}
           facebookPages={facebookPages}
+          facebookLoaded={facebookPagesLoaded}
           onChannelChange={(next) => {
             if (next === channel) return;
             if (channel === "FACEBOOK") {
@@ -915,6 +984,7 @@ function AutomationBuilderV1({
                 provider={channel}
                 onMediaIdsChange={setMediaIds}
                 onReplyOncePerUserChange={setReplyOncePerUser}
+                onMediaIndexChange={onMediaIndexChange}
               />
             )}
           </div>
@@ -944,12 +1014,12 @@ function AutomationBuilderV1({
                       >
                         <option value="">No extra condition</option>
                         <option value="contains_keyword">The text contains a keyword</option>
-                        <option value="media_is">The post is one of these IDs</option>
+                        <option value="media_is">{isFacebook ? "The post is one of these IDs" : "The post is one of these posts"}</option>
                       </select>
                       <ChevronDown size={16} />
                     </span>
                   </label>
-                  {conditionType !== "" && (
+                  {conditionType !== "" && !(conditionType === "media_is" && !isFacebook) && (
                     <label className="field">
                       <span>{conditionType === "contains_keyword" ? "Condition keywords" : "Post IDs"}</span>
                       <input
@@ -961,6 +1031,15 @@ function AutomationBuilderV1({
                     </label>
                   )}
                 </div>
+                {conditionType === "media_is" && !isFacebook && (
+                  <div className="field field-spaced">
+                    <span>Only these posts</span>
+                    <MediaPicker
+                      selectedIds={parseCommaSeparated(conditionValue)}
+                      onChange={(ids) => setConditionValue(commaSeparated(ids))}
+                    />
+                  </div>
+                )}
               </div>
             </section>
           </div>
@@ -981,7 +1060,9 @@ function AutomationBuilderV1({
               <div className="classic-action" key={index}>
                 <div className="classic-action-head">
                   <span className="classic-action-index">Step {index + 1}</span>
-                  {!usesTextTrigger && (
+                  {/* Comment flows only allow their single reply type; every DM-side
+                      trigger (keyword DMs and Story replies included) can pick any. */}
+                  {triggerType !== "comment" && (
                     <span className="select-wrap">
                       <select
                         aria-label={`What Linkar should send in step ${index + 1}`}
@@ -1255,7 +1336,7 @@ function AutomationBuilderV1({
                       maxLength={500}
                       placeholder="You’re in! ✅ Check your inbox."
                     />
-                    <small>Captured emails appear on your My Automations page - export them as CSV any time.</small>
+                    <small>Captured emails are saved to Contacts - use Export CSV there to download them any time.</small>
                   </label>
 
                   <label className="field checkbox-field field-spaced">
@@ -1482,7 +1563,7 @@ function AutomationBuilderV1({
               <li>Priority: {priority || "0"}</li>
               <ChannelReviewItem provider={channel} connectionName={facebookPages.find((page) => page.pageId === facebookPageId)?.pageName} />
               {(scheduleStart || scheduleEnd) && (
-                <li>Active {scheduleStart ? `from ${scheduleStart}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${scheduleEnd}` : ""}</li>
+                <li>Active {scheduleStart ? `from ${formatScheduleInput(scheduleStart)}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${formatScheduleInput(scheduleEnd)}` : ""}</li>
               )}
             </ul>
             {hasPlaceholderLinks && (
@@ -1496,7 +1577,7 @@ function AutomationBuilderV1({
         </div>
 
         <div className="builder-footer">
-          <button type="button" aria-label="Open phone mockup" className="button button-secondary builder-mobile-preview-trigger" onClick={() => { setError(""); setMobilePreviewOpen(true); }}>
+          <button type="button" className="button button-secondary builder-mobile-preview-trigger" aria-expanded={mobilePreviewOpen} onClick={() => { setError(""); setMobilePreviewOpen(true); }}>
             <Eye size={16} /> Preview
           </button>
           <div className="builder-actions">
@@ -1529,10 +1610,16 @@ function AutomationBuilderV1({
       </div>
 
       {mobilePreviewOpen ? <button type="button" className="builder-preview-scrim" aria-label="Close phone mockup backdrop" onClick={() => setMobilePreviewOpen(false)} /> : null}
-      <aside className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`} aria-label="Message preview">
+      <aside
+        ref={previewRef}
+        tabIndex={-1}
+        className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`}
+        aria-label="Message preview"
+        {...(mobilePreviewOpen ? { role: "dialog", "aria-modal": true } : {})}
+      >
         <div className="builder-preview-heading">
           <p className="eyebrow">Message preview</p>
-          <button type="button" className="icon-button builder-preview-close" aria-label="Close phone mockup" onClick={() => setMobilePreviewOpen(false)}><X size={17} /></button>
+          <button ref={previewCloseRef} type="button" className="icon-button builder-preview-close" aria-label="Close phone mockup" onClick={() => setMobilePreviewOpen(false)}><X size={17} /></button>
         </div>
         <div className="preview-line" />
         {facebookPageId ? (
@@ -1666,10 +1753,15 @@ function AutomationBuilderV2({
   const [highestUnlockedStep, setHighestUnlockedStep] = useState(automationId ? WIZARD_STEPS.length - 1 : 0);
   const [previewView, setPreviewView] = useState<PreviewView>("post");
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
-  const connections = useInstagramConnections();
-  const selectedInstagramAccountId = instagramAccountId
-    || connections.find((item) => item.igUserId)?.igUserId
-    || "";
+  const previewRef = useRef<HTMLElement>(null);
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
+  useFocusTrap(previewRef, {
+    active: mobilePreviewOpen,
+    onEscape: () => setMobilePreviewOpen(false),
+    initialFocusRef: previewCloseRef,
+  });
+  const { connections } = useInstagramConnections();
+  const selectedInstagramAccountId = instagramAccountId || defaultInstagramAccountId(connections);
   const connection = connections.find((item) => item.igUserId === selectedInstagramAccountId)
     ?? connections[0]
     ?? null;
@@ -1810,6 +1902,21 @@ function AutomationBuilderV2({
     return null;
   }
 
+  /** Everything a save persists, for unsaved-changes tracking. Media is
+   * compared by id: the picker hydrates snapshots after mount, which is not
+   * an edit. */
+  function dirtySnapshot(): string {
+    const definition = buildDefinition();
+    return JSON.stringify({
+      name,
+      instagramAccountId,
+      priority,
+      definition: { ...definition, trigger: { ...definition.trigger, mediaSnapshots: [] } },
+    });
+  }
+  const [savedSnapshot, setSavedSnapshot] = useState(dirtySnapshot);
+  useUnsavedChangesGuard(dirtySnapshot() !== savedSnapshot);
+
   async function save(intent: "draft" | "activate") {
     setError("");
     const validationError = validate();
@@ -1820,6 +1927,7 @@ function AutomationBuilderV2({
     setPendingIntent(intent);
     try {
       const parsedPriority = Number.parseInt(priority, 10);
+      const snapshot = dirtySnapshot();
       const response = await fetch(savedAutomationId ? `/api/automations/${savedAutomationId}` : "/api/automations", {
         method: savedAutomationId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
@@ -1834,7 +1942,9 @@ function AutomationBuilderV2({
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: { id: string }; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");
+      if (!savedAutomationId) adoptEditUrl(payload.data.id);
       setSavedAutomationId(payload.data.id);
+      setSavedSnapshot(snapshot);
 
       onSaved?.(payload.data);
       setSavedIntent(intent);
@@ -2310,7 +2420,7 @@ function AutomationBuilderV2({
                 </li>
                 {campaignDailyLimit && <li>Daily send limit: {campaignDailyLimit}</li>}
                 {(scheduleStart || scheduleEnd) && (
-                  <li>Active {scheduleStart ? `from ${scheduleStart}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${scheduleEnd}` : ""}</li>
+                  <li>Active {scheduleStart ? `from ${formatScheduleInput(scheduleStart)}` : ""}{scheduleStart && scheduleEnd ? " " : ""}{scheduleEnd ? `until ${formatScheduleInput(scheduleEnd)}` : ""}</li>
                 )}
               </ul>
             </div>
@@ -2318,7 +2428,7 @@ function AutomationBuilderV2({
         </div>
 
         <div className="builder-footer">
-          <button type="button" aria-label="Open phone mockup" className="button button-secondary builder-mobile-preview-trigger" onClick={() => { setError(""); setMobilePreviewOpen(true); }}>
+          <button type="button" className="button button-secondary builder-mobile-preview-trigger" aria-expanded={mobilePreviewOpen} onClick={() => { setError(""); setMobilePreviewOpen(true); }}>
             <Eye size={16} /> Preview
           </button>
           <div className="builder-actions">
@@ -2356,10 +2466,16 @@ function AutomationBuilderV2({
       </div>
 
       {mobilePreviewOpen ? <button type="button" className="builder-preview-scrim" aria-label="Close phone mockup backdrop" onClick={() => setMobilePreviewOpen(false)} /> : null}
-      <aside className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`} aria-label="Message preview">
+      <aside
+        ref={previewRef}
+        tabIndex={-1}
+        className={`builder-preview${mobilePreviewOpen ? " is-open" : ""}`}
+        aria-label="Message preview"
+        {...(mobilePreviewOpen ? { role: "dialog", "aria-modal": true } : {})}
+      >
         <div className="builder-preview-heading">
           <p className="eyebrow">Message preview</p>
-          <button type="button" className="icon-button builder-preview-close" aria-label="Close phone mockup" onClick={() => setMobilePreviewOpen(false)}><X size={17} /></button>
+          <button ref={previewCloseRef} type="button" className="icon-button builder-preview-close" aria-label="Close phone mockup" onClick={() => setMobilePreviewOpen(false)}><X size={17} /></button>
         </div>
         <div className="preview-line" />
         <InstagramPreview

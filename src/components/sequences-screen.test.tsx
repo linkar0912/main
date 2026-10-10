@@ -43,7 +43,7 @@ describe("SequencesScreen", () => {
         }] }), { status: 200 });
       }
       if (!init?.method && url === "/api/automations") {
-        return new Response(JSON.stringify({ data: [{ id: "automation_1", name: "Lead capture", version: 1 }] }), { status: 200 });
+        return new Response(JSON.stringify({ data: [{ id: "automation_1", name: "Lead capture", version: 7, definition: { version: 1 } }] }), { status: 200 });
       }
       if (init?.method === "PATCH" && url === "/api/sequences/sequence_1") {
         return new Response(JSON.stringify({ data: { id: "sequence_1" } }), { status: 200 });
@@ -140,5 +140,69 @@ describe("SequencesScreen", () => {
 
     expect((await screen.findByRole("alert")).textContent).toContain("Sequence service unavailable");
     expect(screen.queryByText(/No sequences yet/i)).toBeNull();
+  });
+
+  it("offers only classic flows as sources, by definition version rather than the edit counter", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/sequences") return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      if (String(input) === "/api/automations") {
+        return new Response(JSON.stringify({ data: [
+          // Edited classic flow: the record counter moved past 1, the flow shape did not.
+          { id: "classic_edited", name: "Classic edited", version: 4, definition: { version: 1 } },
+          // A campaign whose record counter happens to be 1.
+          { id: "campaign_new", name: "Campaign new", version: 1, definition: { version: 2 } },
+        ] }), { status: 200 });
+      }
+      throw new Error(`Unhandled fetch: ${String(input)}`);
+    }));
+
+    render(<SequencesScreen />);
+    await screen.findByText(/No sequences yet/i);
+
+    const select = screen.getByLabelText(/enroll leads captured by/i);
+    const options = Array.from(select.querySelectorAll("option")).map((option) => option.textContent);
+    expect(options).toContain("Classic edited");
+    expect(options).not.toContain("Campaign new");
+  });
+
+  it("defaults new steps inside Meta's 24-hour window and caps the delay input there", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/sequences" || String(input) === "/api/automations") {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      throw new Error(`Unhandled fetch: ${String(input)}`);
+    }));
+
+    render(<SequencesScreen />);
+    await screen.findByText(/No sequences yet/i);
+    fireEvent.click(screen.getByRole("button", { name: /add step/i }));
+
+    const delays = screen.getAllByLabelText(/send after \(hours\)/i) as HTMLInputElement[];
+    expect(delays[1].value).toBe("23");
+    expect(delays[1].max).toBe("23");
+    expect(screen.getAllByText(/within 24 hours/i).length).toBeGreaterThan(0);
+  });
+
+  it("blocks saving a step delay past the 24-hour window", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!init?.method && (String(input) === "/api/sequences" || String(input) === "/api/automations")) {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      throw new Error(`Unhandled fetch: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SequencesScreen />);
+    await screen.findByText(/No sequences yet/i);
+    fireEvent.change(screen.getByLabelText(/sequence name/i), { target: { value: "Nurture" } });
+    fireEvent.click(screen.getByRole("button", { name: /add step/i }));
+    screen.getAllByLabelText(/^message$/i).forEach((field) => fireEvent.change(field, { target: { value: "Hi" } }));
+    fireEvent.change(screen.getAllByLabelText(/send after \(hours\)/i)[1], { target: { value: "48" } });
+    // Submit the form directly: the input's max already stops a native submit,
+    // this checks the guard behind it.
+    fireEvent.submit(screen.getByRole("button", { name: /create sequence/i }).closest("form")!);
+
+    expect(await screen.findByText(/at most 23 hours/i)).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
   });
 });

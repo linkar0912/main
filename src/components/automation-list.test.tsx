@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { AutomationList } from "./automation-list";
 import type { AutomationRecord } from "@/src/lib/repository";
@@ -187,5 +187,54 @@ describe("AutomationList activity link", () => {
     );
 
     expect(screen.queryByText(/Pinned to Facebook Page/)).toBeNull();
+  });
+});
+
+describe("AutomationList delete confirmation", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  function renderWithDelete(onDelete: (id: string) => Promise<void> = async () => {}) {
+    render(
+      <AutomationList
+        automations={[v2Automation()]}
+        loading={false}
+        onStatusChange={async () => {}}
+        onDelete={onDelete}
+      />,
+    );
+  }
+
+  it("names the action group for assistive tech", () => {
+    renderWithDelete();
+    expect(screen.getByRole("group", { name: "Actions for Follow-gated Reel automation" })).toBeTruthy();
+  });
+
+  it("asks with an explicit text button and deletes only on the second click", async () => {
+    const deleted: string[] = [];
+    renderWithDelete(async (id) => { deleted.push(id); });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Follow-gated Reel automation" }));
+    const confirm = screen.getByRole("button", { name: "Confirm delete Follow-gated Reel automation" });
+    expect(confirm.textContent).toBe("Confirm delete?");
+    expect(document.activeElement).toBe(confirm);
+    expect(deleted).toEqual([]);
+
+    fireEvent.click(confirm);
+    await waitFor(() => expect(deleted).toEqual(["automation_v2"]));
+  });
+
+  it("backs out of the confirmation on Escape and on blur", () => {
+    renderWithDelete();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Follow-gated Reel automation" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: /confirm delete/i }), { key: "Escape" });
+    expect(screen.queryByRole("button", { name: /confirm delete/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Follow-gated Reel automation" }));
+    fireEvent.blur(screen.getByRole("button", { name: /confirm delete/i }));
+    expect(screen.queryByRole("button", { name: /confirm delete/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Delete Follow-gated Reel automation" })).toBeTruthy();
   });
 });

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { History, X } from "lucide-react";
+import { useFocusTrap } from "./use-focus-trap";
 import { InlineContentSkeleton } from "./skeleton";
 import type { FlowDefinition } from "@/src/lib/automation/types";
 
@@ -42,6 +44,9 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Kept apart from the load error: a failed restore must not replace the list
+  // the person was just looking at.
+  const [restoreError, setRestoreError] = useState("");
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,7 +80,7 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
     const state = target?.status === "ACTIVE" ? "switched on" : target?.status === "PAUSED" ? "paused" : "a draft (switched off)";
     if (!confirm(`Restore v${target?.version ?? ""}? It replaces the current flow and the automation will be ${state}, as it was in that version.`)) return;
     setRestoringId(versionId);
-    setError("");
+    setRestoreError("");
     try {
       const response = await fetch(`/api/automations/${automationId}/versions/${versionId}/restore`, { method: "POST" });
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -88,7 +93,7 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
         if (data.data) setVersions(data.data);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not restore this version");
+      setRestoreError(caught instanceof Error ? caught.message : "Could not restore this version");
     } finally {
       setRestoringId(null);
     }
@@ -104,6 +109,8 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
     );
   }
   return (
+    <>
+    {restoreError ? <p className="form-error" role="alert">{restoreError}</p> : null}
     <ol className="timeline-list" aria-label="Automation version history">
       {versions.map((version) => (
         <li key={version.id}>
@@ -129,22 +136,20 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
         </li>
       ))}
     </ol>
+    </>
   );
 }
 
 /** Modal wrapper for the history panel. */
 export function AutomationVersionsModal({ automationId, onClose, onRestored }: { automationId: string; onClose: () => void; onRestored?: () => void }) {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, { onEscape: onClose });
 
-  return (
+  return portal(
     <div className="modal-scrim" role="presentation" onClick={onClose}>
       <div
+        ref={panelRef}
+        tabIndex={-1}
         className="modal-panel"
         role="dialog"
         aria-modal="true"
@@ -162,6 +167,12 @@ export function AutomationVersionsModal({ automationId, onClose, onRestored }: {
         </div>
         <AutomationVersionsPanel automationId={automationId} onRestored={onRestored} />
       </div>
-    </div>
+    </div>,
   );
+}
+
+// Rendered on <body> so no page stacking context (the sticky mobile top bar,
+// animated content slots, the automation row) can paint over the dialog.
+function portal(node: ReactNode) {
+  return typeof document === "undefined" ? node : createPortal(node, document.body);
 }
