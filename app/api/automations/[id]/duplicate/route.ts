@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 
 export const runtime = "nodejs";
 
@@ -27,6 +29,18 @@ export async function POST(request: Request, context: RouteContext) {
   }
   const suffix = " (copy)";
   const name = trimmed.length + suffix.length <= 120 ? `${trimmed}${suffix}` : `${trimmed.slice(0, 120 - suffix.length)}${suffix}`;
+  // A copy is a new automation: it counts against the plan exactly like
+  // POST /api/automations, otherwise duplicating is a way around the limit.
+  try {
+    await getEntitlementService().assertEntitled(
+      session.workspaceId,
+      "automations",
+      (await repository.listAutomations(session.workspaceId)).length,
+    );
+  } catch (error) {
+    return entitlementErrorResponse(error)
+      ?? NextResponse.json({ error: "entitlement_check_failed" }, { status: 500 });
+  }
   const copy = await repository.createAutomation(session.workspaceId, {
     provider: original.provider,
     name,

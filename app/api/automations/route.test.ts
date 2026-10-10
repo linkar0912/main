@@ -214,4 +214,43 @@ describe("POST /api/automations", () => {
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({ error: "limit_reached", capability: "automations", used: 3, limit: 3 });
   });
+
+  it("answers an invalid definition with a readable 400", async () => {
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.listConnections.mockResolvedValue([{ igUserId: "ig_1", status: "CONNECTED" }]);
+
+    const response = await POST(new Request("http://localhost/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "INSTAGRAM", instagramAccountId: "ig_1", name: "Broken", definition: { version: 1 } }),
+    }));
+
+    expect(response.status).toBe(400);
+    const body = await response.json() as { error: string };
+    expect(body.error).not.toContain("\"code\"");
+  });
+
+  it("hides repository failures behind a generic 500 instead of echoing Prisma text", async () => {
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.listConnections.mockResolvedValue([{ igUserId: "ig_1", status: "CONNECTED" }]);
+    mocks.createAutomation.mockRejectedValue(new Error("\nInvalid `prisma.automation.create()` invocation:\nUnique constraint failed"));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = await POST(new Request("http://localhost/api/automations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider: "INSTAGRAM",
+        instagramAccountId: "ig_1",
+        name: "Comment reply",
+        definition: { version: 1, trigger: { type: "message", match: "any", keywords: [] }, conditions: [], actions: [{ type: "send_text", text: "Hello" }] },
+      }),
+    }));
+
+    expect(response.status).toBe(500);
+    const body = await response.json() as { error: string };
+    expect(body.error).not.toContain("prisma");
+    expect(errorLog).toHaveBeenCalled();
+    errorLog.mockRestore();
+  });
 });

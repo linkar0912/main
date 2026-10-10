@@ -4,7 +4,8 @@ import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
 import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
-import { toReadableValidationError } from "@/src/lib/validation-error";
+import { isValidationError, toReadableValidationError } from "@/src/lib/validation-error";
+import { logger } from "@/src/lib/logger";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 import { parseAutomationTarget } from "@/src/lib/automation/channel-target";
@@ -39,7 +40,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Status must be DRAFT or ACTIVE" }, { status: 400 });
     }
     const status = body.status === "ACTIVE" ? "ACTIVE" : "DRAFT";
-    const target = parseAutomationTarget(body, { requirePin: true });
+    let target;
+    try {
+      target = parseAutomationTarget(body, { requirePin: true });
+    } catch {
+      return NextResponse.json({ error: "invalid_channel_target" }, { status: 400 });
+    }
     if (!target) return NextResponse.json({ error: "invalid_channel_target" }, { status: 400 });
     const definition = validateFlowDefinition(body.definition);
     const channelIssues = validateDefinitionForTarget(definition, {
@@ -81,6 +87,15 @@ export async function POST(request: Request) {
   } catch (error) {
     const entitlementResponse = entitlementErrorResponse(error);
     if (entitlementResponse) return entitlementResponse;
-    return NextResponse.json({ error: toReadableValidationError(error, "Invalid automation") }, { status: 400 });
+    if (isValidationError(error)) {
+      return NextResponse.json({ error: toReadableValidationError(error, "Invalid automation") }, { status: 400 });
+    }
+    // Repository/driver failures are not the caller's fault and their messages
+    // carry query internals: log the detail, answer with a generic 500.
+    logger.error("Could not create automation", {
+      workspaceId: session.workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Could not save this automation. Try again in a moment." }, { status: 500 });
   }
 }
