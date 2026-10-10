@@ -651,7 +651,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
 
     async listConnectionsExpiringBefore(before) {
       return copy([...connections.values()].filter((connection) =>
-        connection.status === "CONNECTED" && connection.tokenExpiresAt && connection.tokenExpiresAt <= before,
+        connection.status === "CONNECTED" && (!connection.tokenExpiresAt || connection.tokenExpiresAt <= before),
       ));
     },
 

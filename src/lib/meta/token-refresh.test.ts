@@ -51,7 +51,33 @@ describe("Instagram token refresh", () => {
       workspaceId: "workspace_a", igUserId: "ig_revoked", username: "creator",
       accessTokenEncrypted: sealSecret("revoked-token", key), tokenExpiresAt: "2026-09-01T00:00:00.000Z", status: "CONNECTED",
     });
-    await refreshExpiringInstagramTokens(repository, key, vi.fn().mockRejectedValue(new MetaOAuthError("invalid token", 400)), new Date("2026-08-20T00:00:00.000Z"));
+    await refreshExpiringInstagramTokens(repository, key, vi.fn().mockRejectedValue(new MetaOAuthError("invalid token", 400, 190)), new Date("2026-08-20T00:00:00.000Z"));
     expect((await repository.listConnections("workspace_a"))[0]?.status).toBe("EXPIRED");
+  });
+
+  it("keeps a still-valid connection when Meta rejects the refresh for another reason", async () => {
+    const key = randomBytes(32).toString("hex");
+    const repository = createMemoryRepository();
+    await repository.upsertConnection({
+      workspaceId: "workspace_a", igUserId: "ig_young", username: "creator",
+      accessTokenEncrypted: sealSecret("young-token", key), tokenExpiresAt: "2026-09-01T00:00:00.000Z", status: "CONNECTED",
+    });
+    await expect(refreshExpiringInstagramTokens(repository, key, vi.fn().mockRejectedValue(new MetaOAuthError("token too young", 400, 100)), new Date("2026-08-20T00:00:00.000Z")))
+      .resolves.toEqual({ refreshed: 0, failed: 1 });
+    expect((await repository.listConnections("workspace_a"))[0]?.status).toBe("CONNECTED");
+  });
+
+  it("refreshes connections whose expiry was never recorded", async () => {
+    const key = randomBytes(32).toString("hex");
+    const repository = createMemoryRepository();
+    await repository.upsertConnection({
+      workspaceId: "workspace_a", igUserId: "ig_unknown", username: "creator",
+      accessTokenEncrypted: sealSecret("unknown-expiry", key), status: "CONNECTED",
+    });
+    const refresher = vi.fn().mockResolvedValue({ accessToken: "fresh", expiresIn: 5_184_000 });
+    await expect(refreshExpiringInstagramTokens(repository, key, refresher, new Date("2026-08-20T00:00:00.000Z")))
+      .resolves.toEqual({ refreshed: 1, failed: 0 });
+    expect(refresher).toHaveBeenCalledWith("unknown-expiry");
+    expect((await repository.listConnections("workspace_a"))[0]?.tokenExpiresAt).toBe("2026-10-19T00:00:00.000Z");
   });
 });

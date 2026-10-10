@@ -1212,8 +1212,13 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async listConnectionsExpiringBefore(before) {
+      // An unknown expiry is treated as expiring: Meta did not tell us when the
+      // token dies, so refreshing it is the only way to learn (and extend) it.
       const records = await client.instagramConnection.findMany({
-        where: { status: "CONNECTED", tokenExpiresAt: { lte: new Date(before) } },
+        where: {
+          status: "CONNECTED",
+          OR: [{ tokenExpiresAt: null }, { tokenExpiresAt: { lte: new Date(before) } }],
+        },
       });
       return records.map(mapConnection);
     },

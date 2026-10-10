@@ -12,7 +12,8 @@ const REQUEST_TIMEOUT_MS = 10_000;
 export class MetaOAuthError extends Error {
   readonly retryable: boolean;
 
-  constructor(message: string, readonly status: number) {
+  /** `code` is the Graph error code when Meta returned one (190 = invalid/expired token). */
+  constructor(message: string, readonly status: number, readonly code?: number) {
     super(message);
     this.name = "MetaOAuthError";
     this.retryable = status === 0 || status === 429 || status >= 500;
@@ -56,7 +57,7 @@ async function jsonOrThrow(response: Response): Promise<Record<string, unknown>>
     const graphError = typeof payload.error === "object" && payload.error !== null ? payload.error as Record<string, unknown> : {};
     const message = typeof payload.error_message === "string" ? payload.error_message :
       typeof graphError.message === "string" ? graphError.message : `Meta OAuth failed (${response.status})`;
-    throw new MetaOAuthError(message, response.status);
+    throw new MetaOAuthError(message, response.status, typeof graphError.code === "number" ? graphError.code : undefined);
   }
   return payload;
 }
