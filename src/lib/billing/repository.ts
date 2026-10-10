@@ -4,12 +4,14 @@ import { BillingCheckoutState, BillingInterval, BillingSubscriptionStatus, Prism
 
 import { createId } from "@/src/lib/id";
 import { prisma } from "@/src/lib/prisma";
+import { isLiveSubscriptionStatus } from "./subscription-status";
 
 export type CheckoutClaim =
   | { kind: "create"; attemptId: string }
   | { kind: "reuse"; attemptId: string; subscriptionId: string }
   | { kind: "processing"; attemptId: string }
-  | { kind: "conflict"; attemptId: string };
+  | { kind: "conflict"; attemptId: string }
+  | { kind: "subscription_exists" };
 
 export type OwnerSubscription = {
   id: string;
@@ -73,6 +75,15 @@ export function createPrismaBillingRepository(client: BillingPrismaClient = pris
       for (let attemptNumber = 0; attemptNumber < 3; attemptNumber += 1) {
         try {
           return await client.$transaction(async (transaction) => {
+            // A second Razorpay subscription would bill the workspace twice; plan
+            // changes on a live subscription go through change-plan instead.
+            const subscription = await transaction.billingSubscription.findUnique({
+              where: { workspaceId: input.workspaceId },
+              select: { status: true },
+            });
+            if (subscription && isLiveSubscriptionStatus(subscription.status)) {
+              return { kind: "subscription_exists" } as const;
+            }
             await transaction.billingCheckoutAttempt.updateMany({
               where: {
                 workspaceId: input.workspaceId,

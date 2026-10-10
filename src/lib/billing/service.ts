@@ -24,7 +24,7 @@ type BillingProvider = {
 };
 
 export class BillingServiceError extends Error {
-  constructor(public readonly code: "billing_not_configured" | "invalid_checkout_signature" | "subscription_conflict" | "provider_unavailable" | "checkout_verification_pending") {
+  constructor(public readonly code: "billing_not_configured" | "invalid_checkout_signature" | "subscription_conflict" | "subscription_exists" | "provider_unavailable" | "checkout_verification_pending") {
     super(code);
     this.name = "BillingServiceError";
   }
@@ -149,6 +149,7 @@ export function createBillingService(dependencies: BillingServiceDependencies) {
         now: current,
         expiresAt: new Date(current.getTime() + 15 * 60 * 1_000),
       });
+      if (claim.kind === "subscription_exists") throw new BillingServiceError("subscription_exists");
       if (claim.kind === "processing") return { status: "processing" as const, attemptId: claim.attemptId };
       if (claim.kind === "conflict") throw new BillingServiceError("subscription_conflict");
       if (claim.kind === "reuse") {
