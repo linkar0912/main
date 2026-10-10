@@ -26,7 +26,12 @@ describe("GET /api/health", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     // The host release script greps the public body for the deployed commit.
     const text = await response.text();
-    expect(JSON.parse(text)).toEqual({ status: "ok", release: "0123456789abcdef0123456789abcdef01234567" });
+    // Dokploy's service healthcheck requires dependencies.database/redis.
+    expect(JSON.parse(text)).toEqual({
+      status: "ok",
+      release: "0123456789abcdef0123456789abcdef01234567",
+      dependencies: { database: "not_configured", redis: "not_configured" },
+    });
     expect(text).toContain('"release":"0123456789abcdef0123456789abcdef01234567"');
   });
 
