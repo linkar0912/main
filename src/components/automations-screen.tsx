@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AutomationList, useAutomations } from "./automation-list";
 import { DeliveryDiagnostics } from "./delivery-diagnostics";
 import type { AutomationRecord } from "@/src/lib/repository";
+import { toReadableApiError } from "@/src/lib/validation-error";
 
 type StatusFilter = "ALL" | "ACTIVE" | "PAUSED" | "DRAFT";
 const STATUS_FILTERS: Array<{ key: StatusFilter; label: string }> = [
@@ -48,7 +49,7 @@ export function AutomationsScreen({ initialAutomations }: { initialAutomations?:
     const response = await fetch(`/api/automations/${id}`, { method: "DELETE" });
     if (!response.ok) {
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(payload.error ?? "Could not delete this automation.");
+      throw new Error(toReadableApiError(payload.error, "Could not delete this automation."));
     }
     await reload();
   }

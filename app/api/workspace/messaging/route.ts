@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
+import { requireManager } from "@/src/lib/auth/require-role";
 
 export const runtime = "nodejs";
 
@@ -21,8 +22,9 @@ export async function GET(request: Request) {
 
 // PATCH /api/workspace/messaging - set or clear the window (body null clears).
 export async function PATCH(request: Request) {
-  const session = await getValidatedSession(request);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const guard = await requireManager(request);
+  if (!guard.ok) return guard.error;
+  const { session } = guard;
 
   const repository = getRepository();
   const raw = await request.json().catch(() => undefined);

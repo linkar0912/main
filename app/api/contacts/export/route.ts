@@ -1,24 +1,19 @@
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
-import { getValidatedSession } from "@/src/lib/auth/session";
+import { requireManager } from "@/src/lib/auth/require-role";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 import { getServerEnv } from "@/src/lib/env";
 import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
+import { csvCell } from "@/src/lib/format/csv";
 
 export const runtime = "nodejs";
 
-function csvCell(value: string | undefined): string {
-  const cell = value ?? "";
-  // Neutralize spreadsheet formula injection the same way we quote commas.
-  const safe = /^[=+\-@]/.test(cell) ? `'${cell}` : cell;
-  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-}
-
 // GET /api/contacts/export - CSV of the complete workspace contact registry.
 export async function GET(request: Request) {
-  const session = await getValidatedSession(request);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const guard = await requireManager(request);
+  if (!guard.ok) return guard.error;
+  const { session } = guard;
 
   try {
     await getEntitlementService().assertEntitled(session.workspaceId, "exports", 0);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { toReadableApiError, toReadableValidationError } from "./validation-error";
+import { isValidationError, toReadableApiError, toReadableValidationError, ValidationError } from "./validation-error";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -56,9 +56,22 @@ describe("toReadableValidationError", () => {
     expect(message.split(";").length).toBeLessThanOrEqual(3);
   });
 
-  it("passes through a plain Error's own message", () => {
-    expect(toReadableValidationError(new Error("Source automation not found"), "Invalid sequence"))
+  it("passes through a deliberate ValidationError's own message", () => {
+    expect(toReadableValidationError(new ValidationError("Source automation not found"), "Invalid sequence"))
       .toBe("Source automation not found");
+  });
+
+  it("never echoes an arbitrary Error message such as Prisma invocation text", () => {
+    const prismaLike = new Error("\nInvalid `prisma.automation.create()` invocation:\n\nUnique constraint failed on the fields: (`id`)");
+    expect(toReadableValidationError(prismaLike, "Invalid automation")).toBe("Invalid automation");
+    expect(isValidationError(prismaLike)).toBe(false);
+  });
+
+  it("classifies request-content errors separately from server errors", () => {
+    expect(isValidationError(errorFrom({ name: "" }))).toBe(true);
+    expect(isValidationError(new ValidationError("Bad input"))).toBe(true);
+    expect(isValidationError(Object.assign(new Error("trigger: unsupported"), { code: "invalid_channel_definition" }))).toBe(true);
+    expect(isValidationError(new TypeError("x is undefined"))).toBe(false);
   });
 
   it("falls back when handed something that is not an error at all", () => {

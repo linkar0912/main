@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   upsertFacebookPage: vi.fn(),
   deleteCookie: vi.fn(),
   assertEntitled: vi.fn(),
+  getMemberRole: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
@@ -43,7 +44,7 @@ vi.mock("@/src/lib/security/secrets", () => ({
 }));
 
 vi.mock("@/src/lib/repository-provider", () => ({
-  getRepository: () => ({ upsertFacebookPage: mocks.upsertFacebookPage, listFacebookPages: mocks.listFacebookPages }),
+  getRepository: () => ({ getMemberRole: mocks.getMemberRole, upsertFacebookPage: mocks.upsertFacebookPage, listFacebookPages: mocks.listFacebookPages }),
 }));
 vi.mock("@/src/lib/entitlements/service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/src/lib/entitlements/service")>()),
@@ -63,6 +64,7 @@ function selectRequest(): Request {
 describe("POST /api/facebook/oauth/select", () => {
   beforeEach(() => {
     mocks.getValidatedSession.mockReset().mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.getMemberRole.mockReset().mockResolvedValue("OWNER");
     mocks.readSelection.mockReset().mockReturnValue({
       workspaceId: "workspace_1",
       facebookUserId: "facebook_user_1",
@@ -76,6 +78,17 @@ describe("POST /api/facebook/oauth/select", () => {
     mocks.upsertFacebookPage.mockReset();
     mocks.deleteCookie.mockReset();
     mocks.assertEntitled.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("refuses a plain member before reading the selection or calling Meta", async () => {
+    mocks.getMemberRole.mockResolvedValue("MEMBER");
+
+    const response = await POST(selectRequest());
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "forbidden" });
+    expect(mocks.readSelection).not.toHaveBeenCalled();
+    expect(mocks.subscribe).not.toHaveBeenCalled();
   });
 
   it("returns a specific conflict when the selected Page belongs to another workspace", async () => {

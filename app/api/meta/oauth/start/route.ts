@@ -21,6 +21,11 @@ export async function GET(request: Request) {
     login.searchParams.set("next", "/settings");
     return NextResponse.redirect(login);
   }
+  // Connecting an account changes what the whole workspace sends from, so it
+  // is a manager action. This is a browser navigation, not a fetch, so the
+  // refusal lands back on Settings with a readable banner instead of raw JSON.
+  const role = await getRepository().getMemberRole(session.workspaceId, session.email);
+  if (role !== "OWNER" && role !== "ADMIN") return settingsRedirect(env, "forbidden");
   if (!env.metaAppId) return settingsRedirect(env, "missing-config");
   try {
     await getEntitlementService().assertEntitled(

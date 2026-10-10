@@ -11,8 +11,13 @@ const MAX_LISTED_ISSUES = 3;
  *
  * This turns the same information into one readable line: the field that failed,
  * followed by why. Array indices are rendered one-based ("steps 2") because the
- * UI numbers them that way too. Non-Zod errors keep their own message, which is
- * usually already human-written ("Source automation not found").
+ * UI numbers them that way too.
+ *
+ * Only errors that are known to carry user-facing text keep their message:
+ * ZodError, ValidationError (thrown deliberately with a human sentence) and
+ * channel-definition errors. Anything else - a Prisma invocation error, a
+ * driver timeout, a TypeError - collapses to `fallback`, because its message
+ * can contain query text, table names or other internals.
  */
 export function toReadableValidationError(error: unknown, fallback: string): string {
   if (error instanceof z.ZodError) {
@@ -24,13 +29,35 @@ export function toReadableValidationError(error: unknown, fallback: string): str
     });
     return listed.length > 0 ? listed.join("; ") : fallback;
   }
-  if (error instanceof Error && error.message.trim()) return error.message;
+  if (isValidationError(error) && error instanceof Error && error.message.trim()) return error.message;
   return fallback;
+}
+
+/** An input problem whose message is written for the person who sent the request. */
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+/**
+ * True for errors caused by the request's content (respond 400) rather than by
+ * the server (respond 500). Channel-definition errors are matched by their
+ * code so this module stays free of the automation schema (it ships to the
+ * browser through toReadableApiError).
+ */
+export function isValidationError(error: unknown): boolean {
+  return error instanceof z.ZodError
+    || error instanceof ValidationError
+    || (error instanceof Error && (error as { code?: unknown }).code === "invalid_channel_definition");
 }
 
 const API_ERROR_MESSAGES: Record<string, string> = {
   invalid_channel_target: "Choose a connected Instagram account or Facebook Page.",
   invalid_channel_definition: "This automation has settings that are not supported by the selected channel.",
+  forbidden: "Only workspace owners and admins can do this. Ask one of them to make the change.",
+  limit_reached: "Your plan's limit for this has been reached. Upgrade or wait for the next billing month.",
 };
 
 export function toReadableApiError(error: unknown, fallback: string): string {

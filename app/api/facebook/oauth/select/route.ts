@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getValidatedSession } from "@/src/lib/auth/session";
+import { requireManager } from "@/src/lib/auth/require-role";
 import { getServerEnv } from "@/src/lib/env";
 import { listFacebookPages, subscribeFacebookPageToWebhooks, FacebookOAuthError } from "@/src/lib/facebook/oauth";
 import { FACEBOOK_PAGE_SELECTION_COOKIE, readFacebookPageSelection } from "@/src/lib/facebook/page-selection";
@@ -14,8 +14,9 @@ import { logger } from "@/src/lib/logger";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const session = await getValidatedSession(request);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const guard = await requireManager(request);
+  if (!guard.ok) return guard.error;
+  const { session } = guard;
   const body = await request.json().catch(() => ({})) as { pageId?: unknown };
   if (typeof body.pageId !== "string" || !body.pageId) {
     return NextResponse.json({ error: "Facebook Page is required" }, { status: 400 });

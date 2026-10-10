@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { validateFlowDefinition } from "@/src/lib/automation/definition";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
+import { requireManager } from "@/src/lib/auth/require-role";
 import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
 import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
 import type { UpdateAutomationInput } from "@/src/lib/repository";
@@ -146,8 +147,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
-  const session = await getValidatedSession(request);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const guard = await requireManager(request);
+  if (!guard.ok) return guard.error;
+  const { session } = guard;
   const { id } = await context.params;
   const deleted = await getRepository().deleteAutomation(session.workspaceId, id);
   if (!deleted) return NextResponse.json({ error: "Automation not found" }, { status: 404 });

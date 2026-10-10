@@ -26,6 +26,7 @@ import { SocialAvatar } from "./social-avatar";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
+import { toReadableApiError } from "@/src/lib/validation-error";
 import { SettingsConnectionsContentSkeleton, Skeleton } from "./skeleton";
 import { PageHeader } from "./page-header";
 import {
@@ -195,7 +196,7 @@ export function SettingsScreen() {
         body: JSON.stringify({ pageId: selectedFacebookPageId }),
       });
       const payload = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? "Could not connect Facebook Page");
+      if (!response.ok) throw new Error(toReadableApiError(payload.error, "Could not connect Facebook Page"));
       // router.push only swaps the URL - it doesn't remount this component, so
       // the connections/health fetched on initial mount would otherwise stay
       // stale and still show "No Page connected" until a manual reload.
@@ -227,7 +228,7 @@ export function SettingsScreen() {
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error ?? "Could not save messaging hours.");
+        throw new Error(toReadableApiError(payload.error, "Could not save messaging hours."));
       }
       invalidateWorkspaceResource("messaging-settings");
       setQuietSaved(true);
@@ -252,7 +253,10 @@ export function SettingsScreen() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      if (!response.ok) throw new Error("Could not disconnect Instagram");
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(response.status === 403 ? toReadableApiError(payload.error, "Could not disconnect Instagram") : "Could not disconnect Instagram");
+      }
       clearWorkspaceDataCache("connections");
       setConnections((current) => current.filter((connection) => connection.id !== id));
       setHealth((current) => current.filter((entry) => entry.id !== id));
@@ -385,6 +389,7 @@ export function SettingsScreen() {
     "missing-permissions": "Instagram did not approve everything Linkar needs. Reconnect and allow every requested permission.",
     "profile-fetch": "Signed in, but Linkar could not read the account profile back from Instagram. This is usually transient - retry the connection.",
     "already-connected": "That Instagram account already belongs to another Linkar workspace. Disconnect it there before connecting it here.",
+    forbidden: "Only workspace owners and admins can connect Instagram accounts. Ask one of them to connect it.",
     error: "Meta could not finish the connection. Check the app settings and try again.",
   };
 
@@ -413,7 +418,10 @@ export function SettingsScreen() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      if (!response.ok) throw new Error("Could not disconnect Facebook Page");
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(response.status === 403 ? toReadableApiError(payload.error, "Could not disconnect Facebook Page") : "Could not disconnect Facebook Page");
+      }
       clearWorkspaceDataCache("connections");
       setFacebookPages((current) => current.filter((page) => page.id !== id));
       setFacebookHealth((current) => current.filter((entry) => entry.id !== id));
