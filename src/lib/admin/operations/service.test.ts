@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const mocks = vi.hoisted(() => ({ workspace: vi.fn(), broadcast: vi.fn(), broadcastUpdate: vi.fn(), delivery: vi.fn(), deliveries: vi.fn(), deliveryUpdate: vi.fn(), webhook: vi.fn(), webhookUpdate: vi.fn(), broadcastQueue: vi.fn(), leadQueue: vi.fn(), webhookQueue: vi.fn() }));
-const client = { workspace: { findUnique: mocks.workspace }, broadcast: { findUnique: mocks.broadcast, updateMany: mocks.broadcastUpdate }, outboundDelivery: { findUnique: mocks.delivery, findMany: mocks.deliveries, updateMany: mocks.deliveryUpdate }, webhookEvent: { findUnique: mocks.webhook, updateMany: mocks.webhookUpdate } };
+const mocks = vi.hoisted(() => ({ workspace: vi.fn(), broadcast: vi.fn(), broadcastUpdate: vi.fn(), delivery: vi.fn(), deliveries: vi.fn(), deliveryUpdate: vi.fn(), webhook: vi.fn(), webhookUpdate: vi.fn(), broadcastQueue: vi.fn(), leadQueue: vi.fn(), webhookQueue: vi.fn(), automation: vi.fn(), automationFindFirst: vi.fn(), automationUpdate: vi.fn(), versionAggregate: vi.fn(), versionCreate: vi.fn() }));
+const client = { automation: { findUnique: mocks.automation, findFirst: mocks.automationFindFirst, updateMany: mocks.automationUpdate }, automationVersion: { aggregate: mocks.versionAggregate, create: mocks.versionCreate }, workspace: { findUnique: mocks.workspace }, broadcast: { findUnique: mocks.broadcast, updateMany: mocks.broadcastUpdate }, outboundDelivery: { findUnique: mocks.delivery, findMany: mocks.deliveries, updateMany: mocks.deliveryUpdate }, webhookEvent: { findUnique: mocks.webhook, updateMany: mocks.webhookUpdate } };
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({ platformOwnerUserIds: [] }) }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { ...client, $transaction: async (work: (tx: unknown) => unknown) => work(client) } }));
 vi.mock("@/src/lib/queue", () => ({ enqueueBroadcastSends: mocks.broadcastQueue, enqueueLeadDelivery: mocks.leadQueue, enqueueWebhookEvents: mocks.webhookQueue, enqueueFacebookEvents: vi.fn() }));
@@ -59,4 +59,14 @@ it("preserves an interaction payload and original inbound timestamp on replay", 
   await executeAdminOperation("webhook", "h1", { action: "reprocess", version: 1, input: {} }, "owner");
   expect(mocks.webhookUpdate).toHaveBeenCalledBefore(mocks.webhookQueue);
   expect(mocks.webhookQueue).toHaveBeenCalledWith([expect.objectContaining({ id: "original", timestamp: 1234, interactionPayload: "flow:next", storyId: "story" })], "webhook-h1-1");
+});
+it("numbers admin edit snapshots after the highest existing snapshot, not the automation's lock counter", async () => {
+  const automation = { id: "a1", workspaceId: "w1", version: 3, provider: "INSTAGRAM", name: "Old", status: "PAUSED", priority: 0, activatedAt: null, boundMediaId: null, instagramAccountId: "ig", facebookPageId: null, archivedAt: null, definition: { version: 1, trigger: { type: "comment", match: "keyword", keywords: ["hi"], mediaIds: [] }, conditions: [], actions: [{ type: "private_reply", text: "hello" }] } };
+  mocks.automation.mockResolvedValue(automation);
+  mocks.automationFindFirst.mockResolvedValue(automation);
+  mocks.automationUpdate.mockResolvedValue({ count: 1 });
+  mocks.versionAggregate.mockResolvedValue({ _max: { version: 7 } });
+  mocks.versionCreate.mockResolvedValue({});
+  await executeAdminOperation("automation", "a1", { action: "update", version: 3, input: { name: "New" } }, "owner");
+  expect(mocks.versionCreate.mock.calls[0][0].data).toMatchObject({ version: 8, provider: "INSTAGRAM" });
 });
