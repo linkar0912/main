@@ -28,7 +28,7 @@ export function isLiveSubscriptionStatus(status: BillingSubscriptionStatus): boo
 }
 
 // Razorpay's lifecycle order: created → authenticated → active (activated, then
-// charged — usually in the same second) → pending → halted (retries exhausted)
+// charged - usually in the same second) → pending → halted (retries exhausted)
 // → cancelled → completed/expired. Paused sits with the degraded states it is
 // entered from. Only used to order events that share a created_at second.
 const STATUS_PRECEDENCE: Record<BillingSubscriptionStatus, number> = {
