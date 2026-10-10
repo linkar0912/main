@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, Check, Film, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { basicAutomationTemplates } from "@/src/lib/automation/templates";
@@ -165,7 +166,7 @@ export function QuickAutomationScreen() {
               <p>{error}</p>
               <div className="empty-actions">
                 <button type="button" className="button button-secondary" onClick={() => void retry()}><RefreshCw size={15} /> Try again</button>
-                <a className="button button-primary" href="/settings">Check Instagram connection</a>
+                <Link className="button button-primary" href="/settings">Check Instagram connection</Link>
               </div>
             </div>
           ) : reels.length === 0 ? (
@@ -173,7 +174,7 @@ export function QuickAutomationScreen() {
               <Film size={24} />
               <h3>No published Reels yet.</h3>
               <p>Publish a Reel on the connected Instagram account, then come back here.</p>
-              <a className="button button-secondary" href="/settings">Check Instagram connection</a>
+              <Link className="button button-secondary" href="/settings">Check Instagram connection</Link>
             </div>
           ) : (
             <>

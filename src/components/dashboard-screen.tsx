@@ -46,12 +46,22 @@ export type DashboardScreenProps = {
 };
 
 function flowTriggerLabel(automation: AutomationRecord): string {
-  const trigger = automation.definition.trigger as { type?: string } | undefined;
-  if (trigger?.type === "message") return "Words in a message";
-  if (trigger?.type === "first_contact") return "First-message welcome";
-  if (trigger?.type === "story_mention") return "Story mentions";
-  if (trigger?.type === "story_reply") return "Story replies";
-  return "Comment replies";
+  // Exhaustive over every trigger type so a new one can't silently read as a
+  // comment flow (referral and opt-in taps used to).
+  const type = automation.definition.trigger.type;
+  switch (type) {
+    case "comment": return "Comment replies";
+    case "message": return "Words in a message";
+    case "first_contact": return "First-message welcome";
+    case "story_mention": return "Story mentions";
+    case "story_reply": return "Story replies";
+    case "referral": return "Referral link taps";
+    case "optin": return "Permission button taps";
+    default: {
+      const unhandled: never = type;
+      return String(unhandled);
+    }
+  }
 }
 
 function displayNameFromEmail(email: string): string {
@@ -269,20 +279,20 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
             <Link className="quickstart-card" href="/automations/new?type=classic&template=comment-link-dm">
               <strong>Send a link when someone comments</strong>
               <span className="quickstart-card-meta">
-                <span><Zap size={13} /> Quick Automation</span>
+                <span><Zap size={13} /> Template</span>
                 <span className="quickstart-badge">Popular</span>
               </span>
             </Link>
             <Link className="quickstart-card" href="/automations/new?type=classic&template=story-mention-reply">
               <strong>Turn story mentions into DMs</strong>
               <span className="quickstart-card-meta">
-                <span><Zap size={13} /> Quick Automation</span>
+                <span><Zap size={13} /> Template</span>
               </span>
             </Link>
             <Link className="quickstart-card" href="/automations/new?type=classic&template=default-reply">
               <strong>Respond to all your DMs</strong>
               <span className="quickstart-card-meta">
-                <span><Zap size={13} /> Quick Automation</span>
+                <span><Zap size={13} /> Template</span>
               </span>
             </Link>
           </div>

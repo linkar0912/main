@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ArrowLeft, Download, Pencil } from "lucide-react";
 import { AutomationActivity } from "@/src/components/automation-activity";
 import { InsightsPanel } from "@/src/components/insights-panel";
@@ -15,9 +16,13 @@ export const dynamic = "force-dynamic";
 export default async function AutomationActivityPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getRequestSession();
+  // undefined = the lookup itself failed (keep the generic header); null = no
+  // such automation in this workspace (unknown or another tenant's id), which
+  // must not render Export/Edit actions for it.
   const automation = session
-    ? await getRepository().getAutomation(session.workspaceId, id).catch(() => null)
-    : null;
+    ? await getRepository().getAutomation(session.workspaceId, id).catch(() => undefined)
+    : undefined;
+  if (session && automation === null) notFound();
   return (
     <div className="page-wrap campaign-analytics-page">
       <PageHeader

@@ -17,7 +17,9 @@ export default async function DashboardPage() {
   if (!session) return <DashboardScreen />;
 
   const repository = getRepository();
-  const automations = await repository.listAutomations(session.workspaceId);
+  // A failed query falls back to the client fetch instead of failing the page
+  // (same as automations (sections)/page.tsx).
+  const automations = await repository.listAutomations(session.workspaceId).catch(() => undefined);
 
   return (
     <DashboardScreen
