@@ -1,5 +1,14 @@
 import { createServer, type Server } from "node:http";
-import { getHealth, type HealthCheckers } from "./health";
+import { getServerEnv } from "./env";
+import {
+  getHealth,
+  getHealthRedis,
+  WORKER_HEARTBEAT_INTERVAL_MS,
+  WORKER_HEARTBEAT_KEY,
+  WORKER_HEARTBEAT_STALE_MS,
+  type HealthCheckers,
+  type WorkerHeartbeat,
+} from "./health";
 
 export const DEFAULT_WORKER_HEALTH_PORT = 3001;
 const WORKER_READY_TIMEOUT_MS = 1_500;
@@ -19,6 +28,42 @@ async function processingReady(check: () => boolean | Promise<boolean>): Promise
   }
 }
 
+export type WorkerHeartbeatWriter = (beat: WorkerHeartbeat) => Promise<void>;
+
+/** Writes the heartbeat with a TTL so a dead worker expires on its own. */
+async function writeHeartbeatToRedis(beat: WorkerHeartbeat): Promise<void> {
+  const { redisUrl } = getServerEnv();
+  if (!redisUrl) return;
+  const client = await getHealthRedis(redisUrl);
+  await client.set(WORKER_HEARTBEAT_KEY, JSON.stringify(beat), "PX", WORKER_HEARTBEAT_STALE_MS);
+}
+
+/**
+ * Beats only while BullMQ is actually consuming, so the web /api/health (and
+ * the production monitor behind it) sees a wedged worker as well as a dead
+ * one. Returns a stop function.
+ */
+export function startWorkerHeartbeat(
+  isProcessing: () => boolean | Promise<boolean>,
+  write: WorkerHeartbeatWriter = writeHeartbeatToRedis,
+  intervalMs = WORKER_HEARTBEAT_INTERVAL_MS,
+): () => void {
+  const beat = async () => {
+    if (!(await processingReady(isProcessing))) return;
+    // A failed write is what the reader reports as "stale"; never crash the worker.
+    await write({ at: Date.now(), release: process.env.BUILD_COMMIT || null }).catch(() => undefined);
+  };
+  // First beat shortly after start, not a full interval later.
+  const first = setTimeout(() => void beat(), Math.min(intervalMs, 5_000));
+  const timer = setInterval(() => void beat(), intervalMs);
+  first.unref();
+  timer.unref();
+  return () => {
+    clearTimeout(first);
+    clearInterval(timer);
+  };
+}
+
 /**
  * Liveness endpoint for the worker container.
  *
@@ -31,8 +76,9 @@ async function processingReady(check: () => boolean | Promise<boolean>): Promise
 export function createWorkerHealthServer(
   checkers: HealthCheckers = {},
   isProcessing: () => boolean | Promise<boolean> = () => false,
+  options: { heartbeat?: WorkerHeartbeatWriter | false; heartbeatIntervalMs?: number } = {},
 ): Server {
-  return createServer((request, response) => {
+  const server = createServer((request, response) => {
     // Only the health path answers; anything else is a misrouted request and
     // must not reveal that a probe surface exists here.
     if (request.url !== "/health") {
@@ -53,6 +99,20 @@ export function createWorkerHealthServer(
         response.end(JSON.stringify({ status: "degraded" }));
       });
   });
+  // The heartbeat lives with the health server because both describe the same
+  // thing - "this worker is consuming" - and the server is the worker's only
+  // lifecycle hook here: it starts when the worker listens and stops on close.
+  if (options.heartbeat !== false) {
+    let stop: (() => void) | undefined;
+    server.on("listening", () => {
+      stop ??= startWorkerHeartbeat(isProcessing, options.heartbeat || undefined, options.heartbeatIntervalMs);
+    });
+    server.on("close", () => {
+      stop?.();
+      stop = undefined;
+    });
+  }
+  return server;
 }
 
 export function workerHealthPort(): number {

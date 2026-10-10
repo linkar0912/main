@@ -119,7 +119,7 @@ Set the Facebook webhook verify token to `FACEBOOK_VERIFY_TOKEN`, subscribe the 
 
 ## 4. Verify the deployed app yourself
 
-1. Call `GET https://app.linkar.in/api/health`. Confirm three things, not just the first:
+1. Call `GET https://app.linkar.in/api/health` with the `x-health-token: <HEALTH_DETAIL_TOKEN>` header (without it the response carries only `status`). Confirm three things, not just the first:
    - `mode` is `configured` and both `dependencies` report `ok`;
    - `integrations` reports `{"instagram": "configured", "facebook": "configured"}` - `mode` only tracks the database and Redis, so it says `configured` even with no Meta credentials at all;
    - `release` matches the commit you expect to be live. It is baked into the image at build time, so a mismatch means the deploy did not take.

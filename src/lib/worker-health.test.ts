@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AddressInfo } from "node:net";
-import { createWorkerHealthServer } from "./worker-health";
+import { createWorkerHealthServer, startWorkerHeartbeat } from "./worker-health";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -89,5 +89,45 @@ describe("worker health server", () => {
     await withServer(server, async (baseUrl) => {
       expect((await fetch(`${baseUrl}/`)).status).toBe(404);
     });
+  });
+});
+
+describe("worker heartbeat", () => {
+  it("beats with the baked release while the worker is listening and consuming, and stops on close", async () => {
+    vi.stubEnv("BUILD_COMMIT", "worker-release");
+    const beats: { at: number; release: string | null }[] = [];
+    const server = createWorkerHealthServer({}, () => true, {
+      heartbeat: async (beat) => {
+        beats.push(beat);
+      },
+      heartbeatIntervalMs: 10,
+    });
+
+    await withServer(server, async () => {
+      await vi.waitFor(() => expect(beats.length).toBeGreaterThanOrEqual(2));
+    });
+    expect(beats[0]).toMatchObject({ release: "worker-release" });
+    expect(typeof beats[0]!.at).toBe("number");
+
+    const afterClose = beats.length;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(beats.length).toBe(afterClose);
+  });
+
+  it("does not beat while BullMQ is not consuming, so the web health sees a wedged worker", async () => {
+    const write = vi.fn(async () => undefined);
+    const stop = startWorkerHeartbeat(() => false, write, 10);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    stop();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("survives a failed heartbeat write", async () => {
+    const write = vi.fn(async () => {
+      throw new Error("redis down");
+    });
+    const stop = startWorkerHeartbeat(() => true, write, 10);
+    await vi.waitFor(() => expect(write.mock.calls.length).toBeGreaterThanOrEqual(2));
+    stop();
   });
 });

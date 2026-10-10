@@ -30,15 +30,29 @@ Out of scope: AI, unsolicited DMs sent purely because someone followed the accou
 
 ## Local demo (no database or worker)
 
+Signing up and signing in always go through Supabase Auth, so even the demo
+needs a Supabase project. Create `.env.local` with:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...            # hosted project, or `supabase start`
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+```
+
+For a fully local Auth server, install the Supabase CLI and run
+`supabase start` (it uses `supabase/config.toml`; `supabase status` prints the
+URL and keys, and confirmation mail lands in its local inbox at
+http://127.0.0.1:54324). Then:
+
 ```bash
 pnpm install
 pnpm db:generate
 pnpm dev
 ```
 
-Run this without `DATABASE_URL` or `REDIS_URL`; the dashboard uses sample data
-and no worker is required. This is a local demonstration mode only and must
-never be used for a public deployment.
+Leave `DATABASE_URL` and `REDIS_URL` unset; the dashboard uses sample data and
+no worker is required. This is a local demonstration mode only and must never
+be used for a public deployment - a production build refuses to start without
+its database, Redis and Supabase unless `DEMO_MODE=1` is set explicitly.
 
 ## Persistent local stack
 
@@ -54,20 +68,20 @@ pnpm worker
 ```
 
 `pnpm db:migrate` is Prisma's development migration command and is only for
-this local workflow.
+this local workflow. Fill in the Supabase variables from the demo section
+above in `.env` as well.
 
 The compose file publishes Postgres and Valkey on `127.0.0.1` only, and
-Valkey requires a password. After copying `.env.example`, set:
-
-```bash
-REDIS_URL=redis://:linkar-local-redis@localhost:6379/0
-```
+Valkey requires a password; `.env.example` already carries the matching
+`DATABASE_URL`, `DIRECT_URL` and
+`REDIS_URL=redis://:linkar-local-redis@localhost:6379/0`.
 
 ## Production deployment
 
-Production runs on Dokploy. A push to `main` passes CI, publishes an immutable
-GHCR image, and promotes that exact commit through the restricted release
-bridge. Do not push `main` merely to store unfinished work. The release order,
+Production runs on Dokploy. A push to `main` runs CI; only a green CI run
+publishes an immutable GHCR image and promotes that exact commit through the
+restricted release bridge. Database migrations are a separate release step
+run by an operator. Do not push `main` merely to store unfinished work. The release order,
 verification, migration, rollback, and configuration procedures are in
 [`ops/DOKPLOY_DEPLOYMENT.md`](ops/DOKPLOY_DEPLOYMENT.md).
 
@@ -97,8 +111,9 @@ password), then connect an Instagram account or Facebook Page through the settin
 Auth is handled by Supabase Auth (`NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`); email
 confirmation and password-reset links route through `/auth/confirm`.
-`AUTH_SESSION_SECRET` is still required for the rate-limit key HMAC - generate
-it with a password manager or:
+`AUTH_SESSION_SECRET` (32+ characters in production) signs OAuth `state`, the
+owner console's cursors, and the rate-limit key HMAC - generate it with a
+password manager or:
 
 ```bash
 openssl rand -hex 32
@@ -115,9 +130,17 @@ pnpm build
 pnpm test:e2e
 ```
 
+`pnpm test:e2e` signs up a real account, runs `prisma migrate deploy` on an
+exported `DIRECT_URL`/`DATABASE_URL`, and deletes the account afterwards, so it
+refuses to run unless every database and Supabase URL the app would use
+(including those in `.env.local`) is local - docker compose plus
+`supabase start`. `E2E_ALLOW_REMOTE_DB=1` overrides that for a disposable
+remote project; cleanup is then skipped. CI runs the suite against a local
+Supabase stack and the production build.
+
 ## Production requirements
 
-Production needs a public HTTPS deployment, a Supabase project (Postgres + Auth), Valkey, `APP_URL`/`NEXT_PUBLIC_APP_URL` set to the app origin, `PUBLIC_SITE_URL` set to the marketing origin, an `AUTH_SESSION_SECRET`, a Meta App ID and secret, a token encryption key, and the singleton worker running alongside the web application. `GET /api/health` reports dependency state and the immutable image commit without returning connection details; it returns `503` when either configured dependency is unavailable or only one of PostgreSQL and Valkey is configured. Accounts are self-serve via `/signup`; each account gets its own isolated workspace.
+Production needs a public HTTPS deployment, a Supabase project (Postgres + Auth), Valkey, `APP_URL`/`NEXT_PUBLIC_APP_URL` set to the app origin, `PUBLIC_SITE_URL` set to the marketing origin, an `AUTH_SESSION_SECRET`, a Meta App ID and secret, a token encryption key, and the singleton worker running alongside the web application. `GET /api/health` returns only `{"status": ...}` publicly; with the `x-health-token: $HEALTH_DETAIL_TOKEN` header it adds dependency state, the immutable image commit, and the worker heartbeat, never connection details. It returns `503` when either configured dependency is unavailable or only one of PostgreSQL and Valkey is configured; a stale worker heartbeat turns `status` to `degraded` without failing the web container's healthcheck. Accounts are self-serve via `/signup`; each account gets its own isolated workspace.
 
 `.env.production.example` is a variable-name checklist. Replace every
 placeholder in Dokploy and never commit a populated production environment.
@@ -127,7 +150,7 @@ After the web service is public, verify its configured dependencies without
 printing connection details:
 
 ```bash
-curl --fail --show-error https://app.linkar.in/api/health
+curl --fail --show-error -H "x-health-token: $HEALTH_DETAIL_TOKEN" https://app.linkar.in/api/health
 ```
 
 ## Meta App Review

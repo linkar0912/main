@@ -1,19 +1,34 @@
 name: CI
 
+# The production container workflow runs only after this workflow succeeds
+# for a push to main (see container.yml), so every job here gates a deploy.
+
 on:
   push:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Superseded PR runs are cancelled; runs on main always finish because a
+  # successful one triggers the deploy.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Actions are referenced by major tag; Dependabot (.github/dependabot.yml)
+# keeps them current. Pin to commit SHAs when the team adopts a lookup step.
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
+      # Reads the pnpm version from package.json "packageManager".
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11.19.0
 
       - uses: actions/setup-node@v4
         with:
@@ -38,18 +53,108 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
-      - name: Bundle worker
-        run: pnpm build:worker
+      - name: Repository checks
+        run: |
+          pnpm check:deployment-hygiene
+          pnpm check:branding
+          pnpm check:copy
 
-  e2e:
+      - name: Release bridge tests
+        run: |
+          sh ops/dokploy/forced-deploy.test.sh
+          sh ops/dokploy/release-linkar.test.sh
+
+      # The same `next build` + worker bundle the image runs. Runtime secrets
+      # are injected by Dokploy, not at build time, and the build must not
+      # need them.
+      - name: Production build
+        run: pnpm build
+
+  migrations:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: linkar
+          POSTGRES_PASSWORD: linkar
+          POSTGRES_DB: linkar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U linkar"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      shadow:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: linkar
+          POSTGRES_PASSWORD: linkar
+          POSTGRES_DB: linkar_shadow
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U linkar"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CHECKPOINT_DISABLE: "1"
+      DATABASE_URL: postgresql://linkar:linkar@localhost:5432/linkar?schema=public
+      SHADOW_DATABASE_URL: postgresql://linkar:linkar@localhost:5433/linkar_shadow?schema=public
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
         with:
-          version: 11.19.0
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The production release command, against a throwaway database.
+      - name: Apply every committed migration
+        run: pnpm db:migrate:deploy
+
+      # Fails when schema.prisma changed without a matching migration (or a
+      # migration drifted from the schema).
+      - name: Check migrations match schema.prisma
+        run: >-
+          pnpm exec prisma migrate diff
+          --from-migrations prisma/migrations
+          --to-schema-datamodel prisma/schema.prisma
+          --shadow-database-url "$SHADOW_DATABASE_URL"
+          --exit-code
+
+  # End-to-end tests run only against services started inside this job: a
+  # local Supabase stack (Postgres + Auth, configured by supabase/config.toml)
+  # and a Valkey service container. No repository secret or remote project is
+  # used; e2e/local-target.ts refuses any non-local database or Supabase URL.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      valkey:
+        image: valkey/valkey:9.1.1-alpine3.24
+        ports:
+          - 6379:6379
+    env:
+      CHECKPOINT_DISABLE: "1"
+      REDIS_URL: redis://localhost:6379/0
+      # Non-secret values that satisfy the production boot checks for
+      # `next start`. They protect nothing outside this job.
+      AUTH_SESSION_SECRET: ci-e2e-session-secret-0123456789abcdef
+      PLATFORM_OWNER_USER_IDS: 00000000-0000-4000-8000-000000000000
+      META_TOKEN_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:
@@ -63,26 +168,30 @@ jobs:
         run: pnpm db:generate
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
-      - name: Require Supabase e2e secrets
-        env:
-          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (Postgres + Auth)
+        run: supabase start
+
+      - name: Export local Supabase connection
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "::error::e2e needs the NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, and SUPABASE_SERVICE_ROLE_KEY repository secrets; the auth setup signs up a workspace owner and confirms it through the Supabase Admin API."
-            exit 1
-          fi
+          eval "$(supabase status -o env)"
+          {
+            echo "DATABASE_URL=$DB_URL"
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${PUBLISHABLE_KEY:-$ANON_KEY}"
+            echo "SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY:-$SECRET_KEY}"
+          } >> "$GITHUB_ENV"
 
+      - name: Apply migrations to the local database
+        run: pnpm db:migrate:deploy
+
+      # playwright.config.ts builds and starts the production server in CI.
       - name: Run Playwright e2e tests
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: pnpm exec playwright test --reporter=html,list
 
       - name: Upload Playwright report
@@ -93,3 +202,7 @@ jobs:
           path: playwright-report/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup

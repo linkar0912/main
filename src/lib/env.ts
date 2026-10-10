@@ -76,13 +76,95 @@ function booleanEnv(name: string, value: string | undefined): boolean {
 }
 
 const DEV_SESSION_SECRET = "dev-insecure-session-secret-change-me-32ch";
+const MIN_PRODUCTION_SECRET_LENGTH = 32;
+
+// The example env files ship `replace-with-…` / `plan_replace_with_…` values,
+// `your-project-ref` hosts, and `change-me` verify tokens. Any of them reaching
+// production means a checklist line was copied without being filled in.
+const PLACEHOLDER = /(?:^|[^a-z0-9])replace[-_]with[-_]|change-me|your-project-ref|your-region/i;
+
+export function isPlaceholderValue(value: string): boolean {
+  return PLACEHOLDER.test(value);
+}
+
+// Every variable the production checklist (.env.production.example) ships
+// with a placeholder. Checked by name so a placeholder fails at boot instead
+// of at the first request that happens to use it.
+const PLACEHOLDER_CHECKED_ENV = [
+  "AUTH_SESSION_SECRET",
+  "DATABASE_URL",
+  "DIRECT_URL",
+  "REDIS_URL",
+  "SUPABASE_URL",
+  "SUPABASE_PUBLISHABLE_KEY",
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "META_APP_ID",
+  "META_APP_SECRET",
+  "META_TOKEN_ENCRYPTION_KEY",
+  "META_VERIFY_TOKEN",
+  "FACEBOOK_APP_ID",
+  "FACEBOOK_APP_SECRET",
+  "FACEBOOK_TOKEN_ENCRYPTION_KEY",
+  "FACEBOOK_VERIFY_TOKEN",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "RAZORPAY_KEY_ID",
+  "RAZORPAY_KEY_SECRET",
+  "RAZORPAY_WEBHOOK_SECRET",
+  "RAZORPAY_PLAN_CREATOR_MONTHLY_ID",
+  "RAZORPAY_PLAN_CREATOR_ANNUAL_ID",
+  "RAZORPAY_PLAN_GROWTH_MONTHLY_ID",
+  "RAZORPAY_PLAN_GROWTH_ANNUAL_ID",
+  "RAZORPAY_PLAN_AGENCY_MONTHLY_ID",
+  "RAZORPAY_PLAN_AGENCY_ANNUAL_ID",
+  "HEALTH_DETAIL_TOKEN",
+] as const;
+
+/**
+ * `next build` runs with NODE_ENV=production but without runtime secrets -
+ * the deployment platform injects those into the container, not the image.
+ * Next sets NEXT_PHASE for the duration of the build.
+ */
+function isBuildPhase(): boolean {
+  return process.env.NEXT_PHASE === "phase-production-build";
+}
 
 function sessionSecretEnv(name: string, value: string | undefined): string {
   const secret = value?.trim() || DEV_SESSION_SECRET;
-  if (process.env.NODE_ENV === "production" && secret === DEV_SESSION_SECRET) {
-    throw new Error(`${name} must be set to a non-placeholder value in production`);
+  if (process.env.NODE_ENV === "production") {
+    if (secret === DEV_SESSION_SECRET || isPlaceholderValue(secret)) {
+      throw new Error(`${name} must be set to a non-placeholder value in production`);
+    }
+    if (secret.length < MIN_PRODUCTION_SECRET_LENGTH) {
+      throw new Error(`${name} must be at least ${MIN_PRODUCTION_SECRET_LENGTH} characters in production`);
+    }
   }
   return secret;
+}
+
+function assertProductionVerifyToken(name: string, token: string): void {
+  if (isPlaceholderValue(token)) {
+    throw new Error(`${name} must be set to a non-placeholder value in production`);
+  }
+  if (token.length < MIN_PRODUCTION_SECRET_LENGTH) {
+    throw new Error(`${name} must be at least ${MIN_PRODUCTION_SECRET_LENGTH} characters in production`);
+  }
+}
+
+/**
+ * A production process without its database, Redis, Supabase, or token key
+ * used to boot "successfully" in demo mode with /api/health reporting ok.
+ * Fail fast instead, unless the operator explicitly asked for a demo
+ * deployment with DEMO_MODE=1.
+ */
+function assertProductionInfrastructure(values: Record<string, string | undefined>): void {
+  if (process.env.NODE_ENV !== "production" || isBuildPhase() || process.env.DEMO_MODE === "1") return;
+  const missing = Object.entries(values).filter(([, value]) => !value).map(([name]) => name);
+  if (missing.length > 0) {
+    throw new Error(`${missing.join(", ")} must be set in production (set DEMO_MODE=1 only for a deliberate demo deployment)`);
+  }
 }
 
 function optionalHexEncryptionKey(value: string | undefined, envName: string): string | undefined {
@@ -232,16 +314,37 @@ export function getServerEnv(): ServerEnv {
   // deployment that runs neither Meta channel is unaffected.
   const PLACEHOLDER_VERIFY_TOKEN = "change-me";
   if (process.env.NODE_ENV === "production") {
-    if (process.env.META_APP_ID && (process.env.META_VERIFY_TOKEN ?? PLACEHOLDER_VERIFY_TOKEN) === PLACEHOLDER_VERIFY_TOKEN) {
-      throw new Error("META_VERIFY_TOKEN must be set to a non-placeholder value in production");
+    for (const name of PLACEHOLDER_CHECKED_ENV) {
+      const value = process.env[name]?.trim();
+      if (value && isPlaceholderValue(value)) {
+        throw new Error(`${name} must be set to a non-placeholder value in production`);
+      }
     }
-    if (
-      process.env.FACEBOOK_APP_ID
-      && (process.env.FACEBOOK_VERIFY_TOKEN ?? process.env.META_VERIFY_TOKEN ?? PLACEHOLDER_VERIFY_TOKEN) === PLACEHOLDER_VERIFY_TOKEN
-    ) {
-      throw new Error("FACEBOOK_VERIFY_TOKEN must be set to a non-placeholder value in production");
+    if (process.env.META_APP_ID) {
+      assertProductionVerifyToken("META_VERIFY_TOKEN", process.env.META_VERIFY_TOKEN ?? PLACEHOLDER_VERIFY_TOKEN);
+    }
+    if (process.env.FACEBOOK_APP_ID) {
+      assertProductionVerifyToken(
+        "FACEBOOK_VERIFY_TOKEN",
+        process.env.FACEBOOK_VERIFY_TOKEN ?? process.env.META_VERIFY_TOKEN ?? PLACEHOLDER_VERIFY_TOKEN,
+      );
     }
   }
+  // Server code reads the server-only names first so a runtime value wins over
+  // the NEXT_PUBLIC_* copy Next.js may have inlined at build time; the browser
+  // bundle still needs the NEXT_PUBLIC_* variables.
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const supabasePublishableKey =
+    process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  assertProductionInfrastructure({
+    DATABASE_URL: process.env.DATABASE_URL,
+    REDIS_URL: process.env.REDIS_URL,
+    SUPABASE_URL: supabaseUrl,
+    SUPABASE_PUBLISHABLE_KEY: supabasePublishableKey,
+    SUPABASE_SERVICE_ROLE_KEY: supabaseServiceRoleKey,
+    META_TOKEN_ENCRYPTION_KEY: metaTokenEncryptionKey,
+  });
   const providerRequestTimeoutMs = positiveIntegerEnv(
     "PROVIDER_REQUEST_TIMEOUT_MS",
     process.env.PROVIDER_REQUEST_TIMEOUT_MS,
@@ -326,9 +429,9 @@ export function getServerEnv(): ServerEnv {
     adminChallengeTtlSeconds: integerEnv("ADMIN_CHALLENGE_TTL_SECONDS", process.env.ADMIN_CHALLENGE_TTL_SECONDS, 600),
     deletionJobAttempts: integerEnv("DELETION_JOB_ATTEMPTS", process.env.DELETION_JOB_ATTEMPTS, 8),
     deletionJobBackoffMs: integerEnv("DELETION_JOB_BACKOFF_MS", process.env.DELETION_JOB_BACKOFF_MS, 5_000),
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-    supabasePublishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
-    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+    supabaseUrl,
+    supabasePublishableKey,
+    supabaseServiceRoleKey,
     razorpay,
   };
 }

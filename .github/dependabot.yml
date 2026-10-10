@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Workflow actions are referenced by major tag; this keeps them current and
+  # surfaces upstream security fixes as reviewable PRs.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # pnpm workspace (package.json + pnpm-lock.yaml). Versions are exact pins,
+  # so every bump is a reviewed PR that has to pass CI.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]

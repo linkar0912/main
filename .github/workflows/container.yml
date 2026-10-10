@@ -1,37 +1,45 @@
 name: Build production container
 
+# Runs only after CI (lint, typecheck, unit tests, repository checks, the
+# production build, the migration check, and e2e) has passed for a push to
+# main. A red CI run never publishes or deploys. Database migrations are a
+# separate, operator-run release step - see ops/DOKPLOY_DEPLOYMENT.md - and
+# are never applied to production from here.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-  workflow_dispatch:
-
-concurrency:
-  group: linkar-container-main
-  cancel-in-progress: true
 
 permissions:
   contents: read
-  packages: write
+
+# Actions are referenced by major tag; Dependabot (.github/dependabot.yml)
+# keeps them current.
 
 jobs:
-  verify-and-publish:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    # Building an image is safe to abandon when a newer commit arrives.
+    concurrency:
+      group: linkar-container-publish
+      cancel-in-progress: true
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
     steps:
+      # workflow_run executes on the default branch; build exactly the commit
+      # CI verified, not whatever main points at now.
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
         with:
-          version: 11.19.0
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test
-      - run: pnpm lint
-      - run: pnpm build
+      - id: release
+        run: echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -47,25 +55,56 @@ jobs:
           images: ghcr.io/linkar0912/main
           tags: |
             type=raw,value=main
-            type=sha,format=long
+            type=raw,value=sha-${{ steps.release.outputs.sha }}
 
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           build-args: |
-            BUILD_COMMIT=${{ github.sha }}
+            BUILD_COMMIT=${{ steps.release.outputs.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Never cancel a release mid-flight: the host script updates web first and
+    # the worker second, and an interrupted SSH session could leave them on
+    # different commits. Newer releases queue behind the running one.
+    concurrency:
+      group: linkar-production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish.outputs.sha }}
+
+      # CI runs can finish out of order. Do not roll production back to an
+      # older commit because its run happened to complete last.
+      - name: Skip superseded commits
+        id: current
+        env:
+          SHA: ${{ needs.publish.outputs.sha }}
+        run: |
+          tip=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$tip" != "$SHA" ]; then
+            echo "main is now $tip; not deploying superseded $SHA"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy verified image to Dokploy
-        if: github.ref == 'refs/heads/main'
+        if: steps.current.outputs.deploy == 'true'
         env:
           DEPLOY_HOST: ${{ secrets.DOKPLOY_DEPLOY_HOST }}
           DEPLOY_KEY: ${{ secrets.DOKPLOY_DEPLOY_KEY }}
           DEPLOY_HOST_KEY: ${{ secrets.DOKPLOY_DEPLOY_HOST_KEY }}
+          SHA: ${{ needs.publish.outputs.sha }}
         run: |
           set -euo pipefail
           key=$(mktemp)
@@ -75,4 +114,20 @@ jobs:
           printf '%s\n' "$DEPLOY_HOST_KEY" > "$known_hosts"
           chmod 600 "$key" "$known_hosts"
           ssh -i "$key" -o IdentitiesOnly=yes -o UserKnownHostsFile="$known_hosts" \
-            deploybot@"$DEPLOY_HOST" "deploy $GITHUB_SHA"
+            -o ServerAliveInterval=30 \
+            deploybot@"$DEPLOY_HOST" "deploy $SHA"
+
+      # Independent confirmation from outside the host that web and worker
+      # both report the released commit.
+      - name: Verify the release from outside
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          PRODUCTION_HEALTH_URL: https://app.linkar.in/api/health
+          HEALTH_DETAIL_TOKEN: ${{ secrets.HEALTH_DETAIL_TOKEN }}
+          EXPECTED_RELEASE: ${{ needs.publish.outputs.sha }}
+        run: |
+          if [ -z "$HEALTH_DETAIL_TOKEN" ]; then
+            echo "::warning::HEALTH_DETAIL_TOKEN secret is not set; checking public status only"
+            unset EXPECTED_RELEASE
+          fi
+          node scripts/check-production-health.mjs
