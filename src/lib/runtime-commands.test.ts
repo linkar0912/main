@@ -52,7 +52,8 @@ describe("production runtime commands", () => {
     const worker = readProjectFile("src/worker.ts");
     expect(worker).toContain("createSystemMonitor");
     expect(worker).toContain("SYSTEM_MONITOR_INTERVAL_MS");
-    expect(worker).toContain("void runSystemMonitor()");
+    // background.every runs the task at startup unless given a first-run delay.
+    expect(worker).toMatch(/background\.every\("Production system monitor", SYSTEM_MONITOR_INTERVAL_MS, async \(\) => \{[\s\S]*?\n  \}\);/);
   });
 });
 
