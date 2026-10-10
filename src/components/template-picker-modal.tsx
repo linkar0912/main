@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AtSign,
@@ -19,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { FacebookGlyph } from "./facebook-glyph";
+import { useFocusTrap } from "./use-focus-trap";
 import { InstagramGlyph } from "./instagram-glyph";
 import { basicAutomationTemplates, getCompatibleTemplates, triggerLabel, type PremadeTemplate, type TemplateTriggerType } from "@/src/lib/automation/templates";
 
@@ -79,21 +81,14 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
   const [category, setCategory] = useState<TemplateTriggerType | null>(null);
   const [provider, setProvider] = useState<"INSTAGRAM" | "FACEBOOK">("INSTAGRAM");
   const [facebookPages, setFacebookPages] = useState<{ pageId: string; pageName: string; status: string }[]>([]);
+  const [facebookPagesState, setFacebookPagesState] = useState<"loading" | "ready" | "error">("loading");
+  const [facebookPagesAttempt, setFacebookPagesAttempt] = useState(0);
   const [facebookPageId, setFacebookPageId] = useState("");
   const headingId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [onClose]);
+  useFocusTrap(panelRef, { onEscape: onClose, initialFocusRef: searchRef });
 
   useEffect(() => {
     if (provider !== "FACEBOOK") return;
@@ -101,13 +96,20 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
     fetch("/api/facebook/connection")
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as { data?: { pageId: string; pageName: string; status: string }[] };
-        if (active && response.ok) setFacebookPages((payload.data ?? []).filter((page) => page.status === "CONNECTED"));
+        if (!active) return;
+        if (!response.ok) throw new Error("Could not load your Facebook Pages");
+        setFacebookPages((payload.data ?? []).filter((page) => page.status === "CONNECTED"));
+        setFacebookPagesState("ready");
       })
       .catch(() => {
-        if (active) setFacebookPages([]);
+        if (!active) return;
+        setFacebookPages([]);
+        setFacebookPagesState("error");
       });
     return () => { active = false; };
-  }, [provider]);
+  }, [provider, facebookPagesAttempt]);
+
+  const noFacebookPage = provider === "FACEBOOK" && facebookPagesState === "ready" && facebookPages.length === 0;
 
   function go(href: string) {
     onClose();
@@ -167,7 +169,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
 
   return createPortal(
     <div className="modal-scrim template-picker-scrim" onMouseDown={onClose}>
-      <div className="modal-panel is-wide template-picker" role="dialog" aria-modal="true" aria-labelledby={headingId} onMouseDown={(event) => event.stopPropagation()}>
+      <div ref={panelRef} tabIndex={-1} className="modal-panel is-wide template-picker" role="dialog" aria-modal="true" aria-labelledby={headingId} onMouseDown={(event) => event.stopPropagation()}>
         <header className="template-picker-head">
           <h2 id={headingId}>Templates</h2>
           <div className="template-picker-head-actions">
@@ -183,7 +185,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
         <div className="template-picker-search">
           <Search size={16} />
           <input
-            autoFocus
+            ref={searchRef}
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -219,7 +221,11 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
                 className={`segmented-option template-channel-option is-facebook ${provider === "FACEBOOK" ? "is-active" : ""}`}
                 aria-label="Facebook"
                 aria-pressed={provider === "FACEBOOK"}
-                onClick={() => { setProvider("FACEBOOK"); setCategory(null); }}
+                onClick={() => {
+                  if (provider !== "FACEBOOK") setFacebookPagesState("loading");
+                  setProvider("FACEBOOK");
+                  setCategory(null);
+                }}
               >
                 <span className="template-channel-brand-mark"><FacebookGlyph size={19} brand /></span>
                 <span>Facebook</span>
@@ -229,13 +235,48 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
 
           <span className="template-channel-flow" aria-hidden="true"><span /><ChevronRight size={14} /></span>
 
-          {provider === "FACEBOOK" && (
+          {provider === "FACEBOOK" && facebookPagesState === "error" && (
+            <div className="template-channel-destination" role="alert">
+              <span className="template-channel-context-label">Connected Page</span>
+              <span>
+                Your Facebook Pages could not load.{" "}
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={() => {
+                    setFacebookPagesState("loading");
+                    setFacebookPagesAttempt((attempt) => attempt + 1);
+                  }}
+                >
+                  Try again
+                </button>
+              </span>
+            </div>
+          )}
+
+          {noFacebookPage && (
+            <div className="template-channel-destination">
+              <span className="template-channel-context-label">Connected Page</span>
+              <span>
+                No Page connected -{" "}
+                <Link className="text-link" href="/settings" onClick={onClose}>connect one in Settings</Link>
+              </span>
+            </div>
+          )}
+
+          {provider === "FACEBOOK" && (facebookPagesState === "loading" || (facebookPagesState === "ready" && facebookPages.length > 0)) && (
             <label className="template-channel-destination">
               <span className="template-channel-context-label">Connected Page</span>
               <span className="template-channel-select-shell">
                 <FacebookGlyph size={16} />
-                <select aria-label="Facebook Page" value={facebookPageId} onChange={(event) => setFacebookPageId(event.target.value)}>
-                  <option value="">Select a connected Page</option>
+                <select
+                  aria-label="Facebook Page"
+                  value={facebookPageId}
+                  disabled={facebookPagesState === "loading"}
+                  aria-busy={facebookPagesState === "loading"}
+                  onChange={(event) => setFacebookPageId(event.target.value)}
+                >
+                  <option value="">{facebookPagesState === "loading" ? "Loading your Pages…" : "Select a connected Page"}</option>
                   {facebookPages.map((page) => <option key={page.pageId} value={page.pageId}>{page.pageName}</option>)}
                 </select>
                 <ChevronDown className="template-channel-select-chevron" size={16} aria-hidden="true" />
@@ -275,7 +316,15 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
           <div className="template-picker-content" role="region" aria-label="Template results" tabIndex={0}>
             {visible.length === 0 && (
               <p className="muted">
-                {provider === "FACEBOOK" && !facebookPageId ? "Select a connected Facebook Page to choose a recipe." : `No templates match “${query}”.`}
+                {provider === "FACEBOOK" && !facebookPageId
+                  ? facebookPagesState === "loading"
+                    ? "Loading your Facebook Pages…"
+                    : facebookPagesState === "error"
+                      ? "Your Facebook Pages could not load. Try again above."
+                      : noFacebookPage
+                        ? <>No Facebook Page connected yet - <Link className="text-link" href="/settings" onClick={onClose}>connect one in Settings</Link> to build Page automations.</>
+                        : "Select a connected Facebook Page to choose a recipe."
+                  : `No templates match “${query}”.`}
               </p>
             )}
 

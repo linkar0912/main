@@ -10,6 +10,8 @@ function automation(id: string, workspaceId: string): AutomationRecord {
     id,
     workspaceId,
     name: `Automation for ${workspaceId}`,
+    provider: "INSTAGRAM",
+    priority: 0,
     status: "ACTIVE",
     version: 1,
     definition: {

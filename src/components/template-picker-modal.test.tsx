@@ -163,4 +163,74 @@ describe("TemplatePickerModal", () => {
 
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("focuses search on open, traps Tab inside, locks scroll, and returns focus on close", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+
+    const { unmount } = render(<TemplatePickerModal onClose={() => {}} />);
+    const dialog = screen.getByRole("dialog");
+    expect(document.activeElement).toBe(screen.getByLabelText("Search templates"));
+    expect(document.body.style.overflow).toBe("hidden");
+
+    const focusables = dialog.querySelectorAll<HTMLElement>("button:not([disabled]), input, select, [tabindex]:not([tabindex='-1'])");
+    const last = focusables[focusables.length - 1];
+    last.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(focusables[0]);
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+
+    unmount();
+    expect(document.body.style.overflow).toBe("");
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it("shows a loading state while the Facebook Pages load", async () => {
+    let resolve: (value: unknown) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((done) => { resolve = done; })));
+    render(<TemplatePickerModal onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Facebook" }));
+    const select = screen.getByLabelText("Facebook Page") as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect(screen.getAllByText(/Loading your/i).length).toBeGreaterThan(0);
+
+    resolve({ ok: true, json: async () => ({ data: [{ pageId: "page_1", pageName: "Linkar Demo", status: "CONNECTED" }] }) });
+    await waitFor(() => expect((screen.getByLabelText("Facebook Page") as HTMLSelectElement).disabled).toBe(false));
+  });
+
+  it("points to Settings instead of a dead end when no Page is connected", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      // A disconnected Page doesn't count as connected.
+      json: async () => ({ data: [{ pageId: "page_old", pageName: "Old Page", status: "DISCONNECTED" }] }),
+    })));
+    const onClose = vi.fn();
+    render(<TemplatePickerModal onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Facebook" }));
+
+    const links = await screen.findAllByRole("link", { name: /connect one in settings/i });
+    expect(links[0].getAttribute("href")).toBe("/settings");
+    expect(screen.queryByLabelText("Facebook Page")).toBeNull();
+    expect(screen.getByText(/No Page connected/)).toBeTruthy();
+  });
+
+  it("shows an error with a retry when the Facebook Pages fail to load", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "boom" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ pageId: "page_1", pageName: "Linkar Demo", status: "CONNECTED" }] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TemplatePickerModal onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Facebook" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/could not load/i);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("option", { name: "Linkar Demo" })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
