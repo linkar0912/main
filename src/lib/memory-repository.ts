@@ -124,6 +124,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
   const outboundDeliveries = new Map<string, OutboundDeliveryRecord>();
   const outboundUsageReservations = new Map<string, string>();
   const outboundMonthlyUsage = new Map<string, number>();
+  // WorkspaceUsagePeriod.broadcastsCreated, keyed like outboundMonthlyUsage.
+  const broadcastMonthlyUsage = new Map<string, number>();
   const automationDailySendCounters = new Map<string, number>();
   const deletionRequests = new Map<string, DataDeletionRequestRecord>();
   const participants = new Map<string, AutomationParticipantRecord>();
@@ -1201,6 +1203,9 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       if (
         existing.state === "SENT"
         || existing.state === "UNKNOWN"
+        // Prisma only claims PENDING / retryable FAILED rows, so a cancelled
+        // broadcast recipient is terminal there too.
+        || existing.state === "CANCELLED"
         || (existing.state === "FAILED" && !existing.retryable)
       ) {
         return { status: "TERMINAL" as const, record: existing };
@@ -2433,17 +2438,76 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {
-      const cutoff = broadcastSegmentCutoff(segment, new Date());
-      return [...contacts.values()]
+      const now = new Date();
+      const cutoff = broadcastSegmentCutoff(segment, now);
+      const windowStart = new Date(now.getTime() - MESSAGING_WINDOW_MS).toISOString();
+      // Mirrors AutomationContact.lastInboundAt, which Postgres maintains
+      // from inbound message webhook events.
+      const messageTypes = new Set(["message.received", "quick_reply.received", "postback.received", "story_mention.received"]);
+      const lastInboundAt = (contact: AutomationContactRecord) => [...webhookEvents.values()]
+        .filter((event) => event.workspaceId === workspaceId
+          && messageTypes.has(event.eventType)
+          && event.payload.accountId === contact.instagramAccountId
+          && event.payload.recipientId === contact.igScopedUserId)
+        .reduce<string | undefined>((latest, event) => (!latest || event.receivedAt > latest ? event.receivedAt : latest), undefined);
+      const eligible = [...contacts.values()]
         .filter((contact) => {
           if (contact.workspaceId !== workspaceId || contact.suppressedAt) return false;
           if (cutoff && contact.lastSeenAt >= cutoff.toISOString()) return false;
-          if (segment === "captured_email") return contact.state === "CAPTURED" && Boolean(contact.email);
+          if (segment === "captured_email" && !(contact.state === "CAPTURED" && contact.email)) return false;
           return true;
         })
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
-        .slice(0, limit)
-        .map((contact) => ({ igScopedUserId: contact.igScopedUserId, instagramAccountId: contact.instagramAccountId }));
+        .map((contact) => ({ contact, lastInboundAt: lastInboundAt(contact) }))
+        .filter((row): row is { contact: AutomationContactRecord; lastInboundAt: string } =>
+          Boolean(row.lastInboundAt && row.lastInboundAt >= windowStart))
+        .sort((a, b) => b.lastInboundAt.localeCompare(a.lastInboundAt) || a.contact.id.localeCompare(b.contact.id));
+      return {
+        recipients: eligible.slice(0, limit).map(({ contact }) => ({
+          igScopedUserId: contact.igScopedUserId,
+          instagramAccountId: contact.instagramAccountId,
+        })),
+        totalEligible: eligible.length,
+      };
+    },
+
+    async cancelBroadcast(workspaceId, id) {
+      const broadcast = broadcasts.get(id);
+      if (!broadcast || broadcast.workspaceId !== workspaceId) return { status: "not_found" as const };
+      if (broadcast.status !== "PENDING" && broadcast.status !== "RUNNING") {
+        return { status: "not_cancellable" as const, broadcast: copy(broadcast) };
+      }
+      const timestamp = now();
+      const cancelled: BroadcastRecord = { ...broadcast, status: "CANCELLED", cancelledAt: timestamp, completedAt: timestamp };
+      broadcasts.set(id, cancelled);
+      for (const [key, delivery] of outboundDeliveries) {
+        if (delivery.workspaceId !== workspaceId || delivery.broadcastId !== id) continue;
+        if (delivery.state === "PENDING" || (delivery.state === "FAILED" && delivery.retryable)) {
+          outboundDeliveries.set(key, { ...delivery, state: "CANCELLED", retryable: false, updatedAt: timestamp });
+        }
+      }
+      return { status: "cancelled" as const, broadcast: copy(cancelled) };
+    },
+
+    async reserveMonthlyBroadcast(workspaceId, periodStart, limit) {
+      const key = `${workspaceId}:${periodStart}`;
+      const used = broadcastMonthlyUsage.get(key) ?? 0;
+      if (limit !== null && used >= limit) return { reserved: false, used };
+      broadcastMonthlyUsage.set(key, used + 1);
+      return { reserved: true, used: used + 1 };
+    },
+
+    async releaseMonthlyBroadcast(workspaceId, periodStart) {
+      const key = `${workspaceId}:${periodStart}`;
+      const used = broadcastMonthlyUsage.get(key) ?? 0;
+      if (used > 0) broadcastMonthlyUsage.set(key, used - 1);
+    },
+
+    async getWorkspaceUsage(workspaceId, periodStart) {
+      const key = `${workspaceId}:${periodStart}`;
+      return {
+        deliveriesReserved: outboundMonthlyUsage.get(key) ?? 0,
+        broadcastsCreated: broadcastMonthlyUsage.get(key) ?? 0,
+      };
     },
 
     async createTrackedLink(workspaceId, input) {

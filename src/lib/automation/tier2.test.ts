@@ -229,7 +229,16 @@ describe("broadcasts", () => {
     await repository.touchContact("workspace_a", "ig_1", "lead_2", new Date().toISOString());
     await repository.suppressContact("workspace_a", "ig_1", "lead_2", new Date().toISOString());
 
-    const recipients = await repository.listBroadcastRecipients("workspace_a", "all_contacts", 100);
+    // Recipients are people inside the 24-hour window: both leads messaged us.
+    for (const lead of ["lead_1", "lead_2"]) {
+      await repository.recordWebhookEvent("workspace_a", {
+        providerEventId: `dm_${lead}`,
+        eventType: "message.received",
+        receivedAt: new Date().toISOString(),
+        payload: { accountId: "ig_1", recipientId: lead, text: "hi" },
+      });
+    }
+    const { recipients } = await repository.listBroadcastRecipients("workspace_a", "all_contacts", 100);
     expect(recipients.map((r) => r.igScopedUserId)).toEqual(["lead_1"]);
 
     const broadcast = await repository.createBroadcast("workspace_a", {

@@ -431,6 +431,7 @@ function mapBroadcastRow(record: {
   skipped: number;
   createdAt: Date;
   completedAt: Date | null;
+  cancelledAt?: Date | null;
 }): BroadcastRecord {
   return {
     id: record.id,
@@ -445,6 +446,7 @@ function mapBroadcastRow(record: {
     skipped: record.skipped,
     createdAt: record.createdAt.toISOString(),
     completedAt: record.completedAt?.toISOString(),
+    ...(record.cancelledAt ? { cancelledAt: record.cancelledAt.toISOString() } : {}),
   };
 }
 
@@ -3202,19 +3204,89 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {
-      const cutoff = broadcastSegmentCutoff(segment, new Date());
-      const records = await client.automationContact.findMany({
-        where: {
-          workspaceId,
-          suppressedAt: null,
-          ...(cutoff ? { lastSeenAt: { lt: cutoff } } : {}),
-          ...(segment === "captured_email" ? { state: "CAPTURED", email: { not: null } } : {}),
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-        take: limit,
-        select: { igScopedUserId: true, instagramAccountId: true },
+      const now = new Date();
+      const cutoff = broadcastSegmentCutoff(segment, now);
+      // Only people inside Meta's 24-hour window can be messaged at all, so the
+      // cap is spent on them - most recently active first - instead of on the
+      // newest contact rows, most of which the runner would skip.
+      const where: Prisma.AutomationContactWhereInput = {
+        workspaceId,
+        suppressedAt: null,
+        lastInboundAt: { gte: new Date(now.getTime() - MESSAGING_WINDOW_MS) },
+        ...(cutoff ? { lastSeenAt: { lt: cutoff } } : {}),
+        ...(segment === "captured_email" ? { state: "CAPTURED", email: { not: null } } : {}),
+      };
+      const [recipients, totalEligible] = await Promise.all([
+        client.automationContact.findMany({
+          where,
+          orderBy: [{ lastInboundAt: "desc" }, { id: "asc" }],
+          take: limit,
+          select: { igScopedUserId: true, instagramAccountId: true },
+        }),
+        client.automationContact.count({ where }),
+      ]);
+      return { recipients, totalEligible };
+    },
+
+    async cancelBroadcast(workspaceId, id) {
+      return client.$transaction(async (transaction) => {
+        const now = new Date();
+        const changed = await transaction.broadcast.updateMany({
+          where: { id, workspaceId, status: { in: ["PENDING", "RUNNING"] } },
+          data: { status: "CANCELLED", cancelledAt: now, completedAt: now, version: { increment: 1 } },
+        });
+        const record = await transaction.broadcast.findFirst({ where: { id, workspaceId } });
+        if (!record) return { status: "not_found" as const };
+        if (changed.count === 0) return { status: "not_cancellable" as const, broadcast: mapBroadcastRow(record) };
+        // Queued jobs still run, but prepareOutboundDelivery only claims
+        // PENDING or retryable FAILED rows, so a CANCELLED row is never sent.
+        await transaction.outboundDelivery.updateMany({
+          where: { workspaceId, broadcastId: id, OR: [{ state: "PENDING" }, { state: "FAILED", retryable: true }] },
+          data: { state: "CANCELLED", retryable: false, version: { increment: 1 } },
+        });
+        return { status: "cancelled" as const, broadcast: mapBroadcastRow(record) };
       });
-      return records;
+    },
+
+    async reserveMonthlyBroadcast(workspaceId, periodStart, limit) {
+      const periodStartDate = new Date(`${periodStart}T00:00:00.000Z`);
+      const withinLimit = limit === null
+        ? Prisma.sql`TRUE`
+        : Prisma.sql`"WorkspaceUsagePeriod"."broadcastsCreated" < ${limit}`;
+      const firstFits = limit === null ? Prisma.sql`TRUE` : Prisma.sql`${limit} > 0`;
+      // One statement: the conditional increment is the limit check, so two
+      // concurrent creates can never both take the last slot.
+      const [row] = await client.$queryRaw<Array<{ broadcastsCreated: number }>>(Prisma.sql`
+        INSERT INTO "WorkspaceUsagePeriod" ("workspaceId", "periodStart", "broadcastsCreated", "updatedAt")
+        SELECT ${workspaceId}, ${periodStartDate}::date, 1, NOW()
+        WHERE ${firstFits}
+        ON CONFLICT ("workspaceId", "periodStart") DO UPDATE
+          SET "broadcastsCreated" = "WorkspaceUsagePeriod"."broadcastsCreated" + 1,
+              "updatedAt" = NOW()
+          WHERE ${withinLimit}
+        RETURNING "broadcastsCreated"
+      `);
+      if (row) return { reserved: true, used: Number(row.broadcastsCreated) };
+      const usage = await client.workspaceUsagePeriod.findUnique({
+        where: { workspaceId_periodStart: { workspaceId, periodStart: periodStartDate } },
+        select: { broadcastsCreated: true },
+      });
+      return { reserved: false, used: usage?.broadcastsCreated ?? 0 };
+    },
+
+    async releaseMonthlyBroadcast(workspaceId, periodStart) {
+      await client.workspaceUsagePeriod.updateMany({
+        where: { workspaceId, periodStart: new Date(`${periodStart}T00:00:00.000Z`), broadcastsCreated: { gt: 0 } },
+        data: { broadcastsCreated: { decrement: 1 } },
+      });
+    },
+
+    async getWorkspaceUsage(workspaceId, periodStart) {
+      const usage = await client.workspaceUsagePeriod.findUnique({
+        where: { workspaceId_periodStart: { workspaceId, periodStart: new Date(`${periodStart}T00:00:00.000Z`) } },
+        select: { deliveriesReserved: true, broadcastsCreated: true },
+      });
+      return { deliveriesReserved: usage?.deliveriesReserved ?? 0, broadcastsCreated: usage?.broadcastsCreated ?? 0 };
     },
 
     async createTrackedLink(workspaceId, input) {

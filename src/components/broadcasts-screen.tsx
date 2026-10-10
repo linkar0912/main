@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Megaphone } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
+import { toReadableApiError } from "@/src/lib/validation-error";
 
 type BroadcastRow = {
   id: string;
@@ -16,6 +17,34 @@ type BroadcastRow = {
 };
 
 type Segment = "all_contacts" | "captured_email";
+
+type Audience = { eligible: number; queued: number; truncated: boolean };
+
+/** The stored status values are machine words; people see these. */
+const STATUS_LABELS: Record<string, string> = {
+  PENDING: "Scheduled",
+  RUNNING: "Sending",
+  COMPLETED: "Sent",
+  CANCELLED: "Cancelled",
+};
+
+function statusLabel(status: string): string {
+  return STATUS_LABELS[status] ?? status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function isCancellable(status: string): boolean {
+  return status === "PENDING" || status === "RUNNING";
+}
+
+function audienceNotice(audience: Audience | undefined, scheduled: boolean): string {
+  const lead = scheduled ? "Broadcast scheduled" : "Broadcast started";
+  if (!audience) return scheduled ? "Broadcast scheduled." : "Broadcast started - messages are going out now.";
+  if (audience.queued === 0) return `${lead}, but nobody messaged you in the last 24 hours, so there is no one to send it to.`;
+  if (audience.truncated) {
+    return `${lead} for the ${audience.queued.toLocaleString()} most recently active of ${audience.eligible.toLocaleString()} people in the 24-hour window. Send another broadcast to reach the rest.`;
+  }
+  return `${lead} for ${audience.queued.toLocaleString()} ${audience.queued === 1 ? "person" : "people"} in the 24-hour window.`;
+}
 
 /** One-off DM blasts to a contact segment - its own tab, not a footnote on My Automations. */
 export function BroadcastsScreen() {
@@ -32,6 +61,9 @@ export function BroadcastsScreen() {
   // Sending DMs a whole segment and cannot be undone, so the first press only
   // asks; the second (Confirm) actually starts it.
   const [confirming, setConfirming] = useState(false);
+  // Cancelling also asks once: messages already sent stay sent.
+  const [confirmCancelId, setConfirmCancelId] = useState("");
+  const [cancellingId, setCancellingId] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -70,6 +102,31 @@ export function BroadcastsScreen() {
     }
   }
 
+  async function cancelBroadcast(id: string) {
+    if (confirmCancelId !== id) {
+      setConfirmCancelId(id);
+      return;
+    }
+    setConfirmCancelId("");
+    setCancellingId(id);
+    setLoadError("");
+    try {
+      const response = await fetch(`/api/broadcasts/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "CANCELLED" }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(toReadableApiError(payload.error, "Could not cancel this broadcast."));
+      setNotice("Broadcast cancelled. Messages already sent stay sent.");
+      await refresh();
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : "Could not cancel this broadcast.");
+    } finally {
+      setCancellingId("");
+    }
+  }
+
   async function send(event: React.FormEvent) {
     event.preventDefault();
     setError("");
@@ -95,14 +152,14 @@ export function BroadcastsScreen() {
           ...(scheduledFor && scheduledFor.getTime() > Date.now() ? { scheduleStart: scheduledFor.toISOString() } : {}),
         }),
       });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; audience?: Audience };
       if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error ?? "Could not start this broadcast.");
+        throw new Error(toReadableApiError(payload.error, "Could not start this broadcast."));
       }
       setName("");
       setText("");
       setScheduleStart("");
-      setNotice(scheduledFor ? "Broadcast scheduled." : "Broadcast started - messages are going out now.");
+      setNotice(audienceNotice(payload.audience, Boolean(scheduledFor)));
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not start this broadcast.");
@@ -136,7 +193,7 @@ export function BroadcastsScreen() {
                       <div className="automation-copy">
                         <div className="automation-title">
                           <strong>{broadcast.name}</strong>
-                          <em className="sequence-status" data-status={broadcast.status}>{broadcast.status}</em>
+                          <em className="sequence-status" data-status={broadcast.status}>{statusLabel(broadcast.status)}</em>
                         </div>
                         <p>
                           {broadcast.sent}/{broadcast.total} sent
@@ -144,6 +201,24 @@ export function BroadcastsScreen() {
                           {broadcast.skipped > 0 ? ` · ${broadcast.skipped} skipped` : ""}
                         </p>
                       </div>
+                      {isCancellable(broadcast.status) && (
+                        <div className="button-row">
+                          {confirmCancelId === broadcast.id && (
+                            <button className="button button-secondary button-small" type="button" onClick={() => setConfirmCancelId("")}>
+                              Keep sending
+                            </button>
+                          )}
+                          <button
+                            className="button button-secondary button-small"
+                            type="button"
+                            disabled={cancellingId === broadcast.id}
+                            aria-label={confirmCancelId === broadcast.id ? `Confirm cancelling ${broadcast.name}` : `Cancel ${broadcast.name}`}
+                            onClick={() => void cancelBroadcast(broadcast.id)}
+                          >
+                            {cancellingId === broadcast.id ? "Cancelling…" : confirmCancelId === broadcast.id ? "Confirm cancel" : "Cancel"}
+                          </button>
+                        </div>
+                      )}
                     </article>
                   ))}
                 </div>
