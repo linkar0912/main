@@ -196,4 +196,25 @@ describe("workspace palette contract", () => {
     // (grey, later white) made them invisible.
     expect(css).toMatch(/\.ig-screen-dm\s*{[^}]*background:\s*#000/);
   });
+
+  it("lifts danger text to a readable tone in dark mode and keeps danger buttons legible", () => {
+    const darkBlock = css.match(/\[data-theme="dark"\]\s*{([^}]*)}/)?.[1] ?? "";
+    expect(darkBlock).toMatch(/--danger:\s*#ff8a80/);
+    expect(css).toMatch(/\[data-theme="dark"\]\s*\.button-danger\s*{[^}]*color:\s*#101116/);
+  });
+
+  it("shows not-allowed on disabled buttons and keeps the busy cursor for work in progress", () => {
+    expect(css).toMatch(/button:disabled\s*{[^}]*cursor:\s*not-allowed/);
+    expect(css).toMatch(/button:disabled\[aria-busy="true"\][^{]*{[^}]*cursor:\s*wait/);
+  });
+
+  it("keeps admin dialog actions reachable on short screens", () => {
+    expect(css).toMatch(/\.admin-dialog-backdrop\s*{[^}]*overflow-y:\s*auto/);
+    expect(css).toMatch(/\.admin-reason-dialog\s*{[^}]*max-height:[^}]*overflow-y:\s*auto/);
+  });
+
+  it("hides the skip link until it receives focus", () => {
+    expect(css).toMatch(/\.skip-link\s*{[^}]*transform:\s*translatey\(-200%\)/);
+    expect(css).toMatch(/\.skip-link:focus\s*{[^}]*transform:\s*none/);
+  });
 });

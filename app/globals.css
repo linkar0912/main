@@ -176,6 +176,9 @@ html {
   --leaf-line: #286a59;
   --honey-soft: #33230d;
   --honey-line: #57431c;
+  /* #b42318 reads at ~2.6:1 on the graphite panels; error text and danger
+     fills switch to a light coral that clears 4.5:1 in dark mode. */
+  --danger: #ff8a80;
   --danger-soft: #3a1512;
   --danger-line: #6b2b25;
   --warning-ink: #e3ab4d;
@@ -197,6 +200,7 @@ html {
 [data-theme="dark"] .avatar,
 [data-theme="dark"] .auth-page button[type="submit"] { color: #101116; }
 [data-theme="dark"] .plan-tag { color: #101116; }
+[data-theme="dark"] .button-danger { color: #101116; }
 [data-theme="dark"] .setup-row.is-done .setup-node { color: #101116; }
 [data-theme="dark"] .sidebar-link.is-active { color: #101116; }
 [data-theme="dark"] .sidebar-link.is-active svg { color: #101116; }
@@ -228,7 +232,9 @@ a { color: inherit; text-decoration: none; }
 
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
-button:disabled { cursor: wait; opacity: .65; }
+button:disabled { cursor: not-allowed; opacity: .65; }
+/* Only a control that is actually working shows the busy cursor. */
+button:disabled[aria-busy="true"], [aria-busy="true"] button:disabled { cursor: wait; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -2408,8 +2414,10 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .admin-drawer-close { float: right; }
 .admin-detail-drawer > h2 { clear: both; margin-bottom: var(--space-3); overflow-wrap: anywhere; }
 .admin-detail-drawer .admin-inline-kv { margin: var(--space-5) 0; }
-.admin-dialog-backdrop { align-items: center; display: flex; justify-content: center; padding: var(--space-4); z-index: 80; }
-.admin-reason-dialog { display: grid; gap: var(--space-4); max-width: 520px; padding: var(--space-6); width: 100%; }
+/* The backdrop scrolls and the dialog caps its height so Confirm stays
+   reachable on short phone screens and with the on-screen keyboard open. */
+.admin-dialog-backdrop { align-items: center; display: flex; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-4); z-index: 80; }
+.admin-reason-dialog { display: grid; gap: var(--space-4); margin: auto; max-height: calc(100dvh - 2 * var(--space-4)); max-width: 520px; overflow-y: auto; padding: var(--space-6); width: 100%; }
 .admin-reason-dialog textarea { min-height: 100px; }
 .admin-warning-copy { background: var(--warning-soft, var(--surface-soft)); border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: .8rem; margin: 0; padding: var(--space-3); }
 .admin-integration-filter { display: grid; grid-template-columns: 145px 145px 180px minmax(180px, 1fr) minmax(180px, 1fr) auto; }
@@ -3533,6 +3541,45 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   width: 1px;
 }
 
+/* "Skip to content": off-screen until keyboard focus lands on it. */
+.skip-link {
+  background: var(--ink-strong);
+  border-radius: var(--radius-sm);
+  color: var(--paper);
+  font-size: .85rem;
+  font-weight: 700;
+  left: 12px;
+  padding: 10px 14px;
+  position: fixed;
+  top: 12px;
+  transform: translateY(-200%);
+  z-index: 1100;
+}
+.skip-link:focus { transform: none; }
+.main-content:focus { outline: none; }
+
+/* Inline confirmation for destructive actions (disconnect, revoke, sign out
+   everywhere): the consequence is spelled out next to the control. */
+.inline-confirm {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius-sm);
+  display: grid;
+  flex: 1 1 100%;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.inline-confirm p { color: var(--ink); font-size: .84rem; line-height: 1.45; margin: 0; }
+.inline-confirm .button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
+/* Beats the panel-coloured buttons inside settings connection rows. */
+.inline-confirm .button.button-danger { background: var(--danger); }
+
+/* app/(app)/error.tsx: the recoverable error state inside the shell. */
+.workspace-error .empty-state { margin-top: var(--space-8); }
+.workspace-error .button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: center; margin-top: var(--space-4); }
+.workspace-error-ref { font-family: var(--font-mono); font-size: var(--type-meta); margin-top: var(--space-4); }
+
 /* Dashboard "Reply volume" stat block - card with label + value row. */
 .stat-block {
   background: transparent;
@@ -4201,6 +4248,8 @@ a.automation-row:hover .row-chevron { color: var(--ink); }
 .settings-rows { display: grid; list-style: none; margin: 0; padding: 0; }
 .settings-row { border-top: 1px solid var(--line); font-size: .84rem; margin: 0; padding: 14px 20px; }
 .settings-row-split { align-items: center; display: flex; gap: 20px; justify-content: space-between; }
+/* An inline confirmation drops onto its own line under the row. */
+.settings-row-split:has(> .inline-confirm) { flex-wrap: wrap; }
 .settings-row-copy { display: grid; gap: 2px; min-width: 0; }
 .settings-row-copy strong { align-items: center; display: flex; font-size: .86rem; gap: 8px; }
 .settings-row-copy small { color: var(--muted); font-size: .76rem; line-height: 1.45; }
@@ -5447,6 +5496,7 @@ a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-vo
 .contact-detail-identity h2 { font-size: 1.15rem; }
 .contact-detail-drawer > .form-error,
 .contact-detail-drawer > .contact-detail-notice { margin: 0; padding: 10px 20px; top: 0; }
+.contact-detail-load-error { flex-wrap: wrap; justify-content: space-between; }
 .contact-detail-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 16px 20px 0; }
 .contact-detail-section { padding: 20px; }
 .contact-detail-chips + .contact-detail-section { border-top: 0; padding-top: 16px; }
