@@ -763,6 +763,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       };
     },
 
+    async revokeUserSessions(userId, at) {
+      const sessionInvalidBefore = new Date(at);
+      await client.platformUserControl.upsert({
+        where: { userId },
+        create: { userId, sessionInvalidBefore },
+        update: { sessionInvalidBefore },
+      });
+    },
+
     async getPlatformUserControlState(userId) {
       const control = await client.platformUserControl.findUnique({
         where: { userId },
@@ -1265,6 +1274,23 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         // so a "delete my data" request left DM payloads and recipient IDs
         // behind indefinitely.
         await transaction.outboundDelivery.deleteMany({ where: { instagramAccountId: igUserId } });
+        if (workspaceIds.length > 0) {
+          // This account's own webhook events and the executions they
+          // triggered go even when sibling connections keep the workspace
+          // alive (an automation with a NULL instagramAccountId fires for
+          // every account, so its executions are matched by event id).
+          await transaction.$executeRaw(Prisma.sql`
+            DELETE FROM "AutomationExecution" AS execution
+            USING "WebhookEvent" AS event
+            WHERE event."workspaceId" IN (${Prisma.join(workspaceIds)})
+              AND event."accountId" = ${igUserId}
+              AND execution."workspaceId" = event."workspaceId"
+              AND execution."externalEventId" = event."providerEventId"
+          `);
+          await transaction.webhookEvent.deleteMany({
+            where: { workspaceId: { in: workspaceIds }, accountId: igUserId },
+          });
+        }
         await transaction.instagramConnection.deleteMany({ where: { igUserId } });
         for (const workspaceId of workspaceIds) {
           const remainingConnections = await transaction.instagramConnection.count({ where: { workspaceId } });
@@ -1460,14 +1486,36 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           AND "repliedAt" IS NULL
       `);
     },
+    async listFacebookPageIdsByUserId(facebookUserId) {
+      const pages = await client.facebookPageConnection.findMany({
+        where: { facebookUserId },
+        select: { pageId: true },
+      });
+      return pages.map((page) => page.pageId);
+    },
     async beginFacebookDataDeletion(facebookUserId, confirmationCode, signedRequestHash) {
       const record = await client.$transaction(async (transaction) => {
         const pages = await transaction.facebookPageConnection.findMany({
           where: { facebookUserId },
-          select: { pageId: true },
+          select: { pageId: true, workspaceId: true },
         });
         const pageIds = pages.map((page) => page.pageId);
-        if (pageIds.length > 0) await transaction.automation.deleteMany({ where: { facebookPageId: { in: pageIds } } });
+        if (pageIds.length > 0) {
+          // Deleting the automations cascades their executions and
+          // FacebookReplyRecipient rows. The Facebook runner writes no
+          // OutboundDelivery rows, so there is nothing to remove there.
+          await transaction.automation.deleteMany({ where: { facebookPageId: { in: pageIds } } });
+          // Facebook comment events keep the page id in the payload only
+          // (accountId stays NULL); scope by workspace so the JSON filter
+          // runs over the (workspaceId, receivedAt) index, not the table.
+          await transaction.webhookEvent.deleteMany({
+            where: {
+              workspaceId: { in: [...new Set(pages.map((page) => page.workspaceId))] },
+              eventType: { startsWith: "facebook." },
+              OR: pageIds.map((pageId) => ({ payload: { path: ["pageId"], equals: pageId } })),
+            },
+          });
+        }
         await transaction.facebookPageConnection.deleteMany({ where: { facebookUserId } });
         return transaction.dataDeletionRequest.create({
           data: { id: createId("deletion"), confirmationCode, signedRequestHash, status: "PENDING" },
@@ -3192,18 +3240,29 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           conversionUrl: input.conversionUrl ?? null,
           notes: input.notes ?? null,
           createdByUserId: input.createdByUserId ?? null,
+          disabledAt: input.disabledAt ? new Date(input.disabledAt) : null,
         },
+      }).catch((error: unknown) => {
+        // Slugs are globally unique (one public /r/ namespace). Surface the
+        // unique violation with the same message the memory repository uses so
+        // /api/links maps it to 409 instead of a generic 500.
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw new Error(`Slug "${input.slug}" is already used`);
+        }
+        throw error;
       });
       return mapTrackedLink(record);
     },
 
     async getTrackedLinkBySlug(workspaceId, slug) {
-      const record = await client.trackedLink.findUnique({ where: { workspaceId_slug: { workspaceId, slug } } });
-      return record ? mapTrackedLink(record) : null;
+      const record = await client.trackedLink.findUnique({ where: { slug } });
+      return record && record.workspaceId === workspaceId ? mapTrackedLink(record) : null;
     },
 
     async getTrackedLinkBySlugPublic(slug) {
-      const record = await client.trackedLink.findFirst({ where: { slug } });
+      const record = await client.trackedLink.findFirst({
+        where: { slug, disabledAt: null, workspace: { status: "ACTIVE" } },
+      });
       return record ? mapTrackedLink(record) : null;
     },
 
@@ -3282,6 +3341,7 @@ function mapTrackedLink(record: {
   conversionUrl: string | null;
   notes: string | null;
   createdByUserId: string | null;
+  disabledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): TrackedLinkRecord {
@@ -3299,6 +3359,7 @@ function mapTrackedLink(record: {
     ...(record.conversionUrl ? { conversionUrl: record.conversionUrl } : {}),
     ...(record.notes ? { notes: record.notes } : {}),
     ...(record.createdByUserId ? { createdByUserId: record.createdByUserId } : {}),
+    ...(record.disabledAt ? { disabledAt: record.disabledAt.toISOString() } : {}),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };

@@ -76,6 +76,21 @@ describe("GET /api/t/[id]", () => {
     expect(response.status).toBe(404);
   });
 
+  it("404s when the participant's workspace is not ACTIVE", async () => {
+    await repository.ensureWorkspace("ws_1", "owner@example.com", "user_1");
+    const { participant } = await seedLinkSentParticipant("ws_1", "ig_123");
+    await repository.setWorkspaceLifecycle("ws_1", {
+      status: "SUSPENDED",
+      reason: "abuse",
+      actorUserId: "admin_1",
+      at: new Date().toISOString(),
+    });
+    const response = await GET(new Request("http://localhost/api/t/" + participant.id), {
+      params: Promise.resolve({ id: participant.id }),
+    });
+    expect(response.status).toBe(404);
+  });
+
   it("404s when the participant id is unknown", async () => {
     const response = await GET(new Request("http://localhost/api/t/missing"), {
       params: Promise.resolve({ id: "missing" }),

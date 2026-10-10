@@ -36,4 +36,16 @@ describe("POST /api/links", () => {
     await expect(response.json()).resolves.toEqual({ error: "entitlement_required", capability: "tracked_links" });
     expect(mocks.createTrackedLink).not.toHaveBeenCalled();
   });
+
+  it("maps a slug taken by any workspace to 409", async () => {
+    mocks.createTrackedLink.mockRejectedValue(new Error('Slug "guide" is already used'));
+
+    const response = await POST(new Request("https://app.linkar.in/api/links", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: "guide", destination: "https://example.com/guide" }),
+    }));
+
+    expect(response.status).toBe(409);
+  });
 });

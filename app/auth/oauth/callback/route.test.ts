@@ -54,19 +54,24 @@ beforeEach(() => {
 describe("GET /auth/oauth/callback", () => {
   it("redirects to login with error=oauth when there is no code", async () => {
     const response = await GET(callbackRequest("?next=/automations"));
-    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth&next=%2Fautomations");
     expect(mocks.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 
-  it("redirects to login with error=oauth when the provider reports an error instead of a code", async () => {
-    const response = await GET(callbackRequest("?error=access_denied&next=/automations"));
-    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+  it("tells the person they cancelled when the provider reports access_denied, keeping next and invite", async () => {
+    const response = await GET(callbackRequest("?error=access_denied&next=/automations&invite=raw-token"));
+    expect(location(response)).toBe("http://localhost:3000/login?error=cancelled&next=%2Fautomations&invite=raw-token");
+  });
+
+  it("redirects to login with error=oauth for any other provider error", async () => {
+    const response = await GET(callbackRequest("?error=server_error&next=/automations"));
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth&next=%2Fautomations");
   });
 
   it("redirects to login with error=oauth when the code exchange fails", async () => {
     mocks.exchangeCodeForSession.mockResolvedValue({ data: { user: null }, error: { message: "bad code" } });
-    const response = await GET(callbackRequest("?code=abc&next=/automations"));
-    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+    const response = await GET(callbackRequest("?code=abc&next=/automations&invite=raw-token"));
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth&next=%2Fautomations&invite=raw-token");
   });
 
   it("logs in (no provisioning) when the email already belongs to a workspace", async () => {

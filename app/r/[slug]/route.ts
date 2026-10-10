@@ -1,9 +1,11 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { logger } from "@/src/lib/logger";
 import { afterResponse } from "@/src/lib/after-response";
-import { isSafeOutboundUrl, resolveSafeOutboundTarget } from "@/src/lib/security/outbound-url";
+import { getServerEnv } from "@/src/lib/env";
+import { clientAddress } from "@/src/lib/auth/client-address";
+import { isSafeOutboundUrl, postJsonToSafeOutboundTarget } from "@/src/lib/security/outbound-url";
 
 export const runtime = "nodejs";
 
@@ -12,20 +14,18 @@ export const runtime = "nodejs";
 // (and a request slot) for the full keep-alive timeout.
 const CONVERSION_CALLBACK_TIMEOUT_MS = 5_000;
 
-// A non-secret salt keeps the IP hash stable across deployments without revealing
-// the raw address. A pure-cryptographic random per deployment is also fine; this
-// value was chosen once and is committed to the repo.
-const IP_HASH_SALT = "linkar.click.v1";
-
-function hashIp(ipAddress: string | null): string {
-  if (!ipAddress) return "anon";
-  return createHash("sha256").update(`${IP_HASH_SALT}:${ipAddress}`).digest("hex").slice(0, 16);
+// Click IPs are keyed with HMAC under a key derived from the server's session
+// secret. A static committed salt let anyone with a database copy brute-force
+// the IPv4 space (2^32 hashes) back to raw addresses; a server-held key does
+// not. Deriving (rather than reusing the secret directly) keeps the two uses
+// cryptographically separate without a new required environment variable.
+function clickHashKey(secret: string): Buffer {
+  return createHmac("sha256", secret).update("linkar.click-ip.v2").digest();
 }
 
-function readForwardedFor(request: Request): string | null {
-  const header = request.headers.get("x-forwarded-for");
-  if (!header) return null;
-  return header.split(",")[0]?.trim() ?? null;
+function hashIp(ipAddress: string, secret: string): string {
+  if (!ipAddress || ipAddress === "unknown") return "anon";
+  return createHmac("sha256", clickHashKey(secret)).update(ipAddress).digest("hex").slice(0, 16);
 }
 
 function readCountry(request: Request): string | undefined {
@@ -65,8 +65,9 @@ function appendUtm(destination: string, link: { utmSource?: string; utmMedium?: 
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
-// GET /r/[slug] - public redirect. Records a click (with hashed IP) then 302s
-// the visitor to the destination with UTM params appended.
+// GET /r/[slug] - public redirect. Records a click (with keyed IP hash) then
+// 302s the visitor to the destination with UTM params appended. Disabled links
+// and links of a non-ACTIVE workspace resolve as not found.
 export async function GET(request: Request, context: RouteContext) {
   const { slug } = await context.params;
   const repository = getRepository();
@@ -75,7 +76,11 @@ export async function GET(request: Request, context: RouteContext) {
   if (link.expiresAt && Date.parse(link.expiresAt) < Date.now()) {
     return new NextResponse("This link has expired", { status: 410 });
   }
-  const ipHash = hashIp(readForwardedFor(request));
+  // Same trusted-proxy rules as the login limiter: the first X-Forwarded-For
+  // entry is client-controlled, so it would let a visitor pick their own
+  // "unique" identity and inflate unique-click counts.
+  const env = getServerEnv();
+  const ipHash = hashIp(clientAddress(request, env.trustedProxyHops), env.authSessionSecret);
   const country = readCountry(request);
   const userAgent = readUserAgent(request);
   const finalDestination = appendUtm(link.destination, link);
@@ -102,13 +107,13 @@ export async function GET(request: Request, context: RouteContext) {
     });
     if (link.conversionUrl) {
       try {
-        const target = await resolveSafeOutboundTarget(link.conversionUrl);
-        await fetch(target, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ slug, linkId: link.id, country: country ?? null, at: new Date().toISOString() }),
-          signal: AbortSignal.timeout(CONVERSION_CALLBACK_TIMEOUT_MS),
-        });
+        // Validated, DNS-pinned (no rebinding between check and connect) and
+        // never redirected: a 3xx from the customer endpoint is not followed.
+        await postJsonToSafeOutboundTarget(
+          link.conversionUrl,
+          { slug, linkId: link.id, country: country ?? null, at: new Date().toISOString() },
+          { timeoutMs: CONVERSION_CALLBACK_TIMEOUT_MS },
+        );
       } catch (error) {
         logger.warn("Conversion callback failed", {
           linkId: link.id,

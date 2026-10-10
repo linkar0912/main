@@ -1,9 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { KeyRound } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { MarketingHeader } from "@/src/components/marketing/marketing-header";
 import { getServerEnv } from "@/src/lib/env";
 import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
+import { SubmitButton } from "@/src/components/auth/submit-button";
 
 // force-dynamic is required, not vestigial: the marketing chrome needs
 // publicSiteUrl, which is read from the environment at request time so the deployment's
@@ -13,7 +15,10 @@ import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
 // reason.
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: `Forgot password · ${PRODUCT_NAME}` };
+export const metadata: Metadata = {
+    title: `Forgot password · ${PRODUCT_NAME}`,
+    robots: { index: false, follow: false },
+};
 
 export default async function ForgotPasswordPage({
     searchParams,
@@ -43,7 +48,7 @@ export default async function ForgotPasswordPage({
                             <label className="field" htmlFor="email"><span>Email</span>
                                 <input id="email" name="email" type="email" required autoComplete="email" />
                             </label>
-                            <button className="button button-primary" type="submit"><KeyRound size={15} /> Send reset link</button>
+                            <SubmitButton pendingLabel="Sending..."><KeyRound size={15} /> Send reset link</SubmitButton>
                         </form>
                     )}
                     <p className="auth-page-foot">Remembered it? <Link href="/login">Back to login</Link></p>

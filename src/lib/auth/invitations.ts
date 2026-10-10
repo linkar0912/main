@@ -28,3 +28,17 @@ export async function resolveInvitation(params: {
   );
   return valid ? { status: "valid", invitation: invitation! } : { status: "invalid" };
 }
+
+/**
+ * Password signup stores the invite token in the new user's metadata, so the
+ * invitation can still be accepted after email confirmation even if the
+ * confirmation link (or the device it is opened on) lost the `invite` query
+ * parameter. Metadata is user-editable, which is fine: resolveInvitation still
+ * requires the token hash to match an invitation issued for this exact email.
+ */
+export const PENDING_INVITE_METADATA_KEY = "pending_invite";
+
+export function pendingInviteFromUser(user: { user_metadata?: Record<string, unknown> } | null | undefined): string {
+  const value = user?.user_metadata?.[PENDING_INVITE_METADATA_KEY];
+  return typeof value === "string" && value.length <= 512 ? value : "";
+}

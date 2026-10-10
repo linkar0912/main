@@ -5,6 +5,7 @@ import { getRepository } from "@/src/lib/repository-provider";
 import { completeOAuthSignIn } from "@/src/lib/auth/complete-oauth-signin";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { applicationOriginForPath } from "@/src/lib/site-routing";
+import { authPageUrl, sanitizeInvite } from "@/src/lib/auth/auth-redirect";
 
 export const runtime = "nodejs";
 
@@ -21,17 +22,22 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const next = safeNextPath(url.searchParams.get("next"));
   const destinationOrigin = applicationOriginForPath(next, env);
-  const inviteRaw = url.searchParams.get("invite") ?? "";
+  const inviteRaw = sanitizeInvite(url.searchParams.get("invite"));
+
+  // next/invite ride along on every error redirect so an invited teammate who
+  // cancels or hits an error can retry without losing the invitation.
+  const backToLogin = (error: string) =>
+    NextResponse.redirect(authPageUrl("/login", { error, next, invite: inviteRaw }, env.appUrl), 303);
 
   if (!code) {
-    return NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303);
+    // Supabase relays the provider's error; access_denied means the person
+    // pressed Cancel on Facebook's consent screen.
+    return backToLogin(url.searchParams.get("error") === "access_denied" ? "cancelled" : "oauth");
   }
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error || !data.user?.email) {
-    return NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303);
-  }
+  if (error || !data.user?.email) return backToLogin("oauth");
   await completeOAuthSignIn({ email: data.user.email, userId: data.user.id, inviteRaw, repository });
   return NextResponse.redirect(new URL(next, destinationOrigin), 303);
 }

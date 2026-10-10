@@ -2,6 +2,7 @@ import { getServerEnv } from "@/src/lib/env";
 import { createHash } from "node:crypto";
 import { createDeletionConfirmationCode, createDeletionResponse, isFreshDeletionRequest, parseSignedRequest } from "@/src/lib/meta/data-deletion";
 import { getRepository } from "@/src/lib/repository-provider";
+import { payloadTooLargeResponse, readBoundedFormData, RequestBodyTooLargeError } from "@/src/lib/security/request-body";
 import { deleteQueuedInstagramEvents } from "@/src/lib/queue";
 
 export const runtime = "nodejs";
@@ -14,7 +15,13 @@ export async function POST(request: Request) {
   const env = getServerEnv();
   if (!env.metaAppSecret) return new Response("Meta app secret is not configured", { status: 503 });
 
-  const form = await request.formData();
+  let form: FormData;
+  try {
+    form = await readBoundedFormData(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return payloadTooLargeResponse();
+    return new Response("signed_request is required", { status: 400 });
+  }
   const signedRequest = form.get("signed_request");
   if (typeof signedRequest !== "string") return new Response("signed_request is required", { status: 400 });
 

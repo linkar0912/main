@@ -139,7 +139,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
   const automationVersions = new Map<string, AutomationVersionRecord[]>();
   // Tracked short links: keyed by link id; clicks keyed by link id too.
   const trackedLinks = new Map<string, TrackedLinkRecord>();
-  const trackedLinkSlugs = new Map<string, string>(); // `${workspaceId}:${slug}` -> link id
+  const sessionInvalidBeforeByUserId = new Map<string, string>();
+  const trackedLinkSlugs = new Map<string, string>(); // slug (globally unique) -> link id
   const trackedLinkClicks = new Map<string, TrackedLinkClickRecord[]>();
   // email -> workspaceId, mirroring WorkspaceMember rows for login lookups.
   const memberWorkspacesByEmail = new Map<string, string>();
@@ -224,7 +225,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         email: member.email,
         userStatus: "ACTIVE",
         workspaceStatus: lifecycle.status,
-        sessionInvalidBefore: null,
+        sessionInvalidBefore: sessionInvalidBeforeByUserId.get(userId) ?? null,
       };
     },
 
@@ -270,11 +271,19 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       );
       const lifecycle = workspaceLifecycle.get(workspaceId);
       if (!isMember || !lifecycle) return null;
-      return { userStatus: "ACTIVE", workspaceStatus: lifecycle.status, sessionInvalidBefore: null };
+      return {
+        userStatus: "ACTIVE",
+        workspaceStatus: lifecycle.status,
+        sessionInvalidBefore: sessionInvalidBeforeByUserId.get(userId) ?? null,
+      };
     },
 
-    async getPlatformUserControlState() {
-      return { status: "ACTIVE", sessionInvalidBefore: null };
+    async getPlatformUserControlState(userId) {
+      return { status: "ACTIVE", sessionInvalidBefore: sessionInvalidBeforeByUserId.get(userId) ?? null };
+    },
+
+    async revokeUserSessions(userId, at) {
+      sessionInvalidBeforeByUserId.set(userId, new Date(at).toISOString());
     },
 
     async getMemberRole(workspaceId, email) {
@@ -775,15 +784,38 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const key = `${automationId}\0${pageId}\0${senderId}`;
       if (facebookReplyRecipients.get(key)?.eventId === eventId) facebookReplyRecipients.delete(key);
     },
+    async listFacebookPageIdsByUserId(facebookUserId) {
+      return [...facebookPages.values()]
+        .filter((page) => page.facebookUserId === facebookUserId)
+        .map((page) => page.pageId);
+    },
     async beginFacebookDataDeletion(facebookUserId, confirmationCode, signedRequestHash) {
       const removedPageIds = new Set<string>();
+      const removedWorkspaceIds = new Set<string>();
       for (const [id, page] of facebookPages.entries()) {
         if (page.facebookUserId !== facebookUserId) continue;
         removedPageIds.add(page.pageId);
+        removedWorkspaceIds.add(page.workspaceId);
         facebookPages.delete(id);
       }
+      const removedAutomationIds = new Set<string>();
       for (const [id, automation] of automations.entries()) {
-        if (automation.facebookPageId && removedPageIds.has(automation.facebookPageId)) automations.delete(id);
+        if (automation.facebookPageId && removedPageIds.has(automation.facebookPageId)) {
+          automations.delete(id);
+          removedAutomationIds.add(id);
+        }
+      }
+      // Mirrors the cascade from Automation to AutomationExecution.
+      for (const [id, execution] of executions.entries()) {
+        if (removedAutomationIds.has(execution.automationId)) executions.delete(id);
+      }
+      for (const [key, event] of webhookEvents.entries()) {
+        if (
+          removedWorkspaceIds.has(event.workspaceId)
+          && event.eventType.startsWith("facebook.")
+          && typeof event.payload.pageId === "string"
+          && removedPageIds.has(event.payload.pageId)
+        ) webhookEvents.delete(key);
       }
       const record: DataDeletionRequestRecord = {
         confirmationCode,
@@ -834,6 +866,18 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       // indefinitely.
       for (const [key, delivery] of outboundDeliveries.entries()) {
         if (delivery.instagramAccountId === igUserId) outboundDeliveries.delete(key);
+      }
+      // This account's webhook events, and the executions they triggered,
+      // go even when sibling connections keep the workspace alive.
+      const removedEventKeys = new Set<string>();
+      for (const [key, event] of webhookEvents.entries()) {
+        if (workspaceIds.has(event.workspaceId) && event.payload.accountId === igUserId) {
+          removedEventKeys.add(`${event.workspaceId}:${event.providerEventId}`);
+          webhookEvents.delete(key);
+        }
+      }
+      for (const [id, execution] of executions.entries()) {
+        if (removedEventKeys.has(`${execution.workspaceId}:${execution.externalEventId}`)) executions.delete(id);
       }
       // Automations pinned to the deleted account can never fire again; remove
       // them even when sibling connections keep the workspace alive.
@@ -2437,9 +2481,10 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async createTrackedLink(workspaceId, input) {
-      const slugKey = `${workspaceId}:${input.slug}`;
+      // Slugs are globally unique, mirroring the TrackedLink_slug_key index.
+      const slugKey = input.slug;
       if (trackedLinkSlugs.has(slugKey)) {
-        throw new Error(`Slug "${input.slug}" is already used in this workspace`);
+        throw new Error(`Slug "${input.slug}" is already used`);
       }
       const timestamp = now();
       const record: TrackedLinkRecord = {
@@ -2458,6 +2503,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         ...(input.conversionUrl ? { conversionUrl: input.conversionUrl } : {}),
         ...(input.notes ? { notes: input.notes } : {}),
         ...(input.createdByUserId ? { createdByUserId: input.createdByUserId } : {}),
+        ...(input.disabledAt ? { disabledAt: input.disabledAt } : {}),
       };
       trackedLinks.set(record.id, record);
       trackedLinkSlugs.set(slugKey, record.id);
@@ -2465,20 +2511,18 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async getTrackedLinkBySlug(workspaceId, slug) {
-      const id = trackedLinkSlugs.get(`${workspaceId}:${slug}`);
+      const id = trackedLinkSlugs.get(slug);
       if (!id) return null;
       const record = trackedLinks.get(id);
       return record && record.workspaceId === workspaceId ? copy(record) : null;
     },
 
     async getTrackedLinkBySlugPublic(slug) {
-      for (const [linkId, record] of trackedLinks.entries()) {
-        if (record.slug === slug) {
-          void linkId;
-          return copy(record);
-        }
-      }
-      return null;
+      const id = trackedLinkSlugs.get(slug);
+      const record = id ? trackedLinks.get(id) : undefined;
+      if (!record || record.disabledAt) return null;
+      if ((workspaceLifecycle.get(record.workspaceId)?.status ?? "ACTIVE") !== "ACTIVE") return null;
+      return copy(record);
     },
 
     async listTrackedLinks(workspaceId, limit) {
@@ -2494,7 +2538,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const record = trackedLinks.get(id);
       if (!record || record.workspaceId !== workspaceId) return false;
       trackedLinks.delete(id);
-      trackedLinkSlugs.delete(`${workspaceId}:${record.slug}`);
+      trackedLinkSlugs.delete(record.slug);
       trackedLinkClicks.delete(id);
       return true;
     },

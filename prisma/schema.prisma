@@ -561,8 +561,10 @@ model AutomationParticipant {
 model TrackedLink {
   id              String    @id
   workspaceId     String
-  // The branded path (e.g. "/r/summer-sale"). Unique per workspace.
-  slug            String
+  // The branded path (e.g. "/r/summer-sale"). Globally unique: /r/[slug] is
+  // a single public namespace, so a per-workspace key let one tenant shadow
+  // (and hijack the clicks of) another tenant's slug.
+  slug            String    @unique
   // Final URL we redirect to. Validated as http(s) at write time.
   destination     String
   // Optional expiry. Past the deadline the redirect returns 410 Gone.
@@ -587,7 +589,6 @@ model TrackedLink {
   workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   clicks    TrackedLinkClick[]
 
-  @@unique([workspaceId, slug])
   @@index([workspaceId, createdAt])
 }
 

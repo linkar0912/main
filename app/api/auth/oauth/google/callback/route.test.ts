@@ -73,13 +73,19 @@ describe("GET /api/auth/oauth/google/callback", () => {
   it("redirects to login with error=oauth when there is no code", async () => {
     const { state } = validState();
     const response = await GET(callbackRequest(`?state=${state}`, state));
-    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth&next=%2Fautomations");
     expect(mocks.exchangeGoogleCode).not.toHaveBeenCalled();
   });
 
   it("redirects to login with error=oauth when Google reports an error instead of a code", async () => {
-    const response = await GET(callbackRequest("?error=access_denied"));
+    const response = await GET(callbackRequest("?error=server_error"));
     expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+  });
+
+  it("reports a cancelled consent screen and keeps next and invite from the verified state", async () => {
+    const { state } = validState({ next: "/automations", invite: "raw-token" });
+    const response = await GET(callbackRequest(`?error=access_denied&state=${state}`, state));
+    expect(location(response)).toBe("http://localhost:3000/login?error=cancelled&next=%2Fautomations&invite=raw-token");
   });
 
   it("redirects to login with error=oauth when there is no state cookie", async () => {
@@ -105,7 +111,7 @@ describe("GET /api/auth/oauth/google/callback", () => {
     mocks.exchangeGoogleCode.mockRejectedValue(new Error("boom"));
     const { state } = validState();
     const response = await GET(callbackRequest(`?code=abc&state=${state}`, state));
-    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth&next=%2Fautomations");
     expect(mocks.loggerError).toHaveBeenCalledWith(
       expect.stringContaining("code exchange"),
       expect.objectContaining({ error: "boom" }),
@@ -116,7 +122,7 @@ describe("GET /api/auth/oauth/google/callback", () => {
     mocks.signInWithIdToken.mockResolvedValue({ data: { user: null }, error: { message: "Unacceptable audience in id_token" } });
     const { state } = validState();
     const response = await GET(callbackRequest(`?code=abc&state=${state}`, state));
-    expect(location(response)).toBe("http://localhost:3000/login?error=oauth");
+    expect(location(response)).toBe("http://localhost:3000/login?error=oauth&next=%2Fautomations");
     expect(mocks.loggerError).toHaveBeenCalledWith(
       expect.stringContaining("signInWithIdToken"),
       expect.objectContaining({ error: "Unacceptable audience in id_token" }),

@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { logger } from "@/src/lib/logger";
 import { sharedAuthCookieDomain } from "@/src/lib/auth/cookie-domain";
 import { applicationOriginForPath } from "@/src/lib/site-routing";
+import { authPageUrl } from "@/src/lib/auth/auth-redirect";
 
 export const runtime = "nodejs";
 
@@ -33,13 +34,23 @@ export async function GET(request: NextRequest) {
   const stateParam = url.searchParams.get("state");
   const storedState = request.cookies.get(GOOGLE_OAUTH_STATE_COOKIE)?.value;
 
-  const oauthErrorRedirect = () =>
-    withoutStateCookie(NextResponse.redirect(new URL("/login?error=oauth", env.appUrl), 303), env);
+  // Recover next/invite from the signed state whenever it is trustworthy (it
+  // matches the cookie and verifies), so a failed or cancelled sign-in sends
+  // an invited teammate back with their invitation instead of dropping it.
+  const recoverable = stateParam && storedState && stateParam === storedState
+    ? readGoogleOAuthState(stateParam, env.authSessionSecret)
+    : null;
+  const oauthErrorRedirect = (error = "oauth") =>
+    withoutStateCookie(NextResponse.redirect(
+      authPageUrl("/login", { error, next: recoverable?.next, invite: recoverable?.invite }, env.appUrl),
+      303,
+    ), env);
 
   const providerError = url.searchParams.get("error");
   if (providerError) {
     logger.warn("Google OAuth redirect returned an error", { error: providerError });
-    return oauthErrorRedirect();
+    // The person pressed Cancel on Google's consent screen; not a failure.
+    return oauthErrorRedirect(providerError === "access_denied" ? "cancelled" : "oauth");
   }
   if (!code || !stateParam || !storedState || stateParam !== storedState) {
     logger.warn("Google OAuth callback failed state validation", {
@@ -50,7 +61,7 @@ export async function GET(request: NextRequest) {
     });
     return oauthErrorRedirect();
   }
-  const decoded = readGoogleOAuthState(stateParam, env.authSessionSecret);
+  const decoded = recoverable;
   if (!decoded) {
     logger.warn("Google OAuth state signature was invalid or expired");
     return oauthErrorRedirect();

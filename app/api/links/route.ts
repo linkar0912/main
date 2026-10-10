@@ -5,6 +5,7 @@ import { isSafeOutboundUrl } from "@/src/lib/security/outbound-url";
 import { logger } from "@/src/lib/logger";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
+import { rejectCrossSiteRequest } from "@/src/lib/security/same-origin";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,8 @@ export { appendUtm as appendUtmToDestination };
 
 // POST /api/links - create a new tracked link.
 export async function POST(request: Request) {
+  const crossSite = rejectCrossSiteRequest(request);
+  if (crossSite) return crossSite;
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
@@ -118,8 +121,10 @@ export async function POST(request: Request) {
   } catch (error) {
     const entitlementResponse = entitlementErrorResponse(error);
     if (entitlementResponse) return entitlementResponse;
+    // Both repositories raise "Slug ... is already used" for a unique
+    // violation; slugs share one public namespace across every workspace.
     if (error instanceof Error && error.message.includes("already used")) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return NextResponse.json({ error: "That slug is already taken. Choose another one." }, { status: 409 });
     }
     logger.error("Failed to create tracked link", { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ error: "Could not create the link" }, { status: 500 });

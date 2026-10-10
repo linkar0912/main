@@ -129,6 +129,17 @@ export function getRequestSession(): Promise<AppSession | null> {
   return resolveRequestSession();
 }
 
+/**
+ * The instant to store as sessionInvalidBefore when revoking a user's
+ * sessions. JWT `iat` has one-second resolution and assertApplicationAccess
+ * rejects `iat * 1000 < sessionInvalidBefore`, so the instant is floored to
+ * the second: otherwise a sign-in completed later within the same second as
+ * the revocation would be rejected too.
+ */
+export function sessionRevocationInstant(now = Date.now()): string {
+  return new Date(Math.floor(now / 1_000) * 1_000).toISOString();
+}
+
 function hasBackslashOrControlChar(value: string): boolean {
   for (let i = 0; i < value.length; i += 1) {
     const code = value.charCodeAt(i);

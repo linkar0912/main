@@ -404,6 +404,8 @@ export type TrackedLinkRecord = {
   conversionUrl?: string;
   notes?: string;
   createdByUserId?: string;
+  /** Set by the owner console to take a link offline; public lookups skip it. */
+  disabledAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -682,6 +684,12 @@ export interface AutomationRepository {
   getWorkspaceStatus(workspaceId: string): Promise<WorkspaceStatus | null>;
   getApplicationAccessState(userId: string, workspaceId: string): Promise<ApplicationAccessState | null>;
   getPlatformUserControlState(userId: string): Promise<PlatformUserControlState>;
+  /**
+   * Rejects every access token issued before `at` for this user (password
+   * reset, "sign out everywhere"). Supabase's signOut only revokes refresh
+   * tokens; already-issued JWTs stay valid until expiry without this.
+   */
+  revokeUserSessions(userId: string, at: string): Promise<void>;
   getMemberRole(workspaceId: string, email: string): Promise<MemberRole | null>;
   addMember(workspaceId: string, email: string, role: MemberRole, userId?: string): Promise<{ created: boolean }>;
   updateMemberRole(workspaceId: string, email: string, role: MemberRole): Promise<boolean>;
@@ -810,6 +818,8 @@ export interface AutomationRepository {
     repliedAt: string,
   ): Promise<void>;
   releaseFacebookReplyRecipient(automationId: string, pageId: string, senderId: string, eventId: string): Promise<void>;
+  /** Page ids connected by an app-scoped Facebook user (for queued-job cleanup before deletion). */
+  listFacebookPageIdsByUserId(facebookUserId: string): Promise<string[]>;
   beginFacebookDataDeletion(facebookUserId: string, confirmationCode: string, signedRequestHash: string): Promise<DataDeletionRequestRecord>;
   /** List the active automations pinned to a given Facebook Page. */
   listAutomationsForFacebookPage(workspaceId: string, pageId: string): Promise<AutomationRecord[]>;
@@ -1042,8 +1052,9 @@ export interface AutomationRepository {
   ): Promise<TrackedLinkRecord>;
   getTrackedLinkBySlug(workspaceId: string, slug: string): Promise<TrackedLinkRecord | null>;
   /**
-   * Public redirect lookup: returns the link without enforcing the workspace
-   * boundary, so the redirect route can serve any slug in the system.
+   * Public redirect lookup: slugs are globally unique, so this resolves any
+   * slug in the system - but only while the link is servable (not disabled by
+   * the owner console, and its workspace is ACTIVE).
    */
   getTrackedLinkBySlugPublic(slug: string): Promise<TrackedLinkRecord | null>;
   listTrackedLinks(workspaceId: string, limit: number): Promise<TrackedLinkRecord[]>;

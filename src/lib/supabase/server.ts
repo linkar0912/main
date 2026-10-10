@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { getServerEnv } from "@/src/lib/env";
-import { sharedAuthCookieDomain } from "@/src/lib/auth/cookie-domain";
+import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
 
 /**
  * Request-scoped Supabase client. Reads/writes the session via the Next.js
@@ -12,10 +12,9 @@ import { sharedAuthCookieDomain } from "@/src/lib/auth/cookie-domain";
 export async function createSupabaseServerClient(options: { fetchTimeoutMs?: number } = {}) {
   const env = getServerEnv();
   const cookieStore = await cookies();
-  const domain = sharedAuthCookieDomain(env);
 
   return createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
-    ...(domain ? { cookieOptions: { domain } } : {}),
+    cookieOptions: supabaseAuthCookieOptions(env),
     ...(options.fetchTimeoutMs ? { global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => {
       const timeout = AbortSignal.timeout(options.fetchTimeoutMs!);
       return fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout });
