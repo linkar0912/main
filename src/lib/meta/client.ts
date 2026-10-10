@@ -11,18 +11,22 @@ export class MetaApiError extends Error {
   readonly status: number;
   readonly retryable: boolean;
   readonly responseReceived: boolean;
+  /** Graph error code when Meta returned one (e.g. 190 = invalid access token, 4/17/32/613 = throttled). */
+  readonly code?: number;
 
   constructor(
     message: string,
     status: number,
     responseReceived = status > 0,
     retryable = status === 0 || status === 408 || status === 429 || status >= 500,
+    code?: number,
   ) {
     super(message);
     this.name = "MetaApiError";
     this.status = status;
     this.responseReceived = responseReceived;
     this.retryable = retryable;
+    this.code = code;
   }
 }
 
@@ -356,6 +360,7 @@ export class MetaClient {
         response.status,
         true,
         isTransientMetaError(error, response.status),
+        typeof error.code === "number" ? error.code : undefined,
       );
     }
     return data;

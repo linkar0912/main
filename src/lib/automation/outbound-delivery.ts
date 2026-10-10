@@ -1,5 +1,7 @@
 import { createId } from "../id";
+import { logger } from "../logger";
 import { MetaApiError } from "../meta/client";
+import { notifyWorkspaceManagers } from "../notifications";
 import { getRepository } from "../repository-provider";
 import type {
   AutomationRepository,
@@ -63,10 +65,49 @@ export function classifyProviderFailure(
     || !error.responseReceived
     || error.status === 0
   ) return networkFailuresAreRetryable ? "KNOWN_RETRYABLE" : "AMBIGUOUS";
-  if (error.status === 408 || error.status === 429 || error.status >= 500) {
+  // Meta reports throttling (Graph codes 4/17/32/613) and other transient
+  // errors as HTTP 400 with `retryable` set by the client - a rejection we
+  // know was not delivered and may safely try again later.
+  if (error.retryable || error.status === 408 || error.status === 429 || error.status >= 500) {
     return "KNOWN_RETRYABLE";
   }
   return "KNOWN_PERMANENT";
+}
+
+/** Graph code 190: the access token is invalid, expired or revoked. */
+export function isInvalidTokenError(error: unknown): boolean {
+  return error instanceof MetaApiError && error.responseReceived && error.code === 190;
+}
+
+/**
+ * A send rejected with code 190 means every later send on this connection will
+ * fail the same way. Mark the connection EXPIRED (which also stops new events
+ * from being processed for it) and tell the owners to reconnect, exactly as
+ * the token refresher does. Never throws - alerting must not break delivery.
+ */
+async function expireInvalidInstagramConnection(
+  repository: AutomationRepository,
+  igUserId: string,
+): Promise<void> {
+  try {
+    const mapping = await repository.findWorkspaceByInstagramAccount(igUserId);
+    if (!mapping) return;
+    await repository.updateConnectionStatus(mapping.connection.id, "EXPIRED");
+    logger.warn("Instagram connection marked expired after an invalid-token send", {
+      workspaceId: mapping.workspaceId,
+      connectionId: mapping.connection.id,
+    });
+    await notifyWorkspaceManagers(
+      mapping.workspaceId,
+      `token-expired:${mapping.connection.id}`,
+      `Action needed: reconnect @${mapping.connection.username}`,
+      `The Instagram connection for @${mapping.connection.username} expired, so its automations cannot deliver right now. Reconnect the account from Settings to resume.`,
+    );
+  } catch (error) {
+    logger.warn("Could not mark Instagram connection expired", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 /**
@@ -165,6 +206,9 @@ export async function executeOutboundDelivery<
     }
 
     const retryable = classification === "KNOWN_RETRYABLE";
+    if (isInvalidTokenError(error) && request.instagramAccountId) {
+      await expireInvalidInstagramConnection(repository, request.instagramAccountId);
+    }
     await repository.releaseOutboundDeliveryReservation(request.deliveryKey).catch(() => false);
     await repository.failOutboundDelivery(
       request.deliveryKey,
