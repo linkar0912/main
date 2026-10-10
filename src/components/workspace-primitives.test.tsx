@@ -44,6 +44,6 @@ describe("LocalStatusBadge", () => {
   it("renders a dot and a plain word", () => {
     const { container } = render(<LocalStatusBadge {...lifecycleStatus("PAUSED")} />);
     expect(screen.getByText("Paused")).toBeTruthy();
-    expect(container.querySelector(".ws-status")?.getAttribute("data-tone")).toBe("warning");
+    expect(container.querySelector(".status-chip")?.classList.contains("is-warning")).toBe(true);
   });
 });

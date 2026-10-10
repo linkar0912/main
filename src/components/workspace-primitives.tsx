@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * Local stand-ins for the shared primitives being built in src/components/ui/
- * (<RelativeTime value/>, <IdChip id/>). Same props, so swapping the import is
- * the whole migration once those land.
+ * Workspace-screen helpers. The Local* components are thin wrappers over the
+ * shared primitives in src/components/ui/ so the app and the owner console
+ * render statuses, IDs and times identically.
  */
 
-import { Check, Copy } from "lucide-react";
-import { useState } from "react";
-import { formatDate, formatDateTime, formatTime } from "@/src/lib/format-date";
+import { IdChip } from "@/src/components/ui/id-chip";
+import { RelativeTime } from "@/src/components/ui/relative-time";
+import { StatusBadge } from "@/src/components/ui/status-badge";
+import { formatDate, formatTime } from "@/src/lib/format-date";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -50,29 +51,16 @@ export function relativeTimeLabel(input: string | Date, now: number = Date.now()
   return formatDate(date);
 }
 
-/** Relative time with the full local date and time on hover. */
+/** Relative time with the full local date and time on hover (shared component). */
 export function LocalRelativeTime({ value, className }: { value: string | Date; className?: string }) {
-  const date = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(date.getTime())) return null;
-  return (
-    // The label depends on the viewer's clock and zone, so the server's
-    // render is allowed to differ.
-    <time className={className} dateTime={date.toISOString()} title={formatDateTime(date)} suppressHydrationWarning>
-      {relativeTimeLabel(date)}
-    </time>
-  );
+  return <RelativeTime value={value} className={className} />;
 }
 
 export type StatusTone = "success" | "warning" | "danger" | "neutral";
 
-/** Status as a coloured dot and a plain word: "Active", "Paused", "Failed". */
+/** Status as a coloured dot and a plain word (shared component). */
 export function LocalStatusBadge({ tone, label }: { tone: StatusTone; label: string }) {
-  return (
-    <span className="ws-status" data-tone={tone}>
-      <span className="ws-status-dot" aria-hidden />
-      {label}
-    </span>
-  );
+  return <StatusBadge tone={tone} label={label} />;
 }
 
 /** Tone + word for the ACTIVE / PAUSED / DRAFT style enums the API returns. */
@@ -95,24 +83,7 @@ export function shortId(id: string): string {
   return bare.length > 14 ? `${bare.slice(0, 8)}…${bare.slice(-4)}` : bare;
 }
 
-/** A demoted, copyable identifier: short mono form, full value on hover. */
-export function LocalIdChip({ id, label = "ID" }: { id: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <span className="ws-id-chip" title={id}>
-      <code>{shortId(id)}</code>
-      <button
-        type="button"
-        aria-label={copied ? `${label} copied` : `Copy ${label}`}
-        onClick={() => {
-          void navigator.clipboard?.writeText(id).then(() => {
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1500);
-          }).catch(() => undefined);
-        }}
-      >
-        {copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />}
-      </button>
-    </span>
-  );
+/** A demoted, copyable identifier (shared component). */
+export function LocalIdChip({ id }: { id: string; label?: string }) {
+  return <IdChip id={id} />;
 }
