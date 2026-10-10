@@ -61,7 +61,7 @@ describe("public legal and support pages", () => {
 
     const { container } = render(<Page />);
     expect(container.textContent).not.toContain(LEGAL_FILL_ME);
-    expect(container.textContent).not.toContain("—");
+    expect(container.textContent).not.toContain("\u2014");
   });
 
   it("terms cover renewal, refunds, termination, liability, governing law, grievances, and the operator", () => {
