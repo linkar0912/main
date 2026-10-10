@@ -47,9 +47,9 @@ drifted apart.
    session. Screens no longer render their own shell, so navigation swaps
    only the page content and never refetches the sidebar bootstrap.
 2. **Server-rendered first paint.** `app/(app)/dashboard/page.tsx` and
-   `app/(app)/automations/page.tsx` are async Server Components that fetch via
-   the repository in one parallel batch and pass `initial*` props to the
-   client screens. The screens seed their client caches
+   `app/(app)/automations/(sections)/page.tsx` are async Server Components
+   that fetch via the repository in one parallel batch and pass `initial*`
+   props to the client screens. The screens seed their client caches
    (`seedWorkspaceData`, `seedAutomations`) so post-hydration fetches resolve
    from cache. Follow this pattern when adding a heavy screen.
 3. **Session validation costs one parallel lookup.** `getSessionAccessSnapshot`

@@ -33,18 +33,32 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // Severs window references between this app and cross-origin windows that
+  // open it (tab-nabbing, cross-site leaks).
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   // Ignored by browsers over plain HTTP (local dev), enforced once served over HTTPS.
-  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+  // includeSubDomains is deliberate: every linkar.in host is HTTPS-only behind
+  // Cloudflare, and this app also answers on the apex. `preload` is not sent:
+  // preload-list submission is a one-way, apex-only decision to make
+  // explicitly, and app./admin. responses cannot qualify for it anyway.
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
 ];
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+  poweredByHeader: false,
   reactStrictMode: true,
   // The floating dev-tools badge sits over the sidebar's bottom-left content
   // (workspace chip, sign out) on every screen - move it out of the way.
   devIndicators: { position: "bottom-right" },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Billing (in Settings) runs Razorpay Checkout, whose bank and 3-D Secure
+      // steps can open a payment popup that must keep its opener. The last
+      // matching header with the same key wins.
+      { source: "/settings/:path*", headers: [{ key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" }] },
+    ];
   },
 };
 
