@@ -3,11 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { ArrowRight, Boxes, Search, Users } from "lucide-react";
+import { Search } from "lucide-react";
 
+import { PageHeader } from "@/src/components/page-header";
 import type { AdminWorkspaceSummary, CursorPage } from "@/src/lib/admin/accounts-repository";
 import { AdminPagination } from "./shared/admin-pagination";
 import { StatusPill } from "./shared/status-pill";
+
+function plural(count: number, word: string): string {
+  return `${count.toLocaleString("en-IN")} ${word}${count === 1 ? "" : "s"}`;
+}
 
 export function WorkspacesScreen({ page, search = "", cursor = null, history = [] }: { page: CursorPage<AdminWorkspaceSummary>; search?: string; cursor?: string | null; history?: string[] }) {
   const router = useRouter();
@@ -21,55 +26,58 @@ export function WorkspacesScreen({ page, search = "", cursor = null, history = [
   }
 
   return (
-    <main className="page-wrap admin-resource-page">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Linkar operator / accounts</p>
-          <h1>Workspaces</h1>
-          <p className="muted page-lede">Inspect every tenant, its plan, members, connections, and operational state.</p>
-        </div>
-        <span className="admin-count-badge"><Boxes size={16} /> {page.items.length} shown</span>
-      </header>
+    <main className="page-wrap admin-page">
+      <PageHeader title="Workspaces" description="Every customer workspace, its plan, people and connected accounts." />
 
-      <form className="admin-filter-bar" role="search" onSubmit={submitSearch}>
-        <label className="field admin-search-field">
+      <form className="admin-toolbar" role="search" onSubmit={submitSearch}>
+        <label className="field is-grow">
           <span>Search workspaces</span>
-          <span className="admin-input-icon"><Search size={17} aria-hidden /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, slug, or ID" /></span>
+          <span className="admin-search"><Search size={17} aria-hidden /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, web address or ID" /></span>
         </label>
         <button className="button button-secondary" type="submit">Search</button>
       </form>
 
-      <section className="panel admin-table-panel" aria-label="Workspace accounts">
-        {page.items.length === 0 ? (
-          <div className="empty-state"><h2>No workspaces found</h2><p>{search ? "Try a different search term." : "Workspaces will be listed here once created."}</p></div>
-        ) : (
-          <div className="admin-table-scroll">
-            <table className="admin-table">
-              <thead><tr><th>Workspace</th><th>Status</th><th>Assigned plan</th><th>Members</th><th>Automations</th><th><span className="sr-only">Open</span></th></tr></thead>
-              <tbody>{page.items.map((workspace) => (
-                <tr key={workspace.id}>
-                  <td><strong>{workspace.name}</strong><small>{workspace.slug} · {workspace.id}</small></td>
-                  <td><StatusPill status={workspace.status} /></td>
-                  <td><strong>{workspace.planName}</strong><small>{workspace.planKey}</small></td>
-                  <td><span className="admin-inline-count"><Users size={15} /> {workspace.memberCount}</span></td>
-                  <td>{workspace.automationCount}</td>
-                  <td><Link className="button button-ghost button-small" href={`/admin/workspaces/${workspace.id}`} aria-label={`Open ${workspace.name}`}>Open <ArrowRight size={15} /></Link></td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )}
+      <section className="admin-section" aria-label="Workspace accounts">
+        <div className="admin-results">
+          <span>{page.items.length === 0 ? "No workspaces to show" : `Showing ${plural(page.items.length, "workspace")}${search ? ` matching “${search}”` : ""}`}</span>
+        </div>
+        <div className="admin-card is-flush">
+          {page.items.length === 0 ? (
+            <div className="admin-empty">
+              <p>{search ? "No workspace matches that search. Try a name, web address or ID." : "Workspaces appear here as soon as someone signs up."}</p>
+            </div>
+          ) : (
+            <div className="table-scroll">
+              <table className="data-table is-stackable">
+                <thead><tr><th>Workspace</th><th>Status</th><th>Plan</th><th className="is-numeric">Members</th><th className="is-action"><span className="sr-only">Open</span></th></tr></thead>
+                <tbody>{page.items.map((workspace) => (
+                  <tr key={workspace.id}>
+                    <td>
+                      <span className="cell-stack">
+                        <Link href={`/admin/workspaces/${workspace.id}`}>{workspace.name}</Link>
+                        <span className="cell-meta"><span>{workspace.slug}</span><span>{plural(workspace.automationCount, "automation")}</span></span>
+                      </span>
+                    </td>
+                    <td data-label="Status"><StatusPill status={workspace.status} /></td>
+                    <td data-label="Plan">{workspace.planName}</td>
+                    <td data-label="Members" className="is-numeric">{workspace.memberCount.toLocaleString("en-IN")}</td>
+                    <td className="is-action"><Link className="button button-ghost button-small" href={`/admin/workspaces/${workspace.id}`} aria-label={`Open ${workspace.name}`}>Open</Link></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <AdminPagination
+          basePath="/admin/workspaces"
+          params={search ? { search } : {}}
+          cursor={cursor}
+          history={history}
+          nextCursor={page.nextCursor}
+          label="Workspace pagination"
+          summary="Newest workspaces first."
+        />
       </section>
-
-      <AdminPagination
-        basePath="/admin/workspaces"
-        params={search ? { search } : {}}
-        cursor={cursor}
-        history={history}
-        nextCursor={page.nextCursor}
-        label="Workspace pagination"
-        summary="Results are ordered newest first."
-      />
     </main>
   );
 }

@@ -38,3 +38,54 @@ describe("billing and incident posture", () => {
     expect(result.incidents[0]).toMatchObject({ id: "i_1", severity: "CRITICAL", status: "OPEN" });
   });
 });
+
+describe("worker state", () => {
+  const now = new Date("2026-10-11T10:00:00.000Z");
+  const health = () => vi.fn().mockResolvedValue({ status: "ok", release: "abc", dependencies: { database: "ok", redis: "ok" }, integrations: { instagram: "configured", facebook: "configured" }, capabilities: { followGatedCampaigns: "enabled" } });
+  const queueSnapshot = () => vi.fn().mockResolvedValue({ name: "webhooks", configured: true, paused: false, waiting: 0, active: 0, delayed: 0, completed: 0, failed: 0, oldestWaitingAgeMs: null, lastFailedCode: null });
+
+  // Production regression: the worker sits on its own Docker network, so the
+  // URL probe always failed and the page said "Unavailable" for a healthy worker.
+  it("reports a fresh Redis heartbeat as healthy without probing the unreachable worker URL", async () => {
+    vi.stubEnv("REDIS_URL", "redis://localhost:6379");
+    vi.stubEnv("WORKER_HEALTH_URL", "http://worker:3001/health");
+    const fetchMock = vi.fn().mockRejectedValue(new Error("ENOTFOUND worker"));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const service = createAdminSystemService({ health: health(), queueSnapshot: queueSnapshot(), now: () => now, workerHeartbeat: async () => ({ at: now.getTime() - 20_000, release: "e4afaee" }) });
+      const result = await service.snapshot();
+      expect(result.worker).toEqual({ state: "healthy", release: "e4afaee", lastSeenAt: "2026-10-11T09:59:40.000Z" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("flags a stale or missing heartbeat as needing attention", async () => {
+    vi.stubEnv("REDIS_URL", "redis://localhost:6379");
+    const stale = await createAdminSystemService({ health: health(), queueSnapshot: queueSnapshot(), now: () => now, workerHeartbeat: async () => ({ at: now.getTime() - 5 * 60_000, release: "e4afaee" }) }).snapshot();
+    expect(stale.worker).toMatchObject({ state: "degraded", release: "e4afaee", lastSeenAt: "2026-10-11T09:55:00.000Z" });
+    expect(stale.worker.detail).toMatch(/No heartbeat/);
+    expect(stale.overall).toBe("degraded");
+    const missing = await createAdminSystemService({ health: health(), queueSnapshot: queueSnapshot(), now: () => now, workerHeartbeat: async () => null }).snapshot();
+    expect(missing.worker).toMatchObject({ state: "degraded", lastSeenAt: null });
+  });
+
+  it("falls back to the worker URL only when the heartbeat cannot be read", async () => {
+    vi.stubEnv("REDIS_URL", "redis://localhost:6379");
+    vi.stubEnv("WORKER_HEALTH_URL", "http://worker:3001/health");
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const result = await createAdminSystemService({ health: health(), queueSnapshot: queueSnapshot(), now: () => now, workerHeartbeat: async () => { throw new Error("redis down"); } }).snapshot();
+      expect(fetchMock).toHaveBeenCalledWith("http://worker:3001/health", expect.anything());
+      expect(result.worker.state).toBe("healthy");
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("tells the owner exactly which settings turn on owner email alerts", async () => {
+    vi.stubEnv("EMAIL_API_KEY", "");
+    const result = await createAdminSystemService({ health: health(), queueSnapshot: queueSnapshot(), now: () => now, workerHeartbeat: async () => null }).snapshot();
+    const alerts = result.configurationPresence.find((item) => item.requirement === "Owner email alerts");
+    expect(alerts).toMatchObject({ present: false });
+    expect(alerts?.fix).toMatch(/EMAIL_API_KEY.*EMAIL_FROM.*PLATFORM_ALERT_EMAILS/);
+  });
+});

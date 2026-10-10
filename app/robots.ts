@@ -23,6 +23,7 @@ const ROBOTS_DISALLOWED_PATHS = [
   "/profile",
   "/help",
   "/data-deletion/status/",
+  "/dev-preview",
 ];
 
 /**

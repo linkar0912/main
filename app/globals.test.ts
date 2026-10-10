@@ -6,12 +6,12 @@ const css = readFileSync(new URL("./globals.css", import.meta.url), "utf8").toLo
 describe("workspace palette contract", () => {
   it("keeps structural typography on one shared hierarchy", () => {
     expect(css).toMatch(/--type-page-title:\s*clamp\(2rem,\s*3vw,\s*2\.75rem\)/);
-    expect(css).toMatch(/--type-section-title:\s*1\.25rem/);
+    expect(css).toMatch(/--type-section-title:\s*1\.125rem/);
     expect(css).toMatch(/--type-card-title:\s*1rem/);
     expect(css).toMatch(/--type-lede:\s*\.95rem/);
-    expect(css).toMatch(/--type-body:\s*\.875rem/);
-    expect(css).toMatch(/--type-label:\s*\.75rem/);
-    expect(css).toMatch(/--type-meta:\s*\.68rem/);
+    expect(css).toMatch(/--type-body:\s*\.9375rem/);
+    expect(css).toMatch(/--type-label:\s*\.875rem/);
+    expect(css).toMatch(/--type-meta:\s*\.8125rem/);
     expect(css).toMatch(/h1\s*{[^}]*font-size:\s*var\(--type-page-title\)/);
     expect(css).toMatch(/h2\s*{[^}]*font-size:\s*var\(--type-section-title\)/);
     expect(css).toMatch(/h3\s*{[^}]*font-size:\s*var\(--type-card-title\)/);

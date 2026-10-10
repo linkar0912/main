@@ -1,6 +1,5 @@
-import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
-import { AlertTriangle, CheckCircle2, CircleAlert } from "lucide-react";
-
+import { RelativeTime } from "@/src/components/ui/relative-time";
+import { StatusBadge, type StatusTone } from "@/src/components/ui/status-badge";
 import type { AdminIncidentSummary } from "@/src/lib/admin/system/types";
 
 function durationLabel(incident: AdminIncidentSummary, now: string): string {
@@ -11,38 +10,53 @@ function durationLabel(incident: AdminIncidentSummary, now: string): string {
   return `${duration} ${incident.status === "RESOLVED" ? "total" : "active"}`;
 }
 
-function stateLabel(incident: AdminIncidentSummary): string {
-  if (incident.status === "RESOLVED") return "Recovered";
-  if (incident.status === "ACKNOWLEDGED") return "Acknowledged";
-  return incident.severity === "CRITICAL" ? "Critical" : "Warning";
+function state(incident: AdminIncidentSummary): { tone: StatusTone; label: string } {
+  if (incident.status === "RESOLVED") return { tone: "success", label: "Recovered" };
+  if (incident.status === "ACKNOWLEDGED") return { tone: "warning", label: "Acknowledged" };
+  return incident.severity === "CRITICAL" ? { tone: "danger", label: "Critical" } : { tone: "warning", label: "Warning" };
+}
+
+// Incident sources are internal keys such as "component:database" or "queue:webhooks".
+const SOURCES: Record<string, string> = {
+  billing: "Billing",
+  "component:database": "Database",
+  "component:redis": "Job queue (Redis)",
+  "component:worker": "Background worker",
+  "component:web": "Web app",
+  "queue:webhooks": "Incoming events queue",
+  "queue:bulk": "Bulk sends queue",
+};
+
+export function incidentSource(source: string): string {
+  if (SOURCES[source]) return SOURCES[source];
+  const text = source.split(":").at(-1)?.replaceAll(/[_-]/g, " ") ?? source;
+  return `${text[0]?.toUpperCase() ?? ""}${text.slice(1)}`;
 }
 
 export function IncidentTable({ incidents, now }: { incidents: AdminIncidentSummary[]; now: string }) {
   return (
-    <section className="panel admin-incident-panel" aria-labelledby="incident-heading">
-      <div className="admin-section-heading">
+    <section className="admin-card is-flush" aria-labelledby="incident-heading">
+      <div className="admin-card-head">
         <div>
           <h2 id="incident-heading">Incidents</h2>
-          <p>Active problems and recoveries from the last 24 hours.</p>
+          <p>Problems happening now, and recoveries from the last 24 hours.</p>
         </div>
-        <span className="admin-inline-count">{incidents.length} recorded</span>
       </div>
-      <div className="admin-table-scroll">
-        <table className="admin-table admin-incident-table" aria-label="Production incidents">
-          <thead><tr><th>State</th><th>Incident</th><th>Service</th><th>Duration</th><th>Last seen</th></tr></thead>
+      <div className="table-scroll">
+        <table className="data-table is-stackable" aria-label="Production incidents">
+          <thead><tr><th>State</th><th>What happened</th><th>Affects</th><th>Duration</th><th>Last seen</th></tr></thead>
           <tbody>
             {incidents.length === 0 ? (
-              <tr><td colSpan={5} className="admin-incident-empty"><CheckCircle2 size={18} aria-hidden /> No incidents in the last 24 hours</td></tr>
+              <tr><td colSpan={5}><span className="admin-hint">No incidents in the last 24 hours</span></td></tr>
             ) : incidents.map((incident) => {
-              const recovered = incident.status === "RESOLVED";
-              const Icon = recovered ? CheckCircle2 : incident.severity === "CRITICAL" ? CircleAlert : AlertTriangle;
+              const badge = state(incident);
               return (
-                <tr key={incident.id} className={`is-${recovered ? "recovered" : incident.severity.toLowerCase()}`}>
-                  <td data-label="State"><span className={`admin-incident-state is-${recovered ? "recovered" : incident.severity.toLowerCase()}`}><Icon size={14} aria-hidden />{stateLabel(incident)}</span></td>
-                  <td data-label="Incident"><strong>{incident.title}</strong><small>{incident.detail}</small></td>
-                  <td data-label="Service"><code>{incident.source}</code></td>
+                <tr key={incident.id}>
+                  <td data-label="State"><StatusBadge tone={badge.tone} label={badge.label} /></td>
+                  <td><span className="cell-stack"><strong>{incident.title}</strong><span className="cell-meta">{incident.detail}</span></span></td>
+                  <td data-label="Affects">{incidentSource(incident.source)}</td>
                   <td data-label="Duration">{durationLabel(incident, now)}</td>
-                  <td data-label="Last seen"><time dateTime={incident.lastSeenAt}>{formatAdminDateTime(incident.lastSeenAt)}</time></td>
+                  <td data-label="Last seen"><RelativeTime value={incident.lastSeenAt} /></td>
                 </tr>
               );
             })}

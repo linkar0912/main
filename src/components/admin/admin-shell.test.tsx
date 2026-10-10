@@ -18,7 +18,8 @@ describe("AdminShell", () => {
   it("renders the exact operator navigation without customer workspace sections", () => {
     render(<AdminShell owner={{ email: "owner@linkar.in" }}><main>Overview</main></AdminShell>);
 
-    expect(screen.getAllByText("LINKAR OPERATOR").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Owner console").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/LINKAR OPERATOR/)).toBeNull();
     expect(screen.getByRole("link", { name: "Workspaces" }).getAttribute("href")).toBe("/admin/workspaces");
     expect(screen.getByRole("link", { name: "Back to workspace" }).getAttribute("href")).toBe("/dashboard");
     expect(screen.queryByRole("link", { name: "Broadcasts" })).toBeNull();

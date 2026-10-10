@@ -35,7 +35,7 @@ describe("AdminPagination", () => {
   it("returns to the first page from page two and ends cleanly", () => {
     render(<AdminPagination basePath="/admin/audit" params={{ phase: "FAILURE" }} cursor="c2" history={[]} nextCursor={null} label="Audit pagination" summary="Events" />);
     expect(href("Previous page").search).toBe("?phase=FAILURE");
-    expect(screen.getByText("End of results")).toBeTruthy();
+    expect(screen.getByText("No more results")).toBeTruthy();
   });
 
   it("parses and bounds the history parameter", () => {

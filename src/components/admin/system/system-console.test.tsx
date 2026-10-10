@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen } from "@testing-library/react"; import userEvent from "@testing-library/user-event"; import { afterEach, describe, expect, it, vi } from "vitest"; vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) })); const { SystemConsole } = await import("./system-console"); afterEach(cleanup); const snapshot = { overall: "degraded" as const, generatedAt: "2026-08-31T10:00:00.000Z", release: "abc123", web: { state: "healthy" as const }, database: { state: "healthy" as const }, redis: { state: "unavailable" as const, detail: "Probe failed" }, worker: { state: "degraded" as const, detail: "No heartbeat" }, queues: [{ name: "webhooks" as const, configured: true, paused: false, waiting: 2, active: 1, delayed: 0, completed: 20, failed: 1, oldestWaitingAgeMs: 2000, lastFailedCode: "PROVIDER_REJECTED" }], stuckClaims: 1, webhookThroughput: { lastHour: 40 }, deletionJobs: { queued: 0, running: 0, failed: 0 }, billing: { configured: false, failedWebhooksLastHour: 1, driftedSubscriptions: 0 }, incidents: [], configurationPresence: [{ requirement: "Database", present: true }], capabilities: { followGatedCampaigns: "enabled" as const }, reconciliation: { expiredDeliveryClaims: 1 }, rateLimits: { state: "healthy" as const } };
-describe("SystemConsole", () => { it("labels partial outages in text rather than color alone", () => { render(<SystemConsole snapshot={snapshot} />); expect(screen.getByText(/Unavailable · Probe failed/)).toBeTruthy(); expect(screen.getByText(/degraded · No heartbeat/)).toBeTruthy(); expect(screen.getByText("Latest failure:", { exact: false })).toBeTruthy(); }); it("requires a reason dialog before pausing a queue", async () => { render(<SystemConsole snapshot={snapshot} />); await userEvent.click(screen.getByRole("button", { name: "Pause queue" })); expect(screen.getByRole("dialog", { name: "pause webhooks queue" })).toBeTruthy(); expect(screen.getByRole("textbox", { name: "Operator reason" })).toBeTruthy(); }); });
+describe("SystemConsole", () => { it("labels partial outages in text rather than color alone", () => { render(<SystemConsole snapshot={snapshot} />); expect(screen.getByText("Probe failed").parentElement?.textContent).toContain("Down"); expect(screen.getByText("No heartbeat").parentElement?.textContent).toContain("Needs attention"); expect(screen.getByText("Latest failure:", { exact: false })).toBeTruthy(); }); it("requires a reason dialog before pausing a queue", async () => { render(<SystemConsole snapshot={snapshot} />); await userEvent.click(screen.getByRole("button", { name: "Pause queue" })); expect(screen.getByRole("dialog", { name: "Pause Incoming events" })).toBeTruthy(); expect(screen.getByRole("textbox", { name: /^Reason/ })).toBeTruthy(); }); });
 
 describe("incident operations view", () => {
   it("renders active and recovered incidents with explicit text states", () => {
@@ -20,7 +20,7 @@ describe("incident operations view", () => {
   it("shows a calm empty incident state and explicit billing readiness", () => {
     render(<SystemConsole snapshot={snapshot} />);
     expect(screen.getByText("No incidents in the last 24 hours")).toBeTruthy();
-    expect(screen.getByText("Razorpay needs configuration")).toBeTruthy();
+    expect(screen.getByText(/Razorpay billing is not set up/)).toBeTruthy();
   });
 });
 
@@ -28,9 +28,9 @@ it("ages a snapshot even when refreshes fail", () => {
   vi.useFakeTimers(); vi.setSystemTime(new Date(snapshot.generatedAt));
   try {
     render(<SystemConsole snapshot={snapshot} />);
-    expect(screen.queryByText(/· Stale/)).toBeNull();
+    expect(screen.queryByText(/may be out of date/)).toBeNull();
     act(() => vi.advanceTimersByTime(65_000));
-    expect(screen.getByText(/· Stale/)).toBeTruthy();
+    expect(screen.getByText(/may be out of date/)).toBeTruthy();
   } finally { cleanup(); vi.useRealTimers(); }
 });
 it("lists failed jobs and retries only the selected IDs through the reason dialog", async () => {
@@ -47,15 +47,15 @@ it("lists failed jobs and retries only the selected IDs through the reason dialo
     expect(fetchMock.mock.calls[0][0]).toBe("/api/admin/system/queues/webhooks");
     await userEvent.click(await screen.findByRole("checkbox", { name: "Select failed job j2" }));
     await userEvent.click(screen.getByRole("button", { name: "Retry selected (1)" }));
-    const dialog = screen.getByRole("dialog", { name: "retry 1 failed webhooks job" });
+    const dialog = screen.getByRole("dialog", { name: "Retry 1 failed job in Incoming events" });
     expect(dialog).toBeTruthy();
-    await userEvent.type(screen.getByRole("textbox", { name: "Operator reason" }), "Provider outage fixed");
-    await userEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+    await userEvent.type(screen.getByRole("textbox", { name: /^Reason/ }), "Provider outage fixed");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
     const [url, init] = fetchMock.mock.calls[1];
     expect(url).toBe("/api/admin/system/queues/webhooks");
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(init.body)).toEqual({ action: "retry_failed_jobs", jobIds: ["j2"] });
-    expect((await screen.findByRole("status")).textContent).toContain("retry 1 failed webhooks job accepted");
+    expect((await screen.findByRole("status")).textContent).toContain("Retry 1 failed job in Incoming events: requested.");
     expect(screen.queryByRole("region", { name: "Failed webhooks jobs" })).toBeNull();
   } finally { vi.unstubAllGlobals(); }
 });

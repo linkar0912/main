@@ -42,19 +42,21 @@ export function AdminPagination({
   nextLabel?: string;
 }) {
   const previousCursor = history.at(-1) ?? null;
+  // Everything fits on one page: no paging controls, just the note if there is one.
+  if (!cursor && !nextCursor) return summary ? <p className="admin-hint">{summary}</p> : null;
   return (
     <nav className="admin-pagination" aria-label={label}>
-      <span className="muted">{summary}</span>
-      <span className="admin-command-actions">
+      <span>{summary}</span>
+      <span className="admin-actions">
         {cursor ? (
           <>
-            <Link className="button button-ghost" href={href(basePath, params, null, [])}><ChevronsLeft size={16} /> First page</Link>
-            <Link className="button button-secondary" href={href(basePath, params, previousCursor, history.slice(0, -1))}><ArrowLeft size={16} /> Previous page</Link>
+            <Link className="button button-ghost button-small" href={href(basePath, params, null, [])}><ChevronsLeft size={16} /> First page</Link>
+            <Link className="button button-secondary button-small" href={href(basePath, params, previousCursor, history.slice(0, -1))}><ArrowLeft size={16} /> Previous page</Link>
           </>
         ) : null}
         {nextCursor
-          ? <Link className="button button-secondary" href={href(basePath, params, nextCursor, cursor ? [...history, cursor].slice(-MAX_HISTORY) : [])}>{nextLabel} <ArrowRight size={16} /></Link>
-          : <span className="muted">End of results</span>}
+          ? <Link className="button button-secondary button-small" href={href(basePath, params, nextCursor, cursor ? [...history, cursor].slice(-MAX_HISTORY) : [])}>{nextLabel} <ArrowRight size={16} /></Link>
+          : <span>No more results</span>}
       </span>
     </nav>
   );

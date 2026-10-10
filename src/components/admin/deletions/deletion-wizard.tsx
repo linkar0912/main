@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
-import { adminCommand, adminErrorMessage, adminIdempotencyKey } from "../shared/admin-request";
+import { TriangleAlert } from "lucide-react";
+
+import { RelativeTime } from "@/src/components/ui/relative-time";
+import { adminCommand, adminErrorMessage, adminIdempotencyKey, humanizeAdminCode } from "../shared/admin-request";
+import { REASON_LABEL } from "../shared/reason-dialog";
 
 type Prepared = {
   impact: { identity: { label: string }; counts: Record<string, number>; warnings: string[] };
@@ -59,7 +62,7 @@ export function DeletionWizard() {
       await call("/api/admin/deletions", { target, impactDigest: prepared.impactDigest, confirmation, challengeToken: prepared.challenge.token, includeAuthUsers });
       resetPreview();
       setTargetId("");
-      setMessage({ tone: "success", text: "Permanent deletion queued. Progress is shown below." });
+      setMessage({ tone: "success", text: "Deletion queued. You can follow it in Deletion progress below." });
       router.refresh();
     } catch (cause) {
       setMessage({ tone: "error", text: adminErrorMessage(cause, "Deletion failed") });
@@ -69,52 +72,60 @@ export function DeletionWizard() {
   }
 
   return (
-    <section className="panel admin-deletion-wizard" aria-labelledby="deletion-wizard-title">
-      <div>
-        <p className="eyebrow">Challenge protected</p>
-        <h2 id="deletion-wizard-title">Request permanent deletion</h2>
-      </div>
-      <div className="field-grid">
-        <label className="field">
-          <span>Target type</span>
-          <select value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); resetPreview(); }}>
-            <option value="WORKSPACE">Workspace</option>
-            <option value="USER">User</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>Target ID</span>
-          <input value={targetId} autoComplete="off" spellCheck={false} aria-describedby="deletion-target-hint" onChange={(event) => { setTargetId(event.target.value); resetPreview(); }} />
-          <small id="deletion-target-hint" className="admin-field-hint">{kind === "WORKSPACE" ? "Workspace IDs look like workspace_… (copy it from the workspace page)." : "User IDs are Supabase Auth UUIDs (copy it from the user page)."}</small>
-        </label>
-      </div>
-      <label className="field">
-        <span>Operator reason</span>
-        <textarea value={reason} maxLength={500} onChange={(event) => { setReason(event.target.value); resetPreview(); }} rows={3} />
-      </label>
-      <button className="button button-secondary" type="button" disabled={busy || !target.id || reason.trim().length < 3} onClick={() => void preview()}>Preview irreversible impact</button>
-      {prepared ? (
-        <div className="admin-impact-preview">
-          <h3>{prepared.impact.identity.label}</h3>
-          <dl className="admin-system-metrics">
-            {Object.entries(prepared.impact.counts).map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}
-          </dl>
-          <p className="muted">Counts are a snapshot for review. New activity does not invalidate this preview; a change in members or protection does.</p>
-          {prepared.impact.warnings.map((warning) => <p className="form-warning" key={warning}>{warning}</p>)}
-          {kind === "WORKSPACE" ? (
-            <label className="admin-check-field">
-              <input type="checkbox" checked={includeAuthUsers} onChange={(event) => setIncludeAuthUsers(event.target.checked)} /> Also delete orphaned Auth users after workspace cleanup
-            </label>
-          ) : null}
-          <label className="field">
-            <span>Type exactly <code>{prepared.confirmationPhrase}</code></span>
-            <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
-          </label>
-          <p className="muted">Challenge expires {formatAdminDateTime(prepared.challenge.expiresAt)}.</p>
-          <button className="button button-danger" type="button" disabled={busy || confirmation !== prepared.confirmationPhrase} onClick={() => void submit()}>Queue permanent deletion</button>
+    <section className="admin-card is-danger" aria-labelledby="deletion-wizard-title">
+      <div className="admin-card-head">
+        <div>
+          <h2 id="deletion-wizard-title">Delete a workspace or user</h2>
+          <p>First preview exactly what will be removed, then type the confirmation phrase to queue it.</p>
         </div>
-      ) : null}
-      {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "form-error" : "form-success"}>{message.text}</p> : null}
+      </div>
+      <div className="admin-form">
+        <div className="admin-form-row">
+          <label className="field">
+            <span>What to delete</span>
+            <select value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); resetPreview(); }}>
+              <option value="WORKSPACE">Workspace</option>
+              <option value="USER">User</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>{kind === "WORKSPACE" ? "Workspace ID" : "User ID"}</span>
+            <input value={targetId} autoComplete="off" spellCheck={false} aria-describedby="deletion-target-hint" onChange={(event) => { setTargetId(event.target.value); resetPreview(); }} />
+          </label>
+        </div>
+        <p id="deletion-target-hint" className="admin-hint">{kind === "WORKSPACE" ? "Copy it from the ID chip on the workspace page." : "Copy it from the ID chip on the user page."}</p>
+        <label className="field">
+          <span>{REASON_LABEL}</span>
+          <textarea value={reason} maxLength={500} onChange={(event) => { setReason(event.target.value); resetPreview(); }} rows={3} />
+        </label>
+        <div className="admin-actions">
+          <button className="button button-secondary" type="button" disabled={busy || !target.id || reason.trim().length < 3} onClick={() => void preview()}>Preview what will be deleted</button>
+        </div>
+        {prepared ? (
+          <div className="admin-impact">
+            <h3>{prepared.impact.identity.label}</h3>
+            <dl className="admin-kv">
+              {Object.entries(prepared.impact.counts).map(([label, count]) => <div key={label}><dt>{humanizeAdminCode(label.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase())}</dt><dd>{count.toLocaleString("en-IN")}</dd></div>)}
+            </dl>
+            <p className="admin-hint">These counts are a snapshot. New activity does not cancel this preview; a change in members or protection does.</p>
+            {prepared.impact.warnings.map((warning) => <p className="admin-callout is-danger" key={warning}><TriangleAlert size={16} aria-hidden /><span>{warning}</span></p>)}
+            {kind === "WORKSPACE" ? (
+              <label className="admin-check">
+                <input type="checkbox" checked={includeAuthUsers} onChange={(event) => setIncludeAuthUsers(event.target.checked)} /> Also delete sign-in accounts left with no workspace
+              </label>
+            ) : null}
+            <label className="field">
+              <span>Type exactly <code className="admin-phrase">{prepared.confirmationPhrase}</code></span>
+              <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
+            </label>
+            <p className="admin-hint">This preview expires <RelativeTime inline value={prepared.challenge.expiresAt} />.</p>
+            <div className="admin-actions">
+              <button className="button button-danger" type="button" disabled={busy || confirmation !== prepared.confirmationPhrase} onClick={() => void submit()}>Delete permanently</button>
+            </div>
+          </div>
+        ) : null}
+        {message ? <p role={message.tone === "error" ? "alert" : "status"} className={`admin-message ${message.tone === "error" ? "form-error" : "form-success"}`}>{message.text}</p> : null}
+      </div>
     </section>
   );
 }

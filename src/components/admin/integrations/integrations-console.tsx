@@ -3,19 +3,41 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Cable, RefreshCcw, ShieldAlert, Wrench, X } from "lucide-react";
+import { RefreshCcw, ShieldAlert, Wrench, X } from "lucide-react";
 
-import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { PageHeader } from "@/src/components/page-header";
+import { IdChip } from "@/src/components/ui/id-chip";
+import { RelativeTime } from "@/src/components/ui/relative-time";
 import type { AdminIntegrationDetail, AdminIntegrationItem } from "@/src/lib/admin/integrations/types";
 import { AdminPagination } from "../shared/admin-pagination";
-import { adminCommand, adminErrorMessage, adminQuery } from "../shared/admin-request";
+import { adminCommand, adminErrorMessage, adminQuery, humanizeAdminCode } from "../shared/admin-request";
+import { REASON_LABEL } from "../shared/reason-dialog";
 import { StatusPill } from "../shared/status-pill";
 import { useAdminDialog } from "../shared/use-admin-dialog";
 
 const actionIcons: Record<string, typeof Wrench> = { repair_subscription: Wrench, refresh_token: RefreshCcw, disconnect: ShieldAlert };
 
+const actionLabels: Record<string, string> = {
+  refresh_token: "Refresh access",
+  mark_expired: "Mark as expired",
+  repair_subscription: "Repair event subscription",
+  disconnect: "Disconnect",
+};
+const providerNames = { instagram: "Instagram", facebook: "Facebook" } as const;
+const subscriptionStates: Record<AdminIntegrationItem["subscriptionHealth"], { status: string; label: string }> = {
+  healthy: { status: "healthy", label: "Receiving events" },
+  drifted: { status: "drifted", label: "Needs repair" },
+  unchecked: { status: "unchecked", label: "Not checked" },
+  unavailable: { status: "unavailable", label: "Unavailable" },
+};
+
 function label(value: string): string {
-  return value.replaceAll("_", " ");
+  return actionLabels[value] ?? humanizeAdminCode(value);
+}
+
+function TokenExpiry({ item }: { item: AdminIntegrationItem }) {
+  if (item.tokenExpiresAt) return <RelativeTime value={item.tokenExpiresAt} />;
+  return <>{item.tokenExpiry === "expired" ? "Expired" : "Not set"}</>;
 }
 
 function integrationUrl(item: AdminIntegrationItem): string {
@@ -47,7 +69,7 @@ function ActionDialog({ item, action, onClose, onDone }: { item: AdminIntegratio
       }
       const body = challenge ? { action, version: item.version, challengeToken: challenge.token, confirmation } : { action, version: item.version };
       await adminCommand(integrationUrl(item), { method: "PATCH", body, reason, fallback: "integration_operation_failed" });
-      onDone(`${label(action)} completed`);
+      onDone(`Done: ${label(action)}.`);
     } catch (cause) {
       setError(adminErrorMessage(cause));
     } finally {
@@ -57,24 +79,24 @@ function ActionDialog({ item, action, onClose, onDone }: { item: AdminIntegratio
 
   return (
     <div className="admin-dialog-backdrop" role="presentation">
-      <form ref={dialogRef} tabIndex={-1} className="panel admin-reason-dialog" role="dialog" aria-modal="true" aria-labelledby="integration-action-title" onSubmit={submit}>
-        <h2 id="integration-action-title">{label(action)} {item.accountName}</h2>
-        {disconnecting ? <p className="admin-warning-copy">Disconnecting stops every automation on this account until the workspace reconnects it.</p> : null}
-        {error ? <div className="form-error" role="alert">{error}</div> : null}
+      <form ref={dialogRef} tabIndex={-1} className="admin-reason-dialog" role="dialog" aria-modal="true" aria-labelledby="integration-action-title" onSubmit={submit}>
+        <h2 id="integration-action-title">{label(action)}: {item.accountName}</h2>
+        {disconnecting ? <p className="admin-callout is-danger"><ShieldAlert size={16} aria-hidden /><span>Disconnecting stops every automation on this account until the workspace connects it again.</span></p> : null}
+        {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
         <label className="field">
-          <span>Operator reason</span>
+          <span>{REASON_LABEL}</span>
           <textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
         </label>
         {challenge ? (
           <label className="field">
-            <span>Type <code>{challenge.confirmationPhrase}</code></span>
+            <span>Type <code className="admin-phrase">{challenge.confirmationPhrase}</code> to confirm</span>
             <input autoFocus required autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
           </label>
         ) : null}
-        <div className="admin-command-actions">
+        <div className="admin-actions">
           <button className="button button-ghost" type="button" disabled={busy} onClick={onClose}>Cancel</button>
           <button className={disconnecting ? "button button-danger" : "button button-primary"} disabled={busy || !ready} type="submit">
-            {disconnecting && !challenge ? "Prepare disconnect" : "Confirm action"}
+            {disconnecting && !challenge ? "Continue" : disconnecting ? "Disconnect" : "Confirm"}
           </button>
         </div>
       </form>
@@ -125,24 +147,17 @@ export function IntegrationsConsole({ items, filters, nextCursor = null, history
   }
 
   return (
-    <main className="page-wrap admin-resource-page">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Linkar operator / providers</p>
-          <h1>Integrations</h1>
-          <p className="muted page-lede">Derived token and subscription health. Credential material never leaves the server.</p>
-        </div>
-        <span className="admin-count-badge"><Cable size={16} /> {items.length} connections on this page</span>
-      </header>
+    <main className="page-wrap admin-page">
+      <PageHeader title="Connected accounts" description="Instagram and Facebook accounts linked to workspaces." />
 
-      {error ? <div className="form-error" role="alert">{error}</div> : null}
-      {notice ? <div className="form-success" role="status">{notice}</div> : null}
+      {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
+      {notice ? <div className="form-success admin-message" role="status">{notice}</div> : null}
 
-      <form key={JSON.stringify(filters)} className="admin-filter-bar admin-integration-filter" onSubmit={filter}>
+      <form key={JSON.stringify(filters)} className="admin-toolbar" onSubmit={filter}>
         <label className="field">
-          <span>Provider</span>
+          <span>Platform</span>
           <select name="provider" defaultValue={filters.provider ?? ""}>
-            <option value="">All</option>
+            <option value="">Any</option>
             <option value="instagram">Instagram</option>
             <option value="facebook">Facebook</option>
           </select>
@@ -150,112 +165,123 @@ export function IntegrationsConsole({ items, filters, nextCursor = null, history
         <label className="field">
           <span>Status</span>
           <select name="status" defaultValue={filters.status ?? ""}>
-            <option value="">All</option>
+            <option value="">Any</option>
             <option value="CONNECTED">Connected</option>
             <option value="EXPIRED">Expired</option>
             <option value="DISCONNECTED">Disconnected</option>
           </select>
         </label>
         <label className="field">
-          <span>Expiry window</span>
+          <span>Access expires</span>
           <select name="expiry" defaultValue={filters.expiry ?? ""}>
-            <option value="">All</option>
-            <option value="expired">Expired</option>
+            <option value="">Any time</option>
+            <option value="expired">Already expired</option>
             <option value="within_24_hours">Within 24 hours</option>
             <option value="within_7_days">Within 7 days</option>
             <option value="within_30_days">Within 30 days</option>
-            <option value="later">Later</option>
-            <option value="unknown">Unknown</option>
+            <option value="later">In more than 30 days</option>
+            <option value="unknown">Not set</option>
           </select>
         </label>
         <label className="field"><span>Workspace ID</span><input name="workspaceId" defaultValue={filters.workspaceId ?? ""} /></label>
-        <label className="field"><span>Search</span><input name="text" defaultValue={filters.text ?? ""} /></label>
+        <label className="field is-grow"><span>Account name</span><input name="text" defaultValue={filters.text ?? ""} placeholder="@handle or Page name" /></label>
         <button className="button button-secondary" type="submit">Apply filters</button>
       </form>
 
-      <section className="panel admin-table-panel" aria-label="Provider connections">
-        {items.length === 0 ? (
-          <div className="empty-state">
-            <h2>No integrations found</h2>
-            <p>Adjust the provider, status, or expiry filters.</p>
-          </div>
-        ) : (
-          <div className="admin-table-scroll">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th>Workspace</th>
-                  <th>Status</th>
-                  <th>Token expiry</th>
-                  <th>Subscription</th>
-                  <th><span className="sr-only">Inspect</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => {
-                  const rowId = `${item.provider}-${item.id}`;
-                  return (
-                    <tr key={rowId}>
-                      <td><strong>{item.accountName}</strong><small>{item.provider} · {item.accountId}</small></td>
-                      <td><Link href={`/admin/workspaces/${item.workspace.id}`}><strong>{item.workspace.name}</strong></Link><small>{item.workspace.id}</small></td>
-                      <td><StatusPill status={item.status} /></td>
-                      <td><StatusPill status={item.tokenExpiry === "expired" ? "expired" : item.tokenExpiry === "within_24_hours" || item.tokenExpiry === "within_7_days" ? "pending" : "idle"} label={label(item.tokenExpiry)} /></td>
-                      <td><StatusPill status={item.subscriptionHealth} /></td>
-                      <td>
-                        <button className="button button-ghost button-small" disabled={loadingId !== null} aria-label={`Inspect ${item.accountName}`} onClick={() => void inspect(item)} type="button">
-                          {loadingId === rowId ? "Loading…" : "Inspect"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <section className="admin-section" aria-label="Provider connections">
+        <div className="admin-results"><span>{items.length ? `Showing ${items.length} ${items.length === 1 ? "account" : "accounts"}` : "No accounts to show"}</span></div>
+        <div className="admin-card is-flush">
+          {items.length === 0 ? (
+            <div className="admin-empty">
+              <p>No connected accounts match these filters. Try a different platform, status or expiry.</p>
+            </div>
+          ) : (
+            <div className="table-scroll">
+              <table className="data-table is-stackable">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Workspace</th>
+                    <th>Status</th>
+                    <th>Access expires</th>
+                    <th>Events</th>
+                    <th className="is-action"><span className="sr-only">Open</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => {
+                    const rowId = `${item.provider}-${item.id}`;
+                    const subscription = subscriptionStates[item.subscriptionHealth];
+                    return (
+                      <tr key={rowId}>
+                        <td><span className="cell-stack"><strong>{item.accountName}</strong><span className="cell-meta">{providerNames[item.provider]}</span></span></td>
+                        <td data-label="Workspace"><Link href={`/admin/workspaces/${item.workspace.id}`}>{item.workspace.name}</Link></td>
+                        <td data-label="Status"><StatusPill status={item.status} /></td>
+                        <td data-label="Access expires"><TokenExpiry item={item} /></td>
+                        <td data-label="Events"><StatusPill status={subscription.status} label={subscription.label} /></td>
+                        <td className="is-action">
+                          <button className="button button-ghost button-small" disabled={loadingId !== null} aria-label={`Open ${item.accountName}`} onClick={() => void inspect(item)} type="button">
+                            {loadingId === rowId ? "Loading…" : "Open"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <AdminPagination
+          basePath="/admin/integrations"
+          params={filters}
+          cursor={filters.cursor ?? null}
+          history={history}
+          nextCursor={nextCursor}
+          label="Integration pagination"
+          summary="Access tokens never leave the server."
+        />
       </section>
-
-      <AdminPagination
-        basePath="/admin/integrations"
-        params={filters}
-        cursor={filters.cursor ?? null}
-        history={history}
-        nextCursor={nextCursor}
-        label="Integration pagination"
-        summary="Token and subscription state is derived on the server."
-      />
 
       {selected ? (
         <>
           <button className="admin-drawer-scrim" type="button" disabled={action !== null} onClick={() => setSelected(null)} aria-label="Close integration detail" />
           <aside ref={drawerRef} tabIndex={-1} className="admin-detail-drawer" role="dialog" aria-modal="true" aria-label="Integration detail">
-            <button className="button button-ghost button-small admin-drawer-close" type="button" disabled={action !== null} onClick={() => setSelected(null)} aria-label="Close integration detail">
-              <X size={16} />
-            </button>
-            <p className="eyebrow">{selected.provider} / {selected.id}</p>
-            <h2>{selected.accountName}</h2>
-            <p><StatusPill status={selected.status} /></p>
-            <dl className="admin-inline-kv">
+            <div className="admin-drawer-head">
+              <div>
+                <h2>{selected.accountName}</h2>
+                <div className="admin-header-meta">
+                  <StatusPill status={selected.status} />
+                  <span className="admin-hint">{providerNames[selected.provider]}</span>
+                </div>
+              </div>
+              <button className="button button-ghost button-small" type="button" disabled={action !== null} onClick={() => setSelected(null)} aria-label="Close integration detail">
+                <X size={16} aria-hidden />
+              </button>
+            </div>
+            <dl className="admin-kv">
               <div><dt>Workspace</dt><dd>{selected.workspace.name}</dd></div>
-              <div><dt>Token expiry</dt><dd>{label(selected.tokenExpiry)}</dd></div>
-              <div><dt>Subscription</dt><dd>{selected.subscriptionHealth}</dd></div>
-              <div><dt>Subscribed fields</dt><dd>{selected.subscribedFields.join(", ") || "None"}</dd></div>
-              <div><dt>Missing fields</dt><dd>{selected.missingFields.join(", ") || "None"}</dd></div>
-              <div><dt>Checked</dt><dd>{formatAdminDateTime(selected.checkedAt)}</dd></div>
-              {selected.safeErrorCode ? <div><dt>Last error</dt><dd>{selected.safeErrorCode}</dd></div> : null}
+              <div><dt>Account ID</dt><dd><IdChip id={selected.accountId} /></dd></div>
+              <div><dt>Access expires</dt><dd><TokenExpiry item={selected} /></dd></div>
+              <div><dt>Events</dt><dd>{subscriptionStates[selected.subscriptionHealth].label}</dd></div>
+              <div><dt>Subscribed to</dt><dd>{selected.subscribedFields.join(", ") || "Nothing"}</dd></div>
+              <div><dt>Missing</dt><dd>{selected.missingFields.join(", ") || "Nothing"}</dd></div>
+              <div><dt>Last checked</dt><dd><RelativeTime value={selected.checkedAt} /></dd></div>
+              {selected.safeErrorCode ? <div><dt>Last error</dt><dd>{humanizeAdminCode(selected.safeErrorCode.toLowerCase())}</dd></div> : null}
             </dl>
-            <h3>Allowed actions</h3>
-            {selected.allowedActions.length === 0 ? <p className="muted">No operator actions are available for this connection.</p> : null}
-            <div className="admin-command-actions">
-              {selected.allowedActions.map((name) => {
-                const Icon = actionIcons[name];
-                return (
-                  <button key={name} className={name === "disconnect" ? "button button-danger button-small" : "button button-secondary button-small"} onClick={() => setAction(name)} type="button">
-                    {Icon ? <Icon size={14} aria-hidden /> : null}{label(name)}
-                  </button>
-                );
-              })}
+            <div>
+              <h3>What you can do</h3>
+              {selected.allowedActions.length === 0 ? <p className="admin-hint">Nothing can be changed on this account right now.</p> : null}
+              <div className="admin-actions">
+                {selected.allowedActions.map((name) => {
+                  const Icon = actionIcons[name];
+                  return (
+                    <button key={name} className={name === "disconnect" ? "button button-danger button-small" : "button button-secondary button-small"} onClick={() => setAction(name)} type="button">
+                      {Icon ? <Icon size={14} aria-hidden /> : null}{label(name)}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </aside>
         </>

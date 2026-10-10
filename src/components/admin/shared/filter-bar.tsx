@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Search } from "lucide-react";
 
-import { humanizeAdminCode } from "./admin-request";
+import { statusLabel } from "./status-pill";
 
 type Filters = { workspaceId?: string; status?: string; text?: string; provider?: string };
 
@@ -36,7 +36,7 @@ export function FilterBar({
   }
 
   return (
-    <form className="admin-filter-bar admin-operations-filter" onSubmit={submit}>
+    <form className="admin-toolbar" onSubmit={submit}>
       <label className="field">
         <span>Workspace ID</span>
         <input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} />
@@ -44,23 +44,23 @@ export function FilterBar({
       <label className="field">
         <span>Status</span>
         <select value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="">All</option>
-          {statuses.map((item) => <option value={item} key={item}>{humanizeAdminCode(item.toLowerCase())}</option>)}
+          <option value="">Any</option>
+          {statuses.map((item) => <option value={item} key={item}>{statusLabel(item)}</option>)}
         </select>
       </label>
       {showProvider ? (
         <label className="field">
-          <span>Provider</span>
+          <span>Platform</span>
           <select value={provider} onChange={(event) => setProvider(event.target.value)}>
-            <option value="">All</option>
+            <option value="">Any</option>
             <option value="instagram">Instagram</option>
             <option value="facebook">Facebook</option>
           </select>
         </label>
       ) : null}
-      <label className="field admin-search-field">
+      <label className="field is-grow">
         <span>{textLabel}</span>
-        <span className="admin-input-icon">
+        <span className="admin-search">
           <Search size={16} aria-hidden />
           <input value={text} placeholder={textPlaceholder} onChange={(event) => setText(event.target.value)} />
         </span>

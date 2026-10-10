@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getHealth } from "@/src/lib/health";
+import { getHealth, readWorkerHeartbeat, WORKER_HEARTBEAT_STALE_MS, type WorkerHeartbeat } from "@/src/lib/health";
 import { getServerEnv } from "@/src/lib/env";
 import { prisma } from "@/src/lib/prisma";
 import { ADMIN_QUEUE_NAMES, getAdminQueueSnapshot } from "@/src/lib/queue";
@@ -76,6 +76,44 @@ async function loadOperationalData(now: Date): Promise<OperationalData> {
   };
 }
 
+async function probeWorkerUrl(): Promise<AdminProbe> {
+  const workerUrl = process.env.WORKER_HEALTH_URL;
+  if (!workerUrl) return { state: "degraded", detail: "Worker heartbeat endpoint not configured" };
+  return bounded(async () => {
+    const response = await fetch(workerUrl, { cache: "no-store", signal: AbortSignal.timeout(3_000) });
+    return response.ok ? { state: "healthy" as const } : { state: "degraded" as const, detail: "Worker health returned degraded" };
+  }).catch(() => ({ state: "unavailable", detail: "Worker health unavailable" }));
+}
+
+/**
+ * The worker runs on its own Docker network, so the web container usually
+ * cannot reach WORKER_HEALTH_URL. It writes a Redis heartbeat instead (see
+ * startWorkerHeartbeat); a fresh beat is the source of truth. The URL probe is
+ * only a fallback for when the heartbeat itself cannot be read.
+ */
+async function probeWorker(
+  redisConfigured: boolean,
+  read: () => Promise<WorkerHeartbeat | null>,
+  now: Date,
+): Promise<AdminProbe> {
+  if (redisConfigured) {
+    const beat = await bounded(read).then((value) => ({ read: true as const, value }), () => ({ read: false as const, value: null }));
+    if (beat.read) {
+      const lastSeenAt = beat.value ? new Date(beat.value.at).toISOString() : null;
+      if (beat.value && now.getTime() - beat.value.at <= WORKER_HEARTBEAT_STALE_MS) {
+        return { state: "healthy", release: beat.value.release, lastSeenAt };
+      }
+      return {
+        state: "degraded",
+        detail: `No heartbeat from the worker in the last ${Math.round(WORKER_HEARTBEAT_STALE_MS / 1000)} seconds`,
+        release: beat.value?.release ?? null,
+        lastSeenAt,
+      };
+    }
+  }
+  return probeWorkerUrl();
+}
+
 function razorpayConfigured(env: ReturnType<typeof getServerEnv>): boolean {
   return Boolean(
     env.razorpay.keyId && env.razorpay.keySecret && env.razorpay.webhookSecret
@@ -89,6 +127,7 @@ export function createAdminSystemService(dependencies: {
   health?: typeof getHealth;
   queueSnapshot?: typeof getAdminQueueSnapshot;
   operationalData?: (now: Date) => Promise<OperationalData>;
+  workerHeartbeat?: () => Promise<WorkerHeartbeat | null>;
   now?: () => Date;
 } = {}) {
   return {
@@ -104,14 +143,7 @@ export function createAdminSystemService(dependencies: {
         ? await bounded(() => (dependencies.operationalData ?? loadOperationalData)(now)).catch(() => null)
         : null;
 
-      const workerUrl = process.env.WORKER_HEALTH_URL;
-      let worker: AdminProbe = { state: "degraded", detail: "Worker heartbeat endpoint not configured" };
-      if (workerUrl) {
-        worker = await bounded(async () => {
-          const response = await fetch(workerUrl, { cache: "no-store", signal: AbortSignal.timeout(3_000) });
-          return response.ok ? { state: "healthy" as const } : { state: "degraded" as const, detail: "Worker health returned degraded" };
-        }).catch(() => ({ state: "unavailable", detail: "Worker health unavailable" }));
-      }
+      const worker = await probeWorker(Boolean(env.redisUrl), dependencies.workerHeartbeat ?? readWorkerHeartbeat, now);
 
       const queues = queueResults.map((item, index) => item ?? { name: ADMIN_QUEUE_NAMES[index], configured: Boolean(env.redisUrl), paused: null, waiting: 0, active: 0, delayed: 0, completed: 0, failed: 0, oldestWaitingAgeMs: null, lastFailedCode: null });
       const degraded = !health || health.status !== "ok" || database.state !== "healthy" || redis.state !== "healthy" || worker.state !== "healthy" || operational === null || queueResults.some((item) => item === null || !item.configured || item.paused !== false);
@@ -141,14 +173,20 @@ export function createAdminSystemService(dependencies: {
           resolvedAt: incident.resolvedAt?.toISOString() ?? null,
         })),
         configurationPresence: [
-          { requirement: "Database", present: Boolean(env.databaseUrl) },
-          { requirement: "Redis", present: Boolean(env.redisUrl) },
-          { requirement: "Instagram app", present: Boolean(env.metaAppId && env.metaAppSecret) },
-          { requirement: "Facebook app", present: Boolean(env.facebookAppId && env.facebookAppSecret) },
-          { requirement: "Token encryption", present: Boolean(env.metaTokenEncryptionKey) },
-          { requirement: "Platform owner allowlist", present: env.platformOwnerUserIds.length > 0 },
-          { requirement: "Razorpay billing", present: billingConfigured },
-          { requirement: "Owner email alerts", present: Boolean(env.emailApiKey && env.emailFrom && env.platformAlertEmails.length) },
+          ...[
+            { requirement: "Database", present: Boolean(env.databaseUrl), fix: "Add the Postgres connection string to the web server's environment." },
+            { requirement: "Redis", present: Boolean(env.redisUrl), fix: "Add the Redis connection string to the web server's environment." },
+            { requirement: "Instagram app", present: Boolean(env.metaAppId && env.metaAppSecret), fix: "Set META_APP_ID and META_APP_SECRET." },
+            { requirement: "Facebook app", present: Boolean(env.facebookAppId && env.facebookAppSecret), fix: "Set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET." },
+            { requirement: "Token encryption", present: Boolean(env.metaTokenEncryptionKey), fix: "Set META_TOKEN_ENCRYPTION_KEY to 64 hex characters." },
+            { requirement: "Platform owner allowlist", present: env.platformOwnerUserIds.length > 0, fix: "Set PLATFORM_OWNER_USER_IDS to the owner's Supabase user ID." },
+            { requirement: "Razorpay billing", present: billingConfigured, fix: "Set RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET and the six RAZORPAY_PLAN_*_ID values." },
+            {
+              requirement: "Owner email alerts",
+              present: Boolean(env.emailApiKey && env.emailFrom && env.platformAlertEmails.length),
+              fix: "Set EMAIL_API_KEY, EMAIL_FROM and PLATFORM_ALERT_EMAILS (comma-separated owner addresses), then redeploy.",
+            },
+          ].map(({ fix, ...item }) => (item.present ? item : { ...item, fix })),
         ],
         capabilities: { followGatedCampaigns: health?.capabilities.followGatedCampaigns ?? (env.followGatedCampaignsEnabled ? "enabled" : "disabled") },
         reconciliation: { expiredDeliveryClaims: operational?.stuckClaims ?? null },

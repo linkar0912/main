@@ -1,7 +1,14 @@
 import type { AdminQueueSnapshot } from "@/src/lib/queue";
 
 export type AdminProbeState = "healthy" | "degraded" | "unavailable";
-export type AdminProbe = { state: AdminProbeState; detail?: string };
+export type AdminProbe = {
+  state: AdminProbeState;
+  detail?: string;
+  /** Worker only: the release the worker reported in its last heartbeat. */
+  release?: string | null;
+  /** Worker only: when the last heartbeat was written. */
+  lastSeenAt?: string | null;
+};
 
 export type AdminIncidentSummary = {
   id: string;
@@ -31,7 +38,8 @@ export type AdminSystemSnapshot = {
   billing: { configured: boolean; failedWebhooksLastHour: number | null; driftedSubscriptions: number | null };
   incidents: AdminIncidentSummary[];
   operationalDataAvailable?: boolean;
-  configurationPresence: Array<{ requirement: string; present: boolean }>;
+  /** `fix` says, in plain words, which settings to add when a requirement is missing. */
+  configurationPresence: Array<{ requirement: string; present: boolean; fix?: string }>;
   capabilities: { followGatedCampaigns: "enabled" | "disabled" };
   reconciliation: { expiredDeliveryClaims: number | null };
   rateLimits: AdminProbe;

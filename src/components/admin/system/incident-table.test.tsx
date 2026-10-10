@@ -15,6 +15,7 @@ describe("IncidentTable", () => {
     }]} now="2026-09-05T06:10:00Z" />);
     expect(screen.getByRole("table", { name: "Production incidents" })).toBeTruthy();
     expect(screen.getByRole("row", { name: /Critical Database unavailable/ })).toBeTruthy();
+    expect(screen.getByText("Database", { selector: "td" })).toBeTruthy();
     expect(screen.getByText("10m active")).toBeTruthy();
   });
 });

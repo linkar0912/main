@@ -4,39 +4,59 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  Activity,
   ArrowLeft,
   Boxes,
   Cable,
-  ChartNoAxesCombined,
   FileClock,
   Gauge,
+  HeartPulse,
   KeyRound,
   LogOut,
   Menu,
-  PanelsTopLeft,
-  ShieldCheck,
+  Rows3,
+  Trash2,
   Users,
   WalletCards,
-  Trash2,
 } from "lucide-react";
 
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { LinkarMark } from "@/src/components/linkar-mark";
 import { ThemeToggle } from "@/src/components/theme-toggle";
 
+// Grouped by what the owner is doing: looking around, managing accounts,
+// fixing things, and the safety rails around all of it.
 const operatorNavigation = [
-  { href: "/admin", label: "Overview", icon: Gauge },
-  { href: "/admin/workspaces", label: "Workspaces", icon: Boxes },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/plans", label: "Plans", icon: WalletCards },
-  { href: "/admin/operations", label: "Operations", icon: Activity },
-  { href: "/admin/integrations", label: "Integrations", icon: Cable },
-  { href: "/admin/system", label: "System", icon: ChartNoAxesCombined },
-  { href: "/admin/deletions", label: "Deletions", icon: Trash2 },
-  { href: "/admin/audit", label: "Audit", icon: FileClock },
-  { href: "/admin/security", label: "Security", icon: KeyRound },
+  { label: null, items: [{ href: "/admin", label: "Overview", icon: Gauge }] },
+  {
+    label: "Accounts",
+    items: [
+      { href: "/admin/workspaces", label: "Workspaces", icon: Boxes },
+      { href: "/admin/users", label: "Users", icon: Users },
+      { href: "/admin/plans", label: "Plans and invites", icon: WalletCards },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/admin/operations", label: "Records", icon: Rows3 },
+      { href: "/admin/integrations", label: "Connected accounts", icon: Cable },
+      { href: "/admin/system", label: "Service health", icon: HeartPulse },
+    ],
+  },
+  {
+    label: "Safety",
+    items: [
+      { href: "/admin/deletions", label: "Delete data", icon: Trash2 },
+      { href: "/admin/audit", label: "Audit log", icon: FileClock },
+      { href: "/admin/security", label: "Your security", icon: KeyRound },
+    ],
+  },
 ] as const;
+
+function initialsOf(email: string): string {
+  const name = email.split("@")[0]?.replace(/[^a-z]/gi, "") ?? "";
+  return (name.slice(0, 2) || "O").toUpperCase();
+}
 
 function isActive(pathname: string, href: string): boolean {
   return href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -49,7 +69,8 @@ export function AdminShell({
   owner: { email: string };
   children: React.ReactNode;
 }>) {
-  const pathname = usePathname();
+  // The development-only preview mounts the same screens under /dev-preview.
+  const pathname = usePathname().replace(/^\/dev-preview(?=\/admin)/, "");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const restoreMenuFocus = useRef(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -120,7 +141,7 @@ export function AdminShell({
           <LinkarMark className="brand-mark" />
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
-        <span className="admin-operator-rail">LINKAR OPERATOR</span>
+        <span className="sidebar-context">Owner console</span>
       </header>
 
       {drawerOpen ? (
@@ -141,41 +162,43 @@ export function AdminShell({
           <span className="brand-name">{PRODUCT_NAME}</span>
         </Link>
 
-        <div className="admin-operator-rail"><ShieldCheck size={15} aria-hidden /> LINKAR OPERATOR</div>
-        <div className="workspace-chip admin-owner-chip">
-          <span className="avatar" aria-hidden><PanelsTopLeft size={17} /></span>
-          <span className="workspace-id">
-            <strong>Platform owner</strong>
-            <small>{owner.email}</small>
-          </span>
-        </div>
+        <p className="sidebar-context">Owner console</p>
 
-        <nav className="sidebar-nav" aria-label="Operator sections">
-          {operatorNavigation.map(({ href, label, icon: Icon }) => {
-            const active = isActive(pathname, href);
-            return (
-              <Link
-                key={href}
-                className={`sidebar-link ${active ? "is-active" : ""}`}
-                href={href}
-                aria-current={active ? "page" : undefined}
-                onClick={() => closeDrawer()}
-              >
-                <Icon size={18} strokeWidth={1.9} />
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
+        {operatorNavigation.map((group) => (
+          <nav className="sidebar-nav" aria-label={group.label ? `${group.label} sections` : "Operator sections"} key={group.label ?? "home"}>
+            {group.label ? <span className="sidebar-label" aria-hidden>{group.label}</span> : null}
+            {group.items.map(({ href, label, icon: Icon }) => {
+              const active = isActive(pathname, href);
+              return (
+                <Link
+                  key={href}
+                  className={`sidebar-link ${active ? "is-active" : ""}`}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => closeDrawer()}
+                >
+                  <Icon size={18} strokeWidth={1.9} aria-hidden />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+        ))}
 
         <span className="sidebar-spacer" />
-        <Link className="sidebar-link admin-back-link" href="/dashboard">
-          <ArrowLeft size={18} /> Back to workspace
-        </Link>
-        <ThemeToggle className="theme-toggle" showLabel />
-        <form action="/api/auth/logout" method="post">
-          <button className="signout-button" type="submit"><LogOut size={17} /> Sign out</button>
-        </form>
+        <div className="admin-sidebar-foot">
+          <Link className="sidebar-link" href="/dashboard">
+            <ArrowLeft size={18} aria-hidden /> Back to workspace
+          </Link>
+          <ThemeToggle className="theme-toggle" showLabel />
+          <form action="/api/auth/logout" method="post">
+            <button className="signout-button" type="submit"><LogOut size={17} aria-hidden /> Sign out</button>
+          </form>
+          <div className="admin-owner">
+            <span className="avatar" aria-hidden>{initialsOf(owner.email)}</span>
+            <span><small>Signed in as</small><strong title={owner.email}>{owner.email}</strong></span>
+          </div>
+        </div>
       </aside>
 
       <div className="main-content" inert={drawerOpen} aria-hidden={drawerOpen || undefined}>{children}</div>

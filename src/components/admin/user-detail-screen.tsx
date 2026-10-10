@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { ArrowLeft, Ban, KeyRound, Mail, RefreshCcw, ShieldOff, UserRoundCheck } from "lucide-react";
 
-import { formatAdminDate, formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { PageHeader } from "@/src/components/page-header";
+import { IdChip } from "@/src/components/ui/id-chip";
+import { RelativeTime } from "@/src/components/ui/relative-time";
 import type { AdminUserDetail } from "@/src/lib/admin/accounts-repository";
 import { AdminCommandError, adminCommand, adminErrorMessage } from "./shared/admin-request";
+import { REASON_LABEL } from "./shared/reason-dialog";
 import { StatusPill } from "./shared/status-pill";
 
 type AccessAction = "SUSPEND" | "RESTORE" | "REVOKE_LINKAR_SESSIONS" | "BAN" | "UNBAN";
@@ -15,12 +18,17 @@ type AccessAction = "SUSPEND" | "RESTORE" | "REVOKE_LINKAR_SESSIONS" | "BAN" | "
 const accessMessages: Record<AccessAction, string> = {
   SUSPEND: "Linkar access suspended.",
   RESTORE: "Linkar access restored.",
-  REVOKE_LINKAR_SESSIONS: "Existing sessions revoked.",
-  BAN: "Auth login banned and existing Linkar sessions revoked.",
-  UNBAN: "Auth login unbanned. Linkar access status is unchanged.",
+  REVOKE_LINKAR_SESSIONS: "Signed out of every device.",
+  BAN: "Sign-in blocked and every Linkar session ended.",
+  UNBAN: "Sign-in allowed again. Linkar access is unchanged.",
 };
 // Actions that lock the person out need the typed email as a second check.
 const confirmedActions: readonly AccessAction[] = ["SUSPEND", "BAN"];
+
+function roleLabel(role: string): string {
+  const text = role.toLowerCase().replaceAll("_", " ");
+  return `${text[0]?.toUpperCase() ?? ""}${text.slice(1)}`;
+}
 
 export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
   const router = useRouter();
@@ -47,7 +55,7 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
       router.refresh();
     } catch (cause) {
       setError(cause instanceof AdminCommandError && cause.code === "auth_ban_active"
-        ? "Unban Auth login before restoring Linkar access."
+        ? "Allow sign-in again before restoring Linkar access."
         : adminErrorMessage(cause));
     } finally {
       setBusy(false);
@@ -73,84 +81,77 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
   }
 
   return (
-    <main className="page-wrap admin-resource-page">
-      <Link className="admin-back-inline" href="/admin/users"><ArrowLeft size={16} /> All users</Link>
-      <header className="page-header admin-detail-header">
-        <div>
-          <p className="eyebrow">User / {user.id}</p>
-          <h1>{user.email}</h1>
-          <p className="muted page-lede">Created {formatAdminDate(user.createdAt)} · {user.workspaceCount} workspace {user.workspaceCount === 1 ? "membership" : "memberships"}</p>
-        </div>
-        <StatusPill status={user.status} />
-      </header>
+    <main className="page-wrap admin-page is-narrow">
+      <PageHeader
+        back={<Link className="admin-back" href="/admin/users"><ArrowLeft size={16} aria-hidden /> All users</Link>}
+        title={user.email}
+        description={<>Joined <RelativeTime inline value={user.createdAt} />, member of {user.workspaceCount} {user.workspaceCount === 1 ? "workspace" : "workspaces"}</>}
+        actions={<StatusPill status={user.status} />}
+      />
 
-      <section className="admin-detail-grid">
-        <article className="panel admin-summary-card">
-          <p className="eyebrow">Authentication</p>
-          <h2>Session state</h2>
-          <dl>
-            <div><dt>Last sign in</dt><dd>{user.lastSignInAt ? formatAdminDateTime(user.lastSignInAt) : "Never"}</dd></div>
-            <div><dt>Sessions valid after</dt><dd>{user.sessionInvalidBefore ? formatAdminDateTime(user.sessionInvalidBefore) : "All current"}</dd></div>
-            <div><dt>Auth login</dt><dd>{banned ? `Banned until ${formatAdminDateTime(user.authBannedUntil!)}` : "Allowed"}</dd></div>
-          </dl>
-        </article>
-        <article className="panel admin-summary-card">
-          <p className="eyebrow">Linkar lifecycle</p>
-          <h2>{active ? "Access enabled" : "Access suspended"}</h2>
-          {active
-            ? <p className="muted">This identity can sign in to its workspaces.</p>
-            : <p className="muted">{user.suspendedReason ?? "No suspension reason recorded."}{user.suspendedAt ? ` Suspended ${formatAdminDateTime(user.suspendedAt)}.` : ""}</p>}
-        </article>
+      <section className="admin-card" aria-labelledby="sign-in-title">
+        <div className="admin-card-head">
+          <h2 id="sign-in-title">Sign-in</h2>
+          <IdChip id={user.id} prefix="User ID" />
+        </div>
+        <dl className="admin-kv">
+          <div><dt>Last signed in</dt><dd><RelativeTime value={user.lastSignInAt} fallback="Never" /></dd></div>
+          <div><dt>Signed out everywhere</dt><dd><RelativeTime value={user.sessionInvalidBefore} fallback="Not yet" /></dd></div>
+          <div><dt>Can sign in</dt><dd>{banned ? <>Blocked until <RelativeTime inline value={user.authBannedUntil} /></> : "Yes"}</dd></div>
+          <div>
+            <dt>Linkar access</dt>
+            <dd>{active ? "Allowed" : <>Suspended{user.suspendedAt ? <> <RelativeTime inline value={user.suspendedAt} /></> : null}</>}</dd>
+          </div>
+        </dl>
+        {!active ? <p className="admin-hint">{user.suspendedReason ? `Suspended because: ${user.suspendedReason}` : "No suspension reason was recorded."}</p> : null}
       </section>
 
-      <section className="panel admin-detail-section">
-        <div className="panel-heading">
-          <div><p className="eyebrow">Tenant access</p><h2>Memberships</h2></div>
-          <UserRoundCheck size={20} aria-hidden />
-        </div>
-        {memberships.length === 0 ? <p className="muted">This identity does not belong to any workspace.</p> : (
-          <div className="admin-record-list">
+      <section className="admin-card" aria-labelledby="memberships-title">
+        <div className="admin-card-head"><h2 id="memberships-title">Workspaces</h2></div>
+        {memberships.length === 0 ? <p className="admin-hint">This identity does not belong to any workspace.</p> : (
+          <ul className="admin-list">
             {memberships.map((workspace) => (
-              <div className="admin-record-row" key={workspace.id}>
-                <span>
-                  <Link href={`/admin/workspaces/${workspace.id}`}><strong>{workspace.name}</strong></Link>
-                  <small>{workspace.id} · {workspace.status.toLowerCase().replaceAll("_", " ")}</small>
+              <li key={workspace.id}>
+                <span className="admin-list-main">
+                  <Link href={`/admin/workspaces/${workspace.id}`}>{workspace.name}</Link>
+                  <span className="cell-meta">{roleLabel(workspace.role)}</span>
                 </span>
-                <StatusPill status="idle" label={workspace.role.toLowerCase()} />
-              </div>
+                <StatusPill status={workspace.status} />
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
-      <section className="panel admin-detail-section admin-danger-panel">
-        <div className="panel-heading">
-          <div><p className="eyebrow">Audited identity controls</p><h2>Access and recovery</h2></div>
-          <ShieldOff size={20} aria-hidden />
+      <section className="admin-card is-danger" aria-labelledby="access-title">
+        <div className="admin-card-head">
+          <div>
+            <h2 id="access-title">Access and recovery</h2>
+            <p>Suspend and restore control Linkar access. Blocking sign-in stops them logging in at all and does not change Linkar access.</p>
+          </div>
         </div>
-        <div className="admin-command-form">
+        <div className="admin-form">
           <label className="field">
-            <span>Operator reason</span>
+            <span>{REASON_LABEL}</span>
             <textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
           </label>
           <label className="field">
-            <span>Confirm sensitive actions by typing <code>{user.email}</code></span>
+            <span>Type <code className="admin-phrase">{user.email}</code> to confirm suspending, blocking or a password reset</span>
             <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
           </label>
-          <p className="admin-field-hint">Every action needs a reason. Suspending, banning, and password resets also need the email typed above.</p>
-          <p className="admin-field-hint">Suspend and Restore control Linkar access. Ban and Unban control Supabase Auth sign-in and do not change Linkar access.{banned && !active ? " Unban Auth login before restoring Linkar access." : ""}</p>
-          <div className="admin-command-actions">
+          {banned && !active ? <p className="admin-hint">Allow sign-in again before restoring Linkar access.</p> : null}
+          <div className="admin-actions">
             <button ref={firstAction} className={`button ${active ? "button-danger" : "button-primary"}`} disabled={blocked || (!active && banned)} onClick={() => access(active ? "SUSPEND" : "RESTORE")} type="button">
-              {active ? <><Ban size={16} /> Suspend Linkar access</> : <><RefreshCcw size={16} /> Restore Linkar access</>}
+              {active ? <><Ban size={16} aria-hidden /> Suspend Linkar access</> : <><RefreshCcw size={16} aria-hidden /> Restore Linkar access</>}
             </button>
-            <button className="button button-secondary" disabled={blocked} onClick={() => access("REVOKE_LINKAR_SESSIONS")} type="button"><KeyRound size={16} /> Revoke sessions</button>
+            <button className="button button-secondary" disabled={blocked} onClick={() => access("REVOKE_LINKAR_SESSIONS")} type="button"><KeyRound size={16} aria-hidden /> Sign out everywhere</button>
             {banned
-              ? <button className="button button-secondary" disabled={blocked} onClick={() => access("UNBAN")} type="button"><UserRoundCheck size={16} /> Unban Auth login</button>
-              : <button className="button button-secondary" disabled={blocked} onClick={() => access("BAN")} type="button"><ShieldOff size={16} /> Ban Auth login</button>}
-            <button className="button button-secondary" disabled={blocked} onClick={reset} type="button"><Mail size={16} /> Send password reset</button>
+              ? <button className="button button-secondary" disabled={blocked} onClick={() => access("UNBAN")} type="button"><UserRoundCheck size={16} aria-hidden /> Allow sign-in</button>
+              : <button className="button button-secondary" disabled={blocked} onClick={() => access("BAN")} type="button"><ShieldOff size={16} aria-hidden /> Block sign-in</button>}
+            <button className="button button-secondary" disabled={blocked} onClick={reset} type="button"><Mail size={16} aria-hidden /> Send password reset</button>
           </div>
-          {error ? <div className="form-error" role="alert">{error}</div> : null}
-          {message ? <div className="form-success" role="status">{message}</div> : null}
+          {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
+          {message ? <div className="form-success admin-message" role="status">{message}</div> : null}
         </div>
       </section>
     </main>

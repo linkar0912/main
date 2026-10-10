@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -27,7 +27,7 @@ describe("WorkspaceDetailScreen", () => {
     vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }));
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     render(<WorkspaceDetailScreen workspace={workspace} />);
-    await userEvent.type(screen.getByRole("textbox", { name: "Reason for export" }), "Customer data request");
+    await userEvent.type(within(document.getElementById("exports")!).getByRole("textbox", { name: /^Reason/ }), "Customer data request");
     await userEvent.click(screen.getByRole("button", { name: "Download CSV" }));
     expect(fetchMock).toHaveBeenCalledWith("/api/admin/workspaces/w1/export", expect.objectContaining({ method: "POST", body: JSON.stringify({ format: "csv" }) }));
     expect(createObjectURL).toHaveBeenCalledOnce();
@@ -42,7 +42,7 @@ describe("WorkspaceDetailScreen", () => {
 
   it("keeps a visible error until the exact suspension phrase is entered", async () => {
     render(<WorkspaceDetailScreen workspace={workspace} />);
-    await userEvent.type(screen.getByRole("textbox", { name: "Operator reason" }), "Abuse investigation");
+    await userEvent.type(within(document.getElementById("controls")!).getByRole("textbox", { name: /^Reason/ }), "Abuse investigation");
     await userEvent.type(screen.getByRole("textbox", { name: /Type SUSPEND acme/ }), "wrong");
     await userEvent.click(screen.getByRole("button", { name: "Suspend workspace" }));
     const alert = screen.getByRole("alert");
@@ -68,11 +68,11 @@ describe("WorkspaceDetailScreen follow-up", () => {
     expect(screen.getByText("Unlimited")).toBeTruthy();
     expect(screen.getByText("Disabled")).toBeTruthy();
     // The save button no longer depends on the reason field of the lifecycle form further down.
-    await userEvent.type(screen.getByRole("textbox", { name: "Reason for entitlement change" }), "Support upgrade");
-    await userEvent.click(screen.getByRole("button", { name: "Save entitlement" }));
+    await userEvent.type(within(document.getElementById("entitlement")!).getByRole("textbox", { name: /^Reason/ }), "Support upgrade");
+    await userEvent.click(screen.getByRole("button", { name: "Save plan and limits" }));
     expect(fetchMock).toHaveBeenCalledWith("/api/admin/workspaces/w1/entitlement", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ planId: "p1", overrides: {}, version: 3 }) }));
     expect(decodeURIComponent(fetchMock.mock.calls[0][1].headers["x-admin-reason"])).toBe("Support upgrade");
-    expect((await screen.findByRole("status")).textContent).toBe("Entitlement saved.");
+    expect((await screen.findByRole("status")).textContent).toBe("Plan and limits saved.");
     vi.unstubAllGlobals();
   });
 

@@ -1,105 +1,143 @@
-import {
-  Activity,
-  Blocks,
-  Bot,
-  Database,
-  RadioTower,
-  ServerCog,
-  Users,
-} from "lucide-react";
+import Link from "next/link";
 
-import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
-import { StatusPill } from "@/src/components/admin/shared/status-pill";
-import { MetricCard } from "@/src/components/metric-card";
-import type { AdminOverviewDTO } from "@/src/lib/admin/overview";
+import { describeAuditAction } from "@/src/components/admin/shared/audit-actions";
+import { humanizeAdminCode } from "@/src/components/admin/shared/admin-request";
+import { PageHeader } from "@/src/components/page-header";
+import { IdChip } from "@/src/components/ui/id-chip";
+import { RelativeTime } from "@/src/components/ui/relative-time";
+import { StatusBadge, type StatusTone } from "@/src/components/ui/status-badge";
+import type { AdminOperatorTapeItem, AdminOverviewDTO } from "@/src/lib/admin/overview";
 
-function stateLabel(name: string, state: string): string {
-  if (state === "ok" || state === "configured") return `${name} healthy`;
-  if (state === "not_configured") return `${name} not configured`;
-  return `${name} degraded`;
+type HealthState = AdminOverviewDTO["health"]["database"] | AdminOverviewDTO["health"]["instagram"];
+
+function healthBadge(state: HealthState): { tone: StatusTone; label: string } {
+  if (state === "ok") return { tone: "success", label: "Healthy" };
+  if (state === "configured") return { tone: "success", label: "Set up" };
+  if (state === "not_configured") return { tone: "neutral", label: "Not set up" };
+  return { tone: "danger", label: "Down" };
 }
 
-const queueTone = { ok: "healthy", not_configured: "pending", error: "failed" } as const;
+const activityTone: Record<AdminOperatorTapeItem["status"], StatusTone> = { success: "success", failed: "danger", attempt: "neutral" };
+
+function activityTitle(item: AdminOperatorTapeItem): string {
+  return item.kind === "failure" ? "A message failed to send" : describeAuditAction(item.title);
+}
+
+function activityDetail(item: AdminOperatorTapeItem): string {
+  // Failures carry a provider result code such as PROVIDER_REJECTED.
+  if (item.kind === "failure") return /^[A-Z][A-Z0-9_]+$/.test(item.detail) ? `Reason: ${humanizeAdminCode(item.detail.toLowerCase())}` : item.detail;
+  return item.detail;
+}
+
+function Stat({ label, value, note }: { label: string; value: number; note: string }) {
+  return (
+    <div className="admin-stat">
+      <span>{label}</span>
+      <strong>{value.toLocaleString("en-IN")}</strong>
+      <small>{note}</small>
+    </div>
+  );
+}
 
 export function AdminOverviewScreen({ overview }: { overview: AdminOverviewDTO }) {
   const connectionTotal = overview.connections.instagram + overview.connections.facebook;
   const queueDepth = overview.queue.waiting + overview.queue.active + overview.queue.delayed;
   // Counts are zero-filled when the queue cannot be read; do not present that as an empty queue.
   const queueKnown = overview.queue.state === "ok";
+  const healthy = overview.health.status === "ok";
+  const services = [
+    ["Database", overview.health.database],
+    ["Job queue (Redis)", overview.health.redis],
+    ["Instagram app", overview.health.instagram],
+    ["Facebook app", overview.health.facebook],
+  ] as const;
 
   return (
-    <main className="page-wrap admin-overview">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Linkar operator / live state</p>
-          <h1>Platform overview</h1>
-          <p className="muted page-lede">Bounded cross-tenant totals, dependency health, and the latest delivery and owner activity.</p>
-        </div>
-        <div className={`admin-release ${overview.health.status === "ok" ? "is-ok" : "is-degraded"}`}>
-          <ServerCog size={16} aria-hidden />
-          {overview.health.release ? `Release ${overview.health.release}` : "Release unavailable"}
-        </div>
-      </header>
+    <main className="page-wrap admin-page">
+      <PageHeader
+        title="Overview"
+        description="Everything across Linkar right now."
+        actions={(
+          <>
+            <StatusBadge tone={healthy ? "success" : "warning"} label={healthy ? "All systems healthy" : "Needs attention"} />
+            {overview.health.release ? <IdChip id={overview.health.release} prefix="Version" /> : <span className="admin-hint">Version unknown</span>}
+          </>
+        )}
+      />
 
-      <section className="metrics-grid" aria-label="Platform totals">
-        <MetricCard label="Active workspaces" value={String(overview.workspaces.active)} note={`${overview.workspaces.suspended} suspended`} icon={Blocks} tone="saffron" />
-        <MetricCard label="Active users" value={String(overview.users.active)} note="Unique workspace identities" icon={Users} tone="mint" />
-        <MetricCard label="Connections" value={String(connectionTotal)} note={`${overview.connections.instagram} Instagram · ${overview.connections.facebook} Facebook`} icon={RadioTower} tone="lavender" />
-        <MetricCard label="Active automations" value={String(overview.automations.active)} note="Across every workspace" icon={Bot} tone="saffron" />
+      <section className="admin-stats" aria-label="Platform totals">
+        <Stat label="Active workspaces" value={overview.workspaces.active} note={overview.workspaces.suspended ? `${overview.workspaces.suspended} suspended` : "None suspended"} />
+        <Stat label="Active users" value={overview.users.active} note="People with workspace access" />
+        <Stat label="Connected accounts" value={connectionTotal} note={`${overview.connections.instagram} Instagram, ${overview.connections.facebook} Facebook`} />
+        <Stat label="Live automations" value={overview.automations.active} note="Across every workspace" />
       </section>
 
-      <section className="admin-overview-grid">
-        <article className="panel admin-health-panel">
-          <div className="panel-heading">
-            <div><p className="eyebrow">Runtime</p><h2>System pulse</h2></div>
-            <Database size={20} aria-hidden />
-          </div>
-          <div className="admin-status-grid">
-            {[
-              ["Database", overview.health.database],
-              ["Redis", overview.health.redis],
-              ["Instagram", overview.health.instagram],
-              ["Facebook", overview.health.facebook],
-            ].map(([name, state]) => (
-              <div className="admin-status-row" key={name}>
-                <span className={`status-dot is-${state}`} aria-hidden />
-                <strong>{stateLabel(name, state)}</strong>
-              </div>
-            ))}
-          </div>
-          <div className="admin-queue-strip">
-            <span><strong>{queueKnown ? queueDepth : "–"}</strong> in flight</span>
-            <span><strong>{queueKnown ? overview.queue.failed : "–"}</strong> failed</span>
-            <StatusPill status={queueTone[overview.queue.state]} label={stateLabel("Queue", overview.queue.state)} />
-          </div>
-        </article>
-
-        <article className="panel admin-tape-panel">
-          <div className="panel-heading">
-            <div><p className="eyebrow">Latest 20</p><h2>Operator tape</h2></div>
-            <Activity size={20} aria-hidden />
+      <div className="admin-columns is-wide-left">
+        <section className="admin-card is-flush" aria-labelledby="activity-heading">
+          <div className="admin-card-head">
+            <div>
+              <h2 id="activity-heading">Recent activity</h2>
+              <p>Admin actions and failed messages, newest first.</p>
+            </div>
+            <Link className="button button-ghost button-small" href="/admin/audit">Open audit log</Link>
           </div>
           {overview.operatorTape.length === 0 ? (
-            <div className="empty-state admin-tape-empty">
-              <h3>No recent operator or delivery events</h3>
-              <p>New audited actions and automation failures will appear here.</p>
+            <div className="admin-empty">
+              <p>No recent activity. Admin actions and failed messages will show up here.</p>
             </div>
           ) : (
-            <ol className="admin-tape-list">
+            <ol className="admin-activity">
               {overview.operatorTape.map((item) => (
-                <li key={item.id} className={`admin-tape-item is-${item.status}`}>
-                  <span className="admin-tape-marker" aria-hidden />
-                  <div>
-                    <div className="admin-tape-title"><strong>{item.title}</strong><span>{item.kind}</span></div>
-                    <p>{item.detail}</p>
-                    <small><time dateTime={item.at}>{formatAdminDateTime(item.at)}</time>{item.workspaceId ? ` · ${item.workspaceId}` : ""}</small>
+                <li key={item.id}>
+                  <span className={`admin-activity-dot is-${activityTone[item.status]}`} aria-hidden />
+                  <div className="admin-activity-body">
+                    <strong>{activityTitle(item)}</strong>
+                    {item.detail ? <p>{activityDetail(item)}</p> : null}
+                    <div className="cell-meta">
+                      {item.workspaceId ? (
+                        item.workspaceName
+                          ? <Link href={`/admin/workspaces/${item.workspaceId}`}>{item.workspaceName}</Link>
+                          : <IdChip id={item.workspaceId} prefix="Workspace" />
+                      ) : null}
+                      {item.actor ? <span>by {item.actor}</span> : null}
+                      {item.kind === "audit" && item.status !== "success" ? <StatusBadge tone={activityTone[item.status]} label={item.status === "failed" ? "Failed" : "Started"} /> : null}
+                    </div>
                   </div>
+                  <RelativeTime value={item.at} className="admin-activity-time" />
                 </li>
               ))}
             </ol>
           )}
-        </article>
-      </section>
+        </section>
+
+        <section className="admin-card" aria-labelledby="health-heading">
+          <div className="admin-card-head">
+            <div>
+              <h2 id="health-heading">Service health</h2>
+              <p>The systems Linkar depends on.</p>
+            </div>
+          </div>
+          <ul className="admin-health-list">
+            {services.map(([name, state]) => {
+              const badge = healthBadge(state);
+              return (
+                <li key={name}>
+                  <span>{name}</span>
+                  <StatusBadge tone={badge.tone} label={badge.label} />
+                </li>
+              );
+            })}
+          </ul>
+          <dl className="admin-kv">
+            <div><dt>Jobs in progress</dt><dd>{queueKnown ? queueDepth.toLocaleString("en-IN") : "Unknown"}</dd></div>
+            <div><dt>Failed jobs</dt><dd>{queueKnown ? overview.queue.failed.toLocaleString("en-IN") : "Unknown"}</dd></div>
+          </dl>
+          {!queueKnown ? <p className="admin-hint">{overview.queue.state === "not_configured" ? "The job queue is not set up, so job counts are not available." : "The job queue could not be reached, so job counts are unknown."}</p> : null}
+          <div className="admin-actions">
+            <Link className="button button-secondary button-small" href="/admin/system">Open service health</Link>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
