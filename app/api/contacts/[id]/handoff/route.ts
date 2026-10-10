@@ -33,8 +33,14 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "reason is required" }, { status: 400 });
   }
   const pauseAutomations = payload.pauseAutomations !== false; // default true
-  const assigneeUserId = typeof payload.assigneeUserId === "string" ? payload.assigneeUserId.trim() || null : null;
-  const notes = typeof payload.notes === "string" ? payload.notes.trim().slice(0, 4_000) || null : null;
+  // Omitted = leave as is; explicit null (or an empty string) = clear. A
+  // handoff that only sets a reason must not wipe the assignee or notes.
+  const assigneeUserId = payload.assigneeUserId === undefined
+    ? undefined
+    : typeof payload.assigneeUserId === "string" ? payload.assigneeUserId.trim() || null : null;
+  const notes = payload.notes === undefined
+    ? undefined
+    : typeof payload.notes === "string" ? payload.notes.trim().slice(0, 4_000) || null : null;
 
   const repository = getRepository();
   const contact = await repository.getContactById(session.workspaceId, id);

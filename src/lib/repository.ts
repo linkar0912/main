@@ -1048,7 +1048,17 @@ export interface AutomationRepository {
   /** Returns contacts matching an optional lead-status filter, newest first. */
   listContactsByLeadStatus(
     workspaceId: string,
-    options: { leadStatus?: LeadStatus; limit: number; offset?: number },
+    options: {
+      leadStatus?: LeadStatus;
+      limit: number;
+      offset?: number;
+      /**
+       * Keyset position (rows strictly after this one in lastSeenAt DESC,
+       * id ASC order). Takes precedence over `offset`, which shifts when
+       * contacts are touched or change stage between pages.
+       */
+      after?: { lastSeenAt: string; id: string };
+    },
   ): Promise<AutomationContactRecord[]>;
   listInboxContacts(workspaceId: string, query: InboxContactQuery): Promise<InboxContactPage>;
   updateInboxState(workspaceId: string, contactId: string, patch: InboxStatePatch): Promise<AutomationContactRecord | null>;

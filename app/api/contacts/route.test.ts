@@ -79,6 +79,27 @@ describe("GET /api/contacts", () => {
     expect(second.data.hasMore).toBe(false);
   });
 
+  it("pages with a stable cursor even when a contact is touched between pages", async () => {
+    await repository.touchContact("workspace_1", "ig_1", "person_2", "2026-09-01T07:00:00.000Z");
+    await repository.touchContact("workspace_1", "ig_1", "person_3", "2026-09-01T08:00:00.000Z");
+
+    const first = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&limit=2"))).json();
+    expect(first.data.nextCursor).toEqual(expect.any(String));
+    // A new person messages: with offset=2 the list would shift and person_2
+    // would be shown twice. The cursor resumes right after person_2.
+    await repository.touchContact("workspace_1", "ig_1", "person_4", "2026-09-01T09:00:00.000Z");
+    const shifted = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&limit=2&offset=2"))).json();
+    expect(shifted.data.contacts.map((c: { igScopedUserId: string }) => c.igScopedUserId)).toEqual(["person_2", "person_1"]);
+
+    const second = await (await GET(new Request(`https://app.linkar.in/api/contacts?scope=all&limit=2&cursor=${first.data.nextCursor}`))).json();
+    expect(second.data.contacts.map((c: { igScopedUserId: string }) => c.igScopedUserId)).toEqual(["person_1"]);
+    expect(second.data.hasMore).toBe(false);
+    expect(second.data.nextCursor).toBeUndefined();
+
+    const invalid = await GET(new Request("https://app.linkar.in/api/contacts?scope=all&cursor=nope"));
+    expect(invalid.status).toBe(400);
+  });
+
   it("filters full contacts by a valid lead status and rejects an invalid one", async () => {
     const filtered = await GET(new Request("https://app.linkar.in/api/contacts?scope=all&leadStatus=NEW"));
     expect((await filtered.json()).data.contacts).toEqual([]);

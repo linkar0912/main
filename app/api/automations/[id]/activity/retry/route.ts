@@ -58,6 +58,12 @@ export async function POST(request: Request, context: RouteContext) {
     finalDeliveryStatus: "PENDING",
     finalDeliveryError: undefined,
   });
+  // The transition is conditional on the row still being FAILED. null means a
+  // concurrent retry (or the runner) moved it first: do not replay the journey
+  // a second time on top of that.
+  if (!updated) {
+    return NextResponse.json({ error: "This participant is already being retried." }, { status: 409 });
+  }
 
   // A fresh event id bypasses webhook dedupe while sourceCommentId keeps it
   // linked to the same Instagram comment.

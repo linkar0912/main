@@ -5,6 +5,7 @@ import { getServerEnv } from "@/src/lib/env";
 import { MetaClient } from "@/src/lib/meta/client";
 import { hasCachedInstagramAvatar, instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 import { LEAD_STATUSES, type LeadStatus } from "@/src/lib/repository";
+import { decodeInboxCursor, encodeInboxCursor } from "@/src/lib/inbox-cursor";
 
 export const runtime = "nodejs";
 
@@ -97,15 +98,34 @@ export async function GET(request: Request) {
     const leadStatus = leadStatusParam as LeadStatus | null;
     const offsetParam = Number.parseInt(url.searchParams.get("offset") ?? "", 10);
     const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
-    const [counts, contacts, events] = await Promise.all([
+    // `cursor` (keyed on lastSeenAt + id) is stable while contacts are touched
+    // or move between stages; `offset` stays for existing clients.
+    const cursorParam = url.searchParams.get("cursor");
+    let after: { lastSeenAt: string; id: string } | undefined;
+    if (cursorParam) {
+      try {
+        const decoded = decodeInboxCursor(cursorParam, "directory");
+        after = { lastSeenAt: decoded.at, id: decoded.id };
+      } catch {
+        return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+      }
+    }
+    const [counts, page, events] = await Promise.all([
       repository.countContactsByLeadStatus(session.workspaceId),
       repository.listContactsByLeadStatus(session.workspaceId, {
         ...(leadStatus ? { leadStatus } : {}),
-        limit,
-        offset,
+        // One extra row says whether another page exists without trusting a
+        // count that may have moved since.
+        limit: limit + 1,
+        ...(after ? { after } : { offset }),
       }),
       repository.listRecentWebhookEvents(session.workspaceId, CONTACT_RECONCILIATION_LIMIT),
     ]);
+    const contacts = page.slice(0, limit);
+    const lastContact = contacts.at(-1);
+    const nextCursor = page.length > limit && lastContact
+      ? encodeInboxCursor({ kind: "directory", at: lastContact.lastSeenAt, id: lastContact.id })
+      : undefined;
     const env = getServerEnv();
     const enrich = url.searchParams.get("enrich") === "1";
     const connections = enrich && env.metaTokenEncryptionKey && contacts.length
@@ -124,13 +144,13 @@ export async function GET(request: Request) {
     });
     const needsProfileEnrichment = !enrich && Boolean(env.metaTokenEncryptionKey)
       && contacts.some((contact) => !usernames.has(instagramIdentityKey(contact)));
-    const matching = leadStatus ? counts[leadStatus] : Object.values(counts).reduce((sum, value) => sum + value, 0);
     return NextResponse.json({
       data: {
         count: Object.values(counts).reduce((sum, value) => sum + value, 0),
         counts,
         offset,
-        hasMore: offset + contacts.length < matching,
+        hasMore: page.length > limit,
+        ...(nextCursor ? { nextCursor } : {}),
         needsProfileEnrichment,
         contacts: contacts.map((contact) => ({
           id: contact.id,

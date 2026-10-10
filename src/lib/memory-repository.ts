@@ -1860,15 +1860,19 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async listContactsByLeadStatus(workspaceId, options) {
+      const after = options.after;
       const filtered = [...contacts.values()].filter((contact) => {
         if (contact.workspaceId !== workspaceId) return false;
         if (options.leadStatus && contact.leadStatus !== options.leadStatus) return false;
+        if (after && !(contact.lastSeenAt < after.lastSeenAt
+          || (contact.lastSeenAt === after.lastSeenAt && contact.id.localeCompare(after.id) > 0))) return false;
         return true;
       });
+      const start = after ? 0 : options.offset ?? 0;
       return copy(
         filtered
           .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || a.id.localeCompare(b.id))
-          .slice(options.offset ?? 0, (options.offset ?? 0) + options.limit),
+          .slice(start, start + options.limit),
       );
     },
 

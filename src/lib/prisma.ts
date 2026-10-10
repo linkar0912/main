@@ -2519,11 +2519,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async listContactsByLeadStatus(workspaceId, options) {
+      const after = options.after;
       const records = await client.automationContact.findMany({
-        where: { workspaceId, ...(options.leadStatus ? { leadStatus: options.leadStatus } : {}) },
+        where: {
+          workspaceId,
+          ...(options.leadStatus ? { leadStatus: options.leadStatus } : {}),
+          ...(after ? { OR: [
+            { lastSeenAt: { lt: new Date(after.lastSeenAt) } },
+            { lastSeenAt: new Date(after.lastSeenAt), id: { gt: after.id } },
+          ] } : {}),
+        },
         orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
         take: options.limit,
-        ...(options.offset ? { skip: options.offset } : {}),
+        ...(!after && options.offset ? { skip: options.offset } : {}),
       });
       return records.map(mapContact);
     },
