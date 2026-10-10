@@ -54,7 +54,7 @@ function CommentSurface() {
       <div className={styles.inboxRow}>
         <Avatar initial="L" />
         <span className={styles.commentCopy}>
-          <span><b>linkar.studio</b></span>
+          <span><b>yourbrand</b></span>
           <span className={styles.meta}>Here is the guide you asked for</span>
         </span>
         <span className={styles.unread} />
@@ -114,7 +114,7 @@ function CampaignSurface() {
     <div className={styles.surface}>
       <div className={styles.surfaceBar} data-thread="true">
         <Avatar initial="L" />
-        <strong>linkar.studio</strong>
+        <strong>yourbrand</strong>
       </div>
       <div className={styles.thread}>
         <span className={styles.bubbleIn}>Tap below and I will send the link.</span>

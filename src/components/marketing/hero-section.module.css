@@ -107,7 +107,9 @@
   font-weight: 800;
   letter-spacing: -.01em;
   text-decoration: none;
-  background: #fa0cf7;
+  /* White 13px label: the brand #fa0cf7 only reaches about 3.2:1 behind it.
+     This deeper magenta keeps the hue and clears WCAG AA (about 5.2:1). */
+  background: #c200bf;
   border-radius: 999px;
   box-shadow: 0 8px 24px rgb(113 84 48 / 18%);
   transition: transform 420ms cubic-bezier(.43, .195, .02, 1), background-color 180ms ease;

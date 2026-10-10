@@ -9,12 +9,15 @@
   transition:
     opacity 700ms cubic-bezier(.22, .61, .21, 1) var(--reveal-delay),
     transform 700ms cubic-bezier(.22, .61, .21, 1) var(--reveal-delay);
-  will-change: opacity, transform;
 }
 
+/* The compositor hint lives only on elements still waiting to reveal. Kept on
+   every revealed block it pinned a GPU layer per section for the life of the
+   page. */
 .reveal[data-enhanced="true"]:not([data-visible="true"]) {
   opacity: 0;
   transform: translateY(56px);
+  will-change: opacity, transform;
 }
 
 .reveal[data-visible="true"] {

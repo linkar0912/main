@@ -97,7 +97,7 @@ export function InsightsShowcase() {
           </dl>
 
           <div className={styles.linkRow}>
-            <span className={styles.linkSlug}>lnk.ar/guide</span>
+            <span className={styles.linkSlug}>linkar.in/r/guide</span>
             <span className={styles.linkStat}><strong>1,284</strong> taps</span>
             <span className={styles.linkStat}><strong>1,012</strong> unique</span>
             <span className={styles.linkAttribution}>Lead magnet from comments</span>

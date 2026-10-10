@@ -61,7 +61,9 @@ describe("MarketingHeader", () => {
     const primaryNavigation = within(screen.getByRole("navigation", { name: "Primary" }));
     const accountNavigation = within(screen.getByRole("navigation", { name: "Account" }));
     expect(screen.getByRole("link", { name: "Linkar home" }).textContent).toBe("Linkar");
-    expect(screen.getByLabelText("Language: English").textContent).toContain("EN");
+    // There is no language switcher, so the header does not pretend to have one.
+    expect(screen.queryByLabelText(/Language/)).toBeNull();
+    expect(header().textContent).not.toMatch(/\bEN\b/);
     expect(primaryNavigation.getByRole("link", { name: "Product" }).getAttribute("href")).toBe("/#product");
     const solutions = primaryNavigation.getByRole("button", { name: "Solutions" });
     expect(solutions.getAttribute("aria-expanded")).toBe("false");
@@ -182,6 +184,57 @@ describe("MarketingHeader", () => {
 
     expect(solutions.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("navigation", { name: "Solutions" })).toBeTruthy();
+  });
+
+  it("toggles a panel closed with a second click on its trigger", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const resources = screen.getByRole("button", { name: "Resources" });
+    fireEvent.click(resources);
+    expect(resources.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(resources);
+    expect(resources.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("navigation", { name: "Resources" })).toBeNull();
+  });
+
+  it("renders each panel directly after its trigger in document order", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const solutions = screen.getByRole("button", { name: "Solutions" });
+    fireEvent.click(solutions);
+    const panel = screen.getByRole("navigation", { name: "Solutions" });
+    expect(solutions.nextElementSibling).toBe(panel);
+    // Tabbing forward from the trigger reaches the panel's first link next.
+    const firstLink = within(panel).getAllByRole("link")[0];
+    expect(solutions.compareDocumentPosition(firstLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Pricing" })
+      .compareDocumentPosition(firstLink) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
+  it("closes a hover-opened panel shortly after the pointer leaves it", () => {
+    vi.useFakeTimers();
+    try {
+      installBrowserControls();
+      render(<MarketingHeader />);
+
+      const solutions = screen.getByRole("button", { name: "Solutions" });
+      fireEvent.pointerEnter(solutions);
+      expect(screen.getByRole("navigation", { name: "Solutions" })).toBeTruthy();
+
+      fireEvent.pointerLeave(solutions.parentElement as HTMLElement);
+      // Crossing back in before the delay keeps it open.
+      fireEvent.pointerEnter(solutions.parentElement as HTMLElement);
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(screen.getByRole("navigation", { name: "Solutions" })).toBeTruthy();
+
+      fireEvent.pointerLeave(solutions.parentElement as HTMLElement);
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(screen.queryByRole("navigation", { name: "Solutions" })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("closes Solutions with Escape and restores focus", () => {
