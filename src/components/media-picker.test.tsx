@@ -220,6 +220,43 @@ describe("MediaPicker", () => {
     expect(screen.queryByRole("button", { name: /load more/i })).toBeNull();
   });
 
+  it("keeps the loaded grid and selection when Load more fails, and retries inline", async () => {
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [reel], paging: { after: "cursor-2" } }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "Instagram is busy" }, false));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [post], paging: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ControlledPicker />);
+    fireEvent.click(await screen.findByRole("checkbox"));
+    await waitFor(() => expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("true"));
+
+    fireEvent.click(screen.getByRole("button", { name: /load more/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Instagram is busy");
+    // The grid and the selection survive the failure.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: /^retry$/i }));
+    await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(2));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(String(fetchMock.mock.calls[2][0])).toContain("after=cursor-2");
+  });
+
+  it("retries the first page after an initial load failure", async () => {
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "Connect Instagram first" }, false));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [reel], paging: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<MediaPicker selectedIds={[]} onChange={() => {}} />);
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: /^retry$/i }));
+
+    await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(1));
+  });
+
   it("preserves the snapshot of an already-selected item this instance never fetched when an unrelated item is toggled", async () => {
     const unfetchedSnapshot: MediaSnapshot = {
       id: "media_page2",
