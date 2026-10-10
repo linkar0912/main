@@ -288,6 +288,12 @@ export function invalidateWorkspaceResource(key: WorkspaceResourceKey): void {
   resetCache(caches[key]);
 }
 
+export function notifyWorkspaceChanged(): void {
+  invalidateWorkspaceResource("bootstrap");
+  invalidateWorkspaceResource("account-profile");
+  window.dispatchEvent(new Event("linkar-workspace-change"));
+}
+
 /**
  * Force a fresh fetch of the workspace bootstrap, bypassing the in-memory
  * cache. Use after a role change, plan upgrade, or avatar update so the

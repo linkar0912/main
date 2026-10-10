@@ -4,7 +4,7 @@ import { Check, CreditCard, Gauge, Sparkles, TicketCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { openRazorpaySubscriptionCheckout } from "@/src/lib/client/razorpay-checkout";
-import { getBillingView, invalidateWorkspaceResource, type BillingView } from "@/src/lib/client/workspace-data";
+import { getBillingView, invalidateWorkspaceResource, notifyWorkspaceChanged, type BillingView } from "@/src/lib/client/workspace-data";
 import { FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
 import type { BillingInterval, BillingPlanKey } from "@/src/lib/billing/types";
 import { ActionNotice } from "./action-notice";
@@ -19,6 +19,17 @@ function formatRupees(paise: number): string {
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
 }
+
+function intervalLabel(value: string | undefined): string {
+  return value === "ANNUAL" ? "annual" : "monthly";
+}
+
+function planNameFor(view: BillingView, planId: string | undefined): string {
+  const key = planId?.replace(/^plan_/, "");
+  return [FREE_BILLING_PLAN, ...view.catalog].find((plan) => plan.key === key)?.name ?? "your current plan";
+}
+
+const SUBSCRIPTION_EXISTS_MESSAGE = "This workspace already has a subscription, so no new checkout was started. Refresh in a moment to manage it here.";
 
 export function BillingSettings() {
   const [view, setView] = useState<BillingView | null>(null);
@@ -38,6 +49,12 @@ export function BillingSettings() {
     return next;
   }, []);
 
+  // A plan change also changes the sidebar plan and limits shown elsewhere.
+  const refreshAfterChange = useCallback(() => {
+    notifyWorkspaceChanged();
+    return load(true);
+  }, [load]);
+
   useEffect(() => {
     const controller = new AbortController();
     void getBillingView(controller.signal)
@@ -56,6 +73,7 @@ export function BillingSettings() {
         if (next.subscription?.status === "ACTIVE") {
           setActivating(false);
           setMessage("Your plan is active.");
+          notifyWorkspaceChanged();
         }
       }).catch(() => undefined);
     }, ACTIVATION_POLL_MS);
@@ -75,6 +93,30 @@ export function BillingSettings() {
     return () => window.clearTimeout(timer);
   }, [inviteNotice]);
 
+  // Razorpay applies plan changes at the end of the current cycle
+  // (schedule_change_at: cycle_end): nothing is prorated or charged today.
+  async function changePlan(current: BillingView, plan: BillingPlanKey): Promise<void> {
+    const subscription = current.subscription;
+    if (!subscription) return;
+    const currentName = planNameFor(current, subscription.planId);
+    const nextName = planNameFor(current, `plan_${plan}`);
+    const effective = subscription.currentPeriodEnd
+      ? `on ${formatDate(subscription.currentPeriodEnd)}, when your current billing cycle ends`
+      : "when your current billing cycle ends";
+    const confirmed = window.confirm(
+      `Switch from ${currentName} (${intervalLabel(subscription.interval)}) to ${nextName} (${intervalLabel(interval)})?\n\n`
+      + `The change takes effect ${effective}. You keep ${currentName} until then. Nothing is charged today; the new price applies from that date.`,
+    );
+    if (!confirmed) return;
+    const response = await fetch("/api/billing/change-plan", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan, interval }),
+    });
+    const payload = await response.json() as { error?: string };
+    if (!response.ok) throw new Error(payload.error ?? "plan_change_failed");
+    setMessage(`Plan change scheduled. ${nextName} starts ${effective}.`);
+    await refreshAfterChange().catch(() => undefined);
+  }
+
   async function choosePlan(plan: BillingPlanKey) {
     if (!view?.canManage || busyPlan) return;
     setBusyPlan(plan);
@@ -82,19 +124,21 @@ export function BillingSettings() {
     setMessage("");
     try {
       if (view.subscription?.status === "ACTIVE") {
-        const response = await fetch("/api/billing/change-plan", {
-          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan, interval }),
-        });
-        const payload = await response.json() as { error?: string };
-        if (!response.ok) throw new Error(payload.error ?? "plan_change_failed");
-        setMessage("Plan change scheduled for your next billing cycle.");
-        await load(true);
+        await changePlan(view, plan);
         return;
       }
       const response = await fetch("/api/billing/checkout", {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan, interval }),
       });
       const checkout = await response.json() as { status?: string; keyId?: string; subscriptionId?: string; error?: string };
+      if (checkout.error === "subscription_exists") {
+        // The cached view was stale: the workspace already pays, so switch
+        // plans on that subscription rather than opening a second checkout.
+        const latest = await refreshAfterChange();
+        if (latest.subscription?.status === "ACTIVE") await changePlan(latest, plan);
+        else setError(SUBSCRIPTION_EXISTS_MESSAGE);
+        return;
+      }
       if (!response.ok) throw new Error(checkout.error ?? "checkout_failed");
       if (checkout.status === "processing") {
         setMessage("Preparing secure checkout. Try again in a moment.");
@@ -107,6 +151,7 @@ export function BillingSettings() {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(outcome),
       });
       if (!verification.ok) throw new Error("verification_failed");
+      notifyWorkspaceChanged();
       setActivating(true);
       setMessage("Payment received. We’re activating your plan now.");
     } catch (reason) {
@@ -129,7 +174,7 @@ export function BillingSettings() {
         return;
       }
       setMessage("Cancellation scheduled. Paid access stays active through the current billing period.");
-      await load(true).catch(() => undefined);
+      await refreshAfterChange().catch(() => undefined);
     } catch {
       setError("Cancellation could not be scheduled. Try again.");
     }
@@ -147,7 +192,8 @@ export function BillingSettings() {
       if (!response.ok) throw new Error(payload.error ?? "invite_code_redemption_failed");
       if (!payload.data) throw new Error("invite_code_redemption_failed");
       setInviteCode("");
-      await load(true);
+      // The invite is already applied; a failed refresh must not report failure.
+      await refreshAfterChange().catch(() => undefined);
       setInviteNotice({
         tone: "success",
         message: `Invite applied. ${payload.data.plan.name} access is active until ${formatDate(payload.data.expiresAt)}. Your paid subscription was not changed.`,
@@ -202,7 +248,7 @@ export function BillingSettings() {
       <section className="billing-invite panel" aria-labelledby="premium-invite-title">
         <div className="billing-invite-copy">
           <span><TicketCheck size={18} /></span>
-          <div><small>Limited-time plan access</small><h3 id="premium-invite-title">Invite access</h3><p>Enter your code to unlock the plan included with your invite for 30 days. Your current subscription stays unchanged.</p></div>
+          <div><small>Limited-time plan access</small><h3 id="premium-invite-title">Invite access</h3><p>Enter your code to unlock the plan included with your invite for 30 days. Your current subscription stays unchanged, and a higher paid plan stays in effect.</p></div>
         </div>
         <div className="billing-invite-form">
           <label className="sr-only" htmlFor="premium-invite-code">Premium invite code</label>

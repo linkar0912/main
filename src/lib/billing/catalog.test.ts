@@ -1,6 +1,72 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { BILLING_PLANS, FREE_BILLING_PLAN, getBillingPlan, resolveLinkarPlanFromRazorpayId, resolveRazorpayPlanId } from "./catalog";
+
+const LIMIT_COLUMNS = [
+  "memberLimit", "automationLimit", "instagramConnectionLimit", "facebookConnectionLimit",
+  "sequenceLimit", "monthlyBroadcastLimit", "monthlyDeliveryLimit",
+] as const;
+const FLAG_COLUMNS = [
+  "sequencesEnabled", "broadcastsEnabled", "trackedLinksEnabled", "teamEnabled", "facebookEnabled", "exportsEnabled",
+] as const;
+type SeededPlan = Record<string, string | number | boolean | null>;
+
+/** PlanDefinition rows from prisma/seed.ts, the values local and fresh databases enforce. */
+function seededPlans(): Record<string, SeededPlan> {
+  const seed = readFileSync(join(process.cwd(), "prisma/seed.ts"), "utf8");
+  const rows = [...seed.matchAll(/\{ id: "plan_[^}]+\}/g)].map(([literal]) => JSON.parse(
+    literal.replace(/(\w+):/g, "\"$1\":").replace(/(\d)_(\d)/g, "$1$2"),
+  ) as SeededPlan);
+  return Object.fromEntries(rows.map((row) => [row.key as string, row]));
+}
+
+/** PlanDefinition rows upserted into production by the Razorpay billing migration. */
+function migratedPlans(): Record<string, SeededPlan> {
+  const migration = readFileSync(join(process.cwd(), "prisma/migrations/20260904190000_razorpay_billing/migration.sql"), "utf8");
+  const insert = migration.slice(migration.indexOf("INSERT INTO \"PlanDefinition\""));
+  const columns = [...insert.slice(0, insert.indexOf(")")).matchAll(/"(\w+)"/g)].map(([, name]) => name).slice(1);
+  const rows = [...insert.matchAll(/\('(plan_\w+)'[^)]*\)/g)].map(([tuple]) => {
+    const values = tuple.slice(1, -1).split(",").map((value) => value.trim());
+    return Object.fromEntries(columns.map((column, index) => {
+      const value = values[index];
+      if (value === "true" || value === "false") return [column, value === "true"];
+      if (/^\d+$/.test(value)) return [column, Number(value)];
+      return [column, value.replace(/^'|'$/g, "")];
+    })) as SeededPlan;
+  });
+  return Object.fromEntries(rows.map((row) => [row.key as string, row]));
+}
+
+// Advertised feature claims that correspond to an enforced entitlement flag.
+const FEATURE_FLAGS: Record<string, (typeof FLAG_COLUMNS)[number]> = {
+  Sequences: "sequencesEnabled",
+  "Tracked links": "trackedLinksEnabled",
+  Broadcasts: "broadcastsEnabled",
+  Exports: "exportsEnabled",
+};
+
+describe("billing catalog matches enforced plan definitions", () => {
+  for (const [source, load] of [["prisma/seed.ts", seededPlans], ["migration 20260904190000", migratedPlans]] as const) {
+    it(`advertises exactly the limits ${source} enforces`, () => {
+      const plans = load();
+      expect(Object.keys(plans).sort()).toEqual(["agency", "creator", "free", "growth"]);
+      for (const catalogPlan of [FREE_BILLING_PLAN, ...Object.values(BILLING_PLANS)]) {
+        const enforced = plans[catalogPlan.key];
+        expect(enforced, catalogPlan.key).toBeDefined();
+        expect(enforced.name).toBe(catalogPlan.name);
+        expect(enforced.id).toBe(`plan_${catalogPlan.key}`);
+        for (const column of LIMIT_COLUMNS) expect(enforced[column], `${catalogPlan.key}.${column}`).toBe(catalogPlan[column]);
+        for (const feature of catalogPlan.features) {
+          const flag = FEATURE_FLAGS[feature];
+          if (flag) expect(enforced[flag], `${catalogPlan.key} advertises ${feature}`).toBe(true);
+        }
+        expect(enforced.teamEnabled, `${catalogPlan.key}.teamEnabled`).toBe(catalogPlan.memberLimit > 1);
+      }
+    });
+  }
+});
 
 const configuredEnv = {
   razorpay: {
