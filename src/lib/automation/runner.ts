@@ -883,6 +883,16 @@ async function processFieldAnswer(
       remainingAfter,
       atIso,
     );
+    if (!updated) {
+      // Another reply from this person, processed concurrently, already
+      // answered this question; keep its answer instead of overwriting it.
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+        status: "SKIPPED",
+        reason: `field_already_answered:${current.id}`,
+        providerMessageId,
+      });
+      return { matched: 1, sent: 1, skipped: 0, failed: 0 };
+    }
 
     let completionReason = `field_answered:${current.id}`;
     if (updated.state === "CAPTURED") {

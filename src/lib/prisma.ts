@@ -542,6 +542,24 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     }
   }
 
+  /** Reads one contact under SELECT ... FOR UPDATE inside the caller's transaction. */
+  async function lockContact(
+    transaction: Prisma.TransactionClient,
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+  ) {
+    const [locked] = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "AutomationContact"
+      WHERE "workspaceId" = ${workspaceId}
+        AND "instagramAccountId" = ${instagramAccountId}
+        AND "igScopedUserId" = ${igScopedUserId}
+      FOR UPDATE
+    `);
+    if (!locked) throw new Error("Contact not found");
+    return transaction.automationContact.findUniqueOrThrow({ where: { id: locked.id } });
+  }
+
   async function claimExecutionDispatch(input: Parameters<AutomationRepository["claimExecutionDispatch"]>[0]): Promise<boolean> {
     // Two callers share a dedupeKey: `recordExecution` first writes a
     // PROCESSING/CLAIMED row, then `claimExecutionDispatch` advances it
@@ -2175,15 +2193,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           ? { id: known.id, createdAt: new Date(known.createdAt), lastSeenAt: new Date(known.lastSeenAt) }
           : null;
       if (existing) {
-        const updated = await client.automationContact.update({
-          where: { id: existing.id },
-          data: {
-            createdAt: new Date(Math.min(existing.createdAt.getTime(), new Date(seenAt).getTime())),
-            lastSeenAt: new Date(Math.max(existing.lastSeenAt.getTime(), new Date(seenAt).getTime())),
-            inboxStatus: "OPEN",
-          },
-        });
-        return { created: false, record: mapContact(updated) };
+        // LEAST/GREATEST against the row itself, not the caller's snapshot: a
+        // concurrent touch from a newer event must never be rolled back.
+        const seen = new Date(seenAt);
+        const [updated] = await client.$queryRaw<Parameters<typeof mapContact>[0][]>(Prisma.sql`
+          UPDATE "AutomationContact"
+          SET "createdAt" = LEAST("createdAt", ${seen}),
+              "lastSeenAt" = GREATEST("lastSeenAt", ${seen}),
+              "inboxStatus" = 'OPEN',
+              "updatedAt" = NOW()
+          WHERE "id" = ${existing.id}
+          RETURNING *
+        `);
+        if (updated) return { created: false, record: mapContact(updated) };
       }
       try {
         const created = await client.automationContact.create({
@@ -2258,27 +2280,27 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async captureContactEmail(workspaceId, instagramAccountId, igScopedUserId, email, atIso) {
       const normalized = email.trim().toLowerCase();
-      const current = await client.automationContact.findUniqueOrThrow({
-        where: {
-          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
-        },
+      // Row-locked read-modify-write: score and tags are derived from the
+      // current row, so two concurrent captures must not overwrite each other.
+      return client.$transaction(async (transaction) => {
+        const current = await lockContact(transaction, workspaceId, instagramAccountId, igScopedUserId);
+        const updated = await transaction.automationContact.update({
+          where: { id: current.id },
+          data: {
+            email: normalized,
+            state: current.state === "AWAITING_EMAIL" ? "AWAITING_EMAIL" : "CAPTURED",
+            ...(current.state === "AWAITING_EMAIL" ? {} : {
+              awaitingAutomationId: null,
+              awaitingSince: null,
+            }),
+            attempts: 0,
+            tags: current.tags.includes("email_captured") ? undefined : { push: "email_captured" },
+            score: Math.min(current.score + 10, 9999),
+            lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
+          },
+        });
+        return mapContact(updated);
       });
-      const updated = await client.automationContact.update({
-        where: { id: current.id },
-        data: {
-          email: normalized,
-          state: current.state === "AWAITING_EMAIL" ? "AWAITING_EMAIL" : "CAPTURED",
-          ...(current.state === "AWAITING_EMAIL" ? {} : {
-            awaitingAutomationId: null,
-            awaitingSince: null,
-          }),
-          attempts: 0,
-          tags: current.tags.includes("email_captured") ? undefined : { push: "email_captured" },
-          score: Math.min(current.score + 10, 9999),
-          lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
-        },
-      });
-      return mapContact(updated);
     },
 
     async bumpContactEmailAttempt(workspaceId, instagramAccountId, igScopedUserId) {
@@ -2328,23 +2350,27 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async recordContactFieldAnswer(workspaceId, instagramAccountId, igScopedUserId, fieldId, answer, remainingAfter, atIso) {
-      const current = await client.automationContact.findUniqueOrThrow({
-        where: {
-          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
-        },
+      // Compare-and-set under a row lock: two replies processed concurrently
+      // (worker concurrency > 1) must not both answer the same question.
+      return client.$transaction(async (transaction) => {
+        const current = await lockContact(transaction, workspaceId, instagramAccountId, igScopedUserId);
+        const outstanding = Array.isArray(current.awaitingFields)
+          ? (current.awaitingFields[0] as { id?: unknown } | undefined)?.id
+          : undefined;
+        if (current.state !== "AWAITING_FIELD" || outstanding !== fieldId) return null;
+        const existingFields = (current.fields ?? {}) as Record<string, string>;
+        const updated = await transaction.automationContact.update({
+          where: { id: current.id },
+          data: {
+            fields: { ...existingFields, [fieldId]: answer.trim().slice(0, 200) },
+            awaitingFields: remainingAfter,
+            state: remainingAfter.length > 0 ? "AWAITING_FIELD" : "CAPTURED",
+            ...(remainingAfter.length === 0 ? { awaitingAutomationId: null, awaitingSince: null } : {}),
+            lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
+          },
+        });
+        return mapContact(updated);
       });
-      const existingFields = (current.fields ?? {}) as Record<string, string>;
-      const updated = await client.automationContact.update({
-        where: { id: current.id },
-        data: {
-          fields: { ...existingFields, [fieldId]: answer.trim().slice(0, 200) },
-          awaitingFields: remainingAfter,
-          state: remainingAfter.length > 0 ? "AWAITING_FIELD" : "CAPTURED",
-          ...(remainingAfter.length === 0 ? { awaitingAutomationId: null, awaitingSince: null } : {}),
-          lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
-        },
-      });
-      return mapContact(updated);
     },
 
     async suppressContact(workspaceId, instagramAccountId, igScopedUserId, atIso) {

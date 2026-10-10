@@ -1709,6 +1709,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
       if (!id) throw new Error("Contact not found");
       const current = contacts.get(id)!;
+      // Mirrors Prisma's compare-and-set: only the outstanding question can be answered.
+      if (current.state !== "AWAITING_FIELD" || current.awaitingFields?.[0]?.id !== fieldId) return null;
       const updated: AutomationContactRecord = {
         ...current,
         fields: { ...(current.fields ?? {}), [fieldId]: answer.trim().slice(0, 200) },

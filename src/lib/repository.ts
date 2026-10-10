@@ -1013,7 +1013,11 @@ export interface AutomationRepository {
     automationId: string,
     atIso: string,
   ): Promise<AutomationContactRecord>;
-  /** Stores one answer and advances the queue; completes collection on the last field. */
+  /**
+   * Stores one answer and advances the queue; completes collection on the last field.
+   * Compare-and-set: applies only while `fieldId` is still the outstanding question
+   * and returns null otherwise, so two concurrent replies cannot both consume it.
+   */
   recordContactFieldAnswer(
     workspaceId: string,
     instagramAccountId: string,
@@ -1022,7 +1026,7 @@ export interface AutomationRepository {
     answer: string,
     remainingAfter: { id: string; question: string }[],
     atIso: string,
-  ): Promise<AutomationContactRecord>;
+  ): Promise<AutomationContactRecord | null>;
   countCapturedContacts(workspaceId: string): Promise<number>;
   listCapturedContacts(workspaceId: string, limit: number): Promise<CapturedContactSummary[]>;
   countSuppressedContacts(workspaceId: string): Promise<number>;

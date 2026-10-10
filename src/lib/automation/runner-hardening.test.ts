@@ -118,6 +118,39 @@ function commentEvent(id: string): NormalizedEvent {
   };
 }
 
+describe("conversational field answers", () => {
+  it("lets only one of two concurrent replies answer the outstanding question", async () => {
+    const repository = await seed([{
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Here comes the guide!" }],
+      emailCapture: {
+        promptText: "What is your email?",
+        confirmationText: "You are in!",
+        fields: [
+          { id: "name", question: "What's your name?" },
+          { id: "company", question: "Where do you work?" },
+        ],
+      },
+    }]);
+    const client = runnerClient();
+    await processNormalizedEvent(messageEvent({ text: "guide - lead@example.com" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+    // Both replies were read against the same snapshot (worker concurrency):
+    // the second must not overwrite the first or skip a question.
+    const first = await repository.recordContactFieldAnswer("workspace_a", "ig_1", "person_1", "name", "Grace", [{ id: "company", question: "Where do you work?" }], new Date().toISOString());
+    const second = await repository.recordContactFieldAnswer("workspace_a", "ig_1", "person_1", "name", "Hopper", [{ id: "company", question: "Where do you work?" }], new Date().toISOString());
+
+    expect(first?.fields).toEqual({ name: "Grace" });
+    expect(second).toBeNull();
+    expect(await repository.getContact("workspace_a", "ig_1", "person_1")).toMatchObject({
+      fields: { name: "Grace" },
+      awaitingFields: [{ id: "company", question: "Where do you work?" }],
+    });
+  });
+});
+
 describe("runner claims and first contact", () => {
   it("still treats a retried first message as first contact", async () => {
     const repository = await seed([{
