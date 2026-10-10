@@ -82,6 +82,7 @@ describe("outbound delivery coordinator", () => {
     await expect(executeOutboundDelivery(request, send)).resolves.toEqual({
       status: "UNKNOWN",
       error: "network",
+      reused: true,
     });
     expect(send).toHaveBeenCalledTimes(1);
     expect((await repository.getOutboundDelivery(request.deliveryKey))?.state).toBe("UNKNOWN");
@@ -129,6 +130,38 @@ describe("outbound delivery coordinator", () => {
       retryable,
     });
     expect(releaseReservation).toHaveBeenCalledWith(request.deliveryKey);
+  });
+
+  it.each([4, 17, 32, 613])("retries Meta throttling (HTTP 400, Graph code %i)", async (code) => {
+    const error = new MetaApiError("Application request limit reached", 400, true, true, code);
+    expect(classifyProviderFailure(error)).toBe("KNOWN_RETRYABLE");
+    await expect(executeOutboundDelivery(request, vi.fn().mockRejectedValue(error)))
+      .resolves.toMatchObject({ status: "FAILED", retryable: true });
+    expect(await repository.getOutboundDelivery(request.deliveryKey)).toMatchObject({
+      state: "FAILED",
+      retryable: true,
+      resultCode: "RETRYABLE_REJECTION",
+    });
+  });
+
+  it("marks the connection EXPIRED when a send is rejected with code 190", async () => {
+    const connection = await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: "sealed",
+      status: "CONNECTED",
+    });
+    const error = new MetaApiError("Error validating access token", 400, true, false, 190);
+
+    await expect(executeOutboundDelivery(request, vi.fn().mockRejectedValue(error)))
+      .resolves.toMatchObject({ status: "FAILED", retryable: false });
+    const [stored] = await repository.listConnections("workspace_a");
+    expect(stored).toMatchObject({ id: connection.id, status: "EXPIRED" });
+    expect(await repository.getOutboundDelivery(request.deliveryKey)).toMatchObject({
+      state: "FAILED",
+      resultCode: "PROVIDER_REJECTED",
+    });
   });
 
   it("treats a network failure as retryable when the caller opts in", async () => {

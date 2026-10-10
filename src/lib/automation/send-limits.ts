@@ -5,6 +5,10 @@ export type SendLimitContext = {
   repository: AutomationRepository;
   limit?: number;
   now?: Date;
+  /** Owning workspace; its configured timezone decides when "today" starts. */
+  workspaceId?: string;
+  /** Explicit IANA timezone (skips the workspace lookup). */
+  timezone?: string;
 };
 
 export type SendLimitReservation =
@@ -15,14 +19,45 @@ function utcDate(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
+/**
+ * The calendar date of `now` in `timezone` (YYYY-MM-DD). A daily limit that
+ * resets at UTC midnight resets mid-afternoon or mid-morning for most
+ * workspaces; bucketing by the workspace's own date makes "per day" mean the
+ * owner's day. Falls back to UTC when no (valid) timezone is configured.
+ */
+export function bucketDate(now: Date, timezone?: string): string {
+  if (!timezone) return utcDate(now);
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(now);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value;
+    const date = `${part("year")}-${part("month")}-${part("day")}`;
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : utcDate(now);
+  } catch {
+    return utcDate(now);
+  }
+}
+
+async function resolveTimezone(context: SendLimitContext): Promise<string | undefined> {
+  if (context.timezone) return context.timezone;
+  if (!context.workspaceId) return undefined;
+  const window = await context.repository.getMessagingWindow(context.workspaceId).catch(() => null);
+  return window?.timezone;
+}
+
 export async function reserveDailySendSlots(
   context: SendLimitContext,
   amount: number,
 ): Promise<SendLimitReservation> {
-  const date = utcDate(context.now ?? new Date());
+  const now = context.now ?? new Date();
   if (!context.limit || context.limit <= 0) {
-    return { allowed: true, utcDate: date, amount: 0 };
+    return { allowed: true, utcDate: utcDate(now), amount: 0 };
   }
+  const date = bucketDate(now, await resolveTimezone(context));
   const allowed = await context.repository.claimAutomationSendSlots(
     context.automationId,
     date,

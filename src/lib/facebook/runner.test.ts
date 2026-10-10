@@ -3,7 +3,7 @@ import { createMemoryRepository } from "../memory-repository";
 import { sealSecret } from "../security/secrets";
 import { FacebookApiError, FacebookClient } from "./client";
 import type { FacebookConnection, FacebookSendResult } from "./types";
-import { processNormalizedFacebookEvent, RetryableFacebookError, isRetryableFacebookError, selectFacebookReplyText } from "./runner";
+import { facebookReplyDeliveryKey, processNormalizedFacebookEvent, RetryableFacebookError, isRetryableFacebookError, selectFacebookReplyText } from "./runner";
 import type { FacebookNormalizedEvent } from "./types";
 import type { CommentTrigger, FlowDefinitionV1 } from "../automation/types";
 import type { AutomationRepository } from "../repository";
@@ -310,6 +310,88 @@ describe("processNormalizedFacebookEvent", () => {
     });
     expect(retry.sent).toBe(1);
     expect(postCommentReply).toHaveBeenCalledTimes(2);
+  });
+
+  it("never retries a public reply whose outcome is unknown (network failure)", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Guide", { match: "any", keywords: [] });
+    const postCommentReply = vi.fn().mockRejectedValue(new FacebookApiError("Facebook request timed out", 0, false));
+    const { client } = fakeClient({ postCommentReply });
+
+    const first = await processNormalizedFacebookEvent(commentEvent(), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect(first.failed).toBe(1);
+    // A redelivery or admin replay of the same event must not post again.
+    await processNormalizedFacebookEvent(commentEvent(), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect(postCommentReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses a recorded reply when a crashed worker's claim is taken over", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Guide", { match: "any", keywords: [] });
+    const [automation] = await repository.listAutomations("workspace_a");
+    const { client, postCommentReply } = fakeClient();
+    // Worker A claimed the event, posted the reply and recorded it in the
+    // ledger, then died before completing its execution claim.
+    await repository.claimExecution({
+      workspaceId: "workspace_a",
+      automationId: automation!.id,
+      externalEventId: "evt_1",
+      dedupeKey: `${automation!.id}:evt_1`,
+    });
+    const deliveryKey = facebookReplyDeliveryKey(automation!.id, "evt_1");
+    await repository.ensureOutboundDelivery({
+      deliveryKey,
+      workspaceId: "workspace_a",
+      automationId: automation!.id,
+      kind: "CLASSIC_ACTION",
+      payload: { type: "facebook_comment_reply", commentId: "comment_1", text: "Hi" },
+    });
+    await repository.claimOutboundDelivery(deliveryKey, "worker_a", "2026-08-29T10:00:30.000Z");
+    await repository.completeOutboundDelivery(deliveryKey, "worker_a", "fb_comment_1", "2026-08-29T10:00:01.000Z");
+
+    vi.setSystemTime(new Date("2026-08-29T10:10:00.000Z"));
+    const retry = await processNormalizedFacebookEvent(commentEvent(), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect(retry.sent).toBe(1);
+    expect(postCommentReply).not.toHaveBeenCalled();
+    expect(await repository.getExecution("workspace_a", `${automation!.id}:evt_1`)).toMatchObject({ status: "SENT" });
+  });
+
+  it("retries later, without posting, while another worker holds the reply claim", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Guide", { match: "any", keywords: [] });
+    const [automation] = await repository.listAutomations("workspace_a");
+    const deliveryKey = facebookReplyDeliveryKey(automation!.id, "evt_1");
+    await repository.ensureOutboundDelivery({
+      deliveryKey,
+      workspaceId: "workspace_a",
+      automationId: automation!.id,
+      kind: "CLASSIC_ACTION",
+      payload: { type: "facebook_comment_reply", commentId: "comment_1", text: "Hi" },
+    });
+    await repository.claimOutboundDelivery(deliveryKey, "worker_a", "2026-08-29T10:00:30.000Z");
+    const { client, postCommentReply } = fakeClient();
+
+    await expect(processNormalizedFacebookEvent(commentEvent(), repository, { client, tokenEncryptionKey: TOKEN_KEY }))
+      .rejects.toBeInstanceOf(RetryableFacebookError);
+    expect(postCommentReply).not.toHaveBeenCalled();
+    expect(await repository.getExecution("workspace_a", `${automation!.id}:evt_1`)).toBeNull();
+  });
+
+  it("marks the Page expired when Meta rejects its token (code 190)", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Guide", { match: "any", keywords: [] });
+    const { client } = fakeClient({
+      postCommentReply: vi.fn(async () => {
+        throw new FacebookApiError("Error validating access token", 400, true, false, 190);
+      }),
+    });
+
+    await processNormalizedFacebookEvent(commentEvent(), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+    expect((await repository.listFacebookPages("workspace_a"))[0]?.status).toBe("EXPIRED");
   });
 
   it("replyOncePerUser sends the first reply and skips later comments from that sender", async () => {

@@ -602,6 +602,25 @@ export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt" | "d
   dispatchStatus?: ExecutionDispatchStatus;
 };
 export type ClaimExecutionInput = Pick<ExecutionRecord, "workspaceId" | "automationId" | "externalEventId" | "dedupeKey">;
+
+/**
+ * How long a claimExecution claim (PROCESSING/CLAIMED) is held before another
+ * worker may take it over. A worker that dies mid-event would otherwise strand
+ * the event forever; the outbound ledger, not this claim, is what prevents a
+ * second send of anything that already went out.
+ */
+export const EXECUTION_CLAIM_LEASE_MS = 5 * 60 * 1_000;
+
+/** A claimExecution claim whose holder never completed or released it within its lease. */
+export function isAbandonedExecutionClaim(
+  record: Pick<ExecutionRecord, "status" | "dispatchStatus" | "dispatchLeaseExpiresAt" | "createdAt">,
+  nowMs = Date.now(),
+): boolean {
+  if (record.status !== "PROCESSING" || record.dispatchStatus !== "CLAIMED") return false;
+  return record.dispatchLeaseExpiresAt
+    ? Date.parse(record.dispatchLeaseExpiresAt) <= nowMs
+    : Date.parse(record.createdAt) <= nowMs - EXECUTION_CLAIM_LEASE_MS;
+}
 export type ClaimExecutionDispatchInput = ClaimExecutionInput & Required<Pick<
   ExecutionRecord,
   "dispatchOwner" | "dispatchStartedAt" | "dispatchLeaseExpiresAt"
@@ -723,6 +742,18 @@ export interface AutomationRepository {
     automationId: string,
     instagramAccountId: string,
     igScopedUserId: string,
+  ): Promise<number>;
+  /**
+   * Classic (v1) replies this automation sent, or may have sent, to one person:
+   * CLASSIC_ACTION ledger rows that are SENT, CLAIMED or UNKNOWN, excluding the
+   * rows of `excludeEventId` so a retried first reply is not mistaken for a prior one.
+   */
+  countClassicRepliesToRecipient(
+    workspaceId: string,
+    automationId: string,
+    instagramAccountId: string,
+    recipientId: string,
+    excludeEventId: string,
   ): Promise<number>;
   countExecutionsSentSince(automationId: string, sinceIso: string): Promise<number>;
   countParticipantsCreatedSince(workspaceId: string, sinceIso: string): Promise<number>;
@@ -1010,7 +1041,11 @@ export interface AutomationRepository {
     automationId: string,
     atIso: string,
   ): Promise<AutomationContactRecord>;
-  /** Stores one answer and advances the queue; completes collection on the last field. */
+  /**
+   * Stores one answer and advances the queue; completes collection on the last field.
+   * Compare-and-set: applies only while `fieldId` is still the outstanding question
+   * and returns null otherwise, so two concurrent replies cannot both consume it.
+   */
   recordContactFieldAnswer(
     workspaceId: string,
     instagramAccountId: string,
@@ -1019,7 +1054,7 @@ export interface AutomationRepository {
     answer: string,
     remainingAfter: { id: string; question: string }[],
     atIso: string,
-  ): Promise<AutomationContactRecord>;
+  ): Promise<AutomationContactRecord | null>;
   countCapturedContacts(workspaceId: string): Promise<number>;
   listCapturedContacts(workspaceId: string, limit: number): Promise<CapturedContactSummary[]>;
   countSuppressedContacts(workspaceId: string): Promise<number>;
@@ -1118,7 +1153,20 @@ export interface AutomationRepository {
   ): Promise<{ created: boolean }>;
   listDueSequenceSends(nowIso: string, limit: number): Promise<DueSequenceSend[]>;
   /** Advances one step; nextIndex beyond the last step completes the enrollment. */
-  advanceSequenceEnrollment(id: string, nextIndex: number, nextSendAtIso: string | null): Promise<void>;
+  /**
+   * Moves an ACTIVE enrollment to `nextIndex` (COMPLETED when `nextSendAtIso` is null).
+   * With `expectedStepIndex` it is a compare-and-set that applies only while the
+   * enrollment is still on that step, so a slower replica cannot rewind it.
+   * Returns whether the enrollment was updated.
+   */
+  advanceSequenceEnrollment(
+    id: string,
+    nextIndex: number,
+    nextSendAtIso: string | null,
+    expectedStepIndex?: number,
+  ): Promise<boolean>;
+  /** Cancels one ACTIVE enrollment; returns whether it was cancelled. */
+  cancelSequenceEnrollment(id: string): Promise<boolean>;
   cancelEnrollmentsForContact(contactId: string): Promise<number>;
   // Broadcasts (one-off DM blasts to a segment).
   createBroadcast(

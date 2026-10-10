@@ -45,6 +45,7 @@ import type {
   WorkspaceStatus,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
+import { EXECUTION_CLAIM_LEASE_MS } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS, toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
@@ -566,6 +567,27 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     }
   }
 
+  /** Rows per statement for the hourly retention sweeps. */
+  const SWEEP_BATCH_SIZE = 1_000;
+
+  /** Reads one contact under SELECT ... FOR UPDATE inside the caller's transaction. */
+  async function lockContact(
+    transaction: Prisma.TransactionClient,
+    workspaceId: string,
+    instagramAccountId: string,
+    igScopedUserId: string,
+  ) {
+    const [locked] = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "AutomationContact"
+      WHERE "workspaceId" = ${workspaceId}
+        AND "instagramAccountId" = ${instagramAccountId}
+        AND "igScopedUserId" = ${igScopedUserId}
+      FOR UPDATE
+    `);
+    if (!locked) throw new Error("Contact not found");
+    return transaction.automationContact.findUniqueOrThrow({ where: { id: locked.id } });
+  }
+
   async function claimExecutionDispatch(input: Parameters<AutomationRepository["claimExecutionDispatch"]>[0]): Promise<boolean> {
     // Two callers share a dedupeKey: `recordExecution` first writes a
     // PROCESSING/CLAIMED row, then `claimExecutionDispatch` advances it
@@ -894,6 +916,20 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async countParticipantsBySender(automationId, instagramAccountId, igScopedUserId) {
       return client.automationParticipant.count({
         where: { automationId, instagramAccountId, igScopedUserId },
+      });
+    },
+
+    async countClassicRepliesToRecipient(workspaceId, automationId, instagramAccountId, recipientId, excludeEventId) {
+      return client.outboundDelivery.count({
+        where: {
+          workspaceId,
+          instagramAccountId,
+          recipientId,
+          automationId,
+          kind: "CLASSIC_ACTION",
+          state: { in: ["SENT", "CLAIMED", "UNKNOWN"] },
+          NOT: { deliveryKey: { startsWith: `automation:${automationId}:event:${excludeEventId}:` } },
+        },
       });
     },
 
@@ -1250,8 +1286,13 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async listConnectionsExpiringBefore(before) {
+      // An unknown expiry is treated as expiring: Meta did not tell us when the
+      // token dies, so refreshing it is the only way to learn (and extend) it.
       const records = await client.instagramConnection.findMany({
-        where: { status: "CONNECTED", tokenExpiresAt: { lte: new Date(before) } },
+        where: {
+          status: "CONNECTED",
+          OR: [{ tokenExpiresAt: null }, { tokenExpiresAt: { lte: new Date(before) } }],
+        },
       });
       return records.map(mapConnection);
     },
@@ -1611,15 +1652,40 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async claimExecution(input) {
+      const now = new Date();
+      const dispatchLeaseExpiresAt = new Date(now.getTime() + EXECUTION_CLAIM_LEASE_MS);
       try {
         await client.automationExecution.create({
-          data: { id: createId("execution"), status: "PROCESSING", dispatchStatus: "CLAIMED", ...input },
+          data: {
+            id: createId("execution"),
+            status: "PROCESSING",
+            dispatchStatus: "CLAIMED",
+            ...input,
+            dispatchLeaseExpiresAt,
+          },
         });
         return true;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
-        throw error;
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
       }
+      // The key exists. Take it over only when its holder abandoned it: still
+      // PROCESSING (never completed or released) past its lease. Claims written
+      // before leases existed have none and age out by createdAt. The single
+      // conditional UPDATE lets exactly one concurrent caller win.
+      const taken = await client.automationExecution.updateMany({
+        where: {
+          workspaceId: input.workspaceId,
+          dedupeKey: input.dedupeKey,
+          status: "PROCESSING",
+          dispatchStatus: "CLAIMED",
+          OR: [
+            { dispatchLeaseExpiresAt: { lte: now } },
+            { dispatchLeaseExpiresAt: null, createdAt: { lte: new Date(now.getTime() - EXECUTION_CLAIM_LEASE_MS) } },
+          ],
+        },
+        data: { dispatchLeaseExpiresAt },
+      });
+      return taken.count === 1;
     },
 
     async claimExecutionDispatch(input) {
@@ -2170,29 +2236,48 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async expireStaleParticipants(now, reason) {
       const nowDate = new Date(now);
       // Rows that never got an explicit window still expire 24h after they
-      // were created - Meta's opening window cannot outlive that.
+      // were created - Meta's opening window cannot outlive that. The open
+      // states are listed (not "not in terminal") so the (state, window)
+      // index can serve the sweep.
       const createdCutoff = new Date(nowDate.getTime() - MESSAGING_WINDOW_MS);
-      const result = await client.automationParticipant.updateMany({
-        where: {
-          state: { notIn: ["LINK_SENT", "EXPIRED", "FAILED"] },
-          OR: [
-            { messagingWindowExpiresAt: { not: null, lte: nowDate } },
-            { messagingWindowExpiresAt: null, createdAt: { lte: createdCutoff } },
-          ],
-        },
-        data: { state: "EXPIRED", finalDeliveryError: reason },
-      });
-      return result.count;
+      const where: Prisma.AutomationParticipantWhereInput = {
+        state: { in: ["COMMENT_MATCHED", "OPENING_SENT", "OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED"] },
+        OR: [
+          { messagingWindowExpiresAt: { not: null, lte: nowDate } },
+          { messagingWindowExpiresAt: null, createdAt: { lte: createdCutoff } },
+        ],
+      };
+      // Bounded batches keep each statement's row locks and WAL burst small.
+      let expired = 0;
+      for (;;) {
+        const batch = await client.automationParticipant.findMany({ where, select: { id: true }, take: SWEEP_BATCH_SIZE });
+        if (batch.length === 0) break;
+        const result = await client.automationParticipant.updateMany({
+          where: { AND: [where, { id: { in: batch.map((row) => row.id) } }] },
+          data: { state: "EXPIRED", finalDeliveryError: reason },
+        });
+        expired += result.count;
+        if (batch.length < SWEEP_BATCH_SIZE) break;
+      }
+      return expired;
     },
 
     async deleteStaleTerminalParticipants(before) {
-      const result = await client.automationParticipant.deleteMany({
-        where: {
-          state: { in: ["LINK_SENT", "EXPIRED", "FAILED"] },
-          updatedAt: { lt: new Date(before) },
-        },
-      });
-      return result.count;
+      const where: Prisma.AutomationParticipantWhereInput = {
+        state: { in: ["LINK_SENT", "EXPIRED", "FAILED"] },
+        updatedAt: { lt: new Date(before) },
+      };
+      let deleted = 0;
+      for (;;) {
+        const batch = await client.automationParticipant.findMany({ where, select: { id: true }, take: SWEEP_BATCH_SIZE });
+        if (batch.length === 0) break;
+        const result = await client.automationParticipant.deleteMany({
+          where: { AND: [where, { id: { in: batch.map((row) => row.id) } }] },
+        });
+        deleted += result.count;
+        if (batch.length < SWEEP_BATCH_SIZE) break;
+      }
+      return deleted;
     },
 
     async touchContact(workspaceId, instagramAccountId, igScopedUserId, seenAt, known) {
@@ -2207,15 +2292,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           ? { id: known.id, createdAt: new Date(known.createdAt), lastSeenAt: new Date(known.lastSeenAt) }
           : null;
       if (existing) {
-        const updated = await client.automationContact.update({
-          where: { id: existing.id },
-          data: {
-            createdAt: new Date(Math.min(existing.createdAt.getTime(), new Date(seenAt).getTime())),
-            lastSeenAt: new Date(Math.max(existing.lastSeenAt.getTime(), new Date(seenAt).getTime())),
-            inboxStatus: "OPEN",
-          },
-        });
-        return { created: false, record: mapContact(updated) };
+        // LEAST/GREATEST against the row itself, not the caller's snapshot: a
+        // concurrent touch from a newer event must never be rolled back.
+        const seen = new Date(seenAt);
+        const [updated] = await client.$queryRaw<Parameters<typeof mapContact>[0][]>(Prisma.sql`
+          UPDATE "AutomationContact"
+          SET "createdAt" = LEAST("createdAt", ${seen}),
+              "lastSeenAt" = GREATEST("lastSeenAt", ${seen}),
+              "inboxStatus" = 'OPEN',
+              "updatedAt" = NOW()
+          WHERE "id" = ${existing.id}
+          RETURNING *
+        `);
+        if (updated) return { created: false, record: mapContact(updated) };
       }
       try {
         const created = await client.automationContact.create({
@@ -2290,27 +2379,27 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async captureContactEmail(workspaceId, instagramAccountId, igScopedUserId, email, atIso) {
       const normalized = email.trim().toLowerCase();
-      const current = await client.automationContact.findUniqueOrThrow({
-        where: {
-          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
-        },
+      // Row-locked read-modify-write: score and tags are derived from the
+      // current row, so two concurrent captures must not overwrite each other.
+      return client.$transaction(async (transaction) => {
+        const current = await lockContact(transaction, workspaceId, instagramAccountId, igScopedUserId);
+        const updated = await transaction.automationContact.update({
+          where: { id: current.id },
+          data: {
+            email: normalized,
+            state: current.state === "AWAITING_EMAIL" ? "AWAITING_EMAIL" : "CAPTURED",
+            ...(current.state === "AWAITING_EMAIL" ? {} : {
+              awaitingAutomationId: null,
+              awaitingSince: null,
+            }),
+            attempts: 0,
+            tags: current.tags.includes("email_captured") ? undefined : { push: "email_captured" },
+            score: Math.min(current.score + 10, 9999),
+            lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
+          },
+        });
+        return mapContact(updated);
       });
-      const updated = await client.automationContact.update({
-        where: { id: current.id },
-        data: {
-          email: normalized,
-          state: current.state === "AWAITING_EMAIL" ? "AWAITING_EMAIL" : "CAPTURED",
-          ...(current.state === "AWAITING_EMAIL" ? {} : {
-            awaitingAutomationId: null,
-            awaitingSince: null,
-          }),
-          attempts: 0,
-          tags: current.tags.includes("email_captured") ? undefined : { push: "email_captured" },
-          score: Math.min(current.score + 10, 9999),
-          lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
-        },
-      });
-      return mapContact(updated);
     },
 
     async bumpContactEmailAttempt(workspaceId, instagramAccountId, igScopedUserId) {
@@ -2360,23 +2449,27 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async recordContactFieldAnswer(workspaceId, instagramAccountId, igScopedUserId, fieldId, answer, remainingAfter, atIso) {
-      const current = await client.automationContact.findUniqueOrThrow({
-        where: {
-          workspaceId_instagramAccountId_igScopedUserId: { workspaceId, instagramAccountId, igScopedUserId },
-        },
+      // Compare-and-set under a row lock: two replies processed concurrently
+      // (worker concurrency > 1) must not both answer the same question.
+      return client.$transaction(async (transaction) => {
+        const current = await lockContact(transaction, workspaceId, instagramAccountId, igScopedUserId);
+        const outstanding = Array.isArray(current.awaitingFields)
+          ? (current.awaitingFields[0] as { id?: unknown } | undefined)?.id
+          : undefined;
+        if (current.state !== "AWAITING_FIELD" || outstanding !== fieldId) return null;
+        const existingFields = (current.fields ?? {}) as Record<string, string>;
+        const updated = await transaction.automationContact.update({
+          where: { id: current.id },
+          data: {
+            fields: { ...existingFields, [fieldId]: answer.trim().slice(0, 200) },
+            awaitingFields: remainingAfter,
+            state: remainingAfter.length > 0 ? "AWAITING_FIELD" : "CAPTURED",
+            ...(remainingAfter.length === 0 ? { awaitingAutomationId: null, awaitingSince: null } : {}),
+            lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
+          },
+        });
+        return mapContact(updated);
       });
-      const existingFields = (current.fields ?? {}) as Record<string, string>;
-      const updated = await client.automationContact.update({
-        where: { id: current.id },
-        data: {
-          fields: { ...existingFields, [fieldId]: answer.trim().slice(0, 200) },
-          awaitingFields: remainingAfter,
-          state: remainingAfter.length > 0 ? "AWAITING_FIELD" : "CAPTURED",
-          ...(remainingAfter.length === 0 ? { awaitingAutomationId: null, awaitingSince: null } : {}),
-          lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
-        },
-      });
-      return mapContact(updated);
     },
 
     async suppressContact(workspaceId, instagramAccountId, igScopedUserId, atIso) {
@@ -2810,15 +2903,39 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async deleteOldWebhookEvents(before) {
       const cutoff = new Date(before);
-      const result = await client.webhookEvent.deleteMany({ where: { receivedAt: { lt: cutoff } } });
+      // Deleted in bounded id batches: one unbounded DELETE over 90 days of
+      // events held locks and generated WAL for the whole table at once.
+      let deleted = 0;
+      for (;;) {
+        const batch = await client.webhookEvent.findMany({
+          where: { receivedAt: { lt: cutoff } },
+          select: { id: true },
+          take: SWEEP_BATCH_SIZE,
+        });
+        if (batch.length === 0) break;
+        const result = await client.webhookEvent.deleteMany({
+          where: { id: { in: batch.map((row) => row.id) }, receivedAt: { lt: cutoff } },
+        });
+        deleted += result.count;
+        if (batch.length < SWEEP_BATCH_SIZE) break;
+      }
       // A contact whose latest message is older than the cutoff has no messages
       // left, so it leaves the inbox exactly as it did when the list was
       // computed from WebhookEvent.
-      await client.automationContact.updateMany({
-        where: { lastInboundAt: { lt: cutoff } },
-        data: { lastInboundAt: null, lastInboundPreview: null },
-      });
-      return result.count;
+      for (;;) {
+        const batch = await client.automationContact.findMany({
+          where: { lastInboundAt: { lt: cutoff } },
+          select: { id: true },
+          take: SWEEP_BATCH_SIZE,
+        });
+        if (batch.length === 0) break;
+        await client.automationContact.updateMany({
+          where: { id: { in: batch.map((row) => row.id) }, lastInboundAt: { lt: cutoff } },
+          data: { lastInboundAt: null, lastInboundPreview: null },
+        });
+        if (batch.length < SWEEP_BATCH_SIZE) break;
+      }
+      return deleted;
     },
 
     async reconcileContactLastInbound(since) {
@@ -3132,15 +3249,28 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       }));
     },
 
-    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso) {
-      await client.sequenceEnrollment.update({
-        where: { id },
+    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso, expectedStepIndex) {
+      const result = await client.sequenceEnrollment.updateMany({
+        where: {
+          id,
+          state: "ACTIVE",
+          ...(expectedStepIndex === undefined ? {} : { currentStepIndex: expectedStepIndex }),
+        },
         data: {
           currentStepIndex: nextIndex,
           nextSendAt: nextSendAtIso ? new Date(nextSendAtIso) : null,
           state: nextSendAtIso ? "ACTIVE" : "COMPLETED",
         },
       });
+      return result.count === 1;
+    },
+
+    async cancelSequenceEnrollment(id) {
+      const result = await client.sequenceEnrollment.updateMany({
+        where: { id, state: "ACTIVE" },
+        data: { state: "CANCELLED" },
+      });
+      return result.count === 1;
     },
 
     async cancelEnrollmentsForContact(contactId) {

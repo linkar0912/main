@@ -51,6 +51,7 @@ import type {
   InboxContactRow,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
+import { EXECUTION_CLAIM_LEASE_MS, isAbandonedExecutionClaim } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS } from "./messaging-window";
 import { normalizeHelpQuery } from "./help-search";
@@ -364,6 +365,18 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return count;
     },
 
+    async countClassicRepliesToRecipient(workspaceId, automationId, instagramAccountId, recipientId, excludeEventId) {
+      const excludedPrefix = `automation:${automationId}:event:${excludeEventId}:`;
+      return [...outboundDeliveries.values()].filter((delivery) =>
+        delivery.workspaceId === workspaceId
+        && delivery.automationId === automationId
+        && delivery.instagramAccountId === instagramAccountId
+        && delivery.recipientId === recipientId
+        && delivery.kind === "CLASSIC_ACTION"
+        && ["SENT", "CLAIMED", "UNKNOWN"].includes(delivery.state)
+        && !delivery.deliveryKey.startsWith(excludedPrefix)).length;
+    },
+
     async countExecutionsSentSince(automationId, sinceIso) {
       return [...executions.values()].filter(
         (execution) => execution.automationId === automationId && execution.status === "SENT" && execution.createdAt >= sinceIso,
@@ -663,7 +676,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
 
     async listConnectionsExpiringBefore(before) {
       return copy([...connections.values()].filter((connection) =>
-        connection.status === "CONNECTED" && connection.tokenExpiresAt && connection.tokenExpiresAt <= before,
+        connection.status === "CONNECTED" && (!connection.tokenExpiresAt || connection.tokenExpiresAt <= before),
       ));
     },
 
@@ -1000,16 +1013,24 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async claimExecution(input) {
-      const existing = [...executions.values()].some(
+      const nowMs = Date.now();
+      const dispatchLeaseExpiresAt = new Date(nowMs + EXECUTION_CLAIM_LEASE_MS).toISOString();
+      const existing = [...executions.values()].find(
         (record) => record.workspaceId === input.workspaceId && record.dedupeKey === input.dedupeKey,
       );
-      if (existing) return false;
+      if (existing) {
+        // Mirrors Prisma: take over only an abandoned PROCESSING claim.
+        if (!isAbandonedExecutionClaim(existing, nowMs)) return false;
+        executions.set(existing.id, { ...existing, dispatchLeaseExpiresAt });
+        return true;
+      }
       const record: ExecutionRecord = {
         id: createId("execution"),
         createdAt: now(),
         status: "PROCESSING",
         dispatchStatus: "CLAIMED",
         ...input,
+        dispatchLeaseExpiresAt,
       };
       executions.set(record.id, record);
       return true;
@@ -1733,6 +1754,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
       if (!id) throw new Error("Contact not found");
       const current = contacts.get(id)!;
+      // Mirrors Prisma's compare-and-set: only the outstanding question can be answered.
+      if (current.state !== "AWAITING_FIELD" || current.awaitingFields?.[0]?.id !== fieldId) return null;
       const updated: AutomationContactRecord = {
         ...current,
         fields: { ...(current.fields ?? {}), [fieldId]: answer.trim().slice(0, 200) },
@@ -2352,11 +2375,13 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async listDueSequenceSends(nowIso, limit): Promise<DueSequenceSend[]> {
+      // Mirrors Prisma: filter (including the workspace lifecycle), order by
+      // nextSendAt, and only then take the batch.
       const nowMs = Date.parse(nowIso);
       const due: DueSequenceSend[] = [];
       for (const enrollment of enrollments.values()) {
-        if (due.length >= limit) break;
         if (enrollment.state !== "ACTIVE") continue;
+        if ((workspaceLifecycle.get(enrollment.workspaceId)?.status ?? "ACTIVE") !== "ACTIVE") continue;
         const nextMs = enrollment.nextSendAt ? Date.parse(enrollment.nextSendAt) : Number.NaN;
         if (!Number.isFinite(nextMs) || nextMs > nowMs) continue;
         const sequence = sequences.get(enrollment.sequenceId);
@@ -2365,13 +2390,15 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         if (!contact || contact.suppressedAt) continue;
         due.push({ enrollment: copy(enrollment), sequence: copy(sequence), contact: copy(contact) });
       }
-      return due.sort((a, b) =>
-        (a.enrollment.nextSendAt ?? "").localeCompare(b.enrollment.nextSendAt ?? ""));
+      return due
+        .sort((a, b) => (a.enrollment.nextSendAt ?? "").localeCompare(b.enrollment.nextSendAt ?? ""))
+        .slice(0, limit);
     },
 
-    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso) {
+    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso, expectedStepIndex) {
       const enrollment = enrollments.get(id);
-      if (!enrollment) return;
+      if (!enrollment || enrollment.state !== "ACTIVE") return false;
+      if (expectedStepIndex !== undefined && enrollment.currentStepIndex !== expectedStepIndex) return false;
       const completed = nextSendAtIso === null;
       enrollments.set(id, {
         ...enrollment,
@@ -2380,6 +2407,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         state: (completed ? "COMPLETED" : "ACTIVE") satisfies EnrollmentState,
         updatedAt: now(),
       });
+      return true;
+    },
+
+    async cancelSequenceEnrollment(id) {
+      const enrollment = enrollments.get(id);
+      if (!enrollment || enrollment.state !== "ACTIVE") return false;
+      enrollments.set(id, { ...enrollment, state: "CANCELLED", updatedAt: now() });
+      return true;
     },
 
     async cancelEnrollmentsForContact(contactId) {

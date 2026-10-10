@@ -21,6 +21,7 @@ import {
   type SendLimitReservation,
 } from "./send-limits";
 import { checkSendRateLimit } from "./send-rate-limiter";
+import { findSendDeferral, SendDeferredError } from "./send-deferral";
 import {
   processCampaignEvent,
   processExistingCampaignParticipant,
@@ -158,7 +159,6 @@ function personalizeAction(action: ExecutionAction, vars: Record<string, string 
 
 const DEFAULT_DELIVERY_CLAIM_LEASE_MS = 30_000;
 const DAILY_LIMIT_ERROR = "daily_send_limit_reached";
-const PROVIDER_RATE_LIMIT_ERROR = "provider_rate_limited";
 
 /**
  * Meta only accepts a private reply within 7 days of the comment it answers
@@ -206,6 +206,7 @@ async function executeActionDelivery(
     reservation = await reserveDailySendSlots({
       repository,
       automationId: request.automationId,
+      workspaceId: request.workspaceId,
       limit: request.dailySendLimit,
     }, 1);
     if (!reservation.allowed) {
@@ -230,7 +231,10 @@ async function executeActionDelivery(
       const rateLimit = await checkSendRateLimit(connection.igUserId, "private_reply");
       if (!rateLimit.allowed) {
         await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation!);
-        return { status: "FAILED", retryable: true, error: PROVIDER_RATE_LIMIT_ERROR };
+        reservation = undefined;
+        // Deferred until the window resets - the job is parked, not failed,
+        // and the 7-day reply window is far longer than one rate window.
+        throw new SendDeferredError("Send rate limit reached for this Instagram account", rateLimit.retryAfterMs);
       }
     } else if (needsProviderAttempt) {
       // Non-private-reply actions share the account's DM budget; a known ceiling
@@ -238,7 +242,8 @@ async function executeActionDelivery(
       const rateLimit = await checkSendRateLimit(connection.igUserId, "direct_message");
       if (!rateLimit.allowed) {
         await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation!);
-        return { status: "FAILED", retryable: true, error: PROVIDER_RATE_LIMIT_ERROR };
+        reservation = undefined;
+        throw new SendDeferredError("Send rate limit reached for this Instagram account", rateLimit.retryAfterMs);
       }
     }
 
@@ -626,7 +631,7 @@ async function processEmailCaptureReply(
         );
         await repository.completeExecution(mapping.workspaceId, dedupeKey, {
           status: "SENT",
-          reason: `email_captured:${candidate};field_asked:${fieldQueue[0].id}`,
+          reason: `email_captured;field_asked:${fieldQueue[0].id}`,
           providerMessageId,
         });
         return { matched: 1, sent: 1, skipped: 0, failed: 0 };
@@ -659,7 +664,7 @@ async function processEmailCaptureReply(
       await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SENT",
-        reason: `email_captured:${candidate}`,
+        reason: "email_captured",
         providerMessageId,
       });
       void notifyWorkspaceManagers(
@@ -718,9 +723,10 @@ async function processEmailCaptureReply(
       });
       return { matched: 1, sent: 0, skipped: 1, failed: 0 };
     }
-    if (followUpDelivered) {
+    if (followUpDelivered || findSendDeferral(error)) {
+      // A deferral parks the whole event until it may send; it never fails it.
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-      throw retryableAutomationError(error);
+      throw findSendDeferral(error) ?? retryableAutomationError(error);
     }
     if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
@@ -878,10 +884,20 @@ async function processFieldAnswer(
       remainingAfter,
       atIso,
     );
+    if (!updated) {
+      // Another reply from this person, processed concurrently, already
+      // answered this question; keep its answer instead of overwriting it.
+      await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+        status: "SKIPPED",
+        reason: `field_already_answered:${current.id}`,
+        providerMessageId,
+      });
+      return { matched: 1, sent: 1, skipped: 0, failed: 0 };
+    }
 
     let completionReason = `field_answered:${current.id}`;
     if (updated.state === "CAPTURED") {
-      completionReason = `lead_complete:${updated.email ?? "no-email"}`;
+      completionReason = updated.email ? "lead_complete" : "lead_complete:no-email";
       if (updated.email) {
         await queueOrDeliverLead(
           repository,
@@ -921,9 +937,10 @@ async function processFieldAnswer(
       });
       return { matched: 1, sent: 0, skipped: 1, failed: 0 };
     }
-    if (followUpDelivered) {
+    if (followUpDelivered || findSendDeferral(error)) {
+      // A deferral parks the whole event until it may send; it never fails it.
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-      throw retryableAutomationError(error);
+      throw findSendDeferral(error) ?? retryableAutomationError(error);
     }
     if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
@@ -1019,7 +1036,15 @@ export async function processNormalizedEvent(
       new Date(event.timestamp).toISOString(),
       contact,
     );
-    if (needsContactTracking) evaluationContext = { isNewContact: touch.created };
+    // A contact's createdAt is the timestamp of the earliest event seen from
+    // them, so this event is their first contact exactly when nothing earlier
+    // exists. Unlike `touch.created`, that still holds when the job is retried
+    // after the first attempt already created the row.
+    if (needsContactTracking) {
+      evaluationContext = {
+        isNewContact: touch.created || Date.parse(touch.record.createdAt) >= event.timestamp,
+      };
+    }
   }
   // A reply to a Story belongs to a matching story-reply flow when one exists;
   // generic DM flows then stay quiet so the person gets a single answer.
@@ -1141,9 +1166,18 @@ export async function processNormalizedEvent(
         externalEventId: event.id,
         dedupeKey,
       });
-      if (!claimed) continue;
-      // Claimed, so this automation owns the comment. Set the flag only now - a
-      // lost claim (already processed elsewhere) must not burn the winner slot.
+      if (!claimed) {
+        // Lost the claim: if that execution already replied (SENT) or is
+        // replying right now (PROCESSING under a live lease), it owns the
+        // comment's one private reply - lower-priority flows must stay quiet.
+        // A SKIPPED/FAILED execution never replied, so the slot stays open.
+        if (event.type === "comment.created" && !commentWinnerSelected) {
+          const existing = await repository.getExecution(mapping.workspaceId, dedupeKey);
+          if (existing?.status === "SENT" || existing?.status === "PROCESSING") commentWinnerSelected = true;
+        }
+        continue;
+      }
+      // Claimed, so this automation owns the comment.
       if (event.type === "comment.created") commentWinnerSelected = true;
 
       result.matched += 1;
@@ -1155,10 +1189,16 @@ export async function processNormalizedEvent(
         && automation.definition.trigger.replyOncePerUser
         && event.recipientId
       ) {
-        const prior = await repository.countParticipantsBySender(
+        // Classic flows reply through the outbound ledger (v2 campaigns are
+        // the ones with participants), so count replies this automation
+        // already sent - or is sending - to the person, excluding this
+        // event's own rows so a retry of the first reply is not skipped.
+        const prior = await repository.countClassicRepliesToRecipient(
+          mapping.workspaceId,
           automation.id,
           event.accountId,
           event.recipientId,
+          event.id,
         );
         if (prior > 0) {
           await repository.completeExecution(mapping.workspaceId, dedupeKey, {
@@ -1353,9 +1393,10 @@ export async function processNormalizedEvent(
         result.skipped += 1;
         continue;
       }
-      if (allActionsDelivered) {
+      if (allActionsDelivered || findSendDeferral(error)) {
+        // A deferral parks the whole event until it may send; it never fails it.
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-        throw retryableAutomationError(error);
+        throw findSendDeferral(error) ?? retryableAutomationError(error);
       }
       if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);

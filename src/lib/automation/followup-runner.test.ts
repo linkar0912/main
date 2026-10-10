@@ -3,6 +3,7 @@ import { processFlowFollowUp } from "./followup-runner";
 import { createMemoryRepository } from "../memory-repository";
 import { sealSecret } from "../security/secrets";
 import type { FlowFollowUpJob } from "../queue";
+import { SendDeferredError } from "./send-deferral";
 
 const TOKEN_KEY = "a".repeat(64);
 
@@ -108,5 +109,26 @@ describe("flow follow-up runner", () => {
     await processFlowFollowUp(job(), paused, options(pausedClient));
     expect(pausedClient.sendDirectMessage).not.toHaveBeenCalled();
     expect((await paused.getOutboundDelivery(job().deliveryKey))?.resultCode).toBe("SUPPRESSED");
+  });
+
+  it("does not recreate a ledger row for a contact that no longer exists", async () => {
+    const repository = await seed();
+    const dmClient = client();
+
+    await processFlowFollowUp(job(), repository, options(dmClient));
+    expect(dmClient.sendDirectMessage).not.toHaveBeenCalled();
+    expect(await repository.getOutboundDelivery(job().deliveryKey)).toBeNull();
+  });
+
+  it("defers through quiet hours instead of spending a retry attempt", async () => {
+    const repository = await seed();
+    await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+    const hour = new Date().getUTCHours();
+    await repository.setMessagingWindow("workspace_a", { startHour: hour, endHour: (hour + 2) % 24, timezone: "UTC" });
+    const dmClient = client();
+
+    await expect(processFlowFollowUp(job(), repository, { ...options(dmClient), finalAttempt: true }))
+      .rejects.toBeInstanceOf(SendDeferredError);
+    expect(dmClient.sendDirectMessage).not.toHaveBeenCalled();
   });
 });

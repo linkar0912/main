@@ -34,9 +34,13 @@ export async function refreshExpiringInstagramTokens(
       );
       refreshed += 1;
     } catch (error) {
+      // Only a token Meta itself declared invalid (Graph code 190) or one that
+      // is already past its expiry is dead. Any other non-retryable answer (a
+      // 400 for a token younger than 24h, a policy hiccup, a bad response
+      // shape) must not force every automation offline until a reconnect.
       const expired =
         (connection.tokenExpiresAt && connection.tokenExpiresAt <= now.toISOString()) ||
-        (error instanceof MetaOAuthError && !error.retryable);
+        (error instanceof MetaOAuthError && error.code === 190);
       // Previously only counted, never logged with the actual cause - a batch
       // failing for a code defect (bad response shape, a bug here) looked
       // identical in the logs to ordinary token expiry, with zero diagnostic

@@ -32,4 +32,25 @@ describe("delivery claim reconciliation", () => {
     });
     expect(releaseReservation).toHaveBeenCalledWith(deliveryKey);
   });
+
+  it("finishes a broadcast whose last recipient's worker died mid-send", async () => {
+    const repository = createMemoryRepository();
+    const broadcast = await repository.createBroadcast("workspace_a", {
+      name: "News", text: "Hi", segment: "all_contacts", total: 1,
+    });
+    const deliveryKey = `broadcast:${broadcast.id}:ig_1:lead_1`;
+    await repository.ensureOutboundDelivery({
+      deliveryKey,
+      workspaceId: "workspace_a",
+      broadcastId: broadcast.id,
+      instagramAccountId: "ig_1",
+      recipientId: "lead_1",
+      kind: "BROADCAST_RECIPIENT",
+      payload: { type: "text", text: "Hi" },
+    });
+    await repository.claimOutboundDelivery(deliveryKey, "worker_a", "2026-08-23T10:00:00.000Z");
+
+    await reconcileExpiredDeliveryClaims(repository, "2026-08-23T10:00:00.000Z", 100);
+    expect(await repository.getBroadcast("workspace_a", broadcast.id)).toMatchObject({ status: "COMPLETED", failed: 1 });
+  });
 });

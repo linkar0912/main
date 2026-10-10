@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const { createMailer } = await import("./mailer");
+const { createMailer, maskEmailAddress } = await import("./mailer");
 
 describe("Resend mail transport", () => {
   it("reports unavailable without making a request when configuration is missing", async () => {
@@ -46,5 +46,17 @@ describe("Resend mail transport", () => {
     const result = await mailer.send({ to: "owner@linkar.in", subject: "Alert", body: "Body" });
     expect(result).toEqual({ delivered: false, reason: "provider_error", status: 422 });
     expect(JSON.stringify(result)).not.toContain("re_secret");
+  });
+
+  it("masks recipient addresses in delivery logs", async () => {
+    const info = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "email_2" }), { status: 200 }));
+    const mailer = createMailer({ apiKey: "re_secret", from: "Linkar <alerts@linkar.in>", fetch });
+    await mailer.send({ to: "jane.doe@example.com", subject: "Your guide", body: "Body" });
+    const logged = info.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).not.toContain("jane.doe@example.com");
+    expect(logged).toContain("j***@example.com");
+    expect(maskEmailAddress("not-an-email")).toBe("***");
+    info.mockRestore();
   });
 });

@@ -27,6 +27,8 @@ import { processAdminDeletion } from "./lib/admin/deletion/processor";
 import { createDeliveryTiming } from "./lib/automation/delivery-timing";
 import { createSystemMonitor } from "./lib/admin/system/monitor";
 import { reportDatabaseLatency } from "./lib/database-latency";
+import { runWithSendDeferral } from "./lib/automation/job-deferral";
+import { createBackgroundTasks } from "./lib/automation/background-tasks";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 const SYSTEM_MONITOR_INTERVAL_MS = 5 * 60 * 1_000;
@@ -35,6 +37,8 @@ const INBOX_RECONCILE_WINDOW_MS = 10 * 60 * 1_000;
 const SEQUENCE_SWEEP_INTERVAL_MS = 60 * 1_000;
 /** Caps one tick at 20 batches (500 steps) so a huge backlog can't pin the worker. */
 const SEQUENCE_MAX_ROUNDS_PER_TICK = 20;
+/** How long shutdown waits for a running sweep before closing connections anyway. */
+const SHUTDOWN_DRAIN_TIMEOUT_MS = 25_000;
 
 async function processTimedRealtimeJob<T>(
   jobId: string | undefined,
@@ -73,7 +77,7 @@ if (!env.redisUrl) {
   const bulkRedis = new Redis(env.redisUrl, { maxRetriesPerRequest: null });
   // Keep the legacy job handlers on the realtime queue while previously
   // enqueued bulk jobs drain during rollout. New bulk jobs use their own queue.
-  const processJob = async (job: Job) => {
+  const dispatchJob = async (job: Job) => {
       if (job.name === "admin-maintenance") {
         const action = (job.data as { action?: string }).action;
         if (action === "delivery_reconciliation") {
@@ -135,6 +139,7 @@ if (!env.redisUrl) {
             client,
             tokenEncryptionKey: env.facebookTokenEncryptionKey ?? env.metaTokenEncryptionKey,
             timingObserver: timing,
+            claimLeaseMs: env.dispatchLeaseMs,
           }));
       }
 
@@ -171,6 +176,10 @@ if (!env.redisUrl) {
 
       throw new Error("unknown_job");
   };
+  // Quiet hours and our own per-account send windows are waits, not failures:
+  // park the job until it may send instead of spending its 2-3 attempts.
+  const processJob = (job: Job, token?: string) =>
+    runWithSendDeferral(job, token, () => dispatchJob(job));
   const worker = new Worker(WEBHOOK_QUEUE_NAME, processJob, {
     connection: redis,
     concurrency: env.workerConcurrency,
@@ -214,18 +223,31 @@ if (!env.redisUrl) {
     });
   }
 
+  const background = createBackgroundTasks();
+
   // Drain in-flight jobs on shutdown so deploys don't kill deliveries mid-Meta-call.
   // The dispatch-lease reconciliation recovers abandoned work, but a clean close
-  // avoids ambiguity windows entirely.
+  // avoids ambiguity windows entirely. Periodic sweeps stop scheduling and the
+  // running ones are awaited before the database pool is closed, so no sweep is
+  // cut off mid-statement.
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info("Worker shutting down", { signal });
     try {
-      await Promise.all(workers.map((consumer) => consumer.close()));
+      const [, drained] = await Promise.all([
+        Promise.all(workers.map((consumer) => consumer.close())),
+        background.stop(SHUTDOWN_DRAIN_TIMEOUT_MS),
+      ]);
+      if (!drained) logger.warn("Worker shutdown left a background sweep running", { timeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS });
+      healthServer.close();
       redis.disconnect();
       bulkRedis.disconnect();
+      if (env.databaseUrl) {
+        const { prisma } = await import("./lib/prisma");
+        await prisma.$disconnect();
+      }
       process.exit(0);
     } catch (error) {
       logger.error("Worker shutdown failed", { error: error instanceof Error ? error.message : String(error) });
@@ -236,7 +258,7 @@ if (!env.redisUrl) {
   process.on("SIGINT", () => void shutdown("SIGINT"));
 
   if (env.metaTokenEncryptionKey) {
-    const refreshTokens = async () => {
+    background.every("Instagram token refresh", 24 * 60 * 60 * 1_000, async () => {
       const result = await refreshExpiringInstagramTokens(
         getRepository(),
         env.metaTokenEncryptionKey!,
@@ -245,19 +267,15 @@ if (!env.redisUrl) {
       if (result.refreshed || result.failed) {
         logger.info("Instagram token refresh", { refreshed: result.refreshed, failed: result.failed });
       }
-    };
-    void refreshTokens().catch((error) => logger.error("Instagram token refresh failed", { error: error instanceof Error ? error.message : String(error) }));
-    setInterval(() => void refreshTokens().catch((error) => logger.error("Instagram token refresh failed", { error: error instanceof Error ? error.message : String(error) })), 24 * 60 * 60 * 1_000).unref();
+    });
   }
 
-  const sweepParticipants = async () => {
+  background.every("Participant retention sweep", 60 * 60 * 1_000, async () => {
     const result = await sweepStaleParticipants(getRepository());
     if (result.expired || result.deleted) {
       logger.info("Participant retention sweep", { expired: result.expired, deleted: result.deleted });
     }
-  };
-  void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error instanceof Error ? error.message : String(error) }));
-  setInterval(() => void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error instanceof Error ? error.message : String(error) })), 60 * 60 * 1_000).unref();
+  });
 
   // Razorpay sends no event when a cancelled/halted subscription's paid period
   // ends, so lapsed paid plans are downgraded here (within 15 minutes).
@@ -272,82 +290,57 @@ if (!env.redisUrl) {
 
   // Closes the rare window where an inbound event and its new contact commit at
   // the same instant and neither database trigger sees the other's row.
-  const reconcileInbox = async () => {
+  background.every("Inbox reconciliation", INBOX_RECONCILE_INTERVAL_MS, async () => {
     const since = new Date(Date.now() - INBOX_RECONCILE_WINDOW_MS).toISOString();
     const fixed = await getRepository().reconcileContactLastInbound(since);
     if (fixed) logger.info("Inbox ordering reconciled", { contacts: fixed });
-  };
-  setInterval(() => void reconcileInbox().catch((error) => logger.error("Inbox reconciliation failed", { error: error instanceof Error ? error.message : String(error) })), INBOX_RECONCILE_INTERVAL_MS).unref();
+  }, { firstRunDelayMs: INBOX_RECONCILE_INTERVAL_MS });
 
-  let deliveryReconciliationRunning = false;
-  const runDeliveryReconciliation = async () => {
-    if (deliveryReconciliationRunning) return;
-    deliveryReconciliationRunning = true;
-    try {
-      const result = await reconcileExpiredDeliveryClaims(
-        getRepository(),
-        new Date().toISOString(),
-        100,
-      );
-      if (result.unknown > 0) {
-        logger.warn("Expired outbound delivery claims marked unknown", result);
-      }
-    } finally {
-      deliveryReconciliationRunning = false;
+  background.every("Delivery reconciliation", DELIVERY_RECONCILIATION_INTERVAL_MS, async () => {
+    const result = await reconcileExpiredDeliveryClaims(
+      getRepository(),
+      new Date().toISOString(),
+      100,
+    );
+    if (result.unknown > 0) {
+      logger.warn("Expired outbound delivery claims marked unknown", result);
     }
-  };
-  void runDeliveryReconciliation().catch((error) =>
-    logger.error("Delivery reconciliation failed", { error: error instanceof Error ? error.message : String(error) }));
-  setInterval(() => void runDeliveryReconciliation().catch((error) =>
-    logger.error("Delivery reconciliation failed", { error: error instanceof Error ? error.message : String(error) })),
-  DELIVERY_RECONCILIATION_INTERVAL_MS).unref();
+  });
 
   const systemMonitor = createSystemMonitor();
-  const runSystemMonitor = async () => {
+  background.every("Production system monitor", SYSTEM_MONITOR_INTERVAL_MS, async () => {
     const result = await systemMonitor.run();
     if (!result.skipped && (result.lifecycleChanges > 0 || result.alertsDelivered > 0)) {
       logger.info("Production system monitor", result);
     }
-  };
-  void runSystemMonitor().catch((error) => logger.error("Production system monitor failed", { error: error instanceof Error ? error.message : String(error) }));
-  setInterval(() => void runSystemMonitor().catch((error) =>
-    logger.error("Production system monitor failed", { error: error instanceof Error ? error.message : String(error) })), SYSTEM_MONITOR_INTERVAL_MS).unref();
+  });
 
   // Sequence scheduler: delivers drip steps that are due. Runs shortly after boot and
   // then every minute, so a step lands within a minute of its delay instead of up
   // to 15 minutes late. A full batch means more steps are waiting, so the sweep
   // keeps draining (bounded per tick) rather than leaving a backlog for the next.
-  let sequenceSweepRunning = false;
-  const runSequenceSweep = async () => {
-    if (sequenceSweepRunning) return;
-    sequenceSweepRunning = true;
-    try {
-      const repository = getRepository();
-      const client = env.metaAppId ? new MetaClient({
-        apiVersion: env.metaApiVersion,
-        requestTimeoutMs: env.providerRequestTimeoutMs,
-      }) : undefined;
-      const totals = { processed: 0, sent: 0, failed: 0, cancelled: 0 };
-      for (let round = 0; round < SEQUENCE_MAX_ROUNDS_PER_TICK; round += 1) {
-        const result = await processDueSequences(repository, {
-          client,
-          tokenEncryptionKey: env.metaTokenEncryptionKey ?? undefined,
-        });
-        totals.processed += result.processed;
-        totals.sent += result.sent;
-        totals.failed += result.failed;
-        totals.cancelled += result.cancelled;
-        // Stop when the queue is drained, or when a round touched nothing
-        // (every row was skipped), so a tick can never spin on the same rows.
-        if (result.fetched < SEQUENCE_BATCH_SIZE || result.processed === 0) break;
-      }
-      if (totals.processed > 0) {
-        logger.info("Sequence sweep", totals);
-      }
-    } finally {
-      sequenceSweepRunning = false;
+  background.every("Sequence sweep", SEQUENCE_SWEEP_INTERVAL_MS, async () => {
+    const repository = getRepository();
+    const client = env.metaAppId ? new MetaClient({
+      apiVersion: env.metaApiVersion,
+      requestTimeoutMs: env.providerRequestTimeoutMs,
+    }) : undefined;
+    const totals = { processed: 0, sent: 0, failed: 0, cancelled: 0 };
+    for (let round = 0; round < SEQUENCE_MAX_ROUNDS_PER_TICK && !shuttingDown; round += 1) {
+      const result = await processDueSequences(repository, {
+        client,
+        tokenEncryptionKey: env.metaTokenEncryptionKey ?? undefined,
+      });
+      totals.processed += result.processed;
+      totals.sent += result.sent;
+      totals.failed += result.failed;
+      totals.cancelled += result.cancelled;
+      // Stop when the queue is drained, or when a round touched nothing
+      // (every row was skipped), so a tick can never spin on the same rows.
+      if (result.fetched < SEQUENCE_BATCH_SIZE || result.processed === 0) break;
     }
-  };
-  setTimeout(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error instanceof Error ? error.message : String(error) })), 45_000).unref();
-  setInterval(() => void runSequenceSweep().catch((error) => logger.error("Sequence sweep failed", { error: error instanceof Error ? error.message : String(error) })), SEQUENCE_SWEEP_INTERVAL_MS).unref();
+    if (totals.processed > 0) {
+      logger.info("Sequence sweep", totals);
+    }
+  }, { firstRunDelayMs: 45_000 });
 }

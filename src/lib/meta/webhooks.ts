@@ -19,6 +19,18 @@ function numberValue(value: unknown, fallback: number): number {
   return typeof value === "number" ? value : fallback;
 }
 
+/**
+ * Meta sends `entry.time` and comment `created_time` in Unix seconds for
+ * changes-based webhooks, while messaging `timestamp` is already in
+ * milliseconds. Everything downstream (private-reply window, quiet hours,
+ * campaign messaging windows) works in milliseconds, so normalize every
+ * timestamp here. Idempotent for values that are already milliseconds.
+ */
+function unixTimestampMs(value: unknown, fallback: number): number {
+  const timestamp = numberValue(value, fallback);
+  return timestamp < 10_000_000_000 ? timestamp * 1_000 : timestamp;
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   const object = record(value);
@@ -85,7 +97,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
     if (!entry) continue;
     const accountId = stringValue(entry.id);
     if (!accountId) continue;
-    const entryTime = numberValue(entry.time, Date.now());
+    const entryTime = unixTimestampMs(entry.time, Date.now());
 
     const changes = [
       ...(Array.isArray(entry.changes) ? entry.changes : []),
@@ -117,7 +129,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
         mediaId: stringValue(media?.id) ?? stringValue(value.media_id),
         recipientId: stringValue(from?.id),
         ...(stringValue(from?.username) ? { senderUsername: stringValue(from?.username) } : {}),
-        timestamp: numberValue(value.created_time, entryTime),
+        timestamp: unixTimestampMs(value.created_time, entryTime),
       });
     }
 
@@ -131,7 +143,7 @@ export function normalizeWebhook(payload: unknown): NormalizedEvent[] {
       const postback = record(item.postback);
       const optin = record(item.optin);
       const referral = record(item.referral);
-      const timestamp = numberValue(item.timestamp, entryTime);
+      const timestamp = unixTimestampMs(item.timestamp, entryTime);
       const recipientId = stringValue(sender?.id);
       const professionalAccountIsRecipient = stringValue(recipient?.id) === accountId;
       const senderIsExternal = recipientId !== accountId;

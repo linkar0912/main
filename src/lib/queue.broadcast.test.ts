@@ -2,13 +2,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   redisUrl: "redis://queue.test:6379",
+  directMessageRateLimitPerHour: 0,
   add: vi.fn(),
+  redisOptions: [] as unknown[],
 }));
 
 vi.mock("./env", () => ({
-  getServerEnv: () => ({ redisUrl: state.redisUrl }),
+  getServerEnv: () => ({ redisUrl: state.redisUrl, directMessageRateLimitPerHour: state.directMessageRateLimitPerHour }),
 }));
-vi.mock("ioredis", () => ({ default: class Redis {} }));
+vi.mock("ioredis", () => ({
+  default: class Redis {
+    constructor(_url: string, options: unknown) {
+      state.redisOptions.push(options);
+    }
+  },
+}));
 vi.mock("bullmq", () => ({
   Queue: class Queue {
     add = state.add;
@@ -37,6 +45,7 @@ const jobs = [
 describe("broadcast queue fan-out", () => {
   beforeEach(() => {
     state.add.mockReset().mockResolvedValue({ id: "job" });
+    state.directMessageRateLimitPerHour = 0;
     delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
     delete (globalThis as { linkarBulkQueue?: unknown }).linkarBulkQueue;
   });
@@ -85,4 +94,21 @@ describe("broadcast queue fan-out", () => {
     expect(calls.map((call) => call[1].deliveryKey)).toEqual([jobs[0].deliveryKey, jobs[0].deliveryKey, jobs[0].deliveryKey]);
   });
 
+  it("paces each account's recipients to the bulk share of its DM budget", async () => {
+    state.directMessageRateLimitPerHour = 250;
+    await enqueueBroadcastSends([
+      jobs[0],
+      jobs[1],
+      { ...jobs[0], deliveryKey: "a2", igScopedUserId: "recipient_2" },
+      { ...jobs[1], deliveryKey: "b2", igScopedUserId: "recipient_2" },
+    ], 5_000);
+
+    // 70% of 250/hour = 175/hour -> one send every ~20.6 seconds per account.
+    const interval = Math.ceil(3_600_000 / 175);
+    expect(state.add.mock.calls.map((call) => call[2].delay)).toEqual([5_000, 5_000, 5_000 + interval, 5_000 + interval]);
+  });
+  it("opens producer connections that fail fast while Redis is down", async () => {
+    await enqueueBroadcastSends([jobs[0]]);
+    expect(state.redisOptions.at(-1)).toEqual({ maxRetriesPerRequest: 1, enableOfflineQueue: false });
+  });
 });
