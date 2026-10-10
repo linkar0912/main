@@ -35,7 +35,7 @@ const workspaceNavigation = [
 
 const automateNavigation = [
   { href: "/automations", label: "Automations", icon: Workflow },
-  { href: "/quick-automation", label: "Quick Automation", icon: Zap },
+  { href: "/quick-automation", label: "Quick automation", icon: Zap },
   { href: "/insights", label: "Insights", icon: ChartNoAxesCombined },
 ];
 

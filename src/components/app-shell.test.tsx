@@ -88,7 +88,7 @@ describe("AppShell", () => {
 
     await screen.findByText("Member");
     const navigation = screen.getByRole("navigation", { name: "Workspace sections" });
-    expect(within(navigation).getByRole("link", { name: "Quick Automation" }).getAttribute("href")).toBe("/quick-automation");
+    expect(within(navigation).getByRole("link", { name: "Quick automation" }).getAttribute("href")).toBe("/quick-automation");
     expect(within(navigation).getByRole("link", { name: "Insights" }).getAttribute("href")).toBe("/insights");
     expect(within(navigation).queryByRole("link", { name: "Sequences" })).toBeNull();
     expect(within(navigation).queryByRole("link", { name: "Broadcasts" })).toBeNull();
