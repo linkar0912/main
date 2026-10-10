@@ -2,6 +2,7 @@ import { Queue, type Job, type JobType } from "bullmq";
 import Redis from "ioredis";
 import { createHash } from "node:crypto";
 import { getServerEnv } from "./env";
+import { bulkSendIntervalMs } from "./automation/send-rate-limiter";
 import type { ManualReplyEcho } from "./automation/manual-reply";
 import type { NormalizedEvent } from "./automation/types";
 import type { FacebookNormalizedEvent } from "./facebook/types";
@@ -102,6 +103,14 @@ export function createLeadDeliveryJobId(deliveryKey: string): string {
   return createHash("sha256").update(deliveryKey).digest("base64url");
 }
 
+/**
+ * Producer connections (web requests enqueueing work, the worker scheduling
+ * follow-ups) must fail fast while Redis is unreachable rather than queue the
+ * command forever and hang the request. Only BullMQ Worker connections need
+ * `maxRetriesPerRequest: null` - those are created in src/worker.ts.
+ */
+export const PRODUCER_REDIS_OPTIONS = { maxRetriesPerRequest: 1, enableOfflineQueue: false } as const;
+
 const globalForQueue = globalThis as unknown as {
   linkarWebhookQueue?: Queue;
   linkarWebhookRedis?: Redis;
@@ -115,7 +124,7 @@ function getQueue(name: AdminQueueName): Queue | null {
   if (name === "webhooks" && globalForQueue.linkarWebhookQueue) return globalForQueue.linkarWebhookQueue;
   if (name === "bulk" && globalForQueue.linkarBulkQueue) return globalForQueue.linkarBulkQueue;
 
-  const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
+  const redis = new Redis(redisUrl, PRODUCER_REDIS_OPTIONS);
   const queue = new Queue(name === "webhooks" ? WEBHOOK_QUEUE_NAME : BULK_QUEUE_NAME, { connection: redis });
   if (name === "webhooks") {
     globalForQueue.linkarWebhookRedis = redis;
@@ -412,7 +421,7 @@ export async function enqueueFlowFollowUps(jobs: FlowFollowUpJob[]): Promise<num
   );
   return jobs.length;
 }
-// Broadcasts: one DM per contact, fanned out as staggered jobs (~1/second) so a
+// Broadcasts: one DM per contact, fanned out as staggered jobs (paced per account) so a
 // blast never hammers Meta's per-account messaging limits.
 export type BroadcastSendJob = {
   deliveryKey: string;
@@ -461,6 +470,16 @@ export async function enqueueBroadcastSends(
     igScopedUserId: job.igScopedUserId,
   });
   if (!queue) return { accepted: [], rejected: jobs.map(recipientKey) };
+  // Paced per Instagram account (each has its own send bucket) at the rate
+  // the bulk share of that bucket allows, so a blast drains steadily instead
+  // of bursting into the limiter and piling up deferred jobs.
+  const intervalMs = bulkSendIntervalMs();
+  const positionByAccount = new Map<string, number>();
+  const positions = jobs.map((job) => {
+    const position = positionByAccount.get(job.igAccountId) ?? 0;
+    positionByAccount.set(job.igAccountId, position + 1);
+    return position;
+  });
   const results = await Promise.allSettled(
     jobs.map((job, index) =>
       queue.add(
@@ -469,7 +488,7 @@ export async function enqueueBroadcastSends(
         {
           jobId: `broadcast_${createHash("sha256").update(JSON.stringify(retryId ? [job.broadcastId, job.igAccountId, job.igScopedUserId, "admin", retryId] : [job.broadcastId, job.igAccountId, job.igScopedUserId])).digest("base64url")}`,
           priority: QUEUE_PRIORITY.BULK,
-          delay: baseDelayMs + index * 1_000,
+          delay: baseDelayMs + positions[index] * intervalMs,
           attempts: 2,
           backoff: { type: "fixed", delay: 5_000 },
           removeOnComplete: 500,

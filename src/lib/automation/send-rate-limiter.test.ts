@@ -18,29 +18,22 @@ class FakeRedis {
     if (entry) entry.expiresAt = Date.now() + ms;
   }
 
-  multi() {
-    const commands: Array<() => Promise<unknown>> = [];
-    const chain = {
-      incr: (key: string) => {
-        commands.push(() => this.incr(key));
-        return chain;
-      },
-      pexpire: (key: string, ms: number) => {
-        commands.push(async () => {
-          await this.pexpire(key, ms);
-          return 1;
-        });
-        return chain;
-      },
-      exec: async (): Promise<Array<[null, unknown]>> => {
-        const results: Array<[null, unknown]> = [];
-        for (const command of commands) results.push([null, await command()]);
-        return results;
-      },
-    };
-    return chain;
+  count(key: string): number {
+    const entry = this.store.get(key);
+    return entry && (entry.expiresAt === null || entry.expiresAt > Date.now()) ? entry.count : 0;
+  }
+
+  // Emulates the limiter's admit script: count only when under the ceiling.
+  async eval(_script: string, _keys: number, key: string, ceiling: number, windowMs: number): Promise<number> {
+    if (failNextEval.value) throw new Error("connection is closed");
+    if (this.count(key) >= Number(ceiling)) return 0;
+    await this.incr(key);
+    await this.pexpire(key, Number(windowMs));
+    return 1;
   }
 }
+
+const failNextEval = vi.hoisted(() => ({ value: false }));
 
 vi.mock("ioredis", () => ({ default: FakeRedis }));
 
@@ -122,6 +115,47 @@ describe("checkSendRateLimit", () => {
     expect((await checkSendRateLimit("ig_account_1", "comment_reply")).allowed).toBe(false);
     expect(await checkSendRateLimit("ig_account_1", "private_reply")).toEqual({ allowed: true });
     expect((await checkSendRateLimit("ig_account_1", "private_reply")).allowed).toBe(false);
+  });
+
+  it("does not spend budget on rejected attempts", async () => {
+    process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = "2";
+    const { checkSendRateLimit } = await import("./send-rate-limiter");
+    await checkSendRateLimit("ig_account_1", "direct_message");
+    await checkSendRateLimit("ig_account_1", "direct_message");
+    for (let i = 0; i < 5; i += 1) {
+      expect((await checkSendRateLimit("ig_account_1", "direct_message")).allowed).toBe(false);
+    }
+    const redis = (globalThis as unknown as { linkarSendRateLimitRedis: FakeRedis }).linkarSendRateLimitRedis;
+    const windowIndex = Math.floor(Date.now() / 3_600_000);
+    expect(redis.count(`send-rate:direct_message:ig_account_1:${windowIndex}`)).toBe(2);
+  });
+
+  it("reserves part of the hourly budget for realtime sends", async () => {
+    process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = "10";
+    const { checkSendRateLimit, bulkSendIntervalMs } = await import("./send-rate-limiter");
+    let bulkAllowed = 0;
+    for (let i = 0; i < 10; i += 1) {
+      if ((await checkSendRateLimit("ig_account_1", "direct_message", "bulk")).allowed) bulkAllowed += 1;
+    }
+    expect(bulkAllowed).toBe(7);
+    // The remaining 30% is still available to people waiting on a reply.
+    for (let i = 0; i < 3; i += 1) {
+      expect(await checkSendRateLimit("ig_account_1", "direct_message")).toEqual({ allowed: true });
+    }
+    expect((await checkSendRateLimit("ig_account_1", "direct_message")).allowed).toBe(false);
+    // Broadcast fan-out is paced to the bulk share: 7 per hour.
+    expect(bulkSendIntervalMs()).toBe(Math.ceil(3_600_000 / 7));
+  });
+
+  it("fails open when Redis is unavailable", async () => {
+    process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = "1";
+    const { checkSendRateLimit } = await import("./send-rate-limiter");
+    failNextEval.value = true;
+    try {
+      expect(await checkSendRateLimit("ig_account_1", "direct_message")).toEqual({ allowed: true });
+    } finally {
+      failNextEval.value = false;
+    }
   });
 
   it("disables the new buckets independently when set to 0", async () => {
