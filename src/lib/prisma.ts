@@ -2529,7 +2529,12 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async listInboxContacts(workspaceId, query) {
       const cursor = query.cursor ? decodeInboxCursor(query.cursor, "contacts") : undefined;
       let cursorUnread = false;
-      if (cursor && query.sort === "unread") {
+      if (cursor && query.sort === "unread" && cursor.unread !== undefined) {
+        // The boundary's unread flag travels in the cursor: re-reading it
+        // would shift the boundary once someone opens that conversation.
+        cursorUnread = cursor.unread;
+      } else if (cursor && query.sort === "unread") {
+        // Cursors issued before the flag was encoded.
         const cursorContact = await client.automationContact.findFirst({
           where: { id: cursor.id, workspaceId },
           select: { lastInboundAt: true, inboxLastReadAt: true },
@@ -2603,6 +2608,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           kind: "contacts",
           at: last.latestInboundAt ?? last.record.lastSeenAt,
           id: last.record.id,
+          ...(query.sort === "unread" ? { unread: last.unread } : {}),
         }) } : {}),
       };
     },

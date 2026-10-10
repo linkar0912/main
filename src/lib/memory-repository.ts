@@ -1138,19 +1138,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           && record.recipientId === recipientId)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
       const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
-      // A cross-source `~` cursor is not a row id in this table: position by
-      // timestamp instead so the boundary row is not skipped or re-shown.
-      let start = 0;
-      if (cursor) {
-        const found = sorted.findIndex((record) => record.id === cursor.id);
-        if (found >= 0) {
-          start = found + 1;
-        } else {
-          const byTime = sorted.findIndex((record) => record.createdAt <= cursor.at);
-          start = byTime === -1 ? sorted.length : byTime;
-        }
-      }
-      const page = sorted.slice(start, start + options.limit + 1);
+      // Keyset, matching prisma.ts: the id tie-break applies only to a cursor
+      // id from this table; a cross-source cursor (`~`) keeps every row at the
+      // boundary timestamp.
+      const after = cursor
+        ? sorted.filter((record) => record.createdAt < cursor.at || (record.createdAt === cursor.at
+          && (!cursor.id.startsWith("delivery_") || record.id.localeCompare(cursor.id) < 0)))
+        : sorted;
+      const page = after.slice(0, options.limit + 1);
       const hasMore = page.length > options.limit;
       const records = page.slice(0, options.limit);
       const last = records.at(-1);
@@ -1919,8 +1914,23 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           : right.record.id.localeCompare(left.record.id);
       });
       const cursor = query.cursor ? decodeInboxCursor(query.cursor, "contacts") : undefined;
-      const start = cursor ? filtered.findIndex((row) => row.record.id === cursor.id) + 1 : 0;
-      const page = filtered.slice(Math.max(0, start), Math.max(0, start) + query.limit + 1);
+      // Keyset on the cursor's own values, as prisma.ts does: the boundary row
+      // may have been read (or may have left the filter) since the last page.
+      const cursorUnread = cursor
+        ? cursor.unread ?? rows.find((row) => row.record.id === cursor.id)?.unread ?? false
+        : false;
+      const after = cursor
+        ? filtered.filter((row) => {
+          const at = row.latestInboundAt ?? row.record.lastSeenAt;
+          const idOrder = row.record.id.localeCompare(cursor.id);
+          const chronological = query.sort === "oldest"
+            ? at > cursor.at || (at === cursor.at && idOrder > 0)
+            : at < cursor.at || (at === cursor.at && idOrder < 0);
+          if (query.sort !== "unread") return chronological;
+          return (!row.unread && cursorUnread) || (row.unread === cursorUnread && chronological);
+        })
+        : filtered;
+      const page = after.slice(0, query.limit + 1);
       const hasMore = page.length > query.limit;
       const visible = page.slice(0, query.limit);
       const last = visible.at(-1);
@@ -1930,6 +1940,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           kind: "contacts",
           at: last.latestInboundAt ?? last.record.lastSeenAt,
           id: last.record.id,
+          ...(query.sort === "unread" ? { unread: last.unread } : {}),
         }) } : {}),
       };
     },
@@ -1998,18 +2009,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           && event.payload.recipientId === recipientId)
         .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || b.id.localeCompare(a.id));
       const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
-      // Cross-source `~` cursors are not ids here - fall back to timestamp.
-      let start = 0;
-      if (cursor) {
-        const found = sorted.findIndex((event) => event.id === cursor.id);
-        if (found >= 0) {
-          start = found + 1;
-        } else {
-          const byTime = sorted.findIndex((event) => event.receivedAt <= cursor.at);
-          start = byTime === -1 ? sorted.length : byTime;
-        }
-      }
-      const page = sorted.slice(start, start + options.limit + 1);
+      // Keyset, matching prisma.ts: the id tie-break applies only to a
+      // `wevent_` cursor id (including the bare-prefix sentinel, which drops
+      // every row at the boundary timestamp); `~` keeps them all.
+      const after = cursor
+        ? sorted.filter((event) => event.receivedAt < cursor.at || (event.receivedAt === cursor.at
+          && (!cursor.id.startsWith("wevent_") || event.id.localeCompare(cursor.id) < 0)))
+        : sorted;
+      const page = after.slice(0, options.limit + 1);
       const hasMore = page.length > options.limit;
       const records = page.slice(0, options.limit);
       const last = records.at(-1);

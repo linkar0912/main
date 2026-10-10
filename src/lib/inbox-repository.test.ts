@@ -183,4 +183,44 @@ describe("memory inbox repository", () => {
       vi.useRealTimers();
     }
   });
+
+  it("keeps unread-sorted pages stable when the boundary conversation is read in between", async () => {
+    const repository = createMemoryRepository();
+    const unreadA = await seedContact(repository, "unread_a", "2026-09-04T10:00:00.000Z", "a");
+    await seedContact(repository, "unread_b", "2026-09-04T09:00:00.000Z", "b");
+    const readC = await seedContact(repository, "read_c", "2026-09-04T11:00:00.000Z", "c");
+    await repository.updateInboxState("workspace_1", readC.id, { action: "mark_read", readAt: "2026-09-04T12:00:00.000Z" });
+    const query = { limit: 1, sort: "unread" as const, now: "2026-09-04T13:00:00.000Z" };
+
+    const first = await repository.listInboxContacts("workspace_1", query);
+    expect(first.rows.map((row) => row.record.igScopedUserId)).toEqual(["unread_a"]);
+    // The teammate opens the boundary conversation before loading more.
+    await repository.updateInboxState("workspace_1", unreadA.id, { action: "mark_read", readAt: "2026-09-04T12:30:00.000Z" });
+
+    const second = await repository.listInboxContacts("workspace_1", { ...query, cursor: first.nextCursor });
+    const third = await repository.listInboxContacts("workspace_1", { ...query, cursor: second.nextCursor });
+
+    expect(second.rows.map((row) => row.record.igScopedUserId)).toEqual(["unread_b"]);
+    expect(third.rows.map((row) => row.record.igScopedUserId)).toEqual(["read_c"]);
+  });
+
+  it("drops every inbound row at the boundary for a bare wevent_ cursor and keeps them for ~", async () => {
+    const repository = createMemoryRepository();
+    await seedContact(repository, "person_1", "2026-09-04T10:00:00.000Z", "same ms");
+    await repository.recordWebhookEvent("workspace_1", {
+      providerEventId: "older", eventType: "message.received", receivedAt: "2026-09-04T09:00:00.000Z",
+      payload: { accountId: "ig_1", recipientId: "person_1", text: "older" },
+    });
+    const at = "2026-09-04T10:00:00.000Z";
+
+    const excluded = await repository.listInboundEventsForRecipient("workspace_1", "ig_1", "person_1", {
+      limit: 10, cursor: encodeInboxCursor({ kind: "messages", at, id: "wevent_" }),
+    });
+    const included = await repository.listInboundEventsForRecipient("workspace_1", "ig_1", "person_1", {
+      limit: 10, cursor: encodeInboxCursor({ kind: "messages", at, id: "~" }),
+    });
+
+    expect(excluded.records.map((event) => event.payload.text)).toEqual(["older"]);
+    expect(included.records.map((event) => event.payload.text)).toEqual(["same ms", "older"]);
+  });
 });

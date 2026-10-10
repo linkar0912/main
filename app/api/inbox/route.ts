@@ -7,6 +7,7 @@ import { MetaClient } from "@/src/lib/meta/client";
 import { cachedInstagramUsername, hasCachedInstagramAvatar, instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 import { presentInboxText } from "@/src/lib/inbox";
 import { getRepository } from "@/src/lib/repository-provider";
+import { logger } from "@/src/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -59,13 +60,23 @@ export async function GET(request: Request) {
     return username ? [[instagramIdentityKey(identity), username] as const] : [];
   }));
   if (parsed.data.enrich && env.metaTokenEncryptionKey && identities.length) {
-    const connections = await repository.listConnections(session.workspaceId);
-    const enriched = await resolveInstagramUsernames({
-      identities, events: [], connections, apiVersion: env.metaApiVersion,
-      client: new MetaClient({ apiVersion: env.metaApiVersion }), tokenEncryptionKey: env.metaTokenEncryptionKey,
-      remember: (entries) => repository.rememberContactUsernames(session.workspaceId, entries),
-    });
-    for (const [key, username] of enriched) usernames.set(key, username);
+    // Enrichment is a best-effort second pass (Meta lookups, cache writes):
+    // if it fails, the page the client already has is still correct, so
+    // answer with the cached names instead of turning it into a 500.
+    try {
+      const connections = await repository.listConnections(session.workspaceId);
+      const enriched = await resolveInstagramUsernames({
+        identities, events: [], connections, apiVersion: env.metaApiVersion,
+        client: new MetaClient({ apiVersion: env.metaApiVersion }), tokenEncryptionKey: env.metaTokenEncryptionKey,
+        remember: (entries) => repository.rememberContactUsernames(session.workspaceId, entries),
+      });
+      for (const [key, username] of enriched) usernames.set(key, username);
+    } catch (error) {
+      logger.warn("Inbox username enrichment failed", {
+        workspaceId: session.workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
   const needsProfileEnrichment = !parsed.data.enrich && Boolean(env.metaTokenEncryptionKey)
     && identities.some((identity) => !usernames.has(instagramIdentityKey(identity)));

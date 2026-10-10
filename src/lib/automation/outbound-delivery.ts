@@ -28,8 +28,8 @@ export type DeliveryExecutionRequest<
 };
 
 export type DeliveryExecutionResult =
-  | { status: "SENT"; providerMessageId?: string; reused: boolean }
-  | { status: "FAILED"; retryable: boolean; error: string }
+  | { status: "SENT"; providerMessageId?: string; reused: boolean; deliveryId?: string }
+  | { status: "FAILED"; retryable: boolean; error: string; reason?: "QUOTA_REJECTED" }
   | { status: "UNKNOWN"; error: string }
   | { status: "BUSY" };
 
@@ -98,6 +98,7 @@ function existingResult(record: OutboundDeliveryRecord): DeliveryExecutionResult
       status: "SENT",
       providerMessageId: record.providerMessageId,
       reused: true,
+      deliveryId: record.id,
     };
   }
   if (record.state === "UNKNOWN") {
@@ -148,7 +149,7 @@ export async function executeOutboundDelivery<
   }
   if (preparation.status === "BUSY") return { status: "BUSY" };
   if (preparation.status === "QUOTA_REJECTED") {
-    return { status: "FAILED", retryable: false, error: "Monthly delivery limit reached" };
+    return { status: "FAILED", retryable: false, error: "Monthly delivery limit reached", reason: "QUOTA_REJECTED" };
   }
 
   let providerResult: { id?: string; message_id?: string };
@@ -198,5 +199,5 @@ export async function executeOutboundDelivery<
     return { status: "UNKNOWN", error: message };
   }
 
-  return { status: "SENT", providerMessageId, reused: false };
+  return { status: "SENT", providerMessageId, reused: false, deliveryId: preparation.record.id };
 }
