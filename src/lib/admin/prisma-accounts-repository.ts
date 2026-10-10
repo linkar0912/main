@@ -7,12 +7,13 @@ import { getServerEnv } from "@/src/lib/env";
 import { prisma } from "@/src/lib/prisma";
 import type { PlatformUserStatus, WorkspaceStatus } from "@/src/lib/repository";
 import {
+  activeBanUntil,
   boundedAdminLimit,
   type AdminAccountsRepository,
   type AdminUserSummary,
   type AdminWorkspaceSummary,
 } from "./accounts-repository";
-import { decodeAdminCursor, encodeAdminCursor } from "./cursor";
+import { AdminCursorError, decodeAdminCursor, encodeAdminCursor } from "./cursor";
 
 function workspaceSummary(record: {
   id: string;
@@ -46,11 +47,79 @@ function authCreatedAt(user: User): string {
   return new Date(user.created_at).toISOString();
 }
 
+// A search reads Auth one page at a time and stops after this many pages, so a
+// large identity table cannot turn one admin page view into a full scan.
+const SEARCH_PAGE_SIZE = 1_000;
+const MAX_SEARCH_PAGES = 5;
+const MEMBER_SEARCH_LIMIT = 50;
+// The unfiltered listing pages through Auth by page number. The signed cursor
+// carries the page in its id slot; the timestamp slot is fixed and unused.
+const PAGE_CURSOR_EPOCH = new Date(0).toISOString();
+
 export function createPrismaAdminAccountsRepository(
   client = prisma,
   authAdmin = createSupabaseAdminClient(),
   cursorSecret = getServerEnv().authSessionSecret,
 ): AdminAccountsRepository {
+  async function pageAuthUsers(limit: number, cursorValue: string | null | undefined) {
+    let page = 1;
+    if (cursorValue) {
+      const match = /^page:(\d{1,6})$/.exec(decodeAdminCursor(cursorValue, cursorSecret).id);
+      if (!match) throw new AdminCursorError();
+      page = Number(match[1]);
+    }
+    const result = await authAdmin.auth.admin.listUsers({ page, perPage: limit });
+    if (result.error) throw result.error;
+    const hasMore = result.data.nextPage ? result.data.nextPage > page : result.data.users.length === limit;
+    return {
+      users: result.data.users.filter((user) => user.email),
+      nextCursor: hasMore ? encodeAdminCursor({ id: `page:${page + 1}`, createdAt: PAGE_CURSOR_EPOCH }, cursorSecret) : null,
+      searchLimited: false,
+    };
+  }
+
+  async function searchAuthUsers(search: string, limit: number, cursorValue: string | null | undefined) {
+    const cursor = cursorValue ? decodeAdminCursor(cursorValue, cursorSecret) : null;
+    const found = new Map<string, User>();
+    let exhausted = false;
+    for (let page = 1; page <= MAX_SEARCH_PAGES; page += 1) {
+      const result = await authAdmin.auth.admin.listUsers({ page, perPage: SEARCH_PAGE_SIZE });
+      if (result.error) throw result.error;
+      for (const user of result.data.users) {
+        if (user.email?.toLowerCase().includes(search)) found.set(user.id, user);
+      }
+      if (result.data.users.length < SEARCH_PAGE_SIZE) {
+        exhausted = true;
+        break;
+      }
+    }
+    if (!exhausted) {
+      // Identities beyond the scanned pages are still found when they belong
+      // to a workspace, through Linkar's own membership emails.
+      const members = await client.workspaceMember.findMany({
+        where: { userId: { not: null }, email: { contains: search, mode: "insensitive" } },
+        select: { userId: true },
+        distinct: ["userId"],
+        take: MEMBER_SEARCH_LIMIT,
+      });
+      const missing = members.flatMap((member) => member.userId && !found.has(member.userId) ? [member.userId] : []);
+      const lookups = await Promise.all(missing.map((userId) => authAdmin.auth.admin.getUserById(userId)));
+      for (const lookup of lookups) {
+        if (!lookup.error && lookup.data.user?.email) found.set(lookup.data.user.id, lookup.data.user);
+      }
+    }
+    const filtered = [...found.values()]
+      .filter((user) => !cursor || authCreatedAt(user) < cursor.createdAt || (authCreatedAt(user) === cursor.createdAt && user.id > cursor.id))
+      .sort((a, b) => authCreatedAt(b).localeCompare(authCreatedAt(a)) || a.id.localeCompare(b.id));
+    const users = filtered.slice(0, limit);
+    const last = users.at(-1);
+    return {
+      users,
+      nextCursor: filtered.length > limit && last ? encodeAdminCursor({ id: last.id, createdAt: authCreatedAt(last) }, cursorSecret) : null,
+      searchLimited: !exhausted,
+    };
+  }
+
   return {
     async listAdminWorkspaces(query) {
       const limit = boundedAdminLimit(query.limit);
@@ -109,20 +178,10 @@ export function createPrismaAdminAccountsRepository(
 
     async listAdminUsers(query) {
       const limit = boundedAdminLimit(query.limit);
-      const cursor = query.cursor ? decodeAdminCursor(query.cursor, cursorSecret) : null;
       const search = query.search?.trim().toLowerCase();
-      const authUsers: User[] = [];
-      for (let page = 1; ; page += 1) {
-        const result = await authAdmin.auth.admin.listUsers({ page, perPage: 1000 });
-        if (result.error) throw result.error;
-        authUsers.push(...result.data.users);
-        if (result.data.users.length < 1000) break;
-      }
-      const filtered = authUsers
-        .filter((user) => user.email && (!search || user.email.toLowerCase().includes(search)))
-        .filter((user) => !cursor || authCreatedAt(user) < cursor.createdAt || (authCreatedAt(user) === cursor.createdAt && user.id > cursor.id))
-        .sort((a, b) => authCreatedAt(b).localeCompare(authCreatedAt(a)) || a.id.localeCompare(b.id));
-      const selected = filtered.slice(0, limit + 1);
+      const { users: selected, nextCursor, searchLimited } = search
+        ? await searchAuthUsers(search, limit, query.cursor)
+        : await pageAuthUsers(limit, query.cursor);
       const ids = selected.map((user) => user.id);
       const [controls, memberships] = await Promise.all([
         client.platformUserControl.findMany({ where: { userId: { in: ids } }, select: { userId: true, status: true } }),
@@ -130,7 +189,7 @@ export function createPrismaAdminAccountsRepository(
       ]);
       const statusById = new Map(controls.map((control) => [control.userId, control.status as PlatformUserStatus]));
       const countById = new Map(memberships.flatMap((membership) => membership.userId ? [[membership.userId, membership._count._all] as const] : []));
-      const items: AdminUserSummary[] = selected.slice(0, limit).map((user) => ({
+      const items: AdminUserSummary[] = selected.map((user) => ({
         id: user.id,
         email: user.email!,
         status: statusById.get(user.id) ?? "ACTIVE",
@@ -138,11 +197,7 @@ export function createPrismaAdminAccountsRepository(
         lastSignInAt: user.last_sign_in_at ? new Date(user.last_sign_in_at).toISOString() : null,
         workspaceCount: countById.get(user.id) ?? 0,
       }));
-      const last = items.at(-1);
-      return {
-        items,
-        nextCursor: selected.length > limit && last ? encodeAdminCursor({ id: last.id, createdAt: last.createdAt }, cursorSecret) : null,
-      };
+      return { items, nextCursor, ...(searchLimited ? { searchLimited } : {}) };
     },
 
     async getAdminUser(id) {
@@ -163,6 +218,7 @@ export function createPrismaAdminAccountsRepository(
         id: user.id,
         email,
         status: (control?.status as PlatformUserStatus | undefined) ?? "ACTIVE",
+        authBannedUntil: activeBanUntil(user),
         createdAt: authCreatedAt(user),
         lastSignInAt: user.last_sign_in_at ? new Date(user.last_sign_in_at).toISOString() : null,
         workspaceCount: memberships.length,

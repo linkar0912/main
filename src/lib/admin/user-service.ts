@@ -5,7 +5,10 @@ import { getServerEnv } from "@/src/lib/env";
 import { createId } from "@/src/lib/id";
 import { prisma } from "@/src/lib/prisma";
 import type { MemberRole } from "@/src/lib/repository";
-import { AdminWorkspaceError } from "./workspace-service";
+import { activeBanUntil } from "./accounts-repository";
+import { AdminWorkspaceError, assertMembershipChangeAllowed, assertUserTargetAllowed } from "./workspace-service";
+
+export { assertUserTargetAllowed };
 
 function normalizedEmail(value: string): string {
   const email = value.trim().toLowerCase();
@@ -13,12 +16,6 @@ function normalizedEmail(value: string): string {
     throw new AdminWorkspaceError(422, "invalid_email");
   }
   return email;
-}
-
-export function assertUserTargetAllowed(userId: string): void {
-  if (getServerEnv().platformOwnerUserIds.includes(userId.toLowerCase())) {
-    throw new AdminWorkspaceError(403, "platform_owner_protected");
-  }
 }
 
 function authFailure(error: { message?: string; status?: number } | null, fallback: string): never {
@@ -56,25 +53,32 @@ export async function setAdminUserAccess(userId: string, input: {
   actorUserId: string;
 }) {
   assertUserTargetAllowed(userId);
-  if (!["BAN", "UNBAN"].includes(input.action)) {
-    const found = await createSupabaseAdminClient().auth.admin.getUserById(userId);
-    if (found.error && found.error.status !== 404) throw new AdminWorkspaceError(502, "auth_provider_unavailable");
-    if (found.error || !found.data.user) throw new AdminWorkspaceError(404, "user_not_found");
-  }
+  const auth = createSupabaseAdminClient().auth.admin;
   const now = new Date();
+  // The Supabase Auth ban and the Linkar access status are separate controls.
+  // Banning cuts existing Linkar sessions; unbanning only lifts the Auth ban,
+  // so a suspension recorded separately stays in force until it is restored.
   if (input.action === "BAN" || input.action === "UNBAN") {
-    const result = await createSupabaseAdminClient().auth.admin.updateUserById(userId, {
+    const result = await auth.updateUserById(userId, {
       ban_duration: input.action === "BAN" ? "876000h" : "none",
     });
     if (result.error) authFailure(result.error, input.action === "BAN" ? "user_ban_failed" : "user_unban_failed");
-    const banned = input.action === "BAN";
-    await prisma.platformUserControl.upsert({
+    if (input.action === "BAN") {
+      await prisma.platformUserControl.upsert({
         where: { userId },
-        create: { userId, status: banned ? "SUSPENDED" : "ACTIVE", suspendedAt: banned ? now : null, suspendedReason: banned ? input.reason : null, suspendedByUserId: banned ? input.actorUserId : null, sessionInvalidBefore: now },
-        update: { status: banned ? "SUSPENDED" : "ACTIVE", suspendedAt: banned ? now : null, suspendedReason: banned ? input.reason : null, suspendedByUserId: banned ? input.actorUserId : null, ...(banned ? { sessionInvalidBefore: now } : {}) },
+        create: { userId, sessionInvalidBefore: now },
+        update: { sessionInvalidBefore: now },
       });
-    return { userId, action: input.action, at: now.toISOString() };
+    }
+    return { userId, action: input.action, authBannedUntil: result.data?.user ? activeBanUntil(result.data.user, now) : null, at: now.toISOString() };
   }
+
+  const found = await auth.getUserById(userId);
+  if (found.error && found.error.status !== 404) throw new AdminWorkspaceError(502, "auth_provider_unavailable");
+  if (found.error || !found.data.user) throw new AdminWorkspaceError(404, "user_not_found");
+  // Restoring Linkar access while Auth still refuses sign-in would report a
+  // working account that cannot log in. The operator unbans first.
+  if (input.action === "RESTORE" && activeBanUntil(found.data.user, now)) throw new AdminWorkspaceError(409, "auth_ban_active");
 
   if (input.action === "REVOKE_LINKAR_SESSIONS") {
     await prisma.platformUserControl.upsert({
@@ -131,9 +135,7 @@ export async function changeAdminUserMembership(userId: string, input: {
   if (found.error || !email) throw new AdminWorkspaceError(404, "user_not_found");
 
   return prisma.$transaction(async (transaction) => {
-    const workspace = await transaction.workspace.findUnique({ where: { id: input.workspaceId }, select: { deletionScheduledAt: true } });
-    if (!workspace) throw new AdminWorkspaceError(404, "workspace_not_found");
-    if (workspace.deletionScheduledAt) throw new AdminWorkspaceError(409, "deletion_in_progress");
+    await assertMembershipChangeAllowed(transaction, input.workspaceId, userId);
     const existing = await transaction.workspaceMember.findFirst({ where: { workspaceId: input.workspaceId, userId } });
     if (input.action === "ADD") {
       if (existing) throw new AdminWorkspaceError(409, "member_exists");

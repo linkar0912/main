@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ requireAdminWrite: vi.fn(), pause: vi.fn(), appendAdminAuditEvent: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/src/lib/admin/request-guard", () => ({ requireAdminWrite: mocks.requireAdminWrite }));
-vi.mock("@/src/lib/admin/workspace-service", () => ({ pauseAdminWorkspaceAutomations: mocks.pause }));
+vi.mock("@/src/lib/admin/workspace-service", () => ({ PAUSE_ALL_AUDIT_ACTION: "workspace.automations.pause_all", pauseAdminWorkspaceAutomations: mocks.pause }));
 vi.mock("@/src/lib/admin/audit", () => ({ appendAdminAuditEvent: mocks.appendAdminAuditEvent }));
 
 const { POST } = await import("./route");
@@ -15,11 +15,14 @@ describe("pause workspace automations", () => {
       action: "workspace.automations.pause_all", targetType: "workspace", targetId: "w1", reason: "incident response",
       requestId: "req", idempotencyKey: "pause-all-workspace", origin: "https://app.linkar.in", ipHash: "hash", userAgent: "test",
     });
-    mocks.pause.mockResolvedValue({ paused: 3, version: 4 });
+    mocks.pause.mockResolvedValue({ paused: 3, automationIds: [["a1@2", "a2@2", "a3@2"]], version: 4 });
     mocks.appendAdminAuditEvent.mockResolvedValue(undefined);
     const response = await POST(new Request("https://app.linkar.in/api/admin/workspaces/w1/automations/pause", {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version: 3 }),
     }), { params: Promise.resolve({ workspaceId: "w1" }) } as never);
     expect(await response.json()).toEqual({ data: { paused: 3, version: 4 } });
+    // The success row keeps the paused ids so "resume previously paused" can read them back.
+    const success = mocks.appendAdminAuditEvent.mock.calls.map(([event]) => event).find((event) => event.phase === "SUCCESS");
+    expect(success.after.automationIds).toEqual([["a1@2", "a2@2", "a3@2"]]);
   });
 });

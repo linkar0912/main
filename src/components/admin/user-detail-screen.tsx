@@ -7,7 +7,7 @@ import { ArrowLeft, Ban, KeyRound, Mail, RefreshCcw, ShieldOff, UserRoundCheck }
 
 import { formatAdminDate, formatAdminDateTime } from "@/src/components/admin/shared/date-format";
 import type { AdminUserDetail } from "@/src/lib/admin/accounts-repository";
-import { adminCommand, adminErrorMessage } from "./shared/admin-request";
+import { AdminCommandError, adminCommand, adminErrorMessage } from "./shared/admin-request";
 import { StatusPill } from "./shared/status-pill";
 
 type AccessAction = "SUSPEND" | "RESTORE" | "REVOKE_LINKAR_SESSIONS" | "BAN" | "UNBAN";
@@ -16,8 +16,8 @@ const accessMessages: Record<AccessAction, string> = {
   SUSPEND: "Linkar access suspended.",
   RESTORE: "Linkar access restored.",
   REVOKE_LINKAR_SESSIONS: "Existing sessions revoked.",
-  BAN: "Auth login banned.",
-  UNBAN: "Auth login unbanned and Linkar access restored.",
+  BAN: "Auth login banned and existing Linkar sessions revoked.",
+  UNBAN: "Auth login unbanned. Linkar access status is unchanged.",
 };
 // Actions that lock the person out need the typed email as a second check.
 const confirmedActions: readonly AccessAction[] = ["SUSPEND", "BAN"];
@@ -33,6 +33,8 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
   const memberships = user.workspaces ?? [];
   const blocked = busy || reason.trim().length < 3;
   const active = user.status === "ACTIVE";
+  // The Auth ban and Linkar access are separate controls with separate state.
+  const banned = Boolean(user.authBannedUntil);
 
   async function run(path: string, body: unknown, success: string) {
     setBusy(true);
@@ -44,7 +46,9 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
       setConfirmation("");
       router.refresh();
     } catch (cause) {
-      setError(adminErrorMessage(cause));
+      setError(cause instanceof AdminCommandError && cause.code === "auth_ban_active"
+        ? "Unban Auth login before restoring Linkar access."
+        : adminErrorMessage(cause));
     } finally {
       setBusy(false);
       firstAction.current?.focus();
@@ -80,9 +84,6 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
         <StatusPill status={user.status} />
       </header>
 
-      {error ? <div className="form-error" role="alert">{error}</div> : null}
-      {message ? <div className="form-success" role="status">{message}</div> : null}
-
       <section className="admin-detail-grid">
         <article className="panel admin-summary-card">
           <p className="eyebrow">Authentication</p>
@@ -90,6 +91,7 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
           <dl>
             <div><dt>Last sign in</dt><dd>{user.lastSignInAt ? formatAdminDateTime(user.lastSignInAt) : "Never"}</dd></div>
             <div><dt>Sessions valid after</dt><dd>{user.sessionInvalidBefore ? formatAdminDateTime(user.sessionInvalidBefore) : "All current"}</dd></div>
+            <div><dt>Auth login</dt><dd>{banned ? `Banned until ${formatAdminDateTime(user.authBannedUntil!)}` : "Allowed"}</dd></div>
           </dl>
         </article>
         <article className="panel admin-summary-card">
@@ -136,15 +138,19 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
             <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
           </label>
           <p className="admin-field-hint">Every action needs a reason. Suspending, banning, and password resets also need the email typed above.</p>
+          <p className="admin-field-hint">Suspend and Restore control Linkar access. Ban and Unban control Supabase Auth sign-in and do not change Linkar access.{banned && !active ? " Unban Auth login before restoring Linkar access." : ""}</p>
           <div className="admin-command-actions">
-            <button ref={firstAction} className={`button ${active ? "button-danger" : "button-primary"}`} disabled={blocked} onClick={() => access(active ? "SUSPEND" : "RESTORE")} type="button">
-              {active ? <><Ban size={16} /> Suspend</> : <><RefreshCcw size={16} /> Restore</>}
+            <button ref={firstAction} className={`button ${active ? "button-danger" : "button-primary"}`} disabled={blocked || (!active && banned)} onClick={() => access(active ? "SUSPEND" : "RESTORE")} type="button">
+              {active ? <><Ban size={16} /> Suspend Linkar access</> : <><RefreshCcw size={16} /> Restore Linkar access</>}
             </button>
             <button className="button button-secondary" disabled={blocked} onClick={() => access("REVOKE_LINKAR_SESSIONS")} type="button"><KeyRound size={16} /> Revoke sessions</button>
-            <button className="button button-secondary" disabled={blocked} onClick={() => access("BAN")} type="button"><ShieldOff size={16} /> Ban Auth login</button>
-            <button className="button button-ghost" disabled={blocked} onClick={() => access("UNBAN")} type="button"><UserRoundCheck size={16} /> Unban</button>
+            {banned
+              ? <button className="button button-secondary" disabled={blocked} onClick={() => access("UNBAN")} type="button"><UserRoundCheck size={16} /> Unban Auth login</button>
+              : <button className="button button-secondary" disabled={blocked} onClick={() => access("BAN")} type="button"><ShieldOff size={16} /> Ban Auth login</button>}
             <button className="button button-secondary" disabled={blocked} onClick={reset} type="button"><Mail size={16} /> Send password reset</button>
           </div>
+          {error ? <div className="form-error" role="alert">{error}</div> : null}
+          {message ? <div className="form-success" role="status">{message}</div> : null}
         </div>
       </section>
     </main>

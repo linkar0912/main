@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useRef, useState } from "react";
-import { ArrowLeft, Ban, Download, PauseCircle, RadioTower, RotateCcw, Users } from "lucide-react";
+import { ArrowLeft, Ban, Download, PauseCircle, PlayCircle, RadioTower, RotateCcw, Users } from "lucide-react";
 
 import { formatAdminDate, formatAdminDateTime } from "@/src/components/admin/shared/date-format";
 import type { AdminWorkspaceDetail } from "@/src/lib/admin/accounts-repository";
-import { adminCommand, adminErrorMessage } from "./shared/admin-request";
+import { adminCommand, adminCommandResponse, adminErrorMessage, downloadAdminFile } from "./shared/admin-request";
 import { StatusPill } from "./shared/status-pill";
 
 type WorkspaceEntitlement = {
@@ -20,6 +20,18 @@ type WorkspaceEntitlement = {
   version: number;
   usage: { deliveriesReserved: number; broadcastsCreated: number; periodStart: string };
 };
+
+type Section = "entitlement" | "controls" | "exports";
+type Notice = { section: Section; tone: "error" | "success"; text: string };
+
+// Feedback renders inside the section whose form triggered it, so the result
+// of a command at the bottom of the page is not shown off-screen at the top.
+function SectionNotice({ notice, section }: { notice: Notice | null; section: Section }) {
+  if (notice?.section !== section) return null;
+  return notice.tone === "error"
+    ? <div className="form-error" role="alert">{notice.text}</div>
+    : <div className="form-success" role="status">{notice.text}</div>;
+}
 
 function entitlementLabel(key: string): string {
   // memberLimit -> "Member limit", exportsEnabled -> "Exports enabled"
@@ -45,9 +57,9 @@ export function WorkspaceDetailScreen({
   const router = useRouter();
   const [reason, setReason] = useState("");
   const [entitlementReason, setEntitlementReason] = useState("");
+  const [exportReason, setExportReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const [planId, setPlanId] = useState(entitlement?.plan.id ?? "");
   const [overrides, setOverrides] = useState(JSON.stringify(entitlement?.overrides ?? {}, null, 2));
@@ -62,24 +74,22 @@ export function WorkspaceDetailScreen({
   const facebookConnections = workspace.facebookConnections ?? [];
   const assignablePlans = plans.filter((plan) => plan.isActive || plan.id === entitlement?.plan.id);
 
-  function fail(message: string) {
-    setNotice(null);
-    setError(message);
+  function fail(section: Section, text: string) {
+    setNotice({ section, tone: "error", text });
   }
 
-  async function mutate(run: () => Promise<unknown>, success: string) {
+  async function mutate<T>(section: Section, run: () => Promise<T>, success: string | ((result: T) => string), refresh = true) {
     setBusy(true);
-    setError(null);
     setNotice(null);
     try {
-      await run();
-      setNotice(success);
-      router.refresh();
+      const result = await run();
+      setNotice({ section, tone: "success", text: typeof success === "string" ? success : success(result) });
+      if (refresh) router.refresh();
     } catch (cause) {
-      setError(adminErrorMessage(cause));
+      setNotice({ section, tone: "error", text: adminErrorMessage(cause) });
     } finally {
       setBusy(false);
-      lifecycleButton.current?.focus();
+      if (section === "controls") lifecycleButton.current?.focus();
     }
   }
 
@@ -87,10 +97,11 @@ export function WorkspaceDetailScreen({
     event.preventDefault();
     const action = suspended ? "RESTORE" : "SUSPEND";
     if (action === "SUSPEND" && confirmation !== phrase) {
-      fail(`Type ${phrase} exactly to continue.`);
+      fail("controls", `Type ${phrase} exactly to continue.`);
       return;
     }
     void mutate(
+      "controls",
       () => adminCommand(`/api/admin/workspaces/${workspace.id}/lifecycle`, { body: { action, version: workspace.version }, reason }),
       suspended ? "Workspace restored." : "Workspace suspended.",
     );
@@ -98,29 +109,51 @@ export function WorkspaceDetailScreen({
 
   function pauseAutomations() {
     void mutate(
-      () => adminCommand(`/api/admin/workspaces/${workspace.id}/automations/pause`, { body: { version: workspace.version }, reason }),
-      "Active automations paused.",
+      "controls",
+      () => adminCommand<{ paused: number }>(`/api/admin/workspaces/${workspace.id}/automations/pause`, { body: { version: workspace.version }, reason }),
+      (data) => `${data?.paused ?? 0} active automations paused.`,
+    );
+  }
+
+  function resumeAutomations() {
+    void mutate(
+      "controls",
+      () => adminCommand<{ resumed: number; skipped: number }>(`/api/admin/workspaces/${workspace.id}/automations/resume`, { body: { version: workspace.version }, reason }),
+      (data) => `${data?.resumed ?? 0} automations resumed.${data?.skipped ? ` ${data.skipped} changed since the pause and stay as they are.` : ""}`,
+    );
+  }
+
+  function exportWorkspace(format: "csv" | "json") {
+    void mutate(
+      "exports",
+      async () => {
+        const response = await adminCommandResponse(`/api/admin/workspaces/${workspace.id}/export`, { body: { format }, reason: exportReason, fallback: "workspace_export_failed" });
+        downloadAdminFile(await response.blob(), `linkar-workspace-${workspace.id}.${format}`);
+      },
+      `${format.toUpperCase()} export downloaded.`,
+      false,
     );
   }
 
   function saveEntitlement(event: FormEvent) {
     event.preventDefault();
     if (!entitlement) {
-      fail("Entitlement record is unavailable.");
+      fail("entitlement", "Entitlement record is unavailable.");
       return;
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(overrides);
     } catch {
-      fail("Overrides must be valid JSON.");
+      fail("entitlement", "Overrides must be valid JSON.");
       return;
     }
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      fail("Overrides must be a JSON object, for example {} to inherit every plan value.");
+      fail("entitlement", "Overrides must be a JSON object, for example {} to inherit every plan value.");
       return;
     }
     void mutate(
+      "entitlement",
       () => adminCommand(`/api/admin/workspaces/${workspace.id}/entitlement`, { method: "PATCH", body: { planId, overrides: parsed, version: entitlement.version }, reason: entitlementReason }),
       "Entitlement saved.",
     );
@@ -137,9 +170,6 @@ export function WorkspaceDetailScreen({
         </div>
         <StatusPill status={workspace.status} />
       </header>
-
-      {error ? <div className="form-error" role="alert">{error}</div> : null}
-      {notice ? <div className="form-success" role="status">{notice}</div> : null}
 
       <nav className="admin-section-tabs" aria-label="Workspace detail sections">
         <a href="#overview">Overview</a>
@@ -218,6 +248,7 @@ export function WorkspaceDetailScreen({
             <div className="admin-command-actions">
               <button className="button button-primary" disabled={busy} type="submit">Save entitlement</button>
             </div>
+            <SectionNotice notice={notice} section="entitlement" />
           </form>
         </section>
       ) : null}
@@ -293,7 +324,12 @@ export function WorkspaceDetailScreen({
             <button className="button button-secondary" disabled={busy || reason.trim().length < 3} type="button" onClick={pauseAutomations}>
               <PauseCircle size={16} /> Pause active automations
             </button>
+            <button className="button button-ghost" disabled={busy || deletionLocked || suspended || reason.trim().length < 3} type="button" onClick={resumeAutomations}>
+              <PlayCircle size={16} /> Resume previously paused
+            </button>
           </div>
+          <p className="admin-field-hint">Resume re-activates the automations the last Pause active automations command stopped, except any changed since then.</p>
+          <SectionNotice notice={notice} section="controls" />
         </form>
       </section>
 
@@ -302,10 +338,17 @@ export function WorkspaceDetailScreen({
           <div><p className="eyebrow">Safe dataset</p><h2>Workspace export</h2></div>
           <Download size={20} aria-hidden />
         </div>
-        <p className="muted">Exports contain workspace metadata, members, contacts, and automations. Credentials and provider payloads are excluded.</p>
-        <div className="admin-command-actions">
-          <a className="button button-secondary" href={`/api/admin/workspaces/${workspace.id}/export?format=csv`}>Download CSV</a>
-          <a className="button button-ghost" href={`/api/admin/workspaces/${workspace.id}/export?format=json`}>Download JSON</a>
+        <p className="muted">Exports contain workspace metadata, members, contacts, and automations. Credentials and provider payloads are excluded. Each export is audited, and workspaces above 50,000 rows must be exported offline.</p>
+        <div className="admin-command-form">
+          <label className="field">
+            <span>Reason for export</span>
+            <input required minLength={3} maxLength={500} value={exportReason} onChange={(event) => setExportReason(event.target.value)} />
+          </label>
+          <div className="admin-command-actions">
+            <button className="button button-secondary" disabled={busy || exportReason.trim().length < 3} type="button" onClick={() => exportWorkspace("csv")}><Download size={16} /> Download CSV</button>
+            <button className="button button-ghost" disabled={busy || exportReason.trim().length < 3} type="button" onClick={() => exportWorkspace("json")}>Download JSON</button>
+          </div>
+          <SectionNotice notice={notice} section="exports" />
         </div>
       </section>
     </main>

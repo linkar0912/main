@@ -1,10 +1,12 @@
 import { adminJson, adminRouteError, runAuditedAdminMutation } from "@/src/lib/admin/http";
+import { isAdminUserId } from "@/src/lib/admin/ids";
 import { requireAdminWrite } from "@/src/lib/admin/request-guard";
 import { sendAdminPasswordReset } from "@/src/lib/admin/user-service";
 
 export async function POST(request: Request, context: RouteContext<"/api/admin/users/[userId]/reset">) {
   try {
     const { userId } = await context.params;
+    if (!isAdminUserId(userId)) return adminJson({ error: "user_not_found" }, { status: 404 });
     const guard = await requireAdminWrite(request, { action: "user.password_reset", targetType: "user", targetId: userId });
     await request.json();
     return adminJson({ data: await runAuditedAdminMutation(guard, () => sendAdminPasswordReset(userId), { summarize: () => ({ userId, sent: true }) }) });

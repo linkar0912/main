@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { workspaceAuditSnapshot } from "@/src/lib/admin/audit-snapshots";
 import { adminJson, adminRouteError, runAuditedAdminMutation } from "@/src/lib/admin/http";
 import { requireAdminWrite } from "@/src/lib/admin/request-guard";
 import { setAdminWorkspaceLifecycle } from "@/src/lib/admin/workspace-service";
@@ -15,7 +16,7 @@ export async function POST(request: Request, context: RouteContext<"/api/admin/w
       ...input,
       reason: guard.reason,
       actorUserId: guard.owner.userId,
-    }));
+    }), { before: await workspaceAuditSnapshot(workspaceId) });
     return adminJson({ data: workspace });
   } catch (error) {
     return adminRouteError(error, "workspace_lifecycle_failed");

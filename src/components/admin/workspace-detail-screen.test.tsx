@@ -17,7 +17,27 @@ describe("WorkspaceDetailScreen", () => {
     expect(screen.getByText("Growth")).toBeTruthy();
     expect(screen.getByText("owner@acme.test")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Exports" }).getAttribute("href")).toBe("#exports");
-    expect(screen.getByRole("link", { name: "Download CSV" }).getAttribute("href")).toBe("/api/admin/workspaces/w1/export?format=csv");
+    expect((screen.getByRole("button", { name: "Download CSV" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("exports through an audited POST with its own reason and reports the result beside the export form", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("type,id\n", { headers: { "content-type": "text/csv" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const createObjectURL = vi.fn().mockReturnValue("blob:export");
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    render(<WorkspaceDetailScreen workspace={workspace} />);
+    await userEvent.type(screen.getByRole("textbox", { name: "Reason for export" }), "Customer data request");
+    await userEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/admin/workspaces/w1/export", expect.objectContaining({ method: "POST", body: JSON.stringify({ format: "csv" }) }));
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
+    click.mockRestore();
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toBe("CSV export downloaded.");
+    expect(status.closest("section")?.id).toBe("exports");
+    vi.unstubAllGlobals();
+    vi.stubGlobal("crypto", { randomUUID: () => "12345678-1234-4234-8234-123456789abc" });
   });
 
   it("keeps a visible error until the exact suspension phrase is entered", async () => {
@@ -25,7 +45,9 @@ describe("WorkspaceDetailScreen", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "Operator reason" }), "Abuse investigation");
     await userEvent.type(screen.getByRole("textbox", { name: /Type SUSPEND acme/ }), "wrong");
     await userEvent.click(screen.getByRole("button", { name: "Suspend workspace" }));
-    expect(screen.getByRole("alert").textContent).toContain("Type SUSPEND acme exactly");
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Type SUSPEND acme exactly");
+    expect(alert.closest("section")?.id).toBe("controls");
   });
 });
 
@@ -49,7 +71,7 @@ describe("WorkspaceDetailScreen follow-up", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "Reason for entitlement change" }), "Support upgrade");
     await userEvent.click(screen.getByRole("button", { name: "Save entitlement" }));
     expect(fetchMock).toHaveBeenCalledWith("/api/admin/workspaces/w1/entitlement", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ planId: "p1", overrides: {}, version: 3 }) }));
-    expect(fetchMock.mock.calls[0][1].headers["x-admin-reason"]).toBe("Support upgrade");
+    expect(decodeURIComponent(fetchMock.mock.calls[0][1].headers["x-admin-reason"])).toBe("Support upgrade");
     expect((await screen.findByRole("status")).textContent).toBe("Entitlement saved.");
     vi.unstubAllGlobals();
   });
