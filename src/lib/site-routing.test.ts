@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { applicationOriginForPath, isMarketingPath, isProtectedAppPath, marketingHref, resolveHostRedirect, resolveRequestHostname } from "./site-routing";
 
@@ -121,5 +122,27 @@ describe("site host routing", () => {
     const origins = { appUrl: "https://app.linkar.in", adminUrl: "https://admin.linkar.in" };
     expect(applicationOriginForPath("/admin/security", origins)).toBe("https://admin.linkar.in");
     expect(applicationOriginForPath("/dashboard", origins)).toBe("https://app.linkar.in");
+  });
+});
+
+describe("authenticated route coverage", () => {
+  // A page added under app/(app) without a matching prefix skipped the proxy
+  // session gate entirely (as /contacts, /insights and /quick-automation did).
+  const appRoutes = readdirSync("app/(app)", { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("(") && !entry.name.startsWith("_"))
+    .map((entry) => `/${entry.name}`);
+
+  it("finds the authenticated route directories", () => {
+    expect(appRoutes.length).toBeGreaterThan(0);
+  });
+
+  it.each(appRoutes)("gates %s in the proxy and routes it to the app host", (route) => {
+    expect(isProtectedAppPath(route)).toBe(true);
+    expect(isProtectedAppPath(`${route}/nested`)).toBe(true);
+    expect(resolveHostRedirect("linkar.in", route)).toEqual({ target: "app", pathname: route });
+  });
+
+  it.each(appRoutes)("lists %s in the proxy matcher", (route) => {
+    expect(readFileSync("proxy.ts", "utf8")).toContain(`"${route}/:path*"`);
   });
 });

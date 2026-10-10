@@ -13,15 +13,23 @@ const APP_ROUTE_PREFIXES = [
   "/dashboard",
   "/activity",
   "/automations",
+  "/contacts",
+  "/insights",
+  "/quick-automation",
   "/settings",
   "/profile",
   "/help",
 ] as const;
 
+// Every top-level route under app/(app) must be listed here (a test enforces
+// it), so the proxy refreshes the session and bounces signed-out visitors.
 const PROTECTED_APP_ROUTE_PREFIXES = [
   "/dashboard",
   "/activity",
   "/automations",
+  "/contacts",
+  "/insights",
+  "/quick-automation",
   "/settings",
   "/profile",
   "/help",

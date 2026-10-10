@@ -31,3 +31,21 @@ export function sharedAuthCookieDomain(origins: AuthOrigins): string | undefined
     ? parent
     : undefined;
 }
+
+/**
+ * Cookie attributes for the Supabase session cookies. @supabase/ssr defaults
+ * to httpOnly: false so a browser client can read the session; this app has
+ * no browser Supabase client (every auth call runs server-side), so the
+ * tokens are kept out of reach of page scripts. Secure follows the app
+ * origin's scheme, which is https in production and http on localhost.
+ */
+export function supabaseAuthCookieOptions(origins: AuthOrigins) {
+  const domain = sharedAuthCookieDomain(origins);
+  return {
+    ...(domain ? { domain } : {}),
+    path: "/",
+    httpOnly: true,
+    secure: new URL(origins.appUrl).protocol === "https:",
+    sameSite: "lax" as const,
+  };
+}

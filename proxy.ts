@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { assertApplicationAccess, safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { ADMIN_HOST, isAdminRoutePath, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
-import { sharedAuthCookieDomain } from "@/src/lib/auth/cookie-domain";
+import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
 
 // Canonicalizes the marketing and app hosts, then applies an optimistic gate
 // to authenticated page routes. The gate also refreshes the Supabase session
@@ -31,9 +31,8 @@ export async function proxy(request: NextRequest) {
 
   const response = NextResponse.next();
   const isAdminRoute = isAdminRoutePath(request.nextUrl.pathname);
-  const domain = sharedAuthCookieDomain(env);
   const supabase = createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
-    ...(domain ? { cookieOptions: { domain } } : {}),
+    cookieOptions: supabaseAuthCookieOptions(env),
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (cookiesToSet) => {
