@@ -463,7 +463,9 @@ export async function processNormalizedFacebookEvent(
       if (delivery.status === "SENT") result.sent += 1;
       else result.failed += 1;
     } catch (error) {
-      if (isKnownNotPostedRetryable(error)) {
+      // Retry only when nothing was posted: Meta rejected the call with a
+      // retryable answer, or another worker holds the reply's ledger claim.
+      if (isKnownNotPostedRetryable(error) || isRetryableFacebookError(error)) {
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
         throw retryableFacebookError(error);
       }

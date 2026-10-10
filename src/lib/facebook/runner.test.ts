@@ -358,6 +358,28 @@ describe("processNormalizedFacebookEvent", () => {
     expect(await repository.getExecution("workspace_a", `${automation!.id}:evt_1`)).toMatchObject({ status: "SENT" });
   });
 
+  it("retries later, without posting, while another worker holds the reply claim", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Guide", { match: "any", keywords: [] });
+    const [automation] = await repository.listAutomations("workspace_a");
+    const deliveryKey = facebookReplyDeliveryKey(automation!.id, "evt_1");
+    await repository.ensureOutboundDelivery({
+      deliveryKey,
+      workspaceId: "workspace_a",
+      automationId: automation!.id,
+      kind: "CLASSIC_ACTION",
+      payload: { type: "facebook_comment_reply", commentId: "comment_1", text: "Hi" },
+    });
+    await repository.claimOutboundDelivery(deliveryKey, "worker_a", "2026-08-29T10:00:30.000Z");
+    const { client, postCommentReply } = fakeClient();
+
+    await expect(processNormalizedFacebookEvent(commentEvent(), repository, { client, tokenEncryptionKey: TOKEN_KEY }))
+      .rejects.toBeInstanceOf(RetryableFacebookError);
+    expect(postCommentReply).not.toHaveBeenCalled();
+    expect(await repository.getExecution("workspace_a", `${automation!.id}:evt_1`)).toBeNull();
+  });
+
   it("marks the Page expired when Meta rejects its token (code 190)", async () => {
     const repository = createMemoryRepository();
     await seedConnection(repository, "page_1");
