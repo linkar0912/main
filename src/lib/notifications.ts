@@ -1,5 +1,5 @@
 import { logger } from "./logger";
-import { sendEmail } from "./mailer";
+import { maskEmailAddress, sendEmail } from "./mailer";
 import { getRepository } from "./repository-provider";
 import type { MemberRecord } from "./repository";
 
@@ -85,13 +85,17 @@ export async function notifyWorkspaceManagers(
     const results = await Promise.allSettled(recipients.map((to) => sendEmail({ to, subject, body })));
     let failed = 0;
     for (const [index, result] of results.entries()) {
-      if (result.status === "fulfilled") continue;
+      // sendEmail reports provider and configuration failures as a result,
+      // not a throw, so an undelivered result is a failure too.
+      if (result.status === "fulfilled" && result.value.delivered) continue;
       failed += 1;
       logger.warn("workspace manager notification send failed", {
         workspaceId,
-        to: recipients[index],
+        to: maskEmailAddress(recipients[index]),
         subject,
-        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        error: result.status === "rejected"
+          ? result.reason instanceof Error ? result.reason.message : String(result.reason)
+          : result.value.delivered ? undefined : result.value.reason,
       });
     }
     // Record the dedupe key only when at least one send went through; if
