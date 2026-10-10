@@ -22,6 +22,7 @@ import { processFlowFollowUp, type FlowFollowUpRunnerOptions } from "./lib/autom
 import type { FlowFollowUpJob } from "./lib/queue";
 import { createWorkerHealthServer, workerHealthPort } from "./lib/worker-health";
 import { reconcileUsageReservations } from "./lib/admin/system/usage-reconciliation";
+import { sweepLapsedBillingEntitlements } from "./lib/billing/expiry-sweep";
 import { processAdminDeletion } from "./lib/admin/deletion/processor";
 import { createDeliveryTiming } from "./lib/automation/delivery-timing";
 import { createSystemMonitor } from "./lib/admin/system/monitor";
@@ -257,6 +258,17 @@ if (!env.redisUrl) {
   };
   void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error instanceof Error ? error.message : String(error) }));
   setInterval(() => void sweepParticipants().catch((error) => logger.error("Participant retention sweep failed", { error: error instanceof Error ? error.message : String(error) })), 60 * 60 * 1_000).unref();
+
+  // Razorpay sends no event when a cancelled/halted subscription's paid period
+  // ends, so lapsed paid plans are downgraded here (within 15 minutes).
+  if (env.databaseUrl) {
+    const sweepLapsedBilling = async () => {
+      const result = await sweepLapsedBillingEntitlements();
+      if (result.downgraded || result.conflicts) logger.info("Billing paid-through sweep", result);
+    };
+    void sweepLapsedBilling().catch((error) => logger.error("Billing paid-through sweep failed", { error: error instanceof Error ? error.message : String(error) }));
+    setInterval(() => void sweepLapsedBilling().catch((error) => logger.error("Billing paid-through sweep failed", { error: error instanceof Error ? error.message : String(error) })), 15 * 60 * 1_000).unref();
+  }
 
   // Closes the rare window where an inbound event and its new contact commit at
   // the same instant and neither database trigger sees the other's row.
