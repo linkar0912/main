@@ -358,8 +358,12 @@ export function SettingsScreen() {
         const payload = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(payload?.error === "already_member" ? "That person is already in the workspace." : "Could not send the invitation.");
       }
+      const created = await response.json().catch(() => null) as { emailDelivered?: boolean } | null;
       setInviteEmail("");
       await refreshTeam();
+      if (created?.emailDelivered === false) {
+        setTeamError("The invitation was saved, but the email could not be sent. Revoke it and invite again once email delivery is working.");
+      }
     } catch (error) {
       setTeamError(error instanceof Error ? error.message : "Could not send the invitation.");
     } finally {
