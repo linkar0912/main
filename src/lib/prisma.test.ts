@@ -178,12 +178,86 @@ describe("Prisma automation edits", () => {
       data: expect.objectContaining({
         automationId: "automation_1",
         definition: previousDefinition,
+        provider: "INSTAGRAM",
         snapshotBy: "user_editor",
       }),
     });
+    // Automation.version is a write counter: every edit increments it and it
+    // never takes the definition schema version.
     expect(update).toHaveBeenCalledWith({
       where: { id: "automation_1" },
-      data: expect.objectContaining({ definition: editedDefinition, version: 1 }),
+      data: expect.objectContaining({ definition: editedDefinition, version: { increment: 1 } }),
+    });
+  });
+
+  it("increments the counter on a status-only change too", async () => {
+    const previous = { id: "automation_1", workspaceId: "workspace_1", provider: "INSTAGRAM", version: 4 };
+    const update = vi.fn().mockResolvedValue({ ...previous });
+    const transaction = { automation: { findFirst: vi.fn().mockResolvedValue(previous), update } };
+    const client = {
+      $transaction: vi.fn(async (operation: (tx: typeof transaction) => unknown) => operation(transaction)),
+    } as unknown as typeof prisma;
+
+    await createPrismaRepository(client).updateAutomation("workspace_1", "automation_1", { status: "PAUSED" }).catch(() => undefined);
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "automation_1" },
+      data: expect.objectContaining({ status: "PAUSED", version: { increment: 1 } }),
+    });
+  });
+
+  it("retries a serialization failure (P2034) up to three times before giving up", async () => {
+    const conflict = Object.assign(new Error("write conflict"), { code: "P2034" });
+    const transactionCall = vi.fn()
+      .mockRejectedValueOnce(conflict)
+      .mockRejectedValueOnce(conflict)
+      .mockResolvedValueOnce(null);
+    const client = { $transaction: transactionCall } as unknown as typeof prisma;
+
+    await expect(createPrismaRepository(client).updateAutomation("workspace_1", "automation_1", { name: "x" })).resolves.toBeNull();
+    expect(transactionCall).toHaveBeenCalledTimes(3);
+
+    const alwaysConflicting = vi.fn().mockRejectedValue(conflict);
+    await expect(createPrismaRepository({ $transaction: alwaysConflicting } as unknown as typeof prisma)
+      .updateAutomation("workspace_1", "automation_1", { name: "x" })).rejects.toBe(conflict);
+    expect(alwaysConflicting).toHaveBeenCalledTimes(4);
+  });
+
+  it("restores a version's provider inside one transaction and bumps the counter", async () => {
+    const current = {
+      id: "automation_1", workspaceId: "workspace_1", provider: "INSTAGRAM", instagramAccountId: "ig_1", facebookPageId: null,
+      name: "Now", status: "ACTIVE", version: 6, definition: { version: 1 }, activatedAt: null, boundMediaId: null, priority: 0,
+    };
+    const target = {
+      id: "autover_1", automationId: "automation_1", workspaceId: "workspace_1", version: 1, name: "Then",
+      definition: { version: 1 }, status: "DRAFT", priority: 0, activatedAt: null, boundMediaId: null,
+      instagramAccountId: null, facebookPageId: "page_1", provider: "FACEBOOK", snapshotBy: null, snapshotAt: new Date(),
+    };
+    const update = vi.fn().mockResolvedValue({ ...current, createdAt: new Date(), updatedAt: new Date() });
+    const createVersion = vi.fn().mockResolvedValue(target);
+    const transaction = {
+      automation: { findFirst: vi.fn().mockResolvedValue(current), update },
+      automationVersion: {
+        findFirst: vi.fn().mockResolvedValue(target),
+        aggregate: vi.fn().mockResolvedValue({ _max: { version: 3 } }),
+        create: createVersion,
+      },
+    };
+    const transactionCall = vi.fn(async (operation: (tx: typeof transaction) => unknown) => operation(transaction));
+    const repository = createPrismaRepository({ $transaction: transactionCall } as unknown as typeof prisma);
+
+    await repository.restoreAutomationVersion("workspace_1", "automation_1", "autover_1", "user_1");
+
+    expect(transactionCall).toHaveBeenCalledTimes(1);
+    expect(createVersion).toHaveBeenCalledWith({ data: expect.objectContaining({ version: 4, provider: "INSTAGRAM", instagramAccountId: "ig_1" }) });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "automation_1" },
+      data: expect.objectContaining({
+        provider: "FACEBOOK",
+        facebookPageId: "page_1",
+        instagramAccountId: null,
+        version: { increment: 1 },
+      }),
     });
   });
 });

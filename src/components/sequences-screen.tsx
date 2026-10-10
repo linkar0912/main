@@ -67,7 +67,7 @@ export function SequencesScreen() {
       ]);
       const [sequencePayload, automationPayload] = await Promise.all([
         sequenceResponse.json().catch(() => ({})) as Promise<{ data?: SequenceRow[]; error?: string }>,
-        automationResponse.json().catch(() => ({})) as Promise<{ data?: { id: string; name: string; version: number }[]; error?: string }>,
+        automationResponse.json().catch(() => ({})) as Promise<{ data?: { id: string; name: string; definition?: { version?: number } }[]; error?: string }>,
       ]);
       if (signal?.aborted) return;
       if (!sequenceResponse.ok) throw new Error(sequencePayload.error ?? "Could not load sequences.");
@@ -75,7 +75,9 @@ export function SequencesScreen() {
       setSequences(sequencePayload.data ?? []);
       setAutomations(
         (automationPayload.data ?? [])
-          .filter((automation) => automation.version === 1)
+          // Classic (definition v1) flows only. Automation.version is a write
+          // counter, not the definition schema version.
+          .filter((automation) => automation.definition?.version === 1)
           .map(({ id, name }) => ({ id, name })),
       );
     } catch (error) {

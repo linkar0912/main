@@ -50,7 +50,7 @@ import type {
   InboxContactQuery,
   InboxContactRow,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS } from "./messaging-window";
 import { normalizeHelpQuery } from "./help-search";
@@ -593,7 +593,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         provider: input.provider ?? (input.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
         name: input.name.trim(),
         status: input.status ?? "DRAFT",
-        version: input.definition.version,
+        // Write counter, not the definition schema version (see prisma.ts).
+        version: 1,
         definition: copy(input.definition),
         priority: input.priority ?? 0,
         createdAt: timestamp,
@@ -638,7 +639,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           : { facebookPageId: facebookPageId ?? undefined }),
         name: patch.name?.trim() || current.name,
         definition: patch.definition ? copy(patch.definition) : current.definition,
-        version: patch.definition?.version ?? current.version,
+        version: current.version + 1,
         updatedAt: now(),
       };
       automations.set(id, updated);
@@ -2130,6 +2131,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         // Capture activation-time state so a restore is exact.
         status: current.status,
         priority: current.priority,
+        provider: current.provider,
         ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
         ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
         ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
@@ -2180,7 +2182,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         boundMediaId: target.boundMediaId,
         instagramAccountId: target.instagramAccountId,
         facebookPageId: target.facebookPageId,
-        version: Math.max(current.version, target.definition.version) + 1,
+        provider: resolveSnapshotProvider(target, current.provider),
+        version: current.version + 1,
         updatedAt: now(),
       };
       automations.set(automationId, restored);

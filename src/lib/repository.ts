@@ -74,9 +74,26 @@ export type AutomationVersionRecord = {
   boundMediaId?: string;
   instagramAccountId?: string;
   facebookPageId?: string;
+  /** Channel at snapshot time; absent on snapshots that predate the column. */
+  provider?: AutomationProvider;
   snapshotBy?: string;
   snapshotAt: string;
 };
+
+/**
+ * The channel a restore puts the automation back on. Snapshots taken before
+ * AutomationVersion.provider existed fall back to their pin columns; an
+ * unpinned legacy snapshot keeps the automation's current channel.
+ */
+export function resolveSnapshotProvider(
+  snapshot: Pick<AutomationVersionRecord, "provider" | "instagramAccountId" | "facebookPageId">,
+  currentProvider: AutomationProvider,
+): AutomationProvider {
+  if (snapshot.provider) return snapshot.provider;
+  if (snapshot.facebookPageId) return "FACEBOOK";
+  if (snapshot.instagramAccountId) return "INSTAGRAM";
+  return currentProvider;
+}
 
 export type AutomationParticipantRecord = {
   id: string;

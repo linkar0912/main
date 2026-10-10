@@ -43,7 +43,7 @@ describe("SequencesScreen", () => {
         }] }), { status: 200 });
       }
       if (!init?.method && url === "/api/automations") {
-        return new Response(JSON.stringify({ data: [{ id: "automation_1", name: "Lead capture", version: 1 }] }), { status: 200 });
+        return new Response(JSON.stringify({ data: [{ id: "automation_1", name: "Lead capture", version: 7, definition: { version: 1 } }] }), { status: 200 });
       }
       if (init?.method === "PATCH" && url === "/api/sequences/sequence_1") {
         return new Response(JSON.stringify({ data: { id: "sequence_1" } }), { status: 200 });

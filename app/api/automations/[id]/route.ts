@@ -9,6 +9,7 @@ import type { UpdateAutomationInput } from "@/src/lib/repository";
 import { toReadableValidationError } from "@/src/lib/validation-error";
 import { parseAutomationTarget } from "@/src/lib/automation/channel-target";
 import { deriveAutomationSurface, validateDefinitionForTarget } from "@/src/lib/automation/channels/registry";
+import { checkActivationReadiness } from "@/src/lib/automation/activation-readiness";
 
 export const runtime = "nodejs";
 
@@ -112,6 +113,23 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   if (body.status === "ACTIVE" && current.status !== "ACTIVE") {
+    // Switching on - including a bare { status: "ACTIVE" } from the list
+    // toggle - gets the same checks a full save does: the pinned account may
+    // have been disconnected since the last save, and the stored definition
+    // may predate a schema or channel rule.
+    const readiness = await checkActivationReadiness(session.workspaceId, {
+      provider: patch.provider ?? current.provider,
+      instagramAccountId: patch.instagramAccountId !== undefined ? patch.instagramAccountId : current.instagramAccountId,
+      facebookPageId: patch.facebookPageId !== undefined ? patch.facebookPageId : current.facebookPageId,
+      definition: patch.definition ?? current.definition,
+    }, repository);
+    if (!readiness.ok) {
+      return NextResponse.json({
+        error: readiness.error,
+        code: "activation_blocked",
+        ...(readiness.issues ? { issues: readiness.issues } : {}),
+      }, { status: 409 });
+    }
     patch.status = "ACTIVE";
     patch.activatedAt = new Date().toISOString();
     const definition = patch.definition ?? current.definition;

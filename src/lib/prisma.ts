@@ -44,7 +44,7 @@ import type {
   OutboundDeliveryRecord,
   WorkspaceStatus,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS, toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
@@ -349,6 +349,7 @@ function mapAutomationVersion(record: {
   boundMediaId: string | null;
   instagramAccountId: string | null;
   facebookPageId: string | null;
+  provider?: AutomationVersionRecord["provider"] | null;
   snapshotBy: string | null;
   snapshotAt: Date;
 }): AutomationVersionRecord {
@@ -365,6 +366,7 @@ function mapAutomationVersion(record: {
     ...(record.boundMediaId ? { boundMediaId: record.boundMediaId } : {}),
     ...(record.instagramAccountId ? { instagramAccountId: record.instagramAccountId } : {}),
     ...(record.facebookPageId ? { facebookPageId: record.facebookPageId } : {}),
+    ...(record.provider ? { provider: record.provider } : {}),
     ...(record.snapshotBy ? { snapshotBy: record.snapshotBy } : {}),
     snapshotAt: record.snapshotAt.toISOString(),
   };
@@ -524,6 +526,27 @@ function mergeDayCounts(rows: { day: string; count: number }[], days: number): {
     buckets.push({ day, count: counts.get(day) ?? 0 });
   }
   return buckets;
+}
+
+const SERIALIZATION_RETRIES = 3;
+
+/**
+ * Runs a Serializable transaction, retrying up to three times when Postgres
+ * aborts it with a serialization failure (Prisma P2034). Two editors saving
+ * the same automation at once is exactly the case Serializable exists to
+ * catch; the loser should simply re-run against the winner's state rather
+ * than surface a 500.
+ */
+async function withSerializationRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      if (code === "P2034" && attempt < SERIALIZATION_RETRIES) continue;
+      throw error;
+    }
+  }
 }
 
 export function createPrismaRepository(client = prisma): AutomationRepository {
@@ -1134,7 +1157,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           provider: input.provider ?? (input.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
           name: input.name.trim(),
           definition: input.definition,
-          version: input.definition.version,
+          // Automation.version is a pure per-row write counter (optimistic
+          // locking for admin operations), never the definition schema
+          // version - that lives in definition.version.
+          version: 1,
           instagramAccountId: input.instagramAccountId ?? null,
           facebookPageId: input.facebookPageId ?? null,
           priority: input.priority ?? 0,
@@ -1157,10 +1183,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       const data: Record<string, unknown> = {
         ...rest,
         ...(provider ? { provider } : {}),
-        ...(definition ? {
-          definition: definition as Prisma.InputJsonValue,
-          version: definition.version,
-        } : {}),
+        ...(definition ? { definition: definition as Prisma.InputJsonValue } : {}),
+        // Every write bumps the counter so a stale admin command (which
+        // updates WHERE version = n) cannot overwrite a user's edit.
+        version: { increment: 1 },
       };
       if (boundMediaId !== undefined) data.boundMediaId = boundMediaId ?? null;
       if (instagramAccountId !== undefined) {
@@ -1175,7 +1201,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           data.instagramAccountId = null;
         }
       }
-      const record = await client.$transaction(async (transaction) => {
+      const record = await withSerializationRetry(() => client.$transaction(async (transaction) => {
         const existing = await transaction.automation.findFirst({ where: { workspaceId, id } });
         if (!existing) return null;
         if (options?.snapshotBy) {
@@ -1193,6 +1219,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
               definition: existing.definition as Prisma.InputJsonValue,
               status: existing.status,
               priority: existing.priority,
+              provider: existing.provider,
               ...(existing.activatedAt ? { activatedAt: existing.activatedAt } : {}),
               ...(existing.boundMediaId ? { boundMediaId: existing.boundMediaId } : {}),
               ...(existing.instagramAccountId ? { instagramAccountId: existing.instagramAccountId } : {}),
@@ -1202,7 +1229,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           });
         }
         return transaction.automation.update({ where: { id }, data });
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
       return record ? mapAutomation(record) : null;
     },
 
@@ -2830,6 +2857,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           // Capture activation-time state so a restore is exact.
           status: current.status,
           priority: current.priority,
+          provider: current.provider,
           ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
           ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
           ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
@@ -2857,57 +2885,64 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async restoreAutomationVersion(workspaceId, automationId, versionId, restoredBy) {
-      const current = await client.automation.findFirst({ where: { id: automationId, workspaceId } });
-      if (!current) return null;
-      const target = await client.automationVersion.findFirst({
-        where: { id: versionId, automationId, workspaceId },
-      });
-      if (!target) return null;
-      // Capture the pre-restore state so the history remains append-only.
-      const aggregate = await client.automationVersion.aggregate({
-        where: { automationId },
-        _max: { version: true },
-      });
-      const nextNumber = (aggregate._max.version ?? 0) + 1;
-      await client.automationVersion.create({
-        data: {
-          id: createId("autover"),
-          automationId,
-          workspaceId,
-          version: nextNumber,
-          name: current.name,
-          definition: current.definition as Prisma.InputJsonValue,
-          status: current.status,
-          priority: current.priority,
-          ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
-          ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
-          ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
-          ...(current.facebookPageId ? { facebookPageId: current.facebookPageId } : {}),
-          snapshotBy: restoredBy ?? "restore",
-        },
-      });
-      const targetDefinition = target.definition as Prisma.InputJsonValue;
-      const targetVersionNumber = (target.definition as { version?: number }).version ?? 1;
-      // Restore the full state, not just name + definition. Without
-      // status/activatedAt/boundMediaId the restored automation would
-      // behave like a freshly-edited DRAFT and silently miss its
-      // next-media binding (the publishedAt > activatedAt resolver would
-      // pass against an old activatedAt or a missing boundMediaId).
-      const updated = await client.automation.update({
-        where: { id: automationId },
-        data: {
-          name: target.name,
-          definition: targetDefinition,
-          version: Math.max(current.version, targetVersionNumber) + 1,
-          status: target.status,
-          priority: target.priority,
-          ...(target.activatedAt ? { activatedAt: target.activatedAt } : { activatedAt: null }),
-          ...(target.boundMediaId ? { boundMediaId: target.boundMediaId } : { boundMediaId: null }),
-          ...(target.instagramAccountId ? { instagramAccountId: target.instagramAccountId } : { instagramAccountId: null }),
-          ...(target.facebookPageId ? { facebookPageId: target.facebookPageId } : { facebookPageId: null }),
-        },
-      });
-      return mapAutomation(updated);
+      // One Serializable transaction: the pre-restore snapshot, its version
+      // number and the overwrite either all land or none do, and a concurrent
+      // edit or restore forces a retry instead of interleaving.
+      const updated = await withSerializationRetry(() => client.$transaction(async (transaction) => {
+        const current = await transaction.automation.findFirst({ where: { id: automationId, workspaceId } });
+        if (!current) return null;
+        const target = await transaction.automationVersion.findFirst({
+          where: { id: versionId, automationId, workspaceId },
+        });
+        if (!target) return null;
+        // Capture the pre-restore state so the history remains append-only.
+        const aggregate = await transaction.automationVersion.aggregate({
+          where: { automationId },
+          _max: { version: true },
+        });
+        const nextNumber = (aggregate._max.version ?? 0) + 1;
+        await transaction.automationVersion.create({
+          data: {
+            id: createId("autover"),
+            automationId,
+            workspaceId,
+            version: nextNumber,
+            name: current.name,
+            definition: current.definition as Prisma.InputJsonValue,
+            status: current.status,
+            priority: current.priority,
+            provider: current.provider,
+            ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
+            ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
+            ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
+            ...(current.facebookPageId ? { facebookPageId: current.facebookPageId } : {}),
+            snapshotBy: restoredBy ?? "restore",
+          },
+        });
+        // Restore the full state, not just name + definition. Without
+        // status/activatedAt/boundMediaId the restored automation would
+        // behave like a freshly-edited DRAFT and silently miss its
+        // next-media binding (the publishedAt > activatedAt resolver would
+        // pass against an old activatedAt or a missing boundMediaId).
+        // provider travels with the pins so a restore can never leave a
+        // FACEBOOK automation pinned to an Instagram account or vice versa.
+        return transaction.automation.update({
+          where: { id: automationId },
+          data: {
+            name: target.name,
+            definition: target.definition as Prisma.InputJsonValue,
+            version: { increment: 1 },
+            provider: resolveSnapshotProvider(mapAutomationVersion(target), current.provider),
+            status: target.status,
+            priority: target.priority,
+            ...(target.activatedAt ? { activatedAt: target.activatedAt } : { activatedAt: null }),
+            ...(target.boundMediaId ? { boundMediaId: target.boundMediaId } : { boundMediaId: null }),
+            ...(target.instagramAccountId ? { instagramAccountId: target.instagramAccountId } : { instagramAccountId: null }),
+            ...(target.facebookPageId ? { facebookPageId: target.facebookPageId } : { facebookPageId: null }),
+          },
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+      return updated ? mapAutomation(updated) : null;
     },
 
     async createSequence(workspaceId, input) {

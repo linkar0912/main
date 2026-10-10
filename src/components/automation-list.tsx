@@ -11,6 +11,7 @@ import { AutomationListContentSkeleton } from "./skeleton";
 import { StatusBadge } from "./status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
 import { getInstagramConnections, getFacebookPages } from "@/src/lib/client/workspace-data";
+import { toReadableApiError } from "@/src/lib/validation-error";
 
 async function requestAutomations(signal?: AbortSignal): Promise<AutomationRecord[]> {
   const response = await fetch("/api/automations", { signal });
@@ -125,8 +126,9 @@ export function useAutomations(initialData?: AutomationRecord[]) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    const payload = (await response.json().catch(() => ({}))) as { data?: AutomationRecord };
-    if (!response.ok || !payload.data) throw new Error("Could not update automation");
+    const payload = (await response.json().catch(() => ({}))) as { data?: AutomationRecord; error?: string };
+    // A refused activation (409) explains what to fix - surface it as-is.
+    if (!response.ok || !payload.data) throw new Error(toReadableApiError(payload.error, "Could not update automation"));
     setAutomations((current) => {
       const next = current.map((automation) => automation.id === id ? payload.data as AutomationRecord : automation);
       storeAutomations(next);
