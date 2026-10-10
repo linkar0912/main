@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PricingPage } from "./pricing-page";
@@ -42,7 +44,8 @@ describe("PricingPage", () => {
       const plan = screen.getByRole("article", { name });
       expect(within(plan).getByText(price)).toBeTruthy();
       for (const limit of limits) expect(within(plan).getByText(limit)).toBeTruthy();
-      expect(within(plan).getByRole("link", { name: /start|choose/i }).getAttribute("href")).toBe("/signup");
+      const expectedHref = name === "Free plan" ? "/signup" : `/signup?plan=${name.split(" ")[0].toLowerCase()}&interval=monthly`;
+      expect(within(plan).getByRole("link", { name: /start|choose/i }).getAttribute("href")).toBe(expectedHref);
     }
   });
 
@@ -53,7 +56,7 @@ describe("PricingPage", () => {
     expect(within(comparison).getByRole("columnheader", { name: "Choose your plan" })).toBeTruthy();
     for (const plan of ["Free", "Creator", "Growth", "Agency"]) {
       const header = within(comparison).getByRole("columnheader", { name: new RegExp(`^${plan}`) });
-      expect(within(header).getByRole("link").getAttribute("href")).toBe("/signup");
+      expect(within(header).getByRole("link").getAttribute("href")).toBe(plan === "Free" ? "/signup" : `/signup?plan=${plan.toLowerCase()}&interval=monthly`);
     }
 
     const deliveries = within(comparison).getByRole("row", { name: /Monthly deliveries/ });
@@ -73,12 +76,35 @@ describe("PricingPage", () => {
       expect(within(screen.getByRole("article", { name: plan })).getByText(price)).toBeTruthy();
     }
     expect(screen.getAllByText("2 months free")).toHaveLength(3);
+
+    // Every plan link now carries the annual choice through to signup.
+    const growth = screen.getByRole("article", { name: "Growth plan" });
+    expect(within(growth).getByRole("link", { name: /choose/i }).getAttribute("href")).toBe("/signup?plan=growth&interval=annual");
+    const comparison = screen.getByRole("region", { name: "Compare plans and pricing info" });
+    const agency = within(comparison).getByRole("columnheader", { name: /^Agency/ });
+    expect(within(agency).getByRole("link").getAttribute("href")).toBe("/signup?plan=agency&interval=annual");
+    // The comparison shows the exact price, not a "From" price.
+    expect(within(agency).getByText("₹9,990/yr")).toBeTruthy();
+    expect(comparison.textContent).not.toMatch(/\bFrom\b/);
   });
 
   it("offers sign in without using em dashes in public copy", () => {
     const { container } = render(<PricingPage />);
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
     expect(container.textContent).not.toContain("\u2014");
+  });
+});
+
+describe("PricingPage rendering split", () => {
+  it("renders the page on the server and keeps client code to the interactive islands", () => {
+    const source = (file: string) => readFileSync(path.join(process.cwd(), "src/components/marketing", file), "utf8");
+
+    expect(source("pricing-page.tsx")).not.toMatch(/^"use client"/);
+    expect(source("automation-story.tsx")).not.toMatch(/^"use client"/);
+    expect(source("automation-story-scenes.tsx")).not.toMatch(/^"use client"/);
+    for (const island of ["pricing-interval.tsx", "pricing-finder.tsx", "pricing-faq.tsx", "pricing-jump.tsx", "automation-story-shell.tsx"]) {
+      expect(source(island)).toMatch(/^"use client"/);
+    }
   });
 });
 
@@ -117,10 +143,23 @@ describe("PricingPage plan finder", () => {
     fireEvent.click(within(finder).getByRole("button", { name: /See my plan/ }));
 
     expect(within(finder).getByText("Growth")).toBeTruthy();
-    expect(within(finder).getByRole("link", { name: /Start with Growth/ }).getAttribute("href")).toBe("/signup");
+    expect(within(finder).getByRole("link", { name: /Start with Growth/ }).getAttribute("href")).toBe("/signup?plan=growth&interval=monthly");
 
     fireEvent.click(within(finder).getByRole("button", { name: "Start over" }));
     expect(within(finder).getByRole("heading", { name: "Where do people find you?" })).toBeTruthy();
+  });
+
+  it("offers only channels Linkar supports and shows Facebook as a public comment reply", () => {
+    render(<PricingPage />);
+    const finder = screen.getByRole("region", { name: "Pick your plan in 30 seconds" });
+
+    expect(within(finder).queryByRole("button", { name: /Messenger/ })).toBeNull();
+    expect(finder.textContent).not.toMatch(/Messenger/);
+
+    fireEvent.click(within(finder).getByRole("button", { name: /Facebook Page comments/ }));
+    expect(finder.textContent).toContain("Commented on your Page post");
+    // Facebook support is public comment replies only: no inbox hand-off.
+    expect(finder.textContent).not.toMatch(/inbox/i);
   });
 
   it("keeps a shortcut to the finder in view", () => {
@@ -186,6 +225,16 @@ describe("PricingPage billing sections", () => {
 
     fireEvent.click(reset);
     expect(reset.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("hides collapsed answers from assistive technology", () => {
+    render(<PricingPage />);
+    const cancel = screen.getByRole("button", { name: "What happens if I cancel?" });
+    const answer = () => document.getElementById(cancel.getAttribute("aria-controls") ?? "")?.firstElementChild;
+
+    expect(answer()?.getAttribute("aria-hidden")).toBe("true");
+    fireEvent.click(cancel);
+    expect(answer()?.getAttribute("aria-hidden")).toBe("false");
   });
 
   it("closes with a route into signup", () => {

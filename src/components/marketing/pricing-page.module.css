@@ -1596,8 +1596,18 @@
   grid-template-rows: 1fr;
 }
 
+/* A collapsed answer is hidden, not just zero-height: otherwise screen readers
+   read it and links inside it stay in the tab order. The visibility flip waits
+   for the collapse to finish so the closing animation still shows. */
 .faqPanelInner {
   overflow: hidden;
+  visibility: hidden;
+  transition: visibility 0s linear 380ms;
+}
+
+.faqPanel[data-open] .faqPanelInner {
+  visibility: visible;
+  transition-delay: 0s;
 }
 
 .faqPanel p {
