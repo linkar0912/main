@@ -83,8 +83,9 @@ export function DeletionWizard() {
           </select>
         </label>
         <label className="field">
-          <span>Target UUID</span>
-          <input value={targetId} autoComplete="off" spellCheck={false} onChange={(event) => { setTargetId(event.target.value); resetPreview(); }} />
+          <span>Target ID</span>
+          <input value={targetId} autoComplete="off" spellCheck={false} aria-describedby="deletion-target-hint" onChange={(event) => { setTargetId(event.target.value); resetPreview(); }} />
+          <small id="deletion-target-hint" className="admin-field-hint">{kind === "WORKSPACE" ? "Workspace IDs look like workspace_… (copy it from the workspace page)." : "User IDs are Supabase Auth UUIDs (copy it from the user page)."}</small>
         </label>
       </div>
       <label className="field">
@@ -98,6 +99,7 @@ export function DeletionWizard() {
           <dl className="admin-system-metrics">
             {Object.entries(prepared.impact.counts).map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}
           </dl>
+          <p className="muted">Counts are a snapshot for review. New activity does not invalidate this preview; a change in members or protection does.</p>
           {prepared.impact.warnings.map((warning) => <p className="form-warning" key={warning}>{warning}</p>)}
           {kind === "WORKSPACE" ? (
             <label className="admin-check-field">

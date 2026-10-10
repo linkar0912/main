@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { AdminPagination } from "../shared/admin-pagination";
 import { adminCommand, adminErrorMessage, adminIdempotencyKey } from "../shared/admin-request";
 import { StatusPill } from "../shared/status-pill";
 import { DeletionWizard } from "./deletion-wizard";
@@ -24,14 +25,40 @@ type Job = {
 // Cancellation is only possible before the irreversible boundary is crossed.
 // A job already cancelling can be cancelled again to re-enqueue a stalled request.
 const cancellableStates = ["QUEUED", "RUNNING", "FAILED", "CANCELLING"];
+const activeStates = ["QUEUED", "RUNNING", "CANCELLING"];
+const REFRESH_INTERVAL_MS = 20_000;
 
-export function DeletionConsole({ jobs }: { jobs: Job[] }) {
+function jobLabel(job: Job): string {
+  return `${job.targetKind.toLowerCase().replaceAll("_", " ")} ${job.targetId}`;
+}
+
+export function DeletionConsole({
+  jobs,
+  cursor = null,
+  history = [],
+  nextCursor = null,
+}: {
+  jobs: Job[];
+  cursor?: string | null;
+  history?: string[];
+  nextCursor?: string | null;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const reasonReady = reason.trim().length >= 3;
+  const hasActiveJob = jobs.some((job) => activeStates.includes(job.state));
+
+  // Progress is written by the worker, so poll only while a job can still move.
+  useEffect(() => {
+    if (!hasActiveJob) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible" && busy === null) router.refresh();
+    }, REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [busy, hasActiveJob, router]);
 
   async function command(job: Job, action: "cancel" | "retry") {
     setBusy(job.id);
@@ -97,8 +124,8 @@ export function DeletionConsole({ jobs }: { jobs: Job[] }) {
                         <td>
                           {canCancel || canRetry ? (
                             <span className="admin-job-actions">
-                              {canCancel ? <button className="button button-small button-secondary" type="button" disabled={busy !== null || !reasonReady} onClick={() => void command(job, "cancel")}>Cancel</button> : null}
-                              {canRetry ? <button className="button button-small button-secondary" type="button" disabled={busy !== null || !reasonReady} onClick={() => void command(job, "retry")}>Retry</button> : null}
+                              {canCancel ? <button className="button button-small button-secondary" type="button" disabled={busy !== null || !reasonReady} aria-label={`Cancel deletion of ${jobLabel(job)}`} onClick={() => void command(job, "cancel")}>Cancel</button> : null}
+                              {canRetry ? <button className="button button-small button-secondary" type="button" disabled={busy !== null || !reasonReady} aria-label={`Retry deletion of ${jobLabel(job)}`} onClick={() => void command(job, "retry")}>Retry</button> : null}
                             </span>
                           ) : "-"}
                         </td>
@@ -111,6 +138,16 @@ export function DeletionConsole({ jobs }: { jobs: Job[] }) {
           </>
         )}
       </section>
+
+      <AdminPagination
+        basePath="/admin/deletions"
+        params={{}}
+        cursor={cursor}
+        history={history}
+        nextCursor={nextCursor}
+        label="Deletion job pagination"
+        summary={hasActiveJob ? "Refreshes every 20 seconds while a job is active." : "Newest jobs first."}
+      />
     </main>
   );
 }

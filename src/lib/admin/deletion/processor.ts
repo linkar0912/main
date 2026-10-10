@@ -6,7 +6,7 @@ import { prisma } from "@/src/lib/prisma";
 import { deleteQueuedWorkspaceEventsBatch } from "@/src/lib/queue";
 import { getRepository } from "@/src/lib/repository-provider";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
-import { previewDeletion } from "./impact";
+import { deletionImpactMatches, previewDeletion } from "./impact";
 import type { DeletionImpact } from "./types";
 import { loadSyntheticAccountInventory } from "./synthetic-inventory";
 import { assertSyntheticCleanupInventory, canDeleteSyntheticAuthUser } from "./synthetic-cleanup-safety";
@@ -15,7 +15,7 @@ const STAGES: AdminDeletionStageKind[] = ["VALIDATE", "CANCEL_WORK", "DISCONNECT
 
 function safeCode(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
-  const codes = ["deletion_job_not_found", "synthetic_inventory_missing", "impact_changed", "workspace_not_found", "protected_target", "owner_transfer_required", "synthetic_identity_missing", "auth_user_lookup_failed", "auth_identity_changed", "auth_user_delete_failed", "synthetic_inventory_changed", "shared_test_workspace_requires_review"];
+  const codes = ["deletion_job_not_found", "synthetic_inventory_missing", "impact_changed", "workspace_not_found", "deletion_in_progress", "workspace_not_deletable", "protected_target", "owner_transfer_required", "synthetic_identity_missing", "auth_user_lookup_failed", "auth_identity_changed", "auth_user_delete_failed", "synthetic_inventory_changed", "shared_test_workspace_requires_review"];
   return codes.includes(message) ? message.toUpperCase() : "DELETION_STAGE_FAILED";
 }
 
@@ -40,7 +40,9 @@ function syntheticWorkspaceIds(impact: DeletionImpact): string[] {
 
 async function markCancelled(jobId: string, targetKind: "USER" | "WORKSPACE" | "SYNTHETIC_ACCOUNTS", targetId: string, impact: DeletionImpact) {
   if (targetKind === "WORKSPACE") {
-    await prisma.workspace.updateMany({ where: { id: targetId, deletionScheduledAt: { not: null } }, data: { status: "ACTIVE", deletionScheduledAt: null, version: { increment: 1 } } });
+    // A workspace that was already suspended when deletion was requested stays suspended.
+    const status = impact.structure?.workspaceStatus === "SUSPENDED" ? "SUSPENDED" : "ACTIVE";
+    await prisma.workspace.updateMany({ where: { id: targetId, deletionScheduledAt: { not: null } }, data: { status, deletionScheduledAt: null, version: { increment: 1 } } });
   } else if (targetKind === "SYNTHETIC_ACCOUNTS") {
     await prisma.workspace.updateMany({
       where: { id: { in: syntheticWorkspaceIds(impact) }, deletionScheduledAt: { not: null } },
@@ -75,7 +77,7 @@ export async function processAdminDeletion(jobId: string): Promise<{ state: "COM
             assertSyntheticCleanupInventory(current.impactDigest, await loadSyntheticAccountInventory());
           } else {
             const fresh = await previewDeletion({ kind: current.targetKind, id: current.targetId });
-            if (fresh.impactDigest !== current.impactDigest) throw new Error("impact_changed");
+            if (!deletionImpactMatches(current, fresh)) throw new Error("impact_changed");
           }
         } else if (stage === "CANCEL_WORK" && current.targetKind !== "USER") {
           const workspaceIds = current.targetKind === "WORKSPACE" ? [current.targetId] : syntheticWorkspaceIds(impact);
@@ -87,8 +89,12 @@ export async function processAdminDeletion(jobId: string): Promise<{ state: "COM
             ]);
             return [...connections.map((connection) => connection.igUserId), ...pages.map((page) => page.pageId)];
           }))).flat();
+          // A suspended workspace target is locked too, so a lifecycle restore
+          // cannot reopen it mid-deletion; cancellation restores its prior status.
           await prisma.workspace.updateMany({
-            where: { id: { in: workspaceIds }, status: "ACTIVE" },
+            where: current.targetKind === "WORKSPACE"
+              ? { id: { in: workspaceIds }, status: { in: ["ACTIVE", "SUSPENDED"] }, deletionScheduledAt: null }
+              : { id: { in: workspaceIds }, status: "ACTIVE" },
             data: { status: "SUSPENDED", deletionScheduledAt: new Date(), version: { increment: 1 } },
           });
           await deleteQueuedWorkspaceEventsBatch([...workspaceIds, ...providerIds]);

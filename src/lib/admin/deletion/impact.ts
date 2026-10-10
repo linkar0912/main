@@ -6,7 +6,7 @@ import { getServerEnv } from "@/src/lib/env";
 import { prisma } from "@/src/lib/prisma";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
 import { AdminWorkspaceError } from "../workspace-service";
-import type { DeletionImpact, DeletionPreview, DeletionTarget } from "./types";
+import type { DeletionImpact, DeletionPreview, DeletionStructure, DeletionTarget } from "./types";
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -17,7 +17,24 @@ function canonical(value: unknown): string {
 }
 
 export function digestDeletionImpact(impact: DeletionImpact): string {
-  return createHash("sha256").update(canonical(impact)).digest("hex");
+  // Version 2 binds the confirmation to structure only. Live row counts move
+  // with every webhook, so hashing them made a live workspace undeletable.
+  const subject = impact.version === 2 && impact.structure ? { version: 2, structure: impact.structure } : impact;
+  return createHash("sha256").update(canonical(subject)).digest("hex");
+}
+
+/**
+ * Whether a fresh preview still describes the deletion an operator approved.
+ * Jobs stored before version 2 carry a digest over counts, so they are compared
+ * on their target and member identities instead of being failed forever.
+ */
+export function deletionImpactMatches(stored: { impact: unknown; impactDigest: string }, fresh: DeletionPreview): boolean {
+  const impact = stored.impact as Partial<DeletionImpact> | null;
+  if (impact?.version === 2) return stored.impactDigest === fresh.impactDigest;
+  const sorted = (ids: unknown) => Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string").sort() : [];
+  return impact?.target?.kind === fresh.impact.target.kind
+    && impact.target.id === fresh.impact.target.id
+    && canonical(sorted(impact.memberUserIds)) === canonical(sorted(fresh.impact.memberUserIds));
 }
 
 export function deletionConfirmationPhrase(target: DeletionTarget): string {
@@ -31,8 +48,15 @@ async function previewUser(id: string): Promise<DeletionImpact> {
   if (auth.error || !auth.data.user) throw new AdminWorkspaceError(404, "user_not_found");
   const memberships = await prisma.workspaceMember.findMany({ where: { userId: id }, select: { workspaceId: true, role: true } });
   if (memberships.some((membership) => membership.role === "OWNER")) throw new AdminWorkspaceError(409, "owner_transfer_required");
+  const structure: DeletionStructure = {
+    target: { kind: "USER", id },
+    memberUserIds: [id],
+    protected: false,
+    memberships: memberships.map((membership) => `${membership.workspaceId}:${membership.role}`).sort(),
+  };
   return {
-    version: 1,
+    version: 2,
+    structure,
     target: { kind: "USER", id },
     identity: { label: auth.data.user.email ?? id },
     counts: { memberships: memberships.length, platformControls: await prisma.platformUserControl.count({ where: { userId: id } }) },
@@ -43,9 +67,14 @@ async function previewUser(id: string): Promise<DeletionImpact> {
 
 async function previewWorkspace(id: string): Promise<DeletionImpact> {
   return prisma.$transaction(async (transaction) => {
-    const workspace = await transaction.workspace.findUnique({ where: { id }, select: { name: true, status: true } });
+    const workspace = await transaction.workspace.findUnique({ where: { id }, select: { name: true, status: true, deletionScheduledAt: true } });
     if (!workspace) throw new AdminWorkspaceError(404, "workspace_not_found");
-    if (workspace.status !== "ACTIVE") throw new AdminWorkspaceError(409, "workspace_not_active");
+    // Suspended workspaces are the usual deletion candidates. A workspace already
+    // locked by a deletion job belongs to that job. The processor re-runs this
+    // preview only while VALIDATE is incomplete, which is before CANCEL_WORK
+    // suspends and locks the workspace, so the recorded status stays stable.
+    if (workspace.deletionScheduledAt || workspace.status === "DELETION_PENDING") throw new AdminWorkspaceError(409, "deletion_in_progress");
+    if (workspace.status !== "ACTIVE" && workspace.status !== "SUSPENDED") throw new AdminWorkspaceError(409, "workspace_not_deletable");
     const members = await transaction.workspaceMember.findMany({ where: { workspaceId: id }, select: { userId: true } });
     const userIds = members.flatMap((member) => member.userId ? [member.userId] : []).sort();
     if (userIds.some((userId) => getServerEnv().platformOwnerUserIds.includes(userId.toLowerCase()))) {
@@ -64,7 +93,8 @@ async function previewWorkspace(id: string): Promise<DeletionImpact> {
       transaction.trackedLink.count({ where: { workspaceId: id } }),
     ]);
     return {
-      version: 1,
+      version: 2,
+      structure: { target: { kind: "WORKSPACE", id }, memberUserIds: userIds, protected: false, workspaceStatus: workspace.status },
       target: { kind: "WORKSPACE", id },
       identity: { label: workspace.name },
       counts: { members: members.length, automations, contacts, participants, executions, webhookEvents, deliveries, integrations, sequences, broadcasts, trackedLinks },

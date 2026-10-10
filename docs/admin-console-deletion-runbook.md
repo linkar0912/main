@@ -2,11 +2,11 @@
 
 Prefer suspension for access incidents and uncertain cases. Permanent deletion is for confirmed account lifecycle or compliance outcomes and cannot be undone.
 
-1. Open **System → Permanent deletion**, choose a user or workspace UUID, enter the business reason, and generate an impact preview.
-2. Review every count and warning. Platform-owner users, their workspace, non-active workspaces, and users that still own a workspace are rejected server-side.
-3. Type the exact case-sensitive phrase and submit before the single-use challenge expires. The impact digest is recomputed immediately; changed data forces a new preview.
-4. Follow the durable stages. Work is cancelled and the workspace is suspended while deletion remains reversible. The worker then marks the job irreversible before removing tenant rows. Supabase Auth deletion is the final external step.
-5. Cancellation is available only before `irreversibleAt`. It restores an active workspace. Failed jobs can be retried with a new audited reason and resume completed stages without repeating them.
+1. Open **System → Permanent deletion**, choose the target type, and paste its **Target ID**: a Supabase Auth user UUID, or a workspace ID such as `workspace_<uuid>` (copy it from the user or workspace page). Enter the business reason and generate an impact preview. Malformed IDs are rejected before any lookup. Issuing the preview challenge is recorded in the audit trail.
+2. Review every count and warning. Counts are an informational snapshot. Platform-owner users, their workspaces, workspaces already locked by a deletion, and users that still own a workspace are rejected server-side. Active and suspended workspaces can both be previewed.
+3. Type the exact case-sensitive phrase and submit before the single-use challenge expires. The impact digest covers structure only: the target, its member user IDs, platform-owner protection, and the workspace status (or a user's memberships and roles). New contacts, events, or deliveries do not invalidate the preview; a structural change forces a new preview. A second request for a target that already has a queued, running, or cancelling job is rejected.
+4. Follow the durable stages. Work is cancelled and the workspace is suspended and locked while deletion remains reversible. The worker then marks the job irreversible before removing tenant rows. Supabase Auth deletion is the final external step. The job list refreshes every 20 seconds while a job is active.
+5. Cancellation is available only before `irreversibleAt`. It returns the workspace to the status it had when deletion was requested (active or suspended). Failed jobs can be retried with a new audited reason and resume completed stages without repeating them. A job that failed before validation completed is revalidated against the structural digest first; if members or protection changed, start a new request instead.
 
 Workspace Auth-user deletion is opt-in. Only users with no remaining workspace memberships are removed. The allowlisted platform owner is never eligible. Provider data-deletion requests are visible under **System → Provider deletion requests** without signed requests or confirmation codes.
 
