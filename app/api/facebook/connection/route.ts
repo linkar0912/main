@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/src/lib/auth/session";
+import { requireManager } from "@/src/lib/auth/require-role";
 import { getRepository } from "@/src/lib/repository-provider";
 import { logger } from "@/src/lib/logger";
 import { getServerEnv } from "@/src/lib/env";
@@ -31,8 +32,9 @@ export async function GET(request: Request) {
 
 /** DELETE: disconnect a Facebook Page from the workspace. */
 export async function DELETE(request: Request) {
-  const session = await getValidatedSession(request);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const guard = await requireManager(request);
+  if (!guard.ok) return guard.error;
+  const { session } = guard;
   const body = (await request.json().catch(() => ({}))) as { id?: unknown };
   if (typeof body.id !== "string" || !body.id) {
     return NextResponse.json({ error: "Page ID is required" }, { status: 400 });

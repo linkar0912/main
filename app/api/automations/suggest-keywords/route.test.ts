@@ -35,6 +35,21 @@ describe("keyword suggestions", () => {
     expect(suggestions.length).toBeGreaterThanOrEqual(6);
   });
 
+  it("learns from comment-campaign (v2) trigger keywords too", async () => {
+    const campaign = {
+      ...automation([]),
+      id: "automation_2",
+      definition: {
+        version: 2,
+        trigger: { type: "comment", source: "all_media", mediaIds: [], mediaSnapshots: [], match: "keyword", keywords: ["lehenga"] },
+      },
+    } as unknown as AutomationRecord;
+
+    const suggestions = await suggestKeywords(async () => [campaign], "workspace_a");
+
+    expect(suggestions[0]).toBe("lehenga");
+  });
+
   it("falls back to curated staples when the workspace has nothing yet", async () => {
     const suggestions = await suggestKeywords(async () => [], "workspace_a");
     expect(suggestions[0]).toBe("price");

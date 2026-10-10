@@ -32,7 +32,7 @@ const insights = {
   ],
   capturedEmails: 7,
   optedOut: 2,
-  usage: { participantsThisMonth: 12, monthlyLimit: null },
+  usage: { deliveriesThisMonth: 12, monthlyDeliveryLimit: null },
 };
 
 function stubFetch(insightsResponse: Response = new Response(JSON.stringify(insights))) {

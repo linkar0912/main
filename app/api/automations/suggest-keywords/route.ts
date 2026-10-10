@@ -37,14 +37,18 @@ export async function suggestKeywords(
   const automations = await listAutomations(workspaceId);
   const counts = new Map<string, number>();
   for (const automation of automations) {
-    if (automation.definition.version !== 1) continue;
-    const sources = automation.definition.trigger.type === "comment" || automation.definition.trigger.type === "message"
-      ? [
-          ...automation.definition.trigger.keywords,
-          ...automation.definition.conditions.flatMap((condition) =>
-            condition.type === "contains_keyword" ? condition.keywords : []),
-        ]
-      : [];
+    const definition = automation.definition;
+    // Comment campaigns (definition v2) carry their keywords on the trigger;
+    // classic flows (v1) on the trigger plus contains_keyword conditions.
+    const sources = definition.version === 2
+      ? definition.trigger.keywords
+      : definition.trigger.type === "comment" || definition.trigger.type === "message"
+        ? [
+            ...definition.trigger.keywords,
+            ...definition.conditions.flatMap((condition) =>
+              condition.type === "contains_keyword" ? condition.keywords : []),
+          ]
+        : [];
     for (const keyword of sources) {
       const normalized = normalizeWord(keyword);
       if (normalized.length < 3 || STOPWORDS.has(normalized)) continue;

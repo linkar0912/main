@@ -15,7 +15,7 @@ type InsightsPayload = {
   mediaPerformance: MediaPerformance[];
   capturedEmails: number;
   optedOut: number;
-  usage: { participantsThisMonth: number; monthlyLimit: number | null };
+  usage: { deliveriesThisMonth: number; monthlyDeliveryLimit: number | null };
 };
 
 const FUNNEL_STAGES = [
@@ -62,7 +62,7 @@ export function InsightsScreen() {
         mediaPerformance: payload.mediaPerformance ?? [],
         capturedEmails: payload.capturedEmails ?? 0,
         optedOut: payload.optedOut ?? 0,
-        usage: payload.usage ?? { participantsThisMonth: 0, monthlyLimit: null },
+        usage: payload.usage ?? { deliveriesThisMonth: 0, monthlyDeliveryLimit: null },
       };
       insightsCache.value = next;
       insightsCache.fetchedAt = Date.now();
@@ -94,7 +94,7 @@ export function InsightsScreen() {
 
   return (
     <>
-      <main className="page-wrap insights-page">
+      <div className="page-wrap insights-page">
         <PageHeader
           className="insights-page-header"
           title="Insights"
@@ -149,7 +149,7 @@ export function InsightsScreen() {
             </div>
           </div>
         )}
-      </main>
+      </div>
     </>
   );
 }

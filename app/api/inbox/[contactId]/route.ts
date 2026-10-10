@@ -4,7 +4,10 @@ import { MANUAL_REPLY_PAUSE_MS, MANUAL_REPLY_REASON } from "@/src/lib/automation
 import { executeOutboundDelivery } from "@/src/lib/automation/outbound-delivery";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
+import { EntitlementError } from "@/src/lib/entitlements/service";
+import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 import { createId } from "@/src/lib/id";
+import { logger } from "@/src/lib/logger";
 import { decodeInboxCursor, encodeInboxCursor } from "@/src/lib/inbox-cursor";
 import { buildConversation } from "@/src/lib/inbox";
 import { isWithinMessagingWindow } from "@/src/lib/messaging-window";
@@ -25,10 +28,17 @@ const patchSchema = z.discriminatedUnion("action", [
 ]);
 type Context = { params: Promise<{ contactId: string }> };
 
-// Sorts above both `delivery_` and `wevent_` ids so the equal-timestamp
-// tie-break of the *other* table includes every boundary row instead of
-// skipping rows whose ids live in a different space than the cursor.
-const CROSS_SOURCE_CURSOR_ID = "~";
+// The merged conversation is ordered (at DESC, id DESC). At one timestamp
+// every `wevent_` id sorts above every `delivery_` id, so a page boundary on
+// a delivery row has already shown all inbound rows of that millisecond, and
+// a boundary on an inbound row has shown none of that millisecond's
+// deliveries. The repositories apply an id tie-break only when the cursor id
+// carries their own prefix, so the other table gets one of two sentinels:
+//   "~"        - no tie-break: keep every row at the boundary timestamp.
+//   "wevent_"  - a bare prefix sorts below every real wevent id, so the
+//                tie-break drops every inbound row at the boundary timestamp.
+const INCLUDE_BOUNDARY_ROWS = "~";
+const EXCLUDE_INBOUND_BOUNDARY_ROWS = "wevent_";
 
 function scopedMessageCursors(cursor: string): { outbound: string; inbound: string } {
   try {
@@ -36,12 +46,12 @@ function scopedMessageCursors(cursor: string): { outbound: string; inbound: stri
     if (decoded.id.startsWith("delivery_")) {
       return {
         outbound: cursor,
-        inbound: encodeInboxCursor({ kind: "messages", at: decoded.at, id: CROSS_SOURCE_CURSOR_ID }),
+        inbound: encodeInboxCursor({ kind: "messages", at: decoded.at, id: EXCLUDE_INBOUND_BOUNDARY_ROWS }),
       };
     }
     if (decoded.id.startsWith("wevent_")) {
       return {
-        outbound: encodeInboxCursor({ kind: "messages", at: decoded.at, id: CROSS_SOURCE_CURSOR_ID }),
+        outbound: encodeInboxCursor({ kind: "messages", at: decoded.at, id: INCLUDE_BOUNDARY_ROWS }),
         inbound: cursor,
       };
     }
@@ -49,6 +59,13 @@ function scopedMessageCursors(cursor: string): { outbound: string; inbound: stri
     // Let the repositories surface the canonical invalid_cursor error.
   }
   return { outbound: cursor, inbound: cursor };
+}
+
+type MessagePosition = { at: string; id: string };
+
+/** Conversation order, newest first. Negative = `left` comes first. */
+function newestFirst(left: MessagePosition, right: MessagePosition): number {
+  return right.at.localeCompare(left.at) || right.id.localeCompare(left.id);
 }
 
 export async function GET(request: Request, context: Context) {
@@ -68,14 +85,27 @@ export async function GET(request: Request, context: Context) {
       repository.listOutboundDeliveriesForRecipientPage(session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, { limit: pageSize, ...(scoped ? { cursor: scoped.outbound } : {}) }),
       repository.listInboundEventsForRecipient(session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, { limit: pageSize, ...(scoped ? { cursor: scoped.inbound } : {}) }),
     ]);
-    const newest = buildConversation(contact, deliveries.records, events.records)
-      .sort((left, right) => right.at.localeCompare(left.at) || right.id.localeCompare(left.id));
-    const hasMore = newest.length > parsed.data.limit || Boolean(deliveries.nextCursor || events.nextCursor);
-    const visibleNewest = newest.slice(0, parsed.data.limit);
-    const last = visibleNewest.at(-1);
+    const newest = buildConversation(contact, deliveries.records, events.records).sort(newestFirst);
+    // A source that still has more rows is only fully known down to its last
+    // fetched row. Anything older could be missing that source's rows, so it
+    // waits for the next page - otherwise rows dropped by buildConversation
+    // (no text, other identity) could let the page reach past that boundary
+    // and skip messages. The newest such boundary is where knowledge ends.
+    const lastDelivery = deliveries.nextCursor ? deliveries.records.at(-1) : undefined;
+    const lastEvent = events.nextCursor ? events.records.at(-1) : undefined;
+    const boundary = [
+      ...(lastDelivery ? [{ at: lastDelivery.createdAt, id: lastDelivery.id }] : []),
+      ...(lastEvent ? [{ at: lastEvent.receivedAt, id: lastEvent.id }] : []),
+    ].sort(newestFirst)[0];
+    const known = boundary ? newest.filter((message) => newestFirst(message, boundary) <= 0) : newest;
+    const visibleNewest = known.slice(0, parsed.data.limit);
+    // Resume after the last shown message when the page filled up; otherwise
+    // after the boundary, so a page whose rows were all dropped still hands
+    // back a cursor instead of ending the conversation early.
+    const resumeAt = known.length > parsed.data.limit ? visibleNewest.at(-1) : boundary;
     return NextResponse.json({ data: {
       messages: visibleNewest.reverse(),
-      ...(hasMore && last ? { nextCursor: encodeInboxCursor({ kind: "messages", at: last.at, id: last.id }) } : {}),
+      ...(resumeAt ? { nextCursor: encodeInboxCursor({ kind: "messages", at: resumeAt.at, id: resumeAt.id }) } : {}),
     } });
   } catch (error) {
     const invalidCursor = error instanceof Error && error.message === "invalid_cursor";
@@ -146,13 +176,43 @@ export async function POST(request: Request, context: Context) {
   }, contact.igScopedUserId, message as MetaMessage));
 
   if (result.status === "BUSY") return NextResponse.json({ error: "This message is already sending" }, { status: 409 });
-  if (result.status === "FAILED" || result.status === "UNKNOWN") return NextResponse.json({ error: result.error }, { status: 502 });
+  if (result.status === "FAILED" && result.reason === "QUOTA_REJECTED") {
+    return entitlementErrorResponse(new EntitlementError("limit_reached", "deliveries"))!;
+  }
+  if (result.status === "FAILED" || result.status === "UNKNOWN") {
+    // Provider text can be localized, carry ids, or describe our token setup;
+    // keep it in the logs (and the delivery ledger) and give people a sentence.
+    logger.warn("Manual inbox reply was not delivered", {
+      workspaceId: session.workspaceId,
+      contactId: contact.id,
+      status: result.status,
+      error: result.error,
+    });
+    return NextResponse.json({
+      error: result.status === "UNKNOWN"
+        ? "Instagram did not confirm this message. Check the conversation before sending it again."
+        : "Instagram did not accept this message. Try again in a moment.",
+    }, { status: 502 });
+  }
   const sentAt = new Date().toISOString();
   // A teammate is talking to this person now; keep automations out of the
   // conversation until the pause ends or someone resumes them.
   const automationsPausedUntil = new Date(Date.parse(sentAt) + MANUAL_REPLY_PAUSE_MS).toISOString();
-  await repository.pauseContactAutomations(
-    session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, automationsPausedUntil, MANUAL_REPLY_REASON,
-  ).catch(() => false);
-  return NextResponse.json({ data: { message: { id: result.providerMessageId ?? deliveryKey, direction: "outbound", text, at: sentAt, status: "sent" }, automationsPausedUntil } }, { status: 201 });
+  await Promise.all([
+    repository.pauseContactAutomations(
+      session.workspaceId, contact.instagramAccountId, contact.igScopedUserId, automationsPausedUntil, MANUAL_REPLY_REASON,
+    ).catch(() => false),
+    // Replying re-opens a closed conversation, server-side, so every
+    // teammate's inbox agrees on its status.
+    contact.inboxStatus === "OPEN"
+      ? Promise.resolve(null)
+      : repository.updateInboxState(session.workspaceId, contact.id, { action: "set_status", status: "OPEN" }).catch(() => null),
+  ]);
+  // The id must be the OutboundDelivery id: that is what GET returns for this
+  // message, so the optimistic bubble and the refetched one dedupe.
+  return NextResponse.json({ data: {
+    message: { id: result.deliveryId ?? deliveryKey, direction: "outbound", text, at: sentAt, status: "sent" },
+    automationsPausedUntil,
+    inboxStatus: "OPEN",
+  } }, { status: 201 });
 }

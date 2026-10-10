@@ -52,4 +52,38 @@ describe("POST /api/team/invitations", () => {
     expect(mocks.createInvitation).not.toHaveBeenCalled();
     expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
+
+  function invite() {
+    return POST(new Request("https://app.linkar.in/api/team/invitations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "member@example.com", role: "MEMBER" }),
+    }));
+  }
+
+  it("reports a delivered invitation email", async () => {
+    mocks.createInvitation.mockResolvedValue({ id: "inv_1", email: "member@example.com", role: "MEMBER" });
+    mocks.sendEmail.mockResolvedValue({ delivered: true, id: "email_1" });
+
+    const response = await invite();
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({ id: "inv_1", email: "member@example.com", role: "MEMBER", emailDelivered: true });
+  });
+
+  it("still answers 201 with a warning when the mailer reports or throws a failure", async () => {
+    mocks.createInvitation.mockResolvedValue({ id: "inv_1", email: "member@example.com", role: "MEMBER" });
+    mocks.sendEmail.mockResolvedValue({ delivered: false, reason: "not_configured" });
+
+    const notConfigured = await invite();
+    expect(notConfigured.status).toBe(201);
+    await expect(notConfigured.json()).resolves.toMatchObject({ emailDelivered: false, warning: "invitation_email_not_sent" });
+
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.sendEmail.mockRejectedValue(new Error("EMAIL_FROM is not configured"));
+    const thrown = await invite();
+    expect(thrown.status).toBe(201);
+    await expect(thrown.json()).resolves.toMatchObject({ id: "inv_1", emailDelivered: false, warning: "invitation_email_not_sent" });
+    errorLog.mockRestore();
+  });
 });

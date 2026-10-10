@@ -4,6 +4,7 @@ import { getValidatedSession, type AppSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 import { hashToken, createRawToken } from "@/src/lib/auth/tokens";
 import { sendEmail } from "@/src/lib/mailer";
+import { logger } from "@/src/lib/logger";
 import type { MemberRole } from "@/src/lib/repository";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
@@ -85,15 +86,34 @@ export async function POST(request: Request): Promise<NextResponse> {
         invitedByUserId: guard.session.userId,
         expiresAt: new Date(Date.now() + INVITATION_TTL_MS).toISOString(),
     });
-    await sendEmail({
-        to: email,
-        subject: "You're invited to a Linkar workspace",
-        body: `Join your team's Linkar workspace with this link (valid for 7 days):
+    // The invitation row already exists, so a mail failure must not turn into
+    // a 500 the client would retry (and hit already-invited state with no
+    // email sent). Report it on the 201 so the UI can tell the inviter.
+    let emailDelivered = false;
+    try {
+        const delivery = await sendEmail({
+            to: email,
+            subject: "You're invited to a Linkar workspace",
+            body: `Join your team's Linkar workspace with this link (valid for 7 days):
 ${env.appUrl}/signup?invite=${encodeURIComponent(raw)}
 
 You will need to create an account with this exact email address.`,
-    });
-    return NextResponse.json({ id: invitation.id, email: invitation.email, role: invitation.role }, { status: 201 });
+        });
+        emailDelivered = delivery.delivered;
+    } catch (error) {
+        logger.error("Invitation email could not be sent", {
+            workspaceId: guard.session.workspaceId,
+            invitationId: invitation.id,
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
+    return NextResponse.json({
+        id: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        emailDelivered,
+        ...(emailDelivered ? {} : { warning: "invitation_email_not_sent" }),
+    }, { status: 201 });
 }
 
 export async function DELETE(request: Request) {

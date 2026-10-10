@@ -51,6 +51,7 @@ describe("outbound delivery coordinator", () => {
       status: "SENT",
       providerMessageId: "provider_existing",
       reused: true,
+      deliveryId: expect.stringMatching(/^delivery_/),
     });
     expect(send).not.toHaveBeenCalled();
   });
@@ -66,7 +67,7 @@ describe("outbound delivery coordinator", () => {
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     resolveSend({ id: "provider_1" });
 
-    await expect(first).resolves.toMatchObject({ status: "SENT", reused: false });
+    await expect(first).resolves.toMatchObject({ status: "SENT", reused: false, deliveryId: expect.stringMatching(/^delivery_/) });
     await expect(second).resolves.toEqual({ status: "BUSY" });
   });
 
@@ -95,6 +96,7 @@ describe("outbound delivery coordinator", () => {
       status: "FAILED",
       retryable: false,
       error: "Monthly delivery limit reached",
+      reason: "QUOTA_REJECTED",
     });
     expect(send).not.toHaveBeenCalled();
   });

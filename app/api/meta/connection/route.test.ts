@@ -56,13 +56,25 @@ describe("DELETE /api/meta/connection", () => {
   beforeEach(() => {
     repository = createMemoryRepository();
     mocks.getValidatedSession.mockReset();
-    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", email: "owner@linkar.in", workspaceId: "workspace_1" });
+    void repository.addMember("workspace_1", "owner@linkar.in", "OWNER", "user_1");
+    void repository.addMember("workspace_1", "member@linkar.in", "MEMBER", "user_2");
     mocks.getServerEnv.mockReset();
     mocks.getServerEnv.mockReturnValue({ metaApiVersion: "v25.0", metaTokenEncryptionKey: "encryption-key" });
     mocks.unsealSecret.mockReset();
     mocks.unsealSecret.mockReturnValue("plain-token");
     mocks.unsubscribeFromWebhooks.mockReset();
     mocks.unsubscribeFromWebhooks.mockResolvedValue(undefined);
+  });
+
+  it("refuses a plain member before touching Meta or the connection", async () => {
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_2", email: "member@linkar.in", workspaceId: "workspace_1" });
+
+    const response = await DELETE(deleteRequest({ id: "connection_1" }));
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden" });
+    expect(mocks.unsubscribeFromWebhooks).not.toHaveBeenCalled();
   });
 
   it("returns 401 when the owner session is missing", async () => {

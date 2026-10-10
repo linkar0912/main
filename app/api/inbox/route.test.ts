@@ -3,11 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getValidatedSession: vi.fn(),
   getRepository: vi.fn(),
+  env: { metaApiVersion: "v25.0" } as { metaApiVersion: string; metaTokenEncryptionKey?: string },
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidatedSession }));
 vi.mock("@/src/lib/repository-provider", () => ({ getRepository: mocks.getRepository }));
-vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({ metaApiVersion: "v25.0" }) }));
+vi.mock("@/src/lib/env", () => ({ getServerEnv: () => mocks.env }));
 
 import { GET } from "./route";
 
@@ -45,6 +46,37 @@ describe("GET /api/inbox", () => {
     }));
     expect(body.data).toMatchObject({ nextCursor: "next-page", contacts: [expect.objectContaining({ id: "contact_1", unread: true, preview: "Need the guide" })] });
     expect(listConnections).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the un-enriched page when username enrichment fails", async () => {
+    mocks.env = { metaApiVersion: "v25.0", metaTokenEncryptionKey: "key" };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const listInboxContacts = vi.fn().mockResolvedValue({
+        rows: [{
+          record: {
+            id: "contact_1", workspaceId: "workspace_1", instagramAccountId: "ig_1", igScopedUserId: "person_1",
+            state: "NONE", attempts: 0, tags: [], score: 0, leadStatus: "NEW", inboxStatus: "OPEN", inboxFavorite: false,
+            lastSeenAt: "2026-09-04T10:00:00.000Z", createdAt: "2026-09-04T10:00:00.000Z", updatedAt: "2026-09-04T10:00:00.000Z",
+          },
+          preview: "hello",
+          unread: false,
+        }],
+      });
+      mocks.getRepository.mockReturnValue({
+        listInboxContacts,
+        listMembers: vi.fn().mockResolvedValue([]),
+        listConnections: vi.fn().mockRejectedValue(new Error("connection pool timeout")),
+      });
+
+      const response = await GET(new Request("http://localhost/api/inbox?enrich=1"));
+
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.contacts).toEqual([expect.objectContaining({ id: "contact_1" })]);
+    } finally {
+      mocks.env = { metaApiVersion: "v25.0" };
+      warn.mockRestore();
+    }
   });
 
   it("rejects invalid filters", async () => {

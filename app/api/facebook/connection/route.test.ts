@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   listFacebookPages: vi.fn(),
   deleteFacebookPage: vi.fn(),
   unsubscribe: vi.fn(),
+  getMemberRole: vi.fn(),
   session: { workspaceId: "ws_1", userId: "u_1" } as { workspaceId: string; userId: string } | null,
 }));
 
@@ -13,6 +14,7 @@ vi.mock("@/src/lib/auth/session", () => ({
 
 vi.mock("@/src/lib/repository-provider", () => ({
   getRepository: () => ({
+    getMemberRole: mocks.getMemberRole,
     listFacebookPages: mocks.listFacebookPages,
     deleteFacebookPage: mocks.deleteFacebookPage,
   }),
@@ -34,6 +36,20 @@ beforeEach(() => {
   mocks.listFacebookPages.mockReset();
   mocks.deleteFacebookPage.mockReset();
   mocks.unsubscribe.mockReset().mockResolvedValue(true);
+  mocks.getMemberRole.mockReset().mockResolvedValue("ADMIN");
+});
+
+describe("DELETE /api/facebook/connection authorization", () => {
+  it("refuses a plain member without touching the Page", async () => {
+    mocks.getMemberRole.mockResolvedValue("MEMBER");
+    const response = await DELETE(new Request("http://localhost/api/facebook/connection", {
+      method: "DELETE",
+      body: JSON.stringify({ id: "rec_1" }),
+    }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden" });
+    expect(mocks.deleteFacebookPage).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/facebook/connection", () => {

@@ -204,6 +204,11 @@ export async function PATCH(
     const members = await repository.listMembers(session.workspaceId);
     if (!members.some((member) => member.userId === assigneeUserId)) return NextResponse.json({ error: "Assignee is not a workspace member" }, { status: 400 });
   }
+  // The source is shown as a link and drives sequence enrollment; it must be
+  // an automation of this workspace, never an arbitrary or foreign id.
+  if (sourceAutomationId && !await repository.getAutomation(session.workspaceId, sourceAutomationId)) {
+    return NextResponse.json({ error: "Source automation not found" }, { status: 400 });
+  }
 
   let tagRecord = contact;
   if (tags !== undefined) {

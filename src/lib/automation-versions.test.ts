@@ -160,4 +160,47 @@ describe("automation version history", () => {
     const list = await repository.listAutomationVersions("workspace_versions", automation.id, 10);
     expect(list).toHaveLength(0);
   });
+
+  it("treats Automation.version as a write counter, never the definition version", async () => {
+    const repository = createMemoryRepository();
+    await repository.ensureWorkspace("workspace_versions", "owner@team.com");
+    const campaign = await repository.createAutomation("workspace_versions", {
+      name: "Campaign",
+      definition: { ...baseDefinition },
+    });
+    expect(campaign.version).toBe(1);
+
+    const renamed = await repository.updateAutomation("workspace_versions", campaign.id, { name: "Renamed" });
+    const paused = await repository.updateAutomation("workspace_versions", campaign.id, { status: "PAUSED" });
+    expect(renamed?.version).toBe(2);
+    expect(paused?.version).toBe(3);
+    expect(paused?.definition.version).toBe(1);
+
+    const [snapshot] = await Promise.all([repository.snapshotAutomation("workspace_versions", campaign.id)]);
+    const restored = await repository.restoreAutomationVersion("workspace_versions", campaign.id, snapshot!.id);
+    expect(restored?.version).toBe(4);
+  });
+
+  it("snapshots and restores the provider together with the pins", async () => {
+    const repository = createMemoryRepository();
+    await repository.ensureWorkspace("workspace_versions", "owner@team.com");
+    const automation = await repository.createAutomation("workspace_versions", {
+      provider: "FACEBOOK",
+      facebookPageId: "page_1",
+      name: "Page flow",
+      definition: baseDefinition,
+    });
+    const snapshot = await repository.snapshotAutomation("workspace_versions", automation.id);
+    expect(snapshot?.provider).toBe("FACEBOOK");
+
+    await repository.updateAutomation("workspace_versions", automation.id, {
+      provider: "INSTAGRAM",
+      instagramAccountId: "ig_1",
+      facebookPageId: null,
+    });
+    const restored = await repository.restoreAutomationVersion("workspace_versions", automation.id, snapshot!.id);
+
+    expect(restored).toMatchObject({ provider: "FACEBOOK", facebookPageId: "page_1" });
+    expect(restored?.instagramAccountId).toBeUndefined();
+  });
 });

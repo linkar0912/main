@@ -1,5 +1,6 @@
 import { getRepository } from "@/src/lib/repository-provider";
 import { getValidatedSession } from "@/src/lib/auth/session";
+import { requireManager } from "@/src/lib/auth/require-role";
 import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
 import { MetaClient } from "@/src/lib/meta/client";
@@ -37,8 +38,9 @@ export async function GET(request: Request) {
 
 
 export async function DELETE(request: Request) {
-  const session = await getValidatedSession(request);
-  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const guard = await requireManager(request);
+  if (!guard.ok) return guard.error;
+  const { session } = guard;
   const env = getServerEnv();
   if (!env.metaTokenEncryptionKey) return Response.json({ error: "Token encryption is not configured" }, { status: 503 });
   const body = await request.json().catch(() => ({})) as { id?: unknown };

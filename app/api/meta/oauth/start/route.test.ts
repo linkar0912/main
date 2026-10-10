@@ -4,10 +4,11 @@ const mocks = vi.hoisted(() => ({
   getValidatedSession: vi.fn(),
   listConnections: vi.fn(),
   assertEntitled: vi.fn(),
+  getMemberRole: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidatedSession }));
-vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({ listConnections: mocks.listConnections }) }));
+vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({ getMemberRole: mocks.getMemberRole, listConnections: mocks.listConnections }) }));
 vi.mock("@/src/lib/entitlements/service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/src/lib/entitlements/service")>()),
   getEntitlementService: () => ({ assertEntitled: mocks.assertEntitled }),
@@ -27,6 +28,17 @@ describe("GET /api/meta/oauth/start", () => {
     mocks.getValidatedSession.mockReset().mockResolvedValue({ userId: "u1", workspaceId: "w1" });
     mocks.listConnections.mockReset().mockResolvedValue([{ id: "ig1" }]);
     mocks.assertEntitled.mockReset().mockResolvedValue(undefined);
+    mocks.getMemberRole.mockReset().mockResolvedValue("OWNER");
+  });
+
+  it("sends a plain member back to Settings with a readable refusal", async () => {
+    mocks.getMemberRole.mockResolvedValue("MEMBER");
+
+    const response = await GET(new Request("https://app.linkar.in/api/meta/oauth/start"));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://app.linkar.in/settings?meta=forbidden");
+    expect(mocks.assertEntitled).not.toHaveBeenCalled();
   });
 
   it("returns the literal Instagram-limit contract before leaving Linkar", async () => {

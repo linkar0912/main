@@ -43,6 +43,34 @@ describe("/api/contacts/[id]/handoff", () => {
     expect(await repository.hasPausedParticipant("workspace_1", "ig_1", "sender_1")).toBe(false);
   });
 
+  it("keeps the existing assignee and notes when a handoff omits them", async () => {
+    await repository.ensureWorkspace("workspace_1", "owner@linkar.in");
+    await repository.addMember("workspace_1", "agent@linkar.in", "MEMBER", "user_agent");
+    await repository.updateContactProfile("workspace_1", contactId, { assigneeUserId: "user_agent", notes: "VIP, ships to Pune" });
+
+    const handoff = await POST(new Request("https://app.linkar.in", {
+      method: "POST",
+      body: JSON.stringify({ reason: "Asked for a refund" }),
+    }), context(contactId));
+
+    expect(handoff.status).toBe(200);
+    const contact = await repository.getContactById("workspace_1", contactId);
+    expect(contact).toMatchObject({ assigneeUserId: "user_agent", notes: "VIP, ships to Pune" });
+  });
+
+  it("clears the assignee and notes only when they are explicitly null", async () => {
+    await repository.updateContactProfile("workspace_1", contactId, { assigneeUserId: "user_agent", notes: "Old note" });
+
+    await POST(new Request("https://app.linkar.in", {
+      method: "POST",
+      body: JSON.stringify({ reason: "Escalated", assigneeUserId: null, notes: null }),
+    }), context(contactId));
+
+    const contact = await repository.getContactById("workspace_1", contactId);
+    expect(contact?.assigneeUserId).toBeUndefined();
+    expect(contact?.notes).toBeUndefined();
+  });
+
   it("rejects resuming a contact from another workspace", async () => {
     mocks.getValidatedSession.mockResolvedValue({ userId: "user_2", workspaceId: "workspace_2" });
     const response = await DELETE(new Request("https://app.linkar.in", { method: "DELETE" }), context(contactId));

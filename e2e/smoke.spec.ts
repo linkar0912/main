@@ -262,7 +262,7 @@ test("sequence source links can be cleared explicitly", async ({ page }) => {
   };
   await page.route("**/api/sequences", (route) => route.fulfill({ json: { data: [sequence] } }));
   await page.route("**/api/automations", (route) => route.fulfill({
-    json: { data: [{ id: "automation_1", name: "Email capture", version: 1 }] },
+    json: { data: [{ id: "automation_1", name: "Email capture", version: 1, definition: { version: 1 } }] },
   }));
   await page.route("**/api/sequences/sequence_1", async (route) => {
     patchBody = route.request().postDataJSON();

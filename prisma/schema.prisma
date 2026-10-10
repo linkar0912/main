@@ -160,6 +160,9 @@ model AutomationVersion {
   boundMediaId       String?
   instagramAccountId String?
   facebookPageId     String?
+  // Channel at snapshot time. Null on snapshots taken before this column
+  // existed; restore then infers it from the pin columns.
+  provider           AutomationProvider?
   // Who/what produced the snapshot (user id when available; "system" for cron).
   snapshotBy         String?
   // When the snapshot was taken.

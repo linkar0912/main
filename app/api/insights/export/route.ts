@@ -1,7 +1,8 @@
-import { getValidatedSession } from "@/src/lib/auth/session";
+import { requireManager } from "@/src/lib/auth/require-role";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getServerEnv } from "@/src/lib/env";
 import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
+import { csvCell } from "@/src/lib/format/csv";
 
 export const runtime = "nodejs";
 
@@ -17,17 +18,11 @@ const CSV_HEADER = [
     "instagram_username",
 ];
 
-function csvCell(value: string | undefined): string {
-    const cell = value ?? "";
-    // Neutralize spreadsheet formula injection the same way we quote commas.
-    const safe = /^[=+\-@]/.test(cell) ? `'${cell}` : cell;
-    return `"${safe.replace(/"/g, '""')}"`;
-}
-
 // GET /api/insights/export - CSV of this workspace's participants for spreadsheets.
 export async function GET(request: Request) {
-    const session = await getValidatedSession(request);
-    if (!session) return new Response("Unauthorized", { status: 401 });
+    const guard = await requireManager(request);
+    if (!guard.ok) return guard.error;
+    const { session } = guard;
 
     const repository = getRepository();
     const automationId = new URL(request.url).searchParams.get("automationId") || undefined;

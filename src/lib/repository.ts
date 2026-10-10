@@ -74,9 +74,26 @@ export type AutomationVersionRecord = {
   boundMediaId?: string;
   instagramAccountId?: string;
   facebookPageId?: string;
+  /** Channel at snapshot time; absent on snapshots that predate the column. */
+  provider?: AutomationProvider;
   snapshotBy?: string;
   snapshotAt: string;
 };
+
+/**
+ * The channel a restore puts the automation back on. Snapshots taken before
+ * AutomationVersion.provider existed fall back to their pin columns; an
+ * unpinned legacy snapshot keeps the automation's current channel.
+ */
+export function resolveSnapshotProvider(
+  snapshot: Pick<AutomationVersionRecord, "provider" | "instagramAccountId" | "facebookPageId">,
+  currentProvider: AutomationProvider,
+): AutomationProvider {
+  if (snapshot.provider) return snapshot.provider;
+  if (snapshot.facebookPageId) return "FACEBOOK";
+  if (snapshot.instagramAccountId) return "INSTAGRAM";
+  return currentProvider;
+}
 
 export type AutomationParticipantRecord = {
   id: string;
@@ -578,6 +595,7 @@ export type BroadcastRecord = {
   skipped: number;
   createdAt: string;
   completedAt?: string;
+  cancelledAt?: string;
 };
 
 export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt" | "dispatchStatus"> & {
@@ -1040,7 +1058,17 @@ export interface AutomationRepository {
   /** Returns contacts matching an optional lead-status filter, newest first. */
   listContactsByLeadStatus(
     workspaceId: string,
-    options: { leadStatus?: LeadStatus; limit: number; offset?: number },
+    options: {
+      leadStatus?: LeadStatus;
+      limit: number;
+      offset?: number;
+      /**
+       * Keyset position (rows strictly after this one in lastSeenAt DESC,
+       * id ASC order). Takes precedence over `offset`, which shifts when
+       * contacts are touched or change stage between pages.
+       */
+      after?: { lastSeenAt: string; id: string };
+    },
   ): Promise<AutomationContactRecord[]>;
   listInboxContacts(workspaceId: string, query: InboxContactQuery): Promise<InboxContactPage>;
   updateInboxState(workspaceId: string, contactId: string, patch: InboxStatePatch): Promise<AutomationContactRecord | null>;
@@ -1105,15 +1133,39 @@ export interface AutomationRepository {
     workspaceId: string,
     broadcastId: string,
   ): Promise<{ total: number; sent: number; failed: number; skipped: number; pending: number }>;
+  /**
+   * User cancel: PENDING/RUNNING -> CANCELLED (+cancelledAt) and every
+   * not-yet-sent recipient delivery -> CANCELLED, atomically.
+   */
+  cancelBroadcast(workspaceId: string, id: string): Promise<
+    | { status: "cancelled"; broadcast: BroadcastRecord }
+    | { status: "not_cancellable"; broadcast: BroadcastRecord }
+    | { status: "not_found" }
+  >;
+  /**
+   * Atomically counts one broadcast against the workspace's monthly
+   * allowance (WorkspaceUsagePeriod.broadcastsCreated). `reserved: false`
+   * means the limit was already reached; `used` is the count afterwards.
+   */
+  reserveMonthlyBroadcast(workspaceId: string, periodStart: string, limit: number | null): Promise<{ reserved: boolean; used: number }>;
+  /** Gives back a reservation whose broadcast could not be created. */
+  releaseMonthlyBroadcast(workspaceId: string, periodStart: string): Promise<void>;
+  /** Monthly usage counters for one period (zeros when nothing was used). */
+  getWorkspaceUsage(workspaceId: string, periodStart: string): Promise<{ deliveriesReserved: number; broadcastsCreated: number }>;
   // Workspace messaging quiet hours (null when disabled).
   getMessagingWindow(workspaceId: string): Promise<MessagingWindow | null>;
   setMessagingWindow(workspaceId: string, window: MessagingWindow | null): Promise<void>;
-  /** Recipients for a broadcast segment - suppressed contacts and DM-less rows excluded. */
+  /**
+   * Recipients for a broadcast segment: not suppressed, and only people whose
+   * last inbound message is inside Meta's 24-hour window (anyone else would be
+   * skipped as WINDOW_CLOSED). Most recently active first, capped at `limit`;
+   * `totalEligible` is the uncapped count so callers can report truncation.
+   */
   listBroadcastRecipients(
     workspaceId: string,
     segment: BroadcastSegment,
     limit: number,
-  ): Promise<{ igScopedUserId: string; instagramAccountId: string }[]>;
+  ): Promise<{ recipients: { igScopedUserId: string; instagramAccountId: string }[]; totalEligible: number }>;
   // Webhook activity inbox (persisted summaries of every inbound event).
   /** Idempotent per (workspaceId, providerEventId); never throws on duplicates. */
   recordWebhookEvent(workspaceId: string, input: RecordWebhookEventInput): Promise<void>;

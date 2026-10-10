@@ -27,6 +27,7 @@ import { SocialAvatar } from "./social-avatar";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
+import { toReadableApiError } from "@/src/lib/validation-error";
 import { SettingsConnectionsContentSkeleton, Skeleton } from "./skeleton";
 import { PageHeader } from "./page-header";
 import {
@@ -263,7 +264,7 @@ export function SettingsScreen() {
         body: JSON.stringify({ pageId: selectedFacebookPageId }),
       });
       const payload = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? "Could not connect Facebook Page");
+      if (!response.ok) throw new Error(toReadableApiError(payload.error, "Could not connect Facebook Page"));
       // router.push only swaps the URL - it doesn't remount this component, so
       // the connections/health fetched on initial mount would otherwise stay
       // stale and still show "No Page connected" until a manual reload.
@@ -296,7 +297,7 @@ export function SettingsScreen() {
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error ?? "Could not save messaging hours.");
+        throw new Error(toReadableApiError(payload.error, "Could not save messaging hours."));
       }
       invalidateWorkspaceResource("messaging-settings");
       setQuietPersisted({ enabled, start: quietStart, end: quietEnd, timezone: quietTz.trim() || "UTC" });
@@ -322,7 +323,10 @@ export function SettingsScreen() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      if (!response.ok) throw new Error("Could not disconnect Instagram");
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(response.status === 403 ? toReadableApiError(payload.error, "Could not disconnect Instagram") : "Could not disconnect Instagram");
+      }
       clearWorkspaceDataCache("connections");
       // The sidebar avatar comes from the connected account.
       notifyWorkspaceChanged();
@@ -419,6 +423,7 @@ export function SettingsScreen() {
     setTeamError("");
     setTeamNotice("");
     const invitedEmail = inviteEmail.trim();
+    let emailDelivered = true;
     try {
       const response = await fetch("/api/team/invitations", {
         method: "POST",
@@ -429,6 +434,8 @@ export function SettingsScreen() {
         const payload = await response.json().catch(() => null) as InviteErrorPayload;
         throw new Error(inviteErrorMessage(payload));
       }
+      const created = await response.json().catch(() => null) as { emailDelivered?: boolean } | null;
+      emailDelivered = created?.emailDelivered !== false;
     } catch (error) {
       setTeamError(error instanceof Error ? error.message : "Could not send the invitation.");
       setInviteBusy(false);
@@ -437,7 +444,11 @@ export function SettingsScreen() {
     // The invitation exists from here on. A failed list refresh must not read
     // as a failed invite, or people send it again.
     setInviteEmail("");
-    setTeamNotice(`Invitation sent to ${invitedEmail}.`);
+    if (emailDelivered) {
+      setTeamNotice(`Invitation sent to ${invitedEmail}.`);
+    } else {
+      setTeamError("The invitation was saved, but the email could not be sent. Revoke it and invite again once email delivery is working.");
+    }
     try {
       await refreshTeam();
     } catch {
@@ -479,6 +490,7 @@ export function SettingsScreen() {
     "missing-permissions": "Instagram did not approve everything Linkar needs. Reconnect and allow every requested permission.",
     "profile-fetch": "Signed in, but Linkar could not read the account profile back from Instagram. This is usually transient - retry the connection.",
     "already-connected": "That Instagram account already belongs to another Linkar workspace. Disconnect it there before connecting it here.",
+    forbidden: "Only workspace owners and admins can connect Instagram accounts. Ask one of them to connect it.",
     error: "Meta could not finish the connection. Check the app settings and try again.",
   };
 
@@ -508,7 +520,10 @@ export function SettingsScreen() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      if (!response.ok) throw new Error("Could not disconnect Facebook Page");
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(response.status === 403 ? toReadableApiError(payload.error, "Could not disconnect Facebook Page") : "Could not disconnect Facebook Page");
+      }
       clearWorkspaceDataCache("connections");
       notifyWorkspaceChanged();
       setConfirmingDisconnect(null);

@@ -4,10 +4,11 @@ const mocks = vi.hoisted(() => ({
   getValidatedSession: vi.fn(),
   listContactsByLeadStatus: vi.fn(),
   assertEntitled: vi.fn(),
+  getMemberRole: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidatedSession }));
-vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({ listContactsByLeadStatus: mocks.listContactsByLeadStatus, listRecentWebhookEvents: async () => [], listMembers: async () => [] }) }));
+vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({ getMemberRole: mocks.getMemberRole, listContactsByLeadStatus: mocks.listContactsByLeadStatus, listRecentWebhookEvents: async () => [], listMembers: async () => [] }) }));
 vi.mock("@/src/lib/entitlements/service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/src/lib/entitlements/service")>()),
   getEntitlementService: () => ({ assertEntitled: mocks.assertEntitled }),
@@ -20,6 +21,37 @@ describe("GET /api/contacts/export", () => {
     mocks.getValidatedSession.mockReset().mockResolvedValue({ userId: "u1", workspaceId: "w1" });
     mocks.listContactsByLeadStatus.mockReset();
     mocks.assertEntitled.mockReset().mockResolvedValue(undefined);
+    mocks.getMemberRole.mockReset().mockResolvedValue("OWNER");
+  });
+
+  it("refuses plain members before checking entitlements or loading contacts", async () => {
+    mocks.getMemberRole.mockResolvedValue("MEMBER");
+
+    const response = await GET(new Request("https://app.linkar.in/api/contacts/export"));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "forbidden" });
+    expect(mocks.assertEntitled).not.toHaveBeenCalled();
+    expect(mocks.listContactsByLeadStatus).not.toHaveBeenCalled();
+  });
+
+  it("neutralizes spreadsheet formulas in attacker-controlled fields", async () => {
+    mocks.listContactsByLeadStatus.mockResolvedValue([{
+      id: "contact_1",
+      email: "=HYPERLINK(\"https://evil.example\",\"x\")",
+      instagramAccountId: "ig_1",
+      igScopedUserId: "person_1",
+      leadStatus: "NEW",
+      score: 0,
+      tags: ["@cmd", "lead"],
+      lastSeenAt: "2026-09-01T10:00:00.000Z",
+      createdAt: "2026-08-31T10:00:00.000Z",
+    }]);
+
+    const csv = await (await GET(new Request("https://app.linkar.in/api/contacts/export"))).text();
+
+    expect(csv).toContain("\"'=HYPERLINK(\"\"https://evil.example\"\",\"\"x\"\")\"");
+    expect(csv).toContain(",'@cmd;lead,");
   });
 
   it("returns the literal export-feature contract before loading contacts", async () => {

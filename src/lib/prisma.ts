@@ -44,7 +44,7 @@ import type {
   OutboundDeliveryRecord,
   WorkspaceStatus,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS, toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
@@ -349,6 +349,7 @@ function mapAutomationVersion(record: {
   boundMediaId: string | null;
   instagramAccountId: string | null;
   facebookPageId: string | null;
+  provider?: AutomationVersionRecord["provider"] | null;
   snapshotBy: string | null;
   snapshotAt: Date;
 }): AutomationVersionRecord {
@@ -365,6 +366,7 @@ function mapAutomationVersion(record: {
     ...(record.boundMediaId ? { boundMediaId: record.boundMediaId } : {}),
     ...(record.instagramAccountId ? { instagramAccountId: record.instagramAccountId } : {}),
     ...(record.facebookPageId ? { facebookPageId: record.facebookPageId } : {}),
+    ...(record.provider ? { provider: record.provider } : {}),
     ...(record.snapshotBy ? { snapshotBy: record.snapshotBy } : {}),
     snapshotAt: record.snapshotAt.toISOString(),
   };
@@ -429,6 +431,7 @@ function mapBroadcastRow(record: {
   skipped: number;
   createdAt: Date;
   completedAt: Date | null;
+  cancelledAt?: Date | null;
 }): BroadcastRecord {
   return {
     id: record.id,
@@ -443,6 +446,7 @@ function mapBroadcastRow(record: {
     skipped: record.skipped,
     createdAt: record.createdAt.toISOString(),
     completedAt: record.completedAt?.toISOString(),
+    ...(record.cancelledAt ? { cancelledAt: record.cancelledAt.toISOString() } : {}),
   };
 }
 
@@ -524,6 +528,27 @@ function mergeDayCounts(rows: { day: string; count: number }[], days: number): {
     buckets.push({ day, count: counts.get(day) ?? 0 });
   }
   return buckets;
+}
+
+const SERIALIZATION_RETRIES = 3;
+
+/**
+ * Runs a Serializable transaction, retrying up to three times when Postgres
+ * aborts it with a serialization failure (Prisma P2034). Two editors saving
+ * the same automation at once is exactly the case Serializable exists to
+ * catch; the loser should simply re-run against the winner's state rather
+ * than surface a 500.
+ */
+async function withSerializationRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      if (code === "P2034" && attempt < SERIALIZATION_RETRIES) continue;
+      throw error;
+    }
+  }
 }
 
 export function createPrismaRepository(client = prisma): AutomationRepository {
@@ -1143,7 +1168,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           provider: input.provider ?? (input.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
           name: input.name.trim(),
           definition: input.definition,
-          version: input.definition.version,
+          // Automation.version is a pure per-row write counter (optimistic
+          // locking for admin operations), never the definition schema
+          // version - that lives in definition.version.
+          version: 1,
           instagramAccountId: input.instagramAccountId ?? null,
           facebookPageId: input.facebookPageId ?? null,
           priority: input.priority ?? 0,
@@ -1166,10 +1194,10 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       const data: Record<string, unknown> = {
         ...rest,
         ...(provider ? { provider } : {}),
-        ...(definition ? {
-          definition: definition as Prisma.InputJsonValue,
-          version: definition.version,
-        } : {}),
+        ...(definition ? { definition: definition as Prisma.InputJsonValue } : {}),
+        // Every write bumps the counter so a stale admin command (which
+        // updates WHERE version = n) cannot overwrite a user's edit.
+        version: { increment: 1 },
       };
       if (boundMediaId !== undefined) data.boundMediaId = boundMediaId ?? null;
       if (instagramAccountId !== undefined) {
@@ -1184,7 +1212,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           data.instagramAccountId = null;
         }
       }
-      const record = await client.$transaction(async (transaction) => {
+      const record = await withSerializationRetry(() => client.$transaction(async (transaction) => {
         const existing = await transaction.automation.findFirst({ where: { workspaceId, id } });
         if (!existing) return null;
         if (options?.snapshotBy) {
@@ -1202,6 +1230,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
               definition: existing.definition as Prisma.InputJsonValue,
               status: existing.status,
               priority: existing.priority,
+              provider: existing.provider,
               ...(existing.activatedAt ? { activatedAt: existing.activatedAt } : {}),
               ...(existing.boundMediaId ? { boundMediaId: existing.boundMediaId } : {}),
               ...(existing.instagramAccountId ? { instagramAccountId: existing.instagramAccountId } : {}),
@@ -1211,7 +1240,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           });
         }
         return transaction.automation.update({ where: { id }, data });
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
       return record ? mapAutomation(record) : null;
     },
 
@@ -2538,11 +2567,19 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async listContactsByLeadStatus(workspaceId, options) {
+      const after = options.after;
       const records = await client.automationContact.findMany({
-        where: { workspaceId, ...(options.leadStatus ? { leadStatus: options.leadStatus } : {}) },
+        where: {
+          workspaceId,
+          ...(options.leadStatus ? { leadStatus: options.leadStatus } : {}),
+          ...(after ? { OR: [
+            { lastSeenAt: { lt: new Date(after.lastSeenAt) } },
+            { lastSeenAt: new Date(after.lastSeenAt), id: { gt: after.id } },
+          ] } : {}),
+        },
         orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
         take: options.limit,
-        ...(options.offset ? { skip: options.offset } : {}),
+        ...(!after && options.offset ? { skip: options.offset } : {}),
       });
       return records.map(mapContact);
     },
@@ -2550,7 +2587,12 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async listInboxContacts(workspaceId, query) {
       const cursor = query.cursor ? decodeInboxCursor(query.cursor, "contacts") : undefined;
       let cursorUnread = false;
-      if (cursor && query.sort === "unread") {
+      if (cursor && query.sort === "unread" && cursor.unread !== undefined) {
+        // The boundary's unread flag travels in the cursor: re-reading it
+        // would shift the boundary once someone opens that conversation.
+        cursorUnread = cursor.unread;
+      } else if (cursor && query.sort === "unread") {
+        // Cursors issued before the flag was encoded.
         const cursorContact = await client.automationContact.findFirst({
           where: { id: cursor.id, workspaceId },
           select: { lastInboundAt: true, inboxLastReadAt: true },
@@ -2624,6 +2666,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           kind: "contacts",
           at: last.latestInboundAt ?? last.record.lastSeenAt,
           id: last.record.id,
+          ...(query.sort === "unread" ? { unread: last.unread } : {}),
         }) } : {}),
       };
     },
@@ -2878,6 +2921,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           // Capture activation-time state so a restore is exact.
           status: current.status,
           priority: current.priority,
+          provider: current.provider,
           ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
           ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
           ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
@@ -2905,57 +2949,64 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async restoreAutomationVersion(workspaceId, automationId, versionId, restoredBy) {
-      const current = await client.automation.findFirst({ where: { id: automationId, workspaceId } });
-      if (!current) return null;
-      const target = await client.automationVersion.findFirst({
-        where: { id: versionId, automationId, workspaceId },
-      });
-      if (!target) return null;
-      // Capture the pre-restore state so the history remains append-only.
-      const aggregate = await client.automationVersion.aggregate({
-        where: { automationId },
-        _max: { version: true },
-      });
-      const nextNumber = (aggregate._max.version ?? 0) + 1;
-      await client.automationVersion.create({
-        data: {
-          id: createId("autover"),
-          automationId,
-          workspaceId,
-          version: nextNumber,
-          name: current.name,
-          definition: current.definition as Prisma.InputJsonValue,
-          status: current.status,
-          priority: current.priority,
-          ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
-          ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
-          ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
-          ...(current.facebookPageId ? { facebookPageId: current.facebookPageId } : {}),
-          snapshotBy: restoredBy ?? "restore",
-        },
-      });
-      const targetDefinition = target.definition as Prisma.InputJsonValue;
-      const targetVersionNumber = (target.definition as { version?: number }).version ?? 1;
-      // Restore the full state, not just name + definition. Without
-      // status/activatedAt/boundMediaId the restored automation would
-      // behave like a freshly-edited DRAFT and silently miss its
-      // next-media binding (the publishedAt > activatedAt resolver would
-      // pass against an old activatedAt or a missing boundMediaId).
-      const updated = await client.automation.update({
-        where: { id: automationId },
-        data: {
-          name: target.name,
-          definition: targetDefinition,
-          version: Math.max(current.version, targetVersionNumber) + 1,
-          status: target.status,
-          priority: target.priority,
-          ...(target.activatedAt ? { activatedAt: target.activatedAt } : { activatedAt: null }),
-          ...(target.boundMediaId ? { boundMediaId: target.boundMediaId } : { boundMediaId: null }),
-          ...(target.instagramAccountId ? { instagramAccountId: target.instagramAccountId } : { instagramAccountId: null }),
-          ...(target.facebookPageId ? { facebookPageId: target.facebookPageId } : { facebookPageId: null }),
-        },
-      });
-      return mapAutomation(updated);
+      // One Serializable transaction: the pre-restore snapshot, its version
+      // number and the overwrite either all land or none do, and a concurrent
+      // edit or restore forces a retry instead of interleaving.
+      const updated = await withSerializationRetry(() => client.$transaction(async (transaction) => {
+        const current = await transaction.automation.findFirst({ where: { id: automationId, workspaceId } });
+        if (!current) return null;
+        const target = await transaction.automationVersion.findFirst({
+          where: { id: versionId, automationId, workspaceId },
+        });
+        if (!target) return null;
+        // Capture the pre-restore state so the history remains append-only.
+        const aggregate = await transaction.automationVersion.aggregate({
+          where: { automationId },
+          _max: { version: true },
+        });
+        const nextNumber = (aggregate._max.version ?? 0) + 1;
+        await transaction.automationVersion.create({
+          data: {
+            id: createId("autover"),
+            automationId,
+            workspaceId,
+            version: nextNumber,
+            name: current.name,
+            definition: current.definition as Prisma.InputJsonValue,
+            status: current.status,
+            priority: current.priority,
+            provider: current.provider,
+            ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
+            ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
+            ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
+            ...(current.facebookPageId ? { facebookPageId: current.facebookPageId } : {}),
+            snapshotBy: restoredBy ?? "restore",
+          },
+        });
+        // Restore the full state, not just name + definition. Without
+        // status/activatedAt/boundMediaId the restored automation would
+        // behave like a freshly-edited DRAFT and silently miss its
+        // next-media binding (the publishedAt > activatedAt resolver would
+        // pass against an old activatedAt or a missing boundMediaId).
+        // provider travels with the pins so a restore can never leave a
+        // FACEBOOK automation pinned to an Instagram account or vice versa.
+        return transaction.automation.update({
+          where: { id: automationId },
+          data: {
+            name: target.name,
+            definition: target.definition as Prisma.InputJsonValue,
+            version: { increment: 1 },
+            provider: resolveSnapshotProvider(mapAutomationVersion(target), current.provider),
+            status: target.status,
+            priority: target.priority,
+            ...(target.activatedAt ? { activatedAt: target.activatedAt } : { activatedAt: null }),
+            ...(target.boundMediaId ? { boundMediaId: target.boundMediaId } : { boundMediaId: null }),
+            ...(target.instagramAccountId ? { instagramAccountId: target.instagramAccountId } : { instagramAccountId: null }),
+            ...(target.facebookPageId ? { facebookPageId: target.facebookPageId } : { facebookPageId: null }),
+          },
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+      return updated ? mapAutomation(updated) : null;
     },
 
     async createSequence(workspaceId, input) {
@@ -3209,19 +3260,89 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {
-      const cutoff = broadcastSegmentCutoff(segment, new Date());
-      const records = await client.automationContact.findMany({
-        where: {
-          workspaceId,
-          suppressedAt: null,
-          ...(cutoff ? { lastSeenAt: { lt: cutoff } } : {}),
-          ...(segment === "captured_email" ? { state: "CAPTURED", email: { not: null } } : {}),
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-        take: limit,
-        select: { igScopedUserId: true, instagramAccountId: true },
+      const now = new Date();
+      const cutoff = broadcastSegmentCutoff(segment, now);
+      // Only people inside Meta's 24-hour window can be messaged at all, so the
+      // cap is spent on them - most recently active first - instead of on the
+      // newest contact rows, most of which the runner would skip.
+      const where: Prisma.AutomationContactWhereInput = {
+        workspaceId,
+        suppressedAt: null,
+        lastInboundAt: { gte: new Date(now.getTime() - MESSAGING_WINDOW_MS) },
+        ...(cutoff ? { lastSeenAt: { lt: cutoff } } : {}),
+        ...(segment === "captured_email" ? { state: "CAPTURED", email: { not: null } } : {}),
+      };
+      const [recipients, totalEligible] = await Promise.all([
+        client.automationContact.findMany({
+          where,
+          orderBy: [{ lastInboundAt: "desc" }, { id: "asc" }],
+          take: limit,
+          select: { igScopedUserId: true, instagramAccountId: true },
+        }),
+        client.automationContact.count({ where }),
+      ]);
+      return { recipients, totalEligible };
+    },
+
+    async cancelBroadcast(workspaceId, id) {
+      return client.$transaction(async (transaction) => {
+        const now = new Date();
+        const changed = await transaction.broadcast.updateMany({
+          where: { id, workspaceId, status: { in: ["PENDING", "RUNNING"] } },
+          data: { status: "CANCELLED", cancelledAt: now, completedAt: now, version: { increment: 1 } },
+        });
+        const record = await transaction.broadcast.findFirst({ where: { id, workspaceId } });
+        if (!record) return { status: "not_found" as const };
+        if (changed.count === 0) return { status: "not_cancellable" as const, broadcast: mapBroadcastRow(record) };
+        // Queued jobs still run, but prepareOutboundDelivery only claims
+        // PENDING or retryable FAILED rows, so a CANCELLED row is never sent.
+        await transaction.outboundDelivery.updateMany({
+          where: { workspaceId, broadcastId: id, OR: [{ state: "PENDING" }, { state: "FAILED", retryable: true }] },
+          data: { state: "CANCELLED", retryable: false, version: { increment: 1 } },
+        });
+        return { status: "cancelled" as const, broadcast: mapBroadcastRow(record) };
       });
-      return records;
+    },
+
+    async reserveMonthlyBroadcast(workspaceId, periodStart, limit) {
+      const periodStartDate = new Date(`${periodStart}T00:00:00.000Z`);
+      const withinLimit = limit === null
+        ? Prisma.sql`TRUE`
+        : Prisma.sql`"WorkspaceUsagePeriod"."broadcastsCreated" < ${limit}`;
+      const firstFits = limit === null ? Prisma.sql`TRUE` : Prisma.sql`${limit} > 0`;
+      // One statement: the conditional increment is the limit check, so two
+      // concurrent creates can never both take the last slot.
+      const [row] = await client.$queryRaw<Array<{ broadcastsCreated: number }>>(Prisma.sql`
+        INSERT INTO "WorkspaceUsagePeriod" ("workspaceId", "periodStart", "broadcastsCreated", "updatedAt")
+        SELECT ${workspaceId}, ${periodStartDate}::date, 1, NOW()
+        WHERE ${firstFits}
+        ON CONFLICT ("workspaceId", "periodStart") DO UPDATE
+          SET "broadcastsCreated" = "WorkspaceUsagePeriod"."broadcastsCreated" + 1,
+              "updatedAt" = NOW()
+          WHERE ${withinLimit}
+        RETURNING "broadcastsCreated"
+      `);
+      if (row) return { reserved: true, used: Number(row.broadcastsCreated) };
+      const usage = await client.workspaceUsagePeriod.findUnique({
+        where: { workspaceId_periodStart: { workspaceId, periodStart: periodStartDate } },
+        select: { broadcastsCreated: true },
+      });
+      return { reserved: false, used: usage?.broadcastsCreated ?? 0 };
+    },
+
+    async releaseMonthlyBroadcast(workspaceId, periodStart) {
+      await client.workspaceUsagePeriod.updateMany({
+        where: { workspaceId, periodStart: new Date(`${periodStart}T00:00:00.000Z`), broadcastsCreated: { gt: 0 } },
+        data: { broadcastsCreated: { decrement: 1 } },
+      });
+    },
+
+    async getWorkspaceUsage(workspaceId, periodStart) {
+      const usage = await client.workspaceUsagePeriod.findUnique({
+        where: { workspaceId_periodStart: { workspaceId, periodStart: new Date(`${periodStart}T00:00:00.000Z`) } },
+        select: { deliveriesReserved: true, broadcastsCreated: true },
+      });
+      return { deliveriesReserved: usage?.deliveriesReserved ?? 0, broadcastsCreated: usage?.broadcastsCreated ?? 0 };
     },
 
     async createTrackedLink(workspaceId, input) {

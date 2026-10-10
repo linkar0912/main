@@ -9,6 +9,7 @@ import { SocialAvatar } from "../social-avatar";
 import { ConversationHeaderActions, type InboxOperation } from "./conversation-header-actions";
 import { InboxFilters } from "./inbox-filters";
 import type { InboxContact, InboxFiltersValue, InboxMember, InboxMessage } from "./types";
+import { toReadableApiError } from "@/src/lib/validation-error";
 
 const DEFAULT_FILTERS: InboxFiltersValue = {
   query: "",
@@ -566,7 +567,7 @@ export function InstagramInbox() {
         body: JSON.stringify({ text: pending.text }),
       });
       const payload = (await response.json().catch(() => ({}))) as { data?: { message: InboxMessage; automationsPausedUntil?: string }; error?: string };
-      if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not send message");
+      if (!response.ok || !payload.data) throw new Error(toReadableApiError(payload.error, "Could not send message"));
       const sent = payload.data.message;
       if (activeContactIdRef.current === contactId) {
         setMessages((current) => current.map((message) => message.id === pending.id ? { ...sent, clientKey: pending.clientKey } : message));

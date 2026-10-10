@@ -10,6 +10,12 @@ const mocks = vi.hoisted(() => ({
   countParticipantsCreatedSince: vi.fn(),
   countCapturedContacts: vi.fn(),
   countSuppressedContacts: vi.fn(),
+  getWorkspaceUsage: vi.fn(),
+  getMonthlyDeliveryLimit: vi.fn(),
+}));
+
+vi.mock("@/src/lib/entitlements/service", () => ({
+  getEntitlementService: () => ({ getMonthlyDeliveryLimit: mocks.getMonthlyDeliveryLimit }),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidatedSession }));
@@ -23,6 +29,7 @@ vi.mock("@/src/lib/repository-provider", () => ({
     countParticipantsCreatedSince: mocks.countParticipantsCreatedSince,
     countCapturedContacts: mocks.countCapturedContacts,
     countSuppressedContacts: mocks.countSuppressedContacts,
+    getWorkspaceUsage: mocks.getWorkspaceUsage,
   }),
 }));
 
@@ -39,6 +46,8 @@ describe("GET /api/insights", () => {
     mocks.countParticipantsCreatedSince.mockReset().mockResolvedValue(0);
     mocks.countCapturedContacts.mockReset().mockResolvedValue(0);
     mocks.countSuppressedContacts.mockReset().mockResolvedValue(0);
+    mocks.getWorkspaceUsage.mockReset().mockResolvedValue({ deliveriesReserved: 0, broadcastsCreated: 0 });
+    mocks.getMonthlyDeliveryLimit.mockReset().mockResolvedValue(null);
   });
 
   it("passes the selected automation to every analytics query", async () => {
@@ -52,13 +61,16 @@ describe("GET /api/insights", () => {
     expect(mocks.countParticipantsByMedia).toHaveBeenCalledWith("workspace_1", "automation_1");
   });
 
-  it("include=usage skips the heavy analytics queries", async () => {
-    mocks.countParticipantsCreatedSince.mockResolvedValue(7);
+  it("include=usage reports this month's deliveries against the plan's delivery limit", async () => {
+    mocks.getWorkspaceUsage.mockResolvedValue({ deliveriesReserved: 7, broadcastsCreated: 1 });
+    mocks.getMonthlyDeliveryLimit.mockResolvedValue(1_000);
     const response = await GET(new Request("http://localhost/api/insights?automationId=automation_1&include=usage"));
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.usage).toEqual({ participantsThisMonth: 7, monthlyLimit: null });
+    expect(body.usage).toEqual({ deliveriesThisMonth: 7, monthlyDeliveryLimit: 1_000 });
+    expect(mocks.getWorkspaceUsage).toHaveBeenCalledWith("workspace_1", expect.stringMatching(/^\d{4}-\d{2}-01$/));
+    expect(mocks.getMonthlyDeliveryLimit).toHaveBeenCalledWith("workspace_1");
     expect(mocks.countParticipantsByState).not.toHaveBeenCalled();
     expect(mocks.countParticipantsPerDay).not.toHaveBeenCalled();
   });
@@ -76,6 +88,7 @@ describe("GET /api/insights", () => {
       timeseries: { days: 14, participantsPerDay: [{ day: "2026-08-31", count: 3 }], sentPerDay: [{ day: "2026-08-31", count: 5 }] },
       capturedEmails: 11,
       optedOut: 2,
+      contactTotalsScope: "workspace",
     });
     // Home shows neither the funnel, per-post performance, nor plan usage, so
     // those three queries must not run for it.

@@ -98,7 +98,13 @@ describe("PATCH /api/automations/[id] activation", () => {
   });
 
   it("timestamps and unbinds a non-active next-media automation when it becomes active", async () => {
-    const automation = await repository.createAutomation("workspace_a", { name: "Next Reel", definition: campaignDefinition });
+    // Activation requires a CONNECTED pin.
+    await repository.upsertConnection({
+      workspaceId: "workspace_a", igUserId: "ig_1", username: "creator", accessTokenEncrypted: "sealed", status: "CONNECTED",
+    });
+    const automation = await repository.createAutomation("workspace_a", {
+      name: "Next Reel", definition: campaignDefinition, instagramAccountId: "ig_1",
+    });
     await repository.updateAutomation("workspace_a", automation.id, {
       activatedAt: "2026-08-21T09:00:00.000Z",
       boundMediaId: "media_stale",

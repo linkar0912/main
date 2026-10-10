@@ -11,7 +11,7 @@ describe("InsightsPanel", () => {
 
   it("scopes insights and CSV export to the selected automation", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      usage: { participantsThisMonth: 3, monthlyLimit: 100 },
+      usage: { deliveriesThisMonth: 3, monthlyDeliveryLimit: 100 },
       mediaPerformance: [],
     }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -19,6 +19,8 @@ describe("InsightsPanel", () => {
     render(<InsightsPanel automationId="automation_1" />);
 
     await screen.findByLabelText("Campaign export");
+    expect(screen.getByText(/3 messages sent this month of 100 on your plan/)).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "Messages sent this month" }).getAttribute("aria-valuemax")).toBe("100");
     expect(fetchMock).toHaveBeenCalledWith("/api/insights?automationId=automation_1&include=usage");
     expect(screen.getByRole("link", { name: /export csv/i }).getAttribute("href"))
       .toBe("/api/insights/export?automationId=automation_1");

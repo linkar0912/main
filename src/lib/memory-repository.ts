@@ -50,7 +50,7 @@ import type {
   InboxContactQuery,
   InboxContactRow,
 } from "./repository";
-import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
+import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS } from "./messaging-window";
 import { normalizeHelpQuery } from "./help-search";
@@ -124,6 +124,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
   const outboundDeliveries = new Map<string, OutboundDeliveryRecord>();
   const outboundUsageReservations = new Map<string, string>();
   const outboundMonthlyUsage = new Map<string, number>();
+  // WorkspaceUsagePeriod.broadcastsCreated, keyed like outboundMonthlyUsage.
+  const broadcastMonthlyUsage = new Map<string, number>();
   const automationDailySendCounters = new Map<string, number>();
   const deletionRequests = new Map<string, DataDeletionRequestRecord>();
   const participants = new Map<string, AutomationParticipantRecord>();
@@ -602,7 +604,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         provider: input.provider ?? (input.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
         name: input.name.trim(),
         status: input.status ?? "DRAFT",
-        version: input.definition.version,
+        // Write counter, not the definition schema version (see prisma.ts).
+        version: 1,
         definition: copy(input.definition),
         priority: input.priority ?? 0,
         createdAt: timestamp,
@@ -647,7 +650,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           : { facebookPageId: facebookPageId ?? undefined }),
         name: patch.name?.trim() || current.name,
         definition: patch.definition ? copy(patch.definition) : current.definition,
-        version: patch.definition?.version ?? current.version,
+        version: current.version + 1,
         updatedAt: now(),
       };
       automations.set(id, updated);
@@ -1181,19 +1184,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           && record.recipientId === recipientId)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
       const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
-      // A cross-source `~` cursor is not a row id in this table: position by
-      // timestamp instead so the boundary row is not skipped or re-shown.
-      let start = 0;
-      if (cursor) {
-        const found = sorted.findIndex((record) => record.id === cursor.id);
-        if (found >= 0) {
-          start = found + 1;
-        } else {
-          const byTime = sorted.findIndex((record) => record.createdAt <= cursor.at);
-          start = byTime === -1 ? sorted.length : byTime;
-        }
-      }
-      const page = sorted.slice(start, start + options.limit + 1);
+      // Keyset, matching prisma.ts: the id tie-break applies only to a cursor
+      // id from this table; a cross-source cursor (`~`) keeps every row at the
+      // boundary timestamp.
+      const after = cursor
+        ? sorted.filter((record) => record.createdAt < cursor.at || (record.createdAt === cursor.at
+          && (!cursor.id.startsWith("delivery_") || record.id.localeCompare(cursor.id) < 0)))
+        : sorted;
+      const page = after.slice(0, options.limit + 1);
       const hasMore = page.length > options.limit;
       const records = page.slice(0, options.limit);
       const last = records.at(-1);
@@ -1249,6 +1247,9 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       if (
         existing.state === "SENT"
         || existing.state === "UNKNOWN"
+        // Prisma only claims PENDING / retryable FAILED rows, so a cancelled
+        // broadcast recipient is terminal there too.
+        || existing.state === "CANCELLED"
         || (existing.state === "FAILED" && !existing.retryable)
       ) {
         return { status: "TERMINAL" as const, record: existing };
@@ -1903,15 +1904,19 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async listContactsByLeadStatus(workspaceId, options) {
+      const after = options.after;
       const filtered = [...contacts.values()].filter((contact) => {
         if (contact.workspaceId !== workspaceId) return false;
         if (options.leadStatus && contact.leadStatus !== options.leadStatus) return false;
+        if (after && !(contact.lastSeenAt < after.lastSeenAt
+          || (contact.lastSeenAt === after.lastSeenAt && contact.id.localeCompare(after.id) > 0))) return false;
         return true;
       });
+      const start = after ? 0 : options.offset ?? 0;
       return copy(
         filtered
           .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || a.id.localeCompare(b.id))
-          .slice(options.offset ?? 0, (options.offset ?? 0) + options.limit),
+          .slice(start, start + options.limit),
       );
     },
 
@@ -1962,8 +1967,23 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           : right.record.id.localeCompare(left.record.id);
       });
       const cursor = query.cursor ? decodeInboxCursor(query.cursor, "contacts") : undefined;
-      const start = cursor ? filtered.findIndex((row) => row.record.id === cursor.id) + 1 : 0;
-      const page = filtered.slice(Math.max(0, start), Math.max(0, start) + query.limit + 1);
+      // Keyset on the cursor's own values, as prisma.ts does: the boundary row
+      // may have been read (or may have left the filter) since the last page.
+      const cursorUnread = cursor
+        ? cursor.unread ?? rows.find((row) => row.record.id === cursor.id)?.unread ?? false
+        : false;
+      const after = cursor
+        ? filtered.filter((row) => {
+          const at = row.latestInboundAt ?? row.record.lastSeenAt;
+          const idOrder = row.record.id.localeCompare(cursor.id);
+          const chronological = query.sort === "oldest"
+            ? at > cursor.at || (at === cursor.at && idOrder > 0)
+            : at < cursor.at || (at === cursor.at && idOrder < 0);
+          if (query.sort !== "unread") return chronological;
+          return (!row.unread && cursorUnread) || (row.unread === cursorUnread && chronological);
+        })
+        : filtered;
+      const page = after.slice(0, query.limit + 1);
       const hasMore = page.length > query.limit;
       const visible = page.slice(0, query.limit);
       const last = visible.at(-1);
@@ -1973,6 +1993,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           kind: "contacts",
           at: last.latestInboundAt ?? last.record.lastSeenAt,
           id: last.record.id,
+          ...(query.sort === "unread" ? { unread: last.unread } : {}),
         }) } : {}),
       };
     },
@@ -2041,18 +2062,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           && event.payload.recipientId === recipientId)
         .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || b.id.localeCompare(a.id));
       const cursor = options.cursor ? decodeInboxCursor(options.cursor, "messages") : undefined;
-      // Cross-source `~` cursors are not ids here - fall back to timestamp.
-      let start = 0;
-      if (cursor) {
-        const found = sorted.findIndex((event) => event.id === cursor.id);
-        if (found >= 0) {
-          start = found + 1;
-        } else {
-          const byTime = sorted.findIndex((event) => event.receivedAt <= cursor.at);
-          start = byTime === -1 ? sorted.length : byTime;
-        }
-      }
-      const page = sorted.slice(start, start + options.limit + 1);
+      // Keyset, matching prisma.ts: the id tie-break applies only to a
+      // `wevent_` cursor id (including the bare-prefix sentinel, which drops
+      // every row at the boundary timestamp); `~` keeps them all.
+      const after = cursor
+        ? sorted.filter((event) => event.receivedAt < cursor.at || (event.receivedAt === cursor.at
+          && (!cursor.id.startsWith("wevent_") || event.id.localeCompare(cursor.id) < 0)))
+        : sorted;
+      const page = after.slice(0, options.limit + 1);
       const hasMore = page.length > options.limit;
       const records = page.slice(0, options.limit);
       const last = records.at(-1);
@@ -2174,6 +2191,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         // Capture activation-time state so a restore is exact.
         status: current.status,
         priority: current.priority,
+        provider: current.provider,
         ...(current.activatedAt ? { activatedAt: current.activatedAt } : {}),
         ...(current.boundMediaId ? { boundMediaId: current.boundMediaId } : {}),
         ...(current.instagramAccountId ? { instagramAccountId: current.instagramAccountId } : {}),
@@ -2224,7 +2242,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         boundMediaId: target.boundMediaId,
         instagramAccountId: target.instagramAccountId,
         facebookPageId: target.facebookPageId,
-        version: Math.max(current.version, target.definition.version) + 1,
+        provider: resolveSnapshotProvider(target, current.provider),
+        version: current.version + 1,
         updatedAt: now(),
       };
       automations.set(automationId, restored);
@@ -2467,17 +2486,76 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {
-      const cutoff = broadcastSegmentCutoff(segment, new Date());
-      return [...contacts.values()]
+      const now = new Date();
+      const cutoff = broadcastSegmentCutoff(segment, now);
+      const windowStart = new Date(now.getTime() - MESSAGING_WINDOW_MS).toISOString();
+      // Mirrors AutomationContact.lastInboundAt, which Postgres maintains
+      // from inbound message webhook events.
+      const messageTypes = new Set(["message.received", "quick_reply.received", "postback.received", "story_mention.received"]);
+      const lastInboundAt = (contact: AutomationContactRecord) => [...webhookEvents.values()]
+        .filter((event) => event.workspaceId === workspaceId
+          && messageTypes.has(event.eventType)
+          && event.payload.accountId === contact.instagramAccountId
+          && event.payload.recipientId === contact.igScopedUserId)
+        .reduce<string | undefined>((latest, event) => (!latest || event.receivedAt > latest ? event.receivedAt : latest), undefined);
+      const eligible = [...contacts.values()]
         .filter((contact) => {
           if (contact.workspaceId !== workspaceId || contact.suppressedAt) return false;
           if (cutoff && contact.lastSeenAt >= cutoff.toISOString()) return false;
-          if (segment === "captured_email") return contact.state === "CAPTURED" && Boolean(contact.email);
+          if (segment === "captured_email" && !(contact.state === "CAPTURED" && contact.email)) return false;
           return true;
         })
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
-        .slice(0, limit)
-        .map((contact) => ({ igScopedUserId: contact.igScopedUserId, instagramAccountId: contact.instagramAccountId }));
+        .map((contact) => ({ contact, lastInboundAt: lastInboundAt(contact) }))
+        .filter((row): row is { contact: AutomationContactRecord; lastInboundAt: string } =>
+          Boolean(row.lastInboundAt && row.lastInboundAt >= windowStart))
+        .sort((a, b) => b.lastInboundAt.localeCompare(a.lastInboundAt) || a.contact.id.localeCompare(b.contact.id));
+      return {
+        recipients: eligible.slice(0, limit).map(({ contact }) => ({
+          igScopedUserId: contact.igScopedUserId,
+          instagramAccountId: contact.instagramAccountId,
+        })),
+        totalEligible: eligible.length,
+      };
+    },
+
+    async cancelBroadcast(workspaceId, id) {
+      const broadcast = broadcasts.get(id);
+      if (!broadcast || broadcast.workspaceId !== workspaceId) return { status: "not_found" as const };
+      if (broadcast.status !== "PENDING" && broadcast.status !== "RUNNING") {
+        return { status: "not_cancellable" as const, broadcast: copy(broadcast) };
+      }
+      const timestamp = now();
+      const cancelled: BroadcastRecord = { ...broadcast, status: "CANCELLED", cancelledAt: timestamp, completedAt: timestamp };
+      broadcasts.set(id, cancelled);
+      for (const [key, delivery] of outboundDeliveries) {
+        if (delivery.workspaceId !== workspaceId || delivery.broadcastId !== id) continue;
+        if (delivery.state === "PENDING" || (delivery.state === "FAILED" && delivery.retryable)) {
+          outboundDeliveries.set(key, { ...delivery, state: "CANCELLED", retryable: false, updatedAt: timestamp });
+        }
+      }
+      return { status: "cancelled" as const, broadcast: copy(cancelled) };
+    },
+
+    async reserveMonthlyBroadcast(workspaceId, periodStart, limit) {
+      const key = `${workspaceId}:${periodStart}`;
+      const used = broadcastMonthlyUsage.get(key) ?? 0;
+      if (limit !== null && used >= limit) return { reserved: false, used };
+      broadcastMonthlyUsage.set(key, used + 1);
+      return { reserved: true, used: used + 1 };
+    },
+
+    async releaseMonthlyBroadcast(workspaceId, periodStart) {
+      const key = `${workspaceId}:${periodStart}`;
+      const used = broadcastMonthlyUsage.get(key) ?? 0;
+      if (used > 0) broadcastMonthlyUsage.set(key, used - 1);
+    },
+
+    async getWorkspaceUsage(workspaceId, periodStart) {
+      const key = `${workspaceId}:${periodStart}`;
+      return {
+        deliveriesReserved: outboundMonthlyUsage.get(key) ?? 0,
+        broadcastsCreated: broadcastMonthlyUsage.get(key) ?? 0,
+      };
     },
 
     async createTrackedLink(workspaceId, input) {
