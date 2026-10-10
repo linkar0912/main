@@ -64,4 +64,41 @@ describe("ContactDetailModal", () => {
     expect(calls.some((call) => call.url === "/api/contacts/contact_1/handoff" && call.method === "DELETE")).toBe(true);
     expect(screen.queryByRole("button", { name: "Resume automations" })).toBeNull();
   });
+
+  it("can be closed while the record is still loading", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+    const onClose = vi.fn();
+    render(<ContactDetailModal contactId="contact_1" onClose={onClose} />);
+
+    // The drawer covers the whole screen on phones; the close button must not
+    // wait for the record.
+    fireEvent.click(screen.getByRole("button", { name: "Close contact details" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers Retry when the record fails to load instead of loading forever", async () => {
+    let fail = true;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/team/members") return new Response(JSON.stringify({ data: [] }));
+      if (fail) return new Response(JSON.stringify({ error: "Could not load this contact" }), { status: 500 });
+      return new Response(JSON.stringify({ data: {
+        contact: { id: "contact_1", instagramUsername: "maya", state: "NONE", tags: [], score: 0, leadStatus: "NEW", lastSeenAt: "2026-09-02T08:07:00.000Z", createdAt: "2026-08-29T08:07:00.000Z" },
+        timeline: [],
+      } }));
+    }));
+    const initial = { id: "contact_1", instagramUsername: "maya", tags: [], score: 0, leadStatus: "NEW" as const, lastSeenAt: "2026-09-02T08:07:00.000Z", createdAt: "2026-08-29T08:07:00.000Z", state: "NONE" };
+    render(<ContactDetailModal contactId="contact_1" initial={initial} onClose={() => undefined} />);
+
+    expect(await screen.findByText("Could not load this contact")).toBeTruthy();
+    expect(screen.queryByLabelText("Loading timeline")).toBeNull();
+    expect((screen.getByLabelText("Internal notes") as HTMLTextAreaElement).disabled).toBe(true);
+
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("No interactions recorded yet.")).toBeTruthy();
+    expect(screen.queryByText("Could not load this contact")).toBeNull();
+    expect((screen.getByLabelText("Internal notes") as HTMLTextAreaElement).disabled).toBe(false);
+  });
 });

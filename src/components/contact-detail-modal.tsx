@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
 import { SocialAvatar } from "./social-avatar";
 import { loadTeamMembers, type TeamMember } from "@/src/lib/client/team-members";
+import { formatDateTime } from "@/src/lib/format-date";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 
@@ -65,10 +66,6 @@ function timelineDetail(detail: string): string {
   return detail;
 }
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
 /**
  * Contact 360: profile chips, engagement score, editable manual tags, and the
  * interaction timeline. Automatic labels ("email_captured", "opted_out",
@@ -90,6 +87,10 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
   const [detailLoaded, setDetailLoaded] = useState(false);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [error, setError] = useState("");
+  // The full record failed to load. Kept apart from `error` (a failed save)
+  // so the panel can offer Retry instead of a skeleton that never resolves.
+  const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [tagDraft, setTagDraft] = useState(initial?.tags.join(", ") ?? "");
   const [saving, setSaving] = useState<"" | "profile" | "tags" | "handoff" | "resume">("");
   const [notice, setNotice] = useState("");
@@ -124,16 +125,22 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
         setAssigneeDraft(payload.data.contact.assigneeUserId ?? "");
         setNotesDraft(payload.data.contact.notes ?? "");
         setProfileDirty(false);
+        setLoadError("");
       })
       .catch((caught: unknown) => {
-        if (active) setError(caught instanceof Error ? caught.message : "Could not load this contact");
+        if (active) setLoadError(caught instanceof Error ? caught.message : "Could not load this contact");
       });
     return () => {
       active = false;
     };
     // `initial` is a first-paint hint for this contactId, not a dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contactId]);
+  }, [contactId, loadAttempt]);
+
+  function retryLoad() {
+    setLoadError("");
+    setLoadAttempt((attempt) => attempt + 1);
+  }
 
   useEffect(() => {
     let active = true;
@@ -292,25 +299,34 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
         aria-label="Contact details"
         onClick={(event) => event.stopPropagation()}
       >
+        {/* Always rendered: the drawer is full screen on phones, so the close
+            button cannot wait for the record to load (or fail to). */}
+        <header className="contact-detail-header">
+          {contact ? <SocialAvatar channel="instagram" name={contactLabel} src={`/api/contacts/${contact.id}/avatar`} size="large" /> : <span aria-hidden="true" />}
+          <div className="contact-detail-identity">
+            <h2>{contact ? contactLabel : "Contact details"}</h2>
+            {contact ? (
+              <p className="muted">
+                First seen {formatDateTime(contact.createdAt)} · Last seen {formatDateTime(contact.lastSeenAt)}
+                {contact.suppressedAt ? " · Opted out" : ""}
+              </p>
+            ) : null}
+          </div>
+          <button className="icon-button" type="button" aria-label="Close contact details" onClick={onClose}><X size={16} /></button>
+        </header>
+        {loadError && (
+          <div className="form-error contact-detail-load-error" role="alert">
+            <span>{loadError}</span>
+            <button className="button button-secondary button-small" type="button" onClick={retryLoad}>Retry</button>
+          </div>
+        )}
         {error && <p className="form-error" role="alert">{error}</p>}
         {notice && <p className="form-success contact-detail-notice" role="status">{notice}</p>}
-        {!contact && !error && (
+        {!contact && !loadError && (
           <InlineContentSkeleton label="Loading contact details" rows={4} />
         )}
         {contact && (
           <>
-            <header className="contact-detail-header">
-              <SocialAvatar channel="instagram" name={contactLabel} src={`/api/contacts/${contact.id}/avatar`} size="large" />
-              <div className="contact-detail-identity">
-                <h2>{contactLabel}</h2>
-                <p className="muted">
-                  First seen {formatDate(contact.createdAt)} · Last seen {formatDate(contact.lastSeenAt)}
-                  {contact.suppressedAt ? " · Opted out" : ""}
-                </p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Close contact details" onClick={onClose}><X size={16} /></button>
-            </header>
-
             <div className="contact-chips contact-detail-chips">
               <span className="status-badge">Score {contact.score}</span>
               {contact.tags.map((tag) => (
@@ -455,7 +471,7 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
             <section className="contact-detail-section contact-detail-timeline" aria-labelledby="contact-timeline-title">
             <h3 id="contact-timeline-title">Timeline</h3>
             {!detailLoaded ? (
-              <InlineContentSkeleton label="Loading timeline" rows={2} />
+              loadError ? <p className="muted">The timeline could not load. Use Retry above.</p> : <InlineContentSkeleton label="Loading timeline" rows={2} />
             ) : timeline.length === 0 ? (
               <p className="muted">No interactions recorded yet.</p>
             ) : (
@@ -464,7 +480,7 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
                   <li key={entry.id}>
                     <div className="activity-row">
                       <span>{entry.label}</span>
-                      <time dateTime={entry.at}>{formatDate(entry.at)}</time>
+                      <time dateTime={entry.at}>{formatDateTime(entry.at)}</time>
                     </div>
                     {entry.detail && <p className="muted activity-summary">{timelineDetail(entry.detail)}</p>}
                   </li>

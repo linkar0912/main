@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/contacts" }));
-const { ContactsScreen } = await import("./contacts-screen");
+const { ContactsScreen, stagePageOffset } = await import("./contacts-screen");
 
 const contacts = [
   {
@@ -132,5 +132,30 @@ describe("ContactsScreen", () => {
     expect(await screen.findByRole("dialog", { name: "Contact details" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Hand off to team/i })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Export CSV/i })).toBeTruthy();
+  });
+});
+
+describe("stagePageOffset", () => {
+  const row = (id: string, leadStatus: string, lastSeenAt: string) => ({ id, leadStatus, lastSeenAt, createdAt: lastSeenAt, instagramAccountId: "ig_1", igScopedUserId: id, state: "NONE", tags: [], score: 0 }) as Parameters<typeof stagePageOffset>[0][number];
+
+  it("counts the fetched rows of a stage when nothing moved", () => {
+    const rows = [row("a", "QUALIFIED", "2026-09-05T00:00:00Z"), row("b", "QUALIFIED", "2026-09-04T00:00:00Z"), row("c", "NEW", "2026-09-03T00:00:00Z")];
+    expect(stagePageOffset(rows, "QUALIFIED", new Map())).toBe(2);
+  });
+
+  it("does not skip a server row when an older contact was moved into the stage here", () => {
+    // a, b were fetched as QUALIFIED; z (older than both) was just moved from NEW.
+    // The server lists z after the next unfetched QUALIFIED row, so counting it
+    // (offset 3) would skip that row.
+    const rows = [row("a", "QUALIFIED", "2026-09-05T00:00:00Z"), row("b", "QUALIFIED", "2026-09-04T00:00:00Z"), row("z", "QUALIFIED", "2026-08-01T00:00:00Z")];
+    expect(stagePageOffset(rows, "QUALIFIED", new Map([["z", "NEW"]]))).toBe(2);
+  });
+
+  it("counts a moved contact that sorts inside the fetched prefix, and drops one moved out", () => {
+    const rows = [row("a", "QUALIFIED", "2026-09-05T00:00:00Z"), row("m", "QUALIFIED", "2026-09-04T12:00:00Z"), row("b", "QUALIFIED", "2026-09-04T00:00:00Z"), row("x", "CUSTOMER", "2026-09-03T00:00:00Z")];
+    const moved = new Map([["m", "NEW"], ["x", "QUALIFIED"]] as const);
+    expect(stagePageOffset(rows, "QUALIFIED", moved)).toBe(3);
+    // x left QUALIFIED; the source stage offset no longer includes it.
+    expect(stagePageOffset(rows, "CUSTOMER", moved)).toBe(0);
   });
 });
