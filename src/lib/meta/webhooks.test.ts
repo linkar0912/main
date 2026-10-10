@@ -34,7 +34,7 @@ describe("normalizeWebhook", () => {
         mediaId: "media_1",
         recipientId: "person_1",
         senderUsername: "creator",
-        timestamp: 1710000000,
+        timestamp: 1710000000000,
       },
     ]);
   });
@@ -56,13 +56,13 @@ describe("normalizeWebhook", () => {
       commentId: "comment_direct",
       mediaId: "media_1",
       recipientId: "person_1",
-      timestamp: 1710000000,
+      timestamp: 1710000000000,
     }]);
   });
 
   it("keeps the kind and link of text-less DMs such as photos, reels and hearts", () => {
     const message = (mid: string, body: Record<string, unknown>) => ({
-      sender: { id: "person_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000000, message: { mid, ...body },
+      sender: { id: "person_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000000000, message: { mid, ...body },
     });
     const events = normalizeWebhook({
       object: "instagram",
@@ -100,7 +100,7 @@ describe("normalizeWebhook", () => {
             {
               sender: { id: "person_1" },
               recipient: { id: "ig_business_1" },
-              timestamp: 1710000002,
+              timestamp: 1710000002000,
               message: { mid: "mid_1", text: "PRICE" },
             },
           ],
@@ -115,7 +115,7 @@ describe("normalizeWebhook", () => {
         type: "message.received",
         text: "PRICE",
         recipientId: "person_1",
-        timestamp: 1710000002,
+        timestamp: 1710000002000,
       },
     ]);
     expect(events[0]).not.toHaveProperty("interactionPayload");
@@ -131,7 +131,7 @@ describe("normalizeWebhook", () => {
           {
             sender: { id: "igsid_1" },
             recipient: { id: "ig_business_1" },
-            timestamp: 1710000001,
+            timestamp: 1710000001000,
             message: {
               mid: "quick_reply_1",
               text: "Yes, send it",
@@ -141,19 +141,19 @@ describe("normalizeWebhook", () => {
           {
             sender: { id: "igsid_2" },
             recipient: { id: "ig_business_1" },
-            timestamp: 1710000002,
+            timestamp: 1710000002000,
             postback: { mid: "postback_1", title: "Check again", payload: "recheck-value" },
           },
           {
             sender: { id: "igsid_3" },
             recipient: { id: "ig_business_1" },
-            timestamp: 1710000003,
+            timestamp: 1710000003000,
             optin: { ref: "optin-value" },
           },
           {
             sender: { id: "igsid_4" },
             recipient: { id: "ig_business_1" },
-            timestamp: 1710000004,
+            timestamp: 1710000004000,
             referral: { ref: "referral-value" },
           },
         ],
@@ -166,7 +166,7 @@ describe("normalizeWebhook", () => {
         text: "Yes, send it",
         interactionPayload: "signed-value",
         recipientId: "igsid_1",
-        timestamp: 1710000001,
+        timestamp: 1710000001000,
       },
       {
         id: "postback_1",
@@ -175,7 +175,7 @@ describe("normalizeWebhook", () => {
         text: "Check again",
         interactionPayload: "recheck-value",
         recipientId: "igsid_2",
-        timestamp: 1710000002,
+        timestamp: 1710000002000,
       },
       {
         id: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
@@ -184,7 +184,7 @@ describe("normalizeWebhook", () => {
         text: "optin-value",
         interactionPayload: "optin-value",
         recipientId: "igsid_3",
-        timestamp: 1710000003,
+        timestamp: 1710000003000,
       },
       {
         id: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
@@ -193,7 +193,7 @@ describe("normalizeWebhook", () => {
         text: "referral-value",
         interactionPayload: "referral-value",
         recipientId: "igsid_4",
-        timestamp: 1710000004,
+        timestamp: 1710000004000,
       },
     ]);
   });
@@ -205,9 +205,9 @@ describe("normalizeWebhook", () => {
         id: "ig_business_1",
         time: 1710000000,
         messaging: [
-          { sender: { id: "igsid_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, optin: { ref: "signed-a" } },
-          { sender: { id: "igsid_2" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, optin: { ref: "signed-b" } },
-          { sender: { id: "igsid_3" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, referral: { ref: "signed-c" } },
+          { sender: { id: "igsid_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001000, optin: { ref: "signed-a" } },
+          { sender: { id: "igsid_2" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001000, optin: { ref: "signed-b" } },
+          { sender: { id: "igsid_3" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001000, referral: { ref: "signed-c" } },
         ],
       }],
     };
@@ -231,10 +231,10 @@ describe("normalizeWebhook", () => {
         id: "ig_business_1",
         time: 1710000000,
         messaging: [
-          { sender: { id: "igsid_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, message: { text: "first" } },
-          { sender: { id: "igsid_2" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, message: { text: "second" } },
-          { sender: { id: "igsid_3" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, postback: { title: "First", payload: "first-action" } },
-          { sender: { id: "igsid_4" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, postback: { title: "Second", payload: "second-action" } },
+          { sender: { id: "igsid_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001000, message: { text: "first" } },
+          { sender: { id: "igsid_2" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001000, message: { text: "second" } },
+          { sender: { id: "igsid_3" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001000, postback: { title: "First", payload: "first-action" } },
+          { sender: { id: "igsid_4" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001000, postback: { title: "Second", payload: "second-action" } },
         ],
       }],
     };
@@ -259,9 +259,9 @@ describe("normalizeWebhook", () => {
         id: "ig_business_1",
         time: 1710000000,
         messaging: [
-          { sender: { id: "igsid_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001, message: { mid: "empty", text: "empty", quick_reply: { payload: "" } } },
-          { sender: { id: "igsid_2" }, recipient: { id: "ig_business_1" }, timestamp: 1710000002, message: { mid: "missing", text: "missing", quick_reply: {} } },
-          { sender: { id: "igsid_3" }, recipient: { id: "ig_business_1" }, timestamp: 1710000003, message: { mid: "malformed", text: "malformed", quick_reply: { payload: 42 } } },
+          { sender: { id: "igsid_1" }, recipient: { id: "ig_business_1" }, timestamp: 1710000001000, message: { mid: "empty", text: "empty", quick_reply: { payload: "" } } },
+          { sender: { id: "igsid_2" }, recipient: { id: "ig_business_1" }, timestamp: 1710000002000, message: { mid: "missing", text: "missing", quick_reply: {} } },
+          { sender: { id: "igsid_3" }, recipient: { id: "ig_business_1" }, timestamp: 1710000003000, message: { mid: "malformed", text: "malformed", quick_reply: { payload: 42 } } },
         ],
       }],
     });
@@ -323,7 +323,7 @@ describe("normalizeWebhook", () => {
         mediaId: "media_1",
         recipientId: "person_1",
         senderUsername: "customer",
-        timestamp: 1710000000,
+        timestamp: 1710000000000,
       },
     ]);
   });
@@ -346,7 +346,40 @@ describe("normalizeWebhook", () => {
       type: "message.received",
       text: "price",
       recipientId: "person_1",
-      timestamp: 1710000000,
+      timestamp: 1710000000000,
     }]);
+  });
+  it("converts second-based comment timestamps to milliseconds (regression)", () => {
+    // Realistic Meta payload: changes-based webhooks send entry.time and
+    // created_time in Unix seconds; messaging timestamps are already ms.
+    const events = normalizeWebhook({
+      object: "instagram",
+      entry: [
+        {
+          id: "ig_business_1",
+          time: 1760090400,
+          changes: [
+            { field: "comments", value: { id: "c_entry_time", text: "guide", media: { id: "m" }, from: { id: "p1" } } },
+            { field: "comments", value: { id: "c_created", text: "guide", media: { id: "m" }, from: { id: "p2" }, created_time: 1760090399 } },
+          ],
+        },
+        {
+          id: "ig_business_1",
+          time: 1760090400123,
+          messaging: [
+            { sender: { id: "p3" }, recipient: { id: "ig_business_1" }, timestamp: 1760090400456, message: { mid: "m_1", text: "hi" } },
+          ],
+        },
+      ],
+    });
+
+    expect(events.map((event) => [event.id, event.timestamp])).toEqual([
+      ["c_entry_time", 1760090400000],
+      ["c_created", 1760090399000],
+      ["m_1", 1760090400456],
+    ]);
+    // A comment that arrived "just now" must be inside the 7-day private reply window.
+    const age = 1760090460000 - events[0]!.timestamp;
+    expect(age).toBe(60_000);
   });
 });
