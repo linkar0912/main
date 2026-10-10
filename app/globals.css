@@ -6583,6 +6583,9 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .page-wrap.admin-page { gap: 24px; }
   .admin-card { padding: 20px 16px; }
   .admin-card.is-flush > .admin-card-head, .admin-card-foot { padding: 16px; }
+  .admin-card-kv { padding-left: 16px; padding-right: 16px; }
+  .admin-card.is-flush > .admin-card-note { margin-left: 16px; margin-right: 16px; }
+  .admin-card-body { padding-left: 16px; padding-right: 16px; }
   .admin-card.is-flush .admin-list > li, .admin-card.is-flush .admin-list-row, .admin-activity > li, .admin-queue, .admin-readiness > li { padding-left: 16px; padding-right: 16px; }
   .admin-card-head { flex-direction: column; }
   .admin-stat { padding: 16px; }
