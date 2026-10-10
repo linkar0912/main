@@ -9,6 +9,14 @@ export class AdminCommandError extends Error {
   }
 }
 
+/**
+ * Header values must be ISO-8859-1, so a reason with a curly quote, rupee sign,
+ * dash, or Devanagari text would make fetch throw. The server decodes it.
+ */
+export function encodeAdminReason(reason: string): string {
+  return encodeURIComponent(reason.trim());
+}
+
 export function adminIdempotencyKey(prefix = "admin"): string {
   return `${prefix}-${crypto.randomUUID()}`;
 }
@@ -29,7 +37,7 @@ export async function adminCommandResponse(url: string, options: AdminCommandOpt
     method: options.method ?? "POST",
     headers: {
       "content-type": "application/json",
-      "x-admin-reason": options.reason.trim(),
+      "x-admin-reason": encodeAdminReason(options.reason),
       "idempotency-key": options.idempotencyKey ?? adminIdempotencyKey(),
     },
     body: JSON.stringify(options.body ?? {}),
@@ -69,7 +77,10 @@ export function humanizeAdminCode(code: string): string {
 
 export function adminErrorMessage(cause: unknown, fallback = "Operation failed"): string {
   if (cause instanceof AdminCommandError) return humanizeAdminCode(cause.code);
-  // Network failures carry browser-specific prose; show the plain fallback.
+  // fetch rejects with a TypeError when the request never reached the server
+  // (offline, DNS, CORS, or a header it refused to send). Its message is
+  // browser-specific prose, so say what happened instead.
+  if (cause instanceof TypeError) return `${fallback}: the request did not reach Linkar. Check your connection and try again.`;
   return fallback;
 }
 

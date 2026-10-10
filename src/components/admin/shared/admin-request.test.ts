@@ -16,7 +16,7 @@ describe("admin request transport", () => {
     await expect(adminCommand("/api/admin/plans", { body: { key: "growth" }, reason: "  raise limit  " })).resolves.toEqual({ id: "p1" });
     const [, init] = fetchMock.mock.calls[0];
     expect(init.method).toBe("POST");
-    expect(init.headers["x-admin-reason"]).toBe("raise limit");
+    expect(decodeURIComponent(init.headers["x-admin-reason"])).toBe("raise limit");
     // The server accepts 16-128 characters from this set only.
     expect(init.headers["idempotency-key"]).toMatch(/^[A-Za-z0-9._:-]{16,128}$/);
     expect(init.body).toBe(JSON.stringify({ key: "growth" }));
@@ -37,8 +37,21 @@ describe("admin request transport", () => {
     expect(adminErrorMessage(failure)).toBe("System command failed");
   });
 
-  it("does not expose browser network error text", () => {
-    expect(adminErrorMessage(new TypeError("Failed to fetch"), "Operation failed")).toBe("Operation failed");
+  it("does not expose browser network error text but says the request did not arrive", () => {
+    const message = adminErrorMessage(new TypeError("Failed to fetch"), "Operation failed");
+    expect(message).not.toContain("Failed to fetch");
+    expect(message).toMatch(/^Operation failed: the request did not reach Linkar/);
+  });
+
+  it("percent-encodes reasons that are not ISO-8859-1 so fetch can send them", async () => {
+    const fetchMock = stubFetch(Response.json({ data: {} }));
+    const reason = "Customer’s ₹999 refund → ग्राहक अनुरोध";
+    await adminCommand("/api/admin/plans", { reason });
+    const header = fetchMock.mock.calls[0][1].headers["x-admin-reason"] as string;
+    // Header values must be Latin-1; real fetch rejects with a TypeError otherwise.
+    expect(/^[\x20-\x7e]+$/.test(header)).toBe(true);
+    expect(() => new Headers({ "x-admin-reason": header })).not.toThrow();
+    expect(decodeURIComponent(header)).toBe(reason);
   });
 
   it("treats a successful read without data as unavailable", async () => {
