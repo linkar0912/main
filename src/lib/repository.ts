@@ -582,6 +582,14 @@ export type RecordExecutionInput = Omit<ExecutionRecord, "id" | "createdAt" | "d
   dispatchStatus?: ExecutionDispatchStatus;
 };
 export type ClaimExecutionInput = Pick<ExecutionRecord, "workspaceId" | "automationId" | "externalEventId" | "dedupeKey">;
+
+/**
+ * How long a claimExecution claim (PROCESSING/CLAIMED) is held before another
+ * worker may take it over. A worker that dies mid-event would otherwise strand
+ * the event forever; the outbound ledger, not this claim, is what prevents a
+ * second send of anything that already went out.
+ */
+export const EXECUTION_CLAIM_LEASE_MS = 5 * 60 * 1_000;
 export type ClaimExecutionDispatchInput = ClaimExecutionInput & Required<Pick<
   ExecutionRecord,
   "dispatchOwner" | "dispatchStartedAt" | "dispatchLeaseExpiresAt"
@@ -697,6 +705,18 @@ export interface AutomationRepository {
     automationId: string,
     instagramAccountId: string,
     igScopedUserId: string,
+  ): Promise<number>;
+  /**
+   * Classic (v1) replies this automation sent, or may have sent, to one person:
+   * CLASSIC_ACTION ledger rows that are SENT, CLAIMED or UNKNOWN, excluding the
+   * rows of `excludeEventId` so a retried first reply is not mistaken for a prior one.
+   */
+  countClassicRepliesToRecipient(
+    workspaceId: string,
+    automationId: string,
+    instagramAccountId: string,
+    recipientId: string,
+    excludeEventId: string,
   ): Promise<number>;
   countExecutionsSentSince(automationId: string, sinceIso: string): Promise<number>;
   countParticipantsCreatedSince(workspaceId: string, sinceIso: string): Promise<number>;

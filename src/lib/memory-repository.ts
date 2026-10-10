@@ -51,6 +51,7 @@ import type {
   InboxContactRow,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
+import { EXECUTION_CLAIM_LEASE_MS } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS } from "./messaging-window";
 import { normalizeHelpQuery } from "./help-search";
@@ -351,6 +352,18 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         count += 1;
       }
       return count;
+    },
+
+    async countClassicRepliesToRecipient(workspaceId, automationId, instagramAccountId, recipientId, excludeEventId) {
+      const excludedPrefix = `automation:${automationId}:event:${excludeEventId}:`;
+      return [...outboundDeliveries.values()].filter((delivery) =>
+        delivery.workspaceId === workspaceId
+        && delivery.automationId === automationId
+        && delivery.instagramAccountId === instagramAccountId
+        && delivery.recipientId === recipientId
+        && delivery.kind === "CLASSIC_ACTION"
+        && ["SENT", "CLAIMED", "UNKNOWN"].includes(delivery.state)
+        && !delivery.deliveryKey.startsWith(excludedPrefix)).length;
     },
 
     async countExecutionsSentSince(automationId, sinceIso) {
@@ -953,16 +966,27 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async claimExecution(input) {
-      const existing = [...executions.values()].some(
+      const nowMs = Date.now();
+      const dispatchLeaseExpiresAt = new Date(nowMs + EXECUTION_CLAIM_LEASE_MS).toISOString();
+      const existing = [...executions.values()].find(
         (record) => record.workspaceId === input.workspaceId && record.dedupeKey === input.dedupeKey,
       );
-      if (existing) return false;
+      if (existing) {
+        // Mirrors Prisma: take over only an abandoned PROCESSING claim.
+        const leaseExpired = existing.dispatchLeaseExpiresAt
+          ? Date.parse(existing.dispatchLeaseExpiresAt) <= nowMs
+          : Date.parse(existing.createdAt) <= nowMs - EXECUTION_CLAIM_LEASE_MS;
+        if (existing.status !== "PROCESSING" || existing.dispatchStatus !== "CLAIMED" || !leaseExpired) return false;
+        executions.set(existing.id, { ...existing, dispatchLeaseExpiresAt });
+        return true;
+      }
       const record: ExecutionRecord = {
         id: createId("execution"),
         createdAt: now(),
         status: "PROCESSING",
         dispatchStatus: "CLAIMED",
         ...input,
+        dispatchLeaseExpiresAt,
       };
       executions.set(record.id, record);
       return true;

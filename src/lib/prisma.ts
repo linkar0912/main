@@ -45,6 +45,7 @@ import type {
   WorkspaceStatus,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
+import { EXECUTION_CLAIM_LEASE_MS } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS, toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
@@ -863,6 +864,20 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       });
     },
 
+    async countClassicRepliesToRecipient(workspaceId, automationId, instagramAccountId, recipientId, excludeEventId) {
+      return client.outboundDelivery.count({
+        where: {
+          workspaceId,
+          instagramAccountId,
+          recipientId,
+          automationId,
+          kind: "CLASSIC_ACTION",
+          state: { in: ["SENT", "CLAIMED", "UNKNOWN"] },
+          NOT: { deliveryKey: { startsWith: `automation:${automationId}:event:${excludeEventId}:` } },
+        },
+      });
+    },
+
     async countExecutionsSentSince(automationId, sinceIso) {
       return client.automationExecution.count({
         where: { automationId, status: "SENT", createdAt: { gte: new Date(sinceIso) } },
@@ -1539,15 +1554,40 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async claimExecution(input) {
+      const now = new Date();
+      const dispatchLeaseExpiresAt = new Date(now.getTime() + EXECUTION_CLAIM_LEASE_MS);
       try {
         await client.automationExecution.create({
-          data: { id: createId("execution"), status: "PROCESSING", dispatchStatus: "CLAIMED", ...input },
+          data: {
+            id: createId("execution"),
+            status: "PROCESSING",
+            dispatchStatus: "CLAIMED",
+            ...input,
+            dispatchLeaseExpiresAt,
+          },
         });
         return true;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
-        throw error;
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
       }
+      // The key exists. Take it over only when its holder abandoned it: still
+      // PROCESSING (never completed or released) past its lease. Claims written
+      // before leases existed have none and age out by createdAt. The single
+      // conditional UPDATE lets exactly one concurrent caller win.
+      const taken = await client.automationExecution.updateMany({
+        where: {
+          workspaceId: input.workspaceId,
+          dedupeKey: input.dedupeKey,
+          status: "PROCESSING",
+          dispatchStatus: "CLAIMED",
+          OR: [
+            { dispatchLeaseExpiresAt: { lte: now } },
+            { dispatchLeaseExpiresAt: null, createdAt: { lte: new Date(now.getTime() - EXECUTION_CLAIM_LEASE_MS) } },
+          ],
+        },
+        data: { dispatchLeaseExpiresAt },
+      });
+      return taken.count === 1;
     },
 
     async claimExecutionDispatch(input) {

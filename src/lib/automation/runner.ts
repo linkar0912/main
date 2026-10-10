@@ -1025,7 +1025,15 @@ export async function processNormalizedEvent(
       new Date(event.timestamp).toISOString(),
       contact,
     );
-    if (needsContactTracking) evaluationContext = { isNewContact: touch.created };
+    // A contact's createdAt is the timestamp of the earliest event seen from
+    // them, so this event is their first contact exactly when nothing earlier
+    // exists. Unlike `touch.created`, that still holds when the job is retried
+    // after the first attempt already created the row.
+    if (needsContactTracking) {
+      evaluationContext = {
+        isNewContact: touch.created || Date.parse(touch.record.createdAt) >= event.timestamp,
+      };
+    }
   }
   // A reply to a Story belongs to a matching story-reply flow when one exists;
   // generic DM flows then stay quiet so the person gets a single answer.
@@ -1147,9 +1155,18 @@ export async function processNormalizedEvent(
         externalEventId: event.id,
         dedupeKey,
       });
-      if (!claimed) continue;
-      // Claimed, so this automation owns the comment. Set the flag only now - a
-      // lost claim (already processed elsewhere) must not burn the winner slot.
+      if (!claimed) {
+        // Lost the claim: if that execution already replied (SENT) or is
+        // replying right now (PROCESSING under a live lease), it owns the
+        // comment's one private reply - lower-priority flows must stay quiet.
+        // A SKIPPED/FAILED execution never replied, so the slot stays open.
+        if (event.type === "comment.created" && !commentWinnerSelected) {
+          const existing = await repository.getExecution(mapping.workspaceId, dedupeKey);
+          if (existing?.status === "SENT" || existing?.status === "PROCESSING") commentWinnerSelected = true;
+        }
+        continue;
+      }
+      // Claimed, so this automation owns the comment.
       if (event.type === "comment.created") commentWinnerSelected = true;
 
       result.matched += 1;
@@ -1161,10 +1178,16 @@ export async function processNormalizedEvent(
         && automation.definition.trigger.replyOncePerUser
         && event.recipientId
       ) {
-        const prior = await repository.countParticipantsBySender(
+        // Classic flows reply through the outbound ledger (v2 campaigns are
+        // the ones with participants), so count replies this automation
+        // already sent - or is sending - to the person, excluding this
+        // event's own rows so a retry of the first reply is not skipped.
+        const prior = await repository.countClassicRepliesToRecipient(
+          mapping.workspaceId,
           automation.id,
           event.accountId,
           event.recipientId,
+          event.id,
         );
         if (prior > 0) {
           await repository.completeExecution(mapping.workspaceId, dedupeKey, {
