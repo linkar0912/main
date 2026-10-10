@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
-  ArrowUpRight,
+  BarChart3,
   CheckCircle2,
   MailCheck,
   Plus,
@@ -20,13 +20,14 @@ import { useAutomations } from "./automation-list";
 import { CreateAutomationButton } from "./create-automation-button";
 import { FailurePanel } from "./failure-panel";
 import { TrackedLinksPanel } from "./tracked-links-panel";
-import { StatusBadge } from "./status-badge";
+import { LocalStatusBadge, lifecycleStatus } from "./workspace-primitives";
 import type { AutomationRecord } from "@/src/lib/repository";
 import { getFacebookPages, getInstagramConnections, getInsightsOverview, seedWorkspaceData } from "@/src/lib/client/workspace-data";
 import type { DayPoint } from "./reply-volume-chart";
 import { ReplyVolumeCard } from "./reply-volume-card";
 import { halfWindowDelta, StatGrid, StatTile } from "./stat-tile";
 import { PageHeader, SectionCard } from "./page-header";
+import { greetingFor } from "@/src/lib/display-name";
 
 const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
 
@@ -43,7 +44,28 @@ export type DashboardScreenProps = {
   initialHasConnection?: boolean;
   /** Session email from the server render, so the greeting needs no bootstrap wait. */
   initialEmail?: string;
+  /** Profile display name, when the account has one; wins over the email. */
+  initialDisplayName?: string;
 };
+
+/**
+ * How long the overview may stay unanswered before Home stops showing loading
+ * placeholders and offers a retry. Without a bound, a request that never
+ * settles left every stat tile and the chart as skeletons indefinitely.
+ */
+export const INSIGHTS_TIMEOUT_MS = 15_000;
+
+type InsightsStatus = "loading" | "ready" | "error";
+
+function withTimeout<T>(request: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Timed out loading performance data")), ms);
+    request.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error: unknown) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
 
 function flowTriggerLabel(automation: AutomationRecord): string {
   // Exhaustive over every trigger type so a new one can't silently read as a
@@ -64,13 +86,6 @@ function flowTriggerLabel(automation: AutomationRecord): string {
   }
 }
 
-function displayNameFromEmail(email: string): string {
-  const handle = email.split("@")[0] ?? "";
-  const words = handle.replace(/[^a-zA-Z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "there";
-  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
-}
-
 function DemoBanner() {
   const { mode } = useAccountIdentity();
   if (mode !== "demo") return null;
@@ -80,13 +95,13 @@ function DemoBanner() {
       <div>
         <strong>You’re in demo mode.</strong>
         <span> Explore the builder with sample data. </span>
-        <Link href="/settings">Connect account <ArrowUpRight size={13} /></Link>
+        <Link href="/settings">Connect an account</Link>
       </div>
     </div>
   );
 }
 
-function DashboardGreeting({ fallbackEmail = "" }: { fallbackEmail?: string }) {
+function DashboardGreeting({ fallbackEmail = "", displayName }: { fallbackEmail?: string; displayName?: string }) {
   const { email: contextEmail } = useAccountIdentity();
   // The context email arrives with the client bootstrap; the server-passed
   // fallback paints the real name in the very first render.
@@ -94,15 +109,15 @@ function DashboardGreeting({ fallbackEmail = "" }: { fallbackEmail?: string }) {
   return (
     <PageHeader
       className="home-greeting"
-      title={`Hello, ${displayNameFromEmail(email)}!`}
-      description="Welcome back - here’s how your replies performed over the last 14 days."
+      title={greetingFor(email, displayName)}
+      description="Here’s how your replies did over the last 14 days."
       actions={(
         <>
           <CreateAutomationButton className="button button-secondary">
-            <Plus size={16} /> New automation
+            <Plus size={16} aria-hidden /> New automation
           </CreateAutomationButton>
           <Link className="button button-primary" href="/quick-automation">
-            <Zap size={16} /> Quick Automation
+            <Zap size={16} aria-hidden /> Quick automation
           </Link>
         </>
       )}
@@ -148,10 +163,10 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
     <section className="setup-panel" aria-label="First steps">
       <div className="setup-head">
         <div>
-          <h2>Your next best moves</h2>
-          <p>Three quick steps to get your first useful reply live.</p>
+          <h2>Get your first reply live</h2>
+          <p>Three steps. Most people finish in a few minutes.</p>
         </div>
-        <span className="setup-count">{completed}/{steps.length} done</span>
+        <span className="setup-count">{completed} of {steps.length} done</span>
       </div>
       <div className="setup-rail">
         {steps.map((step, index) => {
@@ -159,16 +174,16 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
           const rowClassName = `setup-row ${step.done ? "is-done" : ""} ${isNext ? "is-next" : ""}`;
           const content = (
             <>
-              <span className="setup-node">{step.done ? <CheckCircle2 size={17} /> : index + 1}</span>
+              <span className="setup-node" aria-hidden>{step.done ? <CheckCircle2 size={17} /> : index + 1}</span>
               <span className="setup-copy">
                 <strong>{step.title}</strong>
                 <small>{step.hint}</small>
               </span>
               {step.done ? (
-                <span className="setup-done-tag"><CheckCircle2 size={13} /> Done</span>
-              ) : (
-                <span className="setup-cta">{isNext ? "Do this now" : "Quick setup"} <ArrowRight size={13} /></span>
-              )}
+                <span className="setup-done-tag">Done</span>
+              ) : isNext ? (
+                <span className="setup-cta">Start <ArrowRight size={14} aria-hidden /></span>
+              ) : null}
             </>
           );
           if (step.href === null) {
@@ -190,10 +205,13 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
   );
 }
 
-export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection, initialEmail }: DashboardScreenProps = {}) {
+export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection, initialEmail, initialDisplayName }: DashboardScreenProps = {}) {
   const { automations, loading } = useAutomations(initialAutomations);
   const [insights, setInsights] = useState<InsightsPayload | null>(initialInsights ?? null);
-  const [insightsError, setInsightsError] = useState(false);
+  // Explicit status instead of inferring "loading" from `insights === null`:
+  // a failed or never-settling request used to leave that null forever, and
+  // the stat tiles (which had no error branch) stayed skeletons for good.
+  const [insightsStatus, setInsightsStatus] = useState<InsightsStatus>(initialInsights ? "ready" : "loading");
   const [hasConnection, setHasConnection] = useState<boolean | null>(() => initialHasConnection ?? null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -211,11 +229,13 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
       // /api/insights already returns it as capturedEmails off the same
       // countCapturedContacts() query, and the contacts route pages in 50
       // contact rows on top. One fewer authenticated round trip per load.
-      getInsightsOverview()
+      withTimeout(getInsightsOverview(), INSIGHTS_TIMEOUT_MS)
         .then((payload) => {
-          if (active) { setInsights(payload); setInsightsError(false); }
+          if (active) { setInsights(payload); setInsightsStatus("ready"); }
         })
-        .catch(() => { if (active) setInsightsError(true); });
+        // A failed background refresh keeps the last good numbers on screen;
+        // only a load with nothing to show yet turns into the error state.
+        .catch(() => { if (active) setInsightsStatus((status) => status === "ready" ? status : "error"); });
       Promise.all([
         getInstagramConnections().catch(() => []),
         getFacebookPages().catch(() => []),
@@ -245,14 +265,27 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
   const reachedDelta = halfWindowDelta(participantsPerDay);
   const capturedTotal = insights?.capturedEmails ?? 0;
   const optedOutTotal = insights?.optedOut ?? 0;
-  // Gate on `insights` having resolved: before it does every total reads zero,
-  // and claiming "no activity yet" to an established account would be a lie.
+  const insightsLoading = insightsStatus === "loading";
+  const insightsFailed = insightsStatus === "error";
+  // Only a resolved overview can say "nothing happened": before it arrives
+  // every total reads zero, and claiming no activity to an established
+  // account would be a lie.
   const hasPerformanceHistory =
-    insights === null ||
+    insightsStatus !== "ready" ||
     sentTotal > 0 ||
     reachedTotal > 0 ||
     capturedTotal > 0 ||
     optedOutTotal > 0;
+  /** Unavailable numbers read as a dash, never as a fake zero. */
+  const statValue = (value: number) => insightsFailed ? "–" : value;
+  const unavailableNote = "Couldn’t load";
+
+  function retryInsights() {
+    setInsightsStatus("loading");
+    void withTimeout(getInsightsOverview(), INSIGHTS_TIMEOUT_MS)
+      .then((payload) => { setInsights(payload); setInsightsStatus("ready"); })
+      .catch(() => setInsightsStatus("error"));
+  }
 
   const activeFlows = automations.filter((a) => a.status === "ACTIVE");
   const pausedFlows = automations.filter((a) => a.status !== "ACTIVE");
@@ -263,16 +296,19 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
 
   return (
     <>
-      <div className="page-wrap">
-        <DashboardGreeting fallbackEmail={initialEmail ?? ""} />
+      <div className="page-wrap ws-page dashboard-page">
+        <DashboardGreeting fallbackEmail={initialEmail ?? ""} displayName={initialDisplayName} />
 
         <DemoBanner />
 
-        {!loading && automations.length === 0 ? <section aria-label="Start here">
+        {!loading && automations.length === 0 ? <section className="quickstart" aria-label="Start here">
           <div className="quickstart-head">
-            <h2>Start here</h2>
+            <div>
+              <h2>Start here</h2>
+              <p>Pick a template. You can change every word before it goes live.</p>
+            </div>
             <button className="text-link" type="button" onClick={() => setPickerOpen(true)}>
-              Explore all templates <ArrowUpRight size={13} />
+              Browse all templates
             </button>
           </div>
           <div className="quickstart-grid">
@@ -301,28 +337,33 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
         <SetupChecklist automations={automations} hasConnection={hasConnection} loading={loading} />
 
         <StatGrid>
-          <StatTile label="Replies sent" icon={Send} loading={insights === null} value={sentTotal} note="Last 14 days" delta={sentDelta} trend={sentPerDay} />
-          <StatTile label="People reached" icon={UsersRound} loading={insights === null} value={reachedTotal} note="Last 14 days" delta={reachedDelta} trend={participantsPerDay} />
-          <StatTile label="Emails captured" icon={MailCheck} loading={insights === null} value={capturedTotal} note={`${optedOutTotal.toLocaleString()} opted out, respected`} />
-          <StatTile label="Replies that are on" icon={Power} loading={loading && automations.length === 0} value={activeCount} note={`Out of ${automations.length.toLocaleString()} automations`} />
+          <StatTile label="Replies sent" icon={Send} loading={insightsLoading} value={statValue(sentTotal)} note={insightsFailed ? unavailableNote : "Last 14 days"} delta={insightsFailed ? null : sentDelta} trend={insightsFailed ? undefined : sentPerDay} />
+          <StatTile label="People reached" icon={UsersRound} loading={insightsLoading} value={statValue(reachedTotal)} note={insightsFailed ? unavailableNote : "Last 14 days"} delta={insightsFailed ? null : reachedDelta} trend={insightsFailed ? undefined : participantsPerDay} />
+          <StatTile label="Emails captured" icon={MailCheck} loading={insightsLoading} value={statValue(capturedTotal)} note={insightsFailed ? unavailableNote : optedOutTotal > 0 ? `${optedOutTotal.toLocaleString()} opted out` : "All time"} />
+          <StatTile label="Automations on" icon={Power} loading={loading && automations.length === 0} value={activeCount} note={`Out of ${automations.length.toLocaleString()}`} />
         </StatGrid>
 
         <ReplyVolumeCard
           sent={sentPerDay}
           reached={participantsPerDay}
           days={14}
-          loading={insights === null}
-          action={<Link className="text-link" href="/insights">Open insights <ArrowUpRight size={13} /></Link>}
-          placeholder={insightsError && insights === null ? (
-            <div className="panel-empty" role="alert">Performance data could not load. <button className="text-link" type="button" onClick={() => {
-              setInsightsError(false);
-              void getInsightsOverview().then(setInsights).catch(() => setInsightsError(true));
-            }}>Retry</button></div>
-          ) : insights !== null && !hasPerformanceHistory ? (
-            <p className="panel-empty">
-              No activity yet - once an automation replies, you’ll see replies sent, people reached and
-              emails captured here.
-            </p>
+          loading={insightsLoading}
+          action={<Link className="text-link" href="/insights">View insights</Link>}
+          placeholder={insightsFailed ? (
+            <div className="chart-state" role="alert">
+              <p>Reply activity didn’t load. Check your connection and try again.</p>
+              <button className="button button-secondary button-small" type="button" onClick={retryInsights}>Try again</button>
+            </div>
+          ) : !hasPerformanceHistory ? (
+            <div className="chart-state">
+              <span className="chart-state-icon" aria-hidden><BarChart3 size={20} /></span>
+              <p>No replies yet in the last 14 days. Daily activity shows up here once an automation sends its first reply.</p>
+              {/* A new workspace already has three ways to create one above;
+                  only an established one needs pointing at its automations. */}
+              {automations.length > 0 ? (
+                <Link className="button button-secondary button-small" href="/automations">Check your automations</Link>
+              ) : null}
+            </div>
           ) : undefined}
         />
 
@@ -332,16 +373,16 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
             flush
             aria-label="Your automations"
             title="Your automations"
-            description={automations.length > 0 ? `${activeCount} of ${automations.length} switched on` : undefined}
-            action={<Link className="text-link" href="/automations">Manage all <ArrowUpRight size={13} /></Link>}
+            description={automations.length > 0 ? `${activeCount} of ${automations.length} on` : undefined}
+            action={automations.length > 0 ? <Link className="text-link" href="/automations">View all</Link> : undefined}
           >
             {flowRows.length === 0 ? (
               <div className="empty-state is-inline">
                 <span className="empty-icon"><Workflow size={20} /></span>
                 <h3>No automations yet</h3>
-                <p>Create your first automatic reply to start answering comments and messages.</p>
-                <CreateAutomationButton className="button button-primary">
-                  <Plus size={15} /> New automation
+                <p>Create one to start answering comments and messages automatically.</p>
+                <CreateAutomationButton className="button button-secondary button-small">
+                  <Plus size={15} aria-hidden /> New automation
                 </CreateAutomationButton>
               </div>
             ) : (
@@ -352,10 +393,10 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
                       {automation.status === "ACTIVE" ? <Zap size={17} strokeWidth={1.8} /> : <Workflow size={17} strokeWidth={1.8} />}
                     </span>
                     <span className="automation-copy">
-                      <span className="automation-title"><strong>{automation.name}</strong><StatusBadge status={automation.status} /></span>
+                      <span className="automation-title"><strong>{automation.name}</strong><LocalStatusBadge {...lifecycleStatus(automation.status)} /></span>
                       <p>{flowTriggerLabel(automation)}</p>
                     </span>
-                    <ArrowRight className="row-chevron" size={15} />
+                    <ArrowRight className="row-chevron" size={15} aria-hidden />
                   </Link>
                 ))}
               </div>
@@ -365,7 +406,7 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
             className="failure-panel"
             aria-label="Recent failures"
             title="Recent failures"
-            description="Messages Linkar or Meta could not send, with the reason when available."
+            description="Messages that couldn’t be sent, and why."
           >
             <FailurePanel limit={4} />
           </SectionCard>

@@ -10,7 +10,7 @@ vi.mock("./automation-list", () => ({
   useAutomations: () => ({ automations: automationState.automations, loading: automationState.loading }),
 }));
 
-const { DashboardScreen } = await import("./dashboard-screen");
+const { DashboardScreen, INSIGHTS_TIMEOUT_MS } = await import("./dashboard-screen");
 const { AppShell } = await import("./app-shell");
 
 function stubDashboardFetch() {
@@ -81,11 +81,11 @@ describe("DashboardScreen onboarding", () => {
 
     render(<DashboardScreen />);
 
-    expect(await screen.findByText("1/3 done")).toBeTruthy();
+    expect(await screen.findByText("1 of 3 done")).toBeTruthy();
     expect(screen.getByText("Connect an Instagram account or Facebook Page").closest(".setup-row")?.classList.contains("is-done")).toBe(true);
   });
 
-  it("greets the signed-in user by their account handle", async () => {
+  it("greets the signed-in user by a friendly first name", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/api/workspace/bootstrap")) {
@@ -108,10 +108,54 @@ describe("DashboardScreen onboarding", () => {
     // wraps the screen in AppShell the same way.
     render(<AppShell><DashboardScreen /></AppShell>);
 
-    const heading = await screen.findByRole("heading", { name: "Hello, Tejas Creator!" });
+    const heading = await screen.findByRole("heading", { name: "Hello, Tejas" });
     const greeting = heading.closest("header");
     expect(greeting).toBeTruthy();
-    expect(within(greeting as HTMLElement).getByRole("link", { name: "Quick Automation" }).getAttribute("href")).toBe("/quick-automation");
+    expect(within(greeting as HTMLElement).getByRole("link", { name: "Quick automation" }).getAttribute("href")).toBe("/quick-automation");
+  });
+
+  it("drops trailing digits from the email handle and prefers a display name", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const view = render(<DashboardScreen initialEmail="tejastelkar9@gmail.com" />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Hello, Tejastelkar");
+
+    view.rerender(<DashboardScreen initialEmail="tejastelkar9@gmail.com" initialDisplayName="Tejas Telkar" />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Hello, Tejas");
+  });
+
+  it("says Welcome back when the email has no usable name", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    render(<DashboardScreen initialEmail="admin@example.com" />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Welcome back");
+  });
+
+  it("replaces stat skeletons with an error and a retry when insights fail", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/insights")) return { ok: false, status: 500, json: async () => ({ error: "boom" }) } as Response;
+      return { ok: true, json: async () => ({ data: [] }) } as Response;
+    }));
+    render(<DashboardScreen />);
+
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(document.querySelectorAll(".kpi-grid .kpi-skeleton")).toHaveLength(0);
+    expect(screen.getAllByText("Couldn’t load")).toHaveLength(3);
+  });
+
+  it("stops showing loading placeholders when insights never answer", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+      render(<DashboardScreen />);
+      expect(document.querySelectorAll(".kpi-grid .kpi-skeleton").length).toBeGreaterThan(0);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(INSIGHTS_TIMEOUT_MS + 10); });
+
+      expect(document.querySelectorAll(".kpi-grid .kpi-skeleton")).toHaveLength(0);
+      expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows Start here only after an empty automation list has loaded", async () => {
@@ -226,7 +270,8 @@ describe("DashboardScreen onboarding", () => {
     stubEmptyDashboardFetch();
     render(<DashboardScreen />);
 
-    expect(await screen.findByText(/No activity yet/i)).toBeTruthy();
+    expect(await screen.findByText(/No replies yet in the last 14 days/i)).toBeTruthy();
+    expect(document.querySelector(".dashboard-chart-skeleton")).toBeNull();
     expect(screen.queryByRole("img", { name: /daily replies sent and people reached/i })).toBeNull();
   });
 
@@ -238,7 +283,7 @@ describe("DashboardScreen onboarding", () => {
 
     const tiles = [...document.querySelectorAll(".kpi-grid .kpi-tile")];
     expect(tiles).toHaveLength(4);
-    for (const label of ["Replies sent", "People reached", "Emails captured", "Replies that are on"]) {
+    for (const label of ["Replies sent", "People reached", "Emails captured", "Automations on"]) {
       expect(tiles.some((tile) => tile.textContent?.includes(label))).toBe(true);
     }
   });

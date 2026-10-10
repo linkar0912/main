@@ -31,7 +31,8 @@ describe("ReplyVolumeChart", () => {
   it("shows a helpful empty state instead of zero-height bars", () => {
     render(<ReplyVolumeChart days={14} sent={[{ day: "2026-09-01", count: 0 }]} reached={[]} compact />);
 
-    expect(screen.getByText("No replies yet. Daily activity will appear here after an automation sends its first reply.")).toBeTruthy();
+    expect(screen.getByText("No replies yet in the last 14 days. Daily activity shows up here once an automation sends its first reply.")).toBeTruthy();
+    expect(screen.queryByLabelText("Chart legend")).toBeNull();
     expect(screen.queryByRole("img")).toBeNull();
   });
 });
