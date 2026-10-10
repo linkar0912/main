@@ -51,10 +51,20 @@ export async function requireBillingOwner(request: Request): Promise<BillingGuar
   } catch {
     return { ok: false, error: NextResponse.json({ error: "origin_mismatch" }, { status: 403 }) };
   }
-  if (normalizedOrigin !== new URL(request.url).origin) {
+  const env = getServerEnv();
+  // Behind the Cloudflare tunnel, Traefik receives plain HTTP, so request.url
+  // reads http://app.linkar.in while the browser sends https://app.linkar.in.
+  // The configured public app origin is the authority; request.url still
+  // matches for local development without a proxy.
+  const allowedOrigins = new Set([new URL(request.url).origin]);
+  try {
+    allowedOrigins.add(new URL(env.appUrl).origin);
+  } catch {
+    // An unparsable APP_URL leaves only the request origin.
+  }
+  if (!allowedOrigins.has(normalizedOrigin)) {
     return { ok: false, error: NextResponse.json({ error: "origin_mismatch" }, { status: 403 }) };
   }
-  const env = getServerEnv();
   const address = clientAddress(request, env.trustedProxyHops);
   const ipHash = createHmac("sha256", env.authSessionSecret)
     .update(`billing-client-address\0${address}`)

@@ -52,6 +52,22 @@ describe("billing authorization", () => {
     if (!member.ok) expect(member.error.status).toBe(403);
   });
 
+  it("accepts the public app origin when the proxy delivers the request over plain http", async () => {
+    vi.stubEnv("APP_URL", "https://app.linkar.in");
+    const behindTunnel = await requireBillingOwner(new Request("http://app.linkar.in/api/billing/invite-code", {
+      method: "POST",
+      headers: { origin: "https://app.linkar.in" },
+    }));
+    expect(behindTunnel.ok).toBe(true);
+
+    const spoofedScheme = await requireBillingOwner(new Request("http://app.linkar.in/api/billing/invite-code", {
+      method: "POST",
+      headers: { origin: "https://app.linkar.in.evil.example" },
+    }));
+    expect(spoofedScheme.ok).toBe(false);
+    vi.unstubAllEnvs();
+  });
+
   it("rejects billing mutations without the exact application origin", async () => {
     const missingOrigin = await requireBillingOwner(new Request("https://app.linkar.in/api/billing/cancel", { method: "POST" }));
     expect(missingOrigin.ok).toBe(false);
