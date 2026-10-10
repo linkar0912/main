@@ -5,6 +5,25 @@ import { assertApplicationAccess, safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { ADMIN_HOST, isAdminRoutePath, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
 import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
+import { isCrossSiteRequest } from "@/src/lib/security/same-origin";
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+// Provider callbacks are server-to-server and authenticate with signatures;
+// they never carry a browser Origin, so the cross-site check does not apply.
+const PROVIDER_CALLBACK_PATHS = [
+  "/api/meta/webhook",
+  "/api/meta/deauthorize",
+  "/api/meta/data-deletion",
+  "/api/facebook/webhook",
+  "/api/facebook/deauthorize",
+  "/api/facebook/data-deletion",
+  "/api/razorpay/webhook",
+] as const;
+
+function isProviderCallbackPath(pathname: string): boolean {
+  return PROVIDER_CALLBACK_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
 
 // Canonicalizes the marketing and app hosts, then applies an optimistic gate
 // to authenticated page routes. The gate also refreshes the Supabase session
@@ -13,6 +32,16 @@ import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
 // verifies via getValidatedSession(); Proxy is not the source of truth for
 // authorization (see Next.js's Proxy guidance against using it as one).
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  // Every state-changing API call made with a browser session must come from
+  // our own pages. SameSite=Lax already blocks most cross-site POSTs, but the
+  // session cookie is scoped to the parent domain, so a sibling subdomain is
+  // "same-site"; this closes that gap for all routes in one place.
+  if (pathname.startsWith("/api/") && !SAFE_METHODS.has(request.method) && !isProviderCallbackPath(pathname) && isCrossSiteRequest(request)) {
+    return NextResponse.json({ error: "cross_site_request" }, { status: 403 });
+  }
+  if (pathname.startsWith("/api/") && !isAdminRoutePath(pathname)) return NextResponse.next();
+
   const env = getServerEnv();
 
   const hostname = resolveRequestHostname(request.headers, request.nextUrl.hostname);
@@ -100,6 +129,6 @@ export const config = {
     "/profile/:path*",
     "/help/:path*",
     "/admin/:path*",
-    "/api/admin/:path*",
+    "/api/:path*",
   ],
 };

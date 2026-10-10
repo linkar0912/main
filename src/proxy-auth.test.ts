@@ -58,4 +58,22 @@ describe("proxy authentication boundaries", () => {
       expect.objectContaining({ cookieOptions: { domain: "linkar.in", path: "/", httpOnly: true, secure: true, sameSite: "lax" } }),
     );
   });
+
+  it("rejects cross-site state-changing API calls but lets same-origin and provider callbacks through", async () => {
+    const crossSite = await proxy(new NextRequest("https://app.linkar.in/api/automations", { method: "POST", headers: { origin: "https://evil.example", "sec-fetch-site": "cross-site" } }));
+    expect(crossSite.status).toBe(403);
+
+    const sibling = await proxy(new NextRequest("https://app.linkar.in/api/broadcasts", { method: "POST", headers: { origin: "https://blog.linkar.in", "sec-fetch-site": "same-site" } }));
+    expect(sibling.status).toBe(403);
+
+    const sameOrigin = await proxy(new NextRequest("https://app.linkar.in/api/automations", { method: "POST", headers: { origin: "https://app.linkar.in", "sec-fetch-site": "same-origin" } }));
+    expect(sameOrigin.status).toBe(200);
+
+    const read = await proxy(new NextRequest("https://app.linkar.in/api/automations", { headers: { origin: "https://evil.example", "sec-fetch-site": "cross-site" } }));
+    expect(read.status).toBe(200);
+
+    const webhook = await proxy(new NextRequest("https://app.linkar.in/api/razorpay/webhook", { method: "POST", headers: { "sec-fetch-site": "cross-site" } }));
+    expect(webhook.status).toBe(200);
+    expect(mocks.getClaims).not.toHaveBeenCalled();
+  });
 });
