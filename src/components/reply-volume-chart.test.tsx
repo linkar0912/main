@@ -21,9 +21,9 @@ describe("ReplyVolumeChart", () => {
     expect(within(legend).getByText("People reached")).toBeTruthy();
     const columns = [...chart.querySelectorAll<HTMLElement>(".chart-column")];
     expect(columns.map((column) => column.title)).toEqual([
-      "Sep 1: 2 sent, 1 reached",
-      "Sep 2: 4 sent, 0 reached",
-      "Sep 3: 0 sent, 3 reached",
+      "1 Sept: 2 sent, 1 reached",
+      "2 Sept: 4 sent, 0 reached",
+      "3 Sept: 0 sent, 3 reached",
     ]);
     expect(container.querySelectorAll(".chart-bar")).toHaveLength(6);
   });
