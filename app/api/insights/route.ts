@@ -1,14 +1,30 @@
 import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
+import type { AutomationRepository } from "@/src/lib/repository";
+import { getEntitlementService } from "@/src/lib/entitlements/service";
 
 export const runtime = "nodejs";
 
 const TIMESERIES_DAYS = 14;
 
-function startOfMonthIso(): string {
+/** WorkspaceUsagePeriod.periodStart for the current UTC month. */
+function currentPeriodStart(): string {
     const now = new Date();
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/**
+ * Plan usage = the metered quantity the plan actually limits: messages
+ * reserved against the monthly delivery allowance, next to that allowance
+ * (null = unlimited). Workspace-wide by nature, even on a campaign page.
+ */
+async function planUsage(repository: AutomationRepository, workspaceId: string) {
+    const [usage, monthlyDeliveryLimit] = await Promise.all([
+        repository.getWorkspaceUsage(workspaceId, currentPeriodStart()),
+        getEntitlementService().getMonthlyDeliveryLimit(workspaceId).catch(() => null),
+    ]);
+    return { deliveriesThisMonth: usage.deliveriesReserved, monthlyDeliveryLimit };
 }
 
 // GET /api/insights?automationId=<optional>&include=usage|overview
@@ -36,14 +52,13 @@ export async function GET(request: Request) {
     const include = params.get("include");
 
     if (include === "usage") {
-        // No paid tiers are modeled yet, so monthlyLimit stays null (unlimited).
-        return NextResponse.json({
-            usage: {
-                participantsThisMonth: await repository.countParticipantsCreatedSince(session.workspaceId, startOfMonthIso()),
-                monthlyLimit: null as number | null,
-            },
-        });
+        return NextResponse.json({ usage: await planUsage(repository, session.workspaceId) });
     }
+
+    // Contacts are workspace records with no automation column, so these two
+    // totals cannot be narrowed to one automation; the response says so
+    // instead of letting a campaign view present them as its own.
+    const contactTotalsScope = "workspace" as const;
 
     if (include === "overview") {
         const [participantsPerDay, sentPerDay, capturedEmails, optedOut] = await Promise.all([
@@ -56,17 +71,18 @@ export async function GET(request: Request) {
             timeseries: { days: TIMESERIES_DAYS, participantsPerDay, sentPerDay },
             capturedEmails,
             optedOut,
+            contactTotalsScope,
         });
     }
 
-    const [funnel, participantsPerDay, sentPerDay, mediaPerformance, capturedEmails, optedOut, participantsThisMonth] = await Promise.all([
+    const [funnel, participantsPerDay, sentPerDay, mediaPerformance, capturedEmails, optedOut, usage] = await Promise.all([
         repository.countParticipantsByState(session.workspaceId, automationId || undefined),
         repository.countParticipantsPerDay(session.workspaceId, TIMESERIES_DAYS, automationId),
         repository.countExecutionsSentPerDay(session.workspaceId, TIMESERIES_DAYS, automationId),
         repository.countParticipantsByMedia(session.workspaceId, automationId),
         repository.countCapturedContacts(session.workspaceId),
         repository.countSuppressedContacts(session.workspaceId),
-        repository.countParticipantsCreatedSince(session.workspaceId, startOfMonthIso()),
+        planUsage(repository, session.workspaceId),
     ]);
 
     return NextResponse.json({
@@ -77,7 +93,8 @@ export async function GET(request: Request) {
             .slice(0, 10),
         capturedEmails,
         optedOut,
-        usage: { participantsThisMonth, monthlyLimit: null as number | null },
+        contactTotalsScope,
+        usage,
     });
 }
 

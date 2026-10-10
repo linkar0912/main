@@ -6,7 +6,8 @@ import { SectionCard } from "./page-header";
 import { InlineContentSkeleton } from "./skeleton";
 
 type InsightsPayload = {
-  usage?: { participantsThisMonth: number; monthlyLimit: number | null };
+  /** Workspace-wide: messages sent this month against the plan's allowance (null = unlimited). */
+  usage?: { deliveriesThisMonth: number; monthlyDeliveryLimit: number | null };
 };
 
 export function InsightsPanel({ automationId, showExport = true }: { automationId?: string; showExport?: boolean }) {
@@ -36,30 +37,30 @@ export function InsightsPanel({ automationId, showExport = true }: { automationI
   }
 
   const usage = insights.usage;
-  const usageLimit = usage?.monthlyLimit ?? null;
+  const usageLimit = usage?.monthlyDeliveryLimit ?? null;
   const usagePercent =
-    usage && usageLimit ? Math.min(100, Math.round((usage.participantsThisMonth / usageLimit) * 100)) : null;
+    usage && usageLimit ? Math.min(100, Math.round((usage.deliveriesThisMonth / usageLimit) * 100)) : null;
 
   return (
     <div className="insights-stack side-stack">
       {usage && (
-        <SectionCard className="side-panel" title="Plan usage" description="Participants counted this month." aria-label="Plan usage">
+        <SectionCard className="side-panel" title="Plan usage" description="Messages sent this month across the workspace." aria-label="Plan usage">
           <div className="usage-meter">
             {usagePercent !== null && usageLimit !== null && (
               <div
                 className="usage-bar"
                 role="progressbar"
-                aria-label="Participants used this month"
-                aria-valuenow={usage.participantsThisMonth}
+                aria-label="Messages sent this month"
+                aria-valuenow={usage.deliveriesThisMonth}
                 aria-valuemin={0}
                 aria-valuemax={usageLimit}
               >
-                <span style={{ width: `${Math.max(usagePercent, usage.participantsThisMonth > 0 ? 4 : 0)}%` }} />
+                <span style={{ width: `${Math.max(usagePercent, usage.deliveriesThisMonth > 0 ? 4 : 0)}%` }} />
               </div>
             )}
             <p className="muted usage-note">
-              {usage.participantsThisMonth.toLocaleString()} participant{usage.participantsThisMonth === 1 ? "" : "s"} this month
-              {usage.monthlyLimit ? ` of ${usage.monthlyLimit.toLocaleString()}` : ""} on your plan.
+              {usage.deliveriesThisMonth.toLocaleString()} message{usage.deliveriesThisMonth === 1 ? "" : "s"} sent this month
+              {usageLimit !== null ? ` of ${usageLimit.toLocaleString()} on your plan.` : " - your plan has no monthly limit."}
             </p>
           </div>
         </SectionCard>
