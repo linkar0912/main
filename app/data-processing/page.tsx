@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { PublicPage } from "@/src/components/public-page";
 import { getServerEnv } from "@/src/lib/env";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: `Data processing addendum · ${PRODUCT_NAME}`,
+  description: `How ${PRODUCT_NAME} processes personal data about the people your automations talk to, as your processor.`,
+  alternates: { canonical: "/data-processing" },
+};
 
 export default function DataProcessingPage() {
   const { supportEmail } = getServerEnv();

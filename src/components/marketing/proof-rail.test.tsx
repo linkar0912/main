@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ProofRail } from "./proof-rail";
 
@@ -61,6 +61,24 @@ describe("ProofRail", () => {
     expect(visibleCards.map((card) => within(card).getByText(/Creator workflow/i))).toHaveLength(2);
     expect(screen.queryByText(/followers|customers|revenue|million|testimonial/i)).toBeNull();
     expect(screen.queryAllByRole("link")).toHaveLength(0);
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    // The only control is the marquee's pause button.
+    expect(screen.queryAllByRole("button")).toHaveLength(1);
+  });
+
+  it("offers a visible control that pauses and resumes the moving strip", () => {
+    render(<ProofRail />);
+
+    const ticker = document.querySelector("[data-proof-ticker]");
+    const pause = screen.getByRole("button", { name: "Pause creator examples" });
+    expect(pause.getAttribute("aria-pressed")).toBe("false");
+    expect(ticker?.hasAttribute("data-paused")).toBe(false);
+
+    fireEvent.click(pause);
+    const play = screen.getByRole("button", { name: "Play creator examples" });
+    expect(play.getAttribute("aria-pressed")).toBe("true");
+    expect(ticker?.getAttribute("data-paused")).toBe("true");
+
+    fireEvent.click(play);
+    expect(ticker?.hasAttribute("data-paused")).toBe(false);
   });
 });

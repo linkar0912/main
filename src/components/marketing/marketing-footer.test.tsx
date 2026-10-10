@@ -31,14 +31,15 @@ describe("MarketingFooter", () => {
       ["How it works", "/#how-it-works"],
       ["Workflows", "/#workflows"],
       ["Get started", "/signup"],
-      ["Help", "/help"],
-      ["Support", "/support"],
+      ["Help and support", "/support"],
+      ["Contact", "/contact"],
       ["Login", "/login"],
       ["Dashboard", "/dashboard"],
       ["Linkar home", "/#top"],
       ["Setup", "/#setup"],
       ["Questions", "/#faq"],
       ["Terms", "/terms"],
+      ["Refund policy", "/refund-policy"],
       ["Acceptable use", "/acceptable-use"],
       ["Privacy", "/privacy"],
       ["Cookies", "/cookies"],
@@ -53,6 +54,8 @@ describe("MarketingFooter", () => {
 
     const links = within(footer).getAllByRole("link");
     expect(links).toHaveLength(expected.size + 1);
+    // /help is the signed-in help centre; logged-out visitors would bounce to login.
+    expect(links.some((link) => link.getAttribute("href") === "/help")).toBe(false);
     expect(links.every((link) => {
       const href = link.getAttribute("href") ?? "";
       return href.startsWith("/") || href.startsWith("#");

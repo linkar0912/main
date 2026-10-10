@@ -31,9 +31,52 @@
 }
 
 .ticker {
+  position: relative;
   min-inline-size: 0;
   overflow: hidden;
   touch-action: pan-x;
+}
+
+.ticker[data-paused] .track {
+  animation-play-state: paused;
+}
+
+/* Visible pause/play control (WCAG 2.2.2), pinned to the strip's trailing edge. */
+.tickerToggle {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 12px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  inline-size: 36px;
+  block-size: 36px;
+  padding: 0;
+  color: var(--marketing-text);
+  background: var(--marketing-raised);
+  border: 1px solid var(--marketing-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.tickerToggle:focus-visible {
+  outline: 2px solid var(--marketing-text);
+  outline-offset: 2px;
+}
+
+.tickerToggle [data-icon="pause"] {
+  inline-size: 10px;
+  block-size: 12px;
+  border-inline: 3px solid currentColor;
+}
+
+.tickerToggle [data-icon="play"] {
+  inline-size: 0;
+  block-size: 0;
+  margin-inline-start: 3px;
+  border-block: 6px solid transparent;
+  border-inline-start: 10px solid currentColor;
 }
 
 .track {
@@ -249,6 +292,11 @@
   }
 
   .trackSegment[data-proof-duplicate] {
+    display: none;
+  }
+
+  /* Nothing moves, so there is nothing to pause. */
+  .tickerToggle {
     display: none;
   }
 

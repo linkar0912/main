@@ -55,6 +55,14 @@
   .header[data-surface="solid"] .frame {
     backdrop-filter: blur(18px) saturate(115%);
   }
+
+  /* Each mega panel sits in the DOM right after its trigger, inside .frame.
+     A backdrop-filter would make .frame the containing block for the panel's
+     position: fixed and pin it inside the bar, so drop the blur while a panel
+     is open; the frame is opaque then anyway. */
+  .header[data-mega-menu="open"] .frame {
+    backdrop-filter: none;
+  }
 }
 
 /* On pages with a light top surface (e.g. the auth pages), keep the header
@@ -97,30 +105,6 @@
   inline-size: auto;
 }
 
-.language {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  gap: 10px;
-  min-block-size: 44px;
-  color: inherit;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .75rem;
-  font-weight: 600;
-  letter-spacing: .06em;
-}
-
-.language > span:first-child {
-  border-bottom: 1px solid currentColor;
-}
-
-.languageCaret {
-  inline-size: 0;
-  block-size: 0;
-  border-block-start: 5px solid currentColor;
-  border-inline: 4px solid transparent;
-}
-
 .primaryNavigation {
   justify-self: center;
 }
@@ -158,7 +142,7 @@
   transform: rotate(8deg);
 }
 
-.primaryNavigation ul,
+.primaryNavigation > ul,
 .accountNavigation ul,
 .menuSheet ul {
   display: flex;
@@ -168,7 +152,7 @@
   list-style: none;
 }
 
-.primaryNavigation ul {
+.primaryNavigation > ul {
   gap: clamp(22px, 2.1vw, 38px);
 }
 
@@ -176,7 +160,7 @@
   gap: clamp(18px, 1.6vw, 30px);
 }
 
-.primaryNavigation a,
+.primaryNavigation > ul > li > a,
 .solutionsButton,
 .accountNavigation a,
 .wordmark,
@@ -187,7 +171,7 @@
   outline-offset: 3px;
 }
 
-.primaryNavigation a:focus-visible,
+.primaryNavigation > ul > li > a:focus-visible,
 .solutionsButton:focus-visible,
 .accountNavigation a:focus-visible,
 .wordmark:focus-visible,
@@ -197,7 +181,7 @@
   outline: 2px solid currentColor;
 }
 
-.primaryNavigation a,
+.primaryNavigation > ul > li > a,
 .solutionsButton,
 .accountNavigation a,
 .mobileActions a {
@@ -234,13 +218,13 @@
   transform: translateY(2px) rotate(225deg);
 }
 
-.primaryNavigation a,
+.primaryNavigation > ul > li > a,
 .solutionsButton,
 .login {
   position: relative;
 }
 
-.primaryNavigation a::after,
+.primaryNavigation > ul > li > a::after,
 .solutionsButton::after,
 .login::after {
   position: absolute;
@@ -253,8 +237,8 @@
   transition: transform 220ms cubic-bezier(.43, .195, .02, 1);
 }
 
-.primaryNavigation a:hover::after,
-.primaryNavigation a:focus-visible::after,
+.primaryNavigation > ul > li > a:hover::after,
+.primaryNavigation > ul > li > a:focus-visible::after,
 .solutionsButton:hover::after,
 .solutionsButton:focus-visible::after,
 .solutionsButton[aria-expanded="true"]::after,
@@ -601,7 +585,7 @@
 @media (prefers-reduced-motion: reduce) {
   .frame,
   .wordmark,
-  .primaryNavigation a::after,
+  .primaryNavigation > ul > li > a::after,
   .solutionsButton::after,
   .login::after,
   .getStarted,

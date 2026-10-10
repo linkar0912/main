@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import Link from "next/link";
 import { FacebookGlyph } from "../facebook-glyph";
 import { InstagramGlyph } from "../instagram-glyph";
@@ -73,6 +73,9 @@ type MarketingHeaderProps = {
 
 type DesktopPanel = "solutions" | "resources" | null;
 
+const PANEL_LEAVE_DELAY_MS = 240;
+const HOVER_CLICK_GRACE_MS = 400;
+
 /** Floating marketing header with primary and account navigation, and a mobile sheet. */
 export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderProps = {}) {
   const headerRef = useRef<HTMLElement>(null);
@@ -85,6 +88,8 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
   const [scrolled, setScrolled] = useState(forceSurface === "solid");
   const [menuOpen, setMenuOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<DesktopPanel>(null);
+  const panelLeaveTimer = useRef<number | null>(null);
+  const panelHoverOpenedAt = useRef(0);
 
   useEffect(() => {
     menuOpenRef.current = menuOpen;
@@ -167,6 +172,49 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
     return () => window.removeEventListener("resize", closeOnTabletResize);
   }, []);
 
+  useEffect(() => () => {
+    if (panelLeaveTimer.current !== null) window.clearTimeout(panelLeaveTimer.current);
+  }, []);
+
+  const cancelPanelLeave = () => {
+    if (panelLeaveTimer.current === null) return;
+    window.clearTimeout(panelLeaveTimer.current);
+    panelLeaveTimer.current = null;
+  };
+
+  // A mouse resting on a trigger opens its panel. Touch is left to the click,
+  // which would otherwise arrive straight after the synthetic hover and close
+  // the panel again.
+  const openOnHover = (panel: Exclude<DesktopPanel, null>, pointerType: string) => {
+    if (pointerType === "touch") return;
+    cancelPanelLeave();
+    if (activePanel === panel) return;
+    panelHoverOpenedAt.current = Date.now();
+    setActivePanel(panel);
+  };
+
+  // Click toggles. A click that lands just after the hover opened the panel is
+  // the same gesture, so it keeps the panel open rather than shutting it.
+  const togglePanel = (panel: Exclude<DesktopPanel, null>) => {
+    cancelPanelLeave();
+    const justHovered = Date.now() - panelHoverOpenedAt.current < HOVER_CLICK_GRACE_MS;
+    setActivePanel((current) => (current === panel && !justHovered ? null : panel));
+  };
+
+  // The trigger and its panel form one hover zone. Leaving it closes the panel
+  // after a short delay, so the pointer can cross the gap between bar and panel.
+  const panelHoverZone = {
+    onPointerEnter: cancelPanelLeave,
+    onPointerLeave: (event: PointerEvent<HTMLLIElement>) => {
+      if (event.pointerType === "touch") return;
+      cancelPanelLeave();
+      panelLeaveTimer.current = window.setTimeout(() => {
+        panelLeaveTimer.current = null;
+        setActivePanel(null);
+      }, PANEL_LEAVE_DELAY_MS);
+    },
+  };
+
   const closeMenu = (restoreFocus = false) => {
     setMenuOpen(false);
     if (restoreFocus) {
@@ -224,42 +272,89 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
             <LinkarMark className={styles.wordmarkMark} />
             Linkar
           </Link>
-          <div className={styles.language} aria-label="Language: English">
-            <span>EN</span>
-            <span className={styles.languageCaret} aria-hidden="true" />
-          </div>
         </div>
 
         <nav className={styles.primaryNavigation} aria-label="Primary">
           <ul>
             <li><Link href={marketingHref(navigationItems[0].href, siteOrigin)}>{navigationItems[0].label}</Link></li>
-            <li className={styles.solutionsTrigger}>
+            <li className={styles.solutionsTrigger} {...panelHoverZone}>
               <button
                 ref={solutionsButtonRef}
                 className={styles.solutionsButton}
                 type="button"
                 aria-expanded={activePanel === "solutions"}
                 aria-controls="marketing-solutions"
-                onClick={() => setActivePanel("solutions")}
-                onPointerEnter={() => setActivePanel("solutions")}
+                onClick={() => togglePanel("solutions")}
+                onPointerEnter={(event) => openOnHover("solutions", event.pointerType)}
               >
                 Solutions <span className={styles.solutionsCaret} aria-hidden="true" />
               </button>
+              {/* Rendered right after its trigger so keyboard and screen-reader
+                  order runs straight from the button into the panel. */}
+              {activePanel === "solutions" ? (
+                <nav id="marketing-solutions" className={styles.solutionsPanel} aria-label="Solutions">
+                  <section className={styles.solutionsColumn} aria-labelledby="solutions-channel-title">
+                    <p id="solutions-channel-title" className={styles.solutionsEyebrow}>By channel</p>
+                    <Link className={styles.channelLink} href={marketingHref("/#channels", siteOrigin)} aria-label="Instagram" onClick={() => setActivePanel(null)}>
+                      <span className={styles.channelIcon} data-channel="instagram" aria-hidden="true"><InstagramGlyph size={27} brand /></span>
+                      <span><strong>Instagram</strong><small>Private replies and DMs</small></span>
+                      <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
+                    </Link>
+                    <Link className={styles.channelLink} href={marketingHref("/#channels", siteOrigin)} aria-label="Facebook Pages" onClick={() => setActivePanel(null)}>
+                      <span className={styles.channelIcon} data-channel="facebook" aria-hidden="true"><FacebookGlyph size={27} brand /></span>
+                      <span><strong>Facebook Pages</strong><small>Public comment replies</small></span>
+                      <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
+                    </Link>
+                  </section>
+                  <section className={styles.solutionsColumn} aria-labelledby="solutions-use-case-title">
+                    <p id="solutions-use-case-title" className={styles.solutionsEyebrow}>By use case</p>
+                    <ul className={styles.useCaseList}>
+                      {useCaseItems.map((item, index) => (
+                        <li key={item.label} style={{ "--solution-index": index } as CSSProperties}>
+                          <Link href={marketingHref(item.href, siteOrigin)} onClick={() => setActivePanel(null)}>
+                            <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                            <span className={styles.linkArrow} aria-hidden="true">&#8594;</span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                </nav>
+              ) : null}
             </li>
             <li><Link href={marketingHref(navigationItems[1].href, siteOrigin)}>{navigationItems[1].label}</Link></li>
             <li><Link href={marketingHref(navigationItems[2].href, siteOrigin)}>{navigationItems[2].label}</Link></li>
-            <li className={styles.solutionsTrigger}>
+            <li className={styles.solutionsTrigger} {...panelHoverZone}>
               <button
                 ref={resourcesButtonRef}
                 className={styles.solutionsButton}
                 type="button"
                 aria-expanded={activePanel === "resources"}
                 aria-controls="marketing-resources"
-                onClick={() => setActivePanel("resources")}
-                onPointerEnter={() => setActivePanel("resources")}
+                onClick={() => togglePanel("resources")}
+                onPointerEnter={(event) => openOnHover("resources", event.pointerType)}
               >
                 Resources <span className={styles.solutionsCaret} aria-hidden="true" />
               </button>
+              {activePanel === "resources" ? (
+                <nav id="marketing-resources" className={`${styles.solutionsPanel} ${styles.resourcesPanel}`} aria-label="Resources">
+                  {resourceGroups.map((group, groupIndex) => (
+                    <section className={styles.solutionsColumn} aria-labelledby={`resources-${groupIndex}-title`} key={group.label}>
+                      <p id={`resources-${groupIndex}-title`} className={styles.solutionsEyebrow}>{group.label}</p>
+                      <ul className={`${styles.useCaseList} ${styles.resourceList}`}>
+                        {group.items.map((item, index) => (
+                          <li key={item.label} style={{ "--solution-index": index } as CSSProperties}>
+                            <Link href={marketingHref(item.href, siteOrigin)} onClick={() => setActivePanel(null)}>
+                              <strong>{item.label}</strong>
+                              <span className={styles.linkArrow} aria-hidden="true">&#8594;</span>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
+                </nav>
+              ) : null}
             </li>
           </ul>
         </nav>
@@ -325,64 +420,14 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
       </div>
 
       {activePanel ? (
-        <>
-          <button
-            className={styles.solutionsBackdrop}
-            type="button"
-            aria-label={`Close ${activePanel === "solutions" ? "Solutions" : "Resources"}`}
-            data-solutions-backdrop={activePanel === "solutions" ? "" : undefined}
-            data-resources-backdrop={activePanel === "resources" ? "" : undefined}
-            onClick={() => setActivePanel(null)}
-          />
-          {activePanel === "solutions" ? (
-            <nav id="marketing-solutions" className={styles.solutionsPanel} aria-label="Solutions">
-              <section className={styles.solutionsColumn} aria-labelledby="solutions-channel-title">
-                <p id="solutions-channel-title" className={styles.solutionsEyebrow}>By channel</p>
-                <Link className={styles.channelLink} href={marketingHref("/#channels", siteOrigin)} aria-label="Instagram" onClick={() => setActivePanel(null)}>
-                  <span className={styles.channelIcon} data-channel="instagram" aria-hidden="true"><InstagramGlyph size={27} brand /></span>
-                  <span><strong>Instagram</strong><small>Private replies and DMs</small></span>
-                  <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
-                </Link>
-                <Link className={styles.channelLink} href={marketingHref("/#channels", siteOrigin)} aria-label="Facebook Pages" onClick={() => setActivePanel(null)}>
-                  <span className={styles.channelIcon} data-channel="facebook" aria-hidden="true"><FacebookGlyph size={27} brand /></span>
-                  <span><strong>Facebook Pages</strong><small>Public comment replies</small></span>
-                  <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
-                </Link>
-              </section>
-              <section className={styles.solutionsColumn} aria-labelledby="solutions-use-case-title">
-                <p id="solutions-use-case-title" className={styles.solutionsEyebrow}>By use case</p>
-                <ul className={styles.useCaseList}>
-                  {useCaseItems.map((item, index) => (
-                    <li key={item.label} style={{ "--solution-index": index } as CSSProperties}>
-                      <Link href={marketingHref(item.href, siteOrigin)} onClick={() => setActivePanel(null)}>
-                        <span><strong>{item.label}</strong><small>{item.detail}</small></span>
-                        <span className={styles.linkArrow} aria-hidden="true">&#8594;</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </nav>
-          ) : (
-            <nav id="marketing-resources" className={`${styles.solutionsPanel} ${styles.resourcesPanel}`} aria-label="Resources">
-              {resourceGroups.map((group, groupIndex) => (
-                <section className={styles.solutionsColumn} aria-labelledby={`resources-${groupIndex}-title`} key={group.label}>
-                  <p id={`resources-${groupIndex}-title`} className={styles.solutionsEyebrow}>{group.label}</p>
-                  <ul className={`${styles.useCaseList} ${styles.resourceList}`}>
-                    {group.items.map((item, index) => (
-                      <li key={item.label} style={{ "--solution-index": index } as CSSProperties}>
-                        <Link href={marketingHref(item.href, siteOrigin)} onClick={() => setActivePanel(null)}>
-                          <strong>{item.label}</strong>
-                          <span className={styles.linkArrow} aria-hidden="true">&#8594;</span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </nav>
-          )}
-        </>
+        <button
+          className={styles.solutionsBackdrop}
+          type="button"
+          aria-label={`Close ${activePanel === "solutions" ? "Solutions" : "Resources"}`}
+          data-solutions-backdrop={activePanel === "solutions" ? "" : undefined}
+          data-resources-backdrop={activePanel === "resources" ? "" : undefined}
+          onClick={() => setActivePanel(null)}
+        />
       ) : null}
     </header>
   );

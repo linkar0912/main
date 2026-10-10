@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { PublicPage } from "@/src/components/public-page";
 import { getServerEnv } from "@/src/lib/env";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: `Acceptable use policy · ${PRODUCT_NAME}`,
+  description: `What you may and may not automate with ${PRODUCT_NAME} on Instagram and Facebook, and how we enforce it.`,
+  alternates: { canonical: "/acceptable-use" },
+};
 
 export default function AcceptableUsePage() {
   const { supportEmail } = getServerEnv();

@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { getServerEnv } from "@/src/lib/env";
+import { LEGAL_ENTITY } from "@/src/lib/legal-entity";
 import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
 import { MarketingHeader } from "@/src/components/marketing/marketing-header";
 
 const legalDocuments = [
   { label: "Terms of service", href: "/terms" },
+  { label: "Refund and cancellation", href: "/refund-policy" },
   { label: "Acceptable use policy", href: "/acceptable-use" },
   { label: "Privacy policy", href: "/privacy" },
   { label: "Cookies statement", href: "/cookies" },
@@ -13,7 +15,7 @@ const legalDocuments = [
   { label: "Data deletion", href: "/data-deletion" },
 ] as const;
 
-const DEFAULT_EFFECTIVE_DATE = "30 August 2026";
+const DEFAULT_EFFECTIVE_DATE = LEGAL_ENTITY.effectiveDate;
 
 /**
  * Legal document layout: an index of the policy set on the left, the document

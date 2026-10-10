@@ -1,0 +1,72 @@
+.banner {
+  position: fixed;
+  inset-inline: 16px auto;
+  inset-block-end: 16px;
+  z-index: 200;
+  display: grid;
+  gap: 14px;
+  max-inline-size: min(420px, calc(100vw - 32px));
+  padding: 18px 20px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgb(5 5 5 / 18%);
+}
+
+.banner p,
+.controls p {
+  margin: 0;
+  font-size: .9rem;
+  font-weight: 550;
+  line-height: 1.55;
+}
+
+.banner a {
+  color: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+.controls {
+  display: grid;
+  gap: 14px;
+  max-inline-size: 72ch;
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.button {
+  min-block-size: 44px;
+  padding-inline: 18px;
+  color: var(--ink);
+  font: inherit;
+  font-size: .85rem;
+  font-weight: 750;
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.button:hover,
+.button:focus-visible,
+.button[aria-pressed="true"] {
+  color: var(--panel);
+  background: var(--ink);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}

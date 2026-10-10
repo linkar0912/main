@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import Image from "next/image";
+import { ProofTicker } from "./proof-ticker";
 import styles from "./proof-rail.module.css";
 
 const creatorExamples = [
@@ -93,18 +94,12 @@ export function ProofRail() {
           <h2>Made for creators, marketers &amp; brands.</h2>
         </div>
 
-        <div
-          className={styles.ticker}
-          data-proof-ticker
-          data-ticker="continuous"
-          data-pause-on-hover="true"
-          data-pause-on-focus="true"
-        >
+        <ProofTicker>
           <div className={styles.track} data-proof-track>
             <CreatorSet />
             <CreatorSet duplicate />
           </div>
-        </div>
+        </ProofTicker>
       </div>
     </section>
   );

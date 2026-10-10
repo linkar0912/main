@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LEGAL_ENTITY, legalCopyrightHolder } from "@/src/lib/legal-entity";
 import { isMarketingPath, marketingHref } from "@/src/lib/site-routing";
 import { LinkarMark } from "../linkar-mark";
 import styles from "./marketing-footer.module.css";
@@ -18,8 +19,8 @@ const columns = [
   {
     title: "Resources",
     links: [
-      ["Help", "/help"],
-      ["Support", "/support"],
+      ["Help and support", "/support"],
+      ["Contact", "/contact"],
       ["Login", "/login"],
       ["Dashboard", "/dashboard"],
     ],
@@ -36,6 +37,7 @@ const columns = [
     title: "Legal",
     links: [
       ["Terms", "/terms"],
+      ["Refund policy", "/refund-policy"],
       ["Acceptable use", "/acceptable-use"],
       ["Privacy", "/privacy"],
       ["Cookies", "/cookies"],
@@ -45,6 +47,12 @@ const columns = [
     ],
   },
 ] as const;
+
+/** The legal owner of the site: the proprietor once named, else the trade name. */
+function copyrightLine(): string {
+  const holder = legalCopyrightHolder();
+  return holder === LEGAL_ENTITY.tradeName ? `${holder}.` : `${holder}, trading as ${LEGAL_ENTITY.tradeName}.`;
+}
 
 type MarketingFooterProps = {
   /** Drops the tall vertical stage on utility pages while keeping the same
@@ -102,7 +110,7 @@ export function MarketingFooter({ compact = false, siteOrigin }: MarketingFooter
         </div>
 
         <div className={styles.legalLine}>
-          <p>© {year} Linkar.</p>
+          <p>© {year} {copyrightLine()}</p>
           <p>Linkar uses Meta’s supported Instagram and Facebook interfaces. Availability and limits depend on the connected account, Page, and platform policies.</p>
         </div>
       </div>

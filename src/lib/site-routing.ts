@@ -38,6 +38,8 @@ const MARKETING_ROUTE_PREFIXES = [
   "/service-providers",
   "/data-deletion",
   "/support",
+  "/refund-policy",
+  "/contact",
 ] as const;
 
 function matchesPathPrefix(pathname: string, prefix: string): boolean {

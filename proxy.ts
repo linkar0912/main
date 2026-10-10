@@ -89,6 +89,8 @@ export const config = {
     "/service-providers/:path*",
     "/data-deletion/:path*",
     "/support/:path*",
+    "/refund-policy/:path*",
+    "/contact/:path*",
     "/dashboard/:path*",
     "/activity/:path*",
     "/automations/:path*",
