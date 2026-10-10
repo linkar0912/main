@@ -29,9 +29,10 @@ with no published port or FQDN.
 2. Confirm the service has no public port, FQDN, cross-project attachment, or
    cross-application alias, and shares only Linkar's private application
    network.
-3. Check `https://app.linkar.in/api/health`; require
-   `status: "ok"`, `dependencies.database: "ok"`, and
-   `dependencies.redis: "ok"`.
+3. Check `https://app.linkar.in/api/health` with the
+   `x-health-token: <HEALTH_DETAIL_TOKEN>` header; require
+   `status: "ok"`, `dependencies.database: "ok"`,
+   `dependencies.redis: "ok"`, and `worker.heartbeat: "ok"`.
 4. Send a controlled Instagram webhook only after the Meta configuration is
    complete, then confirm the worker processes its queued event.
 

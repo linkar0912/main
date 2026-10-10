@@ -16,12 +16,29 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    env:
+      # Optional: an incoming-webhook URL (Slack-compatible JSON body). Without
+      # it the only alert is the failed workflow run.
+      ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      # With HEALTH_DETAIL_TOKEN the probe also requires database, Redis, a
+      # live worker heartbeat, the follow-gated rollout, and web and worker on
+      # the same release. Without it only the public status is checked.
       - name: Verify Linkar production
         env:
           PRODUCTION_HEALTH_URL: https://app.linkar.in/api/health
+          HEALTH_DETAIL_TOKEN: ${{ secrets.HEALTH_DETAIL_TOKEN }}
         run: node scripts/check-production-health.mjs
+
+      - name: Alert
+        if: failure() && env.ALERT_WEBHOOK_URL != ''
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          body=$(node -e 'console.log(JSON.stringify({ text: `Linkar production health check failed: ${process.env.RUN_URL}` }))')
+          curl --fail --silent --show-error --max-time 10 \
+            -H "Content-Type: application/json" -d "$body" "$ALERT_WEBHOOK_URL"
