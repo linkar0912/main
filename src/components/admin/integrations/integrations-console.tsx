@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Cable, RefreshCcw, ShieldAlert, Wrench, X } from "lucide-react";
+import { Cable, RefreshCcw, ShieldAlert, Wrench, X } from "lucide-react";
 
 import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
 import type { AdminIntegrationDetail, AdminIntegrationItem } from "@/src/lib/admin/integrations/types";
+import { AdminPagination } from "../shared/admin-pagination";
 import { adminCommand, adminErrorMessage, adminQuery } from "../shared/admin-request";
 import { StatusPill } from "../shared/status-pill";
 import { useAdminDialog } from "../shared/use-admin-dialog";
@@ -81,7 +82,7 @@ function ActionDialog({ item, action, onClose, onDone }: { item: AdminIntegratio
   );
 }
 
-export function IntegrationsConsole({ items, filters, nextCursor }: { items: AdminIntegrationItem[]; filters: Record<string, string>; nextCursor?: string | null }) {
+export function IntegrationsConsole({ items, filters, nextCursor = null, history = [] }: { items: AdminIntegrationItem[]; filters: Record<string, string>; nextCursor?: string | null; history?: string[] }) {
   const router = useRouter();
   const [selected, setSelected] = useState<AdminIntegrationDetail | null>(null);
   const [action, setAction] = useState<string | null>(null);
@@ -215,12 +216,15 @@ export function IntegrationsConsole({ items, filters, nextCursor }: { items: Adm
         )}
       </section>
 
-      <nav className="admin-pagination" aria-label="Integration pagination">
-        <span className="muted">Token and subscription state is derived on the server.</span>
-        {nextCursor
-          ? <Link className="button button-secondary" href={`/admin/integrations?${new URLSearchParams({ ...filters, cursor: nextCursor })}`}>Next page <ArrowRight size={16} /></Link>
-          : <span className="muted">End of results</span>}
-      </nav>
+      <AdminPagination
+        basePath="/admin/integrations"
+        params={filters}
+        cursor={filters.cursor ?? null}
+        history={history}
+        nextCursor={nextCursor}
+        label="Integration pagination"
+        summary="Token and subscription state is derived on the server."
+      />
 
       {selected ? (
         <>

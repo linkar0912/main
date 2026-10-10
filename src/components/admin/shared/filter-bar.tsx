@@ -11,12 +11,17 @@ export function FilterBar({
   initial,
   statuses,
   showProvider = true,
+  textLabel = "Text",
+  textPlaceholder,
   onApply,
 }: {
   initial: Filters;
   /** States valid for the selected resource kind. */
   statuses: readonly string[];
   showProvider?: boolean;
+  /** What the free-text filter matches for this resource kind. */
+  textLabel?: string;
+  textPlaceholder?: string;
   onApply: (filters: Record<string, string>) => void;
 }) {
   const [workspaceId, setWorkspaceId] = useState(initial.workspaceId ?? "");
@@ -54,10 +59,10 @@ export function FilterBar({
         </label>
       ) : null}
       <label className="field admin-search-field">
-        <span>Text</span>
+        <span>{textLabel}</span>
         <span className="admin-input-icon">
           <Search size={16} aria-hidden />
-          <input value={text} onChange={(event) => setText(event.target.value)} />
+          <input value={text} placeholder={textPlaceholder} onChange={(event) => setText(event.target.value)} />
         </span>
       </label>
       <button className="button button-secondary" type="submit">Apply filters</button>

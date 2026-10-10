@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { z } from "zod";
 import { AdminRouteGuard } from "@/src/components/admin/admin-route-guard";
+import { parseAdminPageHistory } from "@/src/components/admin/shared/admin-pagination";
 import { OperationsConsole } from "@/src/components/admin/operations/operations-console";
 import { AdminCursorError } from "@/src/lib/admin/cursor";
 import { AdminOperationFilterSchema, OperationKindSchema } from "@/src/lib/admin/operations/query-schema";
@@ -30,6 +31,6 @@ async function Data({ searchParams }: { searchParams: Params }) {
       </main>
     );
   }
-  return <OperationsConsole kind={kind} page={result.page} filters={result.filters} />;
+  return <OperationsConsole kind={kind} page={result.page} filters={result.filters} cursor={one("cursor") ?? null} history={parseAdminPageHistory(raw.prev)} />;
 }
 export default function OperationsPage({ searchParams }: { searchParams: Params }) { return <AdminRouteGuard><Data searchParams={searchParams} /></AdminRouteGuard>; }

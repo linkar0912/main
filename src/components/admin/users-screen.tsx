@@ -7,12 +7,13 @@ import { ArrowRight, Search, UserPlus, Users } from "lucide-react";
 
 import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
 import type { AdminUserSummary, CursorPage } from "@/src/lib/admin/accounts-repository";
+import { AdminPagination } from "./shared/admin-pagination";
 import { adminCommand, adminErrorMessage } from "./shared/admin-request";
 import { StatusPill } from "./shared/status-pill";
 
 type Mode = "INVITE" | "CREATE";
 
-export function UsersScreen({ page, search = "" }: { page: CursorPage<AdminUserSummary>; search?: string }) {
+export function UsersScreen({ page, search = "", cursor = null, history = [] }: { page: CursorPage<AdminUserSummary>; search?: string; cursor?: string | null; history?: string[] }) {
   const router = useRouter();
   const [query, setQuery] = useState(search);
   const [email, setEmail] = useState("");
@@ -105,6 +106,10 @@ export function UsersScreen({ page, search = "" }: { page: CursorPage<AdminUserS
         <button className="button button-secondary" type="submit">Search</button>
       </form>
 
+      {page.searchLimited ? (
+        <p className="admin-field-hint" role="status">Search covered the first 5,000 identities from Supabase Auth plus every workspace member. Use a more specific email, or open the user from their workspace, to find the rest.</p>
+      ) : null}
+
       <section className="panel admin-table-panel" aria-label="User identities">
         {page.items.length === 0 ? (
           <div className="empty-state">
@@ -133,12 +138,15 @@ export function UsersScreen({ page, search = "" }: { page: CursorPage<AdminUserS
         )}
       </section>
 
-      <nav className="admin-pagination" aria-label="User pagination">
-        <span className="muted">Supabase identities joined to Linkar memberships.</span>
-        {page.nextCursor
-          ? <Link className="button button-secondary" href={`/admin/users?${new URLSearchParams({ ...(search ? { search } : {}), cursor: page.nextCursor })}`}>Next page <ArrowRight size={16} /></Link>
-          : <span className="muted">End of results</span>}
-      </nav>
+      <AdminPagination
+        basePath="/admin/users"
+        params={search ? { search } : {}}
+        cursor={cursor}
+        history={history}
+        nextCursor={page.nextCursor}
+        label="User pagination"
+        summary="Supabase identities joined to Linkar memberships."
+      />
     </main>
   );
 }

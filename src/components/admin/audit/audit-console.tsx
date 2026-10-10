@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { ArrowRight, Download } from "lucide-react";
+import { Download } from "lucide-react";
 
 import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { AdminPagination } from "../shared/admin-pagination";
 import { adminCommandResponse, adminErrorMessage, adminIdempotencyKey, downloadAdminFile } from "../shared/admin-request";
 import { StatusPill } from "../shared/status-pill";
 
@@ -26,7 +26,7 @@ type Event = {
   createdAt: Date | string;
 };
 
-export function AuditConsole({ events, nextHref, filters }: { events: Event[]; nextHref: string | null; filters: Record<string, string> }) {
+export function AuditConsole({ events, nextCursor, filters, cursor = null, history = [] }: { events: Event[]; nextCursor: string | null; filters: Record<string, string>; cursor?: string | null; history?: string[] }) {
   const router = useRouter();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -128,12 +128,16 @@ export function AuditConsole({ events, nextHref, filters }: { events: Event[]; n
         )}
       </section>
 
-      <nav className="admin-pagination" aria-label="Audit pagination">
-        <span className="muted">{events.length} events on this page</span>
-        {nextHref
-          ? <Link className="button button-secondary" href={nextHref}>Older events <ArrowRight size={16} /></Link>
-          : <span className="muted">End of results</span>}
-      </nav>
+      <AdminPagination
+        basePath="/admin/audit"
+        params={filters}
+        cursor={cursor}
+        history={history}
+        nextCursor={nextCursor}
+        label="Audit pagination"
+        summary={`${events.length} events on this page`}
+        nextLabel="Older events"
+      />
     </main>
   );
 }

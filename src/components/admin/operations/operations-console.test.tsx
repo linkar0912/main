@@ -14,12 +14,12 @@ describe("OperationsConsole", () => {
 it("removes cleared filters and resets the form when URL filters change", async () => {
   const props = { kind: "delivery" as const, page: { items: [item], nextCursor: null } };
   const { rerender } = render(<OperationsConsole {...props} filters={{ kind: "delivery", text: "old", status: "FAILED" }} />);
-  await userEvent.clear(screen.getByRole("textbox", { name: "Text" }));
+  await userEvent.clear(screen.getByRole("textbox", { name: "Delivery kind" }));
   await userEvent.selectOptions(screen.getByRole("combobox", { name: "Status" }), "");
   await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
   expect(push).toHaveBeenLastCalledWith("/admin/operations?kind=delivery");
   rerender(<OperationsConsole {...props} filters={{ kind: "delivery", text: "new" }} />);
-  expect((screen.getByRole("textbox", { name: "Text" }) as HTMLInputElement).value).toBe("new");
+  expect((screen.getByRole("textbox", { name: "Delivery kind" }) as HTMLInputElement).value).toBe("new");
 });
 it("Escape closes a nested confirmation without closing its detail drawer", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { ...item, attributes: {}, allowedActions: ["retry"] } }) }));
