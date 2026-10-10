@@ -4,9 +4,10 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, Ban, Check, Copy, Plus, Save, TicketCheck, WalletCards } from "lucide-react";
 
-import { formatAdminDate } from "@/src/components/admin/shared/date-format";
+import { formatAdminDate, formatAdminDateTime } from "@/src/components/admin/shared/date-format";
 import { ActionNotice } from "../action-notice";
-import { adminCommand, adminErrorMessage } from "./shared/admin-request";
+import { AdminCommandError, adminCommand, adminErrorMessage } from "./shared/admin-request";
+import { ReasonDialog } from "./shared/reason-dialog";
 import { StatusPill } from "./shared/status-pill";
 
 type Plan = {
@@ -21,7 +22,10 @@ type InviteCode = {
   plan: { key: string; name: string };
   redemption: null | { workspaceId: string; startsAt: string; expiresAt: string; createdAt: string };
 };
-type Notify = { onError: (message: string | null) => void; onSuccess: (message: string) => void };
+type Notice = { tone: "error" | "success"; message: string };
+
+// New workspaces are created on this plan; the server refuses to retire it.
+const DEFAULT_PLAN_KEY = "free";
 
 const limitFields = [
   ["memberLimit", "Members"],
@@ -98,24 +102,32 @@ function PlanFields({ value, onChange }: { value: Values; onChange: (value: Valu
   );
 }
 
-function PlanEditor({ plan, onError, onSuccess }: { plan: Plan } & Notify) {
+function LocalNotice({ notice, onDismiss }: { notice: Notice | null; onDismiss: () => void }) {
+  return notice ? <ActionNotice tone={notice.tone} message={notice.message} onDismiss={onDismiss} /> : null;
+}
+
+function PlanEditor({ plan }: { plan: Plan }) {
   const router = useRouter();
   const [value, setValue] = useState<Values>(() => editableValues(plan));
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmingRetire, setConfirmingRetire] = useState(false);
+  const [confirmingSave, setConfirmingSave] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const reasonReady = reason.trim().length >= 3;
+  const defaultPlan = plan.key === DEFAULT_PLAN_KEY;
 
   async function run(method: "PATCH" | "DELETE", body: unknown, success: string) {
     setBusy(true);
-    onError(null);
+    setNotice(null);
     try {
       await adminCommand(`/api/admin/plans/${plan.id}`, { method, body, reason, fallback: "plan_operation_failed" });
       setConfirmingRetire(false);
-      onSuccess(success);
+      setConfirmingSave(false);
+      setNotice({ tone: "success", message: success });
       router.refresh();
     } catch (cause) {
-      onError(adminErrorMessage(cause));
+      setNotice({ tone: "error", message: adminErrorMessage(cause) });
     } finally {
       setBusy(false);
     }
@@ -123,13 +135,20 @@ function PlanEditor({ plan, onError, onSuccess }: { plan: Plan } & Notify) {
 
   function save(event: FormEvent) {
     event.preventDefault();
+    // Plan edits apply to every assigned workspace at once, so a plan in use
+    // needs a second, explicit confirmation that names how many are affected.
+    if (plan.workspaceCount > 0 && !confirmingSave) {
+      setConfirmingRetire(false);
+      setConfirmingSave(true);
+      return;
+    }
     void run("PATCH", { ...value, version: plan.version }, `${value.name} saved.`);
   }
 
   function retire() {
     // The retire button sits outside form submission, so the reason is checked here.
     if (!reasonReady) {
-      onError("Add an operator reason before retiring a plan.");
+      setNotice({ tone: "error", message: "Add an operator reason before retiring a plan." });
       return;
     }
     void run("DELETE", { version: plan.version }, `${plan.name} retired.`);
@@ -147,7 +166,7 @@ function PlanEditor({ plan, onError, onSuccess }: { plan: Plan } & Notify) {
       </div>
       {/* A retired plan stays attached to its workspaces but can no longer be edited. */}
       <fieldset className="admin-plan-fields" disabled={!plan.isActive}>
-        <PlanFields value={value} onChange={setValue} />
+        <PlanFields value={value} onChange={(next) => { setValue(next); setConfirmingSave(false); }} />
         <label className="field">
           <span>Operator reason</span>
           <input required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
@@ -155,25 +174,35 @@ function PlanEditor({ plan, onError, onSuccess }: { plan: Plan } & Notify) {
       </fieldset>
       {plan.isActive ? (
         <div className="admin-command-actions">
-          <button className="button button-primary" disabled={busy} type="submit"><Save size={16} /> Save plan</button>
-          {confirmingRetire ? (
+          {confirmingSave ? (
+            <>
+              <button className="button button-primary" disabled={busy} type="submit"><Save size={16} /> Confirm save</button>
+              <button className="button button-ghost" disabled={busy} type="button" onClick={() => setConfirmingSave(false)}>Keep editing</button>
+            </>
+          ) : <button className="button button-primary" disabled={busy} type="submit"><Save size={16} /> Save plan</button>}
+          {defaultPlan ? null : confirmingRetire ? (
             <>
               <button className="button button-danger" disabled={busy} type="button" onClick={retire}><Archive size={16} /> Confirm retire</button>
               <button className="button button-ghost" disabled={busy} type="button" onClick={() => setConfirmingRetire(false)}>Keep plan</button>
             </>
           ) : (
-            <button className="button button-secondary" disabled={busy} type="button" onClick={() => setConfirmingRetire(true)}><Archive size={16} /> Retire plan</button>
+            <button className="button button-secondary" disabled={busy} type="button" onClick={() => { setConfirmingSave(false); setConfirmingRetire(true); }}><Archive size={16} /> Retire plan</button>
           )}
         </div>
       ) : <p className="admin-field-hint">Retired plans are read-only. Existing workspaces keep these limits.</p>}
+      {confirmingSave ? <p className="admin-field-hint" role="status">Saving changes the limits of {plan.workspaceCount} assigned {plan.workspaceCount === 1 ? "workspace" : "workspaces"} immediately.</p> : null}
       {confirmingRetire ? <p className="admin-field-hint">Retiring stops new assignments. {plan.workspaceCount} assigned workspaces keep this plan.</p> : null}
+      {defaultPlan && plan.isActive ? <p className="admin-field-hint">New workspaces start on this plan, so it cannot be retired.</p> : null}
+      <LocalNotice notice={notice} onDismiss={() => setNotice(null)} />
     </form>
   );
 }
 
-function PremiumInviteManager({ plans, inviteCodes, onError, onSuccess }: { plans: Plan[]; inviteCodes: InviteCode[] } & Notify) {
+type InviteCommand = { type: "revoke" | "end_access"; item: InviteCode };
+
+function PremiumInviteManager({ plans, inviteCodes }: { plans: Plan[]; inviteCodes: InviteCode[] }) {
   const router = useRouter();
-  const availablePlans = plans.filter((plan) => plan.isActive && plan.key !== "free");
+  const availablePlans = plans.filter((plan) => plan.isActive && plan.key !== DEFAULT_PLAN_KEY);
   const [selectedPlanKey, setSelectedPlanKey] = useState(() => availablePlans[0]?.key ?? "");
   const selectedPlan = availablePlans.find((plan) => plan.key === selectedPlanKey) ?? availablePlans[0] ?? null;
   const [label, setLabel] = useState("");
@@ -182,16 +211,20 @@ function PremiumInviteManager({ plans, inviteCodes, onError, onSuccess }: { plan
   const [busy, setBusy] = useState(false);
   const [createdCode, setCreatedCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [listNotice, setListNotice] = useState<Notice | null>(null);
+  const [command, setCommand] = useState<InviteCommand | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(null);
 
   async function create(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
-    onError(null);
+    setNotice(null);
     setCreatedCode("");
     setCopied(false);
     try {
       if (!selectedPlan) {
-        onError("Invite plan unavailable");
+        setNotice({ tone: "error", message: "Invite plan unavailable" });
         return;
       }
       const data = await adminCommand<{ code?: string; plan?: { key: string; name: string } }>("/api/admin/invite-codes", {
@@ -200,35 +233,45 @@ function PremiumInviteManager({ plans, inviteCodes, onError, onSuccess }: { plan
         fallback: "invite_code_create_failed",
       });
       if (!data?.code || !data.plan) {
-        onError("Invite code create failed");
+        setNotice({ tone: "error", message: "Invite code create failed" });
         return;
       }
       setCreatedCode(data.code);
       setLabel("");
       setExpiresAt("");
       setReason("");
-      onSuccess(`${data.plan.name} invite code created.`);
+      setNotice({ tone: "success", message: `${data.plan.name} invite code created.` });
       router.refresh();
     } catch (cause) {
-      onError(adminErrorMessage(cause));
+      setNotice({ tone: "error", message: adminErrorMessage(cause) });
     } finally {
       setBusy(false);
     }
   }
 
-  async function revoke(item: InviteCode) {
-    if (reason.trim().length < 3) {
-      onError("Add an operator reason before revoking a code.");
-      return;
-    }
+  async function execute(commandReason: string) {
+    if (!command) return;
     setBusy(true);
-    onError(null);
+    setCommandError(null);
+    const { item, type } = command;
     try {
-      await adminCommand(`/api/admin/invite-codes/${item.id}`, { method: "DELETE", reason, fallback: "invite_code_revoke_failed" });
-      onSuccess(`${item.label} revoked.`);
+      await adminCommand(type === "revoke" ? `/api/admin/invite-codes/${item.id}` : `/api/admin/invite-codes/${item.id}/access`, {
+        method: "DELETE",
+        reason: commandReason,
+        fallback: type === "revoke" ? "invite_code_revoke_failed" : "premium_access_end_failed",
+      });
+      setCommand(null);
+      setListNotice({ tone: "success", message: type === "revoke" ? `${item.label} revoked.` : `Premium access from ${item.label} ended.` });
       router.refresh();
     } catch (cause) {
-      onError(adminErrorMessage(cause));
+      if (cause instanceof AdminCommandError && cause.status === 404) {
+        // Another operator removed it or the list is stale; show the current list.
+        setCommand(null);
+        setListNotice({ tone: "error", message: type === "revoke" ? `${item.label} no longer exists. The list has been refreshed.` : `${item.label} has no premium access to end. The list has been refreshed.` });
+        router.refresh();
+      } else {
+        setCommandError(adminErrorMessage(cause));
+      }
     } finally {
       setBusy(false);
     }
@@ -239,7 +282,7 @@ function PremiumInviteManager({ plans, inviteCodes, onError, onSuccess }: { plan
       await navigator.clipboard.writeText(createdCode);
       setCopied(true);
     } catch {
-      onError("Copy failed. Select the code and copy it manually.");
+      setNotice({ tone: "error", message: "Copy failed. Select the code and copy it manually." });
     }
   }
 
@@ -288,7 +331,6 @@ function PremiumInviteManager({ plans, inviteCodes, onError, onSuccess }: { plan
           </label>
           <button className="button button-primary" disabled={busy || !selectedPlan} type="submit"><Plus size={16} /> Generate code</button>
         </div>
-        <p className="admin-field-hint">The operator reason above is also used when revoking a code.</p>
         {createdCode ? (
           <div className="admin-created-code">
             <code>{createdCode}</code>
@@ -297,28 +339,48 @@ function PremiumInviteManager({ plans, inviteCodes, onError, onSuccess }: { plan
             </button>
           </div>
         ) : null}
+        <LocalNotice notice={notice} onDismiss={() => setNotice(null)} />
       </form>
 
+      <LocalNotice notice={listNotice} onDismiss={() => setListNotice(null)} />
       {inviteCodes.length === 0 ? <p className="admin-invite-plan-empty">No invite codes have been generated yet.</p> : (
         <div className="admin-invite-list">
           {inviteCodes.map((item) => {
             const state = inviteState(item);
+            const accessActive = Boolean(item.redemption && new Date(item.redemption.expiresAt) > new Date());
             return (
               <article className="admin-invite-row" key={item.id}>
                 <div>
                   <strong>{item.label}</strong>
-                  <p>{item.plan.name} · {item.durationDays} days · created {formatAdminDate(item.createdAt)}</p>
-                  {item.redemption ? <small>Redeemed by workspace {item.redemption.workspaceId} · expires {formatAdminDate(item.redemption.expiresAt)}</small> : null}
+                  <p>{item.plan.name} · {item.durationDays} days · created {formatAdminDate(item.createdAt)} · {item.expiresAt ? `code expires ${formatAdminDateTime(item.expiresAt)}` : "code does not expire"}</p>
+                  {item.redemption ? <small>Redeemed by workspace {item.redemption.workspaceId} · access {accessActive ? "ends" : "ended"} {formatAdminDateTime(item.redemption.expiresAt)}</small> : null}
                 </div>
                 <StatusPill status={state === "used" ? "idle" : state} label={state} />
                 {state === "ready" ? (
-                  <button className="button button-secondary button-small" type="button" disabled={busy} onClick={() => void revoke(item)}><Ban size={14} /> Revoke</button>
+                  <button className="button button-secondary button-small" type="button" disabled={busy} aria-label={`Revoke ${item.label}`} onClick={() => { setCommandError(null); setCommand({ type: "revoke", item }); }}><Ban size={14} /> Revoke</button>
+                ) : null}
+                {accessActive ? (
+                  <button className="button button-secondary button-small" type="button" disabled={busy} aria-label={`End premium access from ${item.label}`} onClick={() => { setCommandError(null); setCommand({ type: "end_access", item }); }}><Ban size={14} /> End access</button>
                 ) : null}
               </article>
             );
           })}
         </div>
       )}
+
+      {command ? (
+        <ReasonDialog
+          title={command.type === "revoke" ? `Revoke ${command.item.label}` : `End premium access from ${command.item.label}`}
+          warning={command.type === "revoke"
+            ? "The code can no longer be redeemed. Access already granted by other codes is unaffected."
+            : `Workspace ${command.item.redemption?.workspaceId ?? ""} returns to its assigned plan now instead of ${command.item.redemption ? formatAdminDateTime(command.item.redemption.expiresAt) : "its scheduled end"}.`}
+          busy={busy}
+          error={commandError}
+          danger
+          onCancel={() => setCommand(null)}
+          onConfirm={(commandReason) => void execute(commandReason)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -329,29 +391,21 @@ export function PlansScreen({ plans, inviteCodes = [] }: { plans: Plan[]; invite
   const [key, setKey] = useState("");
   const [value, setValue] = useState(defaults);
   const [reason, setReason] = useState("");
-  const [notice, setNotice] = useState<{ tone: "error" | "success"; message: string } | null>(null);
-
-  function setError(message: string | null) {
-    setNotice(message ? { tone: "error", message } : null);
-  }
-
-  function setSuccess(message: string) {
-    setNotice({ tone: "success", message });
-  }
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   async function create(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
-    setError(null);
+    setNotice(null);
     try {
       await adminCommand("/api/admin/plans", { body: { key, ...value }, reason, fallback: "plan_operation_failed" });
-      setSuccess(`${value.name} created.`);
+      setNotice({ tone: "success", message: `${value.name} created.` });
       setKey("");
       setValue(defaults);
       setReason("");
       router.refresh();
     } catch (cause) {
-      setError(adminErrorMessage(cause));
+      setNotice({ tone: "error", message: adminErrorMessage(cause) });
     } finally {
       setCreating(false);
     }
@@ -368,9 +422,7 @@ export function PlansScreen({ plans, inviteCodes = [] }: { plans: Plan[]; invite
         <span className="admin-count-badge"><WalletCards size={16} /> {plans.length} templates</span>
       </header>
 
-      {notice ? <ActionNotice tone={notice.tone} message={notice.message} onDismiss={() => setNotice(null)} /> : null}
-
-      <PremiumInviteManager plans={plans} inviteCodes={inviteCodes} onError={setError} onSuccess={setSuccess} />
+      <PremiumInviteManager plans={plans} inviteCodes={inviteCodes} />
 
       <form className="panel admin-plan-card admin-new-plan" onSubmit={create}>
         <div className="panel-heading">
@@ -387,10 +439,11 @@ export function PlansScreen({ plans, inviteCodes = [] }: { plans: Plan[]; invite
           <input required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
         </label>
         <button className="button button-primary" disabled={creating} type="submit"><Plus size={16} /> Create plan</button>
+        <LocalNotice notice={notice} onDismiss={() => setNotice(null)} />
       </form>
 
       <section className="admin-plan-stack" aria-label="Plan templates">
-        {plans.map((plan) => <PlanEditor key={`${plan.id}:${plan.version}`} plan={plan} onError={setError} onSuccess={setSuccess} />)}
+        {plans.map((plan) => <PlanEditor key={`${plan.id}:${plan.version}`} plan={plan} />)}
       </section>
     </main>
   );
