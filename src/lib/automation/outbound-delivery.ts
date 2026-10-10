@@ -31,8 +31,10 @@ export type DeliveryExecutionRequest<
 
 export type DeliveryExecutionResult =
   | { status: "SENT"; providerMessageId?: string; reused: boolean }
-  | { status: "FAILED"; retryable: boolean; error: string }
-  | { status: "UNKNOWN"; error: string }
+  // `reused` marks an outcome some earlier attempt already recorded, so a
+  // caller keeping per-outcome counters can tell it apart from a fresh one.
+  | { status: "FAILED"; retryable: boolean; error: string; reused?: true }
+  | { status: "UNKNOWN"; error: string; reused?: true }
   | { status: "BUSY" };
 
 export const deliveryKeys = {
@@ -142,11 +144,11 @@ function existingResult(record: OutboundDeliveryRecord): DeliveryExecutionResult
     };
   }
   if (record.state === "UNKNOWN") {
-    return { status: "UNKNOWN", error: record.lastError ?? "Provider result is ambiguous" };
+    return { status: "UNKNOWN", error: record.lastError ?? "Provider result is ambiguous", reused: true };
   }
   if (record.state === "CLAIMED") return { status: "BUSY" };
   if (record.state === "FAILED" && !record.retryable) {
-    return { status: "FAILED", retryable: false, error: record.lastError ?? "Delivery failed" };
+    return { status: "FAILED", retryable: false, error: record.lastError ?? "Delivery failed", reused: true };
   }
   return null;
 }

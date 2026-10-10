@@ -5,8 +5,9 @@ import { MetaApiError } from "../meta/client";
 import { logger } from "../logger";
 import type { FlowFollowUpJob } from "../queue";
 import { executeOutboundDelivery } from "./outbound-delivery";
-import { isQuietNow, isWithinMessagingWindow } from "../messaging-window";
+import { isQuietNow, isWithinMessagingWindow, msUntilQuietEnd } from "../messaging-window";
 import { checkSendRateLimit } from "./send-rate-limiter";
+import { SendDeferredError } from "./send-deferral";
 
 export type FlowFollowUpRunnerOptions = {
   client?: {
@@ -26,18 +27,25 @@ async function markKnownOutcome(
   job: FlowFollowUpJob,
   error: string,
   resultCode: Extract<OutboundDeliveryResultCode, "SUPPRESSED" | "WINDOW_CLOSED" | "PROVIDER_REJECTED">,
+  ensureLedgerRow = true,
 ): Promise<void> {
   // The ledger row may not exist yet - skips can happen on the very first
-  // processing pass, so ensure it before claiming.
-  await repository.ensureOutboundDelivery({
-    deliveryKey: job.deliveryKey,
-    workspaceId: job.workspaceId,
-    automationId: job.automationId,
-    instagramAccountId: job.instagramAccountId,
-    recipientId: job.recipientId,
-    kind: "FLOW_FOLLOWUP",
-    payload: { ...job.message },
-  });
+  // processing pass, so ensure it before claiming. Not for a recipient whose
+  // contact is gone (deleted on request): recreating a row would put their
+  // identifier back into the ledger, and there is nothing left to deliver.
+  if (ensureLedgerRow) {
+    await repository.ensureOutboundDelivery({
+      deliveryKey: job.deliveryKey,
+      workspaceId: job.workspaceId,
+      automationId: job.automationId,
+      instagramAccountId: job.instagramAccountId,
+      recipientId: job.recipientId,
+      kind: "FLOW_FOLLOWUP",
+      payload: { ...job.message },
+    });
+  } else if (!await repository.getOutboundDelivery(job.deliveryKey)) {
+    return;
+  }
   const owner = `followup_guard:${job.deliveryKey}`;
   const claim = await repository.claimOutboundDelivery(
     job.deliveryKey,
@@ -64,8 +72,12 @@ export async function processFlowFollowUp(
     throw new Error("Flow follow-up record does not match the job");
   }
 
-  const skip = async (error: string, resultCode: "SUPPRESSED" | "WINDOW_CLOSED" | "PROVIDER_REJECTED") => {
-    await markKnownOutcome(repository, job, error, resultCode);
+  const skip = async (
+    error: string,
+    resultCode: "SUPPRESSED" | "WINDOW_CLOSED" | "PROVIDER_REJECTED",
+    ensureLedgerRow = true,
+  ) => {
+    await markKnownOutcome(repository, job, error, resultCode, ensureLedgerRow);
     logger.info("Flow follow-up skipped", {
       workspaceId: job.workspaceId,
       automationId: job.automationId,
@@ -89,7 +101,11 @@ export async function processFlowFollowUp(
     await skip("Recipient is suppressed", "SUPPRESSED");
     return;
   }
-  if (!isWithinMessagingWindow(contact?.lastSeenAt)) {
+  if (!contact) {
+    await skip("Recipient no longer exists", "WINDOW_CLOSED", false);
+    return;
+  }
+  if (!isWithinMessagingWindow(contact.lastSeenAt)) {
     await skip("The 24-hour messaging window has closed", "WINDOW_CLOSED");
     return;
   }
@@ -105,16 +121,28 @@ export async function processFlowFollowUp(
     return;
   }
 
-  // Quiet hours: defer the nudge with a retryable 429 rather than messaging
-  // inside the owner's configured night window.
+  // Quiet hours and the account's send window defer the nudge (the worker
+  // parks the job without spending an attempt). A nudge that could only go
+  // out after the 24-hour window closes is settled as WINDOW_CLOSED instead.
+  const defer = async (message: string, delayMs: number): Promise<void> => {
+    const deferral = new SendDeferredError(message, delayMs);
+    if (!isWithinMessagingWindow(contact.lastSeenAt, Date.now() + deferral.delayMs)) {
+      await skip("The 24-hour messaging window closes before the nudge could go out", "WINDOW_CLOSED");
+      return;
+    }
+    throw deferral;
+  };
   const messagingWindow = await repository.getMessagingWindow(job.workspaceId);
-  if (messagingWindow && isQuietNow(new Date(), messagingWindow)) {
-    throw new MetaApiError("Quiet hours are active for this workspace", 429, true);
+  const now = new Date();
+  if (messagingWindow && isQuietNow(now, messagingWindow)) {
+    await defer("Quiet hours are active for this workspace", msUntilQuietEnd(now, messagingWindow));
+    return;
   }
 
   const rateLimit = await checkSendRateLimit(mapping.connection.igUserId, "direct_message");
   if (!rateLimit.allowed) {
-    throw new MetaApiError("Send rate limit reached for this Instagram account", 429, true);
+    await defer("Send rate limit reached for this Instagram account", rateLimit.retryAfterMs);
+    return;
   }
 
   const connection: MetaConnection = {

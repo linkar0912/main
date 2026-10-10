@@ -81,6 +81,7 @@ describe("outbound delivery coordinator", () => {
     await expect(executeOutboundDelivery(request, send)).resolves.toEqual({
       status: "UNKNOWN",
       error: "network",
+      reused: true,
     });
     expect(send).toHaveBeenCalledTimes(1);
     expect((await repository.getOutboundDelivery(request.deliveryKey))?.state).toBe("UNKNOWN");

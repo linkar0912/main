@@ -21,6 +21,7 @@ import {
   type SendLimitReservation,
 } from "./send-limits";
 import { checkSendRateLimit } from "./send-rate-limiter";
+import { findSendDeferral, SendDeferredError } from "./send-deferral";
 import {
   processCampaignEvent,
   processExistingCampaignParticipant,
@@ -158,7 +159,6 @@ function personalizeAction(action: ExecutionAction, vars: Record<string, string 
 
 const DEFAULT_DELIVERY_CLAIM_LEASE_MS = 30_000;
 const DAILY_LIMIT_ERROR = "daily_send_limit_reached";
-const PROVIDER_RATE_LIMIT_ERROR = "provider_rate_limited";
 
 /**
  * Meta only accepts a private reply within 7 days of the comment it answers
@@ -230,7 +230,10 @@ async function executeActionDelivery(
       const rateLimit = await checkSendRateLimit(connection.igUserId, "private_reply");
       if (!rateLimit.allowed) {
         await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation!);
-        return { status: "FAILED", retryable: true, error: PROVIDER_RATE_LIMIT_ERROR };
+        reservation = undefined;
+        // Deferred until the window resets - the job is parked, not failed,
+        // and the 7-day reply window is far longer than one rate window.
+        throw new SendDeferredError("Send rate limit reached for this Instagram account", rateLimit.retryAfterMs);
       }
     } else if (needsProviderAttempt) {
       // Non-private-reply actions share the account's DM budget; a known ceiling
@@ -238,7 +241,8 @@ async function executeActionDelivery(
       const rateLimit = await checkSendRateLimit(connection.igUserId, "direct_message");
       if (!rateLimit.allowed) {
         await releaseDailySendSlots({ repository, automationId: request.automationId }, reservation!);
-        return { status: "FAILED", retryable: true, error: PROVIDER_RATE_LIMIT_ERROR };
+        reservation = undefined;
+        throw new SendDeferredError("Send rate limit reached for this Instagram account", rateLimit.retryAfterMs);
       }
     }
 
@@ -718,9 +722,10 @@ async function processEmailCaptureReply(
       });
       return { matched: 1, sent: 0, skipped: 1, failed: 0 };
     }
-    if (followUpDelivered) {
+    if (followUpDelivered || findSendDeferral(error)) {
+      // A deferral parks the whole event until it may send; it never fails it.
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-      throw retryableAutomationError(error);
+      throw findSendDeferral(error) ?? retryableAutomationError(error);
     }
     if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
@@ -921,9 +926,10 @@ async function processFieldAnswer(
       });
       return { matched: 1, sent: 0, skipped: 1, failed: 0 };
     }
-    if (followUpDelivered) {
+    if (followUpDelivered || findSendDeferral(error)) {
+      // A deferral parks the whole event until it may send; it never fails it.
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-      throw retryableAutomationError(error);
+      throw findSendDeferral(error) ?? retryableAutomationError(error);
     }
     if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
       await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
@@ -1353,9 +1359,10 @@ export async function processNormalizedEvent(
         result.skipped += 1;
         continue;
       }
-      if (allActionsDelivered) {
+      if (allActionsDelivered || findSendDeferral(error)) {
+        // A deferral parks the whole event until it may send; it never fails it.
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
-        throw retryableAutomationError(error);
+        throw findSendDeferral(error) ?? retryableAutomationError(error);
       }
       if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) {
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);

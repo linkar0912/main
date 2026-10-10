@@ -19,7 +19,8 @@ import { unsealSecret } from "../security/secrets";
 import { releaseDailySendSlots, renderTemplate, reserveDailySendSlots } from "./send-limits";
 import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
 import { checkSendRateLimit, type SendRateLimitBucket } from "./send-rate-limiter";
-import { isQuietNow, MESSAGING_WINDOW_MS } from "../messaging-window";
+import { isQuietNow, MESSAGING_WINDOW_MS, msUntilQuietEnd } from "../messaging-window";
+import { SendDeferredError } from "./send-deferral";
 import type { DeliveryTimingObserver } from "./delivery-timing";
 
 const RECHECK_COOLDOWN_MS = 10_000;
@@ -643,16 +644,18 @@ async function guardedDelivery(
       // Per-account send ceiling and quiet hours, checked only when Meta is
       // actually about to be called.
       if (needsProviderAttempt) {
-        // Quiet hours are a workspace-level courtesy window; defer the send with
-        // a retryable 429 (same contract as the per-account rate limit below)
-        // rather than messaging inside the owner's configured night window.
-        if (messagingWindow && isQuietNow(new Date(), messagingWindow)) {
+        // Quiet hours are a workspace-level courtesy window; defer the send
+        // (same contract as the per-account rate limit below) rather than
+        // messaging inside the owner's configured night window. The worker
+        // parks the job until the window ends without spending an attempt.
+        const now = new Date();
+        if (messagingWindow && isQuietNow(now, messagingWindow)) {
           await releaseSlots();
           await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
           if (spec.onRetryablePending) {
             await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
           }
-          throw new MetaApiError("Quiet hours are active for this workspace", 429, true);
+          throw new SendDeferredError("Quiet hours are active for this workspace", msUntilQuietEnd(now, messagingWindow));
         }
 
         // Distinct from the daily send limit above, which is a product
@@ -669,7 +672,7 @@ async function guardedDelivery(
           if (spec.onRetryablePending) {
             await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
           }
-          throw new MetaApiError("Send rate limit reached for this Instagram account", 429, true);
+          throw new SendDeferredError("Send rate limit reached for this Instagram account", rateLimit.retryAfterMs);
         }
       }
 
@@ -1020,7 +1023,7 @@ async function sendCooldownNotice(
     if (!rateLimit.allowed) {
       await releaseSlots();
       await releaseOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner);
-      throw new MetaApiError("Send rate limit reached for this Instagram account", 429, true);
+      throw new SendDeferredError("Send rate limit reached for this Instagram account", rateLimit.retryAfterMs);
     }
 
     const providerStartedAt = performance.now();

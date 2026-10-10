@@ -26,6 +26,7 @@ import { processAdminDeletion } from "./lib/admin/deletion/processor";
 import { createDeliveryTiming } from "./lib/automation/delivery-timing";
 import { createSystemMonitor } from "./lib/admin/system/monitor";
 import { reportDatabaseLatency } from "./lib/database-latency";
+import { runWithSendDeferral } from "./lib/automation/job-deferral";
 
 const DELIVERY_RECONCILIATION_INTERVAL_MS = 5 * 60 * 1_000;
 const SYSTEM_MONITOR_INTERVAL_MS = 5 * 60 * 1_000;
@@ -72,7 +73,7 @@ if (!env.redisUrl) {
   const bulkRedis = new Redis(env.redisUrl, { maxRetriesPerRequest: null });
   // Keep the legacy job handlers on the realtime queue while previously
   // enqueued bulk jobs drain during rollout. New bulk jobs use their own queue.
-  const processJob = async (job: Job) => {
+  const dispatchJob = async (job: Job) => {
       if (job.name === "admin-maintenance") {
         const action = (job.data as { action?: string }).action;
         if (action === "delivery_reconciliation") {
@@ -170,6 +171,10 @@ if (!env.redisUrl) {
 
       throw new Error("unknown_job");
   };
+  // Quiet hours and our own per-account send windows are waits, not failures:
+  // park the job until it may send instead of spending its 2-3 attempts.
+  const processJob = (job: Job, token?: string) =>
+    runWithSendDeferral(job, token, () => dispatchJob(job));
   const worker = new Worker(WEBHOOK_QUEUE_NAME, processJob, {
     connection: redis,
     concurrency: env.workerConcurrency,

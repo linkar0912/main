@@ -14,6 +14,7 @@ import { findMatchedKeyword, matchesTrigger, resolveReplyForMedia } from "../aut
 import { validateDefinitionForTarget } from "../automation/channels/registry";
 import type { DeliveryTimingObserver } from "../automation/delivery-timing";
 import { checkSendRateLimit } from "../automation/send-rate-limiter";
+import { SendDeferredError } from "../automation/send-deferral";
 
 /**
  * Result shape parallel to the Instagram runner's RunnerResult so the
@@ -205,12 +206,12 @@ export async function processNormalizedFacebookEvent(
     // Per-Page send ceiling, checked before any claim or slot reservation so
     // there is nothing to unwind. Meta throttles Pages dynamically off
     // engagement, so a public reply storm on a viral post is a real
-    // restriction risk. Thrown (not skipped) so the reply is retried and still
-    // lands once the window rolls over, matching how transient Graph failures
-    // are handled below.
+    // restriction risk. Deferred (not skipped, not failed) so the worker parks
+    // the event until the window rolls over and the reply still lands, without
+    // spending the job's few retry attempts.
     const rateLimit = await checkSendRateLimit(mapping.page.pageId, "comment_reply");
     if (!rateLimit.allowed) {
-      throw new RetryableFacebookError("Send rate limit reached for this Facebook Page");
+      throw new SendDeferredError("Send rate limit reached for this Facebook Page", rateLimit.retryAfterMs);
     }
 
     const replyOnce = definition.trigger.type === "comment"
