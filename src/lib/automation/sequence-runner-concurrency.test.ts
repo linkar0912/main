@@ -77,6 +77,60 @@ describe("sequence delivery claims", () => {
     expect(due).toHaveLength(0);
   });
 
+  it("cancels only the failing enrollment, not the contact's other sequences", async () => {
+    const { repository, client, options } = await sequenceHarness();
+    const contact = (await repository.getContact("workspace_a", "ig_1", "lead_1"))!;
+    const other = await repository.createSequence("workspace_a", {
+      name: "Onboarding",
+      status: "ACTIVE",
+      steps: [{ id: "other_step", delayHours: 0, text: "Welcome aboard" }],
+    });
+    await repository.enrollContactInSequence("workspace_a", other.id, contact.id, 1, new Date().toISOString());
+    vi.mocked(client.sendDirectMessage).mockRejectedValue(new MetaApiError("Meta 400", 400, true));
+
+    await processDueSequences(repository, options);
+
+    const later = await repository.listDueSequenceSends(new Date(Date.now() + 2 * 3_600_000).toISOString(), 10);
+    expect(later.map((row) => row.sequence.id)).toEqual([other.id]);
+  });
+
+  it("never rewinds an enrollment another replica already advanced", async () => {
+    const { repository } = await sequenceHarness();
+    const [due] = await repository.listDueSequenceSends(new Date().toISOString(), 10);
+    const enrollmentId = due!.enrollment.id;
+
+    expect(await repository.advanceSequenceEnrollment(enrollmentId, 1, null, 0)).toBe(true);
+    // A slower sweep still holding step 0 tries to reschedule it.
+    expect(await repository.advanceSequenceEnrollment(
+      enrollmentId,
+      0,
+      new Date(Date.now() + 60_000).toISOString(),
+      0,
+    )).toBe(false);
+    expect(await repository.listDueSequenceSends(new Date(Date.now() + 3_600_000).toISOString(), 10)).toHaveLength(0);
+  });
+
+  it("skips suspended workspaces and takes the earliest-due rows first", async () => {
+    const { repository } = await sequenceHarness();
+    await repository.touchContact("workspace_a", "ig_1", "lead_2", new Date().toISOString());
+    const early = (await repository.getContact("workspace_a", "ig_1", "lead_2"))!;
+    const sequence = await repository.createSequence("workspace_a", {
+      name: "Earlier",
+      status: "ACTIVE",
+      steps: [{ id: "early_step", delayHours: 0, text: "Hi" }],
+    });
+    await repository.enrollContactInSequence("workspace_a", sequence.id, early.id, 0, new Date(Date.now() - 3_600_000).toISOString());
+
+    const [first] = await repository.listDueSequenceSends(new Date().toISOString(), 1);
+    expect(first!.contact.igScopedUserId).toBe("lead_2");
+
+    await repository.ensureWorkspace("workspace_a", "owner@example.com", "user-1");
+    await repository.setWorkspaceLifecycle("workspace_a", {
+      status: "SUSPENDED", reason: "test", actorUserId: "admin", at: new Date().toISOString(),
+    });
+    expect(await repository.listDueSequenceSends(new Date().toISOString(), 10)).toHaveLength(0);
+  });
+
   it("backs a retryable failure off instead of leaving it at the head of the due queue", async () => {
     const { repository, client, options } = await sequenceHarness();
     vi.mocked(client.sendDirectMessage).mockRejectedValue(new MetaApiError("Meta 503", 503, true));

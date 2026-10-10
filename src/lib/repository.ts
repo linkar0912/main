@@ -1114,7 +1114,20 @@ export interface AutomationRepository {
   ): Promise<{ created: boolean }>;
   listDueSequenceSends(nowIso: string, limit: number): Promise<DueSequenceSend[]>;
   /** Advances one step; nextIndex beyond the last step completes the enrollment. */
-  advanceSequenceEnrollment(id: string, nextIndex: number, nextSendAtIso: string | null): Promise<void>;
+  /**
+   * Moves an ACTIVE enrollment to `nextIndex` (COMPLETED when `nextSendAtIso` is null).
+   * With `expectedStepIndex` it is a compare-and-set that applies only while the
+   * enrollment is still on that step, so a slower replica cannot rewind it.
+   * Returns whether the enrollment was updated.
+   */
+  advanceSequenceEnrollment(
+    id: string,
+    nextIndex: number,
+    nextSendAtIso: string | null,
+    expectedStepIndex?: number,
+  ): Promise<boolean>;
+  /** Cancels one ACTIVE enrollment; returns whether it was cancelled. */
+  cancelSequenceEnrollment(id: string): Promise<boolean>;
   cancelEnrollmentsForContact(contactId: string): Promise<number>;
   // Broadcasts (one-off DM blasts to a segment).
   createBroadcast(

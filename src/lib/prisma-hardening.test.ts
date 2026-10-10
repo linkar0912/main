@@ -174,6 +174,16 @@ describe("retention sweeps", () => {
   });
 });
 
+describe("advanceSequenceEnrollment", () => {
+  it("only moves an ACTIVE enrollment that is still on the expected step", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const client = { sequenceEnrollment: { updateMany } } as unknown as typeof prisma;
+
+    await expect(createPrismaRepository(client).advanceSequenceEnrollment("enrollment_1", 2, null, 1)).resolves.toBe(false);
+    expect(updateMany.mock.calls[0]?.[0]?.where).toEqual({ id: "enrollment_1", state: "ACTIVE", currentStepIndex: 1 });
+  });
+});
+
 describe("listConnectionsExpiringBefore", () => {
   it("includes connections whose expiry was never recorded", async () => {
     const findMany = vi.fn().mockResolvedValue([]);

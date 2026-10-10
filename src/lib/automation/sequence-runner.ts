@@ -71,6 +71,10 @@ export async function processDueSequences(
   for (const { enrollment, sequence, contact } of due) {
     if (await repository.getWorkspaceStatus(enrollment.workspaceId) !== "ACTIVE") continue;
     result.processed += 1;
+    // Every move is a compare-and-set on the step this sweep read, so a
+    // replica running the same sweep concurrently can never rewind (or
+    // double-advance) the enrollment.
+    const expectedStep = enrollment.currentStepIndex;
 
     // Quiet hours: hold the step (keep it due) until the window reopens.
     const messagingWindow = await messagingWindowFor(enrollment.workspaceId);
@@ -79,6 +83,7 @@ export async function processDueSequences(
         enrollment.id,
         enrollment.currentStepIndex,
         new Date(Date.now() + msUntilQuietEnd(new Date(), messagingWindow)).toISOString(),
+        expectedStep,
       );
       continue;
     }
@@ -107,7 +112,7 @@ export async function processDueSequences(
 
     const step = sequence.steps[enrollment.currentStepIndex];
     if (!step) {
-      await repository.advanceSequenceEnrollment(enrollment.id, sequence.steps.length, null);
+      await repository.advanceSequenceEnrollment(enrollment.id, sequence.steps.length, null, expectedStep);
       result.cancelled += 1;
       continue;
     }
@@ -127,6 +132,7 @@ export async function processDueSequences(
         enrollment.id,
         enrollment.currentStepIndex,
         new Date(Date.now() + rateLimit.retryAfterMs).toISOString(),
+        expectedStep,
       );
       continue;
     }
@@ -164,9 +170,10 @@ export async function processDueSequences(
           status: delivery.status,
         });
         // Terminal outcomes would otherwise leave the enrollment stuck re-reading
-        // the same dead delivery on every sweep - cancel it like the other dead ends.
+        // the same dead delivery on every sweep - cancel this enrollment. The
+        // contact's other sequences have their own steps and stay untouched.
         if (delivery.status === "UNKNOWN" || !delivery.retryable) {
-          await repository.cancelEnrollmentsForContact(contact.id);
+          await repository.cancelSequenceEnrollment(enrollment.id);
         }
         result.failed += 1;
       }
@@ -178,6 +185,7 @@ export async function processDueSequences(
           enrollment.id,
           enrollment.currentStepIndex,
           new Date(Date.now() + SEQUENCE_RETRY_BACKOFF_MS).toISOString(),
+          expectedStep,
         );
       }
       continue;
@@ -187,7 +195,7 @@ export async function processDueSequences(
     const nextIndex = enrollment.currentStepIndex + 1;
     const nextStep = sequence.steps[nextIndex];
     if (!nextStep) {
-      await repository.advanceSequenceEnrollment(enrollment.id, nextIndex, null);
+      await repository.advanceSequenceEnrollment(enrollment.id, nextIndex, null, expectedStep);
       continue;
     }
     // Schedule relative to when this step was due (not wall-clock now) so a
@@ -199,6 +207,7 @@ export async function processDueSequences(
       enrollment.id,
       nextIndex,
       new Date(baseMs + nextStep.delayHours * 3_600_000).toISOString(),
+      expectedStep,
     );
   }
 

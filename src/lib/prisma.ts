@@ -3150,15 +3150,28 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       }));
     },
 
-    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso) {
-      await client.sequenceEnrollment.update({
-        where: { id },
+    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso, expectedStepIndex) {
+      const result = await client.sequenceEnrollment.updateMany({
+        where: {
+          id,
+          state: "ACTIVE",
+          ...(expectedStepIndex === undefined ? {} : { currentStepIndex: expectedStepIndex }),
+        },
         data: {
           currentStepIndex: nextIndex,
           nextSendAt: nextSendAtIso ? new Date(nextSendAtIso) : null,
           state: nextSendAtIso ? "ACTIVE" : "COMPLETED",
         },
       });
+      return result.count === 1;
+    },
+
+    async cancelSequenceEnrollment(id) {
+      const result = await client.sequenceEnrollment.updateMany({
+        where: { id, state: "ACTIVE" },
+        data: { state: "CANCELLED" },
+      });
+      return result.count === 1;
     },
 
     async cancelEnrollmentsForContact(contactId) {

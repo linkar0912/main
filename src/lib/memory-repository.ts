@@ -2312,11 +2312,13 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async listDueSequenceSends(nowIso, limit): Promise<DueSequenceSend[]> {
+      // Mirrors Prisma: filter (including the workspace lifecycle), order by
+      // nextSendAt, and only then take the batch.
       const nowMs = Date.parse(nowIso);
       const due: DueSequenceSend[] = [];
       for (const enrollment of enrollments.values()) {
-        if (due.length >= limit) break;
         if (enrollment.state !== "ACTIVE") continue;
+        if ((workspaceLifecycle.get(enrollment.workspaceId)?.status ?? "ACTIVE") !== "ACTIVE") continue;
         const nextMs = enrollment.nextSendAt ? Date.parse(enrollment.nextSendAt) : Number.NaN;
         if (!Number.isFinite(nextMs) || nextMs > nowMs) continue;
         const sequence = sequences.get(enrollment.sequenceId);
@@ -2325,13 +2327,15 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         if (!contact || contact.suppressedAt) continue;
         due.push({ enrollment: copy(enrollment), sequence: copy(sequence), contact: copy(contact) });
       }
-      return due.sort((a, b) =>
-        (a.enrollment.nextSendAt ?? "").localeCompare(b.enrollment.nextSendAt ?? ""));
+      return due
+        .sort((a, b) => (a.enrollment.nextSendAt ?? "").localeCompare(b.enrollment.nextSendAt ?? ""))
+        .slice(0, limit);
     },
 
-    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso) {
+    async advanceSequenceEnrollment(id, nextIndex, nextSendAtIso, expectedStepIndex) {
       const enrollment = enrollments.get(id);
-      if (!enrollment) return;
+      if (!enrollment || enrollment.state !== "ACTIVE") return false;
+      if (expectedStepIndex !== undefined && enrollment.currentStepIndex !== expectedStepIndex) return false;
       const completed = nextSendAtIso === null;
       enrollments.set(id, {
         ...enrollment,
@@ -2340,6 +2344,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         state: (completed ? "COMPLETED" : "ACTIVE") satisfies EnrollmentState,
         updatedAt: now(),
       });
+      return true;
+    },
+
+    async cancelSequenceEnrollment(id) {
+      const enrollment = enrollments.get(id);
+      if (!enrollment || enrollment.state !== "ACTIVE") return false;
+      enrollments.set(id, { ...enrollment, state: "CANCELLED", updatedAt: now() });
+      return true;
     },
 
     async cancelEnrollmentsForContact(contactId) {
