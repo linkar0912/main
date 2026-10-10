@@ -248,7 +248,7 @@ export function BillingSettings() {
       <section className="billing-invite panel" aria-labelledby="premium-invite-title">
         <div className="billing-invite-copy">
           <span><TicketCheck size={18} /></span>
-          <div><small>Limited-time plan access</small><h3 id="premium-invite-title">Invite access</h3><p>Enter your code to unlock the plan included with your invite for 30 days. Your current subscription stays unchanged, and a higher paid plan stays in effect.</p></div>
+          <div><h3 id="premium-invite-title">Have an invite code?</h3><p>It unlocks the plan in your invite for 30 days. Your current subscription doesn’t change, and if you already pay for a higher plan, that one stays.</p></div>
         </div>
         <div className="billing-invite-form">
           <label className="sr-only" htmlFor="premium-invite-code">Premium invite code</label>
@@ -280,7 +280,7 @@ export function BillingSettings() {
               </div>
               <ul>{plan.features.map((feature) => <li key={feature}><Check size={14} />{feature}</li>)}</ul>
               <button className={`button ${currentBillingSelection ? "button-secondary" : "button-primary"}`} type="button" disabled={currentBillingSelection || activating || !view.canManage || !view.billingConfigured || Boolean(busyPlan)} onClick={() => void choosePlan(plan.key)}>
-                {currentBillingSelection ? "Current billing" : busyPlan === plan.key ? "Opening…" : `Choose ${plan.name}`}
+                {currentBillingSelection ? "Your current plan" : busyPlan === plan.key ? "Opening…" : `Choose ${plan.name}`}
               </button>
             </article>
           );

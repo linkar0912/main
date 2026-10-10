@@ -54,7 +54,7 @@ describe("BroadcastsScreen", () => {
     render(<BroadcastsScreen />);
     await screen.findByText("No broadcasts yet");
     fireEvent.change(screen.getByPlaceholderText("e.g. Weekend offer"), { target: { value: "Drop" } });
-    fireEvent.change(screen.getByPlaceholderText("Write the DM blast"), { target: { value: "New stock" } });
+    fireEvent.change(screen.getByPlaceholderText("Write the message everyone will get"), { target: { value: "New stock" } });
     fireEvent.click(screen.getByRole("button", { name: "Send broadcast" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm send" }));
 
@@ -72,7 +72,7 @@ describe("BroadcastsScreen", () => {
     render(<BroadcastsScreen />);
     await screen.findByText("No broadcasts yet");
     fireEvent.change(screen.getByPlaceholderText("e.g. Weekend offer"), { target: { value: "Drop" } });
-    fireEvent.change(screen.getByPlaceholderText("Write the DM blast"), { target: { value: "New stock" } });
+    fireEvent.change(screen.getByPlaceholderText("Write the message everyone will get"), { target: { value: "New stock" } });
     fireEvent.click(screen.getByRole("button", { name: "Send broadcast" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm send" }));
 

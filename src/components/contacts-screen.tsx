@@ -8,7 +8,7 @@ import { ContactsContentSkeleton } from "./skeleton";
 import { SocialAvatar } from "./social-avatar";
 import { PageHeader } from "./page-header";
 import { useTeamMembers } from "@/src/lib/client/team-members";
-import { formatDateTime } from "@/src/lib/format-date";
+import { LocalRelativeTime } from "./workspace-primitives";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 type ContactRow = {
@@ -50,8 +50,16 @@ function contactName(contact: ContactRow): string {
   return username ? `@${username}` : contact.email ?? "Instagram user";
 }
 
+/** Tags the engine sets itself, in words; people's own tags show as typed. */
+const AUTOMATIC_TAG_LABELS: Record<string, string> = {
+  email_captured: "email captured",
+  opted_out: "opted out",
+  clicked: "clicked a link",
+};
+
 function contactSubtitle(contact: ContactRow): string {
-  const details = [contact.email, ...contact.tags].filter(Boolean).join(" · ");
+  const tags = contact.tags.map((tag) => AUTOMATIC_TAG_LABELS[tag] ?? tag);
+  const details = [contact.email, ...tags].filter(Boolean).join(", ");
   if (details) return details;
   return CAPTURE_STATE_LABELS[contact.state] ?? "Instagram contact";
 }
@@ -351,14 +359,14 @@ export function ContactsScreen() {
 
   return (
     <>
-      <div className={`page-wrap contacts-wrap${openContactId ? " has-drawer" : ""}`}>
+      <div className={`page-wrap contacts-wrap ws-page${openContactId ? " has-drawer" : ""}`}>
         <PageHeader
           title="Contacts"
-          description="Everyone who has interacted with your automations - track their stage, owner and notes."
+          description="Everyone who has talked to your automations, with their stage, owner and notes."
           actions={(
             <>
               <ContextHelpLink topic="leads" />
-              <a className="button button-secondary" href="/api/contacts/export" download><Download size={16} /> Export CSV</a>
+              <a className="button button-secondary" href="/api/contacts/export" download><Download size={16} aria-hidden /> Export CSV</a>
             </>
           )}
         />
@@ -402,7 +410,7 @@ export function ContactsScreen() {
         ) : (
           <section className="contacts-panel" aria-label="Customer contacts">
             <div className="contacts-table-head" aria-hidden>
-              <span>Contact</span><span>Stage</span><span>Engagement</span><span>Owner</span><span>Last seen</span><span />
+              <span>Contact</span><span>Stage</span><span>Owner</span><span>Last seen</span><span />
             </div>
             <ul className="contacts-list">
               {visible.map((contact) => (
@@ -420,10 +428,12 @@ export function ContactsScreen() {
                     <SocialAvatar channel="instagram" name={contactName(contact)} src={contact.avatarUrl} />
                     <span><strong>{contactName(contact)}</strong><small>{contactSubtitle(contact)}</small></span>
                   </div>
-                  <span className={`status-pill is-${contact.leadStatus.toLowerCase()}`}>{STATUS_LABELS[contact.leadStatus]}</span>
-                  <span className="contact-score" title="Engagement score: rises with clicks, captured details and stage changes">{contact.score} pts{contact.suppressedAt ? " · opted out" : ""}</span>
+                  <span className="contact-stage">
+                    <span className={`status-pill is-${contact.leadStatus.toLowerCase()}`}>{STATUS_LABELS[contact.leadStatus]}</span>
+                    <span className="contact-score" title="Engagement score: rises with clicks, captured details and stage changes">{contact.score} pts{contact.suppressedAt ? ", opted out" : ""}</span>
+                  </span>
                   <span className="contact-owner">{contact.assigneeUserId ? members.get(contact.assigneeUserId) ?? "Former member" : "Unassigned"}</span>
-                  <time dateTime={contact.lastSeenAt}>{formatDateTime(contact.lastSeenAt)}</time>
+                  <LocalRelativeTime className="contact-last-seen" value={contact.lastSeenAt} />
                   <button
                     className="button button-ghost button-small"
                     type="button"
@@ -440,7 +450,7 @@ export function ContactsScreen() {
         )}
         {hasMore && contacts.length > 0 ? (
           <button className="list-toggle contacts-load-more" type="button" onClick={() => void loadMore()} disabled={loadingMore}>
-            {loadingMore ? "Loading…" : `Load more · ${loadedForStatus.toLocaleString()} of ${availableForStatus.toLocaleString()} shown`}
+            {loadingMore ? "Loading…" : `Load more (showing ${loadedForStatus.toLocaleString()} of ${availableForStatus.toLocaleString()})`}
           </button>
         ) : null}
         </div>

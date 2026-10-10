@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Megaphone } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
+import { LocalStatusBadge, type StatusTone } from "./workspace-primitives";
 import { toReadableApiError } from "@/src/lib/validation-error";
 
 type BroadcastRow = {
@@ -30,6 +31,13 @@ const STATUS_LABELS: Record<string, string> = {
 
 function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function statusTone(status: string): StatusTone {
+  if (status === "RUNNING") return "success";
+  if (status === "PENDING") return "warning";
+  if (status === "FAILED") return "danger";
+  return "neutral";
 }
 
 function isCancellable(status: string): boolean {
@@ -175,7 +183,7 @@ export function BroadcastsScreen() {
         <div className="split-layout">
             <section className="surface is-flush" aria-label="Broadcast history">
               <div className="surface-head">
-                <div className="surface-head-copy"><h2>{loading ? "Broadcasts" : `${broadcasts.length} ${broadcasts.length === 1 ? "broadcast" : "broadcasts"}`}</h2><p>Every blast you have sent or scheduled.</p></div>
+                <div className="surface-head-copy"><h2>Your broadcasts</h2><p>{loading || broadcasts.length === 0 ? "Everything you’ve sent or scheduled." : `${broadcasts.length} sent or scheduled.`}</p></div>
               </div>
               <div className="surface-body">
               {loadError ? <p className="form-error" role="alert">{loadError} <button className="text-link" type="button" onClick={() => void refresh()}>Try again</button></p> : null}
@@ -183,7 +191,7 @@ export function BroadcastsScreen() {
                 <div className="empty-state is-inline">
                   <span className="empty-icon"><Megaphone size={20} /></span>
                   <h3>No broadcasts yet</h3>
-                  <p>Compose one and it will show up here with its delivery counts.</p>
+                  <p>Write one in the form. It shows up here with how many people got it.</p>
                 </div>
               ) : (
                 <div className="automation-list">
@@ -193,10 +201,10 @@ export function BroadcastsScreen() {
                       <div className="automation-copy">
                         <div className="automation-title">
                           <strong>{broadcast.name}</strong>
-                          <em className="sequence-status" data-status={broadcast.status}>{statusLabel(broadcast.status)}</em>
+                          <LocalStatusBadge tone={statusTone(broadcast.status)} label={statusLabel(broadcast.status)} />
                         </div>
                         <p>
-                          {broadcast.sent}/{broadcast.total} sent
+                          {broadcast.sent.toLocaleString()} of {broadcast.total.toLocaleString()} sent
                           {broadcast.failed > 0 ? ` · ${broadcast.failed} failed` : ""}
                           {broadcast.skipped > 0 ? ` · ${broadcast.skipped} skipped` : ""}
                         </p>
@@ -227,7 +235,7 @@ export function BroadcastsScreen() {
             </section>
             <form className="surface composer-card" onSubmit={send} aria-label="New broadcast">
               <div className="surface-head">
-                <div className="surface-head-copy"><h2>New broadcast</h2><p>Compose once, send to a whole segment.</p></div>
+                <div className="surface-head-copy"><h2>New broadcast</h2><p>Write one message and send it to a group of contacts.</p></div>
               </div>
               <div className="surface-body">
               {error && <p className="form-error" role="alert">{error}</p>}
@@ -238,7 +246,7 @@ export function BroadcastsScreen() {
                   <input value={name} onChange={(e) => { setName(e.target.value); setConfirming(false); }} maxLength={120} placeholder="e.g. Weekend offer" />
                 </label>
                 <label className="field">
-                  <span>Segment</span>
+                  <span>Send to</span>
                   <select value={segment} onChange={(e) => { setSegment(e.target.value as Segment); setConfirming(false); }}>
                     <option value="captured_email">Leads with a captured email</option>
                     <option value="all_contacts">All known contacts</option>
@@ -251,12 +259,12 @@ export function BroadcastsScreen() {
               </div>
               <label className="field field-spaced">
                 <span>Message</span>
-                <textarea value={text} onChange={(e) => { setText(e.target.value); setConfirming(false); }} rows={3} maxLength={1000} placeholder="Write the DM blast" />
+                <textarea value={text} onChange={(e) => { setText(e.target.value); setConfirming(false); }} rows={3} maxLength={1000} placeholder="Write the message everyone will get" />
               </label>
               <label className="field field-spaced">
-                <span>Schedule start (optional)</span>
+                <span>Start at (optional)</span>
                 <input type="datetime-local" value={scheduleStart} onChange={(e) => { setScheduleStart(e.target.value); setConfirming(false); }} />
-                <small className="muted">Leave empty to fan out now. Delivery also waits out quiet hours automatically.</small>
+                <small className="muted">Leave empty to start now. Sending also waits out your quiet hours.</small>
               </label>
               <div className="composer-footer">
                 {confirming ? (

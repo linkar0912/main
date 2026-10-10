@@ -571,7 +571,7 @@ export function SettingsScreen() {
   const quietDirty = !sameQuietHours({ enabled: quietEnabled, start: quietStart, end: quietEnd, timezone: quietTz }, quietPersisted);
 
   return (
-    <div className="page-wrap settings-wrap">
+    <div className="page-wrap settings-wrap ws-page">
       <PageHeader
         title="Settings"
         description="Channels, delivery, team and billing for this workspace."
@@ -615,7 +615,7 @@ export function SettingsScreen() {
             <section className="settings-section" aria-labelledby="connected-channels-title">
               <header className="settings-section-head">
                 <h2 id="connected-channels-title">Connected channels</h2>
-                <p>The Instagram accounts and Facebook Pages that listen for comments and deliver replies.</p>
+                <p>The Instagram accounts and Facebook Pages your automations reply from.</p>
               </header>
 
               {connectionsLoadError && (
@@ -630,20 +630,20 @@ export function SettingsScreen() {
                   <small>Channels</small>
                   <strong>{connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : `${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}</strong>
                 </div>
-                <div className="settings-overview-cell" role="group" aria-label="Environment status">
-                  <small>Environment</small>
+                <div className="settings-overview-cell" role="group" aria-label="Mode status">
+                  <small>Mode</small>
                   <strong>
                     {connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : (
-                      <><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" />{mode === "demo" ? "Demo mode" : "Connected mode"}</>
+                      <><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" />{mode === "demo" ? "Demo mode" : "Live"}</>
                     )}
                   </strong>
                 </div>
-                <div className="settings-overview-cell" role="group" aria-label="Live updates status">
-                  <small>Live updates</small>
+                <div className="settings-overview-cell" role="group" aria-label="Incoming messages status">
+                  <small>Incoming messages</small>
                   <strong>
                     {connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : (
                       <><span className="health-orb" data-state={webhookState === "ok" ? "ok" : webhookState === "warn" ? "warn" : "idle"} aria-hidden="true" />
-                        {webhookState === "ok" ? "Healthy" : webhookState === "warn" ? "Needs attention" : webhookState === "checking" ? "Checking…" : "Nothing to check"}</>
+                        {webhookState === "ok" ? "Healthy" : webhookState === "warn" ? "Needs attention" : webhookState === "checking" ? "Checking…" : "Not set up yet"}</>
                     )}
                   </strong>
                 </div>
@@ -929,7 +929,7 @@ export function SettingsScreen() {
                   <li className="settings-row"><Check size={16} /> Replies follow only the rules you save.</li>
                   <li className="settings-row settings-row-split">
                     <span className="settings-row-copy">
-                      <strong><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" /> {mode === "demo" ? "Demo mode" : "Connected mode"}</strong>
+                      <strong><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" /> {mode === "demo" ? "Demo mode" : "Live"}</strong>
                       <small>{mode === "demo" ? "Live delivery isn't set up for this workspace yet, so it runs on sample data." : "This workspace delivers live replies through Instagram and Facebook."}</small>
                     </span>
                     <Link className="text-link" href="/support">Setup guidance <ExternalLink size={13} /></Link>
@@ -972,7 +972,7 @@ export function SettingsScreen() {
                         <li className="settings-row settings-row-split" key={invitation.id}>
                           <span className="team-who">
                             <span className="avatar avatar-small is-pending" aria-hidden>{invitation.email.slice(0, 2).toUpperCase()}</span>
-                            <span><strong>{invitation.email}</strong><small>{invitation.role} · invitation expires {formatDate(invitation.expiresAt)}</small></span>
+                            <span><strong>{invitation.email}</strong><small>{invitation.role.charAt(0) + invitation.role.slice(1).toLowerCase()}, invite expires {formatDate(invitation.expiresAt)}</small></span>
                           </span>
                           <button
                             className="text-link"

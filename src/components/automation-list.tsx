@@ -312,8 +312,8 @@ export function AutomationList({
     return (
       <div className="empty-state">
         <span className="empty-icon"><Workflow size={22} /></span>
-        <h3>Your first automation starts here.</h3>
-        <p>Turn one clear customer signal into one useful reply.</p>
+        <h3>No automations yet</h3>
+        <p>Create one to reply to comments and DMs automatically.</p>
         <CreateAutomationButton className="button button-secondary">Create automation</CreateAutomationButton>
       </div>
     );
@@ -453,7 +453,7 @@ export function AutomationList({
         </article>
         );
       })}
-      {compact && automations.length > visible.length && <Link className="list-more" href="/automations">View all {automations.length} automations <ArrowUpRight size={15} /></Link>}
+      {compact && automations.length > visible.length && <Link className="list-more" href="/automations">View all {automations.length} automations</Link>}
       {historyForId && (
         <AutomationVersionsModal
           automationId={historyForId}

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { basicAutomationTemplates } from "@/src/lib/automation/templates";
 import { QuickReelsContentSkeleton } from "./skeleton";
 import { PageHeader } from "./page-header";
+import { formatDate as formatDateLabel } from "@/src/lib/format-date";
 
 type QuickMedia = {
   id: string;
@@ -42,7 +43,8 @@ function reelName(reel: QuickMedia): string {
 function formatDate(timestamp: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "Recent Reel";
-  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).format(date);
+  // Same en-IN "7 Oct 2026" as every other workspace date.
+  return formatDateLabel(date);
 }
 
 export function QuickAutomationScreen() {
@@ -144,11 +146,11 @@ export function QuickAutomationScreen() {
 
   return (
     <>
-      <div className="page-wrap quick-automation-page">
+      <div className="page-wrap quick-automation-page ws-page">
         <PageHeader
           className="quick-automation-header"
-          title="Pick a Reel. Put it to work."
-          description="Choose a published Reel, then choose what Linkar should do when someone comments."
+          title="Quick automation"
+          description="Pick a published Reel, then choose what happens when someone comments on it."
         />
 
         <section className="surface quick-automation-stage" aria-labelledby="choose-reel-heading">
@@ -162,17 +164,17 @@ export function QuickAutomationScreen() {
           ) : error && reels.length === 0 ? (
             <div className="empty-state quick-empty">
               <Film size={24} />
-              <h3>Your Reels could not load.</h3>
+              <h3>Your Reels didn’t load</h3>
               <p>{error}</p>
               <div className="empty-actions">
-                <button type="button" className="button button-secondary" onClick={() => void retry()}><RefreshCw size={15} /> Try again</button>
+                <button type="button" className="button button-secondary" onClick={() => void retry()}><RefreshCw size={15} aria-hidden /> Try again</button>
                 <Link className="button button-primary" href="/settings">Check Instagram connection</Link>
               </div>
             </div>
           ) : reels.length === 0 ? (
             <div className="empty-state quick-empty">
               <Film size={24} />
-              <h3>No published Reels yet.</h3>
+              <h3>No published Reels yet</h3>
               <p>Publish a Reel on the connected Instagram account, then come back here.</p>
               <Link className="button button-secondary" href="/settings">Check Instagram connection</Link>
             </div>
