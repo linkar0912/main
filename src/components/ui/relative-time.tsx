@@ -57,11 +57,15 @@ export function relativeTimeLabel(value: string | Date | number, now: number): s
   return date.toLocaleDateString(DATE_LOCALE, { day: "numeric", month: "short", year: "numeric" });
 }
 
-/** The exact local moment, for the tooltip: "11 Oct 2026, 9:19:45 pm IST". */
+/**
+ * The exact moment in the viewer's own time zone, for the tooltip:
+ * "11 Oct 2026, 9:19:45 pm". No zone name - it is always the viewer's local
+ * time, and a zone label ("UTC", "GMT+5:30") reads as server jargon.
+ */
 export function fullTimeLabel(value: string | Date | number): string {
   const date = toDate(value);
   if (Number.isNaN(date.getTime())) return "Unknown";
-  return date.toLocaleString(DATE_LOCALE, { dateStyle: "medium", timeStyle: "long" });
+  return date.toLocaleString(DATE_LOCALE, { dateStyle: "medium", timeStyle: "medium" });
 }
 
 function subscribe(onTick: () => void): () => void {
