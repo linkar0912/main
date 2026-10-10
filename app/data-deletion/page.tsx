@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { PublicPage } from "@/src/components/public-page";
 import { getServerEnv } from "@/src/lib/env";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: `Data deletion · ${PRODUCT_NAME}`,
+  description: `How to ask ${PRODUCT_NAME} to delete data linked to your Instagram account, Facebook Page, and workspace.`,
+  alternates: { canonical: "/data-deletion" },
+};
 
 export default function DataDeletionPage() {
   const { supportEmail } = getServerEnv();

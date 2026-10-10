@@ -1,0 +1,38 @@
+.details {
+  display: grid;
+  max-inline-size: 72ch;
+  margin: 0 0 18px;
+  border-block-start: 1px solid var(--line);
+}
+
+.details > div {
+  display: grid;
+  grid-template-columns: minmax(140px, 32%) 1fr;
+  gap: 16px;
+  padding-block: 12px;
+  border-block-end: 1px solid var(--line);
+}
+
+.details dt {
+  color: var(--muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.details dd {
+  margin: 0;
+  color: var(--slate, var(--ink));
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .details > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
