@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, JetBrains_Mono, Manrope } from "next/font/google";
 import { SiteAnalytics } from "@/src/components/site-analytics";
-import { getAnalyticsMeasurementId } from "@/src/lib/env";
+import { PRODUCT_NAME } from "@/src/lib/branding";
+import { OPEN_GRAPH_DEFAULTS, publicSiteOrigin } from "@/src/lib/site-url";
 import "./globals.css";
 
 /* Brand type system - display carries headlines, sans carries the UI,
@@ -10,14 +11,25 @@ const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-disp
 const sans = Manrope({ subsets: ["latin"], variable: "--font-sans" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
+const DEFAULT_TITLE = `${PRODUCT_NAME} · Instagram and Facebook automation, made clear`;
+const DEFAULT_DESCRIPTION = "Deterministic Instagram conversations and Facebook Page public comment replies for creators and businesses.";
+
+// No title.template: the signed-in app pages already set full "X · Linkar"
+// titles, and a template would double the suffix on every one of them.
 export const metadata: Metadata = {
-  title: "Linkar - Instagram and Facebook automation, made clear",
-  description: "Deterministic Instagram conversations and Facebook Page public comment replies for creators and businesses.",
+  metadataBase: new URL(publicSiteOrigin()),
+  title: DEFAULT_TITLE,
+  description: DEFAULT_DESCRIPTION,
+  applicationName: PRODUCT_NAME,
+  // Shared Open Graph basics. A page that sets its own openGraph replaces this
+  // object wholesale, so pages that do (home, pricing) repeat these fields.
+  // Titles are left out here so a page without its own og:title falls back
+  // to its <title> rather than inheriting the homepage's.
+  openGraph: OPEN_GRAPH_DEFAULTS,
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const gaMeasurementId = getAnalyticsMeasurementId();
-
   return (
     <html
       lang="en"
@@ -35,7 +47,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         {children}
-        <SiteAnalytics measurementId={gaMeasurementId} />
+        <SiteAnalytics />
       </body>
     </html>
   );
