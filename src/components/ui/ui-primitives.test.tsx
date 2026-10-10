@@ -71,6 +71,11 @@ describe("RelativeTime", () => {
     expect(time.getAttribute("title")).toBeTruthy();
   });
 
+  it("lowercases day words when used mid-sentence", () => {
+    render(<p>Created <RelativeTime value={new Date(Date.now() - 10_000).toISOString()} inline /></p>);
+    expect(screen.getByText("just now")).toBeTruthy();
+  });
+
   it("uses a plain fallback when there is no time", () => {
     render(<RelativeTime value={null} fallback="Not set" />);
     expect(screen.getByText("Not set")).toBeTruthy();

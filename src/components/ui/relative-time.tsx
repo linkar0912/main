@@ -77,7 +77,13 @@ const serverNow = () => null;
  * (and the hydration pass) render a time-zone-neutral date so markup matches;
  * the relative wording replaces it as soon as the page is interactive.
  */
-export function RelativeTime({ value, fallback = "Never", className }: { value: string | Date | number | null | undefined; fallback?: string; className?: string }) {
+export function RelativeTime({ value, fallback = "Never", inline = false, className }: {
+  value: string | Date | number | null | undefined;
+  fallback?: string;
+  /** Mid-sentence ("Created just now"): lowercases "Just now", "Today", "Yesterday", "Tomorrow". */
+  inline?: boolean;
+  className?: string;
+}) {
   const now = useSyncExternalStore(subscribe, clientNow, serverNow);
   if (value === null || value === undefined || value === "") return <span className={className}>{fallback}</span>;
   const date = toDate(value);
@@ -90,5 +96,7 @@ export function RelativeTime({ value, fallback = "Never", className }: { value: 
       </time>
     );
   }
-  return <time className={className} dateTime={iso} title={fullTimeLabel(date)}>{relativeTimeLabel(date, now)}</time>;
+  const label = relativeTimeLabel(date, now);
+  const shown = inline && /^(Just|Today|Yesterday|Tomorrow)\b/.test(label) ? `${label[0].toLowerCase()}${label.slice(1)}` : label;
+  return <time className={className} dateTime={iso} title={fullTimeLabel(date)}>{shown}</time>;
 }

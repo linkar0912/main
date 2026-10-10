@@ -2,9 +2,14 @@
 
 Linkar's identity is a direct study of ManyChat's real, live brand (not a
 vague "creator tool" vibe): near-black ink, one hot-magenta signature
-interaction color, a bright yellow secondary block color, chunky friendly
-type, uppercase mono buttons, pill-shaped confidence, and a faint graph-paper
-texture behind hero panels.
+interaction color, a bright yellow highlighter used only on the plan sticker,
+and chunky Bricolage page titles.
+
+Inside the product the direction is **"Calm control"** (owner feedback,
+2026-10-11): a quiet, legible operator tool where chrome recedes so content
+and status read first. The owner's words override older rules below; in
+particular the old "uppercase mono buttons and section labels" rule is
+**revoked**.
 
 ## Logo - wordmark and app mark
 
@@ -34,7 +39,7 @@ Browser and home-screen icons are generated from the same mark:
 |---|---|---|
 | `--ink` | `#17181d` | Body text, primary CTAs (black pills), dark panels |
 | `--ink-strong` | `#0b0c10` | Hover state of ink surfaces |
-| `--volt` | `#fff100` | Secondary signature for plan stickers, active nav pills, and energy moments |
+| `--volt` | `#fff100` | The plan sticker (FREE/AGENCY) only. Not nav, not badges, not slabs |
 | `--volt-deep` | `#f7cd21` | Volt borders/hover on dark |
 | `--accent` | `#fa0cf7` | Magenta - ManyChat's real CTA/interaction color. Links, focus rings, active data, primary chart series |
 | `--accent-hover` | `#c807c4` | Hover/pressed state of accent surfaces |
@@ -43,20 +48,22 @@ Browser and home-screen icons are generated from the same mark:
 | `--grape` | `#7b34ce` | Spectrum: secondary chart series, condition markers |
 | `--flame` | `#ff4b00` | Spectrum: emphasis metrics (`--saffron`) |
 | `--leaf` | `#0f7b3f` | Success states (`--green`) |
-| `--honey` | `#b45309` | Warning states (`--amber`) |
+| `--honey` | `#b45309` | Warning fills/text (`--amber`). Warning *dots* use `--status-warning` (`#d98c00`), because honey reads brown at dot size |
 | `--danger` | `#b42318` | Errors and failed statuses only |
-| `--surface-soft` | `#f7f6ef` | Warm bone - sidebar, soft chips |
+| `--surface-soft` | `#f5f5f4` | Neutral soft fill. Lines are neutral too (`--line` `#e6e6ea`) - no warm/brown greys |
 | `--canvas` | `#ffffff` | App canvas stays white |
 
 Rules:
 
-1. **Volt is a highlighter, not a paint bucket.** Small doses: stickers,
-   active states, key words. Always pair with ink; never body text on white.
+1. **Volt is the plan sticker and nothing else.** Always paired with ink.
+   No volt nav slabs, admin badges, or highlight blocks.
 2. **Magenta is the only interactive accent** for links/focus/info - this
    replaced Signal Blue once we confirmed ManyChat's real palette has no
    blue in it at all.
 3. Red is reserved for errors - never decoration.
-4. Legacy palettes are contractually forbidden (see `app/globals.test.ts`):
+4. **No brown or orange anywhere.** Status is green (`--leaf`), amber dot,
+   red (`--danger`) or neutral grey - always a dot plus a word.
+5. Legacy palettes are contractually forbidden (see `app/globals.test.ts`):
    Meta blue `#0866ff`, Tailwind greens, old amber rgba, and the retired
    Signal Blue (`#0a6cff`).
 
@@ -66,28 +73,61 @@ Loaded in `app/layout.tsx` via `next/font/google` (self-hosted):
 
 | Variable | Family | Use |
 |---|---|---|
-| `--font-display` | Bricolage Grotesque | h1–h3, sidebar + login wordmarks |
-| `--font-sans` | Manrope | Everything else (body 15px, UI labels) |
-| `--font-mono` | JetBrains Mono | Media IDs, handles, tokens - **and now all buttons, section labels, and the plan tag** |
+| `--font-display` | Bricolage Grotesque | Page `h1` (800) and the wordmark only |
+| `--font-sans` | Manrope | Everything else: body, buttons, tabs, labels, table headers, counters, badges, `h2`/`h3` |
+| `--font-mono` | JetBrains Mono | Only inside an ID chip and code-like values an operator copies |
 
-Headlines are extra-bold (800) with slight negative tracking (-.02em).
+Rules:
 
-ManyChat sets every button and nav label in an uppercase monospace font
-(`CoFo Sans Mono`). We can't license that font, so `.button` and its
-variants (`.chooser-cta`, `.button-setup`), plus `.plan-tag` and
-`.sidebar-label`, reuse the JetBrains Mono already loaded for data -
-uppercase, `.04–.05em` letter-spacing. Everything else (nav copy, body
-text, table cells) stays Manrope for density and legibility; we didn't
-uppercase the in-app sidebar nav, since that's read constantly rather than
-skimmed once like a marketing site.
+- **Sentence case everywhere.** No letter-spaced uppercase except the tiny
+  plan sticker. Buttons are Manrope 600, 14px, sentence case, no "→" suffix.
+- Numbers are Manrope with `font-variant-numeric: tabular-nums`, never mono.
+- Type scale (`:root`): page title (Bricolage, existing clamp), section title
+  `--type-section-title` 1.125rem Manrope 700, body `--type-body` 15px,
+  secondary `--type-label` 14px / `--type-meta` 13px. **13px is the floor**
+  for any UI text.
+- Page header: `h1` + one plain sentence (90 characters max) + a
+  right-aligned primary action. No eyebrows.
+
+## Status, IDs and time
+
+- **Status badge** (`src/components/ui/status-badge.tsx`,
+  `<StatusBadge tone="success|warning|danger|neutral" label="Healthy" />`):
+  a coloured dot plus a plain word ("Healthy", "Needs attention", "Down",
+  "Connected", "Expired", "Active", "Paused", "Failed"). The same component
+  everywhere; the word carries the meaning.
+- **ID chip** (`src/components/ui/id-chip.tsx`, `<IdChip id prefix? />`):
+  `9f30c8c8…633c` (type prefix stripped, first 8 + last 4; commit SHAs become
+  7 characters), mono 12px, muted, with a copy button and the full ID in the
+  tooltip. Never the primary label of a row - put it on a secondary line or a
+  detail page. A release is shown as an ID chip labelled "Version".
+- **Time** (`src/components/ui/relative-time.tsx`, `<RelativeTime value />`):
+  relative and local ("2 hours ago", "Yesterday 21:19", "3 Oct, 21:19") with
+  the full local date-time in the tooltip. Pass `inline` mid-sentence
+  ("created just now"). Never print "UTC" in primary UI.
+- **Tables** (`.data-table`, add `.is-stackable` to turn rows into cards on
+  phones): five columns at most, the first is a human name, IDs move to a
+  muted second line, the row action is a ghost "Open" button, rows are 56px.
+
+## Navigation
+
+The active sidebar item - in the app and the owner console alike - is a
+soft neutral fill (`--nav-active-fill`: ink at 6% on light, white at 8% on
+dark), the label in ink at weight 700 and the icon in `--accent-text`.
+Hover changes colour only. Sidebar group labels are quiet sentence-case
+Manrope (`.sidebar-label`). The owner console shows "Owner console" as a
+quiet line under the logo instead of a badge.
 
 ## Shape & depth
 
-- Buttons and badges are **pills** (`border-radius: 999px`); primary = ink
-  background that lifts with `--shadow-lift` on hover.
-- Panels/cards use `--radius-lg` (20px) with soft diffuse shadows - no hard
-  neo-brutalist borders inside the app; the playfulness comes from color.
-- Inputs keep 10px radii so forms stay calm.
+- One radius family: 12px cards and panels (`--radius-card`), 10px inputs and
+  buttons (`--radius-control`), full pill only for status badges and the plan
+  sticker.
+- 1px subtle borders, no heavy shadows. Primary buttons are ink (inverted in
+  dark mode) and do not lift on hover.
+- 8px grid. Page padding 32px top / 40px sides on desktop, 16px on phones;
+  32px between sections; 20-24px card padding; 16px between sibling cards and
+  rows. Two bordered blocks never touch.
 - Product mockups (`.template-illustration` in the template gallery) use a
   near-black card with a faint magenta-tinted grid and a solid-magenta
   caption bar pinned to the bottom edge - ManyChat's actual IG-post-mockup
@@ -118,7 +158,7 @@ adjectives. Tagline: **"Instagram and Facebook automation, made clear."**
 ## Governance
 
 - All colors/typography flow through `:root` tokens in `app/globals.css`.
-- `app/globals.test.ts` asserts the palette contract (white canvas, bone
-  sidebar, magenta accent, Volt signature, red-for-errors). Update it
+- `app/globals.test.ts` asserts the palette and type contract (white canvas,
+  panel sidebar, magenta accent, Volt, red-for-errors, the type scale). Update it
   whenever the system itself changes - never bypass it.
 - `pnpm check:branding` guards legacy product names.
