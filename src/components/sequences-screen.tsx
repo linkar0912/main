@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Pencil, Play, Plus, RotateCw, Trash2 } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
+import { LocalStatusBadge, lifecycleStatus } from "./workspace-primitives";
 
 type SequenceStepView = { id: string; delayHours: number | string; text: string };
 type SequenceRow = {
@@ -217,11 +218,11 @@ export function SequencesScreen() {
         <div className="split-layout">
             <section className="surface is-flush" aria-label="Your sequences">
               <div className="surface-head">
-                <div className="surface-head-copy"><h2>{loading ? "Sequences" : `${sequences.length} ${sequences.length === 1 ? "sequence" : "sequences"}`}</h2><p>Follow-ups that run on their own.</p></div>
+                <div className="surface-head-copy"><h2>Your sequences</h2><p>{loading || sequences.length === 0 ? "Follow-ups that run on their own." : `${sequences.length} ${sequences.length === 1 ? "sequence" : "sequences"}, running on their own.`}</p></div>
                 {/* A Link here pointed at the page it already sits on, so the soft
                     navigation never remounted the screen and nothing refetched. */}
                 <button className="text-link" type="button" onClick={() => void refresh()}>
-                  <RotateCw size={14} /> Refresh
+                  <RotateCw size={14} aria-hidden /> Refresh
                 </button>
               </div>
               <div className="surface-body">
@@ -229,8 +230,8 @@ export function SequencesScreen() {
               {!loading && !pageError && sequences.length === 0 && (
                 <div className="empty-state is-inline">
                   <span className="empty-icon"><ListOrdered size={22} /></span>
-                  <h3>No sequences yet.</h3>
-                  <p>Create one with the form to follow up with new leads.</p>
+                  <h3>No sequences yet</h3>
+                  <p>Use the form to create one and follow up with new leads automatically.</p>
                 </div>
               )}
               {sequences.map((row) => (
@@ -239,7 +240,7 @@ export function SequencesScreen() {
                   <div className="automation-copy">
                     <div className="automation-title">
                       <strong>{row.name}</strong>
-                      <em className="sequence-status" data-status={row.status}>{row.status}</em>
+                      <LocalStatusBadge {...lifecycleStatus(row.status)} />
                     </div>
                     <p>
                       {row.steps.length} {row.steps.length === 1 ? "step" : "steps"}
@@ -247,7 +248,7 @@ export function SequencesScreen() {
                       {row.sourceAutomationId && (
                         <>
                           <span className="row-divider">·</span>
-                          source: {automations.find((a) => a.id === row.sourceAutomationId)?.name ?? "removed flow"}
+                          from {automations.find((a) => a.id === row.sourceAutomationId)?.name ?? "a deleted automation"}
                         </>
                       )}
                     </p>
@@ -306,7 +307,7 @@ export function SequencesScreen() {
                 <small>New leads from this flow enroll automatically; STOP replies are skipped.</small>
               </label>
 
-              <p className="eyebrow field-spaced">Steps</p>
+              <h3 className="composer-subhead field-spaced">Steps</h3>
               {steps.map((step, index) => (
                 <div className="sequence-step-row field-spaced" key={step.id}>
                   <div className="sequence-step-head">

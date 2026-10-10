@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { ProfileScreen } from "@/src/components/profile-screen";
 import { ScreenSkeleton } from "@/src/components/skeleton";
 
-export const metadata = { title: "My Profile · Linkar" };
+export const metadata = { title: "My profile · Linkar" };
 
 // Deliberately a plain, statically-rendered client page (like /automations and
 // /settings) rather than a force-dynamic server page. The previous shape awaited

@@ -32,7 +32,7 @@ describe("AutomationsScreen", () => {
 
     expect(await screen.findByRole("heading", { name: "Automations" })).toBeTruthy();
     const tabs = screen.getByRole("navigation", { name: "Automation sections" });
-    expect(within(tabs).getByRole("link", { name: "My Automations" }).getAttribute("aria-current")).toBe("page");
+    expect(within(tabs).getByRole("link", { name: "My automations" }).getAttribute("aria-current")).toBe("page");
     expect(within(tabs).getByRole("link", { name: "Sequences" }).getAttribute("href")).toBe("/automations/sequences");
     expect(within(tabs).getByRole("link", { name: "Broadcasts" }).getAttribute("href")).toBe("/automations/broadcasts");
   });

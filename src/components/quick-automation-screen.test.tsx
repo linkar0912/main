@@ -77,7 +77,7 @@ describe("QuickAutomationScreen", () => {
     stubFetch();
     const { container } = render(<QuickAutomationScreen />);
 
-    await screen.findByRole("heading", { name: "Pick a Reel. Put it to work." });
+    await screen.findByRole("heading", { name: "Quick automation" });
     expect(container.querySelector(".quick-automation-header svg")).toBeNull();
   });
 

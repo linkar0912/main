@@ -289,8 +289,8 @@ describe("SettingsScreen webhook health panel", () => {
 
     const summary = await screen.findByRole("region", { name: "Workspace pulse" });
     expect(summary.textContent).toContain("2 connected channels");
-    expect(summary.textContent).toContain("Connected mode");
-    expect(within(summary).getByRole("group", { name: "Environment status" })).toBeTruthy();
+    expect(summary.textContent).toContain("Live");
+    expect(within(summary).getByRole("group", { name: "Mode status" })).toBeTruthy();
     expect(within(summary).getByRole("group", { name: "Channel status" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connections/ }).getAttribute("aria-pressed")).toBe("true");
 

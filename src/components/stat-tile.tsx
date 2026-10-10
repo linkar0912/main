@@ -43,8 +43,9 @@ function Delta({ delta }: { delta?: StatDelta | null }) {
 
 /** Tiny area line of a daily series; decorative, the number carries the meaning. */
 function Sparkline({ points }: { points: DayPoint[] }) {
-  if (points.length < 2) return null;
   const values = points.map((point) => point.count);
+  // A flat line along the floor reads as a broken chart, not as "nothing yet".
+  if (points.length < 2 || values.every((value) => value === 0)) return null;
   const max = Math.max(...values, 1);
   const width = 96;
   const height = 28;

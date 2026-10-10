@@ -78,7 +78,7 @@ describe("DeliveryIssueRow", () => {
       </ul>,
     );
 
-    expect(screen.getByText("No provider detail was returned.")).toBeTruthy();
+    expect(screen.getByText("Meta didn’t say why.")).toBeTruthy();
   });
 
   it("shows the supporting detail line when given one", () => {
@@ -95,5 +95,16 @@ describe("DeliveryIssueRow", () => {
     );
 
     expect(screen.getByText("Attempt 2")).toBeTruthy();
+  });
+
+  it("drops Meta's numeric code prefix but keeps the raw message on hover", () => {
+    render(
+      <ul>
+        <DeliveryIssueRow label="Reply" lastError="(#10) This message is sent outside of allowed window." timestamp="2026-09-01T11:11:00.000Z" timeLabel="Yesterday" />
+      </ul>,
+    );
+
+    const sentence = screen.getByText("This message is sent outside of allowed window.");
+    expect(sentence.getAttribute("title")).toBe("(#10) This message is sent outside of allowed window.");
   });
 });

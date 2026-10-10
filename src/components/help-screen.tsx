@@ -6,7 +6,6 @@ import {
   BookOpen,
   ChevronDown,
   CreditCard,
-  ExternalLink,
   Inbox,
   LayoutGrid,
   LifeBuoy,
@@ -91,7 +90,7 @@ const TOPICS: Topic[] = [
           <>
             Owners and admins manage connections, team invitations, and every automation. Members can
             work with automations but not workspace-level settings. Your own role is shown on{" "}
-            <Link href="/profile">My Profile</Link> and in the sidebar chip.
+            <Link href="/profile">My profile</Link> and in the sidebar chip.
           </>
         ),
       },
@@ -534,7 +533,7 @@ const TOPICS: Topic[] = [
             Plans cap connections, automations, sequences, monthly broadcasts, monthly deliveries, and
             team members, and switch features like sequences, broadcasts, tracked links, Facebook, and
             exports on or off. Your current plan is shown in the sidebar chip and on{" "}
-            <Link href="/profile">My Profile</Link>; the exact allowances belong to that plan rather
+            <Link href="/profile">My profile</Link>; the exact allowances belong to that plan rather
             than being fixed in the app.
           </>
         ),
@@ -622,7 +621,7 @@ const TOPICS: Topic[] = [
         q: "How do I change my password?",
         a: (
           <>
-            <Link href="/profile">My Profile</Link> → Password &amp; sessions. Updating your password
+            <Link href="/profile">My profile</Link> → Password &amp; sessions. Updating your password
             keeps your other devices signed in; &ldquo;Sign out all&rdquo; invalidates every session
             across all devices, including the one you&apos;re using.
           </>
@@ -632,7 +631,7 @@ const TOPICS: Topic[] = [
         q: "Why does my email say Unverified?",
         a: (
           <>
-            The signup confirmation hasn&apos;t been completed. <Link href="/profile">My Profile</Link>{" "}
+            The signup confirmation hasn&apos;t been completed. <Link href="/profile">My profile</Link>{" "}
             shows the status and a resend button (rate-limited, so wait a little between attempts).
             Verify it to keep full access to the workspace.
           </>
@@ -759,10 +758,10 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
   }
 
   return (
-    <div className="page-wrap">
+    <div className="page-wrap ws-page help-page">
       <PageHeader
         title="Help"
-        description="Guides and answers for every part of the workspace - searchable in one place."
+        description="Answers to common questions, from first setup to delivery problems."
       />
 
       <section className="help-search-shell" aria-label="Search help articles">
@@ -889,10 +888,9 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
           <section className="panel help-contact-card" aria-label="Contact support">
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">Still stuck?</p>
-                <h2>Talk to a human</h2>
+                <h2>Still stuck? Email us</h2>
               </div>
-              <LifeBuoy size={21} />
+              <LifeBuoy size={21} aria-hidden />
             </div>
             <p className="muted">
               Email us with your workspace name, the automation name, and roughly when it happened.
@@ -910,10 +908,10 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
           </section>
 
           <nav className="profile-footer-links" aria-label="Policies">
-            <Link href="/privacy">Privacy policy <ExternalLink size={12} /></Link>
-            <Link href="/terms">Terms of service <ExternalLink size={12} /></Link>
-            <Link href="/data-deletion">Data deletion <ExternalLink size={12} /></Link>
-            <Link href="/support">Public support page <ExternalLink size={12} /></Link>
+            <Link href="/privacy">Privacy policy</Link>
+            <Link href="/terms">Terms of service</Link>
+            <Link href="/data-deletion">Data deletion</Link>
+            <Link href="/support">Public support page</Link>
           </nav>
         </div>
       </div>

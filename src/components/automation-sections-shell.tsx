@@ -42,11 +42,16 @@ function sectionFor(pathname: string): Section {
  * render its own header, and the shared loading state showed the Automations
  * header first, so every switch flashed the wrong title and bounced the pill.
  */
-export function AutomationSectionsShell({ children }: { children: ReactNode }) {
-  const section = sectionFor(usePathname());
+export function AutomationSectionsShell({ children, section: sectionOverride }: {
+  children: ReactNode;
+  /** Pins the section when the route path can't say it (app/dev-preview). */
+  section?: Section;
+}) {
+  const routeSection = sectionFor(usePathname());
+  const section = sectionOverride ?? routeSection;
   const { title, description, helpTopic } = SECTIONS[section];
   return (
-    <div className="page-wrap automation-sections">
+    <div className="page-wrap ws-page automation-sections">
       <PageHeader
         title={title}
         description={description}

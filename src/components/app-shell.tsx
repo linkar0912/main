@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { friendlyFirstName } from "@/src/lib/display-name";
 import { LinkarMark } from "@/src/components/linkar-mark";
 import { getWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT } from "@/src/lib/client/workspace-data";
 import { SegmentedIndicator } from "./segmented-indicator";
@@ -71,26 +72,27 @@ function displayRole(role: AccountIdentity["role"] | ""): string {
   return role.charAt(0) + role.slice(1).toLowerCase();
 }
 
+/** "Tejastelkar" for tejastelkar9@..., "Your account" when no name survives. */
 function displayNameFromEmail(email: string): string {
-  const handle = email.split("@")[0] ?? "";
-  const words = handle.replace(/[^a-zA-Z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "Your account";
-  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+  return friendlyFirstName(email) ?? "Your account";
 }
 
+/** One letter from the friendly name; a person glyph stands in otherwise. */
 function initialsOf(email: string): string {
-  const handle = email.split("@")[0] ?? "";
-  const cleaned = handle.replace(/[^a-zA-Z0-9]/g, " ").trim();
-  if (!cleaned) return "OW";
-  if (cleaned.includes(" ")) {
-    return cleaned.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
-  }
-  return cleaned.slice(0, 2).toUpperCase();
+  return friendlyFirstName(email)?.charAt(0).toUpperCase() ?? "";
 }
 
+
+/** app/dev-preview/workspace mirrors the real routes under a prefix; strip it so
+ * the preview highlights the same nav item the real page would. */
+const DEV_PREVIEW_PREFIX = "/dev-preview/workspace";
+
+function routePathname(pathname: string): string {
+  return pathname.startsWith(DEV_PREVIEW_PREFIX) ? pathname.slice(DEV_PREVIEW_PREFIX.length) || "/" : pathname;
+}
 
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
-  const pathname = usePathname();
+  const pathname = routePathname(usePathname());
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<AccountIdentity["role"] | "">("");
@@ -290,7 +292,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
         {platformOwner ? (
           <nav className="sidebar-nav" aria-label="Platform administration">
-            <Link className="sidebar-link admin-entry-link" href="/admin" onClick={closeDrawer}>
+            <Link className="sidebar-link" href="/admin" onClick={closeDrawer}>
               <ShieldCheck size={17} strokeWidth={1.9} /> Admin
             </Link>
           </nav>
@@ -342,7 +344,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <Link
                   className="account-row-main"
                   href="/profile"
-                  aria-label="My Profile"
+                  aria-label="My profile"
                   aria-current={isActive(pathname, "/profile") ? "page" : undefined}
                   onClick={closeDrawer}
                 >
@@ -350,7 +352,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                     // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
                     <img className="avatar is-photo" src={igAvatarUrl} alt="Instagram profile picture" />
                   ) : (
-                    <span className="avatar" aria-hidden>{initialsOf(email)}</span>
+                    <span className="avatar" aria-hidden>{initialsOf(email) || <UserRound size={16} strokeWidth={2} />}</span>
                   )}
                   <span className="account-row-id">
                     <strong title={email}>{displayNameFromEmail(email)}</strong>

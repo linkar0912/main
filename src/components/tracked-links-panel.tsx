@@ -3,6 +3,7 @@
 import { Check, Copy, Link as LinkIcon, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { InlineContentSkeleton } from "./skeleton";
+import { LocalRelativeTime, relativeTimeLabel } from "./workspace-primitives";
 
 type Link = {
   id: string;
@@ -26,9 +27,24 @@ type Stats = {
   topCountries: { country: string; count: number }[];
 };
 
-function formatDate(value: string | undefined): string {
-  if (!value) return "Not available";
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function formatWhen(value: string | undefined): string {
+  if (!value) return "No clicks yet";
+  return relativeTimeLabel(value);
+}
+
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+/** "Campaign diwali_2026, from instagram (dm)" - the UTM tags in words. */
+function tagLine(link: Link): string {
+  const parts = [
+    link.utmCampaign ? `campaign ${link.utmCampaign}` : "",
+    link.utmSource ? `from ${link.utmSource}${link.utmMedium ? ` (${link.utmMedium})` : ""}` : "",
+    link.expiresAt ? `expires ${lowerFirst(relativeTimeLabel(link.expiresAt))}` : "",
+  ].filter(Boolean);
+  const text = parts.join(", ");
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "No tracking tags";
 }
 
 const EMPTY_FORM = {
@@ -155,7 +171,7 @@ export function TrackedLinksPanel() {
           onClick={() => setShowForm((value) => !value)}
           aria-expanded={showForm}
         >
-          {showForm ? "Cancel" : (<><Plus size={14} /> New link</>)}
+          {showForm ? "Cancel" : (<><Plus size={14} aria-hidden /> New link</>)}
         </button>
       </div>
       <div className="surface-body">
@@ -186,7 +202,7 @@ export function TrackedLinksPanel() {
           </div>
           <div className="field-grid">
             <label className="field">
-              <span>utm_source</span>
+              <span>Source tag</span>
               <input
                 value={form.utmSource}
                 onChange={(event) => setForm((current) => ({ ...current, utmSource: event.target.value }))}
@@ -194,7 +210,7 @@ export function TrackedLinksPanel() {
               />
             </label>
             <label className="field">
-              <span>utm_medium</span>
+              <span>Medium tag</span>
               <input
                 value={form.utmMedium}
                 onChange={(event) => setForm((current) => ({ ...current, utmMedium: event.target.value }))}
@@ -202,7 +218,7 @@ export function TrackedLinksPanel() {
               />
             </label>
             <label className="field">
-              <span>utm_campaign</span>
+              <span>Campaign tag</span>
               <input
                 value={form.utmCampaign}
                 onChange={(event) => setForm((current) => ({ ...current, utmCampaign: event.target.value }))}
@@ -220,7 +236,7 @@ export function TrackedLinksPanel() {
               />
             </label>
             <label className="field">
-              <span>Conversion callback (optional)</span>
+              <span>Conversion URL (optional)</span>
               <input
                 value={form.conversionUrl}
                 onChange={(event) => setForm((current) => ({ ...current, conversionUrl: event.target.value }))}
@@ -247,27 +263,22 @@ export function TrackedLinksPanel() {
         <InlineContentSkeleton label="Loading tracked links" rows={3} />
       ) : links.length === 0 ? (
         <p className="all-clear is-neutral">
-          <LinkIcon size={15} /> No tracked links yet. Add one to start counting clicks and tagging UTMs.
+          <LinkIcon size={15} aria-hidden /> No tracked links yet. Create one to count clicks from your DMs.
         </p>
       ) : (
         <ul className="tracked-link-list">
           {links.map((link) => {
             const statsEntry = stats[link.slug];
             return (
-              <li key={link.id}>
-                <div className="activity-row">
-                  <span><strong>/r/{link.slug}</strong> &middot; {link.destination}</span>
-                  <span className="muted">{formatDate(link.createdAt)}</span>
+              <li key={link.id} className="tracked-link-row">
+                <div className="tracked-link-copy">
+                  <strong>/r/{link.slug}</strong>
+                  <span className="tracked-link-destination" title={link.destination}>{link.destination}</span>
+                  <small>{tagLine(link)}. Created <LocalRelativeTime value={link.createdAt} /></small>
                 </div>
-                <p className="muted activity-summary">
-                  {link.utmCampaign ? `Campaign: ${link.utmCampaign} · ` : ""}
-                  {link.utmSource ? `Source: ${link.utmSource} · ` : ""}
-                  {link.utmMedium ? `Medium: ${link.utmMedium}` : ""}
-                  {link.expiresAt ? ` · Expires ${formatDate(link.expiresAt)}` : ""}
-                </p>
-                <div className="button-row">
+                <div className="tracked-link-actions">
                   <button
-                    className="button button-secondary button-small"
+                    className="button button-ghost button-small"
                     type="button"
                     onClick={() => {
                       // Confirm the copy; clipboard access can be blocked, so
@@ -280,10 +291,10 @@ export function TrackedLinksPanel() {
                         .catch(() => setError(`Couldn't copy - the link is ${window.location.origin}/r/${link.slug}`));
                     }}
                   >
-                    {copiedSlug === link.slug ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy URL</>}
+                    {copiedSlug === link.slug ? <><Check size={14} aria-hidden /> Copied</> : <><Copy size={14} aria-hidden /> Copy URL</>}
                   </button>
                   <button
-                    className="button button-secondary button-small"
+                    className="button button-ghost button-small"
                     type="button"
                     onClick={() => void loadStats(link.slug)}
                     aria-expanded={statsFor === link.slug}
@@ -291,19 +302,19 @@ export function TrackedLinksPanel() {
                     {statsFor === link.slug ? "Refresh stats" : "View stats"}
                   </button>
                   <button
-                    className="button button-secondary button-small"
+                    className="button button-ghost button-small"
                     type="button"
                     onClick={() => void removeLink(link.id, link.slug)}
                     aria-label={`Delete /r/${link.slug}`}
                   >
-                    <Trash2 size={14} /> Delete
+                    <Trash2 size={14} aria-hidden /> Delete
                   </button>
                 </div>
                 {statsFor === link.slug && statsEntry && (
                   <div className="tracked-link-stats">
-                    <span className="status-badge">{statsEntry.totalClicks} clicks</span>
-                    <span className="status-badge">{statsEntry.uniqueClicks} unique</span>
-                    <span className="muted">Last click {formatDate(statsEntry.lastClickedAt)}</span>
+                    <span className="tracked-link-stat"><strong>{statsEntry.totalClicks} clicks</strong></span>
+                    <span className="tracked-link-stat"><strong>{statsEntry.uniqueClicks} unique</strong></span>
+                    <span className="muted">{statsEntry.lastClickedAt ? `Last click ${lowerFirst(formatWhen(statsEntry.lastClickedAt))}` : formatWhen(undefined)}</span>
                     {statsEntry.topCountries.length > 0 && (
                       <p className="muted activity-summary">
                         Top countries: {statsEntry.topCountries.map((entry) => `${entry.country} (${entry.count})`).join(", ")}

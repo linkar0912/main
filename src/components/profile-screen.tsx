@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  ArrowUpRight,
   BadgeCheck,
   ChevronRight,
   CircleHelp,
@@ -13,6 +12,7 @@ import {
   Link2,
   LogOut,
   ShieldCheck,
+  UserRound,
   Users,
 } from "lucide-react";
 import { useAccountIdentity } from "./app-shell";
@@ -22,6 +22,7 @@ import { PageHeader } from "./page-header";
 import { SocialAvatar } from "./social-avatar";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { formatDate } from "@/src/lib/format-date";
+import { friendlyFirstName } from "@/src/lib/display-name";
 import {
   getAccountProfile,
   getFacebookPages,
@@ -54,24 +55,14 @@ type ProfileScreenProps = {
   role?: MemberRole;
 };
 
+/** One letter from the friendly name; a person glyph stands in otherwise. */
 function initialsOf(email: string): string {
-  const handle = email.split("@")[0] ?? "";
-  const cleaned = handle.replace(/[^a-zA-Z0-9]/g, " ").trim();
-  if (!cleaned) return "OW";
-  if (cleaned.includes(" ")) {
-    return cleaned.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
-  }
-  return cleaned.slice(0, 2).toUpperCase();
+  return friendlyFirstName(email)?.charAt(0).toUpperCase() ?? "";
 }
 
+/** "Tejastelkar" for tejastelkar9@..., never the raw handle with its digits. */
 function displayNameFromEmail(email: string): string {
-  const handle = email.split("@")[0] ?? "";
-  const cleaned = handle.replace(/[^a-zA-Z0-9]+/g, " ").trim();
-  if (!cleaned) return "Workspace owner";
-  return cleaned
-    .split(/\s+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+  return friendlyFirstName(email) ?? "Your account";
 }
 
 function roleLabel(role: MemberRole): string {
@@ -184,10 +175,10 @@ function ProfileBody({
   }
 
   return (
-    <div className="page-wrap profile-wrap">
+    <div className="page-wrap profile-wrap ws-page">
       <PageHeader
-        title="My Profile"
-        description="Your identity, security, and connected Instagram and Facebook channels in one place."
+        title="My profile"
+        description="Your account details, password and connected channels."
       />
 
       {savedMessage && (
@@ -208,7 +199,7 @@ function ProfileBody({
             // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
             <img className="avatar profile-avatar is-photo" src={avatar} alt="" />
           ) : email ? (
-            <span className="avatar profile-avatar" aria-hidden>{initialsOf(email)}</span>
+            <span className="avatar profile-avatar" aria-hidden>{initialsOf(email) || <UserRound size={22} strokeWidth={1.8} />}</span>
           ) : (
             <Skeleton className="profile-avatar" style={{ borderRadius: "50%" }} />
           )}
@@ -284,7 +275,7 @@ function ProfileBody({
               <div className="settings-group-foot">
                 <span />
                 <button className="button button-primary button-small" type="submit">
-                  <KeyRound size={14} /> Update password
+                  Update password
                 </button>
               </div>
             </form>
@@ -305,7 +296,7 @@ function ProfileBody({
                 <small>Ends every session on all your devices, including this one.</small>
               </span>
               <button className="button button-secondary button-small" type="button" aria-expanded={confirmingSignOut} onClick={() => setConfirmingSignOut(true)}>
-                <LogOut size={14} /> Sign out all
+                <LogOut size={14} aria-hidden /> Sign out all
               </button>
               {confirmingSignOut ? (
                 <InlineConfirm
@@ -337,7 +328,7 @@ function ProfileBody({
                     <strong>@{connection.username}</strong>
                     <small className="connection-status" role="status" aria-label={`Instagram ${connection.status.toLowerCase()}`}>
                       <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
-                      Instagram · {channelStatusLabel(connection.status)} · {formatDate(connection.connectedAt)}
+                      Instagram, {channelStatusLabel(connection.status).toLowerCase()} since {formatDate(connection.connectedAt)}
                     </small>
                   </span>
                 </li>
@@ -353,7 +344,7 @@ function ProfileBody({
                     <strong>{facebookPage.pageName}</strong>
                     <small className="connection-status" role="status" aria-label={`Facebook ${facebookPage.status.toLowerCase()}`}>
                       <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
-                      Facebook Page · {channelStatusLabel(facebookPage.status)}
+                      Facebook Page, {channelStatusLabel(facebookPage.status).toLowerCase()}
                     </small>
                   </span>
                 </li>
@@ -366,7 +357,7 @@ function ProfileBody({
             <div className="settings-group-foot">
               <span />
               <Link className={`button ${hasChannel ? "button-secondary" : "button-primary"} button-small`} href="/settings">
-                {hasChannel ? "Manage channels" : "Connect a channel"} <ArrowUpRight size={14} />
+                {hasChannel ? "Manage channels" : "Connect a channel"}
               </Link>
             </div>
           </section>

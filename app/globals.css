@@ -6609,3 +6609,503 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .admin-probes { grid-template-columns: minmax(0, 1fr); }
   .admin-stat > strong { font-size: 1.4rem; }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   Workspace screens - "Calm control"
+   Screen-level layer for Home, Automations, Inbox, Contacts, Insights,
+   Settings, Profile, Help and Quick Automation. Shared primitives (buttons,
+   badges, nav, form controls) stay in their own rules above; this block only
+   sets each screen's rhythm, type and copy-bearing elements:
+   8px grid, 32px between sections, 16px between siblings, 20-24px inside
+   cards, 12px card radius, Manrope for everything below the page title,
+   sentence case, tabular numbers. It sits last so it wins on source order.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.page-wrap.ws-page {
+  --ws-section-gap: 32px;
+  --ws-gap: 16px;
+  --surface-radius: 12px;
+  --surface-pad: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ws-section-gap);
+  padding: 40px 40px 72px;
+}
+/* The flex gap owns vertical rhythm; legacy per-block margins would double it. */
+/* Scoped through the shell so it outranks `.page-wrap > section.kpi-grid`. */
+.app-content-slot .page-wrap.ws-page > * { margin: 0; min-width: 0; }
+.page-wrap.ws-page > .page-header.has-tabs { padding-bottom: 0; }
+
+/* Page title stays Bricolage; everything under it is Manrope. */
+.ws-page h1 { font-size: clamp(1.75rem, 2.4vw, 2.1rem); letter-spacing: -.035em; line-height: 1.1; }
+.ws-page .page-header .page-lede { color: var(--muted); font-size: .9375rem; line-height: 1.5; margin-top: 8px; }
+.ws-page :is(h2, h3) { font-family: var(--font-sans, "Manrope"), sans-serif; letter-spacing: -.01em; }
+.ws-page .surface-head h2,
+.ws-page .surface > .panel-heading h2 { font-size: 1.125rem; font-weight: 700; line-height: 1.35; }
+.ws-page .surface-head p { font-size: .875rem; line-height: 1.5; margin-top: 4px; }
+.ws-page .surface-head { margin-bottom: 20px; }
+.ws-page .surface.is-flush > .surface-head { padding: 20px var(--surface-pad); }
+.ws-page .text-link { font-size: .875rem; font-weight: 650; }
+.ws-page :is(.empty-state p, .empty-state.is-inline p) { font-size: .875rem; line-height: 1.5; }
+.ws-page .empty-state h3 { font-size: 1rem; }
+.ws-page :is(.muted, small) { font-variant-numeric: tabular-nums; }
+
+/* ── Status: dot + plain word, the same everywhere ─────────────────────── */
+.ws-status {
+  align-items: center;
+  color: var(--slate);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: var(--font-sans, "Manrope"), sans-serif;
+  font-size: .8125rem;
+  font-weight: 650;
+  gap: 6px;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: none;
+  white-space: nowrap;
+}
+.ws-status-dot { background: var(--muted); border-radius: 50%; flex: 0 0 8px; height: 8px; width: 8px; }
+.ws-status[data-tone="success"] .ws-status-dot { background: var(--leaf); }
+.ws-status[data-tone="warning"] .ws-status-dot { background: var(--honey); }
+.ws-status[data-tone="danger"] .ws-status-dot { background: var(--danger); }
+[data-theme="dark"] .ws-status[data-tone="warning"] .ws-status-dot { background: var(--warning-ink); }
+
+/* ── ID chip: demoted, copyable ────────────────────────────────────────── */
+.ws-id-chip { align-items: center; color: var(--muted); display: inline-flex; gap: 2px; max-width: 100%; }
+.ws-id-chip code { font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace; font-size: .75rem; white-space: nowrap; }
+.ws-id-chip button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  width: 24px;
+}
+.ws-id-chip button:hover { color: var(--ink); }
+.ws-id-chip button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Home ──────────────────────────────────────────────────────────────── */
+.dashboard-page .home-greeting h1 { margin: 0; }
+
+/* Start here: three template cards, separated from everything around them. */
+.dashboard-page .quickstart { display: grid; gap: var(--ws-gap); }
+.dashboard-page .quickstart-head { align-items: flex-end; display: flex; gap: var(--ws-gap); justify-content: space-between; margin: 0; }
+.dashboard-page .quickstart-head h2 { font-size: 1.125rem; font-weight: 700; margin: 0; }
+.dashboard-page .quickstart-head p { color: var(--muted); font-size: .875rem; margin: 4px 0 0; }
+.dashboard-page .quickstart-head .text-link { flex: 0 0 auto; }
+.dashboard-page .quickstart-grid { gap: var(--ws-gap); }
+.dashboard-page .quickstart-card {
+  border-radius: 12px;
+  box-shadow: none;
+  gap: 24px;
+  min-height: 128px;
+  padding: 20px;
+  transition: border-color var(--speed);
+}
+.dashboard-page .quickstart-card:hover { border-color: var(--ink); box-shadow: none; transform: none; }
+.dashboard-page .quickstart-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dashboard-page .quickstart-card strong { font-size: 1rem; font-weight: 700; line-height: 1.35; }
+.dashboard-page .quickstart-card-meta { gap: 12px; }
+.dashboard-page .quickstart-card-meta span { font-size: .8125rem; }
+/* "Popular" is a quiet label; volt belongs to the plan sticker alone. */
+.dashboard-page .quickstart-card-meta .quickstart-badge {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--slate);
+  font-size: .8125rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  padding: 1px 10px;
+  text-transform: none;
+}
+
+/* First-steps checklist. */
+.dashboard-page .setup-panel { padding: 24px; }
+.dashboard-page .setup-head { align-items: flex-start; margin-bottom: 8px; }
+.dashboard-page .setup-head h2 { font-size: 1.125rem; font-weight: 700; }
+.dashboard-page .setup-head p { font-size: .875rem; }
+.dashboard-page .setup-count { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; font-weight: 650; padding-top: 4px; }
+.dashboard-page .setup-row { border-radius: 10px; gap: 16px; padding: 12px 0; }
+.dashboard-page .setup-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dashboard-page .setup-row:not(:last-child)::before { left: 15px; width: 2px; }
+.dashboard-page .setup-node { border-width: 1.5px; flex-basis: 32px; font-size: .875rem; font-variant-numeric: tabular-nums; font-weight: 700; height: 32px; }
+.dashboard-page .setup-copy strong { font-size: .9375rem; font-weight: 700; }
+.dashboard-page .setup-copy small { font-size: .8125rem; line-height: 1.45; }
+.dashboard-page .setup-cta { color: var(--ink); font-size: .875rem; font-weight: 700; }
+.dashboard-page .setup-row.is-next .setup-cta { color: var(--accent-text); }
+.dashboard-page .setup-done-tag { font-size: .8125rem; }
+
+/* Stat strip: Manrope numbers, tabular, no display face. */
+.ws-page .kpi-grid { border-radius: 12px; }
+.ws-page .kpi-tile.stat-tile > .stat-block { gap: 8px; padding: 20px; }
+.ws-page .stat-tile .stat-label { color: var(--slate); font-size: .875rem; font-weight: 650; }
+.ws-page .stat-tile .stat-value-row strong {
+  font-family: var(--font-sans, "Manrope"), sans-serif;
+  font-size: 1.875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  letter-spacing: -.02em;
+}
+.ws-page .stat-tile .stat-note { font-size: .8125rem; }
+.ws-page .stat-delta { font-size: .8125rem; }
+
+/* Reply volume: magenta is the one primary series; reach stays a quiet grey. */
+.ws-page .chart-panel .surface-body { min-height: 0; }
+.ws-page .reply-volume-chart > .insights-legend span { font-size: .8125rem; }
+.ws-page .bar-participants,
+.ws-page .swatch-participants { background: color-mix(in srgb, var(--slate) 38%, var(--panel)); }
+.ws-page .chart-column small { font-size: .75rem; font-variant-numeric: tabular-nums; }
+.ws-page .surface .chart-plot { background: linear-gradient(to top, var(--line) 1px, transparent 1px) 0 100% / 100% 100% no-repeat, transparent; }
+.chart-state {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: center;
+  min-height: 220px;
+  padding: 24px 16px;
+  text-align: center;
+}
+.chart-state p { color: var(--muted); font-size: .9375rem; line-height: 1.55; margin: 0; max-width: 46ch; }
+.chart-state-icon {
+  align-items: center;
+  background: var(--surface-soft);
+  border-radius: 12px;
+  color: var(--muted);
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+/* Loading keeps the plot's shape but stays faint, so it reads as "loading",
+   never as a broken chart. */
+.ws-page .dashboard-chart-skeleton { min-height: 220px; opacity: .6; }
+
+/* Automations + failures side by side. */
+.dashboard-page .dashboard-columns { gap: var(--ws-gap); }
+.dashboard-page .automations-panel .automation-row { align-items: center; gap: 16px; min-height: 64px; padding: 14px var(--surface-pad); }
+.dashboard-page .automation-row .automation-title { align-items: center; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.dashboard-page .automation-row .automation-title strong { font-size: .9375rem; font-weight: 700; }
+.dashboard-page .automation-row .automation-copy p { color: var(--muted); font-size: .8125rem; margin-top: 2px; }
+.dashboard-page .automation-row .automation-icon { background: var(--surface-soft); border-radius: 10px; color: var(--slate); }
+
+.ws-page .failure-list { gap: 0; }
+.ws-page .failure-row {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  gap: 12px;
+  padding: 14px 0;
+}
+.ws-page .failure-row:first-child { padding-top: 0; }
+.ws-page .failure-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.ws-page .failure-row .activity-summary { font-size: .875rem; line-height: 1.5; }
+.ws-page .failure-row-detail,
+.ws-page .failure-row-time { font-size: .8125rem; }
+.ws-page .failure-row-meta { gap: 4px; }
+/* The kind of message is a label, not an alarm; the icon already says "failed". */
+.ws-page .failure-badge {
+  background: transparent;
+  border: 0;
+  color: var(--slate);
+  font-size: .8125rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  padding: 0;
+}
+.ws-page .failure-state { font-size: .75rem; letter-spacing: 0; text-transform: none; }
+.ws-page .all-clear { font-size: .875rem; }
+.ws-page .list-toggle { font-size: .875rem; margin-top: 16px; padding-top: 14px; }
+
+/* Tracked links: one divided list, actions docked right. */
+.ws-page .tracked-links-stack .surface-head { margin-bottom: 20px; }
+.tracked-link-list { display: grid; list-style: none; margin: 0; padding: 0; }
+.tracked-link-row {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px 24px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 16px 0;
+}
+.tracked-link-row:first-child { border-top: 0; padding-top: 0; }
+.tracked-link-row:last-child { padding-bottom: 0; }
+.tracked-link-copy { display: grid; gap: 2px; min-width: 0; }
+.tracked-link-copy strong { font-size: .9375rem; font-weight: 700; }
+.tracked-link-destination { color: var(--slate); font-size: .875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tracked-link-copy small { color: var(--muted); font-size: .8125rem; line-height: 1.45; }
+.tracked-link-actions { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.tracked-link-stats {
+  align-items: center;
+  background: var(--surface-soft);
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: .875rem;
+  gap: 8px 16px;
+  grid-column: 1 / -1;
+  padding: 12px 16px;
+}
+.tracked-link-stats .activity-summary { flex-basis: 100%; margin: 0; }
+.tracked-link-stat strong { font-variant-numeric: tabular-nums; }
+.tracked-link-form { border-bottom: 1px solid var(--line); display: grid; gap: 16px; margin-bottom: 20px; padding-bottom: 24px; }
+
+
+/* ── Shared screen chrome ──────────────────────────────────────────────── */
+/* "Need help?" sits beside the primary action as a quiet text link. */
+.ws-page .context-help-link {
+  font-family: var(--font-sans, "Manrope"), sans-serif;
+  font-size: .875rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Column headers and small labels: sentence case, readable size, no tracking. */
+.ws-page :is(.automation-columns, .list-columns, .contacts-table-head, .activity-table-head, .facebook-activity-table-head, .insights-table th, .settings-nav-label, .help-topic-group-label, .profile-identity-facts dt, .kv-label, .billing-invite-copy small, .settings-summary-intro > p, .media-type-label, .diagnostic dt, .template-example small, .metric-top, .funnel-cell-label) {
+  font-family: var(--font-sans, "Manrope"), sans-serif;
+  font-size: .8125rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ws-page :is(.automation-account, .connection-copy small, .connection-state, .media-id-cell, .kv-value.mono) {
+  font-family: var(--font-sans, "Manrope"), sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Retry state reads as a status word with a dot, like every other status. */
+.ws-page .failure-state {
+  align-items: center;
+  background: transparent;
+  display: inline-flex;
+  font-size: .8125rem;
+  font-weight: 650;
+  gap: 6px;
+  padding: 0;
+}
+.ws-page .failure-state::before { background: currentColor; border-radius: 50%; content: ""; height: 8px; width: 8px; }
+.ws-page .failure-state[data-state="FAILED"] { background: transparent; color: var(--warning-ink); }
+.ws-page .failure-state[data-state="UNKNOWN"] { background: transparent; color: var(--slate); }
+.ws-page .surface-head h2 .surface-head-icon { flex: 0 0 auto; }
+
+/* ── Automations ───────────────────────────────────────────────────────── */
+.automation-sections .page-header.has-tabs { border-bottom: 0; }
+.automation-sections .page-switch { margin-top: 24px; }
+.automation-sections .page-stack { gap: var(--ws-gap); }
+.automation-sections .automations-summary .settings-overview-cell small { font-size: .8125rem; letter-spacing: 0; text-transform: none; }
+.automation-sections .automations-summary .settings-overview-cell strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.automation-sections .automation-columns { color: var(--muted); }
+.automation-sections .automation-row { min-height: 72px; }
+.automation-sections .automation-name strong { font-size: .9375rem; }
+.automation-sections .automation-meta { font-size: .8125rem; }
+.automation-sections .automation-account { font-size: .8125rem; }
+.automation-sections .list-toolbar { padding: 16px var(--surface-pad); }
+.automation-sections .composer-subhead { font-size: 1rem; font-weight: 700; margin: 24px 0 8px; }
+.automation-sections .automation-row .ws-status { font-size: .8125rem; }
+.automation-sections .split-layout { gap: var(--ws-gap); }
+
+
+/* ── Sub-navigation (Settings, Help): soft neutral fill, accent icon ───── */
+.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active,
+.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow: none;
+  color: var(--ink);
+  font-weight: 700;
+}
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active,
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active:hover {
+  background: color-mix(in srgb, #ffffff 8%, transparent);
+  color: var(--ink);
+}
+.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--accent-text); }
+.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count) { color: var(--muted); opacity: 1; }
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--accent-text); }
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count) { color: var(--muted); }
+.ws-page :is(.settings-nav-link, .section-nav-link) { font-size: .875rem; min-height: 40px; }
+.ws-page :is(.settings-nav-count, .section-nav-count) { font-size: .8125rem; font-variant-numeric: tabular-nums; }
+
+/* ── Settings ──────────────────────────────────────────────────────────── */
+.settings-wrap.ws-page .settings-section-head h2 { font-size: 1.125rem; font-weight: 700; }
+.settings-wrap.ws-page .settings-section-head p { font-size: .875rem; }
+.settings-wrap.ws-page .settings-overview-cell small { font-size: .8125rem; letter-spacing: 0; text-transform: none; }
+.settings-wrap.ws-page .settings-overview-cell strong { font-variant-numeric: tabular-nums; }
+.settings-wrap.ws-page .settings-group-copy h3 { font-size: 1rem; font-weight: 700; }
+.settings-wrap.ws-page .settings-group-copy p,
+.settings-wrap.ws-page .settings-row-copy small,
+.settings-wrap.ws-page .connection-copy small { font-size: .8125rem; }
+/* "Connected" is a status word with a dot, not a filled pill. */
+.ws-page .connection-title .connection-state {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  font-size: .8125rem;
+  font-weight: 650;
+  padding: 0;
+}
+.ws-page .connection-state-dot { box-shadow: none !important; }
+.ws-page .health-fields li { font-size: .8125rem; }
+.ws-page .role-tag { font-size: .8125rem; letter-spacing: 0; text-transform: none; }
+
+/* ── Inbox ─────────────────────────────────────────────────────────────── */
+.ibx-workspace { gap: 24px; }
+.ibx-tag { font-size: .75rem; padding: 4px 8px; }
+.ibx-row-top time { font-size: .8125rem; }
+
+/* ── Profile ───────────────────────────────────────────────────────────── */
+.profile-wrap.ws-page .profile-columns { gap: var(--ws-gap); }
+.profile-wrap.ws-page .profile-column { gap: var(--ws-gap); }
+.profile-wrap.ws-page .profile-facts dt { font-size: .8125rem; letter-spacing: 0; text-transform: none; }
+.profile-wrap.ws-page .profile-facts dd { font-variant-numeric: tabular-nums; }
+.profile-wrap.ws-page .profile-identity-name h2 { font-size: 1.25rem; font-weight: 750; }
+
+/* ── Help ──────────────────────────────────────────────────────────────── */
+.help-page.ws-page .help-search-shell { margin: 0; }
+.help-page.ws-page .section-content { gap: var(--ws-gap); }
+.help-page.ws-page .help-content-head h2 { font-size: 1.125rem; font-weight: 700; }
+.help-page.ws-page .help-topic-group-count { font-size: .8125rem; letter-spacing: 0; text-transform: none; }
+.help-page.ws-page .faq-question { font-size: .9375rem; }
+.help-page.ws-page .help-contact-card { padding: 24px; }
+
+
+/* ── Shell account footer: same calm active state as the nav ───────────── */
+.sidebar .account-row.is-active { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+[data-theme="dark"] .sidebar .account-row.is-active { background: color-mix(in srgb, #ffffff 8%, transparent); }
+.sidebar .account-row.is-active .account-row-id small,
+.sidebar .account-row.is-active .account-row-id small > span:first-child { color: var(--muted); }
+.sidebar .account-row.is-active .account-row-more { color: var(--muted); }
+.sidebar .account-row.is-active .account-row-main:hover strong { color: var(--accent-text); }
+[data-theme="dark"] .sidebar .account-row.is-active :is(strong, .account-row-more) { color: var(--ink); }
+[data-theme="dark"] .sidebar .account-row.is-active :is(small, small > span) { color: var(--muted); }
+.sidebar .account-row.is-active .account-row-name .plan-tag,
+.sidebar .account-row.is-active .account-row-id small .plan-tag { background: var(--volt); color: var(--on-volt); }
+.sidebar .account-row-id small { font-size: .8125rem; }
+.sidebar .account-row-id small > span:first-child { font-weight: 650; }
+
+
+/* ── Billing (inside Settings): volt is the plan sticker only ─────────── */
+.ws-page .billing-heading h2 { font-family: var(--font-sans, "Manrope"), sans-serif; font-size: 1.125rem; font-weight: 700; letter-spacing: -.01em; }
+.ws-page .billing-current-plan > span,
+.ws-page .billing-invite-copy > span { background: var(--surface-soft); box-shadow: none; color: var(--ink); }
+.ws-page .billing-current small { font-size: .8125rem; font-weight: 650; }
+.ws-page .billing-current strong,
+.ws-page .billing-plan-top h3 { font-family: var(--font-sans, "Manrope"), sans-serif; letter-spacing: -.01em; }
+.ws-page .billing-current strong { font-variant-numeric: tabular-nums; }
+.ws-page .billing-usage-copy strong span,
+.ws-page .billing-current > p { font-size: .8125rem; }
+.ws-page .billing-invite { background: var(--panel); border-color: var(--line); border-radius: 12px; box-shadow: none; }
+.ws-page .billing-invite::after { display: none; }
+.ws-page .billing-invite p { font-size: .875rem; }
+.ws-page .billing-invite-submit,
+.ws-page .billing-invite-submit:hover { background: var(--ink); box-shadow: none; color: var(--panel); }
+.ws-page .billing-invite-submit:disabled { background: var(--surface-sunk); color: var(--muted); }
+.ws-page .billing-plan { border-color: var(--line); border-radius: 12px; }
+.ws-page .billing-plan.is-current { border-color: var(--ink); box-shadow: none; }
+.ws-page .billing-plan.is-featured:not(.is-current) { box-shadow: none; }
+.ws-page .billing-plan-current,
+.ws-page .billing-plan-best { font-size: .8125rem; font-weight: 650; padding: 2px 10px; }
+.ws-page .billing-plan-current { background: transparent; border: 1px solid var(--line-strong); color: var(--slate); }
+.ws-page .billing-price strong { font-family: var(--font-sans, "Manrope"), sans-serif; font-size: clamp(1.9rem, 2.6vw, 2.4rem); font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: -.03em; }
+.ws-page .billing-price span,
+.ws-page .billing-saving,
+.ws-page .billing-capacity span,
+.ws-page .billing-plan li,
+.ws-page .billing-subscription p,
+.ws-page .billing-period label { font-size: .8125rem; }
+.ws-page .billing-period > span { font-size: .75rem; }
+.ws-page .billing-capacity strong { font-variant-numeric: tabular-nums; }
+.ws-page .billing-subscription { padding: 20px 24px; }
+
+/* ── Quick automation ──────────────────────────────────────────────────── */
+.quick-automation-page.ws-page .quick-automation-stage.surface { margin: 0; }
+.quick-automation-page.ws-page .quick-stage-heading h2 { font-size: 1.125rem; font-weight: 700; }
+.quick-automation-page.ws-page .quick-stage-heading p { font-size: .875rem; }
+.quick-automation-page.ws-page .quick-reel-copy small { font-size: .8125rem; }
+.quick-automation-page.ws-page .quick-reel-card.is-selected { box-shadow: 0 0 0 2px var(--accent); }
+.quick-automation-page.ws-page .quick-reel-check { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.quick-automation-page.ws-page .quick-reel-type { font-size: .75rem; }
+.quick-automation-page.ws-page .quick-flow-card small { font-size: .8125rem; }
+
+
+/* ── Contacts ──────────────────────────────────────────────────────────── */
+.contacts-wrap.ws-page .contacts-table-head,
+.contacts-wrap.ws-page .contact-row { grid-template-columns: minmax(220px, 1.6fr) 130px minmax(140px, 1fr) 150px 72px; }
+.contacts-wrap.ws-page .contacts-table-head { background: transparent; color: var(--muted); }
+.contacts-wrap.ws-page .contact-row { min-height: 64px; }
+.contacts-wrap.ws-page .contact-primary strong { font-size: .9375rem; }
+.contacts-wrap.ws-page .contact-primary small { font-size: .8125rem; }
+.contact-stage { display: grid; gap: 2px; justify-items: start; min-width: 0; }
+.contacts-wrap.ws-page .contact-score,
+.contacts-wrap.ws-page .contact-owner,
+.contacts-wrap.ws-page .contact-last-seen { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contacts-wrap.ws-page .contacts-load-more { font-size: .875rem; }
+@media (min-width: 1200px) {
+  .contacts-wrap.ws-page.has-drawer .contacts-table-head,
+  .contacts-wrap.ws-page.has-drawer .contact-row { grid-template-columns: minmax(0, 1fr) 110px 120px 72px; }
+  .contacts-wrap.ws-page.has-drawer .contacts-table-head > :nth-child(3),
+  .contacts-wrap.ws-page.has-drawer .contact-row > .contact-owner { display: none; }
+  .contacts-wrap.ws-page.has-drawer .contacts-table-head > :nth-child(4) { display: block; }
+}
+.contacts-wrap.ws-page .contact-stage .status-pill { font-size: .875rem; font-weight: 650; }
+.contacts-wrap.ws-page .filter-chips { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+@media (max-width: 900px) {
+  .contacts-wrap.ws-page .contact-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .contacts-wrap.ws-page .contact-stage { align-items: center; display: flex; gap: 8px; }
+  .contacts-wrap.ws-page .contact-row > :not(.contact-primary):not(.button) { padding-left: 54px; }
+}
+.ws-page .contact-detail-timeline .activity-row time { font-size: .8125rem; }
+
+/* ── Insights ──────────────────────────────────────────────────────────── */
+.insights-page.ws-page .insights-workspace { gap: var(--ws-section-gap); }
+.insights-page.ws-page .insights-detail-grid { gap: var(--ws-gap); }
+.insights-page.ws-page .insights-table td { font-size: .875rem; font-variant-numeric: tabular-nums; }
+.insights-page.ws-page .insights-table th { background: transparent; color: var(--muted); }
+.insights-page.ws-page .media-cell { display: grid; gap: 2px; min-width: 0; }
+.insights-page.ws-page .insights-journey li { font-size: .9375rem; }
+.insights-page.ws-page .insights-journey strong { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1100px) {
+  .page-wrap.ws-page { padding: 32px 32px 64px; }
+}
+@media (max-width: 820px) {
+  .ws-page .billing-invite { align-items: stretch; flex-direction: column; }
+  .ws-page .billing-invite-form { flex: 1 1 auto; grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .ws-page .billing-invite-submit { min-height: 44px; width: 100%; }
+  .ws-page .billing-invite-form input { height: 44px; }
+  .page-wrap.ws-page { --ws-section-gap: 24px; --surface-pad: 16px; padding: 24px 16px 48px; }
+  .dashboard-page .quickstart-head { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .dashboard-page .automations-panel .automation-row { flex-wrap: nowrap; }
+  .tracked-link-row { grid-template-columns: minmax(0, 1fr); }
+  .tracked-link-actions { justify-content: flex-start; margin-left: -10px; }
+  .ws-page .failure-row { grid-template-columns: auto minmax(0, 1fr); }
+  .ws-page .failure-row-meta { grid-column: 2; justify-items: start; grid-auto-flow: column; justify-content: start; gap: 12px; }
+}
+@media (max-width: 560px) {
+  .automation-sections .page-switch { display: flex; width: 100%; }
+  .automation-sections .page-switch .segmented-option { flex: 1 1 0; justify-content: center; min-width: 0; padding-inline: 6px; }
+  .automation-sections .page-switch .segmented-option svg { display: none; }
+}
+@media (max-width: 560px) {
+  /* Labels wrap above the trend pill instead of truncating to "Replies se…". */
+  .ws-page .stat-tile .stat-head { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .ws-page .stat-tile .stat-label > span:last-child { white-space: normal; }
+  /* Fourteen columns leave ~20px each: label every fourth day, unwrapped. */
+  /* Zero width so a visible label never widens its own column. */
+  .ws-page .chart-column .chart-date-label { display: block; justify-self: start; overflow: visible; text-align: left; visibility: hidden; white-space: nowrap; width: 0; }
+  .ws-page .chart-column:nth-child(4n + 1) .chart-date-label { visibility: visible; }
+  .ws-page .surface-head-action .button { white-space: nowrap; }
+}
+@media (max-width: 560px) {
+  .ws-page .kpi-tile.stat-tile > .stat-block { padding: 16px; }
+  .ws-page .stat-tile .stat-value-row strong { font-size: 1.5rem; }
+  .ws-page .stat-tile .stat-label { font-size: .8125rem; }
+  .dashboard-page .setup-row { align-items: flex-start; }
+  .dashboard-page .setup-cta, .dashboard-page .setup-done-tag { padding-top: 6px; }
+}

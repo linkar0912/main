@@ -39,12 +39,17 @@ export function ReplyVolumeChart({
 
   return (
     <div className={`reply-volume-chart ${compact ? "is-compact" : ""}`}>
-      <div className="insights-legend" aria-label="Chart legend">
-        <span><i className="legend-swatch swatch-sent" /> Replies sent</span>
-        <span><i className="legend-swatch swatch-participants" /> People reached</span>
-      </div>
+      {/* A legend over an empty plot explains nothing, so it only appears with data. */}
+      {hasActivity ? (
+        <div className="insights-legend" aria-label="Chart legend">
+          <span><i className="legend-swatch swatch-sent" /> Replies sent</span>
+          <span><i className="legend-swatch swatch-participants" /> People reached</span>
+        </div>
+      ) : null}
       {!hasActivity ? (
-        <p className="chart-empty">No replies yet. Daily activity will appear here after an automation sends its first reply.</p>
+        <div className="chart-state">
+          <p>No replies yet in the last {days} days. Daily activity shows up here once an automation sends its first reply.</p>
+        </div>
       ) : (
         <div className="chart-plot">
           <div className="insights-chart" role="img" aria-label={`Daily replies sent and people reached for the last ${days} days`}>

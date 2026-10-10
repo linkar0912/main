@@ -26,7 +26,8 @@ const MAX_MESSAGE_LENGTH = 1_000;
 const GROUP_GAP_MS = 5 * 60_000;
 
 function displayName(contact: InboxContact): string {
-  return contact.username ? `@${contact.username.replace(/^@+/, "")}` : `Instagram contact ·${contact.id.slice(-5)}`;
+  // No raw ID suffix: the preview line and time already tell unnamed rows apart.
+  return contact.username ? `@${contact.username.replace(/^@+/, "")}` : "Instagram contact";
 }
 
 function startOfDay(date: Date): number {

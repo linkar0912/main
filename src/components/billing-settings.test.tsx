@@ -96,7 +96,7 @@ describe("BillingSettings", () => {
     window.addEventListener("linkar-workspace-change", workspaceChanged);
     await act(async () => { render(<BillingSettings />); });
 
-    expect((await screen.findByRole("button", { name: /current billing/i })).hasAttribute("disabled")).toBe(true);
+    expect((await screen.findByRole("button", { name: /your current plan/i })).hasAttribute("disabled")).toBe(true);
     fireEvent.click(screen.getByRole("radio", { name: /Annual/ }));
     const annualButton = screen.getByRole("button", { name: /choose creator/i });
     expect(annualButton.hasAttribute("disabled")).toBe(false);

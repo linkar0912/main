@@ -8,7 +8,7 @@ import { ListOrdered, Megaphone, Workflow } from "lucide-react";
 type SectionKey = "my" | "sequences" | "broadcasts";
 
 const SECTIONS = [
-  { key: "my", href: "/automations", label: "My Automations", icon: Workflow },
+  { key: "my", href: "/automations", label: "My automations", icon: Workflow },
   { key: "sequences", href: "/automations/sequences", label: "Sequences", icon: ListOrdered },
   { key: "broadcasts", href: "/automations/broadcasts", label: "Broadcasts", icon: Megaphone },
 ] as const;

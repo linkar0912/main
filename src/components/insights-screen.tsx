@@ -7,6 +7,7 @@ import type { DayPoint } from "./reply-volume-chart";
 import { ReplyVolumeCard } from "./reply-volume-card";
 import { halfWindowDelta, StatGrid, StatTile } from "./stat-tile";
 import { PageHeader, SectionCard } from "./page-header";
+import { LocalIdChip } from "./workspace-primitives";
 
 type MediaPerformance = { mediaId: string; matched: number; delivered: number; clicked: number };
 type InsightsPayload = {
@@ -94,12 +95,12 @@ export function InsightsScreen() {
 
   return (
     <>
-      <div className="page-wrap insights-page">
+      <div className="page-wrap insights-page ws-page">
         <PageHeader
           className="insights-page-header"
           title="Insights"
-          description="See what your automations reach, deliver, and convert."
-          actions={<a className="button button-secondary" href="/api/insights/export" download><Download size={16} /> Export CSV</a>}
+          description="How many people your automations reach, and what they do next."
+          actions={<a className="button button-secondary" href="/api/insights/export" download><Download size={16} aria-hidden /> Export CSV</a>}
         />
 
         {loading && (
@@ -108,9 +109,9 @@ export function InsightsScreen() {
 
         {!loading && error && (
           <section className="surface insights-error">
-            <div className="surface-head"><div className="surface-head-copy"><h2>Insights are temporarily out of reach</h2></div></div>
+            <div className="surface-head"><div className="surface-head-copy"><h2>Insights didn’t load</h2></div></div>
             <p className="form-error" role="alert">{error}</p>
-            <button className="button button-secondary" type="button" onClick={() => void load()}><RefreshCw size={15} /> Try again</button>
+            <button className="button button-secondary" type="button" onClick={() => void load()}><RefreshCw size={15} aria-hidden /> Try again</button>
           </section>
         )}
 
@@ -119,7 +120,7 @@ export function InsightsScreen() {
             <StatGrid>
               <StatTile label="Replies sent" icon={Send} value={totals.sent} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.sentPerDay)} trend={data.timeseries.sentPerDay} />
               <StatTile label="People reached" icon={UsersRound} value={totals.reached} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.participantsPerDay)} trend={data.timeseries.participantsPerDay} />
-              <StatTile label="Emails captured" icon={MailCheck} value={data.capturedEmails} note={`${data.optedOut.toLocaleString()} opted out, respected`} />
+              <StatTile label="Emails captured" icon={MailCheck} value={data.capturedEmails} note={data.optedOut > 0 ? `${data.optedOut.toLocaleString()} opted out` : "All time"} />
               <StatTile label="Link clicks" icon={MousePointerClick} value={data.mediaPerformance.reduce((total, row) => total + row.clicked, 0)} note="From tracked links" />
             </StatGrid>
 
@@ -140,11 +141,11 @@ export function InsightsScreen() {
                     <table className="insights-table" aria-label="Top content performance">
                       <thead><tr><th>Post</th><th>Matched</th><th>Delivered</th><th>Clicks</th><th>Click rate</th></tr></thead>
                       <tbody>{data.mediaPerformance.map((row) => (
-                        <tr key={row.mediaId}><td className="media-id-cell" title={`Instagram media ID ${row.mediaId}`}>Instagram post · {row.mediaId.slice(-6)}</td><td>{row.matched}</td><td>{row.delivered}</td><td>{row.clicked}</td><td>{row.delivered ? `${Math.round((row.clicked / row.delivered) * 100)}%` : "-"}</td></tr>
+                        <tr key={row.mediaId}><td className="media-cell"><span>Instagram post</span><LocalIdChip id={row.mediaId} label="post ID" /></td><td>{row.matched}</td><td>{row.delivered}</td><td>{row.clicked}</td><td>{row.delivered ? `${Math.round((row.clicked / row.delivered) * 100)}%` : "-"}</td></tr>
                       ))}</tbody>
                     </table>
                   </div>
-                ) : <p className="muted insights-empty-copy">Post-level performance appears after an automation matches a comment.</p>}
+                ) : <p className="muted insights-empty-copy">Posts show up here once an automation matches a comment on them.</p>}
               </SectionCard>
             </div>
           </div>
