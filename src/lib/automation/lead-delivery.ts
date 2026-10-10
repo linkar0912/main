@@ -60,6 +60,32 @@ async function postWebhook(payload: LeadWebhookPayload, options: LeadDeliveryOpt
   }
 }
 
+/**
+ * The mailer reports failures in its return value instead of throwing, so a
+ * rejected or undeliverable email must be turned into a provider error here -
+ * otherwise the ledger records SENT for a message that never left. Mirrors the
+ * MetaApiError contract: provider 5xx/429 and network failures are retryable
+ * (the Idempotency-Key makes a resend safe), 4xx and a missing configuration
+ * are permanent.
+ */
+async function sendLeadEmail(
+  payload: LeadEmailPayload,
+  deliveryKey: string,
+  mailer: typeof sendEmail,
+): Promise<{ id?: string }> {
+  const result = await mailer({ ...payload, idempotencyKey: payload.idempotencyKey ?? deliveryKey });
+  if (result.delivered) return { id: result.id };
+  if (result.reason === "not_configured") {
+    throw new MetaApiError("Email delivery is not configured", 400, true, false);
+  }
+  if (result.reason === "network_error" || result.status === undefined || result.status < 400) {
+    // No (or an unreadable) provider answer: classified as a network failure,
+    // which lead deliveries treat as retryable.
+    throw new MetaApiError("Email provider did not confirm the message", 0, false);
+  }
+  throw new MetaApiError(`Email provider rejected the message (HTTP ${result.status})`, result.status, true);
+}
+
 function assertDelivery(job: LeadDeliveryJob, record: Awaited<ReturnType<AutomationRepository["getOutboundDelivery"]>>) {
   if (!record || record.workspaceId !== job.workspaceId || record.kind !== job.kind) {
     throw new Error("Lead delivery does not exist or does not belong to this workspace");
@@ -95,10 +121,8 @@ export async function processLeadDelivery(
       payload: record.payload as LeadEmailPayload,
       claimLeaseMs: options.claimLeaseMs ?? 30_000,
       repository,
-    }, async (payload) => {
-      await (options.mailer ?? sendEmail)(payload);
-      return {};
-    });
+      networkFailuresAreRetryable: true,
+    }, (payload) => sendLeadEmail(payload, record.deliveryKey, options.mailer ?? sendEmail));
   }
   return executeOutboundDelivery({
     deliveryKey: record.deliveryKey,
