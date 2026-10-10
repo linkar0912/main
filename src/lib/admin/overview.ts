@@ -43,6 +43,8 @@ export type AdminOverviewSources = {
   loadQueue: () => Promise<WebhookQueueCounts>;
   loadFailures: () => Promise<AdminOverviewFailure[]>;
   loadAuditEvents: () => Promise<AdminOverviewAuditEvent[]>;
+  /** Workspace display names for the activity feed; optional so a lookup failure never blanks the page. */
+  loadWorkspaceNames?: (ids: string[]) => Promise<Map<string, string>>;
 };
 
 export type AdminOperatorTapeItem = {
@@ -53,6 +55,10 @@ export type AdminOperatorTapeItem = {
   detail: string;
   status: "attempt" | "success" | "failed";
   workspaceId: string | null;
+  /** Human name of workspaceId when it could be resolved. */
+  workspaceName: string | null;
+  /** Owner email for audit events; null for system-generated failures. */
+  actor: string | null;
   targetId: string;
 };
 
@@ -101,6 +107,8 @@ export async function loadAdminOverview(sources: AdminOverviewSources = producti
       detail: failure.reason && /^[A-Z][A-Z0-9_]{1,79}$/.test(failure.reason) ? failure.reason : "Delivery failed. Inspect the delivery record for its result code.",
       status: "failed",
       workspaceId: failure.workspaceId,
+      workspaceName: null,
+      actor: null,
       targetId: failure.automationId,
     })),
     ...auditEvents.map((event): AdminOperatorTapeItem => ({
@@ -111,11 +119,19 @@ export async function loadAdminOverview(sources: AdminOverviewSources = producti
       detail: safeDetail(event.errorCode ? `${event.reason} · ${event.errorCode}` : event.reason, "Operator action"),
       status: auditStatus(event.phase),
       workspaceId: event.workspaceId,
+      workspaceName: null,
+      actor: event.actorEmail,
       targetId: event.targetId,
     })),
   ]
     .sort((left, right) => right.at.localeCompare(left.at))
     .slice(0, TAPE_LIMIT);
+
+  const workspaceIds = [...new Set(operatorTape.flatMap((item) => item.workspaceId ? [item.workspaceId] : []))];
+  const names = workspaceIds.length && sources.loadWorkspaceNames
+    ? await sources.loadWorkspaceNames(workspaceIds).catch(() => new Map<string, string>())
+    : new Map<string, string>();
+  for (const item of operatorTape) item.workspaceName = item.workspaceId ? names.get(item.workspaceId) ?? null : null;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -151,6 +167,10 @@ const productionSources: AdminOverviewSources = {
     };
   },
   loadHealth: getHealth,
+  async loadWorkspaceNames(ids) {
+    const rows = await prisma.workspace.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+    return new Map(rows.map((row) => [row.id, row.name]));
+  },
   loadQueue: getWebhookQueueCounts,
   loadFailures: () => prisma.automationExecution.findMany({
     where: { status: "FAILED" },

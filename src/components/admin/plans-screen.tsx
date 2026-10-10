@@ -2,12 +2,14 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, Ban, Check, Copy, Plus, Save, TicketCheck, WalletCards } from "lucide-react";
+import { Archive, Ban, Check, Copy, Plus, Save } from "lucide-react";
 
-import { formatAdminDate, formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { PageHeader } from "@/src/components/page-header";
+import { IdChip } from "@/src/components/ui/id-chip";
+import { RelativeTime } from "@/src/components/ui/relative-time";
 import { ActionNotice } from "../action-notice";
 import { AdminCommandError, adminCommand, adminErrorMessage } from "./shared/admin-request";
-import { ReasonDialog } from "./shared/reason-dialog";
+import { REASON_LABEL, ReasonDialog } from "./shared/reason-dialog";
 import { StatusPill } from "./shared/status-pill";
 
 type Plan = {
@@ -30,11 +32,11 @@ const DEFAULT_PLAN_KEY = "free";
 const limitFields = [
   ["memberLimit", "Members"],
   ["automationLimit", "Automations"],
-  ["instagramConnectionLimit", "Instagram connections"],
-  ["facebookConnectionLimit", "Facebook connections"],
+  ["instagramConnectionLimit", "Instagram accounts"],
+  ["facebookConnectionLimit", "Facebook Pages"],
   ["sequenceLimit", "Sequences"],
-  ["monthlyBroadcastLimit", "Monthly broadcasts"],
-  ["monthlyDeliveryLimit", "Monthly deliveries"],
+  ["monthlyBroadcastLimit", "Broadcasts a month"],
+  ["monthlyDeliveryLimit", "Messages a month"],
 ] as const;
 const featureFields = [
   ["sequencesEnabled", "Sequences"],
@@ -61,17 +63,21 @@ function inviteState(item: InviteCode): "used" | "revoked" | "expired" | "ready"
   return item.expiresAt && new Date(item.expiresAt) <= new Date() ? "expired" : "ready";
 }
 
+function workspaces(count: number): string {
+  return `${count.toLocaleString("en-IN")} ${count === 1 ? "workspace" : "workspaces"}`;
+}
+
 function PlanFields({ value, onChange }: { value: Values; onChange: (value: Values) => void }) {
   return (
     <>
       <label className="field">
-        <span>Display name</span>
+        <span>Plan name</span>
         <input required maxLength={80} value={value.name} onChange={(event) => onChange({ ...value, name: event.target.value })} />
       </label>
-      <fieldset className="admin-plan-fieldset">
-        <legend>Resource limits</legend>
-        <p className="muted">Leave a limit empty for unlimited.</p>
-        <div className="admin-plan-limit-grid">
+      <fieldset className="admin-fieldset">
+        <legend>Limits</legend>
+        <p className="admin-hint">Leave a limit empty for unlimited.</p>
+        <div className="admin-fieldset-grid">
           {limitFields.map(([key, label]) => (
             <label className="field" key={key}>
               <span>{label}</span>
@@ -88,11 +94,11 @@ function PlanFields({ value, onChange }: { value: Values; onChange: (value: Valu
           ))}
         </div>
       </fieldset>
-      <fieldset className="admin-plan-fieldset">
+      <fieldset className="admin-fieldset">
         <legend>Features</legend>
-        <div className="admin-feature-grid">
+        <div className="admin-fieldset-grid is-checks">
           {featureFields.map(([key, label]) => (
-            <label className="admin-check-field" key={key}>
+            <label className="admin-check" key={key}>
               <input type="checkbox" checked={value[key]} onChange={(event) => onChange({ ...value, [key]: event.target.checked })} /> {label}
             </label>
           ))}
@@ -148,51 +154,50 @@ function PlanEditor({ plan }: { plan: Plan }) {
   function retire() {
     // The retire button sits outside form submission, so the reason is checked here.
     if (!reasonReady) {
-      setNotice({ tone: "error", message: "Add an operator reason before retiring a plan." });
+      setNotice({ tone: "error", message: "Add a reason before retiring a plan." });
       return;
     }
     void run("DELETE", { version: plan.version }, `${plan.name} retired.`);
   }
 
   return (
-    <form className="panel admin-plan-card" onSubmit={save}>
-      <div className="panel-heading">
+    <form className="admin-card" onSubmit={save}>
+      <div className="admin-card-head">
         <div>
-          <p className="eyebrow">{plan.key} · version {plan.version}</p>
-          <h2>{plan.name}</h2>
-          <p className="muted">{plan.workspaceCount} assigned workspaces · {plan.isActive ? "Active" : "Retired"}</p>
+          <h3>{plan.name}</h3>
+          <p>{plan.workspaceCount ? `${workspaces(plan.workspaceCount)} on this plan` : "No workspaces on this plan yet"}</p>
         </div>
-        <StatusPill status={plan.isActive ? "active" : "suspended"} label={plan.isActive ? "active" : "retired"} />
+        <StatusPill status={plan.isActive ? "active" : "retired"} label={plan.isActive ? "Available" : "Retired"} />
       </div>
       {/* A retired plan stays attached to its workspaces but can no longer be edited. */}
-      <fieldset className="admin-plan-fields" disabled={!plan.isActive}>
+      <fieldset className="admin-plain-fieldset" disabled={!plan.isActive}>
         <PlanFields value={value} onChange={(next) => { setValue(next); setConfirmingSave(false); }} />
         <label className="field">
-          <span>Operator reason</span>
+          <span>{REASON_LABEL}</span>
           <input required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
         </label>
       </fieldset>
+      {confirmingSave ? <p className="admin-callout" role="status">Saving changes the limits of {workspaces(plan.workspaceCount)} immediately.</p> : null}
+      {confirmingRetire ? <p className="admin-callout">Retiring stops new workspaces from getting this plan. The {workspaces(plan.workspaceCount)} already on it keep it.</p> : null}
       {plan.isActive ? (
-        <div className="admin-command-actions">
+        <div className="admin-actions">
           {confirmingSave ? (
             <>
-              <button className="button button-primary" disabled={busy} type="submit"><Save size={16} /> Confirm save</button>
+              <button className="button button-primary" disabled={busy} type="submit"><Save size={16} aria-hidden /> Confirm save</button>
               <button className="button button-ghost" disabled={busy} type="button" onClick={() => setConfirmingSave(false)}>Keep editing</button>
             </>
-          ) : <button className="button button-primary" disabled={busy} type="submit"><Save size={16} /> Save plan</button>}
+          ) : <button className="button button-primary" disabled={busy} type="submit"><Save size={16} aria-hidden /> Save plan</button>}
           {defaultPlan ? null : confirmingRetire ? (
             <>
-              <button className="button button-danger" disabled={busy} type="button" onClick={retire}><Archive size={16} /> Confirm retire</button>
+              <button className="button button-danger" disabled={busy} type="button" onClick={retire}><Archive size={16} aria-hidden /> Confirm retire</button>
               <button className="button button-ghost" disabled={busy} type="button" onClick={() => setConfirmingRetire(false)}>Keep plan</button>
             </>
           ) : (
-            <button className="button button-secondary" disabled={busy} type="button" onClick={() => { setConfirmingSave(false); setConfirmingRetire(true); }}><Archive size={16} /> Retire plan</button>
+            <button className="button button-secondary" disabled={busy} type="button" onClick={() => { setConfirmingSave(false); setConfirmingRetire(true); }}><Archive size={16} aria-hidden /> Retire plan</button>
           )}
         </div>
-      ) : <p className="admin-field-hint">Retired plans are read-only. Existing workspaces keep these limits.</p>}
-      {confirmingSave ? <p className="admin-field-hint" role="status">Saving changes the limits of {plan.workspaceCount} assigned {plan.workspaceCount === 1 ? "workspace" : "workspaces"} immediately.</p> : null}
-      {confirmingRetire ? <p className="admin-field-hint">Retiring stops new assignments. {plan.workspaceCount} assigned workspaces keep this plan.</p> : null}
-      {defaultPlan && plan.isActive ? <p className="admin-field-hint">New workspaces start on this plan, so it cannot be retired.</p> : null}
+      ) : <p className="admin-hint">Retired plans are read-only. Workspaces already on it keep these limits.</p>}
+      {defaultPlan && plan.isActive ? <p className="admin-hint">New workspaces start on this plan, so it cannot be retired.</p> : null}
       <LocalNotice notice={notice} onDismiss={() => setNotice(null)} />
     </form>
   );
@@ -224,7 +229,7 @@ function PremiumInviteManager({ plans, inviteCodes }: { plans: Plan[]; inviteCod
     setCopied(false);
     try {
       if (!selectedPlan) {
-        setNotice({ tone: "error", message: "Invite plan unavailable" });
+        setNotice({ tone: "error", message: "No paid plan is available for invite codes." });
         return;
       }
       const data = await adminCommand<{ code?: string; plan?: { key: string; name: string } }>("/api/admin/invite-codes", {
@@ -233,7 +238,7 @@ function PremiumInviteManager({ plans, inviteCodes }: { plans: Plan[]; inviteCod
         fallback: "invite_code_create_failed",
       });
       if (!data?.code || !data.plan) {
-        setNotice({ tone: "error", message: "Invite code create failed" });
+        setNotice({ tone: "error", message: "The invite code could not be created." });
         return;
       }
       setCreatedCode(data.code);
@@ -282,60 +287,61 @@ function PremiumInviteManager({ plans, inviteCodes }: { plans: Plan[]; inviteCod
       await navigator.clipboard.writeText(createdCode);
       setCopied(true);
     } catch {
-      setNotice({ tone: "error", message: "Copy failed. Select the code and copy it manually." });
+      setNotice({ tone: "error", message: "Copy failed. Select the code and copy it yourself." });
     }
   }
 
   return (
-    <section className="admin-invite-section">
-      <div className="panel-heading">
+    <section className="admin-section" aria-labelledby="invites-title">
+      <div className="admin-section-title">
         <div>
-          <p className="eyebrow">Promotional access</p>
-          <h2>Premium invite codes</h2>
-          <p className="muted">Each code grants one workspace 30 days on the selected plan. The code is shown only once.</p>
+          <h2 id="invites-title">Invite codes</h2>
+          <p>Each code gives one workspace 30 days on a paid plan. The code is shown only once.</p>
         </div>
-        <TicketCheck size={20} aria-hidden />
       </div>
 
-      <form className="panel admin-plan-card admin-invite-create" onSubmit={create}>
-        <label className="field admin-invite-plan-field">
+      <form className="admin-card" onSubmit={create}>
+        <div className="admin-card-head"><h3>Create an invite code</h3></div>
+        <label className="field">
           <span>Invite plan</span>
           <select required disabled={availablePlans.length === 0} value={selectedPlan?.key ?? ""} onChange={(event) => setSelectedPlanKey(event.target.value)}>
             {availablePlans.length === 0
-              ? <option value="">No active paid plans</option>
+              ? <option value="">No paid plans available</option>
               : availablePlans.map((plan) => <option key={plan.id} value={plan.key}>{plan.name}</option>)}
           </select>
         </label>
         {selectedPlan ? (
-          <div className="admin-invite-plan-summary">
-            <div><span>Selected access</span><strong>{selectedPlan.name}</strong></div>
+          <div className="admin-plan-summary">
+            <div className="admin-list-main"><span className="admin-hint">Selected access</span><strong>{selectedPlan.name}</strong></div>
             <dl>
               {limitFields.map(([key, fieldLabel]) => (
                 <div key={key}><dt>{fieldLabel}</dt><dd>{selectedPlan[key] === null ? "Unlimited" : selectedPlan[key].toLocaleString("en-IN")}</dd></div>
               ))}
             </dl>
           </div>
-        ) : <p className="admin-invite-plan-empty">Create or reactivate a paid plan before generating an invite code.</p>}
-        <div className="admin-invite-inputs">
+        ) : <p className="admin-callout">Create or bring back a paid plan before making an invite code.</p>}
+        <div className="admin-form-row">
           <label className="field">
             <span>Internal label</span>
-            <input required minLength={2} maxLength={120} value={label} onChange={(event) => setLabel(event.target.value)} placeholder="September creator cohort" />
+            <input required minLength={2} maxLength={120} value={label} onChange={(event) => setLabel(event.target.value)} placeholder="October creator cohort" />
           </label>
           <label className="field">
             <span>Code expires <em>optional</em></span>
             <input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
           </label>
           <label className="field">
-            <span>Operator reason</span>
+            <span>{REASON_LABEL}</span>
             <input required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
           </label>
-          <button className="button button-primary" disabled={busy || !selectedPlan} type="submit"><Plus size={16} /> Generate code</button>
+        </div>
+        <div className="admin-actions">
+          <button className="button button-primary" disabled={busy || !selectedPlan} type="submit"><Plus size={16} aria-hidden /> Generate code</button>
         </div>
         {createdCode ? (
           <div className="admin-created-code">
             <code>{createdCode}</code>
             <button className="button button-secondary button-small" type="button" onClick={() => void copyCode()}>
-              {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
+              {copied ? <><Check size={14} aria-hidden /> Copied</> : <><Copy size={14} aria-hidden /> Copy</>}
             </button>
           </div>
         ) : null}
@@ -343,40 +349,54 @@ function PremiumInviteManager({ plans, inviteCodes }: { plans: Plan[]; inviteCod
       </form>
 
       <LocalNotice notice={listNotice} onDismiss={() => setListNotice(null)} />
-      {inviteCodes.length === 0 ? <p className="admin-invite-plan-empty">No invite codes have been generated yet.</p> : (
-        <div className="admin-invite-list">
-          {inviteCodes.map((item) => {
-            const state = inviteState(item);
-            const accessActive = Boolean(item.redemption && new Date(item.redemption.expiresAt) > new Date());
-            return (
-              <article className="admin-invite-row" key={item.id}>
-                <div>
-                  <strong>{item.label}</strong>
-                  <p>{item.plan.name} · {item.durationDays} days · created {formatAdminDate(item.createdAt)} · {item.expiresAt ? `code expires ${formatAdminDateTime(item.expiresAt)}` : "code does not expire"}</p>
-                  {item.redemption ? <small>Redeemed by workspace {item.redemption.workspaceId} · access {accessActive ? "ends" : "ended"} {formatAdminDateTime(item.redemption.expiresAt)}</small> : null}
-                </div>
-                <StatusPill status={state === "used" ? "idle" : state} label={state} />
-                {state === "ready" ? (
-                  <button className="button button-secondary button-small" type="button" disabled={busy} aria-label={`Revoke ${item.label}`} onClick={() => { setCommandError(null); setCommand({ type: "revoke", item }); }}><Ban size={14} /> Revoke</button>
-                ) : null}
-                {accessActive ? (
-                  <button className="button button-secondary button-small" type="button" disabled={busy} aria-label={`End premium access from ${item.label}`} onClick={() => { setCommandError(null); setCommand({ type: "end_access", item }); }}><Ban size={14} /> End access</button>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      )}
+      <div className="admin-card is-flush">
+        {inviteCodes.length === 0 ? <div className="admin-empty"><p>No invite codes yet. Codes you generate appear here.</p></div> : (
+          <ul className="admin-list">
+            {inviteCodes.map((item) => {
+              const state = inviteState(item);
+              const accessActive = Boolean(item.redemption && new Date(item.redemption.expiresAt) > new Date());
+              return (
+                <li key={item.id}>
+                  <span className="admin-list-main">
+                    <strong>{item.label}</strong>
+                    <span className="cell-meta">
+                      <span>{item.plan.name}, {item.durationDays} days</span>
+                      <span>Created <RelativeTime inline value={item.createdAt} /></span>
+                      <span>{item.expiresAt ? <>Code expires <RelativeTime inline value={item.expiresAt} /></> : "code does not expire"}</span>
+                    </span>
+                    {item.redemption ? (
+                      <span className="cell-meta">
+                        <span>Used by</span><IdChip id={item.redemption.workspaceId} prefix="Workspace" />
+                        <span>access {accessActive ? "ends" : "ended"} <RelativeTime inline value={item.redemption.expiresAt} /></span>
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="admin-list-side">
+                    <StatusPill status={state} label={state === "ready" ? "Ready to use" : undefined} tone={state === "ready" ? "success" : undefined} />
+                    {state === "ready" ? (
+                      <button className="button button-secondary button-small" type="button" disabled={busy} aria-label={`Revoke ${item.label}`} onClick={() => { setCommandError(null); setCommand({ type: "revoke", item }); }}><Ban size={14} aria-hidden /> Revoke</button>
+                    ) : null}
+                    {accessActive ? (
+                      <button className="button button-secondary button-small" type="button" disabled={busy} aria-label={`End premium access from ${item.label}`} onClick={() => { setCommandError(null); setCommand({ type: "end_access", item }); }}><Ban size={14} aria-hidden /> End access</button>
+                    ) : null}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
       {command ? (
         <ReasonDialog
           title={command.type === "revoke" ? `Revoke ${command.item.label}` : `End premium access from ${command.item.label}`}
           warning={command.type === "revoke"
-            ? "The code can no longer be redeemed. Access already granted by other codes is unaffected."
-            : `Workspace ${command.item.redemption?.workspaceId ?? ""} returns to its assigned plan now instead of ${command.item.redemption ? formatAdminDateTime(command.item.redemption.expiresAt) : "its scheduled end"}.`}
+            ? "The code can no longer be used. Access already given by other codes is not affected."
+            : "The workspace goes back to its own plan now instead of when this access was due to end."}
           busy={busy}
           error={commandError}
           danger
+          confirmLabel={command.type === "revoke" ? "Revoke code" : "End access"}
           onCancel={() => setCommand(null)}
           onConfirm={(commandReason) => void execute(commandReason)}
         />
@@ -412,38 +432,41 @@ export function PlansScreen({ plans, inviteCodes = [] }: { plans: Plan[]; invite
   }
 
   return (
-    <main className="page-wrap admin-resource-page">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Linkar operator / entitlements</p>
-          <h1>Plans and limits</h1>
-          <p className="muted page-lede">Define enforceable templates. Empty limits mean unlimited; retired plans remain attached to existing workspaces.</p>
-        </div>
-        <span className="admin-count-badge"><WalletCards size={16} /> {plans.length} templates</span>
-      </header>
+    <main className="page-wrap admin-page">
+      <PageHeader title="Plans and invites" description="What each plan includes, and invite codes that give paid access for free." />
 
       <PremiumInviteManager plans={plans} inviteCodes={inviteCodes} />
 
-      <form className="panel admin-plan-card admin-new-plan" onSubmit={create}>
-        <div className="panel-heading">
-          <div><p className="eyebrow">New template</p><h2>Create plan</h2></div>
-          <Plus size={20} aria-hidden />
+      <section className="admin-section" aria-label="Plan templates">
+        <div className="admin-section-title">
+          <div>
+            <h2>Plans</h2>
+            <p>Empty limits mean unlimited. Retired plans stay on the workspaces that already have them.</p>
+          </div>
         </div>
-        <label className="field">
-          <span>Stable key</span>
-          <input required pattern="[a-z][a-z0-9_-]{1,39}" title="Lowercase letters, numbers, hyphens, or underscores; must start with a letter." value={key} onChange={(event) => setKey(event.target.value)} placeholder="growth" />
-        </label>
-        <PlanFields value={value} onChange={setValue} />
-        <label className="field">
-          <span>Operator reason</span>
-          <input required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
-        </label>
-        <button className="button button-primary" disabled={creating} type="submit"><Plus size={16} /> Create plan</button>
-        <LocalNotice notice={notice} onDismiss={() => setNotice(null)} />
-      </form>
-
-      <section className="admin-plan-stack" aria-label="Plan templates">
         {plans.map((plan) => <PlanEditor key={`${plan.id}:${plan.version}`} plan={plan} />)}
+
+        <form className="admin-card" onSubmit={create}>
+          <div className="admin-card-head">
+            <div>
+              <h3>Create a plan</h3>
+              <p>The key is permanent and used in billing settings, for example growth.</p>
+            </div>
+          </div>
+          <label className="field">
+            <span>Plan key</span>
+            <input required pattern="[a-z][a-z0-9_-]{1,39}" title="Lowercase letters, numbers, hyphens, or underscores; must start with a letter." value={key} onChange={(event) => setKey(event.target.value)} placeholder="growth" />
+          </label>
+          <PlanFields value={value} onChange={setValue} />
+          <label className="field">
+            <span>{REASON_LABEL}</span>
+            <input required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
+          </label>
+          <div className="admin-actions">
+            <button className="button button-primary" disabled={creating} type="submit"><Plus size={16} aria-hidden /> Create plan</button>
+          </div>
+          <LocalNotice notice={notice} onDismiss={() => setNotice(null)} />
+        </form>
       </section>
     </main>
   );

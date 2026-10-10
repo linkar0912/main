@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { KeyRound, LockKeyhole, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { KeyRound, Plus, Trash2 } from "lucide-react";
 
+import { PageHeader } from "@/src/components/page-header";
+import { StatusBadge } from "@/src/components/ui/status-badge";
 import { encodeAdminReason } from "./shared/admin-request";
+import { REASON_LABEL } from "./shared/reason-dialog";
 
 type Factor = {
   id: string;
@@ -37,12 +40,12 @@ type Removal = {
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
-  forbidden: "This account is not allowed to access Linkar operator security.",
-  invalid_mfa_code: "That verification code was not accepted. Wait for a fresh code and try again.",
-  invalid_request: "Check the security form and try again.",
-  last_verified_factor: "Add and verify a backup factor before removing this one.",
-  mfa_provider_error: "MFA provider is temporarily unavailable. Your existing security settings were not changed.",
-  security_operation_failed: "The security operation could not be completed.",
+  forbidden: "This account is not allowed into the owner console.",
+  invalid_mfa_code: "That code was not accepted. Wait for a fresh code and try again.",
+  invalid_request: "Check the form and try again.",
+  last_verified_factor: "Add and verify a backup app before removing this one.",
+  mfa_provider_error: "Two-factor sign-in is temporarily unavailable. Your security settings were not changed.",
+  security_operation_failed: "That could not be completed. Try again.",
 };
 
 function idempotencyKey(): string {
@@ -53,6 +56,23 @@ function idempotencyKey(): string {
 async function readJson(response: Response): Promise<Record<string, unknown>> {
   // An outage page is not JSON; treat it as an empty body so the caller reports a safe message.
   return await response.json().catch(() => ({})) as Record<string, unknown>;
+}
+
+function CodeField({ code, onCodeChange, autoFocus = false }: { code: string; onCodeChange: (code: string) => void; autoFocus?: boolean }) {
+  return (
+    <label className="field">
+      <span>Six-digit verification code</span>
+      <input
+        value={code}
+        onChange={(event) => onCodeChange(event.target.value.replace(/\D/g, "").slice(0, 6))}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern="[0-9]{6}"
+        maxLength={6}
+        autoFocus={autoFocus}
+      />
+    </label>
+  );
 }
 
 function EnrollmentForm({
@@ -73,7 +93,7 @@ function EnrollmentForm({
   onCancel?: () => void;
 }) {
   return (
-    <form className="admin-enrollment-grid" onSubmit={onSubmit}>
+    <form className="admin-enrollment" onSubmit={onSubmit}>
       <div className="admin-qr-frame">
         {/* Supabase returns trusted enrollment SVG; encoding it prevents markup injection. */}
         {/* eslint-disable-next-line @next/next/no-img-element -- ephemeral data URI cannot use the image optimizer */}
@@ -82,21 +102,11 @@ function EnrollmentForm({
           alt="Linkar authenticator QR code"
         />
       </div>
-      <div className="admin-enrollment-fields">
-        <p className="muted">Can’t scan? Enter this secret manually:</p>
+      <div className="admin-form">
+        <p className="admin-hint">Can’t scan it? Type this key into the app instead:</p>
         <code className="admin-secret">{enrollment.secret}</code>
-        <label className="field">
-          <span>Six-digit verification code</span>
-          <input
-            value={code}
-            onChange={(event) => onCodeChange(event.target.value.replace(/\D/g, "").slice(0, 6))}
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-          />
-        </label>
-        <div className="admin-security-actions">
+        <CodeField code={code} onCodeChange={onCodeChange} />
+        <div className="admin-actions">
           {onCancel ? (
             <button className="button button-secondary" type="button" disabled={busy} onClick={onCancel}>Cancel</button>
           ) : null}
@@ -111,7 +121,7 @@ function EnrollmentForm({
 
 function messageFor(error: unknown): string {
   const code = typeof error === "string" ? error : "security_operation_failed";
-  return ERROR_MESSAGES[code] ?? "The security operation could not be completed.";
+  return ERROR_MESSAGES[code] ?? ERROR_MESSAGES.security_operation_failed;
 }
 
 export function AdminSecurityScreen({
@@ -161,6 +171,7 @@ export function AdminSecurityScreen({
     () => security?.factors.filter((factor) => factor.status === "verified") ?? [],
     [security],
   );
+  const verified = security.aal === "aal2";
 
   async function beginEnrollment(backup = false) {
     setBusy(true);
@@ -194,7 +205,7 @@ export function AdminSecurityScreen({
         setEnrollment(null);
         setCode("");
         await load();
-        setNotice(`Backup factor ${name} verified.`);
+        setNotice(`Backup app ${name} verified.`);
         return;
       }
       onVerified(typeof data.redirectTo === "string" ? data.redirectTo : "/admin");
@@ -249,67 +260,44 @@ export function AdminSecurityScreen({
   }
 
   return (
-    <main className="page-wrap admin-security-wrap">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Linkar operator</p>
-          <h1>Owner security</h1>
-          <p className="page-lede">MFA is the hard boundary around every cross-workspace write.</p>
-        </div>
-        <span className={`status-badge ${security?.aal === "aal2" ? "status-active" : "status-follow_required"}`}>
-          {security?.aal === "aal2" ? "AAL2 verified" : "AAL1 only"}
-        </span>
-      </header>
+    <main className="page-wrap admin-page is-narrow">
+      <PageHeader
+        title="Your security"
+        description="Two-factor sign-in protects every admin action."
+        actions={<StatusBadge tone={verified ? "success" : "warning"} label={verified ? "Two-factor verified" : "Two-factor needed"} />}
+      />
 
-      {error ? <p className="form-error admin-security-alert" role="alert">{error}</p> : null}
-      {notice ? <p className="form-success admin-security-alert" role="status">{notice}</p> : null}
+      {error ? <p className="form-error admin-message" role="alert">{error}</p> : null}
+      {notice ? <p className="form-success admin-message" role="status">{notice}</p> : null}
 
-      <section className="panel admin-security-identity" aria-label="Owner identity">
-        <span className="settings-icon"><ShieldCheck size={22} aria-hidden /></span>
-        <div>
-          <p className="eyebrow">Allowlisted Supabase identity</p>
-          <h2>{ownerEmail}</h2>
-          <p className="muted">Email is shown for recognition only. Authorization uses the exact server-side user UUID.</p>
-        </div>
-      </section>
-
-      {security.aal !== "aal2" ? (
-        <section className="panel admin-security-enrollment">
-          <div className="panel-heading">
+      {!verified ? (
+        <section className="admin-card" aria-labelledby="verify-title">
+          <div className="admin-card-head">
             <div>
-              <p className="eyebrow">Required before access</p>
-              <h2>{verifiedFactors.length > 0 ? "Verify your authenticator" : "MFA enrollment required"}</h2>
+              <h2 id="verify-title">{verifiedFactors.length > 0 ? "Verify your authenticator" : "Set up two-factor sign-in"}</h2>
+              <p>
+                {verifiedFactors.length > 0
+                  ? `Enter a fresh six-digit code from ${verifiedFactors[0]?.friendlyName ?? "your authenticator app"}.`
+                  : "You need an authenticator app before you can use the owner console. Add Linkar to it, then enter one fresh six-digit code."}
+              </p>
             </div>
-            <LockKeyhole size={24} aria-hidden />
           </div>
-          <p className="muted">
-            {verifiedFactors.length > 0
-              ? `Enter a fresh six-digit code from ${verifiedFactors[0]?.friendlyName ?? "your authenticator"}.`
-              : "Add Linkar to a TOTP authenticator, then enter one fresh six-digit code."}
-          </p>
 
           {verifiedFactors.length > 0 ? (
-            <form className="admin-enrollment-fields admin-existing-factor" onSubmit={verifyEnrollment}>
-              <label className="field">
-                <span>Six-digit verification code</span>
-                <input
-                  value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  autoFocus
-                />
-              </label>
-              <button className="button button-primary" type="submit" disabled={busy || !/^\d{6}$/.test(code)}>
-                Verify and open admin
-              </button>
+            <form className="admin-form" onSubmit={verifyEnrollment}>
+              <CodeField code={code} onCodeChange={setCode} autoFocus />
+              <div className="admin-actions">
+                <button className="button button-primary" type="submit" disabled={busy || !/^\d{6}$/.test(code)}>
+                  Verify and open admin
+                </button>
+              </div>
             </form>
           ) : !enrollment ? (
-            <button className="button button-primary" type="button" disabled={busy} onClick={() => void beginEnrollment()}>
-              <KeyRound size={16} aria-hidden /> Set up authenticator
-            </button>
+            <div className="admin-actions">
+              <button className="button button-primary" type="button" disabled={busy} onClick={() => void beginEnrollment()}>
+                <KeyRound size={16} aria-hidden /> Set up authenticator
+              </button>
+            </div>
           ) : (
             <EnrollmentForm
               enrollment={enrollment}
@@ -324,70 +312,85 @@ export function AdminSecurityScreen({
       ) : null}
 
       {security.factors.length > 0 ? (
-        <section className="panel">
-          <div className="panel-heading">
+        <section className="admin-card" aria-labelledby="apps-title">
+          <div className="admin-card-head">
             <div>
-              <p className="eyebrow">Authenticator inventory</p>
-              <h2>Security factors</h2>
+              <h2 id="apps-title">Authenticator apps</h2>
+              <p>Keep a backup app so you can still get in if you lose a phone.</p>
             </div>
-            {security.aal === "aal2" && !enrollment ? (
+            {verified && !enrollment ? (
               <button className="button button-secondary button-small" type="button" disabled={busy} onClick={() => void beginEnrollment(true)}>
-                <Plus size={15} aria-hidden /> Add backup factor
+                <Plus size={15} aria-hidden /> Add a backup app
               </button>
             ) : null}
           </div>
-          {security.aal === "aal2" && enrollment?.backup ? (
-            <div className="admin-security-enrollment">
-              <p className="muted">
-                Scan this code with a second authenticator{enrollment.friendlyName ? ` (${enrollment.friendlyName})` : ""}, then enter one fresh six-digit code from it.
+          {verified && enrollment?.backup ? (
+            <div className="admin-form is-full">
+              <p className="admin-hint">
+                Scan this code with your second authenticator app{enrollment.friendlyName ? ` (${enrollment.friendlyName})` : ""}, then enter one fresh six-digit code from it.
               </p>
               <EnrollmentForm
                 enrollment={enrollment}
                 code={code}
                 busy={busy}
-                submitLabel="Verify backup factor"
+                submitLabel="Verify backup app"
                 onCodeChange={setCode}
                 onSubmit={verifyEnrollment}
                 onCancel={() => { setEnrollment(null); setCode(""); }}
               />
             </div>
           ) : null}
-          <div className="admin-factor-list">
+          <ul className="admin-list">
             {security.factors.map((factor) => (
-              <div className="admin-factor-row" key={factor.id}>
-                <span className="settings-icon"><KeyRound size={18} aria-hidden /></span>
-                <div>
+              <li key={factor.id}>
+                <span className="admin-list-main">
                   <strong>{factor.friendlyName}</strong>
-                  <p>{factor.factorType.toUpperCase()} · {factor.status}</p>
-                </div>
-                {factor.status === "verified" && verifiedFactors.length > 1 ? (
-                  <button className="button button-secondary button-small" type="button" disabled={busy} onClick={() => void prepareRemoval(factor)}>
-                    <Trash2 size={15} aria-hidden /> Remove {factor.friendlyName}
-                  </button>
-                ) : null}
-              </div>
+                  <span className="cell-meta">{factor.factorType === "totp" ? "Authenticator app" : factor.factorType}</span>
+                </span>
+                <span className="admin-list-side">
+                  <StatusBadge tone={factor.status === "verified" ? "success" : "neutral"} label={factor.status === "verified" ? "Verified" : "Not verified"} />
+                  {factor.status === "verified" && verifiedFactors.length > 1 ? (
+                    <button className="button button-ghost button-small" type="button" disabled={busy} aria-label={`Remove ${factor.friendlyName}`} onClick={() => void prepareRemoval(factor)}>
+                      <Trash2 size={15} aria-hidden /> Remove
+                    </button>
+                  ) : null}
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         </section>
       ) : null}
 
+      <section className="admin-card" aria-label="Owner identity">
+        <div className="admin-card-head">
+          <div>
+            <h2>Signed in as {ownerEmail}</h2>
+            <p>Only allowlisted owner accounts can open this console. Access is checked against your account, not just the email address.</p>
+          </div>
+        </div>
+      </section>
+
       {removal ? (
-        <section className="panel admin-danger-panel" aria-labelledby="remove-factor-title">
-          <h2 id="remove-factor-title">Remove {removal.factor.friendlyName}</h2>
-          <p className="muted">This invalidates the selected recovery path. Another verified factor will remain.</p>
-          <form onSubmit={removeFactor}>
-            <label className="field field-wide">
-              <span>Operator reason</span>
+        <section className="admin-card is-danger" aria-labelledby="remove-factor-title">
+          <div className="admin-card-head">
+            <div>
+              <h2 id="remove-factor-title">Remove {removal.factor.friendlyName}</h2>
+              <p>You will no longer be able to sign in with this app. Your other verified app stays.</p>
+            </div>
+          </div>
+          <form className="admin-form" onSubmit={removeFactor}>
+            <label className="field">
+              <span>{REASON_LABEL}</span>
               <textarea value={removal.reason} onChange={(event) => setRemoval({ ...removal, reason: event.target.value })} />
             </label>
-            <label className="field field-wide">
-              <span>Type <code>{removal.confirmationPhrase}</code></span>
+            <label className="field">
+              <span>Type <code className="admin-phrase">{removal.confirmationPhrase}</code> to confirm</span>
               <input value={removal.confirmation} autoComplete="off" spellCheck={false} onChange={(event) => setRemoval({ ...removal, confirmation: event.target.value })} />
             </label>
-            <div className="admin-security-actions">
+            <div className="admin-actions">
               <button className="button button-secondary" type="button" disabled={busy} onClick={() => setRemoval(null)}>Cancel</button>
               <button className="button button-danger" type="submit" disabled={busy || removal.reason.trim().length < 3 || removal.confirmation !== removal.confirmationPhrase}>
-                Remove factor
+                Remove app
               </button>
             </div>
           </form>

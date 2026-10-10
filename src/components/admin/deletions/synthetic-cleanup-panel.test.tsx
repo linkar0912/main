@@ -28,7 +28,7 @@ describe("SyntheticCleanupPanel", () => {
     }), { status: 200, headers: { "content-type": "application/json" } }));
 
     render(<SyntheticCleanupPanel />);
-    fireEvent.change(screen.getByLabelText("Operator reason"), { target: { value: "remove generated test accounts" } });
+    fireEvent.change(screen.getByLabelText(/^Reason/), { target: { value: "remove generated test accounts" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview test accounts" }));
 
     expect(await screen.findByText("58")).toBeTruthy();
@@ -49,7 +49,7 @@ describe("SyntheticCleanupPanel", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { id: "del_batch" } }), { status: 202, headers: { "content-type": "application/json" } }));
 
     render(<SyntheticCleanupPanel />);
-    fireEvent.change(screen.getByLabelText("Operator reason"), { target: { value: "remove generated test accounts" } });
+    fireEvent.change(screen.getByLabelText(/^Reason/), { target: { value: "remove generated test accounts" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview test accounts" }));
     await screen.findByText("DELETE 1 SYNTHETIC ACCOUNTS");
     fireEvent.change(screen.getByLabelText(/Type exactly/), { target: { value: "DELETE 1 SYNTHETIC ACCOUNTS" } });

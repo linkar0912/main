@@ -26,10 +26,10 @@ async function Data({ searchParams }: PageProps<"/admin/audit">) {
     : null;
   if (!data) {
     return (
-      <main className="page-wrap admin-resource-page admin-invalid-filters">
-        <h1>Invalid audit filters</h1>
-        <p role="alert">Invalid audit filters or page position. Clear the filters and try again.</p>
-        <Link className="button button-secondary" href="/admin/audit">Clear filters</Link>
+      <main className="page-wrap admin-page">
+        <h1>Audit log</h1>
+        <p className="admin-callout" role="alert">Those filters or that page could not be used. Clear the filters and try again.</p>
+        <Link className="button button-secondary admin-start" href="/admin/audit">Clear filters</Link>
       </main>
     );
   }

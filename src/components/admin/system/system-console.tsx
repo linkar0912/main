@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, CircleCheck, CircleX, Database, Gauge, RadioTower, Server } from "lucide-react";
+import { Database, Gauge, RadioTower, Server } from "lucide-react";
 
-import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
-import type { AdminSystemSnapshot } from "@/src/lib/admin/system/types";
-import { adminCommand, adminErrorMessage, adminQuery } from "../shared/admin-request";
+import { PageHeader } from "@/src/components/page-header";
+import { IdChip } from "@/src/components/ui/id-chip";
+import { RelativeTime } from "@/src/components/ui/relative-time";
+import { StatusBadge, type StatusTone } from "@/src/components/ui/status-badge";
+import type { AdminProbe, AdminSystemSnapshot } from "@/src/lib/admin/system/types";
+import { adminCommand, adminErrorMessage, adminQuery, humanizeAdminCode } from "../shared/admin-request";
 import { ReasonDialog } from "../shared/reason-dialog";
 import { IncidentTable } from "./incident-table";
 
@@ -21,10 +24,15 @@ type FailedJobList = { queue: string; jobs: FailedJob[] | null; selected: string
 // The retry endpoint accepts at most this many job IDs per audited command.
 const MAX_RETRY_BATCH = 100;
 
+const queueNames: Record<string, string> = { webhooks: "Incoming events", bulk: "Bulk sends" };
+function queueName(name: string): string {
+  return queueNames[name] ?? humanizeAdminCode(name);
+}
+
 function commandLabel(pending: Pending): string {
-  if (pending.type === "retry") return `retry ${pending.jobIds.length} failed ${pending.queue} job${pending.jobIds.length === 1 ? "" : "s"}`;
-  const action = pending.action.replaceAll("_", " ");
-  return pending.type === "queue" ? `${action} ${pending.queue} queue` : action;
+  if (pending.type === "retry") return `Retry ${pending.jobIds.length} failed ${pending.jobIds.length === 1 ? "job" : "jobs"} in ${queueName(pending.queue)}`;
+  if (pending.type === "queue") return `${pending.action === "pause" ? "Pause" : "Resume"} ${queueName(pending.queue)}`;
+  return pending.action === "run_delivery_reconciliation" ? "Re-check stuck sends" : "Recount plan usage";
 }
 
 function queueState(queue: AdminSystemSnapshot["queues"][number]): "unavailable" | "paused" | "running" {
@@ -32,9 +40,14 @@ function queueState(queue: AdminSystemSnapshot["queues"][number]): "unavailable"
   return queue.paused ? "paused" : "running";
 }
 
-function probeLabel(state: string, detail?: string): string {
-  const label = state === "unavailable" ? "Unavailable" : state;
-  return `${label}${detail ? ` · ${detail}` : ""}`;
+const probeBadges: Record<AdminProbe["state"], { tone: StatusTone; label: string }> = {
+  healthy: { tone: "success", label: "Healthy" },
+  degraded: { tone: "warning", label: "Needs attention" },
+  unavailable: { tone: "danger", label: "Down" },
+};
+
+function count(value: number | null | undefined): string {
+  return value === null || value === undefined ? "Unknown" : value.toLocaleString("en-IN");
 }
 
 export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
@@ -98,7 +111,7 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
       const url = pending.type === "system" ? "/api/admin/system" : `/api/admin/system/queues/${pending.queue}`;
       const body = pending.type === "retry" ? { action: "retry_failed_jobs", jobIds: pending.jobIds } : { action: pending.action };
       await adminCommand(url, { method: pending.type === "system" ? "POST" : "PATCH", body, reason, fallback: "system_command_failed" });
-      setNotice(`${commandLabel(pending)} accepted`);
+      setNotice(`${commandLabel(pending)}: requested.`);
       if (pending.type === "retry") setFailedList(null);
       setPending(null);
       router.refresh();
@@ -110,79 +123,103 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
   }
 
   const probes = [
-    ["Web", snapshot.web, Gauge],
+    ["Web app", snapshot.web, Gauge],
     ["Database", snapshot.database, Database],
-    ["Redis", snapshot.redis, RadioTower],
-    ["Worker", snapshot.worker, Server],
+    ["Job queue (Redis)", snapshot.redis, RadioTower],
+    ["Background worker", snapshot.worker, Server],
   ] as const;
   const stale = renderedAt - Date.parse(snapshot.generatedAt) > 60_000;
   const activeIncidents = snapshot.incidents.filter((incident) => incident.status !== "RESOLVED").length;
-  const activeLabel = `${activeIncidents} active incident${activeIncidents === 1 ? "" : "s"}`;
+  const healthy = snapshot.overall === "healthy";
+  const missing = snapshot.configurationPresence.filter((item) => !item.present).length;
 
   return (
-    <main className="page-wrap admin-resource-page admin-system-page">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Linkar operator / infrastructure</p>
-          <h1>System</h1>
-          <p className="muted page-lede">Production health, incident history, queues, billing readiness, and recovery controls.</p>
-        </div>
-        <span className={`admin-release ${snapshot.overall === "healthy" ? "is-ok" : "is-degraded"}`}>
-          <Activity size={15} aria-hidden /> {snapshot.overall === "healthy" ? "Operational" : "Attention needed"} · {snapshot.release ?? "release unknown"}
-        </span>
-      </header>
+    <main className="page-wrap admin-page">
+      <PageHeader
+        title="Service health"
+        description="How Linkar's servers, background jobs and settings are doing right now."
+        actions={(
+          <>
+            <StatusBadge tone={healthy ? "success" : "warning"} label={healthy ? "Healthy" : "Needs attention"} />
+            {snapshot.release ? <IdChip id={snapshot.release} prefix="Version" /> : null}
+          </>
+        )}
+      />
 
-      {notice ? <div className="form-success" role="status">{notice}</div> : null}
+      {notice ? <div className="form-success admin-message" role="status">{notice}</div> : null}
 
-      <section className="panel admin-ops-summary" aria-label="Production status summary">
-        <div className="admin-ops-primary">
-          <span className={`admin-ops-signal is-${activeIncidents > 0 ? "attention" : "healthy"}`} aria-hidden>
-            {activeIncidents > 0 ? <CircleX size={22} /> : <CircleCheck size={22} />}
-          </span>
-          <div><strong>{snapshot.operationalDataAvailable === false ? "Incident status unavailable" : activeIncidents > 0 ? activeLabel : "No active incidents"}</strong><small>Snapshot {formatAdminDateTime(snapshot.generatedAt)}{stale ? " · Stale" : ""}</small></div>
+      <section className="admin-section" aria-label="Production status summary">
+        <div className="admin-results">
+          <span>Checked <RelativeTime inline value={snapshot.generatedAt} />{stale ? ". This page may be out of date; it refreshes every 20 seconds." : ""}</span>
         </div>
-        <div className="admin-ops-fact"><span>Razorpay</span><strong>{snapshot.billing.configured ? "Ready" : "Needs configuration"}</strong></div>
-        <div className="admin-ops-fact"><span>Billing webhooks failed</span><strong>{snapshot.billing.failedWebhooksLastHour ?? "Unavailable"}</strong></div>
-        <div className="admin-ops-fact"><span>Stuck deliveries</span><strong>{snapshot.stuckClaims ?? "Unavailable"}</strong></div>
+        <div className="admin-summary-strip">
+          <div className="admin-stat">
+            <span>Incidents</span>
+            <strong>{snapshot.operationalDataAvailable === false ? "–" : activeIncidents}</strong>
+            <small>{snapshot.operationalDataAvailable === false ? "Incident status unavailable" : activeIncidents === 0 ? "No active incidents" : `${activeIncidents} active ${activeIncidents === 1 ? "incident" : "incidents"}`}</small>
+          </div>
+          <div className="admin-stat">
+            <span>Stuck message sends</span>
+            <strong>{count(snapshot.stuckClaims)}</strong>
+            <small>Sends that stopped without a result</small>
+          </div>
+          <div className="admin-stat">
+            <span>Meta events</span>
+            <strong>{count(snapshot.webhookThroughput.lastHour)}</strong>
+            <small>Received in the last hour</small>
+          </div>
+          <div className="admin-stat">
+            <span>Failed billing updates</span>
+            <strong>{count(snapshot.billing.failedWebhooksLastHour)}</strong>
+            <small>From Razorpay in the last hour</small>
+          </div>
+        </div>
       </section>
 
-      <section className="panel admin-probe-panel" aria-label="Runtime probes">
+      <section className="admin-probes" aria-label="Runtime probes">
         {probes.map(([name, probe, Icon]) => (
-          <div className="admin-probe-row" key={name}>
-            <Icon size={18} aria-hidden />
-            <span>{name}</span>
-            <strong className={`is-${probe.state}`}>{probeLabel(probe.state, probe.detail)}</strong>
+          <div className="admin-probe" key={name}>
+            <span className="admin-probe-name"><Icon size={18} aria-hidden /> {name}</span>
+            <StatusBadge tone={probeBadges[probe.state].tone} label={probeBadges[probe.state].label} />
+            {probe.detail ? <p>{probe.detail}</p> : null}
+            {probe.lastSeenAt ? <p>Last check-in <RelativeTime inline value={probe.lastSeenAt} /></p> : null}
+            {probe.release ? <IdChip id={probe.release} prefix="Version" /> : null}
           </div>
         ))}
       </section>
 
-      {snapshot.operationalDataAvailable === false ? <p className="form-error" role="status">Operational data could not be loaded. Incident and workload counts are unavailable.</p> : <IncidentTable incidents={snapshot.incidents} now={new Date(renderedAt).toISOString()} />}
+      {snapshot.operationalDataAvailable === false
+        ? <p className="form-error admin-message" role="status">Operational data could not be loaded, so incident and workload counts are unavailable.</p>
+        : <IncidentTable incidents={snapshot.incidents} now={new Date(renderedAt).toISOString()} />}
 
-      <div className="admin-system-layout">
-        <section className="panel admin-operations-panel" aria-labelledby="queue-heading">
-          <div className="admin-section-heading"><div><h2 id="queue-heading">Queue operations</h2><p>Live workload and bounded operator controls.</p></div></div>
+      <div className="admin-columns is-wide-left">
+        <section className="admin-card is-flush" aria-labelledby="queue-heading">
+          <div className="admin-card-head">
+            <div><h2 id="queue-heading">Background jobs</h2><p>Work waiting to run, and controls to pause or retry it.</p></div>
+          </div>
           {snapshot.queues.map((queue) => {
             const state = queueState(queue);
-            const count = (value: number) => state === "unavailable" ? "–" : value;
+            const shown = (value: number) => state === "unavailable" ? "–" : value.toLocaleString("en-IN");
             return (
-              <div className="admin-queue-row" key={queue.name}>
-                <div className="admin-queue-name"><strong>{queue.name}</strong><span className={`is-${state}`}>{state === "unavailable" ? "Unavailable" : state === "paused" ? "Paused" : "Running"}</span></div>
-                <dl>
-                  <div><dt>Waiting</dt><dd>{count(queue.waiting)}</dd></div>
-                  <div><dt>Active</dt><dd>{count(queue.active)}</dd></div>
-                  <div><dt>Delayed</dt><dd>{count(queue.delayed)}</dd></div>
-                  <div><dt>Failed</dt><dd>{count(queue.failed)}</dd></div>
+              <div className="admin-queue" key={queue.name}>
+                <div className="admin-queue-head">
+                  <strong>{queueName(queue.name)}</strong>
+                  <StatusBadge tone={state === "running" ? "success" : state === "paused" ? "warning" : "danger"} label={state === "unavailable" ? "Unavailable" : state === "paused" ? "Paused" : "Running"} />
+                </div>
+                <dl className="admin-queue-counts">
+                  <div><dt>Waiting</dt><dd>{shown(queue.waiting)}</dd></div>
+                  <div><dt>In progress</dt><dd>{shown(queue.active)}</dd></div>
+                  <div><dt>Scheduled</dt><dd>{shown(queue.delayed)}</dd></div>
+                  <div><dt>Failed</dt><dd>{shown(queue.failed)}</dd></div>
                 </dl>
-                <div className="admin-queue-action">
-                  {queue.lastFailedCode ? <small>Latest failure: <code>{queue.lastFailedCode}</code></small> : <small>{state === "unavailable" ? "Failure history unavailable" : "No recorded failures"}</small>}
-                  <span className="admin-command-actions">
-                    {state !== "unavailable" && queue.failed > 0 ? (
-                      <button className="button button-ghost button-small" type="button" aria-expanded={failedList?.queue === queue.name} aria-controls={`failed-jobs-${queue.name}`} onClick={() => failedList?.queue === queue.name ? setFailedList(null) : void reviewFailedJobs(queue.name)}>
-                        {failedList?.queue === queue.name ? "Hide failed jobs" : "Review failed jobs"}
-                      </button>
-                    ) : null}
-                    <button className="button button-secondary button-small" disabled={state === "unavailable"} type="button" onClick={() => openCommand({ type: "queue", queue: queue.name, action: queue.paused ? "resume" : "pause" })}>{queue.paused ? "Resume queue" : "Pause queue"}</button>
-                  </span>
+                <p className="admin-hint">{queue.lastFailedCode ? <>Latest failure: {humanizeAdminCode(queue.lastFailedCode.toLowerCase())}</> : state === "unavailable" ? "Failure history unavailable" : "No recorded failures"}</p>
+                <div className="admin-actions">
+                  <button className="button button-secondary button-small" disabled={state === "unavailable"} type="button" onClick={() => openCommand({ type: "queue", queue: queue.name, action: queue.paused ? "resume" : "pause" })}>{queue.paused ? "Resume queue" : "Pause queue"}</button>
+                  {state !== "unavailable" && queue.failed > 0 ? (
+                    <button className="button button-ghost button-small" type="button" aria-expanded={failedList?.queue === queue.name} aria-controls={`failed-jobs-${queue.name}`} onClick={() => failedList?.queue === queue.name ? setFailedList(null) : void reviewFailedJobs(queue.name)}>
+                      {failedList?.queue === queue.name ? "Hide failed jobs" : "Review failed jobs"}
+                    </button>
+                  ) : null}
                 </div>
                 {failedList?.queue === queue.name ? (
                   <FailedJobsPanel
@@ -195,29 +232,42 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
               </div>
             );
           })}
-          <div className="admin-maintenance-row">
-            <div><strong>Reconciliation</strong><small>{snapshot.reconciliation.expiredDeliveryClaims === null ? "Expired claim count unavailable" : `${snapshot.reconciliation.expiredDeliveryClaims} expired delivery claims`}</small></div>
-            <div className="admin-command-actions">
-              <button className="button button-secondary button-small" type="button" onClick={() => openCommand({ type: "system", action: "run_delivery_reconciliation" })}>Reconcile deliveries</button>
-              <button className="button button-secondary button-small" type="button" onClick={() => openCommand({ type: "system", action: "run_usage_reconciliation" })}>Reconcile usage</button>
+          <div className="admin-card-foot">
+            <div className="admin-list-main">
+              <strong>Fix-ups</strong>
+              <span className="admin-hint">{snapshot.reconciliation.expiredDeliveryClaims === null ? "Stuck send count unavailable" : snapshot.reconciliation.expiredDeliveryClaims === 0 ? "No stuck sends right now" : `${snapshot.reconciliation.expiredDeliveryClaims} stuck sends to re-check`}</span>
+            </div>
+            <div className="admin-actions">
+              <button className="button button-secondary button-small" type="button" onClick={() => openCommand({ type: "system", action: "run_delivery_reconciliation" })}>Re-check stuck sends</button>
+              <button className="button button-secondary button-small" type="button" onClick={() => openCommand({ type: "system", action: "run_usage_reconciliation" })}>Recount plan usage</button>
             </div>
           </div>
         </section>
 
-        <aside className="panel admin-posture-panel" aria-labelledby="posture-heading">
-          <div className="admin-section-heading"><div><h2 id="posture-heading">Readiness</h2><p>Presence checks only. Values stay secret.</p></div></div>
-          <ul className="admin-readiness-list">
+        <aside className="admin-card is-flush" aria-labelledby="posture-heading">
+          <div className="admin-card-head">
+            <div>
+              <h2 id="posture-heading">Setup checklist</h2>
+              <p>{missing === 0 ? "Everything Linkar needs is set." : `${missing} ${missing === 1 ? "setting needs" : "settings need"} attention. Values stay secret; only presence is checked.`}</p>
+            </div>
+          </div>
+          <ul className="admin-readiness">
             {snapshot.configurationPresence.map((item) => (
-              <li key={item.requirement}><span className="health-orb" data-state={item.present ? "ok" : "warn"} aria-hidden /><span>{item.requirement}</span><strong>{item.present ? "Ready" : "Missing"}</strong></li>
+              <li key={item.requirement}>
+                <span className="admin-readiness-row">
+                  <span>{item.requirement}</span>
+                  <StatusBadge tone={item.present ? "success" : "warning"} label={item.present ? "Ready" : "Missing"} />
+                </span>
+                {!item.present && item.fix ? <span className="admin-hint">{item.fix}</span> : null}
+              </li>
             ))}
           </ul>
-          <dl className="admin-posture-metrics">
-            <div><dt>Webhooks / hour</dt><dd>{snapshot.webhookThroughput.lastHour ?? "Unavailable"}</dd></div>
-            <div><dt>Subscription drift</dt><dd>{snapshot.billing.driftedSubscriptions ?? "Unavailable"}</dd></div>
-            <div><dt>Failed deletions</dt><dd>{snapshot.deletionJobs.failed ?? "Unavailable"}</dd></div>
-            <div><dt>Follow-gated</dt><dd>{snapshot.capabilities.followGatedCampaigns}</dd></div>
+          {!snapshot.billing.configured ? <p className="admin-callout admin-card-note">Razorpay billing is not set up, so customers cannot pay for plans.</p> : null}
+          <dl className="admin-kv admin-card-kv">
+            <div><dt>Subscriptions needing attention</dt><dd>{count(snapshot.billing.driftedSubscriptions)}</dd></div>
+            <div><dt>Failed deletions</dt><dd>{count(snapshot.deletionJobs.failed)}</dd></div>
+            <div><dt>Follow-to-unlock campaigns</dt><dd>{snapshot.capabilities.followGatedCampaigns === "enabled" ? "On" : "Off"}</dd></div>
           </dl>
-          {!snapshot.billing.configured ? <p className="admin-readiness-warning">Razorpay needs configuration</p> : null}
         </aside>
       </div>
 
@@ -225,7 +275,7 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
         <ReasonDialog
           error={error}
           title={commandLabel(pending)}
-          warning="This command changes live Linkar runtime state and is recorded in the immutable audit trail."
+          warning="This changes how Linkar runs right now and is recorded in the audit log."
           busy={busy}
           onCancel={cancelCommand}
           onConfirm={execute}
@@ -245,31 +295,34 @@ function FailedJobsPanel({ list, onToggle, onToggleAll, onRetry }: {
   const selectable = jobs.slice(0, MAX_RETRY_BATCH);
   const allSelected = selectable.length > 0 && selectable.every((job) => list.selected.includes(job.id));
   return (
-    // Spans the whole queue row grid so the list sits under the queue it belongs to.
-    <div className="admin-failed-jobs" style={{ gridColumn: "1 / -1" }} id={`failed-jobs-${list.queue}`} role="region" aria-label={`Failed ${list.queue} jobs`} aria-busy={list.jobs === null}>
-      {list.error ? <div className="form-error" role="alert">{list.error}</div> : null}
-      {list.jobs === null ? <p className="muted">Loading failed jobs…</p> : null}
-      {list.jobs !== null && !list.error && jobs.length === 0 ? <p className="muted">No failed jobs are retained for this queue.</p> : null}
+    <div className="admin-failed-jobs" id={`failed-jobs-${list.queue}`} role="region" aria-label={`Failed ${list.queue} jobs`} aria-busy={list.jobs === null}>
+      {list.error ? <div className="form-error admin-message" role="alert">{list.error}</div> : null}
+      {list.jobs === null ? <p className="admin-hint">Loading failed jobs…</p> : null}
+      {list.jobs !== null && !list.error && jobs.length === 0 ? <p className="admin-hint">No failed jobs are kept for this queue.</p> : null}
       {jobs.length > 0 ? (
         <>
-          <p className="admin-field-hint">Showing the {jobs.length} most recent failed jobs. Retry only failures whose external cause is fixed.</p>
-          <label className="admin-check-field">
+          <p className="admin-hint">The {jobs.length} most recent failed jobs. Only retry the ones whose cause is fixed.</p>
+          <label className="admin-check">
             <input type="checkbox" checked={allSelected} onChange={(event) => onToggleAll(event.target.checked)} /> Select all
           </label>
-          <ul className="admin-record-list">
+          <ul className="admin-list">
             {jobs.map((job) => (
-              <li className="admin-record-row" key={job.id}>
-                <label className="admin-check-field">
+              <li key={job.id}>
+                <label className="admin-check">
                   <input type="checkbox" checked={list.selected.includes(job.id)} disabled={!list.selected.includes(job.id) && list.selected.length >= MAX_RETRY_BATCH} onChange={(event) => onToggle(job.id, event.target.checked)} aria-label={`Select failed job ${job.id}`} />
-                  <span>
-                    <strong>{job.name}</strong>
-                    <small>{job.id} · {job.code ?? "No failure code"} · {job.attemptsMade} attempt{job.attemptsMade === 1 ? "" : "s"}{job.failedAt ? ` · failed ${formatAdminDateTime(job.failedAt)}` : ""}</small>
+                  <span className="admin-list-main">
+                    <strong>{humanizeAdminCode(job.name.replaceAll("-", "_"))}</strong>
+                    <span className="cell-meta">
+                      <span>{job.code ? humanizeAdminCode(job.code.toLowerCase()) : "No failure code"}</span>
+                      <span>{job.attemptsMade} {job.attemptsMade === 1 ? "attempt" : "attempts"}</span>
+                      {job.failedAt ? <span>Failed <RelativeTime inline value={job.failedAt} /></span> : null}
+                    </span>
                   </span>
                 </label>
               </li>
             ))}
           </ul>
-          <div className="admin-command-actions">
+          <div className="admin-actions">
             <button className="button button-secondary button-small" type="button" disabled={list.selected.length === 0} onClick={onRetry}>
               Retry selected ({list.selected.length})
             </button>

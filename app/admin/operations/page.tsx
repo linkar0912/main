@@ -24,10 +24,10 @@ async function Data({ searchParams }: { searchParams: Params }) {
   }
   if (!result) {
     return (
-      <main className="page-wrap admin-resource-page admin-invalid-filters">
-        <h1>Operations</h1>
-        <p role="alert">Invalid operation filters. Clear the filters and try again.</p>
-        <Link className="button button-secondary" href={`/admin/operations?kind=${kind}`}>Clear filters</Link>
+      <main className="page-wrap admin-page">
+        <h1>Records</h1>
+        <p className="admin-callout" role="alert">Those filters could not be used. Clear them and try again.</p>
+        <Link className="button button-secondary admin-start" href={`/admin/operations?kind=${kind}`}>Clear filters</Link>
       </main>
     );
   }

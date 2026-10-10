@@ -71,7 +71,7 @@ function fillInviteForm(planKey = "growth") {
 
   fireEvent.change(planSelect, { target: { value: planKey } });
   fireEvent.change(within(form).getByLabelText("Internal label"), { target: { value: "Launch cohort" } });
-  fireEvent.change(within(form).getByLabelText("Operator reason"), { target: { value: "Creator launch" } });
+  fireEvent.change(within(form).getByLabelText(/^Reason/), { target: { value: "Creator launch" } });
   fireEvent.click(within(form).getByRole("button", { name: "Generate code" }));
 }
 
@@ -88,7 +88,7 @@ describe("PlansScreen", () => {
       redemption: null,
     }]} />);
 
-    expect(screen.getByText("7 assigned workspaces · Active")).toBeTruthy();
+    expect(screen.getByText("7 workspaces on this plan")).toBeTruthy();
     expect(screen.getAllByLabelText("Members").some((input) => (input as HTMLInputElement).value === "")).toBe(true);
     expect(screen.getByRole("button", { name: "Retire plan" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Exports", checked: true })).toBeTruthy();
@@ -148,11 +148,11 @@ it("saves a plan without sending serialized timestamps or other response metadat
   vi.stubGlobal("fetch", fetchMock);
   render(<PlansScreen plans={[{ ...growthPlan, createdAt: "2026-01-01", updatedAt: "2026-01-02" } as typeof growthPlan]} />);
   const form = screen.getByRole("button", { name: "Save plan" }).closest("form")!;
-  fireEvent.change(within(form).getByLabelText("Operator reason"), { target: { value: "Update limits" } });
+  fireEvent.change(within(form).getByLabelText(/^Reason/), { target: { value: "Update limits" } });
   fireEvent.click(within(form).getByRole("button", { name: "Save plan" }));
   // The plan is assigned to 7 workspaces, so saving asks for a second confirmation.
   expect(fetchMock).not.toHaveBeenCalled();
-  expect(within(form).getByText(/Saving changes the limits of 7 assigned workspaces/)).toBeTruthy();
+  expect(within(form).getByText(/Saving changes the limits of 7 workspaces/)).toBeTruthy();
   fireEvent.click(within(form).getByRole("button", { name: "Confirm save" }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
   const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
@@ -165,7 +165,7 @@ describe("PlansScreen retirement", () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: {} }));
     vi.stubGlobal("fetch", fetchMock);
     render(<PlansScreen plans={[growthPlan]} />);
-    const card = screen.getByRole("heading", { name: "Growth", level: 2 }).closest("form");
+    const card = screen.getByRole("heading", { name: "Growth", level: 3 }).closest("form");
     if (!card) throw new Error("Plan card not found");
 
     fireEvent.click(within(card).getByRole("button", { name: "Retire plan" }));
@@ -173,9 +173,9 @@ describe("PlansScreen retirement", () => {
     // Confirming without a reason used to send an empty reason that the server rejected.
     fireEvent.click(within(card).getByRole("button", { name: "Confirm retire" }));
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toContain("Add an operator reason before retiring a plan.");
+    expect(screen.getByRole("alert").textContent).toContain("Add a reason before retiring a plan.");
 
-    fireEvent.change(within(card).getByLabelText("Operator reason"), { target: { value: "Replaced by Scale" } });
+    fireEvent.change(within(card).getByLabelText(/^Reason/), { target: { value: "Replaced by Scale" } });
     fireEvent.click(within(card).getByRole("button", { name: "Confirm retire" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     expect(fetchMock).toHaveBeenCalledWith("/api/admin/plans/p_growth", expect.objectContaining({ method: "DELETE", body: JSON.stringify({ version: 2 }) }));
@@ -201,8 +201,8 @@ describe("plan and invite safeguards", () => {
     render(<PlansScreen plans={[growthPlan]} inviteCodes={[{ id: "i1", label: "Launch cohort", durationDays: 30, expiresAt: "2026-12-01T00:00:00.000Z", revokedAt: null, createdAt: "2026-09-05T00:00:00.000Z", plan: { key: "growth", name: "Growth" }, redemption: null }]} />);
     fireEvent.click(screen.getByRole("button", { name: "Revoke Launch cohort" }));
     const dialog = screen.getByRole("dialog");
-    fireEvent.change(within(dialog).getByLabelText("Operator reason"), { target: { value: "Campaign cancelled" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm action" }));
+    fireEvent.change(within(dialog).getByLabelText(/^Reason/), { target: { value: "Campaign cancelled" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke code" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     expect(fetchMock).toHaveBeenCalledWith("/api/admin/invite-codes/i1", expect.objectContaining({ method: "DELETE" }));
     expect(decodeURIComponent(fetchMock.mock.calls[0][1].headers["x-admin-reason"])).toBe("Campaign cancelled");
@@ -216,8 +216,8 @@ describe("plan and invite safeguards", () => {
     render(<PlansScreen plans={[growthPlan]} inviteCodes={[{ id: "i2", label: "Creator gift", durationDays: 30, expiresAt: null, revokedAt: null, createdAt: "2026-09-05T00:00:00.000Z", plan: { key: "growth", name: "Growth" }, redemption: { workspaceId: "workspace_1", startsAt: "2026-10-01T00:00:00.000Z", expiresAt: "2126-10-31T00:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z" } }]} />);
     fireEvent.click(screen.getByRole("button", { name: "End premium access from Creator gift" }));
     const dialog = screen.getByRole("dialog");
-    fireEvent.change(within(dialog).getByLabelText("Operator reason"), { target: { value: "Abuse of promotion" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm action" }));
+    fireEvent.change(within(dialog).getByLabelText(/^Reason/), { target: { value: "Abuse of promotion" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "End access" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/admin/invite-codes/i2/access", expect.objectContaining({ method: "DELETE" })));
     expect((await screen.findByRole("status")).textContent).toContain("Premium access from Creator gift ended.");
   });

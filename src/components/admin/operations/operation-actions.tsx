@@ -5,22 +5,20 @@ import { useLayoutEffect, useState } from "react";
 import type { AdminOperationDetail } from "@/src/lib/admin/operations/types";
 import { adminCommand, adminErrorMessage, downloadAdminFile } from "../shared/admin-request";
 import { ReasonDialog } from "../shared/reason-dialog";
+import { actionLabel } from "./labels";
 
 const warning: Record<string, string> = {
-  archive: "This removes the resource from active operation without deleting history.",
-  delete: "This deletion is allowed only when linked history is absent.",
-  retry: "Retry is blocked when a provider receipt already exists.",
-  reprocess: "The original provider event ID and timestamp are preserved. Replay requires a complete stored event and is capped.",
-  release_stale_claim: "An expired claim has an unknown provider outcome. Releasing it prevents an automatic resend.",
-  cancel_pending: "Only work that has not been sent is cancelled.",
+  archive: "This takes it out of use without deleting its history.",
+  delete: "This only works when nothing else depends on it.",
+  retry: "Retry is blocked if Meta already confirmed this message.",
+  reprocess: "The original event and its time are kept. Only complete stored events can be replayed, and replays are capped.",
+  release_stale_claim: "This send stopped without a result from Meta. Releasing it marks the outcome unknown so it is never sent twice.",
+  cancel_pending: "Only messages that have not been sent yet are cancelled.",
 };
+
 const destructiveActions = new Set(["delete", "archive", "cancel_pending", "suppress", "disable"]);
 
 type CommandResult = { csv?: string; retried?: number; rejected?: number };
-
-function label(action: string): string {
-  return action.replaceAll("_", " ");
-}
 
 export function OperationActions({
   detail,
@@ -66,8 +64,8 @@ export function OperationActions({
       }
       setAction(null);
       onComplete(action === "retry_failed"
-        ? `${data?.retried ?? 0} recipients queued; ${data?.rejected ?? 0} rejected and remain retryable.`
-        : `${label(action)} completed`);
+        ? `${data?.retried ?? 0} sends queued again; ${data?.rejected ?? 0} could not be retried yet.`
+        : `Done: ${actionLabel(action)}.`);
     } catch (cause) {
       setError(adminErrorMessage(cause, action === "export_one" ? "Export unavailable" : "Operation failed"));
     } finally {
@@ -77,18 +75,18 @@ export function OperationActions({
 
   return (
     <div>
-      <h3>Allowed actions</h3>
-      {actions.length === 0 ? <p className="muted">No operator actions are available for this record in its current state.</p> : null}
-      <div className="admin-command-actions">
+      <h3>What you can do</h3>
+      {actions.length === 0 ? <p className="admin-hint">Nothing can be changed on this record right now.</p> : null}
+      <div className="admin-actions">
         {actions.map((item) => (
           <button className="button button-secondary button-small" type="button" disabled={busy} onClick={() => { setAction(item); setError(null); }} key={item}>
-            {label(item)}
+            {actionLabel(item)}
           </button>
         ))}
       </div>
       {action ? (
         <ReasonDialog
-          title={`${label(action)} ${detail.title}`}
+          title={`${actionLabel(action)}: ${detail.title}`}
           warning={warning[action]}
           error={error}
           busy={busy}
@@ -99,7 +97,7 @@ export function OperationActions({
         >
           {action === "update_destination" ? (
             <label className="field">
-              <span>Destination URL</span>
+              <span>New link address</span>
               <input required type="url" maxLength={2048} value={destination} onChange={(event) => setDestination(event.target.value)} />
             </label>
           ) : null}

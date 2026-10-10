@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useRef, useState } from "react";
-import { ArrowLeft, Ban, Download, PauseCircle, PlayCircle, RadioTower, RotateCcw, Users } from "lucide-react";
+import { ArrowLeft, Ban, Download, Info, PauseCircle, PlayCircle, RotateCcw } from "lucide-react";
 
-import { formatAdminDate, formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { PageHeader } from "@/src/components/page-header";
+import { IdChip } from "@/src/components/ui/id-chip";
+import { RelativeTime } from "@/src/components/ui/relative-time";
 import type { AdminWorkspaceDetail } from "@/src/lib/admin/accounts-repository";
 import { adminCommand, adminCommandResponse, adminErrorMessage, downloadAdminFile } from "./shared/admin-request";
+import { REASON_LABEL } from "./shared/reason-dialog";
 import { StatusPill } from "./shared/status-pill";
 
 type WorkspaceEntitlement = {
@@ -29,8 +32,8 @@ type Notice = { section: Section; tone: "error" | "success"; text: string };
 function SectionNotice({ notice, section }: { notice: Notice | null; section: Section }) {
   if (notice?.section !== section) return null;
   return notice.tone === "error"
-    ? <div className="form-error" role="alert">{notice.text}</div>
-    : <div className="form-success" role="status">{notice.text}</div>;
+    ? <div className="form-error admin-message" role="alert">{notice.text}</div>
+    : <div className="form-success admin-message" role="status">{notice.text}</div>;
 }
 
 function entitlementLabel(key: string): string {
@@ -43,6 +46,11 @@ function entitlementValue(value: number | boolean | null): string {
   if (value === null) return "Unlimited";
   if (typeof value === "boolean") return value ? "Enabled" : "Disabled";
   return value.toLocaleString("en-IN");
+}
+
+function roleLabel(role: string): string {
+  const text = role.toLowerCase().replaceAll("_", " ");
+  return `${text[0]?.toUpperCase() ?? ""}${text.slice(1)}`;
 }
 
 export function WorkspaceDetailScreen({
@@ -111,7 +119,7 @@ export function WorkspaceDetailScreen({
     void mutate(
       "controls",
       () => adminCommand<{ paused: number }>(`/api/admin/workspaces/${workspace.id}/automations/pause`, { body: { version: workspace.version }, reason }),
-      (data) => `${data?.paused ?? 0} active automations paused.`,
+      (data) => `${data?.paused ?? 0} live automations paused.`,
     );
   }
 
@@ -138,214 +146,203 @@ export function WorkspaceDetailScreen({
   function saveEntitlement(event: FormEvent) {
     event.preventDefault();
     if (!entitlement) {
-      fail("entitlement", "Entitlement record is unavailable.");
+      fail("entitlement", "This workspace has no plan record yet.");
       return;
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(overrides);
     } catch {
-      fail("entitlement", "Overrides must be valid JSON.");
+      fail("entitlement", "Custom limits must be valid JSON.");
       return;
     }
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      fail("entitlement", "Overrides must be a JSON object, for example {} to inherit every plan value.");
+      fail("entitlement", "Custom limits must be a JSON object. Use {} to keep every plan value.");
       return;
     }
     void mutate(
       "entitlement",
       () => adminCommand(`/api/admin/workspaces/${workspace.id}/entitlement`, { method: "PATCH", body: { planId, overrides: parsed, version: entitlement.version }, reason: entitlementReason }),
-      "Entitlement saved.",
+      "Plan and limits saved.",
     );
   }
 
   return (
-    <main className="page-wrap admin-resource-page">
-      <Link className="admin-back-inline" href="/admin/workspaces"><ArrowLeft size={16} /> All workspaces</Link>
-      <header className="page-header admin-detail-header">
-        <div>
-          <p className="eyebrow">Workspace / {workspace.id}</p>
-          <h1>{workspace.name}</h1>
-          <p className="muted page-lede">{workspace.slug} · created {formatAdminDate(workspace.createdAt)}</p>
-        </div>
-        <StatusPill status={workspace.status} />
-      </header>
+    <main className="page-wrap admin-page">
+      <PageHeader
+        back={<Link className="admin-back" href="/admin/workspaces"><ArrowLeft size={16} aria-hidden /> All workspaces</Link>}
+        title={workspace.name}
+        description={<>{workspace.slug}, created <RelativeTime inline value={workspace.createdAt} /></>}
+        actions={<StatusPill status={workspace.status} />}
+      />
 
-      <nav className="admin-section-tabs" aria-label="Workspace detail sections">
+      <nav className="admin-tabs" aria-label="Workspace detail sections">
         <a href="#overview">Overview</a>
-        {entitlement ? <a href="#entitlement">Entitlement</a> : null}
+        {entitlement ? <a href="#entitlement">Plan and limits</a> : null}
         <a href="#members">Members</a>
-        <a href="#connections">Connections</a>
-        <a href="#controls">Controls</a>
+        <a href="#connections">Connected accounts</a>
+        <a href="#controls">Suspend or pause</a>
         <a href="#exports">Exports</a>
       </nav>
 
-      <section id="overview" className="admin-detail-grid">
-        <article className="panel admin-summary-card">
-          <p className="eyebrow">Effective plan</p>
-          <h2>{entitlement?.effectivePlan?.name ?? workspace.planName}</h2>
-          <p className="muted">Key: {entitlement?.effectivePlan?.key ?? workspace.planKey}</p>
-          <dl>
-            <div><dt>Members</dt><dd>{workspace.memberCount}</dd></div>
-            <div><dt>Automations</dt><dd>{workspace.automationCount}</dd></div>
-            <div><dt>Entitlement version</dt><dd>{workspace.entitlementVersion ?? 1}</dd></div>
-          </dl>
-        </article>
-        <article className="panel admin-summary-card">
-          <p className="eyebrow">Channels</p>
-          <h2>Integration footprint</h2>
-          <dl>
-            <div><dt>Instagram</dt><dd>{workspace.instagramConnectionCount}</dd></div>
-            <div><dt>Facebook</dt><dd>{workspace.facebookConnectionCount}</dd></div>
-            <div><dt>Record version</dt><dd>{workspace.version}</dd></div>
-          </dl>
-        </article>
+      <section id="overview" className="admin-card" aria-labelledby="workspace-overview-title">
+        <div className="admin-card-head">
+          <h2 id="workspace-overview-title">At a glance</h2>
+          <IdChip id={workspace.id} prefix="Workspace ID" />
+        </div>
+        <dl className="admin-kv is-grid">
+          <div><dt>Plan</dt><dd>{entitlement?.effectivePlan?.name ?? workspace.planName}</dd></div>
+          <div><dt>Members</dt><dd>{workspace.memberCount}</dd></div>
+          <div><dt>Automations</dt><dd>{workspace.automationCount}</dd></div>
+          <div><dt>Instagram accounts</dt><dd>{workspace.instagramConnectionCount}</dd></div>
+          <div><dt>Facebook Pages</dt><dd>{workspace.facebookConnectionCount}</dd></div>
+          <div><dt>Last changed</dt><dd><RelativeTime value={workspace.updatedAt} /></dd></div>
+        </dl>
       </section>
 
       {entitlement ? (
-        <section id="entitlement" className="panel admin-detail-section">
-          <div className="panel-heading">
-            <div><p className="eyebrow">Versioned entitlements</p><h2>Plan, usage, and overrides</h2></div>
-            <StatusPill status="idle" label={`v${entitlement.version}`} />
+        <section id="entitlement" className="admin-card" aria-labelledby="entitlement-title">
+          <div className="admin-card-head">
+            <div>
+              <h2 id="entitlement-title">Plan and limits</h2>
+              <p>What this workspace can use, and how much it has used this period.</p>
+            </div>
           </div>
           {entitlement.premiumExpiresAt ? (
-            <p className="muted">Premium invite access is active until {formatAdminDateTime(entitlement.premiumExpiresAt)}. Plan and override edits below apply after this access expires.</p>
+            <p className="admin-callout"><Info size={16} aria-hidden /><span>Invite-code access is active until <RelativeTime inline value={entitlement.premiumExpiresAt} />. Plan and limit changes below take effect after that.</span></p>
           ) : null}
-          <div className="admin-entitlement-grid">
+          <div className="admin-columns">
             <div>
-              <h3>Current period usage</h3>
-              <dl className="admin-inline-kv">
-                <div><dt>Period started</dt><dd>{formatAdminDate(entitlement.usage.periodStart)}</dd></div>
-                <div><dt>Deliveries reserved</dt><dd>{entitlement.usage.deliveriesReserved.toLocaleString("en-IN")}</dd></div>
+              <h3 className="admin-subtitle">This period</h3>
+              <dl className="admin-kv">
+                <div><dt>Period started</dt><dd><RelativeTime value={entitlement.usage.periodStart} /></dd></div>
+                <div><dt>Messages reserved</dt><dd>{entitlement.usage.deliveriesReserved.toLocaleString("en-IN")}</dd></div>
                 <div><dt>Broadcasts created</dt><dd>{entitlement.usage.broadcastsCreated.toLocaleString("en-IN")}</dd></div>
               </dl>
             </div>
             <div>
-              <h3>Effective limits</h3>
-              <dl className="admin-inline-kv">
+              <h3 className="admin-subtitle">Limits in effect</h3>
+              <dl className="admin-kv">
                 {Object.entries(entitlement.effective).map(([keyName, value]) => (
                   <div key={keyName}><dt>{entitlementLabel(keyName)}</dt><dd>{entitlementValue(value)}</dd></div>
                 ))}
               </dl>
             </div>
           </div>
-          <form className="admin-command-form" onSubmit={saveEntitlement}>
+          <form className="admin-form" onSubmit={saveEntitlement}>
             <label className="field">
-              <span>Plan template</span>
+              <span>Plan</span>
               <select value={planId} onChange={(event) => setPlanId(event.target.value)}>
-                {assignablePlans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name} ({plan.key}){plan.isActive ? "" : " · retired"}</option>)}
+                {assignablePlans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name}{plan.isActive ? "" : " (retired)"}</option>)}
               </select>
             </label>
             <label className="field">
-              <span>Strict override JSON</span>
-              <textarea value={overrides} onChange={(event) => setOverrides(event.target.value)} spellCheck={false} />
+              <span>Custom limits (JSON)</span>
+              <textarea className="admin-code-input" value={overrides} onChange={(event) => setOverrides(event.target.value)} spellCheck={false} />
+              <small>Only known limit and feature names are accepted. Use <code>null</code> for unlimited and leave a name out to use the plan&apos;s value.</small>
             </label>
-            <p className="admin-field-hint">Only documented limit and feature keys are accepted. Use <code>null</code> for unlimited; omit a key to inherit the plan.</p>
             <label className="field">
-              <span>Reason for entitlement change</span>
+              <span>{REASON_LABEL}</span>
               <input required minLength={3} maxLength={500} value={entitlementReason} onChange={(event) => setEntitlementReason(event.target.value)} />
             </label>
-            <div className="admin-command-actions">
-              <button className="button button-primary" disabled={busy} type="submit">Save entitlement</button>
+            <div className="admin-actions">
+              <button className="button button-primary" disabled={busy} type="submit">Save plan and limits</button>
             </div>
             <SectionNotice notice={notice} section="entitlement" />
           </form>
         </section>
       ) : null}
 
-      <section id="members" className="panel admin-detail-section">
-        <div className="panel-heading">
-          <div><p className="eyebrow">Access</p><h2>Workspace members</h2></div>
-          <Users size={20} aria-hidden />
-        </div>
-        {members.length === 0 ? <p className="muted">This workspace has no members.</p> : (
-          <div className="admin-record-list">
+      <section id="members" className="admin-card" aria-labelledby="members-title">
+        <div className="admin-card-head"><h2 id="members-title">Members</h2></div>
+        {members.length === 0 ? <p className="admin-hint">This workspace has no members.</p> : (
+          <ul className="admin-list">
             {members.map((member) => (
-              <div className="admin-record-row" key={`${member.userId}-${member.email}`}>
-                <span>
-                  {member.userId ? <Link href={`/admin/users/${member.userId}`}><strong>{member.email}</strong></Link> : <strong>{member.email}</strong>}
-                  <small>{member.userId ?? "Awaiting identity link"}</small>
+              <li key={`${member.userId}-${member.email}`}>
+                <span className="admin-list-main">
+                  {member.userId ? <Link href={`/admin/users/${member.userId}`}>{member.email}</Link> : <strong>{member.email}</strong>}
+                  <span className="cell-meta">{member.userId ? <IdChip id={member.userId} prefix="User ID" /> : <span>Invited, has not signed in yet</span>}</span>
                 </span>
-                <StatusPill status="idle" label={member.role.toLowerCase()} />
-              </div>
+                <span className="admin-list-side">{roleLabel(member.role)}</span>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
-      <section id="connections" className="panel admin-detail-section">
-        <div className="panel-heading">
-          <div><p className="eyebrow">Provider state</p><h2>Connections</h2></div>
-          <RadioTower size={20} aria-hidden />
+      <section id="connections" className="admin-card" aria-labelledby="connections-title">
+        <div className="admin-card-head">
+          <h2 id="connections-title">Connected accounts</h2>
+          <Link className="button button-secondary button-small" href={`/admin/integrations?workspaceId=${encodeURIComponent(workspace.id)}`}>Check account health</Link>
         </div>
-        {instagramConnections.length === 0 && facebookConnections.length === 0 ? <p className="muted">No provider connections.</p> : (
-          <div className="admin-record-list">
+        {instagramConnections.length === 0 && facebookConnections.length === 0 ? <p className="admin-hint">No provider connections.</p> : (
+          <ul className="admin-list">
             {instagramConnections.map((item) => (
-              <div className="admin-record-row" key={item.id}>
-                <span><strong>@{item.username}</strong><small>Instagram · {item.igUserId}</small></span>
+              <li key={item.id}>
+                <span className="admin-list-main"><strong>@{item.username}</strong><span className="cell-meta"><span>Instagram</span><span>Connected <RelativeTime inline value={item.connectedAt} /></span></span></span>
                 <StatusPill status={item.status} />
-              </div>
+              </li>
             ))}
             {facebookConnections.map((item) => (
-              <div className="admin-record-row" key={item.id}>
-                <span><strong>{item.pageName}</strong><small>Facebook · {item.pageId}</small></span>
+              <li key={item.id}>
+                <span className="admin-list-main"><strong>{item.pageName}</strong><span className="cell-meta"><span>Facebook Page</span><span>Connected <RelativeTime inline value={item.connectedAt} /></span></span></span>
                 <StatusPill status={item.status} />
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
-        <div className="admin-command-actions">
-          <Link className="button button-secondary button-small" href={`/admin/integrations?workspaceId=${encodeURIComponent(workspace.id)}`}>Open integration health</Link>
-        </div>
       </section>
 
-      <section id="controls" className="panel admin-detail-section admin-danger-panel">
-        <div className="panel-heading">
-          <div><p className="eyebrow">Audited controls</p><h2>Workspace lifecycle</h2></div>
-          <Ban size={20} aria-hidden />
+      <section id="controls" className="admin-card is-danger" aria-labelledby="controls-title">
+        <div className="admin-card-head">
+          <div>
+            <h2 id="controls-title">Suspend or pause</h2>
+            <p>Suspending locks everyone out of this workspace. Pausing stops its automations but keeps access.</p>
+          </div>
         </div>
-        {deletionLocked ? <p className="admin-warning-copy">This workspace is queued for permanent deletion, so it cannot be suspended or restored.</p> : null}
-        {suspended && workspace.suspendedReason ? <p className="muted">Suspended: {workspace.suspendedReason}</p> : null}
-        <form className="admin-command-form" onSubmit={lifecycle}>
+        {deletionLocked ? <p className="admin-callout is-danger"><Info size={16} aria-hidden /><span>This workspace is queued for permanent deletion, so it cannot be suspended or restored.</span></p> : null}
+        {suspended && workspace.suspendedReason ? <p className="admin-hint">Suspended because: {workspace.suspendedReason}</p> : null}
+        <form className="admin-form" onSubmit={lifecycle}>
           <label className="field">
-            <span>Operator reason</span>
+            <span>{REASON_LABEL}</span>
             <textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
           </label>
           {!suspended && !deletionLocked ? (
             <label className="field">
-              <span>Type <code>{phrase}</code></span>
+              <span>Type <code className="admin-phrase">{phrase}</code> to confirm a suspension</span>
               <input required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
             </label>
           ) : null}
-          <div className="admin-command-actions">
+          <div className="admin-actions">
             <button ref={lifecycleButton} className={`button ${suspended ? "button-primary" : "button-danger"}`} disabled={busy || deletionLocked} type="submit">
-              {suspended ? <><RotateCcw size={16} /> Restore workspace</> : <><Ban size={16} /> Suspend workspace</>}
+              {suspended ? <><RotateCcw size={16} aria-hidden /> Restore workspace</> : <><Ban size={16} aria-hidden /> Suspend workspace</>}
             </button>
             <button className="button button-secondary" disabled={busy || reason.trim().length < 3} type="button" onClick={pauseAutomations}>
-              <PauseCircle size={16} /> Pause active automations
+              <PauseCircle size={16} aria-hidden /> Pause live automations
             </button>
             <button className="button button-ghost" disabled={busy || deletionLocked || suspended || reason.trim().length < 3} type="button" onClick={resumeAutomations}>
-              <PlayCircle size={16} /> Resume previously paused
+              <PlayCircle size={16} aria-hidden /> Resume paused automations
             </button>
           </div>
-          <p className="admin-field-hint">Resume re-activates the automations the last Pause active automations command stopped, except any changed since then.</p>
+          <p className="admin-hint">Resume turns back on the automations the last pause stopped, except any changed since.</p>
           <SectionNotice notice={notice} section="controls" />
         </form>
       </section>
 
-      <section id="exports" className="panel admin-detail-section">
-        <div className="panel-heading">
-          <div><p className="eyebrow">Safe dataset</p><h2>Workspace export</h2></div>
-          <Download size={20} aria-hidden />
+      <section id="exports" className="admin-card" aria-labelledby="exports-title">
+        <div className="admin-card-head">
+          <div>
+            <h2 id="exports-title">Export data</h2>
+            <p>Workspace details, members, contacts and automations. Passwords, access tokens and raw Meta data are never included. Workspaces over 50,000 rows must be exported offline.</p>
+          </div>
         </div>
-        <p className="muted">Exports contain workspace metadata, members, contacts, and automations. Credentials and provider payloads are excluded. Each export is audited, and workspaces above 50,000 rows must be exported offline.</p>
-        <div className="admin-command-form">
+        <div className="admin-form">
           <label className="field">
-            <span>Reason for export</span>
+            <span>{REASON_LABEL}</span>
             <input required minLength={3} maxLength={500} value={exportReason} onChange={(event) => setExportReason(event.target.value)} />
           </label>
-          <div className="admin-command-actions">
-            <button className="button button-secondary" disabled={busy || exportReason.trim().length < 3} type="button" onClick={() => exportWorkspace("csv")}><Download size={16} /> Download CSV</button>
+          <div className="admin-actions">
+            <button className="button button-secondary" disabled={busy || exportReason.trim().length < 3} type="button" onClick={() => exportWorkspace("csv")}><Download size={16} aria-hidden /> Download CSV</button>
             <button className="button button-ghost" disabled={busy || exportReason.trim().length < 3} type="button" onClick={() => exportWorkspace("json")}>Download JSON</button>
           </div>
           <SectionNotice notice={notice} section="exports" />

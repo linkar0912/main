@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { RelativeTime } from "@/src/components/ui/relative-time";
 import { adminCommand, adminErrorMessage, adminIdempotencyKey } from "../shared/admin-request";
+import { REASON_LABEL } from "../shared/reason-dialog";
 
 type CleanupPreview = {
   count: number;
@@ -61,7 +62,7 @@ export function SyntheticCleanupPanel() {
       setPreview(null);
       setSubmissionKey(null);
       setConfirmation("");
-      setMessage({ tone: "success", text: "Permanent cleanup queued. Progress is shown below." });
+      setMessage({ tone: "success", text: "Cleanup queued. You can follow it in Deletion progress." });
       router.refresh();
     } catch (error) {
       setMessage({ tone: "error", text: adminErrorMessage(error, "Cleanup request failed") });
@@ -70,33 +71,40 @@ export function SyntheticCleanupPanel() {
     }
   }
 
-  return <section className="panel admin-deletion-wizard synthetic-cleanup-panel" aria-labelledby="synthetic-cleanup-title">
-    <div>
-      <p className="eyebrow">Generated test data</p>
-      <h2 id="synthetic-cleanup-title">Clean up synthetic accounts</h2>
-      <p className="muted">Matches only generated Linkar test addresses: owner-, member-, signout-, release-verify and probe-deploy accounts followed by numbers at example.com, and the internal preview account. Every other email is preserved.</p>
+  return <section className="admin-card" aria-labelledby="synthetic-cleanup-title">
+    <div className="admin-card-head">
+      <div>
+        <h2 id="synthetic-cleanup-title">Clean up test accounts</h2>
+        <p>Removes only accounts made by Linkar&apos;s own tests: owner-, member-, signout-, release-verify and probe-deploy addresses followed by numbers at example.com, plus the internal preview account. Every other email is kept.</p>
+      </div>
     </div>
-    <label className="field">
-      <span>Operator reason</span>
-      <textarea value={reason} maxLength={500} onChange={(event) => { setReason(event.target.value); setPreview(null); setSubmissionKey(null); }} rows={3} />
-    </label>
-    <button className="button button-secondary" type="button" disabled={busy || reason.trim().length < 3} onClick={() => void loadPreview()}>Preview test accounts</button>
-    {preview ? <div className="admin-impact-preview">
-      <div><p className="eyebrow">Current production impact</p><h3>{preview.count} accounts match</h3></div>
-      <dl className="admin-system-metrics">
-        <div><dt>Accounts</dt><dd>{preview.count}</dd></div>
-        <div><dt>Memberships</dt><dd>{preview.membershipsAffected}</dd></div>
-        <div><dt>Owned workspaces</dt><dd>{preview.ownedWorkspacesAffected}</dd></div>
-        <div><dt>Protected owners excluded</dt><dd>{preview.protectedAccountsExcluded}</dd></div>
-      </dl>
-      <p className="form-warning">Owned workspaces are removed first. Account identities are rechecked again immediately before permanent deletion.</p>
+    <div className="admin-form">
       <label className="field">
-        <span>Type exactly <code>{preview.confirmationPhrase}</code></span>
-        <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
+        <span>{REASON_LABEL}</span>
+        <textarea value={reason} maxLength={500} onChange={(event) => { setReason(event.target.value); setPreview(null); setSubmissionKey(null); }} rows={3} />
       </label>
-      <p className="muted">This single-use challenge expires {formatAdminDateTime(preview.challenge.expiresAt)}.</p>
-      <button className="button button-danger" type="button" disabled={busy || !submissionKey || confirmation !== preview.confirmationPhrase || preview.count === 0} onClick={() => void queueCleanup()}>Queue permanent cleanup</button>
-    </div> : null}
-    {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "form-error" : "form-success"}>{message.text}</p> : null}
+      <div className="admin-actions">
+        <button className="button button-secondary" type="button" disabled={busy || reason.trim().length < 3} onClick={() => void loadPreview()}>Preview test accounts</button>
+      </div>
+      {preview ? <div className="admin-impact">
+        <h3>{preview.count === 1 ? "1 account matches" : `${preview.count} accounts match`}</h3>
+        <dl className="admin-kv">
+          <div><dt>Accounts</dt><dd>{preview.count}</dd></div>
+          <div><dt>Workspace memberships</dt><dd>{preview.membershipsAffected}</dd></div>
+          <div><dt>Workspaces they own</dt><dd>{preview.ownedWorkspacesAffected}</dd></div>
+          <div><dt>Protected owners skipped</dt><dd>{preview.protectedAccountsExcluded}</dd></div>
+        </dl>
+        <p className="admin-hint">Workspaces they own are removed first. Each account is checked again just before it is deleted.</p>
+        <label className="field">
+          <span>Type exactly <code className="admin-phrase">{preview.confirmationPhrase}</code></span>
+          <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
+        </label>
+        <p className="admin-hint">This preview expires <RelativeTime inline value={preview.challenge.expiresAt} />.</p>
+        <div className="admin-actions">
+          <button className="button button-danger" type="button" disabled={busy || !submissionKey || confirmation !== preview.confirmationPhrase || preview.count === 0} onClick={() => void queueCleanup()}>Queue permanent cleanup</button>
+        </div>
+      </div> : null}
+      {message ? <p role={message.tone === "error" ? "alert" : "status"} className={`admin-message ${message.tone === "error" ? "form-error" : "form-success"}`}>{message.text}</p> : null}
+    </div>
   </section>;
 }

@@ -43,7 +43,7 @@ describe("AdminSecurityScreen", () => {
 
     render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{ aal: "aal1", nextAal: "aal2", factors: [] }} onVerified={onVerified} />);
 
-    expect(await screen.findByText("MFA enrollment required")).toBeTruthy();
+    expect(await screen.findByText("Set up two-factor sign-in")).toBeTruthy();
     expect(screen.queryByText("PRIVATESECRET")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Set up authenticator" }));
@@ -70,8 +70,8 @@ describe("AdminSecurityScreen", () => {
     render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{ aal: "aal1", nextAal: "aal2", factors: [] }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Set up authenticator" }));
 
-    expect((await screen.findByRole("alert")).textContent).toContain("MFA provider is temporarily unavailable");
-    expect(screen.getByText("MFA enrollment required")).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain("Two-factor sign-in is temporarily unavailable");
+    expect(screen.getByText("Set up two-factor sign-in")).toBeTruthy();
   });
 
   it("challenges an existing verified factor instead of trying to enroll a duplicate", async () => {
@@ -116,12 +116,12 @@ describe("AdminSecurityScreen", () => {
 
     render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{ aal: "aal2", nextAal: "aal2", factors: factors as never }} onVerified={onVerified} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add backup factor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a backup app" }));
     expect(await screen.findByText("BACKUPSECRET")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Six-digit verification code"), { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Verify backup factor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Verify backup app" }));
 
-    expect((await screen.findByRole("status")).textContent).toBe("Backup factor Linkar Operator 2 verified.");
+    expect((await screen.findByRole("status")).textContent).toBe("Backup app Linkar Operator 2 verified.");
     expect(onVerified).not.toHaveBeenCalled();
     expect(screen.queryByText("BACKUPSECRET")).toBeNull();
     expect(screen.getByText("Linkar Operator 2")).toBeTruthy();
@@ -133,11 +133,11 @@ describe("AdminSecurityScreen", () => {
 
     render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{ aal: "aal2", nextAal: "aal2", factors: [{ id: "factor-1", friendlyName: "Primary", factorType: "totp", status: "verified" }] }} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add backup factor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a backup app" }));
     expect(await screen.findByText("BACKUPSECRET")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByText("BACKUPSECRET")).toBeNull();
-    expect(screen.getByRole("button", { name: "Add backup factor" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a backup app" })).toBeTruthy();
   });
 
   it("shows factor removal only when another verified recovery factor exists", async () => {

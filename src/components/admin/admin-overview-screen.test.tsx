@@ -28,26 +28,43 @@ const overview: AdminOverviewDTO = {
     detail: "Provider rejected message",
     status: "failed",
     workspaceId: "workspace-1",
+    workspaceName: "Acme Studio",
+    actor: null,
     targetId: "automation-1",
+  }, {
+    id: "audit-a1",
+    kind: "audit",
+    at: "2026-08-31T09:58:00.000Z",
+    title: "premium_invite.create",
+    detail: "Creator launch",
+    status: "success",
+    workspaceId: null,
+    workspaceName: null,
+    actor: "owner@linkar.in",
+    targetId: "invite-1",
   }],
 };
 
 describe("AdminOverviewScreen", () => {
   afterEach(cleanup);
 
-  it("renders real totals, degraded dependencies, and the operator tape", () => {
+  it("renders real totals, degraded dependencies, and recent activity in plain words", () => {
     render(<AdminOverviewScreen overview={overview} />);
 
-    expect(screen.getByRole("heading", { name: "Platform overview" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Overview", level: 1 })).toBeTruthy();
     expect(screen.getByText("12")).toBeTruthy();
-    expect(screen.getByText("Redis degraded")).toBeTruthy();
+    expect(screen.getByText("Job queue (Redis)").parentElement?.textContent).toContain("Down");
     expect(screen.getByText("Provider rejected message")).toBeTruthy();
-    expect(screen.getByText("Release e4afaee")).toBeTruthy();
+    expect(screen.getByText("A message failed to send")).toBeTruthy();
+    expect(screen.getByText("Created an invite code")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Acme Studio" }).getAttribute("href")).toBe("/admin/workspaces/workspace-1");
+    expect(screen.getByText("e4afaee")).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/UTC|premium_invite\.create/);
   });
 
   it("renders an explicit empty state when there is no operator history", () => {
     render(<AdminOverviewScreen overview={{ ...overview, operatorTape: [] }} />);
 
-    expect(screen.getByText("No recent operator or delivery events")).toBeTruthy();
+    expect(screen.getByText(/No recent activity/)).toBeTruthy();
   });
 });

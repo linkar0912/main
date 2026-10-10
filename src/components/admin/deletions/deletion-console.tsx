@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
+import { PageHeader } from "@/src/components/page-header";
+import { IdChip } from "@/src/components/ui/id-chip";
+import { RelativeTime } from "@/src/components/ui/relative-time";
 import { AdminPagination } from "../shared/admin-pagination";
-import { adminCommand, adminErrorMessage, adminIdempotencyKey } from "../shared/admin-request";
+import { adminCommand, adminErrorMessage, adminIdempotencyKey, humanizeAdminCode } from "../shared/admin-request";
+import { REASON_LABEL } from "../shared/reason-dialog";
 import { StatusPill } from "../shared/status-pill";
 import { DeletionWizard } from "./deletion-wizard";
 import { SyntheticCleanupPanel } from "./synthetic-cleanup-panel";
@@ -66,7 +70,7 @@ export function DeletionConsole({
     setNotice(null);
     try {
       await adminCommand(`/api/admin/deletions/${job.id}`, { method: "PATCH", body: { action }, reason, fallback: "deletion_command_failed", idempotencyKey: adminIdempotencyKey("deletion") });
-      setNotice(action === "cancel" ? "Cancellation requested." : "Deletion job queued again.");
+      setNotice(action === "cancel" ? "Cancellation requested." : "Deletion queued again.");
       router.refresh();
     } catch (cause) {
       setError(adminErrorMessage(cause, "Command failed. Check your connection and try again."));
@@ -76,39 +80,40 @@ export function DeletionConsole({
   }
 
   return (
-    <main className="page-wrap admin-resource-page">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Linkar operator / data lifecycle</p>
-          <h1>Permanent deletion</h1>
-          <p className="muted page-lede">Impact-reviewed, resumable deletion with a hard irreversible boundary.</p>
-        </div>
-      </header>
+    <main className="page-wrap admin-page">
+      <PageHeader
+        title="Delete data"
+        description="Permanently remove a workspace or user. This can't be undone."
+        actions={<Link className="button button-secondary" href="/admin/system/data-deletions">Meta deletion requests</Link>}
+      />
 
-      <SyntheticCleanupPanel />
       <DeletionWizard />
 
-      <section className="panel admin-table-panel" aria-labelledby="deletion-progress-title">
-        <div className="panel-heading">
-          <div><p className="eyebrow">Durable jobs</p><h2 id="deletion-progress-title">Deletion progress</h2></div>
+      <section className="admin-card is-flush" aria-labelledby="deletion-progress-title">
+        <div className="admin-card-head">
+          <div>
+            <h2 id="deletion-progress-title">Deletion progress</h2>
+            <p>{hasActiveJob ? "Refreshes every 20 seconds while a deletion is running." : "Newest first."}</p>
+          </div>
         </div>
         {jobs.length === 0 ? (
-          <div className="empty-state">
-            <h3>No deletion jobs</h3>
-            <p>Queued, running, and finished deletions will be listed here.</p>
+          <div className="admin-empty">
+            <p>No deletions yet. Queued, running and finished deletions appear here.</p>
           </div>
         ) : (
           <>
-            <label className="field admin-job-reason">
-              <span>Reason for cancel or retry</span>
-              <input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Required before a job can be cancelled or retried" />
-            </label>
-            {error ? <div className="form-error" role="alert">{error}</div> : null}
-            {notice ? <div className="form-success" role="status">{notice}</div> : null}
-            <div className="admin-table-scroll">
-              <table className="admin-table">
+            <div className="admin-card-body">
+              <label className="field">
+                <span>{REASON_LABEL}</span>
+                <input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Needed before you cancel or retry a deletion" />
+              </label>
+              {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
+              {notice ? <div className="form-success admin-message" role="status">{notice}</div> : null}
+            </div>
+            <div className="table-scroll">
+              <table className="data-table is-stackable">
                 <thead>
-                  <tr><th>Target</th><th>State</th><th>Stage</th><th>Progress</th><th>Created</th><th>Action</th></tr>
+                  <tr><th>Deleting</th><th>Status</th><th>Progress</th><th>Started</th><th className="is-action"><span className="sr-only">Actions</span></th></tr>
                 </thead>
                 <tbody>
                   {jobs.map((job) => {
@@ -116,18 +121,27 @@ export function DeletionConsole({
                     const canRetry = job.state === "FAILED";
                     return (
                       <tr key={job.id}>
-                        <td><strong>{job.targetKind.toLowerCase()}</strong><small>{job.targetId}</small></td>
-                        <td><StatusPill status={job.state} />{job.terminalErrorCode ? <small>{job.terminalErrorCode}</small> : null}</td>
-                        <td>{job.currentStage ? job.currentStage.toLowerCase().replaceAll("_", " ") : "Queued"}</td>
-                        <td>{job.progress}%</td>
-                        <td>{formatAdminDateTime(job.createdAt)}</td>
-                        <td>
+                        <td><span className="cell-stack"><strong>{job.targetKind === "WORKSPACE" ? "Workspace" : job.targetKind === "USER" ? "User" : humanizeAdminCode(job.targetKind.toLowerCase())}</strong><IdChip id={job.targetId} /></span></td>
+                        <td data-label="Status">
+                          <span className="cell-stack">
+                            <StatusPill status={job.state} />
+                            {job.terminalErrorCode ? <span className="cell-meta">{humanizeAdminCode(job.terminalErrorCode)}</span> : null}
+                          </span>
+                        </td>
+                        <td data-label="Progress">
+                          <span className="cell-stack">
+                            <span>{job.progress}%</span>
+                            <span className="cell-meta">{job.currentStage ? humanizeAdminCode(job.currentStage.toLowerCase()) : job.state === "COMPLETED" ? "Finished" : "Waiting to start"}</span>
+                          </span>
+                        </td>
+                        <td data-label="Started"><RelativeTime value={job.createdAt instanceof Date ? job.createdAt.toISOString() : job.createdAt} /></td>
+                        <td className="is-action">
                           {canCancel || canRetry ? (
-                            <span className="admin-job-actions">
+                            <span className="admin-actions">
                               {canCancel ? <button className="button button-small button-secondary" type="button" disabled={busy !== null || !reasonReady} aria-label={`Cancel deletion of ${jobLabel(job)}`} onClick={() => void command(job, "cancel")}>Cancel</button> : null}
                               {canRetry ? <button className="button button-small button-secondary" type="button" disabled={busy !== null || !reasonReady} aria-label={`Retry deletion of ${jobLabel(job)}`} onClick={() => void command(job, "retry")}>Retry</button> : null}
                             </span>
-                          ) : "-"}
+                          ) : <span className="admin-hint">{job.irreversibleAt && cancellableStates.includes(job.state) ? "Can no longer be stopped" : "No actions"}</span>}
                         </td>
                       </tr>
                     );
@@ -146,8 +160,10 @@ export function DeletionConsole({
         history={history}
         nextCursor={nextCursor}
         label="Deletion job pagination"
-        summary={hasActiveJob ? "Refreshes every 20 seconds while a job is active." : "Newest jobs first."}
+        summary={null}
       />
+
+      <SyntheticCleanupPanel />
     </main>
   );
 }

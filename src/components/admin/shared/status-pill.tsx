@@ -1,11 +1,56 @@
-const TONES: Record<string, "ok" | "warn" | "bad" | "idle"> = {
-  active: "ok", connected: "ok", sent: "ok", completed: "ok", processed: "ok", available: "ok", ready: "ok", success: "ok", healthy: "ok",
-  pending: "warn", queued: "warn", running: "warn", claimed: "warn", received: "warn", attempt: "warn", cancelling: "warn", unknown: "warn", drifted: "warn", deletion_pending: "warn",
-  suspended: "bad", failed: "bad", failure: "bad", expired: "bad", revoked: "bad", unavailable: "bad",
+import { StatusBadge, type StatusTone } from "@/src/components/ui/status-badge";
+
+// Record states arrive as enum values (ACTIVE, DELETION_PENDING, drifted).
+// Each maps to one tone and one plain word.
+const STATES: Record<string, [StatusTone, string]> = {
+  active: ["success", "Active"],
+  connected: ["success", "Connected"],
+  sent: ["success", "Sent"],
+  completed: ["success", "Completed"],
+  processed: ["success", "Processed"],
+  available: ["success", "Available"],
+  ready: ["success", "Ready"],
+  success: ["success", "Succeeded"],
+  healthy: ["success", "Healthy"],
+  running: ["neutral", "Running"],
+  pending: ["warning", "Pending"],
+  queued: ["neutral", "Queued"],
+  claimed: ["neutral", "Sending"],
+  received: ["neutral", "Received"],
+  attempt: ["neutral", "Started"],
+  cancelling: ["warning", "Cancelling"],
+  unknown: ["warning", "Unknown"],
+  drifted: ["warning", "Needs repair"],
+  deletion_pending: ["warning", "Deletion pending"],
+  paused: ["warning", "Paused"],
+  draft: ["neutral", "Draft"],
+  unchecked: ["neutral", "Not checked"],
+  disabled: ["neutral", "Turned off"],
+  suppressed: ["neutral", "Opted out"],
+  cancelled: ["neutral", "Cancelled"],
+  used: ["neutral", "Used"],
+  retired: ["neutral", "Retired"],
+  suspended: ["danger", "Suspended"],
+  failed: ["danger", "Failed"],
+  failure: ["danger", "Failed"],
+  expired: ["danger", "Expired"],
+  revoked: ["danger", "Revoked"],
+  unavailable: ["danger", "Unavailable"],
+  disconnected: ["danger", "Disconnected"],
 };
 
-/** One badge for every record state in the owner console. */
-export function StatusPill({ status, label }: { status: string; label?: string }) {
+export function statusLabel(status: string): string {
   const key = status.toLowerCase();
-  return <span className={`status-pill is-${TONES[key] ?? "idle"}`}>{label ?? key.replaceAll("_", " ")}</span>;
+  if (STATES[key]) return STATES[key][1];
+  const words = key.replaceAll("_", " ");
+  return words ? `${words[0].toUpperCase()}${words.slice(1)}` : "Unknown";
+}
+
+export function statusTone(status: string): StatusTone {
+  return STATES[status.toLowerCase()]?.[0] ?? "neutral";
+}
+
+/** One badge for every record state in the owner console. */
+export function StatusPill({ status, label, tone }: { status: string; label?: string; tone?: StatusTone }) {
+  return <StatusBadge tone={tone ?? statusTone(status)} label={label ?? statusLabel(status)} />;
 }

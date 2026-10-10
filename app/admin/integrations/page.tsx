@@ -18,10 +18,10 @@ async function Data({ searchParams }: { searchParams: Params }) {
     : null;
   if (!page) {
     return (
-      <main className="page-wrap admin-resource-page admin-invalid-filters">
-        <h1>Integrations</h1>
-        <p role="alert">Invalid integration filters. Clear the filters and try again.</p>
-        <Link className="button button-secondary" href="/admin/integrations">Clear filters</Link>
+      <main className="page-wrap admin-page">
+        <h1>Connected accounts</h1>
+        <p className="admin-callout" role="alert">Those filters could not be used. Clear them and try again.</p>
+        <Link className="button button-secondary admin-start" href="/admin/integrations">Clear filters</Link>
       </main>
     );
   }

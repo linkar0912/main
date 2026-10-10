@@ -11,7 +11,7 @@ it("traps focus, restores it, and prevents dismissal during an in-flight command
   expect(document.body.style.overflow).toBe("hidden");
   expect(document.activeElement).toBe(screen.getByRole("textbox"));
   await userEvent.type(screen.getByRole("textbox"), "  review  ");
-  await userEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+  await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
   expect(confirm).toHaveBeenCalledWith("review");
   await userEvent.tab(); expect(document.activeElement).toBe(screen.getByRole("textbox"));
   rerender(<ReasonDialog title="Pause queue" onCancel={cancel} onConfirm={confirm} busy />);

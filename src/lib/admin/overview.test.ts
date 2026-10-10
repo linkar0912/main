@@ -72,4 +72,14 @@ describe("loadAdminOverview", () => {
 
     expect(dto.operatorTape[0].detail).toBe("Delivery failed. Inspect the delivery record for its result code.");
   });
+
+  it("names workspaces and actors in the activity feed, and survives a failed name lookup", async () => {
+    const named = await loadAdminOverview(sources({ loadWorkspaceNames: async () => new Map([["workspace-1", "Acme Studio"]]) }));
+    expect(named.operatorTape.every((item) => item.workspaceName === "Acme Studio")).toBe(true);
+    expect(named.operatorTape.find((item) => item.kind === "audit")?.actor).toBe("owner@linkar.in");
+    expect(named.operatorTape.find((item) => item.kind === "failure")?.actor).toBeNull();
+
+    const unnamed = await loadAdminOverview(sources({ loadWorkspaceNames: async () => { throw new Error("db down"); } }));
+    expect(unnamed.operatorTape.every((item) => item.workspaceName === null)).toBe(true);
+  });
 });
