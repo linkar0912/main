@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getServerEnv } from "@/src/lib/env";
-import { getValidatedSession } from "@/src/lib/auth/session";
+import { getValidatedSession, sessionRevocationInstant } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 import { LoginRateLimitStore } from "@/src/lib/auth/rate-limit";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { rejectCrossSiteRequest } from "@/src/lib/security/same-origin";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,8 @@ export async function GET(request: Request) {
 //   action=logout-all            (invalidates every session)
 //   action=resend-verification   (re-sends the signup confirmation email)
 export async function POST(request: Request) {
+    const crossSite = rejectCrossSiteRequest(request);
+    if (crossSite) return crossSite;
     const env = getServerEnv();
     const session = await getValidatedSession(request);
     if (!session) return NextResponse.redirect(new URL("/login", env.appUrl), 303);
@@ -88,10 +91,9 @@ export async function POST(request: Request) {
             return NextResponse.redirect(new URL("/profile?accountSaved=already-verified", env.appUrl), 303);
         }
         resendVerificationLimiter ??= new LoginRateLimitStore(env.redisUrl, 3, 60 * 60 * 1_000);
-        if (!(await resendVerificationLimiter.isAllowed(session.userId))) {
+        if (!(await resendVerificationLimiter.consume(session.userId))) {
             return NextResponse.redirect(new URL("/profile?accountError=verify-rate-limited", env.appUrl), 303);
         }
-        await resendVerificationLimiter.recordFailure(session.userId);
         const confirmUrl = new URL("/auth/confirm", env.appUrl);
         confirmUrl.searchParams.set("type", "signup");
         await supabase.auth.resend({
@@ -103,6 +105,10 @@ export async function POST(request: Request) {
     }
 
     if (action === "logout-all") {
+        // signOut revokes refresh tokens only; access JWTs already issued to
+        // other devices stay valid until expiry unless every session check
+        // also rejects tokens issued before this instant.
+        await getRepository().revokeUserSessions(session.userId, sessionRevocationInstant());
         await supabase.auth.signOut({ scope: "global" });
         return NextResponse.redirect(new URL("/login?loggedOut=all", env.appUrl), 303);
     }

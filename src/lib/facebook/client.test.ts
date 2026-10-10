@@ -15,6 +15,14 @@ afterEach(() => {
 });
 
 describe("FacebookClient", () => {
+  it("never puts a non-numeric profile id into a Graph path", async () => {
+    const fetchMock = vi.fn();
+    const client = new FacebookClient({ apiVersion: "v25.0", fetcher: fetchMock as unknown as typeof fetch });
+    await expect(client.getProfilePictureUrl({ pageId: "page_1", accessToken: "page-token" }, "me/accounts"))
+      .resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("loads a Facebook profile picture without exposing the Page token", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(200, {
       picture: { data: { url: "https://cdn.example/facebook-profile.jpg" } },
@@ -23,11 +31,11 @@ describe("FacebookClient", () => {
 
     await expect(client.getProfilePictureUrl(
       { pageId: "page_1", accessToken: "page-token" },
-      "person_1",
+      "1234567890",
     )).resolves.toBe("https://cdn.example/facebook-profile.jpg");
 
     const requestUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
-    expect(requestUrl.pathname).toBe("/v25.0/person_1");
+    expect(requestUrl.pathname).toBe("/v25.0/1234567890");
     expect(requestUrl.searchParams.get("fields")).toBe("picture.type(square).width(96).height(96)");
     expect(requestUrl.searchParams.has("access_token")).toBe(false);
   });

@@ -102,6 +102,50 @@ describe("POST /api/auth/signup", () => {
     expect(location(response)).toContain("/signup?sent=1");
   });
 
+  it("defers workspace provisioning and invite acceptance until the email is verified", async () => {
+    mocks.findInvitationByTokenHash.mockResolvedValue({
+      id: "inv_1", workspaceId: "ws_invited", email: "invited@example.com", role: "MEMBER",
+      tokenHash: "hash", invitedByUserId: "u_1",
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(), createdAt: new Date().toISOString(),
+    });
+    mocks.signUp.mockResolvedValue({ data: { user: { id: "user-signup", identities: [{ id: "identity_1" }] }, session: null }, error: null });
+
+    const response = await POST(signupRequest({
+      email: "invited@example.com", password: "long-enough-password", invite: "raw-token", next: "/automations",
+    }, "203.0.113.10"));
+
+    expect(mocks.acceptInvitation).not.toHaveBeenCalled();
+    expect(mocks.ensureWorkspace).not.toHaveBeenCalled();
+    const options = mocks.signUp.mock.calls[0]?.[0]?.options;
+    const confirmUrl = new URL(options.emailRedirectTo);
+    expect(confirmUrl.pathname).toBe("/auth/confirm");
+    expect(confirmUrl.searchParams.get("invite")).toBe("raw-token");
+    expect(options.data).toEqual({ pending_invite: "raw-token" });
+    expect(location(response)).toBe(
+      "http://localhost:3000/signup?sent=1&email=invited%40example.com&next=%2Fautomations&invite=raw-token",
+    );
+  });
+
+  it("keeps the invite on an invite-mismatch error so the person can retry", async () => {
+    mocks.findInvitationByTokenHash.mockResolvedValue(null);
+    const response = await POST(signupRequest({
+      email: "someone@example.com", password: "long-enough-password", invite: "raw-token",
+    }, "203.0.113.11"));
+    expect(location(response)).toContain("invite=raw-token");
+    expect(location(response)).toContain("/signup?error=invite");
+  });
+
+  it("rejects a cross-site signup post", async () => {
+    const request = new Request("http://localhost/api/auth/signup", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "cross-site", origin: "https://evil.example" },
+      body: new URLSearchParams({ email: "a@example.com", password: "long-enough-password" }).toString(),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(403);
+    expect(mocks.signUp).not.toHaveBeenCalled();
+  });
+
   it("redirects to login with error=exists when Supabase reports the email already exists", async () => {
     mocks.signUp.mockResolvedValue({ data: { user: null, session: null }, error: { code: "email_exists" } });
     const response = await POST(signupRequest({ email: "taken@example.com", password: "long-enough-password" }, "203.0.113.7"));

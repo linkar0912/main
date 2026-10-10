@@ -1,7 +1,17 @@
+import type { Metadata } from "next";
 import { PublicPage } from "@/src/components/public-page";
+import { PRODUCT_NAME } from "@/src/lib/branding";
 import { getRepository } from "@/src/lib/repository-provider";
 
 export const dynamic = "force-dynamic";
+
+// The confirmation code in the URL is a lookup token; keep these pages out of
+// search indexes and never leak the URL as a Referer.
+export const metadata: Metadata = {
+  title: `Deletion request status · ${PRODUCT_NAME}`,
+  robots: { index: false, follow: false },
+  referrer: "no-referrer",
+};
 
 type StatusPageProps = { params: Promise<{ code: string }> };
 
