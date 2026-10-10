@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 
 import { AdminRouteGuard } from "@/src/components/admin/admin-route-guard";
+import { parseAdminPageHistory } from "@/src/components/admin/shared/admin-pagination";
 import { UsersScreen } from "@/src/components/admin/users-screen";
 import { getAdminAccountsRepository } from "@/src/lib/admin/accounts-provider";
 import { AdminCursorError } from "@/src/lib/admin/cursor";
 
-type SearchParams = Promise<{ cursor?: string | string[]; search?: string | string[] }>;
+type SearchParams = Promise<{ cursor?: string | string[]; search?: string | string[]; prev?: string | string[] }>;
 
 async function UsersData({ searchParams }: { searchParams: SearchParams }) {
   const input = await searchParams;
@@ -16,7 +17,7 @@ async function UsersData({ searchParams }: { searchParams: SearchParams }) {
     if (error instanceof AdminCursorError) redirect(`/admin/users${search ? `?${new URLSearchParams({ search })}` : ""}`);
     throw error;
   });
-  return <UsersScreen key={search} page={page} search={search} />;
+  return <UsersScreen key={search} page={page} search={search} cursor={cursor} history={parseAdminPageHistory(input.prev)} />;
 }
 
 export default function AdminUsersPage({ searchParams }: { searchParams: SearchParams }) {

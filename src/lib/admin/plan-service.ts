@@ -72,17 +72,28 @@ export async function updateAdminPlan(planId: string, input: z.infer<typeof Plan
   return serialize(await prisma.planDefinition.findUniqueOrThrow({ where: { id: planId }, select: planSelect }));
 }
 
+/** New workspaces are created on this plan, so it can never be retired. */
+export const DEFAULT_PLAN_KEY = "free";
+
 export async function retireAdminPlan(planId: string, version: number) {
-  const changed = await prisma.planDefinition.updateMany({ where: { id: planId, version }, data: { isActive: false, version: { increment: 1 } } });
+  const plan = await prisma.planDefinition.findUnique({ where: { id: planId }, select: { key: true } });
+  if (!plan) throw new AdminWorkspaceError(404, "plan_not_found");
+  if (plan.key === DEFAULT_PLAN_KEY) throw new AdminWorkspaceError(409, "default_plan_protected");
+  const changed = await prisma.planDefinition.updateMany({ where: { id: planId, version, key: { not: DEFAULT_PLAN_KEY } }, data: { isActive: false, version: { increment: 1 } } });
   if (changed.count !== 1) throw new AdminWorkspaceError(409, "stale_version");
   return serialize(await prisma.planDefinition.findUniqueOrThrow({ where: { id: planId }, select: planSelect }));
 }
 
 export async function updateAdminWorkspaceEntitlement(workspaceId: string, input: { planId: string; overrides: unknown; version: number }) {
   const overrides = EntitlementOverridesSchema.parse(input.overrides);
-  const plan = await prisma.planDefinition.findUnique({ where: { id: input.planId }, select: { id: true, isActive: true } });
+  const [plan, current] = await Promise.all([
+    prisma.planDefinition.findUnique({ where: { id: input.planId }, select: { id: true, isActive: true } }),
+    prisma.workspaceEntitlement.findUnique({ where: { workspaceId }, select: { planId: true } }),
+  ]);
   if (!plan) throw new AdminWorkspaceError(404, "plan_not_found");
-  if (!plan.isActive) throw new AdminWorkspaceError(409, "plan_retired");
+  // A workspace already on a retired plan keeps it: editing only its overrides
+  // must not force a plan change. Assigning a retired plan anew is refused.
+  if (!plan.isActive && current?.planId !== plan.id) throw new AdminWorkspaceError(409, "plan_retired");
   const changed = await prisma.workspaceEntitlement.updateMany({ where: { workspaceId, version: input.version }, data: { planId: input.planId, overrides: overrides as Prisma.InputJsonValue, version: { increment: 1 } } });
   if (changed.count !== 1) {
     const exists = await prisma.workspaceEntitlement.count({ where: { workspaceId } });
@@ -116,4 +127,19 @@ export async function loadAdminWorkspaceEntitlement(workspaceId: string) {
     version: record.version,
     usage: { deliveriesReserved: usage?.deliveriesReserved ?? 0, broadcastsCreated: usage?.broadcastsCreated ?? 0, periodStart: periodStart.toISOString() },
   };
+}
+
+/**
+ * Ends a redeemed premium invite early by moving its access end to now. The
+ * workspace falls back to its assigned plan on its next entitlement read.
+ */
+export async function endAdminPremiumAccess(codeId: string) {
+  const now = new Date();
+  const ended = await prisma.premiumInviteRedemption.updateMany({ where: { codeId, expiresAt: { gt: now } }, data: { expiresAt: now } });
+  if (ended.count !== 1) {
+    const exists = await prisma.premiumInviteRedemption.count({ where: { codeId } });
+    throw new AdminWorkspaceError(exists ? 409 : 404, exists ? "premium_access_already_ended" : "premium_redemption_not_found");
+  }
+  const redemption = await prisma.premiumInviteRedemption.findUniqueOrThrow({ where: { codeId }, select: { workspaceId: true, expiresAt: true } });
+  return { codeId, workspaceId: redemption.workspaceId, endedAt: redemption.expiresAt.toISOString() };
 }

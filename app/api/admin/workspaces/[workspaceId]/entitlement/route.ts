@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { entitlementAuditSnapshot } from "@/src/lib/admin/audit-snapshots";
 import { adminJson, adminRouteError, runAuditedAdminMutation } from "@/src/lib/admin/http";
 import { loadAdminWorkspaceEntitlement, updateAdminWorkspaceEntitlement } from "@/src/lib/admin/plan-service";
 import { requireAdminRead, requireAdminWrite } from "@/src/lib/admin/request-guard";
@@ -12,6 +13,6 @@ export async function GET(request: Request, context: RouteContext<"/api/admin/wo
   catch (error) { return adminRouteError(error, "workspace_entitlement_unavailable"); }
 }
 export async function PATCH(request: Request, context: RouteContext<"/api/admin/workspaces/[workspaceId]/entitlement">) {
-  try { const { workspaceId } = await context.params; const input = UpdateEntitlement.parse(await request.json()); const guard = await requireAdminWrite(request, { action: "workspace.entitlement.update", targetType: "workspace", targetId: workspaceId, workspaceId }); return adminJson({ data: await runAuditedAdminMutation(guard, () => updateAdminWorkspaceEntitlement(workspaceId, input)) }); }
+  try { const { workspaceId } = await context.params; const input = UpdateEntitlement.parse(await request.json()); const guard = await requireAdminWrite(request, { action: "workspace.entitlement.update", targetType: "workspace", targetId: workspaceId, workspaceId }); return adminJson({ data: await runAuditedAdminMutation(guard, () => updateAdminWorkspaceEntitlement(workspaceId, input), { before: await entitlementAuditSnapshot(workspaceId) }) }); }
   catch (error) { return adminRouteError(error, "workspace_entitlement_update_failed"); }
 }

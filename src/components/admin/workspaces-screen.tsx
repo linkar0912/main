@@ -6,9 +6,10 @@ import { FormEvent, useState } from "react";
 import { ArrowRight, Boxes, Search, Users } from "lucide-react";
 
 import type { AdminWorkspaceSummary, CursorPage } from "@/src/lib/admin/accounts-repository";
+import { AdminPagination } from "./shared/admin-pagination";
 import { StatusPill } from "./shared/status-pill";
 
-export function WorkspacesScreen({ page, search = "" }: { page: CursorPage<AdminWorkspaceSummary>; search?: string }) {
+export function WorkspacesScreen({ page, search = "", cursor = null, history = [] }: { page: CursorPage<AdminWorkspaceSummary>; search?: string; cursor?: string | null; history?: string[] }) {
   const router = useRouter();
   const [query, setQuery] = useState(search);
 
@@ -60,10 +61,15 @@ export function WorkspacesScreen({ page, search = "" }: { page: CursorPage<Admin
         )}
       </section>
 
-      <nav className="admin-pagination" aria-label="Workspace pagination">
-        <span className="muted">Results are ordered newest first.</span>
-        {page.nextCursor ? <Link className="button button-secondary" href={`/admin/workspaces?${new URLSearchParams({ ...(search ? { search } : {}), cursor: page.nextCursor }).toString()}`}>Next page <ArrowRight size={16} /></Link> : <span className="muted">End of results</span>}
-      </nav>
+      <AdminPagination
+        basePath="/admin/workspaces"
+        params={search ? { search } : {}}
+        cursor={cursor}
+        history={history}
+        nextCursor={page.nextCursor}
+        label="Workspace pagination"
+        summary="Results are ordered newest first."
+      />
     </main>
   );
 }

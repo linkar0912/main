@@ -171,6 +171,13 @@ export async function retryAdminQueueJobs(name: string, jobIds: string[]): Promi
   return { retried: jobIds };
 }
 
+/** Lists the most recent failed jobs with safe codes only; payloads and raw reasons never leave Redis. */
+export async function listAdminFailedJobs(name: string, limit = 50): Promise<Array<{ id: string; name: string; failedAt: string | null; attemptsMade: number; code: string | null }>> {
+  const queue = adminQueue(name); if (!queue) throw new Error("queue_unavailable");
+  const jobs = await queue.getJobs(["failed"], 0, Math.max(1, Math.min(limit, 100)) - 1);
+  return jobs.flatMap((job) => job?.id ? [{ id: job.id, name: job.name, failedAt: job.finishedOn ? new Date(job.finishedOn).toISOString() : null, attemptsMade: job.attemptsMade, code: safeFailureCode(job.failedReason) }] : []);
+}
+
 export async function enqueueAdminMaintenance(action: "delivery_reconciliation" | "usage_reconciliation"): Promise<boolean> {
   const queue = getWebhookQueue(); if (!queue) return false;
   const existing = await queue.getJob(`admin-maintenance_${action}`);

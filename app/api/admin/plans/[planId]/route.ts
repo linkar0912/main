@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { planAuditSnapshot } from "@/src/lib/admin/audit-snapshots";
 import { adminJson, adminRouteError, runAuditedAdminMutation } from "@/src/lib/admin/http";
 import { PlanValuesSchema, retireAdminPlan, updateAdminPlan } from "@/src/lib/admin/plan-service";
 import { requireAdminWrite } from "@/src/lib/admin/request-guard";
@@ -11,7 +12,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
   try {
     const { planId } = await context.params; const input = UpdatePlan.parse(await request.json());
     const guard = await requireAdminWrite(request, { action: "plan.update", targetType: "plan", targetId: planId });
-    return adminJson({ data: await runAuditedAdminMutation(guard, () => updateAdminPlan(planId, input)) });
+    return adminJson({ data: await runAuditedAdminMutation(guard, () => updateAdminPlan(planId, input), { before: await planAuditSnapshot(planId) }) });
   } catch (error) { return adminRouteError(error, "plan_update_failed"); }
 }
 
@@ -19,6 +20,6 @@ export async function DELETE(request: Request, context: RouteContext<"/api/admin
   try {
     const { planId } = await context.params; const input = RetirePlan.parse(await request.json());
     const guard = await requireAdminWrite(request, { action: "plan.retire", targetType: "plan", targetId: planId });
-    return adminJson({ data: await runAuditedAdminMutation(guard, () => retireAdminPlan(planId, input.version)) });
+    return adminJson({ data: await runAuditedAdminMutation(guard, () => retireAdminPlan(planId, input.version), { before: await planAuditSnapshot(planId) }) });
   } catch (error) { return adminRouteError(error, "plan_retire_failed"); }
 }

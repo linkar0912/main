@@ -10,6 +10,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/src/lib/admin/request-guard", () => ({ requireAdminWrite: mocks.requireAdminWrite }));
 vi.mock("@/src/lib/admin/workspace-service", () => ({ setAdminWorkspaceLifecycle: mocks.setLifecycle }));
 vi.mock("@/src/lib/admin/audit", () => ({ appendAdminAuditEvent: mocks.appendAdminAuditEvent }));
+vi.mock("@/src/lib/admin/audit-snapshots", () => ({ workspaceAuditSnapshot: vi.fn().mockResolvedValue({ status: "ACTIVE", version: 1 }) }));
 
 const { POST } = await import("./route");
 const context = { params: Promise.resolve({ workspaceId: "w1" }) } as never;
@@ -31,6 +32,7 @@ describe("workspace lifecycle", () => {
     }), context);
     expect(response.status).toBe(200);
     expect(mocks.setLifecycle).toHaveBeenCalledWith("w1", expect.objectContaining({ reason: "abuse review", actorUserId: "owner-id" }));
+    expect(mocks.appendAdminAuditEvent.mock.calls.every(([event]) => event.before?.status === "ACTIVE")).toBe(true);
   });
 
   it("returns missing reason before changing lifecycle", async () => {

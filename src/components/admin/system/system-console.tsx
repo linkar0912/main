@@ -6,15 +6,23 @@ import { Activity, CircleCheck, CircleX, Database, Gauge, RadioTower, Server } f
 
 import { formatAdminDateTime } from "@/src/components/admin/shared/date-format";
 import type { AdminSystemSnapshot } from "@/src/lib/admin/system/types";
-import { adminCommand, adminErrorMessage } from "../shared/admin-request";
+import { adminCommand, adminErrorMessage, adminQuery } from "../shared/admin-request";
 import { ReasonDialog } from "../shared/reason-dialog";
 import { IncidentTable } from "./incident-table";
 
 type Pending =
   | { type: "queue"; queue: string; action: "pause" | "resume" }
+  | { type: "retry"; queue: string; jobIds: string[] }
   | { type: "system"; action: "run_delivery_reconciliation" | "run_usage_reconciliation" };
 
+type FailedJob = { id: string; name: string; failedAt: string | null; attemptsMade: number; code: string | null };
+type FailedJobList = { queue: string; jobs: FailedJob[] | null; selected: string[]; error: string | null };
+
+// The retry endpoint accepts at most this many job IDs per audited command.
+const MAX_RETRY_BATCH = 100;
+
 function commandLabel(pending: Pending): string {
+  if (pending.type === "retry") return `retry ${pending.jobIds.length} failed ${pending.queue} job${pending.jobIds.length === 1 ? "" : "s"}`;
   const action = pending.action.replaceAll("_", " ");
   return pending.type === "queue" ? `${action} ${pending.queue} queue` : action;
 }
@@ -40,13 +48,36 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [failedList, setFailedList] = useState<FailedJobList | null>(null);
+  const reviewingFailures = failedList !== null;
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (document.visibilityState === "visible" && !pending) router.refresh();
+      // A refresh while reviewing failed jobs would re-render under the operator's selection.
+      if (document.visibilityState === "visible" && !pending && !reviewingFailures) router.refresh();
     }, 20_000);
     return () => clearInterval(timer);
-  }, [pending, router]);
+  }, [pending, reviewingFailures, router]);
+
+  async function reviewFailedJobs(queue: string) {
+    setNotice(null);
+    setFailedList({ queue, jobs: null, selected: [], error: null });
+    try {
+      const jobs = await adminQuery<FailedJob[]>(`/api/admin/system/queues/${queue}`, { fallback: "queue_failed_jobs_unavailable" });
+      setFailedList((current) => current?.queue === queue ? { ...current, jobs } : current);
+    } catch (cause) {
+      const message = adminErrorMessage(cause, "Failed jobs unavailable");
+      setFailedList((current) => current?.queue === queue ? { ...current, jobs: [], error: message } : current);
+    }
+  }
+
+  function toggleJob(id: string, checked: boolean) {
+    setFailedList((current) => current ? { ...current, selected: checked ? [...current.selected, id] : current.selected.filter((item) => item !== id) } : current);
+  }
+
+  function toggleAll(checked: boolean) {
+    setFailedList((current) => current ? { ...current, selected: checked ? (current.jobs ?? []).slice(0, MAX_RETRY_BATCH).map((job) => job.id) : [] } : current);
+  }
 
   function openCommand(next: Pending) {
     setError(null);
@@ -64,9 +95,11 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
     setBusy(true);
     setError(null);
     try {
-      const url = pending.type === "queue" ? `/api/admin/system/queues/${pending.queue}` : "/api/admin/system";
-      await adminCommand(url, { method: pending.type === "queue" ? "PATCH" : "POST", body: { action: pending.action }, reason, fallback: "system_command_failed" });
+      const url = pending.type === "system" ? "/api/admin/system" : `/api/admin/system/queues/${pending.queue}`;
+      const body = pending.type === "retry" ? { action: "retry_failed_jobs", jobIds: pending.jobIds } : { action: pending.action };
+      await adminCommand(url, { method: pending.type === "system" ? "POST" : "PATCH", body, reason, fallback: "system_command_failed" });
       setNotice(`${commandLabel(pending)} accepted`);
+      if (pending.type === "retry") setFailedList(null);
       setPending(null);
       router.refresh();
     } catch (cause) {
@@ -142,8 +175,23 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
                 </dl>
                 <div className="admin-queue-action">
                   {queue.lastFailedCode ? <small>Latest failure: <code>{queue.lastFailedCode}</code></small> : <small>{state === "unavailable" ? "Failure history unavailable" : "No recorded failures"}</small>}
-                  <button className="button button-secondary button-small" disabled={state === "unavailable"} type="button" onClick={() => openCommand({ type: "queue", queue: queue.name, action: queue.paused ? "resume" : "pause" })}>{queue.paused ? "Resume queue" : "Pause queue"}</button>
+                  <span className="admin-command-actions">
+                    {state !== "unavailable" && queue.failed > 0 ? (
+                      <button className="button button-ghost button-small" type="button" aria-expanded={failedList?.queue === queue.name} aria-controls={`failed-jobs-${queue.name}`} onClick={() => failedList?.queue === queue.name ? setFailedList(null) : void reviewFailedJobs(queue.name)}>
+                        {failedList?.queue === queue.name ? "Hide failed jobs" : "Review failed jobs"}
+                      </button>
+                    ) : null}
+                    <button className="button button-secondary button-small" disabled={state === "unavailable"} type="button" onClick={() => openCommand({ type: "queue", queue: queue.name, action: queue.paused ? "resume" : "pause" })}>{queue.paused ? "Resume queue" : "Pause queue"}</button>
+                  </span>
                 </div>
+                {failedList?.queue === queue.name ? (
+                  <FailedJobsPanel
+                    list={failedList}
+                    onToggle={toggleJob}
+                    onToggleAll={toggleAll}
+                    onRetry={() => openCommand({ type: "retry", queue: queue.name, jobIds: failedList.selected.slice(0, MAX_RETRY_BATCH) })}
+                  />
+                ) : null}
               </div>
             );
           })}
@@ -184,5 +232,50 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
         />
       ) : null}
     </main>
+  );
+}
+
+function FailedJobsPanel({ list, onToggle, onToggleAll, onRetry }: {
+  list: FailedJobList;
+  onToggle: (id: string, checked: boolean) => void;
+  onToggleAll: (checked: boolean) => void;
+  onRetry: () => void;
+}) {
+  const jobs = list.jobs ?? [];
+  const selectable = jobs.slice(0, MAX_RETRY_BATCH);
+  const allSelected = selectable.length > 0 && selectable.every((job) => list.selected.includes(job.id));
+  return (
+    // Spans the whole queue row grid so the list sits under the queue it belongs to.
+    <div className="admin-failed-jobs" style={{ gridColumn: "1 / -1" }} id={`failed-jobs-${list.queue}`} role="region" aria-label={`Failed ${list.queue} jobs`} aria-busy={list.jobs === null}>
+      {list.error ? <div className="form-error" role="alert">{list.error}</div> : null}
+      {list.jobs === null ? <p className="muted">Loading failed jobs…</p> : null}
+      {list.jobs !== null && !list.error && jobs.length === 0 ? <p className="muted">No failed jobs are retained for this queue.</p> : null}
+      {jobs.length > 0 ? (
+        <>
+          <p className="admin-field-hint">Showing the {jobs.length} most recent failed jobs. Retry only failures whose external cause is fixed.</p>
+          <label className="admin-check-field">
+            <input type="checkbox" checked={allSelected} onChange={(event) => onToggleAll(event.target.checked)} /> Select all
+          </label>
+          <ul className="admin-record-list">
+            {jobs.map((job) => (
+              <li className="admin-record-row" key={job.id}>
+                <label className="admin-check-field">
+                  <input type="checkbox" checked={list.selected.includes(job.id)} disabled={!list.selected.includes(job.id) && list.selected.length >= MAX_RETRY_BATCH} onChange={(event) => onToggle(job.id, event.target.checked)} aria-label={`Select failed job ${job.id}`} />
+                  <span>
+                    <strong>{job.name}</strong>
+                    <small>{job.id} · {job.code ?? "No failure code"} · {job.attemptsMade} attempt{job.attemptsMade === 1 ? "" : "s"}{job.failedAt ? ` · failed ${formatAdminDateTime(job.failedAt)}` : ""}</small>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="admin-command-actions">
+            <button className="button button-secondary button-small" type="button" disabled={list.selected.length === 0} onClick={onRetry}>
+              Retry selected ({list.selected.length})
+            </button>
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }

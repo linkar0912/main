@@ -93,7 +93,8 @@ describe("PlansScreen", () => {
     expect(screen.getByRole("button", { name: "Retire plan" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Exports", checked: true })).toBeTruthy();
     expect(screen.getByText("Launch cohort")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Revoke" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Revoke Launch cohort" })).toBeTruthy();
+    expect(screen.getByText(/code does not expire/)).toBeTruthy();
   });
 
   it("creates an invite for the selected active paid plan", async () => {
@@ -149,6 +150,10 @@ it("saves a plan without sending serialized timestamps or other response metadat
   const form = screen.getByRole("button", { name: "Save plan" }).closest("form")!;
   fireEvent.change(within(form).getByLabelText("Operator reason"), { target: { value: "Update limits" } });
   fireEvent.click(within(form).getByRole("button", { name: "Save plan" }));
+  // The plan is assigned to 7 workspaces, so saving asks for a second confirmation.
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(within(form).getByText(/Saving changes the limits of 7 assigned workspaces/)).toBeTruthy();
+  fireEvent.click(within(form).getByRole("button", { name: "Confirm save" }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
   const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
   expect(body.version).toBe(2);
@@ -180,5 +185,40 @@ describe("PlansScreen retirement", () => {
     render(<PlansScreen plans={[retiredPlan]} />);
     expect(screen.queryByRole("button", { name: "Save plan" })).toBeNull();
     expect(screen.getByText(/Retired plans are read-only/)).toBeTruthy();
+  });
+});
+
+describe("plan and invite safeguards", () => {
+  it("does not offer retirement of the default free plan", () => {
+    render(<PlansScreen plans={[freePlan]} />);
+    expect(screen.queryByRole("button", { name: "Retire plan" })).toBeNull();
+    expect(screen.getByText(/cannot be retired/)).toBeTruthy();
+  });
+
+  it("revokes a code through its own reason dialog and handles a code that no longer exists", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ error: "invite_code_not_found" }, { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PlansScreen plans={[growthPlan]} inviteCodes={[{ id: "i1", label: "Launch cohort", durationDays: 30, expiresAt: "2026-12-01T00:00:00.000Z", revokedAt: null, createdAt: "2026-09-05T00:00:00.000Z", plan: { key: "growth", name: "Growth" }, redemption: null }]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Revoke Launch cohort" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Operator reason"), { target: { value: "Campaign cancelled" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm action" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(fetchMock).toHaveBeenCalledWith("/api/admin/invite-codes/i1", expect.objectContaining({ method: "DELETE" }));
+    expect(decodeURIComponent(fetchMock.mock.calls[0][1].headers["x-admin-reason"])).toBe("Campaign cancelled");
+    expect((await screen.findByRole("alert")).textContent).toContain("Launch cohort no longer exists");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("ends active premium access from a redeemed code", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: { codeId: "i2" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PlansScreen plans={[growthPlan]} inviteCodes={[{ id: "i2", label: "Creator gift", durationDays: 30, expiresAt: null, revokedAt: null, createdAt: "2026-09-05T00:00:00.000Z", plan: { key: "growth", name: "Growth" }, redemption: { workspaceId: "workspace_1", startsAt: "2026-10-01T00:00:00.000Z", expiresAt: "2126-10-31T00:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z" } }]} />);
+    fireEvent.click(screen.getByRole("button", { name: "End premium access from Creator gift" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Operator reason"), { target: { value: "Abuse of promotion" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm action" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/admin/invite-codes/i2/access", expect.objectContaining({ method: "DELETE" })));
+    expect((await screen.findByRole("status")).textContent).toContain("Premium access from Creator gift ended.");
   });
 });

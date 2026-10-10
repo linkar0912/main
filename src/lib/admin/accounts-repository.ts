@@ -6,7 +6,12 @@ export type CursorQuery = {
   search?: string;
 };
 
-export type CursorPage<T> = { items: T[]; nextCursor: string | null };
+export type CursorPage<T> = {
+  items: T[];
+  nextCursor: string | null;
+  /** Set when a search stopped before covering every record; results may be incomplete. */
+  searchLimited?: boolean;
+};
 
 export type AdminWorkspaceSummary = {
   id: string;
@@ -44,6 +49,8 @@ export type AdminUserSummary = {
 };
 
 export type AdminUserDetail = AdminUserSummary & {
+  /** Supabase Auth ban end, independent of the Linkar access status above. */
+  authBannedUntil?: string | null;
   sessionInvalidBefore?: string;
   suspendedAt?: string;
   suspendedReason?: string;
@@ -55,6 +62,12 @@ export interface AdminAccountsRepository {
   getAdminWorkspace(id: string): Promise<AdminWorkspaceDetail | null>;
   listAdminUsers(query: CursorQuery): Promise<CursorPage<AdminUserSummary>>;
   getAdminUser(id: string): Promise<AdminUserDetail | null>;
+}
+
+/** Returns the Supabase Auth ban end while it is still in force. */
+export function activeBanUntil(user: { banned_until?: string | null }, now = new Date()): string | null {
+  const until = user.banned_until ? Date.parse(user.banned_until) : Number.NaN;
+  return Number.isFinite(until) && until > now.getTime() ? new Date(until).toISOString() : null;
 }
 
 export function boundedAdminLimit(limit?: number): number {

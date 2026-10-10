@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity, ArrowRight, RefreshCcw } from "lucide-react";
+import { Activity, RefreshCcw } from "lucide-react";
 
 import type { AdminOperationDetail, AdminOperationItem, AdminOperationKind, AdminOperationPage } from "@/src/lib/admin/operations/types";
 import { adminOperationKinds, adminOperationStatuses } from "@/src/lib/admin/operations/types";
 import { adminErrorMessage, adminQuery } from "../shared/admin-request";
+import { AdminPagination } from "../shared/admin-pagination";
 import { CursorTable } from "../shared/cursor-table";
 import { FilterBar } from "../shared/filter-bar";
 import { OperationDetailDrawer } from "./operation-detail-drawer";
@@ -15,8 +15,18 @@ import { OperationDetailDrawer } from "./operation-detail-drawer";
 const REFRESH_INTERVAL_MS = 20_000;
 // Tracked links are not bound to a provider; a provider filter would always return nothing.
 const kindsWithoutProvider: readonly AdminOperationKind[] = ["tracked_link"];
+// The free-text filter searches a different field for each resource kind.
+const textFilters: Record<AdminOperationKind, { label: string; placeholder: string }> = {
+  automation: { label: "Name", placeholder: "Automation name" },
+  sequence: { label: "Name", placeholder: "Sequence name" },
+  broadcast: { label: "Name", placeholder: "Broadcast name" },
+  contact: { label: "Contact", placeholder: "Email, @handle, or Instagram user ID" },
+  tracked_link: { label: "Slug", placeholder: "Link slug" },
+  delivery: { label: "Delivery kind", placeholder: "AUTOMATION_DM" },
+  webhook: { label: "Event type", placeholder: "comment.created" },
+};
 
-export function OperationsConsole({ kind, page, filters }: { kind: AdminOperationKind; page: AdminOperationPage; filters: Record<string, string> }) {
+export function OperationsConsole({ kind, page, filters, cursor = null, history = [] }: { kind: AdminOperationKind; page: AdminOperationPage; filters: Record<string, string>; cursor?: string | null; history?: string[] }) {
   const router = useRouter();
   const [selected, setSelected] = useState<AdminOperationDetail | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -110,6 +120,8 @@ export function OperationsConsole({ kind, page, filters }: { kind: AdminOperatio
         initial={filters}
         statuses={adminOperationStatuses[kind]}
         showProvider={!kindsWithoutProvider.includes(kind)}
+        textLabel={textFilters[kind].label}
+        textPlaceholder={textFilters[kind].placeholder}
         onApply={(next) => navigate({ ...next, cursor: "" })}
       />
 
@@ -121,12 +133,15 @@ export function OperationsConsole({ kind, page, filters }: { kind: AdminOperatio
         <CursorTable items={page.items} onOpen={open} />
       </section>
 
-      <nav className="admin-pagination" aria-label="Operation pagination">
-        <span className="muted"><Activity size={14} /> {page.items.length} results on this page</span>
-        {page.nextCursor
-          ? <Link className="button button-secondary" href={`/admin/operations?${new URLSearchParams({ ...filters, kind, cursor: page.nextCursor })}`}>Next page <ArrowRight size={16} /></Link>
-          : <span className="muted">End of results</span>}
-      </nav>
+      <AdminPagination
+        basePath="/admin/operations"
+        params={{ ...filters, kind }}
+        cursor={cursor}
+        history={history}
+        nextCursor={page.nextCursor}
+        label="Operation pagination"
+        summary={<><Activity size={14} /> {page.items.length} results on this page</>}
+      />
 
       {drawerOpen ? (
         <>

@@ -44,6 +44,16 @@ export type AdminWriteContext = AdminWriteOptions & {
   userAgent: string;
 };
 
+/** Clients percent-encode the reason so non-Latin-1 text survives the header. */
+function decodeAdminReason(header: string | null): string {
+  if (!header) return "";
+  try {
+    return decodeURIComponent(header).trim();
+  } catch {
+    throw new AdminRequestError(422, "reason_required");
+  }
+}
+
 function hmac(secret: string, purpose: string, value: string): string {
   return createHmac("sha256", secret).update(`${purpose}\0${value}`).digest("hex");
 }
@@ -92,7 +102,7 @@ function buildAdminWriteContext(
     throw new AdminRequestError(415, "json_required");
   }
 
-  const reason = request.headers.get("x-admin-reason")?.trim() ?? "";
+  const reason = decodeAdminReason(request.headers.get("x-admin-reason"));
   if (reason.length < 3 || reason.length > 500) {
     throw new AdminRequestError(422, "reason_required");
   }

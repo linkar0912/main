@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { getAdminAccountsRepository } from "@/src/lib/admin/accounts-provider";
+import { workspaceAuditSnapshot } from "@/src/lib/admin/audit-snapshots";
 import { adminJson, adminRouteError, runAuditedAdminMutation } from "@/src/lib/admin/http";
 import { requireAdminRead, requireAdminWrite } from "@/src/lib/admin/request-guard";
 import { updateAdminWorkspace } from "@/src/lib/admin/workspace-service";
@@ -27,7 +28,9 @@ export async function PATCH(request: Request, context: RouteContext<"/api/admin/
     const { workspaceId } = await context.params;
     const input = UpdateWorkspace.parse(await request.json());
     const guard = await requireAdminWrite(request, { action: "workspace.update", targetType: "workspace", targetId: workspaceId, workspaceId });
+    const before = await workspaceAuditSnapshot(workspaceId);
     const workspace = await runAuditedAdminMutation(guard, () => updateAdminWorkspace(workspaceId, input), {
+      before: before && { name: before.name, slug: before.slug, version: before.version },
       summarize: (result) => ({ id: result.id, name: result.name, slug: result.slug, status: result.status, version: result.version }),
     });
     return adminJson({ data: workspace });

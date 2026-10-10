@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AuditFilterSchema } from "@/src/lib/admin/audit/query-schema";
 import { AdminRouteGuard } from "@/src/components/admin/admin-route-guard";
+import { parseAdminPageHistory } from "@/src/components/admin/shared/admin-pagination";
 import { AuditConsole } from "@/src/components/admin/audit/audit-console";
 import { listAdminAuditEvents } from "@/src/lib/admin/audit/repository";
 import { AdminCursorError } from "@/src/lib/admin/cursor";
@@ -32,9 +33,8 @@ async function Data({ searchParams }: PageProps<"/admin/audit">) {
       </main>
     );
   }
-  const active = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
-  const next = data.nextCursor ? `/admin/audit?${new URLSearchParams({ ...active, cursor: data.nextCursor }).toString()}` : null;
-  return <AuditConsole events={data.items} nextHref={next} filters={filters} />;
+  const cursor = typeof params.cursor === "string" && params.cursor ? params.cursor : null;
+  return <AuditConsole events={data.items} nextCursor={data.nextCursor} filters={filters} cursor={cursor} history={parseAdminPageHistory(params.prev)} />;
 }
 
 export default function AdminAuditPage(props: PageProps<"/admin/audit">) {

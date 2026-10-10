@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AdminRouteGuard } from "@/src/components/admin/admin-route-guard";
+import { parseAdminPageHistory } from "@/src/components/admin/shared/admin-pagination";
 import { IntegrationsConsole } from "@/src/components/admin/integrations/integrations-console";
 import { AdminCursorError } from "@/src/lib/admin/cursor";
 import { AdminIntegrationQuery, getAdminIntegrationsRepository } from "@/src/lib/admin/integrations/repository";
@@ -24,7 +25,7 @@ async function Data({ searchParams }: { searchParams: Params }) {
       </main>
     );
   }
-  return <IntegrationsConsole key={JSON.stringify(filters)} items={page.items} filters={filters} nextCursor={page.nextCursor} />;
+  return <IntegrationsConsole key={JSON.stringify(filters)} items={page.items} filters={filters} nextCursor={page.nextCursor} history={parseAdminPageHistory(raw.prev)} />;
 }
 
 export default function IntegrationsPage({ searchParams }: { searchParams: Params }) {

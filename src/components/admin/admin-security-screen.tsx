@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { KeyRound, LockKeyhole, ShieldCheck, Trash2 } from "lucide-react";
+import { KeyRound, LockKeyhole, Plus, ShieldCheck, Trash2 } from "lucide-react";
+
+import { encodeAdminReason } from "./shared/admin-request";
 
 type Factor = {
   id: string;
@@ -18,9 +20,12 @@ export type AdminSecurityScreenState = {
 
 type Enrollment = {
   factorId: string;
+  friendlyName?: string;
   qrCode: string;
   secret: string;
   uri: string;
+  /** A backup factor is added from an AAL2 session and does not redirect. */
+  backup: boolean;
 };
 
 type Removal = {
@@ -50,6 +55,60 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return await response.json().catch(() => ({})) as Record<string, unknown>;
 }
 
+function EnrollmentForm({
+  enrollment,
+  code,
+  busy,
+  submitLabel,
+  onCodeChange,
+  onSubmit,
+  onCancel,
+}: {
+  enrollment: Enrollment;
+  code: string;
+  busy: boolean;
+  submitLabel: string;
+  onCodeChange: (code: string) => void;
+  onSubmit: (event: React.FormEvent) => void;
+  onCancel?: () => void;
+}) {
+  return (
+    <form className="admin-enrollment-grid" onSubmit={onSubmit}>
+      <div className="admin-qr-frame">
+        {/* Supabase returns trusted enrollment SVG; encoding it prevents markup injection. */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- ephemeral data URI cannot use the image optimizer */}
+        <img
+          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(enrollment.qrCode)}`}
+          alt="Linkar authenticator QR code"
+        />
+      </div>
+      <div className="admin-enrollment-fields">
+        <p className="muted">Can’t scan? Enter this secret manually:</p>
+        <code className="admin-secret">{enrollment.secret}</code>
+        <label className="field">
+          <span>Six-digit verification code</span>
+          <input
+            value={code}
+            onChange={(event) => onCodeChange(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxLength={6}
+          />
+        </label>
+        <div className="admin-security-actions">
+          {onCancel ? (
+            <button className="button button-secondary" type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+          ) : null}
+          <button className="button button-primary" type="submit" disabled={busy || !/^\d{6}$/.test(code)}>
+            {submitLabel}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
 function messageFor(error: unknown): string {
   const code = typeof error === "string" ? error : "security_operation_failed";
   return ERROR_MESSAGES[code] ?? "The security operation could not be completed.";
@@ -70,6 +129,7 @@ export function AdminSecurityScreen({
   const [removal, setRemoval] = useState<Removal | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -87,7 +147,7 @@ export function AdminSecurityScreen({
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-admin-reason": reason,
+        "x-admin-reason": encodeAdminReason(reason),
         "idempotency-key": idempotencyKey(),
       },
       body: JSON.stringify(body),
@@ -102,12 +162,13 @@ export function AdminSecurityScreen({
     [security],
   );
 
-  async function beginEnrollment() {
+  async function beginEnrollment(backup = false) {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      const data = await post({ action: "enroll" }, "Enroll owner MFA");
-      setEnrollment(data as Enrollment);
+      const data = await post({ action: "enroll" }, backup ? "Add backup owner MFA factor" : "Enroll owner MFA");
+      setEnrollment({ ...(data as Omit<Enrollment, "backup">), backup });
       setCode("");
     } catch (caught) {
       setError(messageFor(caught));
@@ -125,8 +186,17 @@ export function AdminSecurityScreen({
     try {
       const data = await post(
         { action: "verify", factorId, code },
-        "Verify owner MFA",
+        enrollment?.backup ? "Verify backup owner MFA factor" : "Verify owner MFA",
       );
+      if (enrollment?.backup) {
+        // The session is already AAL2; stay here and show the new inventory.
+        const name = enrollment.friendlyName ?? "authenticator";
+        setEnrollment(null);
+        setCode("");
+        await load();
+        setNotice(`Backup factor ${name} verified.`);
+        return;
+      }
       onVerified(typeof data.redirectTo === "string" ? data.redirectTo : "/admin");
     } catch (caught) {
       setError(messageFor(caught));
@@ -192,6 +262,7 @@ export function AdminSecurityScreen({
       </header>
 
       {error ? <p className="form-error admin-security-alert" role="alert">{error}</p> : null}
+      {notice ? <p className="form-success admin-security-alert" role="status">{notice}</p> : null}
 
       <section className="panel admin-security-identity" aria-label="Owner identity">
         <span className="settings-icon"><ShieldCheck size={22} aria-hidden /></span>
@@ -240,34 +311,14 @@ export function AdminSecurityScreen({
               <KeyRound size={16} aria-hidden /> Set up authenticator
             </button>
           ) : (
-            <form className="admin-enrollment-grid" onSubmit={verifyEnrollment}>
-              <div className="admin-qr-frame">
-                {/* Supabase returns trusted enrollment SVG; encoding it prevents markup injection. */}
-                {/* eslint-disable-next-line @next/next/no-img-element -- ephemeral data URI cannot use the image optimizer */}
-                <img
-                  src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(enrollment.qrCode)}`}
-                  alt="Linkar authenticator QR code"
-                />
-              </div>
-              <div className="admin-enrollment-fields">
-                <p className="muted">Can’t scan? Enter this secret manually:</p>
-                <code className="admin-secret">{enrollment.secret}</code>
-                <label className="field">
-                  <span>Six-digit verification code</span>
-                  <input
-                    value={code}
-                    onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                  />
-                </label>
-                <button className="button button-primary" type="submit" disabled={busy || !/^\d{6}$/.test(code)}>
-                  Verify and open admin
-                </button>
-              </div>
-            </form>
+            <EnrollmentForm
+              enrollment={enrollment}
+              code={code}
+              busy={busy}
+              submitLabel="Verify and open admin"
+              onCodeChange={setCode}
+              onSubmit={verifyEnrollment}
+            />
           )}
         </section>
       ) : null}
@@ -279,7 +330,28 @@ export function AdminSecurityScreen({
               <p className="eyebrow">Authenticator inventory</p>
               <h2>Security factors</h2>
             </div>
+            {security.aal === "aal2" && !enrollment ? (
+              <button className="button button-secondary button-small" type="button" disabled={busy} onClick={() => void beginEnrollment(true)}>
+                <Plus size={15} aria-hidden /> Add backup factor
+              </button>
+            ) : null}
           </div>
+          {security.aal === "aal2" && enrollment?.backup ? (
+            <div className="admin-security-enrollment">
+              <p className="muted">
+                Scan this code with a second authenticator{enrollment.friendlyName ? ` (${enrollment.friendlyName})` : ""}, then enter one fresh six-digit code from it.
+              </p>
+              <EnrollmentForm
+                enrollment={enrollment}
+                code={code}
+                busy={busy}
+                submitLabel="Verify backup factor"
+                onCodeChange={setCode}
+                onSubmit={verifyEnrollment}
+                onCancel={() => { setEnrollment(null); setCode(""); }}
+              />
+            </div>
+          ) : null}
           <div className="admin-factor-list">
             {security.factors.map((factor) => (
               <div className="admin-factor-row" key={factor.id}>

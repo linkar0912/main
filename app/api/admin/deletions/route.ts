@@ -3,15 +3,16 @@ import { adminJson, adminRouteError, runAuditedAdminMutation } from "@/src/lib/a
 import { requireAdminRead, requireAdminWrite } from "@/src/lib/admin/request-guard";
 import { listDeletionJobs } from "@/src/lib/admin/deletion/repository";
 import { requestPermanentDeletion } from "@/src/lib/admin/deletion/service";
+import { DeletionTargetSchema } from "@/src/lib/admin/deletion/target-schema";
 
 const Input = z.object({
-  target: z.object({ kind: z.enum(["USER", "WORKSPACE"]), id: z.string().min(1).max(200) }).strict(),
+  target: DeletionTargetSchema,
   impactDigest: z.string().length(64), confirmation: z.string().min(1).max(300), challengeToken: z.string().min(20).max(200),
   includeAuthUsers: z.boolean().default(false),
 }).strict();
 
 export async function GET(request: Request) {
-  try { await requireAdminRead(request); return adminJson({ data: await listDeletionJobs() }); }
+  try { await requireAdminRead(request); return adminJson({ data: await listDeletionJobs({ cursor: new URL(request.url).searchParams.get("cursor") }) }); }
   catch (error) { return adminRouteError(error, "deletion_list_failed"); }
 }
 

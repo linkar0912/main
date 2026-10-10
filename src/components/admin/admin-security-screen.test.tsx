@@ -97,6 +97,49 @@ describe("AdminSecurityScreen", () => {
     await waitFor(() => expect(onVerified).toHaveBeenCalledWith("/admin"));
   });
 
+  it("adds a backup factor at AAL2 and reloads the inventory instead of redirecting", async () => {
+    const onVerified = vi.fn();
+    let factors = [{ id: "factor-1", friendlyName: "Linkar Operator", factorType: "totp", status: "verified" }];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (!init?.method) return jsonResponse({ data: { aal: "aal2", nextAal: "aal2", factors } });
+      const body = JSON.parse(String(init.body)) as { action: string };
+      if (body.action === "enroll") {
+        return jsonResponse({ data: { factorId: "factor-2", friendlyName: "Linkar Operator 2", qrCode: "<svg />", secret: "BACKUPSECRET", uri: "otpauth://totp/Linkar" } });
+      }
+      if (body.action === "verify") {
+        factors = [...factors, { id: "factor-2", friendlyName: "Linkar Operator 2", factorType: "totp", status: "verified" }];
+        return jsonResponse({ data: { verified: true, redirectTo: "/admin" } });
+      }
+      throw new Error(`Unexpected action ${body.action}`);
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{ aal: "aal2", nextAal: "aal2", factors: factors as never }} onVerified={onVerified} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add backup factor" }));
+    expect(await screen.findByText("BACKUPSECRET")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Six-digit verification code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify backup factor" }));
+
+    expect((await screen.findByRole("status")).textContent).toBe("Backup factor Linkar Operator 2 verified.");
+    expect(onVerified).not.toHaveBeenCalled();
+    expect(screen.queryByText("BACKUPSECRET")).toBeNull();
+    expect(screen.getByText("Linkar Operator 2")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Remove/ })).toHaveLength(2);
+  });
+
+  it("lets the owner cancel a backup enrollment", async () => {
+    global.fetch = vi.fn(async () => jsonResponse({ data: { factorId: "factor-2", friendlyName: "Linkar Operator 2", qrCode: "<svg />", secret: "BACKUPSECRET", uri: "otpauth://x" } })) as typeof fetch;
+
+    render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{ aal: "aal2", nextAal: "aal2", factors: [{ id: "factor-1", friendlyName: "Primary", factorType: "totp", status: "verified" }] }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add backup factor" }));
+    expect(await screen.findByText("BACKUPSECRET")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByText("BACKUPSECRET")).toBeNull();
+    expect(screen.getByRole("button", { name: "Add backup factor" })).toBeTruthy();
+  });
+
   it("shows factor removal only when another verified recovery factor exists", async () => {
     global.fetch = vi.fn() as typeof fetch;
 

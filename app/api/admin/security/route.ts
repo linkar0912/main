@@ -115,6 +115,18 @@ function removableFactor(factors: AdminSecurityFactor[], factorId: string): Admi
   return factor;
 }
 
+const FRIENDLY_NAME = "Linkar Operator";
+
+// Supabase rejects a friendly name already held by any factor, verified or not.
+function uniqueFriendlyName(factors: AdminSecurityFactor[]): string {
+  const taken = new Set(factors.map((factor) => factor.friendlyName));
+  if (!taken.has(FRIENDLY_NAME)) return FRIENDLY_NAME;
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${FRIENDLY_NAME} ${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
 function confirmationPhrase(factor: AdminSecurityFactor): string {
   return `REMOVE MFA ${factor.friendlyName}`;
 }
@@ -134,27 +146,34 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (input.action === "enroll") {
       const identity = await getPlatformOwnerIdentity();
-      const context = await requireAdminIdentityWrite(request, {
+      const { supabase, factors } = await loadAdminSecurityFactors();
+      const guard = {
         action: "security.factor.enroll",
         targetType: "owner",
         targetId: identity.userId,
-      });
-      const supabase = await createSupabaseServerClient();
+      };
+      // The first factor is enrolled at AAL1. Once a verified factor exists,
+      // a backup factor may only be added from a session already at AAL2.
+      const context = factors.some((factor) => factor.status === "verified")
+        ? await requireAdminWrite(request, guard)
+        : await requireAdminIdentityWrite(request, guard);
+      const friendlyName = uniqueFriendlyName(factors);
       const data = await audited(context, async () => {
         const result = await supabase.auth.mfa.enroll({
           factorType: "totp",
-          friendlyName: "Linkar Operator",
+          friendlyName,
           issuer: "Linkar",
         });
         if (result.error || !result.data || result.data.type !== "totp") {
           throw new SecurityRouteError(502, "mfa_provider_error");
         }
         return result.data;
-      }, (result) => ({ factorId: result.id, status: "unverified" }));
+      }, (result) => ({ factorId: result.id, friendlyName, status: "unverified" }));
 
       return noStoreJson({
         data: {
           factorId: data.id,
+          friendlyName,
           qrCode: data.totp.qr_code,
           secret: data.totp.secret,
           uri: data.totp.uri,

@@ -138,3 +138,14 @@ it("scopes audit correlation to the action, target, owner, and session", async (
   expect(otherWorkspace.requestId).not.toBe(first.requestId);
   expect(replay.requestId).toBe(first.requestId); expect(other.requestId).not.toBe(first.requestId);
 });
+
+it("decodes percent-encoded reasons and rejects malformed encodings", async () => {
+  mocks.getServerEnv.mockReturnValue({ appUrl: "https://app.linkar.in", authSessionSecret: "test-only", trustedProxyHops: 0 });
+  mocks.getPlatformOwnerSession.mockResolvedValue(OWNER);
+  const options = { action: "workspace.suspend", targetType: "workspace", targetId: "w1" };
+  const base = { origin: "https://app.linkar.in", "content-type": "application/json", "idempotency-key": "unicode-reason-key-0001" };
+  const reason = "Customer’s ₹999 refund → ग्राहक अनुरोध";
+  const decoded = await requireAdminWrite(writeRequest({ ...base, "x-admin-reason": encodeURIComponent(reason) }), options);
+  expect(decoded.reason).toBe(reason);
+  await expect(requireAdminWrite(writeRequest({ ...base, "x-admin-reason": "bad %E0%A4 encoding" }), options)).rejects.toMatchObject({ status: 422, code: "reason_required" });
+});

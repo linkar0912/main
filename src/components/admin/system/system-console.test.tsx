@@ -33,6 +33,40 @@ it("ages a snapshot even when refreshes fail", () => {
     expect(screen.getByText(/· Stale/)).toBeTruthy();
   } finally { cleanup(); vi.useRealTimers(); }
 });
+it("lists failed jobs and retries only the selected IDs through the reason dialog", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(Response.json({ data: [
+      { id: "j1", name: "instagram-event", failedAt: "2026-09-05T06:00:00.000Z", attemptsMade: 3, code: "PROVIDER_REJECTED" },
+      { id: "j2", name: "broadcast-send", failedAt: null, attemptsMade: 1, code: null },
+    ] }))
+    .mockResolvedValueOnce(Response.json({ data: { retried: ["j2"] } }));
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    render(<SystemConsole snapshot={snapshot} />);
+    await userEvent.click(screen.getByRole("button", { name: "Review failed jobs" }));
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/admin/system/queues/webhooks");
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Select failed job j2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Retry selected (1)" }));
+    const dialog = screen.getByRole("dialog", { name: "retry 1 failed webhooks job" });
+    expect(dialog).toBeTruthy();
+    await userEvent.type(screen.getByRole("textbox", { name: "Operator reason" }), "Provider outage fixed");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toBe("/api/admin/system/queues/webhooks");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body)).toEqual({ action: "retry_failed_jobs", jobIds: ["j2"] });
+    expect((await screen.findByRole("status")).textContent).toContain("retry 1 failed webhooks job accepted");
+    expect(screen.queryByRole("region", { name: "Failed webhooks jobs" })).toBeNull();
+  } finally { vi.unstubAllGlobals(); }
+});
+it("shows failed-job list errors inline", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json({ error: "queue_unavailable" }, { status: 503 })));
+  try {
+    render(<SystemConsole snapshot={snapshot} />);
+    await userEvent.click(screen.getByRole("button", { name: "Review failed jobs" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Queue unavailable");
+  } finally { vi.unstubAllGlobals(); }
+});
 it("does not label an unknown queue pause state as running", () => {
   render(<SystemConsole snapshot={{ ...snapshot, queues: [{ ...snapshot.queues[0], paused: null }] }} />);
   expect(screen.queryByText("Running")).toBeNull();
