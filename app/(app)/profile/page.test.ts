@@ -1,14 +1,19 @@
 import { readFileSync } from "node:fs";
+import { Suspense } from "react";
 import { describe, expect, it } from "vitest";
 
 const ProfilePage = (await import("./page")).default;
 const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 
 describe("ProfilePage", () => {
-  it("renders ProfileScreen with no server-resolved props", () => {
+  it("renders ProfileScreen with no server-resolved props inside a Suspense boundary", () => {
     const result = ProfilePage();
-    expect(result.type.name).toBe("ProfileScreen");
-    expect(result.props).toEqual({});
+    // useSearchParams in ProfileScreen needs a Suspense boundary above it.
+    expect(result.type).toBe(Suspense);
+    expect(result.props.fallback).toBeTruthy();
+    const screen = result.props.children;
+    expect(screen.type.name).toBe("ProfileScreen");
+    expect(screen.props).toEqual({});
   });
 
   it("does no server work, so /profile paints as fast as /automations", () => {

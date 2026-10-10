@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { useAccountIdentity } from "./app-shell";
+import { InlineConfirm } from "./inline-confirm";
 import { Skeleton } from "./skeleton";
 import { PageHeader } from "./page-header";
 import { SocialAvatar } from "./social-avatar";
@@ -118,6 +119,7 @@ function ProfileBody({
   const [connections, setConnections] = useState<Connection[]>([]);
   const [facebookPages, setFacebookPages] = useState<FacebookPageSummary[]>([]);
   const [dismissed, setDismissed] = useState(false);
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   // The redirect from /api/account carries feedback in the query string.
   // useSearchParams (rather than reading window.location during render) is
   // Next's own hydration-safe way to read it - server and client agree on
@@ -172,10 +174,10 @@ function ProfileBody({
   const emailVerified: boolean | null = emailVerifiedProp ?? account?.emailVerified ?? null;
   const plan = account?.planName ?? (identity.plan ? planLabel(identity.plan) : "Free");
 
-  const connection = connections[0];
-  const facebookPage = facebookPages[0];
-  const hasChannel = Boolean(connection || facebookPage);
-  const avatar = connection?.profilePictureUrl ?? undefined;
+  // Every connected account is listed; the first Instagram account with a
+  // photo stands in as the profile picture.
+  const hasChannel = connections.length > 0 || facebookPages.length > 0;
+  const avatar = connections.find((connection) => connection.profilePictureUrl)?.profilePictureUrl ?? undefined;
 
   function channelStatusLabel(status: ConnectionStatus): string {
     return status === "CONNECTED" ? "Connected" : status === "EXPIRED" ? "Token expired" : "Disconnected";
@@ -302,9 +304,18 @@ function ProfileBody({
                 <strong>Sign out everywhere</strong>
                 <small>Ends every session on all your devices, including this one.</small>
               </span>
-              <button className="button button-secondary button-small" type="submit">
+              <button className="button button-secondary button-small" type="button" aria-expanded={confirmingSignOut} onClick={() => setConfirmingSignOut(true)}>
                 <LogOut size={14} /> Sign out all
               </button>
+              {confirmingSignOut ? (
+                <InlineConfirm
+                  label="Confirm signing out everywhere"
+                  message="Sign out on every device, including this one? You will need your password to sign back in."
+                  confirmLabel="Sign out everywhere"
+                  confirmType="submit"
+                  onCancel={() => setConfirmingSignOut(false)}
+                />
+              ) : null}
             </form>
           </section>
         </section>
@@ -319,38 +330,38 @@ function ProfileBody({
               </div>
             </div>
             <ul className="settings-rows">
-              <li className="settings-row profile-channel-row">
-                {connection ? (
-                  <>
-                    <SocialAvatar channel="instagram" name={`@${connection.username}`} src={connection.profilePictureUrl ?? undefined} />
-                    <span className="settings-row-copy">
-                      <strong>@{connection.username}</strong>
-                      <small className="connection-status" role="status" aria-label={`Instagram ${connection.status.toLowerCase()}`}>
-                        <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
-                        Instagram · {channelStatusLabel(connection.status)} · {formatDate(connection.connectedAt)}
-                      </small>
-                    </span>
-                  </>
-                ) : (
+              {connections.length > 0 ? connections.map((connection) => (
+                <li className="settings-row profile-channel-row" key={connection.id}>
+                  <SocialAvatar channel="instagram" name={`@${connection.username}`} src={connection.profilePictureUrl ?? undefined} />
+                  <span className="settings-row-copy">
+                    <strong>@{connection.username}</strong>
+                    <small className="connection-status" role="status" aria-label={`Instagram ${connection.status.toLowerCase()}`}>
+                      <span className={`signal-dot status-dot-${connection.status.toLowerCase()}`} />
+                      Instagram · {channelStatusLabel(connection.status)} · {formatDate(connection.connectedAt)}
+                    </small>
+                  </span>
+                </li>
+              )) : (
+                <li className="settings-row profile-channel-row">
                   <span className="settings-row-copy"><strong>Instagram</strong><small>No Instagram account connected yet.</small></span>
-                )}
-              </li>
-              <li className="settings-row profile-channel-row">
-                {facebookPage ? (
-                  <>
-                    <SocialAvatar channel="facebook" name={facebookPage.pageName} src={facebookPage.avatarUrl} />
-                    <span className="settings-row-copy">
-                      <strong>{facebookPage.pageName}</strong>
-                      <small className="connection-status" role="status" aria-label={`Facebook ${facebookPage.status.toLowerCase()}`}>
-                        <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
-                        Facebook Page · {channelStatusLabel(facebookPage.status)}
-                      </small>
-                    </span>
-                  </>
-                ) : (
+                </li>
+              )}
+              {facebookPages.length > 0 ? facebookPages.map((facebookPage) => (
+                <li className="settings-row profile-channel-row" key={facebookPage.id}>
+                  <SocialAvatar channel="facebook" name={facebookPage.pageName} src={facebookPage.avatarUrl} />
+                  <span className="settings-row-copy">
+                    <strong>{facebookPage.pageName}</strong>
+                    <small className="connection-status" role="status" aria-label={`Facebook ${facebookPage.status.toLowerCase()}`}>
+                      <span className={`signal-dot status-dot-${facebookPage.status.toLowerCase()}`} />
+                      Facebook Page · {channelStatusLabel(facebookPage.status)}
+                    </small>
+                  </span>
+                </li>
+              )) : (
+                <li className="settings-row profile-channel-row">
                   <span className="settings-row-copy"><strong>Facebook</strong><small>No Facebook Page connected yet.</small></span>
-                )}
-              </li>
+                </li>
+              )}
             </ul>
             <div className="settings-group-foot">
               <span />
