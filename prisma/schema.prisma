@@ -552,6 +552,9 @@ model AutomationParticipant {
   @@index([pausedAt])
   @@index([workspaceId, createdAt])
   @@index([automationId])
+  // Hourly retention sweeps (expireStaleParticipants / deleteStaleTerminalParticipants).
+  @@index([state, messagingWindowExpiresAt])
+  @@index([state, updatedAt])
 }
 
 // Branded short links the workspace can drop into DMs. The destination URL is
@@ -669,6 +672,8 @@ model AutomationContact {
   @@index([workspaceId, inboxReminderAt, id])
   @@index([workspaceId, lastSeenAt, id])
   @@index([workspaceId, lastInboundAt, id])
+  // Retention clears lastInboundAt across all workspaces (deleteOldWebhookEvents).
+  @@index([lastInboundAt])
 }
 
 // A timed drip campaign: ordered steps, each sent to enrolled contacts after a delay.
@@ -818,6 +823,8 @@ model WebhookEvent {
   @@unique([workspaceId, providerEventId])
   @@index([workspaceId, receivedAt])
   @@index([workspaceId, accountId, recipientId, receivedAt])
+  // Retention deletes by age across all workspaces (deleteOldWebhookEvents).
+  @@index([receivedAt])
 }
 
 // A Facebook Page connected to a workspace for comment-reply automation.

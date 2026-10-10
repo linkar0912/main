@@ -542,6 +542,9 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     }
   }
 
+  /** Rows per statement for the hourly retention sweeps. */
+  const SWEEP_BATCH_SIZE = 1_000;
+
   /** Reads one contact under SELECT ... FOR UPDATE inside the caller's transaction. */
   async function lockContact(
     transaction: Prisma.TransactionClient,
@@ -2156,29 +2159,48 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async expireStaleParticipants(now, reason) {
       const nowDate = new Date(now);
       // Rows that never got an explicit window still expire 24h after they
-      // were created - Meta's opening window cannot outlive that.
+      // were created - Meta's opening window cannot outlive that. The open
+      // states are listed (not "not in terminal") so the (state, window)
+      // index can serve the sweep.
       const createdCutoff = new Date(nowDate.getTime() - MESSAGING_WINDOW_MS);
-      const result = await client.automationParticipant.updateMany({
-        where: {
-          state: { notIn: ["LINK_SENT", "EXPIRED", "FAILED"] },
-          OR: [
-            { messagingWindowExpiresAt: { not: null, lte: nowDate } },
-            { messagingWindowExpiresAt: null, createdAt: { lte: createdCutoff } },
-          ],
-        },
-        data: { state: "EXPIRED", finalDeliveryError: reason },
-      });
-      return result.count;
+      const where: Prisma.AutomationParticipantWhereInput = {
+        state: { in: ["COMMENT_MATCHED", "OPENING_SENT", "OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED"] },
+        OR: [
+          { messagingWindowExpiresAt: { not: null, lte: nowDate } },
+          { messagingWindowExpiresAt: null, createdAt: { lte: createdCutoff } },
+        ],
+      };
+      // Bounded batches keep each statement's row locks and WAL burst small.
+      let expired = 0;
+      for (;;) {
+        const batch = await client.automationParticipant.findMany({ where, select: { id: true }, take: SWEEP_BATCH_SIZE });
+        if (batch.length === 0) break;
+        const result = await client.automationParticipant.updateMany({
+          where: { AND: [where, { id: { in: batch.map((row) => row.id) } }] },
+          data: { state: "EXPIRED", finalDeliveryError: reason },
+        });
+        expired += result.count;
+        if (batch.length < SWEEP_BATCH_SIZE) break;
+      }
+      return expired;
     },
 
     async deleteStaleTerminalParticipants(before) {
-      const result = await client.automationParticipant.deleteMany({
-        where: {
-          state: { in: ["LINK_SENT", "EXPIRED", "FAILED"] },
-          updatedAt: { lt: new Date(before) },
-        },
-      });
-      return result.count;
+      const where: Prisma.AutomationParticipantWhereInput = {
+        state: { in: ["LINK_SENT", "EXPIRED", "FAILED"] },
+        updatedAt: { lt: new Date(before) },
+      };
+      let deleted = 0;
+      for (;;) {
+        const batch = await client.automationParticipant.findMany({ where, select: { id: true }, take: SWEEP_BATCH_SIZE });
+        if (batch.length === 0) break;
+        const result = await client.automationParticipant.deleteMany({
+          where: { AND: [where, { id: { in: batch.map((row) => row.id) } }] },
+        });
+        deleted += result.count;
+        if (batch.length < SWEEP_BATCH_SIZE) break;
+      }
+      return deleted;
     },
 
     async touchContact(workspaceId, instagramAccountId, igScopedUserId, seenAt, known) {
@@ -2790,15 +2812,39 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async deleteOldWebhookEvents(before) {
       const cutoff = new Date(before);
-      const result = await client.webhookEvent.deleteMany({ where: { receivedAt: { lt: cutoff } } });
+      // Deleted in bounded id batches: one unbounded DELETE over 90 days of
+      // events held locks and generated WAL for the whole table at once.
+      let deleted = 0;
+      for (;;) {
+        const batch = await client.webhookEvent.findMany({
+          where: { receivedAt: { lt: cutoff } },
+          select: { id: true },
+          take: SWEEP_BATCH_SIZE,
+        });
+        if (batch.length === 0) break;
+        const result = await client.webhookEvent.deleteMany({
+          where: { id: { in: batch.map((row) => row.id) }, receivedAt: { lt: cutoff } },
+        });
+        deleted += result.count;
+        if (batch.length < SWEEP_BATCH_SIZE) break;
+      }
       // A contact whose latest message is older than the cutoff has no messages
       // left, so it leaves the inbox exactly as it did when the list was
       // computed from WebhookEvent.
-      await client.automationContact.updateMany({
-        where: { lastInboundAt: { lt: cutoff } },
-        data: { lastInboundAt: null, lastInboundPreview: null },
-      });
-      return result.count;
+      for (;;) {
+        const batch = await client.automationContact.findMany({
+          where: { lastInboundAt: { lt: cutoff } },
+          select: { id: true },
+          take: SWEEP_BATCH_SIZE,
+        });
+        if (batch.length === 0) break;
+        await client.automationContact.updateMany({
+          where: { id: { in: batch.map((row) => row.id) }, lastInboundAt: { lt: cutoff } },
+          data: { lastInboundAt: null, lastInboundPreview: null },
+        });
+        if (batch.length < SWEEP_BATCH_SIZE) break;
+      }
+      return deleted;
     },
 
     async reconcileContactLastInbound(since) {

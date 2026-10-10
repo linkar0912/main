@@ -141,6 +141,39 @@ describe("claimExecution", () => {
   });
 });
 
+describe("retention sweeps", () => {
+  const ids = (count: number, prefix: string) => Array.from({ length: count }, (_, index) => ({ id: `${prefix}_${index}` }));
+
+  it("deletes old webhook events and clears contacts in bounded id batches", async () => {
+    const eventFindMany = vi.fn().mockResolvedValueOnce(ids(1_000, "event")).mockResolvedValueOnce(ids(3, "event_tail"));
+    const eventDeleteMany = vi.fn().mockImplementation(async ({ where }) => ({ count: where.id.in.length }));
+    const contactFindMany = vi.fn().mockResolvedValueOnce(ids(2, "contact"));
+    const contactUpdateMany = vi.fn().mockResolvedValue({ count: 2 });
+    const client = {
+      webhookEvent: { findMany: eventFindMany, deleteMany: eventDeleteMany },
+      automationContact: { findMany: contactFindMany, updateMany: contactUpdateMany },
+    } as unknown as typeof prisma;
+
+    await expect(createPrismaRepository(client).deleteOldWebhookEvents("2026-07-12T00:00:00.000Z")).resolves.toBe(1_003);
+    expect(eventDeleteMany).toHaveBeenCalledTimes(2);
+    expect(eventFindMany.mock.calls[0]?.[0]).toMatchObject({ take: 1_000 });
+    expect(contactUpdateMany).toHaveBeenCalledTimes(1);
+    expect(contactUpdateMany.mock.calls[0]?.[0]?.where.id.in).toEqual(["contact_0", "contact_1"]);
+  });
+
+  it("expires stale participants in batches using the open states", async () => {
+    const findMany = vi.fn().mockResolvedValueOnce(ids(1_000, "p")).mockResolvedValueOnce([]);
+    const updateMany = vi.fn().mockResolvedValue({ count: 1_000 });
+    const client = { automationParticipant: { findMany, updateMany } } as unknown as typeof prisma;
+
+    await expect(createPrismaRepository(client).expireStaleParticipants("2026-10-10T00:00:00.000Z", "expired")).resolves.toBe(1_000);
+    expect(findMany.mock.calls[0]?.[0]?.where.state).toEqual({
+      in: ["COMMENT_MATCHED", "OPENING_SENT", "OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED"],
+    });
+    expect(updateMany).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("listConnectionsExpiringBefore", () => {
   it("includes connections whose expiry was never recorded", async () => {
     const findMany = vi.fn().mockResolvedValue([]);
