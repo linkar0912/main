@@ -3192,18 +3192,29 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           conversionUrl: input.conversionUrl ?? null,
           notes: input.notes ?? null,
           createdByUserId: input.createdByUserId ?? null,
+          disabledAt: input.disabledAt ? new Date(input.disabledAt) : null,
         },
+      }).catch((error: unknown) => {
+        // Slugs are globally unique (one public /r/ namespace). Surface the
+        // unique violation with the same message the memory repository uses so
+        // /api/links maps it to 409 instead of a generic 500.
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw new Error(`Slug "${input.slug}" is already used`);
+        }
+        throw error;
       });
       return mapTrackedLink(record);
     },
 
     async getTrackedLinkBySlug(workspaceId, slug) {
-      const record = await client.trackedLink.findUnique({ where: { workspaceId_slug: { workspaceId, slug } } });
-      return record ? mapTrackedLink(record) : null;
+      const record = await client.trackedLink.findUnique({ where: { slug } });
+      return record && record.workspaceId === workspaceId ? mapTrackedLink(record) : null;
     },
 
     async getTrackedLinkBySlugPublic(slug) {
-      const record = await client.trackedLink.findFirst({ where: { slug } });
+      const record = await client.trackedLink.findFirst({
+        where: { slug, disabledAt: null, workspace: { status: "ACTIVE" } },
+      });
       return record ? mapTrackedLink(record) : null;
     },
 
@@ -3282,6 +3293,7 @@ function mapTrackedLink(record: {
   conversionUrl: string | null;
   notes: string | null;
   createdByUserId: string | null;
+  disabledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): TrackedLinkRecord {
@@ -3299,6 +3311,7 @@ function mapTrackedLink(record: {
     ...(record.conversionUrl ? { conversionUrl: record.conversionUrl } : {}),
     ...(record.notes ? { notes: record.notes } : {}),
     ...(record.createdByUserId ? { createdByUserId: record.createdByUserId } : {}),
+    ...(record.disabledAt ? { disabledAt: record.disabledAt.toISOString() } : {}),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };

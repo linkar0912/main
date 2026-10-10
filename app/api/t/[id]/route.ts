@@ -34,7 +34,13 @@ export async function GET(
     // longer running.
     if (participant.state !== "LINK_SENT") return new Response("Not found", { status: 404 });
 
-    const automation = await repository.getAutomation(participant.workspaceId, participant.automationId);
+    // A suspended or deletion-pending workspace stops serving its links, the
+    // same rule /r/[slug] applies.
+    const [workspaceStatus, automation] = await Promise.all([
+        repository.getWorkspaceStatus(participant.workspaceId),
+        repository.getAutomation(participant.workspaceId, participant.automationId),
+    ]);
+    if (workspaceStatus !== "ACTIVE") return new Response("Not found", { status: 404 });
     if (!automation) return new Response("Not found", { status: 404 });
     const definition = automation.definition;
     const targetUrl = definition.version === 2 ? definition.delivery.url : null;

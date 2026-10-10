@@ -28,13 +28,17 @@ describe("tracked link repository", () => {
     ).rejects.toThrow(/already used/);
   });
 
-  it("isolates links across workspaces (same slug is fine in another workspace)", async () => {
+  it("keeps slugs globally unique so one workspace cannot shadow another's /r/ link", async () => {
     const repository = createMemoryRepository();
     await repository.ensureWorkspace("workspace_x", "owner@team.com");
     await repository.ensureWorkspace("workspace_y", "owner@team.com");
     await repository.createTrackedLink("workspace_x", { slug: "shared", destination: "https://example.com/x" });
-    const yLink = await repository.createTrackedLink("workspace_y", { slug: "shared", destination: "https://example.com/y" });
-    expect(yLink.destination).toBe("https://example.com/y");
+    await expect(
+      repository.createTrackedLink("workspace_y", { slug: "shared", destination: "https://example.com/y" }),
+    ).rejects.toThrow(/already used/);
+    // The workspace-scoped lookup never resolves another tenant's slug.
+    expect(await repository.getTrackedLinkBySlug("workspace_y", "shared")).toBeNull();
+    expect((await repository.getTrackedLinkBySlugPublic("shared"))?.destination).toBe("https://example.com/x");
   });
 
   it("records clicks and rolls them up into stats with unique counts", async () => {

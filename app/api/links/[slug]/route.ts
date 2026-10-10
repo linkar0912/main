@@ -2,26 +2,26 @@ import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 import { logger } from "@/src/lib/logger";
+import { rejectCrossSiteRequest } from "@/src/lib/security/same-origin";
 
 export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
 // DELETE /api/links/[slug] - remove a tracked link from the current workspace.
-// Accepts either the link id or the slug; the panel sends the id.
+// Addressed by slug (the panel sends the slug). The lookup is scoped to the
+// caller's workspace, so another tenant's link is indistinguishable from a
+// missing one.
 export async function DELETE(request: Request, context: RouteContext) {
+  const crossSite = rejectCrossSiteRequest(request);
+  if (crossSite) return crossSite;
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { slug } = await context.params;
-  if (!slug) return NextResponse.json({ error: "link id or slug required" }, { status: 400 });
+  if (!slug) return NextResponse.json({ error: "link slug required" }, { status: 400 });
   const repository = getRepository();
-  // First try as id (preferred path for the UI), then as slug so external
-  // callers (e.g. curl scripts) can address the link by either.
-  const candidate = await repository.getTrackedLinkBySlugPublic(slug);
+  const candidate = await repository.getTrackedLinkBySlug(session.workspaceId, slug);
   if (!candidate) return NextResponse.json({ error: "link not found" }, { status: 404 });
-  if (candidate.workspaceId !== session.workspaceId) {
-    return NextResponse.json({ error: "link not found" }, { status: 404 });
-  }
   try {
     const removed = await repository.deleteTrackedLink(session.workspaceId, candidate.id);
     if (!removed) return NextResponse.json({ error: "link not found" }, { status: 404 });

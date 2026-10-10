@@ -404,6 +404,8 @@ export type TrackedLinkRecord = {
   conversionUrl?: string;
   notes?: string;
   createdByUserId?: string;
+  /** Set by the owner console to take a link offline; public lookups skip it. */
+  disabledAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -1042,8 +1044,9 @@ export interface AutomationRepository {
   ): Promise<TrackedLinkRecord>;
   getTrackedLinkBySlug(workspaceId: string, slug: string): Promise<TrackedLinkRecord | null>;
   /**
-   * Public redirect lookup: returns the link without enforcing the workspace
-   * boundary, so the redirect route can serve any slug in the system.
+   * Public redirect lookup: slugs are globally unique, so this resolves any
+   * slug in the system - but only while the link is servable (not disabled by
+   * the owner console, and its workspace is ACTIVE).
    */
   getTrackedLinkBySlugPublic(slug: string): Promise<TrackedLinkRecord | null>;
   listTrackedLinks(workspaceId: string, limit: number): Promise<TrackedLinkRecord[]>;

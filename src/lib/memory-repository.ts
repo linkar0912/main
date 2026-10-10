@@ -139,7 +139,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
   const automationVersions = new Map<string, AutomationVersionRecord[]>();
   // Tracked short links: keyed by link id; clicks keyed by link id too.
   const trackedLinks = new Map<string, TrackedLinkRecord>();
-  const trackedLinkSlugs = new Map<string, string>(); // `${workspaceId}:${slug}` -> link id
+  const trackedLinkSlugs = new Map<string, string>(); // slug (globally unique) -> link id
   const trackedLinkClicks = new Map<string, TrackedLinkClickRecord[]>();
   // email -> workspaceId, mirroring WorkspaceMember rows for login lookups.
   const memberWorkspacesByEmail = new Map<string, string>();
@@ -2437,9 +2437,10 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async createTrackedLink(workspaceId, input) {
-      const slugKey = `${workspaceId}:${input.slug}`;
+      // Slugs are globally unique, mirroring the TrackedLink_slug_key index.
+      const slugKey = input.slug;
       if (trackedLinkSlugs.has(slugKey)) {
-        throw new Error(`Slug "${input.slug}" is already used in this workspace`);
+        throw new Error(`Slug "${input.slug}" is already used`);
       }
       const timestamp = now();
       const record: TrackedLinkRecord = {
@@ -2458,6 +2459,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         ...(input.conversionUrl ? { conversionUrl: input.conversionUrl } : {}),
         ...(input.notes ? { notes: input.notes } : {}),
         ...(input.createdByUserId ? { createdByUserId: input.createdByUserId } : {}),
+        ...(input.disabledAt ? { disabledAt: input.disabledAt } : {}),
       };
       trackedLinks.set(record.id, record);
       trackedLinkSlugs.set(slugKey, record.id);
@@ -2465,20 +2467,18 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async getTrackedLinkBySlug(workspaceId, slug) {
-      const id = trackedLinkSlugs.get(`${workspaceId}:${slug}`);
+      const id = trackedLinkSlugs.get(slug);
       if (!id) return null;
       const record = trackedLinks.get(id);
       return record && record.workspaceId === workspaceId ? copy(record) : null;
     },
 
     async getTrackedLinkBySlugPublic(slug) {
-      for (const [linkId, record] of trackedLinks.entries()) {
-        if (record.slug === slug) {
-          void linkId;
-          return copy(record);
-        }
-      }
-      return null;
+      const id = trackedLinkSlugs.get(slug);
+      const record = id ? trackedLinks.get(id) : undefined;
+      if (!record || record.disabledAt) return null;
+      if ((workspaceLifecycle.get(record.workspaceId)?.status ?? "ACTIVE") !== "ACTIVE") return null;
+      return copy(record);
     },
 
     async listTrackedLinks(workspaceId, limit) {
@@ -2494,7 +2494,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const record = trackedLinks.get(id);
       if (!record || record.workspaceId !== workspaceId) return false;
       trackedLinks.delete(id);
-      trackedLinkSlugs.delete(`${workspaceId}:${record.slug}`);
+      trackedLinkSlugs.delete(record.slug);
       trackedLinkClicks.delete(id);
       return true;
     },
