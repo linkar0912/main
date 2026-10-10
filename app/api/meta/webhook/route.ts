@@ -8,6 +8,7 @@ import { enqueueManualReplyEchoes, enqueueWebhookEvents } from "@/src/lib/queue"
 import { normalizeManualReplyEchoes, processManualReplyEcho } from "@/src/lib/automation/manual-reply";
 import { getRepository } from "@/src/lib/repository-provider";
 import { verifyWebhookSignature } from "@/src/lib/security/signature";
+import { payloadTooLargeResponse, readBoundedText, RequestBodyTooLargeError } from "@/src/lib/security/request-body";
 
 export const runtime = "nodejs";
 
@@ -35,7 +36,15 @@ export async function POST(request: Request) {
   const env = getServerEnv();
   if (!env.metaAppSecret) return new Response("Meta app secret is not configured", { status: 503 });
 
-  const rawBody = await request.text();
+  // Capped before signature verification: the whole body has to be buffered
+  // to verify it, so an unauthenticated caller must not choose its size.
+  let rawBody: string;
+  try {
+    rawBody = await readBoundedText(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return payloadTooLargeResponse();
+    throw error;
+  }
   if (!verifyWebhookSignature(rawBody, request.headers.get("x-hub-signature-256"), env.metaAppSecret)) {
     return new Response("Invalid signature", { status: 403 });
   }

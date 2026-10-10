@@ -45,6 +45,22 @@ describe("Instagram queue deletion", () => {
     expect(broadcastRemove).toHaveBeenCalledOnce();
   });
 
+  it("removes follow-up jobs that carry the account as instagramAccountId", async () => {
+    const followUpRemove = vi.fn().mockResolvedValue(undefined);
+    const siblingRemove = vi.fn().mockResolvedValue(undefined);
+    state.getJobs
+      .mockResolvedValueOnce([
+        { data: { instagramAccountId: "ig_target", automationId: "auto_1" }, remove: followUpRemove },
+        { data: { instagramAccountId: "ig_sibling" }, remove: siblingRemove },
+      ])
+      .mockResolvedValue([]);
+
+    await deleteQueuedInstagramEvents("ig_target");
+
+    expect(followUpRemove).toHaveBeenCalledOnce();
+    expect(siblingRemove).not.toHaveBeenCalled();
+  });
+
   it("removes events for a workspace batch in one queue scan", async () => {
     const firstRemove = vi.fn().mockResolvedValue(undefined);
     const secondRemove = vi.fn().mockResolvedValue(undefined);

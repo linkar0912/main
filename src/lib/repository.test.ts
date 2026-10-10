@@ -873,6 +873,52 @@ describe("memory repository", () => {
     expect(await repository.getOutboundDelivery("delivery_1")).toBeNull();
   });
 
+  it("purges the deleted account's webhook events and their executions even when a sibling account keeps the workspace", async () => {
+    const repository = createMemoryRepository();
+    // An automation with no pinned account fires for every connected account.
+    const shared = await repository.createAutomation("workspace_a", { name: "Any account", definition });
+    await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_123", username: "creator", accessTokenEncrypted: "sealed-token", status: "CONNECTED" });
+    await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_456", username: "sibling", accessTokenEncrypted: "sealed-token", status: "CONNECTED" });
+    const at = new Date().toISOString();
+    await repository.recordWebhookEvent("workspace_a", { providerEventId: "evt_deleted", eventType: "comment.created", receivedAt: at, payload: { accountId: "ig_123", text: "hi" } });
+    await repository.recordWebhookEvent("workspace_a", { providerEventId: "evt_kept", eventType: "comment.created", receivedAt: at, payload: { accountId: "ig_456", text: "hi" } });
+    await repository.recordExecution({ workspaceId: "workspace_a", automationId: shared.id, externalEventId: "evt_deleted", dedupeKey: "dedupe_deleted", status: "SENT" });
+    await repository.recordExecution({ workspaceId: "workspace_a", automationId: shared.id, externalEventId: "evt_kept", dedupeKey: "dedupe_kept", status: "SENT" });
+
+    await repository.beginInstagramDataDeletion("ig_123", "linkar_delete_sibling", "signed-request-hash-sibling");
+
+    const events = await repository.listRecentWebhookEvents("workspace_a", 10);
+    expect(events.map((event) => event.providerEventId)).toEqual(["evt_kept"]);
+    expect(await repository.hasExecution("workspace_a", "dedupe_deleted")).toBe(false);
+    expect(await repository.hasExecution("workspace_a", "dedupe_kept")).toBe(true);
+  });
+
+  it("purges a Facebook user's Page events and automations on a data deletion request", async () => {
+    const repository = createMemoryRepository();
+    await repository.upsertFacebookPage({
+      workspaceId: "workspace_a", pageId: "page_1", pageName: "Acme", facebookUserId: "fb_user_1",
+      accessTokenEncrypted: "sealed", status: "CONNECTED",
+    });
+    await repository.upsertFacebookPage({
+      workspaceId: "workspace_a", pageId: "page_2", pageName: "Other", facebookUserId: "fb_user_2",
+      accessTokenEncrypted: "sealed", status: "CONNECTED",
+    });
+    const automation = await repository.createAutomation("workspace_a", { name: "FB reply", definition, provider: "FACEBOOK", facebookPageId: "page_1" });
+    await repository.recordExecution({ workspaceId: "workspace_a", automationId: automation.id, externalEventId: "fb_evt_1", dedupeKey: "dedupe_fb_1", status: "SENT" });
+    const at = new Date().toISOString();
+    await repository.recordWebhookEvent("workspace_a", { providerEventId: "fb_evt_1", eventType: "facebook.comment.created", receivedAt: at, payload: { pageId: "page_1", senderName: "Visitor" } });
+    await repository.recordWebhookEvent("workspace_a", { providerEventId: "fb_evt_2", eventType: "facebook.comment.created", receivedAt: at, payload: { pageId: "page_2", senderName: "Visitor" } });
+
+    expect(await repository.listFacebookPageIdsByUserId("fb_user_1")).toEqual(["page_1"]);
+    await repository.beginFacebookDataDeletion("fb_user_1", "linkar_delete_fb", "signed-request-hash-fb");
+
+    expect((await repository.listFacebookPages("workspace_a")).map((page) => page.pageId)).toEqual(["page_2"]);
+    expect(await repository.getAutomation("workspace_a", automation.id)).toBeNull();
+    expect(await repository.hasExecution("workspace_a", "dedupe_fb_1")).toBe(false);
+    const events = await repository.listRecentWebhookEvents("workspace_a", 10);
+    expect(events.map((event) => event.providerEventId)).toEqual(["fb_evt_2"]);
+  });
+
   it("expires non-terminal participants whose messaging window has closed, leaving terminal and still-open ones untouched", async () => {
     const repository = createMemoryRepository();
     const { record: closedWindow } = await repository.createParticipant({

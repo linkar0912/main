@@ -15,6 +15,9 @@ export async function GET(request: Request) {
   const pageId = params.get("pageId");
   const profileId = params.get("profileId");
   if (!pageId || !profileId) return NextResponse.json({ error: "Page and profile are required" }, { status: 400 });
+  // profileId is interpolated into a Graph API path; only a numeric Facebook
+  // id may reach it (no "../", query strings, or other Graph edges).
+  if (!/^\d{1,32}$/.test(profileId)) return NextResponse.json({ error: "Invalid profile" }, { status: 400 });
 
   const env = getServerEnv();
   if (!env.facebookTokenEncryptionKey) return new Response(null, { status: 404 });

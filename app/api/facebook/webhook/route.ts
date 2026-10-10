@@ -11,6 +11,7 @@ import {
 import { enqueueFacebookEvents } from "@/src/lib/queue";
 import { getRepository } from "@/src/lib/repository-provider";
 import { verifyWebhookSignature } from "@/src/lib/security/signature";
+import { payloadTooLargeResponse, readBoundedText, RequestBodyTooLargeError } from "@/src/lib/security/request-body";
 
 export const runtime = "nodejs";
 
@@ -45,7 +46,15 @@ export async function POST(request: Request) {
   if (!env.facebookAppSecret) {
     return new Response("Facebook app secret is not configured", { status: 503 });
   }
-  const rawBody = await request.text();
+  // Capped before signature verification: the whole body has to be buffered
+  // to verify it, so an unauthenticated caller must not choose its size.
+  let rawBody: string;
+  try {
+    rawBody = await readBoundedText(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return payloadTooLargeResponse();
+    throw error;
+  }
   // Facebook uses the same X-Hub-Signature-256 HMAC scheme as Instagram, so
   // verifyWebhookSignature is reusable across both channels.
   if (!verifyWebhookSignature(rawBody, request.headers.get("x-hub-signature-256"), env.facebookAppSecret)) {

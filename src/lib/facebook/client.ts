@@ -133,6 +133,8 @@ export class FacebookClient {
   }
 
   async getProfilePictureUrl(connection: FacebookConnection, profileId: string): Promise<string | null> {
+    // Interpolated into the Graph path, so only a numeric id is acceptable.
+    if (!/^\d{1,32}$/.test(profileId)) return null;
     const url = new URL(`${this.baseUrl}/${this.apiVersion}/${profileId}`);
     url.searchParams.set("fields", "picture.type(square).width(96).height(96)");
     const data = await this.request(url, connection.accessToken);
