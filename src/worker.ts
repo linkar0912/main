@@ -135,6 +135,7 @@ if (!env.redisUrl) {
             client,
             tokenEncryptionKey: env.facebookTokenEncryptionKey ?? env.metaTokenEncryptionKey,
             timingObserver: timing,
+            claimLeaseMs: env.dispatchLeaseMs,
           }));
       }
 

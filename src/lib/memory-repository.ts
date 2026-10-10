@@ -51,7 +51,7 @@ import type {
   InboxContactRow,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA } from "./repository";
-import { EXECUTION_CLAIM_LEASE_MS } from "./repository";
+import { EXECUTION_CLAIM_LEASE_MS, isAbandonedExecutionClaim } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS } from "./messaging-window";
 import { normalizeHelpQuery } from "./help-search";
@@ -973,10 +973,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       );
       if (existing) {
         // Mirrors Prisma: take over only an abandoned PROCESSING claim.
-        const leaseExpired = existing.dispatchLeaseExpiresAt
-          ? Date.parse(existing.dispatchLeaseExpiresAt) <= nowMs
-          : Date.parse(existing.createdAt) <= nowMs - EXECUTION_CLAIM_LEASE_MS;
-        if (existing.status !== "PROCESSING" || existing.dispatchStatus !== "CLAIMED" || !leaseExpired) return false;
+        if (!isAbandonedExecutionClaim(existing, nowMs)) return false;
         executions.set(existing.id, { ...existing, dispatchLeaseExpiresAt });
         return true;
       }

@@ -590,6 +590,17 @@ export type ClaimExecutionInput = Pick<ExecutionRecord, "workspaceId" | "automat
  * second send of anything that already went out.
  */
 export const EXECUTION_CLAIM_LEASE_MS = 5 * 60 * 1_000;
+
+/** A claimExecution claim whose holder never completed or released it within its lease. */
+export function isAbandonedExecutionClaim(
+  record: Pick<ExecutionRecord, "status" | "dispatchStatus" | "dispatchLeaseExpiresAt" | "createdAt">,
+  nowMs = Date.now(),
+): boolean {
+  if (record.status !== "PROCESSING" || record.dispatchStatus !== "CLAIMED") return false;
+  return record.dispatchLeaseExpiresAt
+    ? Date.parse(record.dispatchLeaseExpiresAt) <= nowMs
+    : Date.parse(record.createdAt) <= nowMs - EXECUTION_CLAIM_LEASE_MS;
+}
 export type ClaimExecutionDispatchInput = ClaimExecutionInput & Required<Pick<
   ExecutionRecord,
   "dispatchOwner" | "dispatchStartedAt" | "dispatchLeaseExpiresAt"
