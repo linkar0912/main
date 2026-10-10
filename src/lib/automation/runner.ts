@@ -626,7 +626,7 @@ async function processEmailCaptureReply(
         );
         await repository.completeExecution(mapping.workspaceId, dedupeKey, {
           status: "SENT",
-          reason: `email_captured:${candidate};field_asked:${fieldQueue[0].id}`,
+          reason: `email_captured;field_asked:${fieldQueue[0].id}`,
           providerMessageId,
         });
         return { matched: 1, sent: 1, skipped: 0, failed: 0 };
@@ -659,7 +659,7 @@ async function processEmailCaptureReply(
       await enrollNewLeadInSequences(repository, mapping, event.accountId, automation.id, senderId);
       await repository.completeExecution(mapping.workspaceId, dedupeKey, {
         status: "SENT",
-        reason: `email_captured:${candidate}`,
+        reason: "email_captured",
         providerMessageId,
       });
       void notifyWorkspaceManagers(
@@ -881,7 +881,7 @@ async function processFieldAnswer(
 
     let completionReason = `field_answered:${current.id}`;
     if (updated.state === "CAPTURED") {
-      completionReason = `lead_complete:${updated.email ?? "no-email"}`;
+      completionReason = updated.email ? "lead_complete" : "lead_complete:no-email";
       if (updated.email) {
         await queueOrDeliverLead(
           repository,

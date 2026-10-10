@@ -15,11 +15,13 @@ const configuredLevel = ((): LogLevel => {
 
 function write(level: LogLevel, message: string, context?: LogContext): void {
     if (LEVEL_ORDER[level] < LEVEL_ORDER[configuredLevel]) return;
+    // Context first: a caller-supplied `level`/`message`/`time` key must never
+    // overwrite the fields log drivers and alerting key off.
     const line = JSON.stringify({
+        ...(context ?? {}),
         time: new Date().toISOString(),
         level,
         message,
-        ...(context ?? {}),
     });
     if (level === "error") console.error(line);
     else if (level === "warn") console.warn(line);

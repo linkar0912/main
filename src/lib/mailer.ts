@@ -14,6 +14,17 @@ export type EmailDeliveryResult =
 
 type Fetch = typeof fetch;
 
+/**
+ * Recipient addresses are personal data and must not land in log drains in
+ * full: keep the first character of the local part and the domain, which is
+ * enough to correlate a delivery problem with a mailbox provider.
+ */
+export function maskEmailAddress(address: string): string {
+  const at = address.lastIndexOf("@");
+  if (at <= 0) return "***";
+  return `${address[0]}***@${address.slice(at + 1)}`;
+}
+
 export function createMailer(configuration: {
   apiKey?: string;
   from?: string;
@@ -23,7 +34,7 @@ export function createMailer(configuration: {
   return {
     async send(email: OutboundEmail): Promise<EmailDeliveryResult> {
       if (!configuration.apiKey || !configuration.from) {
-        logger.warn("email delivery unavailable", { to: email.to, subject: email.subject, reason: "not_configured" });
+        logger.warn("email delivery unavailable", { to: maskEmailAddress(email.to), subject: email.subject, reason: "not_configured" });
         return { delivered: false, reason: "not_configured" };
       }
 
@@ -40,19 +51,19 @@ export function createMailer(configuration: {
           signal: AbortSignal.timeout(configuration.timeoutMs ?? 10_000),
         });
         if (!response.ok) {
-          logger.error("email provider rejected request", { to: email.to, subject: email.subject, status: response.status });
+          logger.error("email provider rejected request", { to: maskEmailAddress(email.to), subject: email.subject, status: response.status });
           return { delivered: false, reason: "provider_error", status: response.status };
         }
         const result = await response.json().catch(() => null) as { id?: unknown } | null;
         if (!result || typeof result.id !== "string") {
-          logger.error("email provider returned invalid response", { to: email.to, subject: email.subject });
+          logger.error("email provider returned invalid response", { to: maskEmailAddress(email.to), subject: email.subject });
           return { delivered: false, reason: "provider_error", status: response.status };
         }
-        logger.info("email delivered", { to: email.to, subject: email.subject, providerId: result.id });
+        logger.info("email delivered", { to: maskEmailAddress(email.to), subject: email.subject, providerId: result.id });
         return { delivered: true, id: result.id };
       } catch (error) {
         logger.error("email delivery failed", {
-          to: email.to,
+          to: maskEmailAddress(email.to),
           subject: email.subject,
           error: error instanceof Error ? error.name : "UnknownError",
         });
