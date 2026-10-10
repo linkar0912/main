@@ -28,6 +28,7 @@ function stubProductionBaseline() {
   vi.stubEnv("META_VERIFY_TOKEN", "");
   vi.stubEnv("FACEBOOK_VERIFY_TOKEN", "");
   vi.stubEnv("HEALTH_DETAIL_TOKEN", "");
+  vi.stubEnv("LINKAR_PROCESS_ROLE", "");
 }
 
 describe("production boot checks", () => {
@@ -84,6 +85,21 @@ describe("production boot checks", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
     expect(() => getServerEnv()).toThrow("SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY must be set in production");
+  });
+
+  it("lets the worker boot without Supabase keys but still requires its delivery infrastructure", () => {
+    stubProductionBaseline();
+    vi.stubEnv("LINKAR_PROCESS_ROLE", "worker");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(getServerEnv().redisUrl).toContain("redis://");
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("SUPABASE_URL"));
+
+    vi.stubEnv("REDIS_URL", "");
+    expect(() => getServerEnv()).toThrow("REDIS_URL must be set in production");
+    error.mockRestore();
   });
 
   it("allows a deliberate demo deployment and the image build to run without infrastructure", () => {

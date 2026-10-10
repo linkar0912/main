@@ -8,7 +8,7 @@ const REQUIRED = [
   ["capabilities.followGatedCampaigns", "enabled", "follow-gated enabled"],
 ];
 
-// /api/health returns only `status` unless the caller presents
+// /api/health returns only `status` and `release` unless the caller presents
 // HEALTH_DETAIL_TOKEN in this header.
 const DETAIL_HEADER = "x-health-token";
 

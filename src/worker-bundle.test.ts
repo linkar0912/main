@@ -15,5 +15,8 @@ describe("production worker bundle", () => {
         "This module cannot be imported from a Client Component module",
       ),
     ).toBe(false);
+    // build:worker defines LINKAR_PROCESS_ROLE as the string "worker"; if the
+    // shell strips the quotes, esbuild inlines a bare identifier instead.
+    expect(bundle).toMatch(/function isWorkerProcess\(\) \{\s*return true;\s*\}/);
   });
 });

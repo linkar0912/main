@@ -127,6 +127,15 @@ const PLACEHOLDER_CHECKED_ENV = [
  * the deployment platform injects those into the container, not the image.
  * Next sets NEXT_PHASE for the duration of the build.
  */
+/**
+ * The worker bundle is built with LINKAR_PROCESS_ROLE defined as "worker"
+ * (see build:worker in package.json), so this holds regardless of the
+ * container's environment or module evaluation order.
+ */
+function isWorkerProcess(): boolean {
+  return process.env.LINKAR_PROCESS_ROLE === "worker";
+}
+
 function isBuildPhase(): boolean {
   return process.env.NEXT_PHASE === "phase-production-build";
 }
@@ -337,12 +346,23 @@ export function getServerEnv(): ServerEnv {
   const supabasePublishableKey =
     process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-  assertProductionInfrastructure({
-    DATABASE_URL: process.env.DATABASE_URL,
-    REDIS_URL: process.env.REDIS_URL,
+  // The worker never serves sign-in, so a missing Supabase key must not stop
+  // DM delivery; it is logged instead. The web process requires all of them.
+  const supabaseInfrastructure = {
     SUPABASE_URL: supabaseUrl,
     SUPABASE_PUBLISHABLE_KEY: supabasePublishableKey,
     SUPABASE_SERVICE_ROLE_KEY: supabaseServiceRoleKey,
+  };
+  if (isWorkerProcess()) {
+    const missingSupabase = Object.entries(supabaseInfrastructure).filter(([, value]) => !value).map(([name]) => name);
+    if (missingSupabase.length > 0 && process.env.NODE_ENV === "production" && process.env.DEMO_MODE !== "1") {
+      console.error(`${missingSupabase.join(", ")} not set for the worker; admin deletions that call Supabase Auth will fail`);
+    }
+  }
+  assertProductionInfrastructure({
+    DATABASE_URL: process.env.DATABASE_URL,
+    REDIS_URL: process.env.REDIS_URL,
+    ...(isWorkerProcess() ? {} : supabaseInfrastructure),
     META_TOKEN_ENCRYPTION_KEY: metaTokenEncryptionKey,
   });
   const providerRequestTimeoutMs = positiveIntegerEnv(
