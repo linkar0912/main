@@ -142,7 +142,7 @@ enum ParticipantState {
 // lose its next-media binding and (with the publishedAt > activatedAt check)
 // re-bind to the next-published post instead of the originally targeted one.
 model AutomationVersion {
-  id                 String           @id
+  id                 String              @id
   automationId       String
   workspaceId        String
   // Monotonically increasing per-automation version number (1 = creation state).
@@ -154,8 +154,8 @@ model AutomationVersion {
   // Activation-time fields captured at snapshot time. See the table comment for
   // why these are persisted - a restore that drops any of them would break
   // next-media re-binding or alter which events the flow answers.
-  status             AutomationStatus @default(DRAFT)
-  priority           Int              @default(0)
+  status             AutomationStatus    @default(DRAFT)
+  priority           Int                 @default(0)
   activatedAt        DateTime?
   boundMediaId       String?
   instagramAccountId String?
@@ -166,7 +166,7 @@ model AutomationVersion {
   // Who/what produced the snapshot (user id when available; "system" for cron).
   snapshotBy         String?
   // When the snapshot was taken.
-  snapshotAt         DateTime         @default(now())
+  snapshotAt         DateTime            @default(now())
 
   @@unique([automationId, version])
   @@index([automationId, snapshotAt])
@@ -208,7 +208,7 @@ model Workspace {
   name                     String
   slug                     String                      @unique
   createdAt                DateTime                    @default(now())
-  updatedAt                DateTime                    @updatedAt
+  updatedAt                DateTime                    @default(now()) @updatedAt
   version                  Int                         @default(1)
   // Optional messaging quiet hours (workspace-local time). Null = always-on.
   quietStartHour           Int?
@@ -549,8 +549,8 @@ model AutomationParticipant {
   workspace                Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   automation               Automation       @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
-  @@unique([workspaceId, instagramAccountId, sourceCommentId])
-  @@index([instagramAccountId, igScopedUserId, state])
+  @@unique([workspaceId, instagramAccountId, sourceCommentId], map: "AutomationParticipant_workspaceId_instagramAccountId_sourceComm")
+  @@index([instagramAccountId, igScopedUserId, state], map: "AutomationParticipant_instagramAccountId_igScopedUserId_state_i")
   @@index([workspaceId, automationId, updatedAt])
   @@index([messagingWindowExpiresAt])
   @@index([pausedAt])
@@ -592,7 +592,7 @@ model TrackedLink {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   clicks    TrackedLinkClick[]
 
   @@index([workspaceId, createdAt])
@@ -613,7 +613,7 @@ model TrackedLinkClick {
   country     String?
   clickedAt   DateTime @default(now())
 
-  link TrackedLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  link TrackedLink @relation(fields: [linkId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([linkId, clickedAt])
   @@index([workspaceId, clickedAt])
@@ -670,7 +670,7 @@ model AutomationContact {
   workspace               Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   enrollments             SequenceEnrollment[]
 
-  @@unique([workspaceId, instagramAccountId, igScopedUserId])
+  @@unique([workspaceId, instagramAccountId, igScopedUserId], map: "AutomationContact_workspaceId_instagramAccountId_igScopedU_key")
   @@unique([id, workspaceId])
   @@index([workspaceId, state])
   @@index([workspaceId, inboxStatus, lastSeenAt, id])
@@ -679,6 +679,8 @@ model AutomationContact {
   @@index([workspaceId, lastInboundAt, id])
   // Retention clears lastInboundAt across all workspaces (deleteOldWebhookEvents).
   @@index([lastInboundAt])
+  @@index([workspaceId, assigneeUserId], map: "AutomationContact_assigneeUserId_idx")
+  @@index([workspaceId, leadStatus], map: "AutomationContact_leadStatus_idx")
 }
 
 // A timed drip campaign: ordered steps, each sent to enrolled contacts after a delay.
@@ -793,9 +795,10 @@ model OutboundDelivery {
 
   @@index([state, claimExpiresAt])
   @@index([workspaceId, kind, createdAt])
-  @@index([workspaceId, instagramAccountId, recipientId, createdAt])
+  @@index([workspaceId, instagramAccountId, recipientId, createdAt], map: "OutboundDelivery_workspaceId_instagramAccountId_recipientId_cre")
   @@index([broadcastId, state])
   @@index([providerMessageId])
+  @@index([updatedAt, id], map: "OutboundDelivery_updatedAt_id_idx")
 }
 
 model AutomationDailySendCounter {
@@ -830,6 +833,7 @@ model WebhookEvent {
   @@index([workspaceId, accountId, recipientId, receivedAt])
   // Retention deletes by age across all workspaces (deleteOldWebhookEvents).
   @@index([receivedAt])
+  @@index([receivedAt, id], map: "WebhookEvent_receivedAt_id_idx")
 }
 
 // A Facebook Page connected to a workspace for comment-reply automation.
@@ -847,7 +851,7 @@ model FacebookPageConnection {
   status               ConnectionStatus @default(CONNECTED)
   connectedAt          DateTime         @default(now())
   version              Int              @default(1)
-  workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace            Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   // One Facebook Page has exactly one owning workspace.
   @@unique([pageId])
