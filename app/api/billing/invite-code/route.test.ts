@@ -23,7 +23,22 @@ describe("POST /api/billing/invite-code", () => {
         plan: { key: "agency", name: "Agency" },
         expiresAt: "2026-10-05T00:00:00.000Z",
       },
+      refresh: true,
     });
+  });
+
+  it("rejects malformed JSON with a 400 instead of a server error", async () => {
+    const response = await POST(new Request("https://app.linkar.in/api/billing/invite-code", { method: "POST", headers: { "content-type": "application/json" }, body: "{not json" }));
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "invalid_request" });
+    expect(mocks.redeem).not.toHaveBeenCalled();
+  });
+
+  it("rejects a well-formed body without a usable code with a 422", async () => {
+    const response = await POST(new Request("https://app.linkar.in/api/billing/invite-code", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "x" }) }));
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({ error: "invite_code_invalid" });
+    expect(mocks.redeem).not.toHaveBeenCalled();
   });
 
   it("returns a conflict for a used code", async () => {

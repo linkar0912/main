@@ -57,7 +57,7 @@ export const BILLING_PLANS = {
     sequenceLimit: 50,
     monthlyBroadcastLimit: 25,
     monthlyDeliveryLimit: 50_000,
-    features: ["All launch features", "10 team seats", "Priority capacity"],
+    features: ["All launch features", "10 team seats"],
   },
 } as const satisfies Record<BillingPlanKey, BillingCatalogPlan>;
 

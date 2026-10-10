@@ -12,8 +12,15 @@ export function billingErrorResponse(error: unknown): NextResponse {
     billing_not_configured: 503,
     invalid_checkout_signature: 401,
     subscription_conflict: 409,
+    subscription_exists: 409,
     provider_unavailable: 503,
     checkout_verification_pending: 202,
   }[error.code];
+  if (error.code === "subscription_exists") {
+    return NextResponse.json({
+      error: error.code,
+      message: "This workspace already has a subscription. Use Change plan to switch plans instead of starting a new checkout.",
+    }, { status });
+  }
   return NextResponse.json({ error: error.code }, { status });
 }

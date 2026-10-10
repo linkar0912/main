@@ -172,6 +172,16 @@ describe("billing service", () => {
     expect(gateway.createSubscription).not.toHaveBeenCalled();
   });
 
+  it("refuses a second checkout while the workspace already has a live subscription", async () => {
+    const repo = repository({ claimCheckout: vi.fn().mockResolvedValue({ kind: "subscription_exists" }) });
+    const gateway = provider();
+    const service = createBillingService({ repository: repo, provider: gateway, env, getEffectivePlanKey: getFreePlanKey });
+
+    await expect(service.createCheckout("ws_1", "growth", "MONTHLY")).rejects.toEqual(new BillingServiceError("subscription_exists"));
+    expect(gateway.createSubscription).not.toHaveBeenCalled();
+    expect(repo.markCheckoutReady).not.toHaveBeenCalled();
+  });
+
   it("records only a sanitized failure code when provider creation fails", async () => {
     const repo = repository();
     const gateway = provider();

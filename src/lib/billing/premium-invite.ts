@@ -115,7 +115,14 @@ export function createPremiumInviteService(client: PrismaClient = prisma, now: (
   }
 
   async function revoke(id: string) {
-    return client.premiumInviteCode.update({ where: { id }, data: { revokedAt: now() } });
+    try {
+      return await client.premiumInviteCode.update({ where: { id }, data: { revokedAt: now() } });
+    } catch (error) {
+      if ((error as { code?: string }).code === "P2025") {
+        throw Object.assign(new Error("invite_code_not_found"), { status: 404, code: "invite_code_not_found" });
+      }
+      throw error;
+    }
   }
 
   return { create, list, redeem, revoke };

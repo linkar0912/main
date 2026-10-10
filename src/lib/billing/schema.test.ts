@@ -22,6 +22,12 @@ describe("billing database contract", () => {
     expect(schema).toMatch(/model BillingWebhookEvent \{[\s\S]*?eventId\s+String\s+@unique/);
   });
 
+  it("indexes the payload-hash replay lookup made inside the webhook transaction", () => {
+    expect(schema).toMatch(/model BillingWebhookEvent \{[\s\S]*?@@index\(\[payloadHash\]\)[\s\S]*?\}/);
+    const migration = readFileSync(join(root, "prisma/migrations/20261010150000_billing_webhook_payload_hash_index/migration.sql"), "utf8");
+    expect(migration).toContain('CREATE INDEX IF NOT EXISTS "BillingWebhookEvent_payloadHash_idx" ON "BillingWebhookEvent"("payloadHash")');
+  });
+
   it("enables row-level security without browser-facing policies", () => {
     const migration = readFileSync(migrationPath, "utf8");
     expect(migration).toContain('ALTER TABLE "BillingSubscription" ENABLE ROW LEVEL SECURITY');

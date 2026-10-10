@@ -41,6 +41,22 @@ function mapPlan(plan: {
   return plan;
 }
 
+// Launch catalog order. A plan outside it (an admin-defined custom plan) is
+// compared by monthly delivery capacity, with null meaning unlimited.
+const PLAN_RANK: Record<string, number> = { free: 0, creator: 1, growth: 2, agency: 3 };
+
+function planCapacity(plan: PlanEntitlements): number {
+  return plan.monthlyDeliveryLimit ?? Number.POSITIVE_INFINITY;
+}
+
+/** The higher of the paid/base plan and an invite plan; ties keep the base plan. */
+export function higherPlan(base: PlanEntitlements, premium: PlanEntitlements): PlanEntitlements {
+  const baseRank = PLAN_RANK[base.key];
+  const premiumRank = PLAN_RANK[premium.key];
+  if (baseRank !== undefined && premiumRank !== undefined) return premiumRank > baseRank ? premium : base;
+  return planCapacity(premium) > planCapacity(base) ? premium : base;
+}
+
 class MonthlyLimitReached extends Error {}
 
 export function createPrismaEntitlementRepository(client = prisma, now: () => Date = () => new Date()): EntitlementRepository {
@@ -58,8 +74,11 @@ export function createPrismaEntitlementRepository(client = prisma, now: () => Da
           select: { plan: true },
         }),
       ]);
-      if (premium) return { plan: mapPlan(premium.plan), overrides: {} };
-      return entitlement ? { plan: mapPlan(entitlement.plan), overrides: entitlement.overrides } : null;
+      // An invite never downgrades a paid plan and never drops the workspace's
+      // admin overrides; it only lifts the base plan while it is active.
+      if (!entitlement) return premium ? { plan: mapPlan(premium.plan), overrides: {} } : null;
+      const base = mapPlan(entitlement.plan);
+      return { plan: premium ? higherPlan(base, mapPlan(premium.plan)) : base, overrides: entitlement.overrides };
     },
 
     async reserveMonthlyDelivery(input) {
@@ -101,7 +120,14 @@ export function createPrismaEntitlementRepository(client = prisma, now: () => Da
             return { reserved: false, used: usage?.deliveriesReserved ?? 0, limit: input.limit };
           }
           if (code === "P2002") {
-            return { reserved: true, used: usage?.deliveriesReserved ?? 0, limit: input.limit };
+            // Only a duplicate deliveryKey means "already reserved"; losing the
+            // race to create this month's period row is retried, not counted.
+            const reservation = await client.workspaceUsageReservation.findUnique({
+              where: { deliveryKey: input.deliveryKey },
+              select: { deliveryKey: true },
+            });
+            if (reservation) return { reserved: true, used: usage?.deliveriesReserved ?? 0, limit: input.limit };
+            if (attempt < 3) continue;
           }
           throw error;
         }

@@ -7,6 +7,7 @@ import { createPrismaBillingRepository } from "./repository";
 describe("billing repository concurrency", () => {
   it("retries a serializable checkout conflict and then reuses the winning claim", async () => {
     const transaction = {
+      billingSubscription: { findUnique: vi.fn().mockResolvedValue(null) },
       billingCheckoutAttempt: {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
         findFirst: vi.fn().mockResolvedValue({
@@ -29,6 +30,40 @@ describe("billing repository concurrency", () => {
     })).resolves.toEqual({ kind: "processing", attemptId: "checkout_winner" });
     expect(client.$transaction).toHaveBeenCalledTimes(2);
     expect(transaction.billingCheckoutAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["CREATED", "AUTHENTICATED", "ACTIVE", "PENDING", "HALTED", "PAUSED"])(
+    "refuses a second checkout while the workspace subscription is %s",
+    async (status) => {
+      const transaction = {
+        billingSubscription: { findUnique: vi.fn().mockResolvedValue({ status }) },
+        billingCheckoutAttempt: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
+      };
+      const client = { $transaction: vi.fn((operation: (tx: typeof transaction) => unknown) => operation(transaction)) };
+
+      await expect(createPrismaBillingRepository(client as never).claimCheckout({
+        workspaceId: "ws_1", planId: "plan_growth", interval: "MONTHLY",
+        now: new Date("2026-09-04T12:00:00Z"), expiresAt: new Date("2026-09-04T12:15:00Z"),
+      })).resolves.toEqual({ kind: "subscription_exists" });
+      expect(transaction.billingCheckoutAttempt.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["CANCELLED", "COMPLETED", "EXPIRED"])("allows a new checkout after a %s subscription", async (status) => {
+    const transaction = {
+      billingSubscription: { findUnique: vi.fn().mockResolvedValue({ status }) },
+      billingCheckoutAttempt: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: "checkout_new" }),
+      },
+    };
+    const client = { $transaction: vi.fn((operation: (tx: typeof transaction) => unknown) => operation(transaction)) };
+
+    await expect(createPrismaBillingRepository(client as never).claimCheckout({
+      workspaceId: "ws_1", planId: "plan_growth", interval: "MONTHLY",
+      now: new Date("2026-09-04T12:00:00Z"), expiresAt: new Date("2026-09-04T12:15:00Z"),
+    })).resolves.toEqual({ kind: "create", attemptId: "checkout_new" });
   });
 });
 

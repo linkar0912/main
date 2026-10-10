@@ -95,6 +95,11 @@ export function createEntitlementService(
     return repository.releaseMonthlyDelivery(deliveryKey);
   }
 
+  /**
+   * Clears this process's cache only. Other web instances and the worker keep
+   * their entry for at most cacheTtlMs (30 seconds by default), which bounds
+   * how long a plan change takes to apply everywhere.
+   */
   function invalidateWorkspace(workspaceId: string): void {
     entitlementCache.delete(workspaceId);
   }
