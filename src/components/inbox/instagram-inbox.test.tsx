@@ -36,9 +36,64 @@ describe("InstagramInbox", () => {
 
       expect(await screen.findByRole("button", { name: /open conversation with @arjun/i })).toBeTruthy();
       expect(await screen.findByText("Still there?")).toBeTruthy();
+      // Only the new inbound message is announced, through its own live
+      // region; the thread itself no longer re-reads on every update.
+      expect(document.querySelector(".ibx-messages")?.hasAttribute("aria-live")).toBe(false);
+      await waitFor(() => expect(document.querySelector(".ibx-live-announcement")?.textContent).toBe("New message from @aanya: Still there?"));
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("does not announce the thread that was already on screen or messages you send", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const thread = [{ id: "m1", direction: "inbound", text: "Need the guide", at: "2026-09-04T10:00:00.000Z", status: "received" }];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/inbox") return new Response(JSON.stringify({ data: { contacts: [{ ...aanya, unread: false }], members: [] } }), { status: 200 });
+      if (url === "/api/inbox/contact_1" && !init?.method) return new Response(JSON.stringify({ data: { messages: thread } }), { status: 200 });
+      return new Response(JSON.stringify({ data: {} }), { status: 200 });
+    }));
+    try {
+      render(<InstagramInbox />);
+      fireEvent.click(await screen.findByRole("button", { name: /open conversation with @aanya/i }));
+      await screen.findByText("Need the guide", { selector: "p" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(INBOX_LIVE_REFRESH_MS); });
+      expect(document.querySelector(".ibx-live-announcement")?.textContent).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("mirrors stage and owner edits from the contact drawer into the conversation list", async () => {
+    const members = [{ userId: "user_2", email: "maya@example.com", role: "MEMBER" }];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/inbox") return new Response(JSON.stringify({ data: { contacts: [{ ...aanya, unread: false }], members } }), { status: 200 });
+      if (url === "/api/inbox/contact_1" && !init?.method) return new Response(JSON.stringify({ data: { messages: [] } }), { status: 200 });
+      if (url === "/api/team/members") return new Response(JSON.stringify({ data: members }), { status: 200 });
+      if (url.startsWith("/api/contacts/contact_1") && !init?.method) {
+        return new Response(JSON.stringify({ data: { contact: { id: "contact_1", instagramUsername: "aanya", state: "NONE", tags: ["guide"], score: 3, leadStatus: "ENGAGED", lastSeenAt: aanya.lastMessageAt, createdAt: aanya.lastMessageAt }, timeline: [] } }), { status: 200 });
+      }
+      if (url === "/api/contacts/contact_1" && init?.method === "PATCH") {
+        return new Response(JSON.stringify({ data: { leadStatus: "QUALIFIED", assigneeUserId: "user_2", score: 5 } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: {} }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<InstagramInbox />);
+    fireEvent.click(await screen.findByRole("button", { name: /open conversation with @aanya/i }));
+    await screen.findByText("No messages with this contact yet.");
+    fireEvent.click(screen.getByRole("button", { name: "View details for @aanya" }));
+
+    const status = await screen.findByRole("combobox", { name: "Lead status" });
+    await waitFor(() => expect((screen.getByRole("textbox", { name: "Internal notes" }) as HTMLTextAreaElement).disabled).toBe(false));
+    fireEvent.change(status, { target: { value: "QUALIFIED" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+
+    // The roster row picks up the new owner without waiting for a refresh.
+    const row = await screen.findByRole("button", { name: /open conversation with @aanya/i });
+    await waitFor(() => expect(row.textContent).toContain("maya"));
   });
 
   it("does not poll while the tab is hidden", async () => {
