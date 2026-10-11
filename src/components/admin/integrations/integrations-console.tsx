@@ -11,7 +11,8 @@ import { RelativeTime } from "@/src/components/ui/relative-time";
 import type { AdminIntegrationDetail, AdminIntegrationItem } from "@/src/lib/admin/integrations/types";
 import { AdminPagination } from "../shared/admin-pagination";
 import { adminCommand, adminErrorMessage, adminQuery, humanizeAdminCode } from "../shared/admin-request";
-import { REASON_LABEL } from "../shared/reason-dialog";
+import { AdminDialog } from "../shared/admin-dialog";
+import { ReasonField } from "../shared/reason-dialog";
 import { StatusPill } from "../shared/status-pill";
 import { useAdminDialog } from "../shared/use-admin-dialog";
 
@@ -22,6 +23,13 @@ const actionLabels: Record<string, string> = {
   mark_expired: "Mark as expired",
   repair_subscription: "Repair event subscription",
   disconnect: "Disconnect",
+};
+// One plain sentence per action, so the dialog says what will happen.
+const actionIntros: Record<string, string> = {
+  refresh_token: "Asks Meta for a fresh access token so this account keeps working.",
+  mark_expired: "Marks this account as expired so the workspace is asked to reconnect it.",
+  repair_subscription: "Re-subscribes this account to the Meta events Linkar needs to reply.",
+  disconnect: "Removes this account from the workspace. You will be asked to type a confirmation next.",
 };
 const providerNames = { instagram: "Instagram", facebook: "Facebook" } as const;
 const subscriptionStates: Record<AdminIntegrationItem["subscriptionHealth"], { status: string; label: string }> = {
@@ -50,7 +58,6 @@ function ActionDialog({ item, action, onClose, onDone }: { item: AdminIntegratio
   const [error, setError] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<{ token: string; confirmationPhrase: string } | null>(null);
   const [confirmation, setConfirmation] = useState("");
-  const dialogRef = useAdminDialog<HTMLFormElement>(onClose, busy);
   const disconnecting = action === "disconnect";
   const ready = reason.trim().length >= 3 && (!challenge || confirmation === challenge.confirmationPhrase);
 
@@ -78,29 +85,31 @@ function ActionDialog({ item, action, onClose, onDone }: { item: AdminIntegratio
   }
 
   return (
-    <div className="admin-dialog-backdrop" role="presentation">
-      <form ref={dialogRef} tabIndex={-1} className="admin-reason-dialog" role="dialog" aria-modal="true" aria-labelledby="integration-action-title" onSubmit={submit}>
-        <h2 id="integration-action-title">{label(action)}: {item.accountName}</h2>
-        {disconnecting ? <p className="admin-callout is-danger"><ShieldAlert size={16} aria-hidden /><span>Disconnecting stops every automation on this account until the workspace connects it again.</span></p> : null}
-        {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
-        <label className="field">
-          <span>{REASON_LABEL}</span>
-          <textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
-        </label>
-        {challenge ? (
-          <label className="field">
-            <span>Type <code className="admin-phrase">{challenge.confirmationPhrase}</code> to confirm</span>
-            <input autoFocus required autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
-          </label>
-        ) : null}
-        <div className="admin-actions">
+    <AdminDialog
+      title={`${label(action)}: ${item.accountName}`}
+      busy={busy}
+      onClose={onClose}
+      onSubmit={(event) => void submit(event)}
+      footer={(
+        <>
           <button className="button button-ghost" type="button" disabled={busy} onClick={onClose}>Cancel</button>
           <button className={disconnecting ? "button button-danger" : "button button-primary"} disabled={busy || !ready} type="submit">
-            {disconnecting && !challenge ? "Continue" : disconnecting ? "Disconnect" : "Confirm"}
+            {busy ? "Working…" : disconnecting && !challenge ? "Continue" : disconnecting ? "Disconnect" : label(action)}
           </button>
-        </div>
-      </form>
-    </div>
+        </>
+      )}
+    >
+      <p className="admin-dialog-intro">{actionIntros[action] ?? "This changes the account right away."}</p>
+      {disconnecting ? <p className="admin-callout is-danger"><ShieldAlert size={16} aria-hidden /><span>Disconnecting stops every automation on this account until the workspace connects it again.</span></p> : null}
+      {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
+      <ReasonField value={reason} onChange={setReason} />
+      {challenge ? (
+        <label className="field">
+          <span>Type <code className="admin-phrase">{challenge.confirmationPhrase}</code> to confirm</span>
+          <input autoFocus required autoComplete="off" spellCheck={false} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
+        </label>
+      ) : null}
+    </AdminDialog>
   );
 }
 
@@ -264,8 +273,8 @@ export function IntegrationsConsole({ items, filters, nextCursor = null, history
               <div><dt>Account ID</dt><dd><IdChip id={selected.accountId} /></dd></div>
               <div><dt>Access expires</dt><dd><TokenExpiry item={selected} /></dd></div>
               <div><dt>Events</dt><dd>{subscriptionStates[selected.subscriptionHealth].label}</dd></div>
-              <div><dt>Subscribed to</dt><dd>{selected.subscribedFields.join(", ") || "Nothing"}</dd></div>
-              <div><dt>Missing</dt><dd>{selected.missingFields.join(", ") || "Nothing"}</dd></div>
+              <div><dt>Subscribed to</dt><dd>{selected.subscribedFields.map(humanizeAdminCode).join(", ") || "Nothing"}</dd></div>
+              <div><dt>Missing</dt><dd>{selected.missingFields.map(humanizeAdminCode).join(", ") || "Nothing"}</dd></div>
               <div><dt>Last checked</dt><dd><RelativeTime value={selected.checkedAt} /></dd></div>
               {selected.safeErrorCode ? <div><dt>Last error</dt><dd>{humanizeAdminCode(selected.safeErrorCode.toLowerCase())}</dd></div> : null}
             </dl>
@@ -276,7 +285,7 @@ export function IntegrationsConsole({ items, filters, nextCursor = null, history
                 {selected.allowedActions.map((name) => {
                   const Icon = actionIcons[name];
                   return (
-                    <button key={name} className={name === "disconnect" ? "button button-danger button-small" : "button button-secondary button-small"} onClick={() => setAction(name)} type="button">
+                    <button key={name} className={`button button-secondary button-small ${name === "disconnect" ? "is-danger" : ""}`.trim()} onClick={() => setAction(name)} type="button">
                       {Icon ? <Icon size={14} aria-hidden /> : null}{label(name)}
                     </button>
                   );

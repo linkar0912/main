@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { ArrowLeft, Ban, KeyRound, Mail, RefreshCcw, ShieldOff, UserRoundCheck } from "lucide-react";
 
 import { PageHeader } from "@/src/components/page-header";
@@ -10,7 +10,7 @@ import { IdChip } from "@/src/components/ui/id-chip";
 import { RelativeTime } from "@/src/components/ui/relative-time";
 import type { AdminUserDetail } from "@/src/lib/admin/accounts-repository";
 import { AdminCommandError, adminCommand, adminErrorMessage } from "./shared/admin-request";
-import { REASON_LABEL } from "./shared/reason-dialog";
+import { ReasonDialog } from "./shared/reason-dialog";
 import { StatusPill } from "./shared/status-pill";
 
 type AccessAction = "SUSPEND" | "RESTORE" | "REVOKE_LINKAR_SESSIONS" | "BAN" | "UNBAN";
@@ -30,28 +30,54 @@ function roleLabel(role: string): string {
   return `${text[0]?.toUpperCase() ?? ""}${text.slice(1)}`;
 }
 
+type Command = AccessAction | "RESET";
+
+// What each command does, said once in the row and once in its dialog.
+const commands: Record<Command, { area: string; title: string; description: string; confirm: string; danger?: boolean; icon: React.ReactNode }> = {
+  SUSPEND: { area: "Linkar access", title: "Suspend Linkar access", description: "They can't open any workspace until you restore access.", confirm: "Suspend access", danger: true, icon: <Ban size={16} aria-hidden /> },
+  RESTORE: { area: "Linkar access", title: "Restore Linkar access", description: "They can open their workspaces again.", confirm: "Restore access", icon: <RefreshCcw size={16} aria-hidden /> },
+  REVOKE_LINKAR_SESSIONS: { area: "Sessions", title: "Sign out everywhere", description: "Ends every Linkar session on every device. They can sign in again.", confirm: "Sign out everywhere", icon: <KeyRound size={16} aria-hidden /> },
+  BAN: { area: "Sign-in", title: "Block sign-in", description: "Stops them signing in at all. Linkar access is not changed.", confirm: "Block sign-in", danger: true, icon: <ShieldOff size={16} aria-hidden /> },
+  UNBAN: { area: "Sign-in", title: "Allow sign-in", description: "Lets them sign in again. Linkar access is not changed.", confirm: "Allow sign-in", icon: <UserRoundCheck size={16} aria-hidden /> },
+  RESET: { area: "Password", title: "Send password reset", description: "Emails them a link to choose a new password.", confirm: "Send password reset", icon: <Mail size={16} aria-hidden /> },
+};
+
 export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
   const router = useRouter();
-  const [reason, setReason] = useState("");
+  const [command, setCommand] = useState<Command | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const firstAction = useRef<HTMLButtonElement>(null);
   const memberships = user.workspaces ?? [];
-  const blocked = busy || reason.trim().length < 3;
   const active = user.status === "ACTIVE";
   // The Auth ban and Linkar access are separate controls with separate state.
   const banned = Boolean(user.authBannedUntil);
+  const needsEmail = command === "RESET" || (command !== null && confirmedActions.includes(command));
+  const rows: Command[] = [active ? "SUSPEND" : "RESTORE", "REVOKE_LINKAR_SESSIONS", banned ? "UNBAN" : "BAN", "RESET"];
 
-  async function run(path: string, body: unknown, success: string) {
-    setBusy(true);
+  function open(next: Command) {
+    setCommand(next);
+    setConfirmation("");
     setError(null);
     setMessage(null);
+  }
+
+  async function run(reason: string) {
+    if (!command) return;
+    if (needsEmail && confirmation !== user.email) {
+      setError(`Type ${user.email} exactly to continue.`);
+      return;
+    }
+    const [path, body, success] = command === "RESET"
+      ? ["reset", {}, `Password reset sent to ${user.email}.`] as const
+      : ["access", { action: command }, accessMessages[command]] as const;
+    setBusy(true);
+    setError(null);
     try {
       await adminCommand(`/api/admin/users/${user.id}/${path}`, { body, reason, fallback: "admin_operation_failed" });
       setMessage(success);
-      setConfirmation("");
+      setCommand(null);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof AdminCommandError && cause.code === "auth_ban_active"
@@ -59,25 +85,7 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
         : adminErrorMessage(cause));
     } finally {
       setBusy(false);
-      firstAction.current?.focus();
     }
-  }
-
-  function confirmedByEmail(): boolean {
-    if (confirmation === user.email) return true;
-    setMessage(null);
-    setError(`Type ${user.email} exactly to continue.`);
-    return false;
-  }
-
-  function access(action: AccessAction) {
-    if (confirmedActions.includes(action) && !confirmedByEmail()) return;
-    void run("access", { action }, accessMessages[action]);
-  }
-
-  function reset() {
-    if (!confirmedByEmail()) return;
-    void run("reset", {}, `Password reset sent to ${user.email}.`);
   }
 
   return (
@@ -88,6 +96,8 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
         description={<>Joined <RelativeTime inline value={user.createdAt} />, member of {user.workspaceCount} {user.workspaceCount === 1 ? "workspace" : "workspaces"}</>}
         actions={<StatusPill status={user.status} />}
       />
+
+      {message ? <div className="form-success admin-message" role="status">{message}</div> : null}
 
       <section className="admin-card" aria-labelledby="sign-in-title">
         <div className="admin-card-head">
@@ -123,37 +133,51 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
         )}
       </section>
 
-      <section className="admin-card is-danger" aria-labelledby="access-title">
+      <section className="admin-card" aria-labelledby="access-title">
         <div className="admin-card-head">
           <div>
             <h2 id="access-title">Access and recovery</h2>
-            <p>Suspend and restore control Linkar access. Blocking sign-in stops them logging in at all and does not change Linkar access.</p>
+            <p>Each action asks for a reason, and the ones that lock someone out ask you to type their email.</p>
           </div>
         </div>
-        <div className="admin-form">
-          <label className="field">
-            <span>{REASON_LABEL}</span>
-            <textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
-          </label>
-          <label className="field">
-            <span>Type <code className="admin-phrase">{user.email}</code> to confirm suspending, blocking or a password reset</span>
-            <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
-          </label>
-          {banned && !active ? <p className="admin-hint">Allow sign-in again before restoring Linkar access.</p> : null}
-          <div className="admin-actions">
-            <button ref={firstAction} className={`button ${active ? "button-danger" : "button-primary"}`} disabled={blocked || (!active && banned)} onClick={() => access(active ? "SUSPEND" : "RESTORE")} type="button">
-              {active ? <><Ban size={16} aria-hidden /> Suspend Linkar access</> : <><RefreshCcw size={16} aria-hidden /> Restore Linkar access</>}
-            </button>
-            <button className="button button-secondary" disabled={blocked} onClick={() => access("REVOKE_LINKAR_SESSIONS")} type="button"><KeyRound size={16} aria-hidden /> Sign out everywhere</button>
-            {banned
-              ? <button className="button button-secondary" disabled={blocked} onClick={() => access("UNBAN")} type="button"><UserRoundCheck size={16} aria-hidden /> Allow sign-in</button>
-              : <button className="button button-secondary" disabled={blocked} onClick={() => access("BAN")} type="button"><ShieldOff size={16} aria-hidden /> Block sign-in</button>}
-            <button className="button button-secondary" disabled={blocked} onClick={reset} type="button"><Mail size={16} aria-hidden /> Send password reset</button>
-          </div>
-          {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
-          {message ? <div className="form-success admin-message" role="status">{message}</div> : null}
-        </div>
+        <ul className="admin-list admin-command-list">
+          {rows.map((item) => {
+            const restoreBlocked = item === "RESTORE" && banned;
+            return (
+              <li key={item}>
+                <span className="admin-list-main">
+                  <strong>{commands[item].area}</strong>
+                  <span className="cell-meta">{restoreBlocked ? "Allow sign-in again before restoring Linkar access." : commands[item].description}</span>
+                </span>
+                <button className={`button button-secondary button-small ${commands[item].danger ? "is-danger" : ""}`.trim()} type="button" disabled={busy || restoreBlocked} onClick={() => open(item)}>
+                  {commands[item].icon} {commands[item].title}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </section>
+
+      {command ? (
+        <ReasonDialog
+          title={`${commands[command].title} for ${user.email}`}
+          intro={commands[command].description}
+          danger={commands[command].danger}
+          busy={busy}
+          error={error}
+          confirmLabel={commands[command].confirm}
+          confirmDisabled={needsEmail && confirmation.trim().length === 0}
+          onCancel={() => { setCommand(null); setError(null); }}
+          onConfirm={(reason) => void run(reason)}
+        >
+          {needsEmail ? (
+            <label className="field">
+              <span>Type <code className="admin-phrase">{user.email}</code> to confirm</span>
+              <input inputMode="email" autoCapitalize="none" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
+            </label>
+          ) : null}
+        </ReasonDialog>
+      ) : null}
     </main>
   );
 }

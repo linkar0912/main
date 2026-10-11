@@ -6,7 +6,8 @@ import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/src/components/page-header";
 import { StatusBadge } from "@/src/components/ui/status-badge";
 import { encodeAdminReason } from "./shared/admin-request";
-import { REASON_LABEL } from "./shared/reason-dialog";
+import { AdminDialog } from "./shared/admin-dialog";
+import { ReasonField } from "./shared/reason-dialog";
 
 type Factor = {
   id: string;
@@ -238,8 +239,7 @@ export function AdminSecurityScreen({
     }
   }
 
-  async function removeFactor(event: React.FormEvent) {
-    event.preventDefault();
+  async function removeFactor() {
     if (!removal || removal.confirmation !== removal.confirmationPhrase || removal.reason.trim().length < 3) return;
     setBusy(true);
     setError(null);
@@ -267,7 +267,7 @@ export function AdminSecurityScreen({
         actions={<StatusBadge tone={verified ? "success" : "warning"} label={verified ? "Two-factor verified" : "Two-factor needed"} />}
       />
 
-      {error ? <p className="form-error admin-message" role="alert">{error}</p> : null}
+      {error && !removal ? <p className="form-error admin-message" role="alert">{error}</p> : null}
       {notice ? <p className="form-success admin-message" role="status">{notice}</p> : null}
 
       {!verified ? (
@@ -371,30 +371,28 @@ export function AdminSecurityScreen({
       </section>
 
       {removal ? (
-        <section className="admin-card is-danger" aria-labelledby="remove-factor-title">
-          <div className="admin-card-head">
-            <div>
-              <h2 id="remove-factor-title">Remove {removal.factor.friendlyName}</h2>
-              <p>You will no longer be able to sign in with this app. Your other verified app stays.</p>
-            </div>
-          </div>
-          <form className="admin-form" onSubmit={removeFactor}>
-            <label className="field">
-              <span>{REASON_LABEL}</span>
-              <textarea value={removal.reason} onChange={(event) => setRemoval({ ...removal, reason: event.target.value })} />
-            </label>
-            <label className="field">
-              <span>Type <code className="admin-phrase">{removal.confirmationPhrase}</code> to confirm</span>
-              <input value={removal.confirmation} autoComplete="off" spellCheck={false} onChange={(event) => setRemoval({ ...removal, confirmation: event.target.value })} />
-            </label>
-            <div className="admin-actions">
-              <button className="button button-secondary" type="button" disabled={busy} onClick={() => setRemoval(null)}>Cancel</button>
+        <AdminDialog
+          title={`Remove ${removal.factor.friendlyName}`}
+          busy={busy}
+          onClose={() => setRemoval(null)}
+          onSubmit={() => void removeFactor()}
+          footer={(
+            <>
+              <button className="button button-ghost" type="button" disabled={busy} onClick={() => setRemoval(null)}>Cancel</button>
               <button className="button button-danger" type="submit" disabled={busy || removal.reason.trim().length < 3 || removal.confirmation !== removal.confirmationPhrase}>
-                Remove app
+                {busy ? "Working…" : "Remove app"}
               </button>
-            </div>
-          </form>
-        </section>
+            </>
+          )}
+        >
+          <p className="admin-dialog-intro">You will no longer be able to sign in with this app. Your other verified app stays.</p>
+          {error ? <p className="form-error admin-message" role="alert">{error}</p> : null}
+          <ReasonField value={removal.reason} onChange={(reason) => setRemoval({ ...removal, reason })} rows={2} />
+          <label className="field">
+            <span>Type <code className="admin-phrase">{removal.confirmationPhrase}</code> to confirm</span>
+            <input value={removal.confirmation} autoComplete="off" autoCapitalize="none" spellCheck={false} onChange={(event) => setRemoval({ ...removal, confirmation: event.target.value })} />
+          </label>
+        </AdminDialog>
       ) : null}
     </main>
   );

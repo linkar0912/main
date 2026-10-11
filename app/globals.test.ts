@@ -270,7 +270,11 @@ describe("workspace palette contract", () => {
 
   it("keeps admin dialog actions reachable on short screens", () => {
     expect(css).toMatch(/\.admin-dialog-backdrop\s*{[^}]*overflow-y:\s*auto/);
-    expect(css).toMatch(/\.admin-reason-dialog\s*{[^}]*max-height:[^}]*overflow-y:\s*auto/);
+    // The dialog is capped to the screen; its body scrolls while the title and
+    // the Cancel / confirm footer stay pinned.
+    expect(css).toMatch(/\.admin-reason-dialog\s*{[^}]*max-height:\s*calc\(100dvh/);
+    expect(css).toMatch(/\.admin-dialog-body\s*{[^}]*min-height:\s*0[^}]*overflow-y:\s*auto/);
+    expect(css).toMatch(/\.admin-reason-dialog \.admin-dialog-foot\s*{[^}]*flex:\s*0 0 auto/);
   });
 
   it("hides the skip link until it receives focus", () => {

@@ -10,7 +10,8 @@ import { RelativeTime } from "@/src/components/ui/relative-time";
 import type { AdminUserSummary, CursorPage } from "@/src/lib/admin/accounts-repository";
 import { AdminPagination } from "./shared/admin-pagination";
 import { adminCommand, adminErrorMessage } from "./shared/admin-request";
-import { REASON_LABEL } from "./shared/reason-dialog";
+import { AdminDialog } from "./shared/admin-dialog";
+import { ReasonField } from "./shared/reason-dialog";
 import { StatusPill } from "./shared/status-pill";
 
 type Mode = "INVITE" | "CREATE";
@@ -29,6 +30,7 @@ export function UsersScreen({ page, search = "", cursor = null, history = [] }: 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   function searchUsers(event: FormEvent) {
     event.preventDefault();
@@ -37,8 +39,19 @@ export function UsersScreen({ page, search = "", cursor = null, history = [] }: 
     router.push(`/admin/users${params.size ? `?${params}` : ""}`);
   }
 
-  async function submitUser(event: FormEvent) {
-    event.preventDefault();
+  function openAdd() {
+    setError(null);
+    setNotice(null);
+    setAdding(true);
+  }
+
+  function closeAdd() {
+    setAdding(false);
+    setError(null);
+  }
+
+  async function submitUser() {
+    if (busy) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -49,6 +62,7 @@ export function UsersScreen({ page, search = "", cursor = null, history = [] }: 
       setEmail("");
       setReason("");
       setConfirmed(false);
+      setAdding(false);
       router.refresh();
     } catch (cause) {
       setError(adminErrorMessage(cause));
@@ -59,45 +73,48 @@ export function UsersScreen({ page, search = "", cursor = null, history = [] }: 
 
   return (
     <main className="page-wrap admin-page">
-      <PageHeader title="Users" description="Everyone who can sign in to Linkar, and the workspaces they belong to." />
+      <PageHeader
+        title="Users"
+        description="Everyone who can sign in to Linkar, and the workspaces they belong to."
+        actions={<button className="button button-primary" type="button" onClick={openAdd}><UserPlus size={16} aria-hidden /> Add user</button>}
+      />
 
-      <section className="admin-card" aria-labelledby="add-user-title">
-        <div className="admin-card-head">
-          <div>
-            <h2 id="add-user-title">Add a user</h2>
-            <p>Send an invitation email, or create the account straight away.</p>
-          </div>
-        </div>
-        <form className="admin-form is-full" onSubmit={submitUser}>
-          <div className="admin-form-row">
-            <label className="field">
-              <span>Email address</span>
-              <input type="email" required autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} />
-            </label>
-            <label className="field">
-              <span>How to add them</span>
-              <select value={mode} onChange={(event) => setMode(event.target.value as Mode)}>
-                <option value="INVITE">Send an invitation email</option>
-                <option value="CREATE">Create the account now</option>
-              </select>
-            </label>
-            <label className="field">
-              <span>{REASON_LABEL}</span>
-              <input required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
-            </label>
-          </div>
+      {notice ? <div className="form-success admin-message" role="status">{notice}</div> : null}
+
+      {adding ? (
+        <AdminDialog
+          title="Add a user"
+          busy={busy}
+          onClose={closeAdd}
+          onSubmit={() => void submitUser()}
+          footer={(
+            <>
+              <button className="button button-ghost" type="button" disabled={busy} onClick={closeAdd}>Cancel</button>
+              <button className="button button-primary" disabled={busy || !email.trim() || reason.trim().length < 3} type="submit">
+                {busy ? "Working…" : mode === "INVITE" ? "Send invitation" : "Create user"}
+              </button>
+            </>
+          )}
+        >
+          <p className="admin-dialog-intro">Send an invitation email, or create the account straight away.</p>
+          {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
+          <label className="field">
+            <span>Email address</span>
+            <input type="email" inputMode="email" autoCapitalize="none" spellCheck={false} required autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} />
+          </label>
+          <fieldset className="admin-segmented">
+            <legend>How to add them</legend>
+            <label><input type="radio" name="add-user-mode" value="INVITE" checked={mode === "INVITE"} onChange={() => setMode("INVITE")} /> Send an invitation email</label>
+            <label><input type="radio" name="add-user-mode" value="CREATE" checked={mode === "CREATE"} onChange={() => setMode("CREATE")} /> Create the account now</label>
+          </fieldset>
           {mode === "CREATE" ? (
             <label className="admin-check">
               <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> Mark their email as already confirmed
             </label>
           ) : null}
-          <div className="admin-actions">
-            <button className="button button-primary" disabled={busy} type="submit"><UserPlus size={16} aria-hidden /> {mode === "INVITE" ? "Send invitation" : "Create user"}</button>
-          </div>
-          {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
-          {notice ? <div className="form-success admin-message" role="status">{notice}</div> : null}
-        </form>
-      </section>
+          <ReasonField value={reason} onChange={setReason} rows={2} />
+        </AdminDialog>
+      ) : null}
 
       <section className="admin-section" aria-label="User identities">
         <form className="admin-toolbar" role="search" onSubmit={searchUsers}>
@@ -105,7 +122,7 @@ export function UsersScreen({ page, search = "", cursor = null, history = [] }: 
             <span>Search users</span>
             <span className="admin-search">
               <Search size={17} aria-hidden />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Email address" />
+              <input inputMode="email" autoCapitalize="none" spellCheck={false} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Email address" />
             </span>
           </label>
           <button className="button button-secondary" type="submit">Search</button>
@@ -133,7 +150,7 @@ export function UsersScreen({ page, search = "", cursor = null, history = [] }: 
                       <td>
                         <span className="cell-stack">
                           <Link href={`/admin/users/${user.id}`}>{user.email}</Link>
-                          <span className="cell-meta">Joined <RelativeTime inline value={user.createdAt} /></span>
+                          <span className="cell-meta"><span>Joined <RelativeTime inline value={user.createdAt} /></span></span>
                         </span>
                       </td>
                       <td data-label="Status"><StatusPill status={user.status} /></td>

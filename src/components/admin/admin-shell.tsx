@@ -58,8 +58,14 @@ function initialsOf(email: string): string {
   return (name.slice(0, 2) || "O").toUpperCase();
 }
 
+// Meta deletion requests live under /admin/system but belong to Delete data,
+// which is where their back link goes.
+const sectionAliases: Record<string, string> = { "/admin/system/data-deletions": "/admin/deletions" };
+
 function isActive(pathname: string, href: string): boolean {
-  return href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+  const alias = Object.entries(sectionAliases).find(([path]) => pathname === path || pathname.startsWith(`${path}/`));
+  const current = alias ? alias[1] : pathname;
+  return href === "/admin" ? current === href : current === href || current.startsWith(`${href}/`);
 }
 
 export function AdminShell({

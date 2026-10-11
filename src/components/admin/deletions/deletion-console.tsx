@@ -9,7 +9,7 @@ import { IdChip } from "@/src/components/ui/id-chip";
 import { RelativeTime } from "@/src/components/ui/relative-time";
 import { AdminPagination } from "../shared/admin-pagination";
 import { adminCommand, adminErrorMessage, adminIdempotencyKey, humanizeAdminCode } from "../shared/admin-request";
-import { REASON_LABEL } from "../shared/reason-dialog";
+import { ReasonDialog } from "../shared/reason-dialog";
 import { StatusPill } from "../shared/status-pill";
 import { DeletionWizard } from "./deletion-wizard";
 import { SyntheticCleanupPanel } from "./synthetic-cleanup-panel";
@@ -36,6 +36,12 @@ function jobLabel(job: Job): string {
   return `${job.targetKind.toLowerCase().replaceAll("_", " ")} ${job.targetId}`;
 }
 
+function targetName(job: Job): string {
+  return job.targetKind === "WORKSPACE" ? "Workspace" : job.targetKind === "USER" ? "User" : humanizeAdminCode(job.targetKind.toLowerCase());
+}
+
+type Pending = { job: Job; action: "cancel" | "retry" };
+
 export function DeletionConsole({
   jobs,
   cursor = null,
@@ -49,28 +55,35 @@ export function DeletionConsole({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const reasonReady = reason.trim().length >= 3;
   const hasActiveJob = jobs.some((job) => activeStates.includes(job.state));
 
   // Progress is written by the worker, so poll only while a job can still move.
   useEffect(() => {
     if (!hasActiveJob) return;
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible" && busy === null) router.refresh();
+      if (document.visibilityState === "visible" && busy === null && pending === null) router.refresh();
     }, REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [busy, hasActiveJob, router]);
+  }, [busy, hasActiveJob, pending, router]);
 
-  async function command(job: Job, action: "cancel" | "retry") {
-    setBusy(job.id);
+  function open(job: Job, action: "cancel" | "retry") {
     setError(null);
     setNotice(null);
+    setPending({ job, action });
+  }
+
+  async function command(reason: string) {
+    if (!pending) return;
+    const { job, action } = pending;
+    setBusy(job.id);
+    setError(null);
     try {
       await adminCommand(`/api/admin/deletions/${job.id}`, { method: "PATCH", body: { action }, reason, fallback: "deletion_command_failed", idempotencyKey: adminIdempotencyKey("deletion") });
       setNotice(action === "cancel" ? "Cancellation requested." : "Deletion queued again.");
+      setPending(null);
       router.refresh();
     } catch (cause) {
       setError(adminErrorMessage(cause, "Command failed. Check your connection and try again."));
@@ -102,14 +115,7 @@ export function DeletionConsole({
           </div>
         ) : (
           <>
-            <div className="admin-card-body">
-              <label className="field">
-                <span>{REASON_LABEL}</span>
-                <input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Needed before you cancel or retry a deletion" />
-              </label>
-              {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
-              {notice ? <div className="form-success admin-message" role="status">{notice}</div> : null}
-            </div>
+            {notice ? <div className="admin-card-body"><div className="form-success admin-message" role="status">{notice}</div></div> : null}
             <div className="table-scroll">
               <table className="data-table is-stackable">
                 <thead>
@@ -121,7 +127,7 @@ export function DeletionConsole({
                     const canRetry = job.state === "FAILED";
                     return (
                       <tr key={job.id}>
-                        <td><span className="cell-stack"><strong>{job.targetKind === "WORKSPACE" ? "Workspace" : job.targetKind === "USER" ? "User" : humanizeAdminCode(job.targetKind.toLowerCase())}</strong><IdChip id={job.targetId} /></span></td>
+                        <td><span className="cell-stack"><strong>{targetName(job)}</strong><IdChip id={job.targetId} /></span></td>
                         <td data-label="Status">
                           <span className="cell-stack">
                             <StatusPill status={job.state} />
@@ -138,8 +144,8 @@ export function DeletionConsole({
                         <td className="is-action">
                           {canCancel || canRetry ? (
                             <span className="admin-actions">
-                              {canCancel ? <button className="button button-small button-secondary" type="button" disabled={busy !== null || !reasonReady} aria-label={`Cancel deletion of ${jobLabel(job)}`} onClick={() => void command(job, "cancel")}>Cancel</button> : null}
-                              {canRetry ? <button className="button button-small button-secondary" type="button" disabled={busy !== null || !reasonReady} aria-label={`Retry deletion of ${jobLabel(job)}`} onClick={() => void command(job, "retry")}>Retry</button> : null}
+                              {canCancel ? <button className="button button-small button-secondary" type="button" disabled={busy !== null} aria-label={`Cancel deletion of ${jobLabel(job)}`} onClick={() => open(job, "cancel")}>Cancel</button> : null}
+                              {canRetry ? <button className="button button-small button-secondary" type="button" disabled={busy !== null} aria-label={`Retry deletion of ${jobLabel(job)}`} onClick={() => open(job, "retry")}>Retry</button> : null}
                             </span>
                           ) : <span className="admin-hint">{job.irreversibleAt && cancellableStates.includes(job.state) ? "Can no longer be stopped" : "No actions"}</span>}
                         </td>
@@ -164,6 +170,22 @@ export function DeletionConsole({
       />
 
       <SyntheticCleanupPanel />
+
+      {pending ? (
+        <ReasonDialog
+          title={`${pending.action === "cancel" ? "Cancel" : "Retry"} deleting this ${targetName(pending.job).toLowerCase()}`}
+          intro={pending.action === "cancel"
+            ? "Stops the deletion before anything else is removed. Data already removed stays removed."
+            : "Queues the deletion again from the step that failed."}
+          busy={busy !== null}
+          error={error}
+          danger={pending.action === "retry"}
+          confirmLabel={pending.action === "cancel" ? "Cancel deletion" : "Retry deletion"}
+          cancelLabel={pending.action === "cancel" ? "Keep deleting" : "Cancel"}
+          onCancel={() => { setPending(null); setError(null); }}
+          onConfirm={(reason) => void command(reason)}
+        />
+      ) : null}
     </main>
   );
 }

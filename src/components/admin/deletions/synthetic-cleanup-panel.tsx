@@ -85,6 +85,7 @@ export function SyntheticCleanupPanel() {
       </label>
       <div className="admin-actions">
         <button className="button button-secondary" type="button" disabled={busy || reason.trim().length < 3} onClick={() => void loadPreview()}>Preview test accounts</button>
+        {reason.trim().length < 3 ? <span className="admin-hint">Add a reason to preview.</span> : null}
       </div>
       {preview ? <div className="admin-impact">
         <h3>{preview.count === 1 ? "1 account matches" : `${preview.count} accounts match`}</h3>

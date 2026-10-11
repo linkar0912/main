@@ -100,6 +100,7 @@ export function DeletionWizard() {
         </label>
         <div className="admin-actions">
           <button className="button button-secondary" type="button" disabled={busy || !target.id || reason.trim().length < 3} onClick={() => void preview()}>Preview what will be deleted</button>
+          {!target.id || reason.trim().length < 3 ? <span className="admin-hint">Add the {kind === "WORKSPACE" ? "workspace" : "user"} ID and a reason to preview.</span> : null}
         </div>
         {prepared ? (
           <div className="admin-impact">
