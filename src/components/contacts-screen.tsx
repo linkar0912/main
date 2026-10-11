@@ -180,6 +180,13 @@ export function ContactsScreen() {
   // Bumped by "Try again" after a failed first load to rerun the loader.
   const [loadAttempt, setLoadAttempt] = useState(0);
   const members = useTeamMembers();
+
+  // /contacts?q=@handle (a contact picked in the ⌘K palette) starts filtered.
+  useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("q")?.trim();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL after mount.
+    if (initial) setQuery(initial);
+  }, []);
   const autoLoadedStatus = useRef(new Set<LeadStatus>());
   // Contacts whose stage changed in the drawer -> the stage the server last
   // listed them under. Keeps stage pagination offsets honest (stagePageOffset).
@@ -384,6 +391,18 @@ export function ContactsScreen() {
           )}
         />
 
+        {/* Stages are the page's views: underline tabs above the list. */}
+        {firstLoadFailed ? null : (
+          <div ref={slidingThumbRef} className="tab-underline contacts-stage-tabs" role="group" aria-label="Filter contacts by lead stage">
+            <button type="button" className={status === "" ? "is-active" : undefined} aria-pressed={status === ""} onClick={() => selectStatus("")}>All <span className="tab-count">{total}</span></button>
+            {STATUS_ORDER.map((value) => (
+              <button key={value} type="button" className={status === value ? "is-active" : undefined} aria-pressed={status === value} onClick={() => selectStatus(value)}>
+                {STATUS_LABELS[value]} <span className="tab-count">{counts[value]}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="surface is-flush contacts-surface">
         {firstLoadFailed ? null : <section className="contacts-toolbar" aria-label="Filter contacts">
           <label className="contacts-search">
@@ -396,14 +415,6 @@ export function ContactsScreen() {
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
-          <div ref={slidingThumbRef} className="segmented filter-chips" role="group" aria-label="Filter contacts by lead stage">
-            <button type="button" className={`segmented-option filter-chip ${status === "" ? "is-on" : ""}`} aria-pressed={status === ""} onClick={() => selectStatus("")}>All <span className="chip-count">{total}</span></button>
-            {STATUS_ORDER.map((value) => (
-              <button key={value} type="button" className={`segmented-option filter-chip ${status === value ? "is-on" : ""}`} aria-pressed={status === value} onClick={() => selectStatus(value)}>
-                {STATUS_LABELS[value]} <span className="chip-count">{counts[value]}</span>
-              </button>
-            ))}
-          </div>
         </section>}
 
         {error && !firstLoadFailed ? <p className="form-error contacts-error" role="alert">{error}</p> : null}
@@ -439,7 +450,7 @@ export function ContactsScreen() {
               {visible.map((contact) => (
                 <li
                   key={contact.id}
-                  className={`contact-row${openContactId === contact.id ? " is-selected" : ""}`}
+                  className={`contact-row select-rail${openContactId === contact.id ? " is-selected" : ""}`}
                   onClick={(event) => {
                     // The whole row toggles the panel; the button below stays the
                     // keyboard-accessible control.

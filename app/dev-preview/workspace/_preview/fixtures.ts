@@ -972,6 +972,14 @@ export function answer(method: string, url: URL, requested: PreviewScenario, raw
     return json({ error: "Service temporarily unavailable" }, 500);
   }
 
+  // The ⌘K palette searches conversations through the inbox's ?query=.
+  const inboxQuery = path === "/api/inbox" && verb === "GET" ? url.searchParams.get("query")?.trim().toLowerCase() : undefined;
+  if (inboxQuery) {
+    const page = inboxContacts(scenario);
+    const contacts = page.data.contacts.filter((contact) => `${contact.username ?? ""} ${contact.preview ?? ""}`.toLowerCase().includes(inboxQuery));
+    return json({ data: { ...page.data, contacts } });
+  }
+
   if (verb === "GET") {
     switch (path) {
       case "/api/site-config": return json({ gaMeasurementId: "" });

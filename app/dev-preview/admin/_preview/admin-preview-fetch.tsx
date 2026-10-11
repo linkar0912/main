@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { users, workspaces } from "../fixtures";
 
 // Development-only: answers the owner console's client-side API calls (detail
 // drawers, enrolment, deletion previews, commands) with fixtures, so every
@@ -117,6 +118,14 @@ function answer(method: string, url: URL, body: unknown): Answer {
   }
   if (path === "/api/admin/invite-codes" && write) {
     return { status: 201, body: { data: { code: "LINKAR-7QX2-M9KD-4TPA", plan: { key: "growth", name: "Growth" } } } };
+  }
+  // The ⌘K palette's Workspaces and Users sections.
+  if (!write && (path === "/api/admin/workspaces" || path === "/api/admin/users")) {
+    const needle = (url.searchParams.get("search") ?? "").toLowerCase();
+    const items = path === "/api/admin/workspaces"
+      ? workspaces.items.filter((workspace) => `${workspace.name} ${workspace.slug}`.toLowerCase().includes(needle))
+      : users.items.filter((user) => user.email.toLowerCase().includes(needle));
+    return { status: 200, body: { data: { items: items.slice(0, Number(url.searchParams.get("limit")) || 25), nextCursor: null } } };
   }
   if (path === "/api/admin/workspaces/workspace_9f30c8c8-a723-4c1e-b0d4-1e2f3a4b633c/automations/pause") return { status: 200, body: { data: { paused: 12 } } };
   if (path.endsWith("/automations/resume")) return { status: 200, body: { data: { resumed: 11, skipped: 1 } } };

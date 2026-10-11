@@ -143,14 +143,85 @@ text clears WCAG AA on the fill in both themes (6.4-8.5:1).
 - Enforced by `app/globals.test.ts` ("status colour: quiet when fine, loud
   when not").
 
-## Navigation
+## Selection: never a grey fill
 
-The active sidebar item - in the app and the owner console alike - is a
-soft neutral fill (`--nav-active-fill`: ink at 6% on light, white at 8% on
-dark), the label in ink at weight 700 and the icon in `--accent-text`.
-Hover changes colour only. Sidebar group labels are quiet sentence-case
-Manrope (`.sidebar-label`). The owner console shows "Owner console" as a
-quiet line under the logo instead of a badge.
+Owner feedback (round 5): "I don't want that grey bg selected tile - I don't
+have grey bg anywhere." Nothing that is selected, current, active or hovered
+gets a grey or tinted background, in either theme. Selection is shown with
+ink text, a magenta bar, an ink underline or an ink outline. The old
+`--nav-active-fill` token is gone.
+
+| Pattern | Class (container > item) | Selected | Hover |
+|---|---|---|---|
+| Vertical navigation - sidebars, owner console, Settings/Help section navs, template categories, any side list of sections | `.nav-list > .nav-item` (also `.sidebar-nav > .sidebar-link`, `.settings-nav`, `.section-nav`, `.template-picker-categories`) | Text `--ink` 700, icon `--accent`, a 3px x 20px rounded magenta bar (`--select-bar`) on the item's left edge, vertically centred. The bar glides between items on `transform` (`ref={slidingThumbRef}` on the container) | Text and icon go to ink |
+| Horizontal tabs - page view tabs, records tabs, workspace detail tabs, contacts stages | `.tab-underline > a, button` (owner console: `.admin-tabs`); optional `.tab-count` | Ink 700 text and a 2px ink underline (`--select-line`) that slides along the row | Ink text |
+| Segmented control | `.segmented > .segmented-option` | Solid ink thumb (it is not grey) | Ink text; the track has no fill, just a 1px line |
+| Selectable cards and tiles - template cards, choice cards, post picker tiles | `.select-outline` | Background stays the panel colour; 1.5px ink outline, ink title | The hairline darkens to `--line-strong` |
+| Dense list rows - inbox conversations, contact rows | `.select-rail` (title in `strong` or `.select-title`) | A 3px magenta rail on the left edge, ink 700 title | Title goes to ink |
+| Menu items - account menu, Actions menus, the + menu, dropdowns | `.menu-item` (also `.account-menu-item`, `.admin-menu-list > button`) | - | Ink text and icon; keyboard focus gets an inset 2px magenta ring |
+| Table rows | `.data-table` | - | No fill; the row's primary link underlines |
+
+The selected state is read from `aria-current`, `aria-selected`,
+`aria-pressed`, `aria-checked`, a checked input, or `.is-active` /
+`.is-selected` / `.is-on`, so markup only has to say what is selected.
+Adopting them takes a class and the sliding-indicator ref:
+
+```tsx
+// Side list of sections: magenta bar glides between items.
+<nav ref={slidingThumbRef} className="nav-list" aria-label="Report sections">
+  <a className="nav-item" href="/x" aria-current="page"><Icon /> Overview</a>
+</nav>
+
+// View tabs: ink underline glides along the row; .tab-count is a quiet count.
+<div ref={slidingThumbRef} className="tab-underline" role="tablist" aria-label="Views">
+  <button role="tab" aria-selected="true">All <span className="tab-count">12</span></button>
+</div>
+
+<button className="template-card select-outline" aria-pressed={picked}>…</button>
+<li className="contact-row select-rail is-selected"><strong>@handle</strong>…</li>
+<div className="topbar-menu"><a className="menu-item" href="/x"><span className="menu-item-label">Label</span><span className="menu-item-hint">One line</span></a></div>
+```
+
+The tokens behind them are `--select-bar` (magenta), `--select-bar-w` /
+`--select-bar-h` (3px x 20px) and `--select-line` (ink). Screens with their
+own tab classes (the Inbox's `.page-tabs`) draw the same 2px ink underline
+from these tokens.
+
+Allowed non-transparent backgrounds: the page canvas, panels and cards,
+buttons (primary ink, secondary outline is transparent), warning/danger
+status chips, the plan sticker, skeleton loaders, avatars, and the solid
+ink thumbs/knobs of segmented switches and toggles. Code and ID chips are
+transparent with a 1px line. `app/globals.test.ts` ("selection style: never
+a grey fill") fails if a selected/active/current/hover rule sets any other
+background.
+
+## Shell: top bar, search and accounts
+
+- **Top bar** (`.app-topbar`, `src/components/top-bar.tsx`), above the page
+  content and never over the sidebar, in the workspace and the owner console:
+  a search field ("Search automations, contacts, messages…" with a ⌘K / Ctrl K
+  hint) on the left, lined up with the page content; on the right the ink
+  "New automation" split button (click = template picker, caret = New
+  automation, Quick automation, From a template, New tracked link, New
+  broadcast) and the account avatar with the plan sticker. Under 900px it also
+  carries the menu button and wordmark; under 768px the search field is a
+  44px icon. Sticky page panels sit `--topbar-h` (64px) + 20px from the top.
+- **Command palette** (`src/components/command-palette.tsx`): ⌘K / Ctrl K
+  anywhere or "/" outside a text field. Recent picks, Pages (every nav
+  destination and Settings section), Actions, then live Automations, Contacts
+  and Conversations (owner console: Workspaces and Users). Arrow keys, Enter,
+  Escape; the highlighted row is a magenta bar, never a fill. Full-screen
+  sheet on phones.
+- **Accounts** in the sidebar: each connected Instagram account and Facebook
+  Page with its avatar or initial and a status dot (quiet green; amber or red
+  with a soft halo when it needs a reconnect, problems listed first). Five
+  show, the rest fold behind "Show all". "Connect account" appears while the
+  plan has room. A row opens Settings → Connections with that account
+  outlined (`/settings?account=<id>`).
+
+Sidebar group labels are quiet sentence-case Manrope (`.sidebar-label`). The
+owner console shows "Owner console" as a quiet line under the logo instead
+of a badge.
 
 ## Shape & depth
 
@@ -200,7 +271,8 @@ Rules:
 - Selection moves, it does not jump: every segmented switch, tab row and
   side nav gets `ref={slidingThumbRef}`
   (`src/components/ui/use-sliding-thumb.ts`), which measures the selected
-  option and glides one thumb between options.
+  option and glides one indicator between options (the segmented ink thumb,
+  the side-nav magenta bar, the tab underline - see "Selection").
 - Route changes cross-fade the page content only (React `<ViewTransition>`
   from each area's `template.tsx`); the sidebar never moves.
 - Lists animate rows on first mount or when a row is genuinely new, never on

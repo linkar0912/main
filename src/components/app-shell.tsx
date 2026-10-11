@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
-import { createContext, Fragment, useContext, useEffect, useRef, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChartNoAxesCombined,
-  MoreHorizontal,
   UserRound,
   CircleHelp,
   Inbox,
@@ -23,10 +23,16 @@ import { PRODUCT_NAME } from "@/src/lib/branding";
 import { friendlyFirstName } from "@/src/lib/display-name";
 import { LinkarMark } from "@/src/components/linkar-mark";
 import { getWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT } from "@/src/lib/client/workspace-data";
-import { presenceProps, usePresence } from "./ui/use-presence";
+import { CommandPalette } from "./command-palette";
+import { WORKSPACE_RECENT_KEY, workspaceActions, workspacePages } from "./command-palette-items";
+import { workspaceSources } from "./command-palette-sources";
+import { SidebarAccountsSection } from "./sidebar-accounts";
+import { AccountMenuButton, NewMenu, SearchTrigger, usePaletteHotkey } from "./top-bar";
+import { Presence, usePresence } from "./ui/use-presence";
 import { slidingThumbRef } from "./ui/use-sliding-thumb";
-import { Skeleton } from "./skeleton";
 import { ThemeToggle } from "./theme-toggle";
+
+const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
 
 /** Workspace destinations in the sidebar, grouped by job. */
 const workspaceNavigation = [
@@ -41,11 +47,13 @@ const automateNavigation = [
   { href: "/insights", label: "Insights", icon: ChartNoAxesCombined },
 ];
 
-/** Personal destinations pinned to the bottom, like a profile drawer. */
+/** Personal destinations pinned to the bottom of the sidebar. */
 const accountNavigation = [
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/help", label: "Help", icon: CircleHelp },
 ];
+
+const SEARCH_PLACEHOLDER = "Search automations, contacts, messages…";
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -104,14 +112,23 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [igAvatarUrl, setIgAvatarUrl] = useState("");
   const [platformOwner, setPlatformOwner] = useState(false);
   const [identityError, setIdentityError] = useState("");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const accountRef = useRef<HTMLDivElement>(null);
-  const accountMenuButtonRef = useRef<HTMLButtonElement>(null);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
-  // Both leave with a short exit beat instead of vanishing (ui/use-presence).
+  // Leaves with a short exit beat instead of vanishing (ui/use-presence).
   const drawer = usePresence(drawerOpen);
-  const accountMenu = usePresence(accountMenuOpen);
+
+  const palettePages = useMemo(() => workspacePages({ platformOwner }), [platformOwner]);
+  const paletteActions = useMemo(() => workspaceActions(), []);
+  const paletteSearch = useMemo(() => workspaceSources(), []);
+  usePaletteHotkey(paletteOpen, setPaletteOpen);
+
+  const closePalette = () => {
+    setPaletteOpen(false);
+    // The next session lists fresh automations and contacts.
+    paletteSearch.reset();
+  };
 
   const restoreMenuFocus = useRef(false);
   const closeDrawer = () => setDrawerOpen(false);
@@ -127,26 +144,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     restoreMenuFocus.current = false;
     menuButtonRef.current?.focus();
   }, [drawerOpen]);
-
-  useEffect(() => {
-    if (!accountMenuOpen) return;
-    const onPointer = (event: PointerEvent) => {
-      if (!accountRef.current?.contains(event.target as Node)) setAccountMenuOpen(false);
-    };
-    // A disclosure, not an ARIA menu: Tab moves through its links as usual,
-    // and Escape closes it and hands focus back to the toggle.
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setAccountMenuOpen(false);
-      accountMenuButtonRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [accountMenuOpen]);
 
   // Instant, not smooth: html has scroll-behavior: smooth for in-page anchors,
   // and animating back to the top on every navigation made pages feel slow.
@@ -170,8 +167,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
       })
       .catch((caught: unknown) => {
         if (!mounted) return;
-        // Surface a recoverable error so the sidebar can show a retry instead
-        // of silently rendering the empty default identity forever.
+        // Surface a recoverable error so the top bar can say so instead of
+        // silently rendering the empty default identity forever.
         setIdentityError(caught instanceof Error ? caught.message : "Could not load the workspace session");
       });
     return () => {
@@ -245,27 +242,17 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     };
   }, [drawerOpen]);
 
+  const avatar = igAvatarUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
+    <img className="avatar is-photo" src={igAvatarUrl} alt="Instagram profile picture" />
+  ) : (
+    <span className="avatar" aria-hidden>{initialsOf(email) || <UserRound size={16} strokeWidth={2} />}</span>
+  );
+
   return (
     <AccountIdentityContext.Provider value={{ email, role, plan, supportEmail, mode }}>
       <a className="skip-link" href="#main-content">Skip to content</a>
       <div className="app-frame">
-      <header className="mobile-topbar" inert={drawerOpen}>
-        <button
-          ref={menuButtonRef}
-          className="hamburger"
-          type="button"
-          aria-label="Open navigation"
-          aria-expanded={drawerOpen}
-          onClick={() => setDrawerOpen(true)}
-        >
-          <Menu size={20} />
-        </button>
-        <Link className="brand" href="/dashboard" aria-label={`${PRODUCT_NAME} overview`}>
-          <LinkarMark className="brand-mark" />
-          <span className="brand-name">{PRODUCT_NAME}</span>
-        </Link>
-      </header>
-
       {drawer.mounted && (
         // Pointer-only: keyboard and screen-reader users get the labelled close
         // button inside the drawer, so the scrim stays out of the tab order.
@@ -312,6 +299,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           ))}
         </nav>
 
+        <SidebarAccountsSection plan={plan} onNavigate={closeDrawer} />
+
         <span className="sidebar-spacer" />
 
         {platformOwner ? (
@@ -336,79 +325,86 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             </Link>
           ))}
         </nav>
-
-        <div className="sidebar-account" ref={accountRef}>
-          {role === "" ? (
-            identityError ? (
-              <p className="sidebar-account-error" role="alert">{identityError}</p>
-            ) : (
-              <Skeleton style={{ height: 52, borderRadius: 12 }} />
-            )
-          ) : (
-            <>
-              {accountMenu.mounted ? (
-                <div className="account-menu" id="account-menu" {...presenceProps(accountMenu.state)}>
-                  <div className="account-menu-head">
-                    <strong>{displayNameFromEmail(email)}</strong>
-                    <small>{email || `${PRODUCT_NAME} workspace`}</small>
-                  </div>
-                  <Link className="account-menu-item" href="/profile" onClick={() => { setAccountMenuOpen(false); closeDrawer(); }}>
-                    <UserRound size={16} strokeWidth={1.9} /> My profile
-                  </Link>
-                  <ThemeToggle className="account-menu-item" showLabel />
-                  <form action="/api/auth/logout" method="post">
-                    <button className="account-menu-item is-danger" type="submit">
-                      <LogOut size={16} strokeWidth={1.9} />
-                      <span>Sign out</span>
-                    </button>
-                  </form>
-                </div>
-              ) : null}
-              <div className={`account-row ${isActive(pathname, "/profile") ? "is-active" : ""}`}>
-                <Link
-                  className="account-row-main"
-                  href="/profile"
-                  aria-label="My profile"
-                  aria-current={isActive(pathname, "/profile") ? "page" : undefined}
-                  onClick={closeDrawer}
-                >
-                  {igAvatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
-                    <img className="avatar is-photo" src={igAvatarUrl} alt="Instagram profile picture" />
-                  ) : (
-                    <span className="avatar" aria-hidden>{initialsOf(email) || <UserRound size={16} strokeWidth={2} />}</span>
-                  )}
-                  <span className="account-row-id">
-                    <strong title={email}>{displayNameFromEmail(email)}</strong>
-                    <small>
-                      <span>{displayRole(role)}</span>
-                      <span className="plan-tag">{plan}</span>
-                    </small>
-                  </span>
-                </Link>
-                <button
-                  ref={accountMenuButtonRef}
-                  type="button"
-                  className="account-row-more"
-                  aria-label="Account menu"
-                  aria-controls={accountMenuOpen ? "account-menu" : undefined}
-                  aria-expanded={accountMenuOpen}
-                  onClick={() => setAccountMenuOpen((open) => !open)}
-                >
-                  <MoreHorizontal size={17} />
-                </button>
-              </div>
-            </>
-          )}
-        </div>
       </aside>
 
-        {/* The one landmark for page content; screens render plain wrappers
-            inside it. tabIndex lets the skip link move focus here. */}
-        <main id="main-content" className="main-content" tabIndex={-1} inert={drawerOpen} aria-hidden={drawerOpen || undefined}>
-          <div className="app-content-slot">{children}</div>
-        </main>
+        <div className="main-content" inert={drawerOpen} aria-hidden={drawerOpen || undefined}>
+          <header className="app-topbar">
+            <button
+              ref={menuButtonRef}
+              className="hamburger"
+              type="button"
+              aria-label="Open navigation"
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
+            <Link className="brand topbar-brand" href="/dashboard" aria-label={`${PRODUCT_NAME} overview`}>
+              <LinkarMark className="brand-mark" />
+              <span className="brand-name">{PRODUCT_NAME}</span>
+            </Link>
+            <SearchTrigger placeholder={SEARCH_PLACEHOLDER} onOpen={() => setPaletteOpen(true)} />
+            <span className="topbar-spacer" />
+            <NewMenu onTemplate={() => setTemplateOpen(true)} />
+            {role === "" ? (
+              identityError ? (
+                <p className="topbar-account-error" role="alert" title={identityError}>Account unavailable</p>
+              ) : (
+                <span className="topbar-account-skeleton skeleton-block" aria-hidden />
+              )
+            ) : (
+              <AccountMenuButton label="Account menu" menuId="account-menu" avatar={avatar} badge={<span className="plan-tag">{plan}</span>}>
+                {(close) => (
+                  <>
+                    <div className="account-menu-head">
+                      <strong title={email}>{displayNameFromEmail(email)}</strong>
+                      <small>{email || `${PRODUCT_NAME} workspace`}</small>
+                      <small className="account-menu-role"><span>{displayRole(role)}</span><span className="plan-tag">{plan}</span></small>
+                    </div>
+                    <Link
+                      className="account-menu-item"
+                      href="/profile"
+                      aria-current={isActive(pathname, "/profile") ? "page" : undefined}
+                      onClick={close}
+                    >
+                      <UserRound size={16} strokeWidth={1.9} /> My profile
+                    </Link>
+                    <ThemeToggle className="account-menu-item" showLabel />
+                    <form action="/api/auth/logout" method="post">
+                      <button className="account-menu-item is-danger" type="submit">
+                        <LogOut size={16} strokeWidth={1.9} />
+                        <span>Sign out</span>
+                      </button>
+                    </form>
+                  </>
+                )}
+              </AccountMenuButton>
+            )}
+          </header>
+
+          {/* The one landmark for page content; screens render plain wrappers
+              inside it. tabIndex lets the skip link move focus here. */}
+          <main id="main-content" className="app-content-slot" tabIndex={-1}>{children}</main>
+        </div>
       </div>
+
+      <Presence>
+        {paletteOpen ? (
+          <CommandPalette
+            label="Search Linkar"
+            placeholder={SEARCH_PLACEHOLDER}
+            pages={palettePages}
+            actions={paletteActions}
+            sources={paletteSearch.sources}
+            recentKey={WORKSPACE_RECENT_KEY}
+            onAction={(action) => {
+              if (action === "template") setTemplateOpen(true);
+            }}
+            onClose={closePalette}
+          />
+        ) : null}
+      </Presence>
+      <Presence>{templateOpen ? <TemplatePickerModal onClose={() => setTemplateOpen(false)} /> : null}</Presence>
     </AccountIdentityContext.Provider>
   );
 }

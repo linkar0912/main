@@ -283,8 +283,81 @@ describe("workspace palette contract", () => {
   });
 });
 
+// "I don't want that grey bg selected tile - I don't have grey bg anywhere."
+// Selected, current, active and hovered things used to sit on a soft ink or
+// accent tint (sidebar, Settings/Help navs, menus, rows, template
+// categories). Selection now shows with ink text, a magenta bar, an ink
+// underline or an ink outline; the only fills a state may use are solid
+// ink/accent (switch thumbs, toggles, primary buttons) or the panel colour.
+describe("selection style: never a grey fill", () => {
+  const rules = (css.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+{[^{}]*}/g) ?? []).map((rule) => {
+    const [selector, body] = rule.split("{");
+    return { selector: selector.trim().replace(/\s+/g, " "), body };
+  });
+  const state = /:hover|:focus|\.is-(active|selected|on|current|open|focused)\b|\[aria-(current|selected|pressed|checked|expanded)|:checked/;
+  // Restyled on parallel branches this round (the Inbox and the Automations
+  // list adopt these same rules); this exclusion goes once they merge.
+  const parallel = /\.ibx-|\.automation-row|\.automations-surface|\.facebook-activity/;
+  const allowed = /^(transparent|none|var\(--(panel|canvas|paper|ink|ink-strong|accent|accent-hover|white|danger|select-bar|select-line)\)|#101116|#fff|#ffffff)$/;
+
+  it("never fills a selected, current, active or hovered thing with a tint", () => {
+    const offenders = rules.flatMap((rule) => {
+      if (rule.selector.startsWith("@")) return [];
+      const parts = rule.selector.split(",").map((part) => part.trim()).filter((part) => state.test(part) && !parallel.test(part));
+      if (parts.length === 0) return [];
+      const values = [...rule.body.matchAll(/background(?:-color)?:\s*([^;]+)/g)].map((match) => match[1].replace(/!important/, "").trim());
+      // Volt belongs to the plan sticker (and the billing "save" badge) only.
+      const volt = parts.every((part) => /plan-tag|segmented-badge/.test(part));
+      return values
+        .filter((value) => !allowed.test(value) && !(volt && value === "var(--volt)"))
+        .map((value) => `${rule.selector} => ${value}`);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("retires the soft nav fill token", () => {
+    expect(css).not.toMatch(/--nav-active-fill/);
+  });
+
+  it("paints sliding indicators in ink or magenta, never a fill", () => {
+    const thumbs = rules.filter((rule) => /\[style\*="--thumb-w"\]::(before|after)$/.test(rule.selector) && /background:/.test(rule.body));
+    expect(thumbs.length).toBeGreaterThan(2);
+    for (const thumb of thumbs) {
+      expect(thumb.body).toMatch(/background:\s*var\(--(ink|select-bar|select-line)\)/);
+    }
+  });
+
+  it("marks vertical navigation with a 3px x 20px magenta bar that moves on transform", () => {
+    expect(css).toMatch(/--select-bar:\s*var\(--accent\)/);
+    expect(css).toMatch(/--select-bar-w:\s*3px/);
+    expect(css).toMatch(/--select-bar-h:\s*20px/);
+    const bar = css.match(/:is\(\.nav-list, \.sidebar-nav, \.settings-nav, \.section-nav, \.template-picker-categories\)\[style\*="--thumb-w"\]::before\s*{([^}]*)}/)?.[1] ?? "";
+    expect(bar).toMatch(/background:\s*var\(--select-bar\)/);
+    expect(bar).toMatch(/transform:\s*translate\(var\(--thumb-x\)/);
+    expect(bar).toMatch(/transition:\s*var\(--thumb-motion,\s*transform var\(--dur-3\)/);
+    expect(bar).not.toMatch(/clip-path/);
+    expect(css).toMatch(/\.sidebar-link\.is-active svg,\s*\.sidebar-link\.is-active:hover svg\s*{[^}]*color:\s*var\(--accent\)/);
+  });
+
+  it("underlines horizontal tabs in ink and outlines chosen cards", () => {
+    expect(css).toMatch(/--select-line:\s*var\(--ink\)/);
+    expect(css).toMatch(/\.tab-underline > :is\(\.is-active,[^)]*\)\s*{[^}]*color:\s*var\(--ink\)[^}]*font-weight:\s*700/);
+    expect(css).toMatch(/\.select-outline:is\(\.is-selected,[^{]*{[^}]*background:\s*var\(--panel\)[^}]*border-color:\s*var\(--select-line\)/);
+    expect(css).toMatch(/\.select-rail:is\(\.is-selected,[^{]*{[^}]*box-shadow:\s*inset var\(--select-bar-w\) 0 0 var\(--select-bar\)/);
+  });
+
+  it("keeps the segmented track and ID chips unfilled", () => {
+    expect(css).toMatch(/\.segmented\s*{\s*background:\s*transparent;\s*border:\s*1px solid var\(--line-strong\)/);
+    expect(css).toMatch(/\.id-chip code\s*{\s*background:\s*transparent;\s*border:\s*1px solid var\(--line\)/);
+  });
+});
+
 describe("motion system", () => {
-  const motion = css.slice(css.indexOf("/* === round 4: motion === */"));
+  // The motion block runs until the next area's block (later rounds append
+  // their own blocks, with their own reduced-motion media queries).
+  const motionStart = css.indexOf("/* === round 4: motion === */");
+  const motionEnd = css.indexOf("/* === ", motionStart + 1);
+  const motion = css.slice(motionStart, motionEnd < 0 ? undefined : motionEnd);
 
   it("moves the selection thumb with clip-path, never width or position", () => {
     expect(css).toMatch(/\.segmented\[style\*="--thumb-w"\]::before\s*{[^}]*clip-path:\s*inset\(var\(--thumb-y\) var\(--thumb-r\) var\(--thumb-b\) var\(--thumb-x\)/);

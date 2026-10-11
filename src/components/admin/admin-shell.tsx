@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Boxes,
@@ -20,10 +20,16 @@ import {
 } from "lucide-react";
 
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { CommandPalette } from "@/src/components/command-palette";
+import { ADMIN_RECENT_KEY, adminPages } from "@/src/components/command-palette-items";
+import { adminSources } from "@/src/components/command-palette-sources";
 import { LinkarMark } from "@/src/components/linkar-mark";
 import { ThemeToggle } from "@/src/components/theme-toggle";
-import { usePresence } from "@/src/components/ui/use-presence";
+import { AccountMenuButton, SearchTrigger, usePaletteHotkey } from "@/src/components/top-bar";
+import { Presence, usePresence } from "@/src/components/ui/use-presence";
 import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
+
+const SEARCH_PLACEHOLDER = "Search workspaces, users, pages…";
 
 // Grouped by what the owner is doing: looking around, managing accounts,
 // fixing things, and the safety rails around all of it.
@@ -84,6 +90,10 @@ export function AdminShell({
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const drawer = usePresence(drawerOpen);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const palettePages = useMemo(() => adminPages(), []);
+  const paletteSources = useMemo(() => adminSources(), []);
+  usePaletteHotkey(paletteOpen, setPaletteOpen);
 
   function closeDrawer(restoreFocus = false) {
     setDrawerOpen(false);
@@ -135,24 +145,6 @@ export function AdminShell({
 
   return (
     <div className="app-frame admin-frame">
-      <header className="mobile-topbar admin-mobile-topbar" inert={drawerOpen}>
-        <button
-          ref={menuButtonRef}
-          className="hamburger"
-          type="button"
-          aria-label="Open operator navigation"
-          aria-expanded={drawerOpen}
-          onClick={() => setDrawerOpen(true)}
-        >
-          <Menu size={20} />
-        </button>
-        <Link className="brand" href="/admin" aria-label={`${PRODUCT_NAME} operator overview`}>
-          <LinkarMark className="brand-mark" />
-          <span className="brand-name">{PRODUCT_NAME}</span>
-        </Link>
-        <span className="sidebar-context">Owner console</span>
-      </header>
-
       {drawer.mounted ? (
         <button className="scrim" type="button" aria-label="Close operator navigation" data-state={drawer.state} onClick={() => closeDrawer(true)} />
       ) : null}
@@ -200,18 +192,65 @@ export function AdminShell({
           <Link className="sidebar-link" href="/dashboard">
             <ArrowLeft size={18} aria-hidden /> Back to workspace
           </Link>
-          <ThemeToggle className="theme-toggle" showLabel />
-          <form action="/api/auth/logout" method="post">
-            <button className="signout-button" type="submit"><LogOut size={17} aria-hidden /> Sign out</button>
-          </form>
-          <div className="admin-owner">
-            <span className="avatar" aria-hidden>{initialsOf(owner.email)}</span>
-            <span><small>Signed in as</small><strong title={owner.email}>{owner.email}</strong></span>
-          </div>
         </div>
       </aside>
 
-      <div className="main-content" inert={drawerOpen} aria-hidden={drawerOpen || undefined}>{children}</div>
+      <div className="main-content" inert={drawerOpen} aria-hidden={drawerOpen || undefined}>
+        <header className="app-topbar admin-topbar">
+          <button
+            ref={menuButtonRef}
+            className="hamburger"
+            type="button"
+            aria-label="Open operator navigation"
+            aria-expanded={drawerOpen}
+            onClick={() => setDrawerOpen(true)}
+          >
+            <Menu size={20} />
+          </button>
+          <Link className="brand topbar-brand" href="/admin" aria-label={`${PRODUCT_NAME} operator overview`}>
+            <LinkarMark className="brand-mark" />
+            <span className="brand-name">{PRODUCT_NAME}</span>
+          </Link>
+          <SearchTrigger placeholder={SEARCH_PLACEHOLDER} onOpen={() => setPaletteOpen(true)} />
+          <span className="topbar-spacer" />
+          <AccountMenuButton
+            label="Owner menu"
+            menuId="owner-menu"
+            avatar={<span className="avatar" aria-hidden>{initialsOf(owner.email)}</span>}
+          >
+            {(close) => (
+              <>
+                <div className="account-menu-head">
+                  <strong>Owner console</strong>
+                  <small title={owner.email}>Signed in as {owner.email}</small>
+                </div>
+                <Link className="account-menu-item" href="/admin/security" onClick={close}>
+                  <KeyRound size={16} strokeWidth={1.9} aria-hidden /> Your security
+                </Link>
+                <ThemeToggle className="account-menu-item" showLabel />
+                <form action="/api/auth/logout" method="post">
+                  <button className="account-menu-item is-danger" type="submit"><LogOut size={16} strokeWidth={1.9} aria-hidden /> Sign out</button>
+                </form>
+              </>
+            )}
+          </AccountMenuButton>
+        </header>
+        {children}
+      </div>
+
+      <Presence>
+        {paletteOpen ? (
+          <CommandPalette
+            label="Search the owner console"
+            placeholder={SEARCH_PLACEHOLDER}
+            pages={palettePages}
+            actions={[]}
+            sources={paletteSources}
+            recentKey={ADMIN_RECENT_KEY}
+            onClose={() => setPaletteOpen(false)}
+          />
+        ) : null}
+      </Presence>
     </div>
   );
 }

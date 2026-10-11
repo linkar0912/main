@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({ pathname: "/admin" }));
 
-vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
+vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname, useRouter: () => ({ push: vi.fn() }) }));
 
 const { AdminShell } = await import("./admin-shell");
 
@@ -40,6 +40,37 @@ describe("AdminShell", () => {
 
     expect(screen.getByRole("link", { name: "Delete data" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Service health" }).hasAttribute("aria-current")).toBe(false);
+  });
+
+  it("searches workspaces and users from the owner console palette", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const items = url.startsWith("/api/admin/workspaces")
+        ? [{ id: "ws1", name: "Acme Studio", slug: "acme-studio", planName: "Growth" }]
+        : [{ id: "u1", email: "acme@example.com", workspaceCount: 2 }];
+      return { ok: true, json: async () => ({ data: { items, nextCursor: null } }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdminShell owner={{ email: "owner@linkar.in" }}><main>Overview</main></AdminShell>);
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const dialog = screen.getByRole("dialog", { name: "Search the owner console" });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "acme" } });
+
+    expect(await screen.findByRole("option", { name: /Acme Studio/ })).toBeTruthy();
+    expect(await screen.findByRole("option", { name: /acme@example\.com/ })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith("/api/admin/workspaces?search=acme&limit=5", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/admin/users?search=acme&limit=5", expect.anything());
+    expect(dialog.textContent).not.toContain("Automations");
+    vi.unstubAllGlobals();
+  });
+
+  it("moves the owner's identity and sign-out into the top bar menu", () => {
+    render(<AdminShell owner={{ email: "owner@linkar.in" }}><main>Overview</main></AdminShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Owner menu" }));
+    const menu = document.getElementById("owner-menu") as HTMLElement;
+    expect(menu.textContent).toContain("owner@linkar.in");
+    expect(menu.textContent).toContain("Sign out");
   });
 
   it("closes the mobile operator drawer with Escape and restores focus", async () => {

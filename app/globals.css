@@ -478,7 +478,7 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
 .action-notice > svg { color: var(--accent-vivid-dark); }
 .action-notice p { color: inherit; font-size: .82rem; font-weight: 650; line-height: 1.4; margin: 0; }
 .action-notice button { align-items: center; background: transparent; border: 0; border-radius: 7px; color: inherit; display: flex; justify-content: center; padding: 5px; }
-.action-notice button:hover { background: rgb(255 255 255 / 10%); }
+.action-notice button:hover { background: transparent; opacity: .72; }
 .action-notice-error > svg { color: #ff8f87; }
 [data-theme="dark"] .action-notice { background: #f4f4f1; border-color: #f4f4f1; color: #151518; }
 [data-theme="dark"] .action-notice-error > svg { color: #c63d35; }
@@ -625,9 +625,8 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .sidebar-link:hover { color: var(--ink); }
 .sidebar-link:hover svg { color: var(--ink); transform: translateY(-1px); }
 .sidebar-link.is-active {
-  background: var(--volt);
-  color: var(--on-volt);
-  font-weight: 800;
+  color: var(--ink);
+  font-weight: 700;
 }
 .sidebar-link.is-active svg { color: var(--ink-strong); }
 .sidebar-link.is-active::before { content: none; }
@@ -820,9 +819,9 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .template-channel-option:hover { color: var(--ink); }
 .template-channel-option:focus-visible { outline: 2px solid var(--channel-color); outline-offset: 2px; }
 .template-channel-option.is-active {
-  background: color-mix(in srgb, var(--channel-color) 9%, var(--panel));
-  border-color: color-mix(in srgb, var(--channel-color) 45%, var(--line));
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--channel-color) 13%, transparent);
+  background: transparent;
+  border-color: var(--ink);
+  box-shadow: none;
   color: var(--ink);
 }
 .template-channel-brand-mark {
@@ -931,7 +930,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   transition: background var(--speed), color var(--speed);
 }
 .template-picker-category:hover { color: var(--ink); }
-.template-picker-category.is-active { background: var(--accent-soft); color: var(--accent-text); font-weight: 750; }
+.template-picker-category.is-active { color: var(--ink); font-weight: 700; }
 .template-picker-count { color: var(--subtle); font-size: .74rem; font-weight: 700; margin-left: auto; }
 .template-picker-category.is-active .template-picker-count { color: var(--accent-text); }
 .template-picker-content { flex: 1; max-height: none; min-width: 0; overflow-y: auto; padding: var(--space-5) var(--space-6); }
@@ -958,7 +957,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
   text-align: left;
   transition: border-color var(--speed), transform var(--speed);
 }
-.template-picker-tile:hover { border-color: var(--accent); transform: translateY(-1px); }
+.template-picker-tile:hover { border-color: var(--line-strong); transform: translateY(-1px); }
 .template-picker-tile strong { font-size: .88rem; }
 .template-picker-tile p { color: var(--muted); flex: 1; font-size: .78rem; line-height: 1.45; margin: 0; }
 .template-picker-tile-meta { align-items: center; color: var(--subtle); display: flex; font-size: .68rem; font-weight: 700; gap: 8px; letter-spacing: .03em; text-transform: uppercase; }
@@ -1135,12 +1134,12 @@ a.setup-row:hover .setup-cta, button.setup-row:hover .setup-cta { color: var(--i
 .section-nav-link { align-items: center; border-radius: var(--radius-sm); color: var(--slate); display: flex; font-size: var(--type-body); font-weight: 650; gap: 10px; padding: 11px var(--space-3); transition: background var(--speed), color var(--speed); }
 button.section-nav-link { background: transparent; border: 0; font: inherit; text-align: left; width: 100%; }
 a.section-nav-link:hover, button.section-nav-link:hover { color: var(--ink); }
-.section-nav-link.is-active { background: var(--accent-soft); color: var(--accent-text); font-weight: 750; }
+.section-nav-link.is-active { color: var(--ink); font-weight: 700; }
 /* button.section-nav-link:hover's element-type selector otherwise out-specifies
    this, so hovering the already-active tab knocked it back to the plain hover
    look - a very common case, since the pointer sits right on it after a click. */
 button.section-nav-link.is-active:hover,
-a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(--accent-text); }
+a.section-nav-link.is-active:hover { color: var(--ink); }
 .section-nav-count { color: var(--subtle); font-size: .72rem; font-weight: 700; margin-left: auto; }
 .section-nav-link.is-active .section-nav-count { color: var(--accent-text); }
 .settings-security-link { border-top: 1px solid var(--line); color: var(--muted); margin-top: var(--space-4); padding-top: var(--space-4); }
@@ -1692,7 +1691,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .classic-action + .classic-action { margin-top: var(--space-3); }
 .keyword-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .keyword-suggestion-chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; color: var(--muted); cursor: pointer; font-size: .78rem; padding: 4px 11px; transition: border-color .15s, color .15s; }
-.keyword-suggestion-chip:hover { border-color: var(--accent); color: var(--text); }
+.keyword-suggestion-chip:hover { border-color: var(--line-strong); color: var(--ink); }
 .capture-field-options { align-items: start; }
 .classic-action-head { align-items: center; display: flex; gap: 10px; justify-content: space-between; }
 .classic-action-index { color: var(--muted); font-size: .68rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
@@ -1704,8 +1703,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .media-empty { border: 1px dashed var(--line-strong); border-radius: 10px; color: var(--muted); padding: var(--space-4); text-align: center; }
 .media-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .media-card { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; cursor: pointer; display: flex; flex-direction: column; gap: var(--space-2); overflow: hidden; padding: var(--space-2); transition: border-color var(--speed), box-shadow var(--speed); }
-.media-card:hover { border-color: var(--accent); }
-.media-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .18); }
+.media-card:hover { border-color: var(--line-strong); }
+.media-card.is-selected { border-color: var(--ink); box-shadow: 0 0 0 .5px var(--ink); }
 .media-thumb { aspect-ratio: 1; background: var(--surface-sunk); border-radius: 7px; display: block; overflow: hidden; position: relative; }
 .media-card.is-reel .media-thumb { aspect-ratio: 9 / 16; }
 .media-thumb img { display: block; height: 100%; object-fit: cover; width: 100%; }
@@ -1729,7 +1728,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .quick-reel-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .quick-reel-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink); cursor: pointer; display: grid; min-width: 0; overflow: hidden; padding: 0; text-align: left; transition: border-color var(--speed), box-shadow var(--speed), transform var(--speed); }
 .quick-reel-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-card); transform: translateY(-2px); }
-.quick-reel-card.is-selected { border-color: var(--ink-strong); box-shadow: 0 0 0 2px var(--volt), var(--shadow-card); }
+.quick-reel-card.is-selected { border-color: var(--ink); box-shadow: 0 0 0 .5px var(--ink); }
 .quick-reel-card:focus-visible, .quick-flow-card:focus-visible { outline: 3px solid rgba(var(--accent-rgb), .35); outline-offset: 3px; }
 .quick-reel-thumb { aspect-ratio: 9 / 12; background: var(--surface-sunk); display: block; overflow: hidden; position: relative; }
 .quick-reel-thumb img { height: 100%; object-fit: cover; width: 100%; }
@@ -1746,7 +1745,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .quick-flow-stage { border-top: 1px solid var(--line); padding-top: var(--space-7); scroll-margin-top: var(--space-5); }
 .quick-flow-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .quick-flow-card { align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink); cursor: pointer; display: flex; gap: var(--space-4); justify-content: space-between; min-width: 0; padding: 18px; text-align: left; transition: border-color var(--speed), background var(--speed); }
-.quick-flow-card:hover { border-color: var(--accent); }
+.quick-flow-card:hover { border-color: var(--line-strong); }
 .quick-flow-card.is-featured { background: var(--ink-strong); border-color: var(--ink-strong); color: var(--white); grid-column: 1 / -1; }
 [data-theme="dark"] .quick-flow-card.is-featured { color: #101116; }
 .quick-flow-card > span { display: grid; gap: 6px; min-width: 0; }
@@ -2252,7 +2251,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   padding-inline: 22px;
   white-space: nowrap;
 }
-.billing-invite-submit:hover { background: var(--volt); box-shadow: 0 9px 22px color-mix(in srgb, var(--volt) 22%, transparent); }
+.billing-invite-submit:hover { background: var(--ink-strong); box-shadow: none; }
 .billing-invite-submit:disabled {
   background: var(--surface-sunk);
   border-color: var(--line-strong);
@@ -2395,7 +2394,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .help-feedback { align-items: center; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); }
 .help-feedback span, .help-feedback p { color: var(--muted); font-size: var(--type-meta); font-weight: 750; margin: 0 var(--space-1) 0 0; }
 .help-feedback button { align-items: center; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 999px; color: var(--ink); display: inline-flex; font-size: var(--type-meta); font-weight: 750; gap: 5px; padding: 6px 10px; }
-.help-feedback button:hover { border-color: var(--accent-line); color: var(--accent-strong); }
+.help-feedback button:hover { border-color: var(--line-strong); color: var(--ink); }
 .help-feedback em { color: var(--danger); font-size: var(--type-meta); font-style: normal; }
 .context-help-link { color: var(--muted); white-space: nowrap; }
 .context-help-link:hover { color: var(--ink); }
@@ -2449,7 +2448,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   transition: transform var(--speed), background var(--speed), color var(--speed);
 }
 .faq-item.is-open .faq-chevron {
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
   transform: rotate(180deg);
 }
@@ -3414,7 +3413,6 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   min-height: 36px;
   padding: 7px 10px;
 }
-.sidebar-link.is-active:hover { background: var(--volt); }
 .sidebar-link:hover svg { transform: none; }
 .sidebar-nav[aria-label="Account"] { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
 .sidebar-nav[aria-label="Platform administration"] { margin-bottom: 4px; }
@@ -3676,7 +3674,7 @@ a.automation-row:hover .row-chevron { color: var(--ink); }
 .section-nav { gap: 2px; top: 20px; }
 .section-nav-link { min-height: 36px; padding: 7px 10px; }
 .section-nav-link:hover { color: var(--ink); }
-.section-nav-link.is-active { background: var(--panel); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); }
+.section-nav-link.is-active { color: var(--ink); }
 .section-nav-link.is-active svg,
 .section-nav-link.is-active .section-nav-count { color: var(--accent-text); }
 .section-content { display: grid; gap: 20px; min-width: 0; }
@@ -3885,8 +3883,8 @@ a.automation-row:hover .row-chevron { color: var(--ink); }
 }
 .settings-nav-link svg { color: var(--muted); flex: 0 0 auto; }
 .settings-nav-link:hover, .settings-nav-link:hover svg { color: var(--ink); }
-.settings-nav-link.is-active { background: var(--volt); color: var(--on-volt); font-weight: 800; }
-.settings-nav-link.is-active svg { color: var(--on-volt); }
+.settings-nav-link.is-active { color: var(--ink); font-weight: 700; }
+.settings-nav-link.is-active svg { color: var(--accent); }
 [data-theme="dark"] .settings-nav-link.is-active,
 [data-theme="dark"] .settings-nav-link.is-active svg { color: #101116; }
 .settings-nav-count { color: var(--subtle); font-size: .72rem; font-weight: 700; margin-left: auto; }
@@ -4346,17 +4344,12 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 
 /* Vertical section lists (Help) share the Settings list treatment. */
 .section-nav-link.is-active,
-.settings-wrap .section-nav-link.is-active { background: var(--volt); box-shadow: none; color: var(--on-volt); font-weight: 800; }
-.section-nav-link.is-active svg,
-.section-nav-link.is-active .section-nav-count { color: var(--on-volt); }
-[data-theme="dark"] .section-nav-link.is-active,
-[data-theme="dark"] .section-nav-link.is-active svg,
-[data-theme="dark"] .section-nav-link.is-active .section-nav-count { color: #101116; }
-.template-picker-category.is-active { background: var(--volt); color: var(--on-volt); font-weight: 800; }
-.template-picker-category.is-active .template-picker-count,
-.template-picker-category.is-active svg { color: var(--on-volt); }
-[data-theme="dark"] .template-picker-category.is-active,
-[data-theme="dark"] .template-picker-category.is-active :is(svg, .template-picker-count) { color: #101116; }
+.settings-wrap .section-nav-link.is-active { box-shadow: none; color: var(--ink); font-weight: 700; }
+.section-nav-link.is-active svg { color: var(--accent); }
+.section-nav-link.is-active .section-nav-count { color: var(--muted); }
+.template-picker-category.is-active { color: var(--ink); font-weight: 700; }
+.template-picker-category.is-active .template-picker-count { color: var(--muted); }
+.template-picker-category.is-active svg { color: var(--accent); }
 
 /* ═════════════════════════════════════════════════════════════════════════════
    Switch control v2 - the ONE switch style in the workspace.
@@ -4620,9 +4613,9 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 .faq-item.is-open .faq-question { color: var(--accent-text); }
 
 /* ── Help: tighter rhythm + one hover language for the topic list ─────────── */
-/* The active topic kept an old pink hover; it stays yellow like every list. */
+/* The active topic keeps its look under the pointer: ink text, no fill. */
 button.section-nav-link.is-active:hover,
-a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-volt); }
+a.section-nav-link.is-active:hover { background: transparent; color: var(--ink); }
 [data-theme="dark"] button.section-nav-link.is-active:hover,
 [data-theme="dark"] a.section-nav-link.is-active:hover { color: #101116; }
 .section-nav-link:not(.is-active):hover { background: transparent; color: var(--ink); }
@@ -4779,7 +4772,6 @@ a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-vo
   padding: 6px 4px 6px 6px;
   transition: background var(--speed);
 }
-.account-row.is-active { background: var(--volt); }
 .account-row-main { align-items: center; color: var(--ink); display: flex; flex: 1 1 auto; gap: 10px; min-width: 0; }
 .account-row-main .avatar { flex: 0 0 34px; height: 34px; width: 34px; }
 .account-row-id { display: grid; gap: 1px; line-height: 1.25; min-width: 0; }
@@ -4793,7 +4785,7 @@ a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-vo
 .account-row.is-active .account-row-main:hover strong { color: var(--on-volt); }
 .account-row.is-active .account-row-id small,
 .account-row.is-active .account-row-id small > span:first-child { color: var(--on-volt); }
-.account-row.is-active .account-row-name .plan-tag { background: var(--on-volt); color: var(--volt); }
+.account-row.is-active .account-row-name .plan-tag { background: var(--volt); color: var(--on-volt); }
 .account-row-more {
   align-items: center;
   background: transparent;
@@ -5056,7 +5048,6 @@ a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-vo
 .campaign-participants .activity-roster { gap: 0; }
 .campaign-participants .activity-row,
 .campaign-participants .activity-row:hover { background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; }
-.campaign-participants .activity-row:hover { background: color-mix(in srgb, var(--surface-soft) 50%, transparent); }
 .campaign-participants .activity-row-grid { padding: 12px var(--surface-pad) 4px; }
 .campaign-participants .row-detail-toggle { padding: 2px var(--surface-pad) 10px; }
 .campaign-participants .row-detail[open] { border-top: 0; }
@@ -5333,7 +5324,7 @@ a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-vo
 .campaign-participants .journey-steps { display: grid; gap: 3px; grid-template-columns: repeat(5, 1fr); list-style: none; margin: 0; max-width: 160px; padding: 0; }
 .campaign-participants .journey-steps > li { background: var(--line); border-radius: 99px; height: 6px; }
 .campaign-participants .journey-steps > li.is-done { background: var(--accent); }
-.campaign-participants .journey-steps > li.is-current { background: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.campaign-participants .journey-steps > li.is-current { background: var(--accent); opacity: .4; }
 .campaign-participants .journey-steps > li.is-failed { background: var(--danger); }
 .campaign-participants .journey-steps > li.is-expired { background: var(--honey); }
 .campaign-participants .participant-row.tone-ok .journey-steps > li.is-done { background: var(--status-ok); }
@@ -6080,8 +6071,6 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   --radius-control: 10px;
   --radius-card: 12px;
   --workspace-gutter: 40px;
-  /* Soft neutral fill for the selected nav item: ink at ~6%. */
-  --nav-active-fill: rgba(23, 24, 29, .06);
   /* Status: quiet when fine, loud when not. Normal and neutral states are a
      dot plus a word in the normal text colour; only warning and danger get a
      filled chip, so the one real problem on a screen is the one that shows. */
@@ -6096,7 +6085,6 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   --status-danger-text: #a8201a;
 }
 [data-theme="dark"] {
-  --nav-active-fill: rgba(255, 255, 255, .08);
   --status-neutral: #73747e;
   --status-warning: #e3ab4d;
   --status-warning-fill: #3a2a0f;
@@ -6230,7 +6218,8 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .id-chip { align-items: center; color: var(--muted); display: inline-flex; gap: 2px; max-width: 100%; min-width: 0; vertical-align: middle; }
 .id-chip-label { font-size: .8125rem; font-weight: 600; margin-right: 6px; }
 .id-chip code {
-  background: rgba(23, 24, 29, .05);
+  background: transparent;
+  border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--slate);
   font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace;
@@ -6239,7 +6228,6 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   padding: 1px 6px;
   white-space: nowrap;
 }
-[data-theme="dark"] .id-chip code { background: rgba(255, 255, 255, .07); }
 .id-chip-copy {
   align-items: center;
   background: transparent;
@@ -6318,12 +6306,12 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .sidebar-link svg { color: var(--muted); }
 .sidebar-link:hover, .sidebar-link:hover svg { color: var(--ink); }
 .sidebar-link.is-active,
-.sidebar-link.is-active:hover { background: var(--nav-active-fill); color: var(--ink); font-weight: 700; }
+.sidebar-link.is-active:hover { background: transparent; color: var(--ink); font-weight: 700; }
 .sidebar-link.is-active svg,
-.sidebar-link.is-active:hover svg { color: var(--accent-text); }
+.sidebar-link.is-active:hover svg { color: var(--accent); }
 [data-theme="dark"] .sidebar-link.is-active { color: var(--ink-strong); }
-[data-theme="dark"] .sidebar-link.is-active svg { color: var(--accent-text); }
-.account-row.is-active { background: var(--nav-active-fill); }
+[data-theme="dark"] .sidebar-link.is-active svg { color: var(--accent); }
+.account-row.is-active { background: transparent; }
 .account-row.is-active .account-row-main:hover strong { color: var(--accent-text); }
 .account-row.is-active .account-row-id small { color: var(--muted); }
 .account-row.is-active .account-row-id small > span:first-child { color: var(--slate); }
@@ -6639,7 +6627,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .admin-menu-list > button svg { color: var(--muted); flex: 0 0 auto; margin-top: 2px; }
 .admin-menu-list > button > span { display: grid; gap: 2px; }
 .admin-menu-list > button small { color: var(--muted); font-size: .8125rem; font-weight: 500; }
-.admin-menu-list > button:hover:not(:disabled), .admin-menu-list > button:focus-visible { background: var(--nav-active-fill); outline: none; }
+.admin-menu-list > button:hover:not(:disabled), .admin-menu-list > button:focus-visible { background: transparent; color: var(--ink); outline: none; }
 .admin-menu-list > button:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .admin-menu-list > button.is-danger, .admin-menu-list > button.is-danger svg { color: var(--danger); }
 .admin-menu-list > button:disabled { cursor: not-allowed; opacity: .55; }
@@ -7059,19 +7047,19 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 /* ── Sub-navigation (Settings, Help): soft neutral fill, accent icon ───── */
 .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active,
 .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  background: transparent;
   box-shadow: none;
   color: var(--ink);
   font-weight: 700;
 }
 [data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active,
 [data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active:hover {
-  background: color-mix(in srgb, #ffffff 8%, transparent);
+  background: transparent;
   color: var(--ink);
 }
-.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--accent-text); }
+.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--accent); }
 .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count) { color: var(--muted); opacity: 1; }
-[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--accent-text); }
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--accent); }
 [data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count) { color: var(--muted); }
 .ws-page :is(.settings-nav-link, .section-nav-link) { font-size: .875rem; min-height: 40px; }
 .ws-page :is(.settings-nav-count, .section-nav-count) { font-size: .8125rem; font-variant-numeric: tabular-nums; }
@@ -7120,8 +7108,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 
 
 /* ── Shell account footer: same calm active state as the nav ───────────── */
-.sidebar .account-row.is-active { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-[data-theme="dark"] .sidebar .account-row.is-active { background: color-mix(in srgb, #ffffff 8%, transparent); }
+.sidebar .account-row.is-active { background: transparent; }
 .sidebar .account-row.is-active .account-row-id small,
 .sidebar .account-row.is-active .account-row-id small > span:first-child { color: var(--muted); }
 .sidebar .account-row.is-active .account-row-more { color: var(--muted); }
@@ -7305,7 +7292,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .builder-field .keyword-input input:not([type="checkbox"]):not([type="radio"]):focus { box-shadow: none; }
 .keyword-chip { align-items: center; background: var(--surface-sunk); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); display: inline-flex; font-size: .875rem; font-weight: 600; gap: 2px; line-height: 1; max-width: 100%; padding: 4px 4px 4px 10px; }
 .keyword-chip button { align-items: center; background: transparent; border: 0; border-radius: 6px; color: var(--muted); cursor: pointer; display: inline-flex; height: 24px; justify-content: center; width: 24px; }
-.keyword-chip button:hover { background: var(--line); color: var(--ink); }
+.keyword-chip button:hover { background: transparent; color: var(--ink); }
 .keyword-chip button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .builder-layout .keyword-suggestions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
 .keyword-suggestions-label { color: var(--muted); font-size: .8125rem; margin-right: 2px; }
@@ -7419,7 +7406,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .template-picker .template-channel-surface strong { color: var(--ink); font-size: .8125rem; font-weight: 600; }
 .template-picker .template-picker-category { color: var(--slate); font-size: .875rem; font-weight: 600; }
 .template-picker .template-picker-category.is-active,
-[data-theme="dark"] .template-picker .template-picker-category.is-active { background: var(--nav-active-fill); color: var(--ink); font-weight: 700; }
+[data-theme="dark"] .template-picker .template-picker-category.is-active { background: transparent; color: var(--ink); font-weight: 700; }
 .template-picker .template-picker-category.is-active svg,
 [data-theme="dark"] .template-picker .template-picker-category.is-active svg { color: var(--accent-text); }
 .template-picker .template-picker-count,
@@ -7427,7 +7414,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 [data-theme="dark"] .template-picker .template-picker-category.is-active .template-picker-count { color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; font-weight: 600; }
 .template-picker .template-picker-section-label { color: var(--ink); font-family: var(--font-sans, "Manrope"), sans-serif; font-size: .9375rem; font-weight: 700; letter-spacing: 0; margin-bottom: 12px; text-transform: none; }
 .template-picker .template-picker-tile { gap: 10px; padding: 18px; }
-.template-picker .template-picker-tile:hover { border-color: var(--ink); transform: none; }
+.template-picker .template-picker-tile:hover { border-color: var(--line-strong); transform: none; }
 .template-picker .template-picker-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .template-picker .template-picker-tile strong { font-size: .9375rem; }
 .template-picker .template-picker-tile p { font-size: .875rem; line-height: 1.5; }
@@ -7516,7 +7503,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .quick-automation-page.ws-page .quick-stage-heading h2 { font-size: 1.125rem; font-weight: 700; }
 .quick-automation-page.ws-page .quick-stage-heading p { font-size: .875rem; }
 .quick-automation-page.ws-page .quick-reel-copy small { font-size: .8125rem; }
-.quick-automation-page.ws-page .quick-reel-card.is-selected { box-shadow: 0 0 0 2px var(--accent); }
+.quick-automation-page.ws-page .quick-reel-card.is-selected { border-color: var(--ink); box-shadow: 0 0 0 .5px var(--ink); }
 .quick-automation-page.ws-page .quick-reel-check { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .quick-automation-page.ws-page .quick-reel-type { font-size: .75rem; }
 .quick-automation-page.ws-page .quick-flow-card small { font-size: .8125rem; }
@@ -8004,9 +7991,8 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 @media (min-width: 901px) { .ibx-list-empty.is-account-empty { display: none; } }
 
 /* ── Contacts: table ─────────────────────────────────────────────────────── */
-.contacts-surface .contact-row.is-selected { background: color-mix(in srgb, var(--ink) 5%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
-[data-theme="dark"] .contacts-surface .contact-row.is-selected { background: color-mix(in srgb, #ffffff 7%, transparent); }
-.contacts-surface .contact-row.is-selected strong { color: var(--ink); }
+.contacts-surface .contact-row.is-selected { background: transparent; box-shadow: inset 3px 0 0 var(--accent); }
+.contacts-surface .contact-row.is-selected strong { color: var(--ink); font-weight: 700; }
 .contact-primary-copy { flex: 1 1 auto; min-width: 0; }
 .contacts-wrap.ws-page .filter-chips .chip-count { font-size: .8125rem; }
 .contacts-load-error .empty-icon { color: var(--danger); }
@@ -8214,7 +8200,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   transition: background var(--speed), color var(--speed);
   width: 44px;
 }
-.admin-dialog-close:hover:not(:disabled) { background: var(--nav-active-fill); color: var(--ink); }
+.admin-dialog-close:hover:not(:disabled) { background: transparent; color: var(--ink); }
 .admin-dialog-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .admin-dialog-close:disabled { cursor: not-allowed; opacity: .5; }
 .admin-dialog-body { align-content: start; display: grid; flex: 1 1 auto; gap: 16px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 24px 24px; }
@@ -8271,7 +8257,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
     min-height: 44px;
     padding: 0 14px;
   }
-  .admin-tabs > .is-active { background: var(--nav-active-fill); border-color: var(--ink); }
+  .admin-tabs > .is-active { background: transparent; border-color: var(--ink); box-shadow: inset 0 0 0 .5px var(--ink); }
   .admin-tabs > button[role="tab"]:focus-visible { border-radius: var(--radius-control); outline-offset: 2px; }
 
   /* Card heads keep a short action beside the title rather than orphaned below it. */
@@ -8665,8 +8651,8 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   padding: 10px var(--surface-pad);
   transition: background var(--dur-1) var(--ease-out);
 }
-.home-automation-row:hover { background: color-mix(in srgb, var(--accent) 2.5%, var(--panel)); }
-.home-automation-row:hover .home-automation-copy strong { color: var(--accent-text); }
+.home-automation-row:hover { background: transparent; }
+.home-automation-row:hover .home-automation-copy strong { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .home-automation-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .home-automation-channel { align-items: center; background: var(--surface-soft); border-radius: 10px; display: inline-flex; height: 32px; justify-content: center; width: 32px; }
 .home-automation-copy { display: grid; gap: 1px; min-width: 0; }
@@ -8983,46 +8969,39 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 /* Automation sections share a layout, so only their body cross-fades. */
 .automation-section-body { animation: motion-fade-up var(--dur-2) var(--ease-out) both; }
 
-/* ── Sliding selection thumbs (useSlidingThumb) ────────────────────────────
-   The segmented switch rules live with the switch above; these give the same
-   gliding thumb to the sidebars, Settings and Help navs, the Inbox channel
-   switch and the template categories (a soft fill), and to the owner-console
-   tab rows (an accent underline). */
-.sidebar-nav, .ibx-channels, .template-picker-categories { isolation: isolate; position: relative; }
+/* ── Sliding selection indicators (useSlidingThumb) ────────────────────────
+   Selection is never a fill (Round 5, docs/brand.md "Selection"). The
+   segmented switch keeps its solid ink thumb (rules with the switch above).
+   Vertical lists of sections - the sidebars, Settings and Help navs, the
+   template categories, anything marked .nav-list - get a 3px x 20px magenta
+   bar on the selected item's left edge that glides between items on a
+   transform. Horizontal tab rows (.tab-underline, the owner-console tabs)
+   get a 2px ink underline that slides along the row. */
+:is(.nav-list, .sidebar-nav, .template-picker-categories) { isolation: isolate; position: relative; }
+/* Sticky already makes these the containing block for the bar. */
 .settings-nav, .section-nav { isolation: isolate; }
-:is(.sidebar-nav, .settings-nav, .section-nav, .ibx-channels, .template-picker-categories)[style*="--thumb-w"]::before {
-  background: var(--nav-active-fill);
-  clip-path: inset(var(--thumb-y) var(--thumb-r) var(--thumb-b) var(--thumb-x) round var(--radius-control));
+:is(.nav-list, .sidebar-nav, .settings-nav, .section-nav, .template-picker-categories)[style*="--thumb-w"]::before {
+  background: var(--select-bar);
+  border-radius: 3px;
   content: "";
-  height: var(--thumb-sh);
+  height: var(--select-bar-h);
   left: 0;
   opacity: var(--thumb-o, 1);
   pointer-events: none;
   position: absolute;
   top: 0;
-  transition: var(--thumb-motion, clip-path var(--dur-3) var(--ease-emph), opacity var(--dur-2) var(--ease-out));
-  width: var(--thumb-sw);
-  z-index: -1;
+  transform: translate(var(--thumb-x), calc(var(--thumb-y) + (var(--thumb-h) - var(--select-bar-h)) / 2));
+  transition: var(--thumb-motion, transform var(--dur-3) var(--ease-emph), opacity var(--dur-2) var(--ease-out));
+  width: var(--select-bar-w);
+  z-index: 1;
 }
-:is(.settings-nav, .section-nav)[style*="--thumb-w"]::before { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-[data-theme="dark"] :is(.settings-nav, .section-nav)[style*="--thumb-w"]::before { background: color-mix(in srgb, #ffffff 8%, transparent); }
-.ibx-channels[style*="--thumb-w"]::before { background: var(--ink); clip-path: inset(var(--thumb-y) var(--thumb-r) var(--thumb-b) var(--thumb-x) round 9px); }
-.sidebar-nav[style*="--thumb-w"] .sidebar-link.is-active,
-.sidebar-nav[style*="--thumb-w"] .sidebar-link.is-active:hover,
-.ws-page :is(.settings-nav, .section-nav)[style*="--thumb-w"] :is(.settings-nav-link, .section-nav-link).is-active,
-.ws-page :is(.settings-nav, .section-nav)[style*="--thumb-w"] :is(.settings-nav-link, .section-nav-link).is-active:hover,
-[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav)[style*="--thumb-w"] :is(.settings-nav-link, .section-nav-link).is-active,
-[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav)[style*="--thumb-w"] :is(.settings-nav-link, .section-nav-link).is-active:hover,
-.ibx-channels[style*="--thumb-w"] button[aria-selected="true"],
-.template-picker-categories[style*="--thumb-w"] .template-picker-category.is-active,
-[data-theme="dark"] .template-picker .template-picker-categories[style*="--thumb-w"] .template-picker-category.is-active { background: transparent; }
-:is(.sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .ibx-channels button) {
-  transition: background-color var(--dur-1) var(--ease-out), color var(--dur-2) var(--ease-out);
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category) {
+  transition: color var(--dur-2) var(--ease-out);
 }
 .sidebar-link svg { transition: color var(--dur-2) var(--ease-out); }
-.admin-tabs { position: relative; }
-.admin-tabs[style*="--thumb-w"]::after {
-  background: var(--accent);
+:is(.admin-tabs, .tab-underline) { position: relative; }
+:is(.admin-tabs, .tab-underline)[style*="--thumb-w"]::after {
+  background: var(--select-line);
   bottom: 0;
   clip-path: inset(0 var(--thumb-r) 0 var(--thumb-x));
   content: "";
@@ -9035,7 +9014,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   width: var(--thumb-sw);
 }
 .admin-tabs[style*="--thumb-w"] > .is-active { border-bottom-color: transparent; }
-.admin-tabs > :is(a, button) { transition: color var(--dur-2) var(--ease-out), background-color var(--dur-1) var(--ease-out); }
+.admin-tabs > :is(a, button) { transition: color var(--dur-2) var(--ease-out); }
 @media (max-width: 720px) {
   /* Tabs wrap into chips here; each chip carries its own state. */
   .admin-tabs[style*="--thumb-w"]::after { content: none; }
@@ -9204,11 +9183,533 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   .quick-reel-card:hover, :is(.media-card, .quick-reel-card):active { transform: none; }
   .collapse, .collapse[data-state="closing"] { transition: none; }
   :is(.status-summary, .builder-disclosure, .row-detail, .admin-audit-details)::details-content { transition: none; }
-  :is(.sidebar-nav, .settings-nav, .section-nav, .ibx-channels, .template-picker-categories, .segmented)::before,
-  .admin-tabs::after { transition: none !important; }
+  :is(.nav-list, .sidebar-nav, .settings-nav, .section-nav, .template-picker-categories, .segmented)::before,
+  :is(.admin-tabs, .tab-underline)::after { transition: none !important; }
   :is(.button, .icon-button, .account-row-more, .segmented-option, .keyword-suggestion-chip, .ibx-chip):not(:disabled):active,
   .template-picker .template-picker-tile:hover,
   .template-picker .template-picker-tile:active { transform: none; }
+}
+
+/* === Round 5: shell === */
+/* ── Selection: never a grey fill ──────────────────────────────────────────
+   "I don't want that grey bg selected tile." Selected, current, active and
+   hovered things never get a tinted background. They show with ink text,
+   a magenta indicator bar, an ink underline or an ink outline instead. The
+   reusable pieces (documented in docs/brand.md "Selection", enforced by
+   app/globals.test.ts):
+     .nav-list > .nav-item     vertical sections: magenta bar on the left edge
+     .tab-underline > a|button horizontal tabs: 2px ink underline
+     .select-outline           selectable cards/tiles: 1.5px ink outline
+     .select-rail              dense list rows: 3px magenta rail on the left
+     .menu-item                menu rows: ink text on hover/focus, no fill
+   Selected state is read from aria-current, aria-selected, aria-pressed,
+   aria-checked, a checked input, or .is-active / .is-selected / .is-on. */
+:root {
+  --select-bar: var(--accent);
+  --select-bar-w: 3px;
+  --select-bar-h: 20px;
+  --select-line: var(--ink);
+}
+
+/* Vertical navigation: transparent always; the bar marks the selection. */
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category) { background: transparent; position: relative; }
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):hover,
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):hover svg { color: var(--ink); }
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) {
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink);
+  font-weight: 700;
+}
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) svg { color: var(--accent); }
+/* Before the sliding bar has measured (first paint, or a list without
+   useSlidingThumb), the selected item draws its own bar. */
+:is(.nav-list, .sidebar-nav, .settings-nav, .section-nav, .template-picker-categories):not([style*="--thumb-w"]) :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"])::before {
+  background: var(--select-bar);
+  border-radius: 3px;
+  content: "";
+  height: var(--select-bar-h);
+  left: 0;
+  margin-top: calc(var(--select-bar-h) / -2);
+  position: absolute;
+  top: 50%;
+  width: var(--select-bar-w);
+}
+.nav-list { display: flex; flex-direction: column; gap: 2px; }
+.nav-item {
+  align-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--slate);
+  display: flex;
+  font: inherit;
+  font-size: .9rem;
+  font-weight: 600;
+  gap: 12px;
+  min-height: 40px;
+  padding: 8px 12px;
+  text-align: left;
+  width: 100%;
+}
+.nav-item svg { color: var(--muted); flex: 0 0 auto; }
+
+/* Horizontal tabs: transparent; the selected tab is ink 700 with a 2px ink
+   underline that slides (useSlidingThumb on the row). */
+.tab-underline {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 4px 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-underline::-webkit-scrollbar { display: none; }
+.tab-underline > :is(a, button) {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: .9rem;
+  font-weight: 600;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 2px;
+  white-space: nowrap;
+}
+.tab-underline > :is(a, button):hover { color: var(--ink); }
+.tab-underline > :is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) { color: var(--ink); font-weight: 700; }
+.tab-underline:not([style*="--thumb-w"]) > :is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) { box-shadow: inset 0 -2px 0 var(--select-line); }
+.tab-underline > :is(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tab-underline .tab-count { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* Selectable cards and tiles: the panel colour stays; an ink outline marks
+   the choice and hovering darkens the hairline. */
+.select-outline { background: var(--panel); border: 1px solid var(--line); transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out); }
+.select-outline:hover { background: var(--panel); border-color: var(--line-strong); }
+.select-outline:is(.is-selected, .is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"], [aria-checked="true"], :has(> input:checked)) {
+  background: var(--panel);
+  border-color: var(--select-line);
+  box-shadow: 0 0 0 .5px var(--select-line);
+}
+
+/* Dense list rows: transparent; a 3px magenta rail and an ink title. */
+.select-rail { background: transparent; }
+.select-rail:hover { background: transparent; }
+.select-rail:is(.is-selected, .is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"]) { background: transparent; box-shadow: inset var(--select-bar-w) 0 0 var(--select-bar); }
+.select-rail:is(.is-selected, .is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"]) :is(strong, .select-title) { color: var(--ink); font-weight: 700; }
+
+/* Menu rows (account menu, Actions menus, the + menu): ink on hover and
+   focus, an inset focus ring for the keyboard, no fill. */
+:is(.menu-item, .account-menu-item, .admin-menu-list > button) { background: transparent; }
+:is(.menu-item, .account-menu-item, .admin-menu-list > button):is(:hover, :focus-visible):not(:disabled),
+:is(.menu-item, .account-menu-item, .admin-menu-list > button):is(:hover, :focus-visible):not(:disabled) svg { background: transparent; color: var(--ink); }
+:is(.menu-item, .account-menu-item, .admin-menu-list > button):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.account-menu-item.is-danger:hover, .account-menu-item.is-danger:hover svg { color: var(--danger); }
+
+/* Table rows: no hover fill; the row's primary link underlines instead. */
+.data-table tbody tr:hover { background: transparent; }
+.data-table tbody tr:hover td:first-child a:not(.button) { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── Global top bar (workspace and owner console) ─────────────────────────
+   Search field on the left (opens the ⌘K palette), the create button and the
+   account menu on the right. It sits above the page content, never over the
+   sidebar, and stays put while the page scrolls. On phones it also carries
+   the menu button and the wordmark; the search field becomes an icon. */
+:root { --topbar-h: 64px; }
+.app-topbar {
+  align-items: center;
+  background: var(--workspace-canvas, var(--panel));
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  min-height: var(--topbar-h);
+  /* Lines up with the page content, which is centred at --workspace-max. */
+  padding: 10px max(var(--workspace-gutter), calc((100% - var(--workspace-max)) / 2 + var(--workspace-gutter)));
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.app-topbar .hamburger, .app-topbar .topbar-brand { display: none; }
+.app-topbar .topbar-brand { align-items: center; color: var(--ink-strong); min-height: 44px; }
+.topbar-spacer { flex: 1 1 auto; }
+.topbar-search {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  cursor: text;
+  display: inline-flex;
+  flex: 0 1 440px;
+  font: inherit;
+  font-size: .9rem;
+  font-weight: 500;
+  gap: 10px;
+  height: 40px;
+  min-width: 0;
+  padding: 0 8px 0 12px;
+  text-align: left;
+  transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.topbar-search:hover { border-color: var(--muted); color: var(--slate); }
+.topbar-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.topbar-search svg { flex: 0 0 auto; }
+.topbar-search-placeholder { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-search-kbd {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-family: var(--font-sans, "Manrope"), sans-serif;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+/* Create: one ink split button. */
+.topbar-new { display: inline-flex; flex: 0 0 auto; position: relative; }
+.topbar-new .button { min-height: 40px; }
+.topbar-new-main { border-bottom-right-radius: 0; border-top-right-radius: 0; gap: 6px; padding: 0 14px 0 12px; }
+.topbar-new-more {
+  border-bottom-left-radius: 0;
+  border-top-left-radius: 0;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, currentColor 28%, transparent);
+  min-width: 36px;
+  padding: 0 10px;
+}
+.topbar-new-more:hover { box-shadow: inset 1px 0 0 color-mix(in srgb, currentColor 28%, transparent); }
+.topbar-new-more svg { transition: transform var(--dur-2) var(--ease-out); }
+.topbar-new-more[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+/* Account: avatar, the plan sticker, a caret. */
+.topbar-account { flex: 0 0 auto; position: relative; }
+.topbar-account-button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 44px;
+  padding: 3px 10px 3px 3px;
+  transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.topbar-account-button:hover, .topbar-account-button[aria-expanded="true"] { border-color: var(--line-strong); color: var(--ink); }
+.topbar-account-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.topbar-account-button .avatar { flex: 0 0 36px; font-size: .8125rem; height: 36px; width: 36px; }
+.topbar-account-button .plan-tag { font-size: .625rem; margin: 0; padding: 3px 8px; }
+.topbar-account-chevron { transition: transform var(--dur-2) var(--ease-out); }
+.topbar-account-button[aria-expanded="true"] .topbar-account-chevron { transform: rotate(180deg); }
+.topbar-account-skeleton { border-radius: 999px; display: block; height: 40px; width: 96px; }
+.topbar-account-error { color: var(--danger); font-size: .8125rem; font-weight: 600; margin: 0; }
+
+/* Menus hanging off the bar: a panel, rows with ink hover, no fills. */
+.topbar-menu {
+  animation: motion-drop-in var(--dur-2) var(--ease-emph) both;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
+  display: grid;
+  gap: 2px;
+  min-width: 260px;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  transform-origin: 100% 0;
+  z-index: 60;
+}
+.topbar-menu[data-state="closing"] { animation: motion-drop-out calc(var(--dur-2) * .7) var(--ease-in) both; pointer-events: none; }
+.topbar-menu form { display: contents; }
+.topbar-create-menu { min-width: 300px; }
+.menu-item {
+  align-content: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--slate);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 2px;
+  min-height: 44px;
+  padding: 8px 12px;
+  text-align: left;
+  text-decoration: none;
+  width: 100%;
+}
+.menu-item-label { color: var(--slate); font-size: .9rem; font-weight: 650; transition: color var(--dur-1) var(--ease-out); }
+.menu-item-hint { color: var(--muted); font-size: .8125rem; line-height: 1.35; }
+.menu-item:is(:hover, :focus-visible) .menu-item-label { color: var(--ink); }
+.topbar-account-menu .account-menu-head { border-bottom: 1px solid var(--line); margin-bottom: 4px; padding: 8px 12px 12px; }
+.topbar-account-menu .account-menu-head strong { color: var(--ink); font-size: .9375rem; }
+.topbar-account-menu .account-menu-head small { font-size: .8125rem; }
+.account-menu-role { align-items: center; display: flex; gap: 8px; margin-top: 4px; }
+.account-menu-role .plan-tag { font-size: .625rem; margin: 0; padding: 2px 7px; }
+.topbar-account-menu .account-menu-item { font-size: .9rem; min-height: 44px; padding: 0 12px; }
+.topbar-account-menu .account-menu-item[aria-current="page"] { color: var(--ink); font-weight: 700; }
+.topbar-account-menu .account-menu-item[aria-current="page"] svg { color: var(--accent); }
+
+/* Sticky panels inside pages clear the bar. */
+.section-nav, .settings-wrap .section-nav, .settings-nav, .profile-side, .composer-card,
+.activity-side, .builder-preview, .builder-layout .builder-preview { top: calc(var(--topbar-h) + 20px); }
+
+@media (max-width: 900px) {
+  .app-topbar { gap: 8px; padding: 10px 16px; }
+  .app-topbar .hamburger { display: inline-flex; margin-left: -10px; }
+  .app-topbar .topbar-brand { display: inline-flex; }
+  .topbar-search { flex: 1 1 auto; margin-left: 8px; }
+  /* The full-screen preview sheet covers the page, so the bar steps aside. */
+  .app-frame:has(.builder-preview.is-open) .app-topbar { visibility: hidden; }
+}
+@media (max-width: 767px) {
+  .topbar-search { flex: 0 0 44px; height: 44px; justify-content: center; margin-left: 0; padding: 0; width: 44px; }
+  .topbar-search-placeholder, .topbar-search-kbd { display: none; }
+  .topbar-spacer { flex: 1 1 0; }
+  .topbar-new .button { min-height: 44px; }
+  .topbar-new-main { padding: 0 12px; }
+  .topbar-new-label { clip: rect(0 0 0 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+  .topbar-new-more { min-width: 40px; }
+  .topbar-menu { max-width: calc(100vw - 32px); position: fixed; right: 16px; top: calc(var(--topbar-h) + 4px); }
+  .topbar-account-button { padding-right: 6px; }
+}
+@media (max-width: 420px) {
+  .app-topbar .topbar-brand .brand-name { display: none; }
+  .topbar-account-button .plan-tag { display: none; }
+}
+
+/* ── Command palette (⌘K) ──────────────────────────────────────────────── */
+.palette-scrim {
+  align-items: flex-start;
+  animation: motion-fade-in-soft var(--dur-2) var(--ease-out) both;
+  background: rgb(16 17 22 / 32%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: min(12vh, 96px) 16px 16px;
+  position: fixed;
+  z-index: 1100;
+}
+[data-theme="dark"] .palette-scrim { background: rgb(0 0 0 / 55%); }
+.palette-scrim[data-state="closing"] { animation: motion-fade-out calc(var(--dur-3) * .7) var(--ease-in) both; pointer-events: none; }
+.palette {
+  animation: motion-scale-in var(--dur-3) var(--ease-emph) both;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+  max-height: min(580px, calc(100dvh - 2 * min(12vh, 96px)));
+  outline: none;
+  overflow: hidden;
+  width: min(640px, 100%);
+}
+.palette-scrim[data-state="closing"] > .palette { animation: motion-scale-out calc(var(--dur-3) * .7) var(--ease-in) both; }
+.palette-search { align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); display: flex; flex: 0 0 auto; gap: 12px; padding: 0 10px 0 18px; }
+.palette-input {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  flex: 1 1 auto;
+  font: inherit;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  height: 60px;
+  min-width: 0;
+  outline: none;
+  padding: 0;
+}
+.palette-input::placeholder { color: var(--muted); }
+.palette-spinner { animation: spin .8s linear infinite; border: 2px solid var(--line-strong); border-radius: 50%; border-top-color: var(--ink); flex: 0 0 16px; height: 16px; width: 16px; }
+.palette-close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 40px;
+  height: 40px;
+  justify-content: center;
+}
+.palette-close:hover { color: var(--ink); }
+.palette-close:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.palette-results { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 10px; }
+.palette-group-label { align-items: center; color: var(--muted); display: flex; font-size: .8125rem; font-weight: 650; gap: 6px; padding: 12px 12px 6px; }
+.palette-option {
+  align-items: center;
+  border-radius: var(--radius-control);
+  color: var(--slate);
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 12px;
+  position: relative;
+}
+/* The highlighted row is a dense list row: magenta rail, ink text, no fill. */
+.palette-option[aria-selected="true"] { color: var(--ink); }
+.palette-option[aria-selected="true"]::before {
+  background: var(--select-bar);
+  border-radius: 3px;
+  content: "";
+  height: var(--select-bar-h);
+  left: 0;
+  margin-top: calc(var(--select-bar-h) / -2);
+  position: absolute;
+  top: 50%;
+  width: var(--select-bar-w);
+}
+.palette-option-icon {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 32px;
+  height: 32px;
+  justify-content: center;
+  transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.palette-option[aria-selected="true"] .palette-option-icon { border-color: var(--line-strong); color: var(--accent); }
+.palette-option-copy { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+.palette-option-label { color: inherit; font-size: .9375rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-option[aria-selected="true"] .palette-option-label { color: var(--ink); font-weight: 700; }
+.palette-option-hint { color: var(--muted); font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-option-enter { color: var(--muted); flex: 0 0 auto; opacity: 0; transition: opacity var(--dur-1) var(--ease-out); }
+.palette-option[aria-selected="true"] .palette-option-enter { opacity: 1; }
+.palette-note { color: var(--muted); font-size: .875rem; margin: 0; padding: 8px 12px; }
+.palette-empty { color: var(--muted); display: grid; font-size: .875rem; gap: 4px; justify-items: center; padding: 36px 16px; text-align: center; }
+.palette-empty strong { color: var(--ink); font-size: .9375rem; overflow-wrap: anywhere; }
+.palette-foot { border-top: 1px solid var(--line); color: var(--muted); display: flex; flex: 0 0 auto; font-size: .8125rem; gap: 18px; padding: 10px 18px; }
+.palette-foot kbd {
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  color: var(--slate);
+  display: inline-block;
+  font-family: var(--font-sans, "Manrope"), sans-serif;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-right: 4px;
+  min-width: 22px;
+  padding: 0 5px;
+  text-align: center;
+}
+@media (max-width: 600px) {
+  /* Phones: a full-screen sheet that rises from the bottom edge. */
+  .palette-scrim { padding: 0; }
+  .palette { animation: motion-sheet-up var(--dur-3) var(--ease-emph) both; border: 0; border-radius: 0; height: 100dvh; max-height: none; width: 100%; }
+  .palette-scrim[data-state="closing"] > .palette { animation: motion-sheet-down calc(var(--dur-3) * .7) var(--ease-in) both; }
+  .palette-search { padding: env(safe-area-inset-top) 6px 0 16px; }
+  .palette-input { font-size: 16px; height: 56px; }
+  .palette-close { flex-basis: 44px; height: 44px; }
+  .palette-option { min-height: 52px; }
+  .palette-foot { display: none; }
+  .palette-results { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
+
+/* ── Sidebar: connected accounts ───────────────────────────────────────── */
+.sidebar-accounts { display: grid; gap: 1px; min-width: 0; }
+.app-frame .sidebar-accounts .sidebar-label { font-family: var(--font-sans, "Manrope"), sans-serif; font-size: .8125rem; font-weight: 650; letter-spacing: 0; line-height: 1.3; margin: 0; }
+.sidebar-accounts-list { display: grid; gap: 1px; list-style: none; margin: 0; min-width: 0; padding: 0; }
+.sidebar-account-link,
+.sidebar-accounts-more,
+.sidebar-accounts-connect {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--slate);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  gap: 10px;
+  min-height: 36px;
+  min-width: 0;
+  padding: 5px 12px;
+  text-align: left;
+  width: 100%;
+}
+.sidebar-account-link:hover, .sidebar-accounts-more:hover, .sidebar-accounts-connect:hover { color: var(--ink); }
+.sidebar-accounts-more, .sidebar-accounts-connect { color: var(--muted); }
+.sidebar-accounts-more svg, .sidebar-accounts-connect svg { flex: 0 0 auto; margin: 0 4px 0 6px; }
+.sidebar-accounts-more svg { transition: transform var(--dur-2) var(--ease-out); }
+.sidebar-accounts-more[aria-expanded="true"] svg { transform: rotate(180deg); }
+.sidebar-account-avatar {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--slate);
+  display: inline-flex;
+  flex: 0 0 26px;
+  font-size: .8125rem;
+  font-weight: 700;
+  height: 26px;
+  justify-content: center;
+  overflow: hidden;
+  width: 26px;
+}
+.sidebar-account-avatar img { display: block; height: 100%; object-fit: cover; width: 100%; }
+.sidebar-account-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-account-status { background: var(--status-ok); border-radius: 50%; flex: 0 0 8px; height: 8px; margin-right: 2px; width: 8px; }
+.sidebar-account-status[data-tone="warning"] { background: var(--status-warning); box-shadow: 0 0 0 3px var(--status-warning-fill); }
+.sidebar-account-status[data-tone="danger"] { background: var(--status-danger); box-shadow: 0 0 0 3px var(--status-danger-fill); }
+.sidebar-accounts-loading { display: grid; gap: 8px; padding: 6px 12px; }
+.sidebar-accounts-loading .skeleton-block { border-radius: 6px; display: block; height: 20px; }
+.sidebar-accounts-note { color: var(--muted); font-size: .8125rem; margin: 0; padding: 4px 12px; }
+.sidebar-accounts-note .text-link { background: transparent; border: 0; cursor: pointer; font: inherit; padding: 0; }
+@media (max-width: 900px) {
+  .sidebar-account-link, .sidebar-accounts-more, .sidebar-accounts-connect { min-height: 44px; }
+}
+
+/* ── Selection applied: screens owned by this block ───────────────────────
+   Contacts' lead stages are the page's view tabs; the row whose drawer is
+   open carries the magenta rail. Settings outlines the account picked in the
+   sidebar's Accounts list. */
+.contacts-stage-tabs { margin: 0 0 16px; }
+.contacts-stage-tabs .tab-count { font-size: .8125rem; }
+.settings-group .connection-row.is-focused { border-radius: var(--radius-control); box-shadow: inset 0 0 0 1.5px var(--select-line); }
+
+/* "I don't have grey bg anywhere": neutral chips, icon tiles, code and table
+   headers sit on the panel with a hairline instead of a grey fill. (Bars and
+   tracks that carry data, skeletons and status fills keep theirs.) */
+.empty-icon, .review-beat-icon, .settings-group-icon, .help-topic-group-icon, .chart-state-icon,
+.home-automation-channel, .home-links-icon, .ins-automation-channel {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.participant-badge, .role-tag, .template-example, .keyword-chip, .keyword-chip.is-any,
+.health-fields li, .settings-group .channel-health .health-fields li, .legal-content code,
+.help-feedback button, .ws-page .billing-invite-copy > span {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.keyword-chip, .keyword-chip.is-any, .legal-content code, .help-feedback button { box-shadow: none; }
+.billing-period, .feed-toolbar { background: transparent; }
+.feed-toolbar { box-shadow: inset 0 0 0 1px var(--line); }
+.contacts-surface .contacts-table-head,
+.insights-content.is-flush .insights-table th,
+.ins-table thead th, .ins-table thead tr { background: transparent; }
+
+@media (max-width: 1020px) {
+  /* The Settings and Help navs wrap into a row of chips here: the chosen
+     chip gets the ink outline of a selectable card and the bar steps aside. */
+  .settings-nav, .section-nav { position: relative; top: auto; }
+  :is(.settings-nav, .section-nav)::before,
+  :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link)::before { content: none !important; }
+  .settings-wrap .settings-nav-link.is-active { border-color: var(--select-line); box-shadow: 0 0 0 .5px var(--select-line); }
 }
 
 /* === Round 5: inbox === */

@@ -1,6 +1,7 @@
 "use client";
 
 import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
+import { prefersReducedMotion } from "@/src/components/ui/use-presence";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -155,6 +156,9 @@ export function SettingsScreen() {
   const searchParams = useSearchParams();
   const metaState = searchParams.get("meta") ?? "";
   const facebookState = searchParams.get("facebook") ?? "";
+  // ?account=<connection id> (the sidebar's Accounts list) outlines that row
+  // in Connections and scrolls it into view.
+  const focusedAccountId = searchParams.get("account") ?? "";
   const [facebookPages, setFacebookPages] = useState<FacebookPageSummary[]>([]);
   const [facebookHealth, setFacebookHealth] = useState<FacebookHealth[]>([]);
   const [facebookBusyId, setFacebookBusyId] = useState("");
@@ -215,6 +219,12 @@ export function SettingsScreen() {
     const timer = window.setTimeout(() => setQuietSaved(false), 2500);
     return () => window.clearTimeout(timer);
   }, [quietSaved]);
+
+  useEffect(() => {
+    if (!focusedAccountId || connectionsLoading || section !== "connections") return;
+    const row = document.getElementById(`account-${focusedAccountId}`);
+    row?.scrollIntoView?.({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }, [focusedAccountId, connectionsLoading, section]);
 
   useEffect(() => {
     if (section !== "delivery") return;
@@ -676,7 +686,7 @@ export function SettingsScreen() {
                         {connections.map((connection) => {
                           const accountHealth = health.find((entry) => entry.id === connection.id);
                           return (
-                            <li className="settings-row connection-row" key={connection.id}>
+                            <li className={`settings-row connection-row${focusedAccountId === connection.id ? " is-focused" : ""}`} id={`account-${connection.id}`} key={connection.id}>
                               <div className="connection-main">
                                 <SocialAvatar channel="instagram" name={`@${connection.username}`} src={connection.profilePictureUrl ?? undefined} />
                                 <div className="connection-copy">
@@ -782,7 +792,7 @@ export function SettingsScreen() {
                         {facebookPages.map((page) => {
                           const pageHealth = facebookHealth.find((entry) => entry.id === page.id);
                           return (
-                            <li className="settings-row connection-row" key={page.id}>
+                            <li className={`settings-row connection-row${focusedAccountId === page.id ? " is-focused" : ""}`} id={`account-${page.id}`} key={page.id}>
                               <div className="connection-main">
                                 {/* Facebook's literal brand blue is set inline (matches FacebookGlyph.tsx) rather than
                                     in globals.css - the workspace palette contract (globals.test.ts) forbids legacy
