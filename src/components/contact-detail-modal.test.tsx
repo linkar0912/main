@@ -76,6 +76,19 @@ describe("ContactDetailModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("moves focus into the panel and hands it back to the opener on close", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = render(<ContactDetailModal contactId="contact_1" onClose={() => undefined} />);
+
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close contact details" }));
+    unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
   it("offers Retry when the record fails to load instead of loading forever", async () => {
     let fail = true;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {

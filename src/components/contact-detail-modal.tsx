@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { AlertCircle, X } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
 import { SocialAvatar } from "./social-avatar";
 import { loadTeamMembers, type TeamMember } from "@/src/lib/client/team-members";
-import { formatDateTime } from "@/src/lib/format-date";
+import { RelativeTime } from "./ui/relative-time";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 
@@ -153,6 +153,22 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
     const timer = window.setTimeout(() => setNotice(""), 2500);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  // Focus moves into the panel when it opens and back to whatever opened it
+  // when it closes. On phones the panel covers the page, so the page behind
+  // stops scrolling while it is open.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus({ preventScroll: true });
+    const covers = typeof window.matchMedia === "function" && window.matchMedia("(max-width: 600px)").matches;
+    const previousOverflow = document.body.style.overflow;
+    if (covers) document.body.style.overflow = "hidden";
+    return () => {
+      if (covers) document.body.style.overflow = previousOverflow;
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -306,16 +322,18 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
           <div className="contact-detail-identity">
             <h2>{contact ? contactLabel : "Contact details"}</h2>
             {contact ? (
-              <p className="muted">
-                First seen {formatDateTime(contact.createdAt)} · Last seen {formatDateTime(contact.lastSeenAt)}
-                {contact.suppressedAt ? " · Opted out" : ""}
+              <p className="muted contact-detail-meta">
+                <span>Last seen <RelativeTime value={contact.lastSeenAt} inline /></span>
+                <span>First seen <RelativeTime value={contact.createdAt} inline /></span>
+                {contact.suppressedAt ? <span>Opted out</span> : null}
               </p>
             ) : null}
           </div>
-          <button className="icon-button" type="button" aria-label="Close contact details" onClick={onClose}><X size={16} /></button>
+          <button ref={closeRef} className="icon-button" type="button" aria-label="Close contact details" onClick={onClose}><X size={18} /></button>
         </header>
         {loadError && (
           <div className="form-error contact-detail-load-error" role="alert">
+            <AlertCircle size={16} aria-hidden="true" />
             <span>{loadError}</span>
             <button className="button button-secondary button-small" type="button" onClick={retryLoad}>Retry</button>
           </div>
@@ -328,7 +346,7 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
         {contact && (
           <>
             <div className="contact-chips contact-detail-chips">
-              <span className="status-badge">Score {contact.score}</span>
+              <span className="contact-detail-score" title="Engagement score: rises with clicks, captured details and stage changes">{contact.score} {contact.score === 1 ? "point" : "points"}</span>
               {contact.tags.map((tag) => (
                 <span className="tag-chip" key={tag}>{tag}</span>
               ))}
@@ -454,14 +472,16 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
             <section className="contact-detail-section" aria-labelledby="contact-tags-title">
             <h3 id="contact-tags-title">Tags</h3>
             <label className="field field-spaced">
-              <span>Comma separated <em>letters, numbers and dashes; automatic tags are kept</em></span>
+              <span>Your tags</span>
               <input
                 aria-label="Contact tags"
+                aria-describedby="contact-tags-hint"
                 value={tagDraft}
                 onChange={(event) => setTagDraft(event.target.value)}
                 placeholder="vip, webinar-lead"
                 maxLength={300}
               />
+              <small id="contact-tags-hint" className="field-hint">Separate tags with commas. Use letters, numbers and dashes. Automatic tags stay.</small>
             </label>
             <button className="button button-secondary button-small" type="button" onClick={saveTags} disabled={Boolean(saving) || !detailLoaded}>
               {saving === "tags" ? "Saving…" : "Save tags"}
@@ -480,7 +500,7 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
                   <li key={entry.id}>
                     <div className="activity-row">
                       <span>{entry.label}</span>
-                      <time dateTime={entry.at}>{formatDateTime(entry.at)}</time>
+                      <RelativeTime value={entry.at} />
                     </div>
                     {entry.detail && <p className="muted activity-summary">{timelineDetail(entry.detail)}</p>}
                   </li>
