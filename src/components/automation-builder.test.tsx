@@ -1439,6 +1439,10 @@ describe("AutomationBuilder", () => {
       for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
       fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
       await screen.findByText(/saved to your workspace/i);
+      // The guard and the footer's save state read the same dirty flag; wait
+      // for the footer to settle so the guard's listener is gone too (the
+      // success notice can render a tick earlier on a slow CI runner).
+      await screen.findByText(/all changes saved/i);
 
       const link = addLink("/automations");
       expect(clickLink(link)).toBe(false);
