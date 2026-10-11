@@ -10767,3 +10767,33 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
   .billing-code-form input { flex-basis: 100%; min-height: 44px; }
   .billing-code-form .button { flex: 1 1 100%; }
 }
+
+/* === Round 6: polish from the full UI sweep === */
+/* Text floor: nothing readable below 13px, and the plan sticker reads in
+   sentence case instead of tiny uppercase. */
+.auto-row-problem .status-chip { font-size: .8125rem; }
+.id-chip code { font-size: .8125rem; }
+.plan-tag,
+.workspace-meta-badges .plan-tag {
+  font-size: .8125rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.3;
+  padding: 2px 9px;
+  text-transform: none;
+}
+.account-row-name .plan-tag,
+.account-row-id small .plan-tag { font-size: .75rem; letter-spacing: 0; padding: 1px 8px; text-transform: none; }
+
+/* Phones: every tap target is at least 44px tall. Inline links inside a
+   sentence are exempt; these are the standalone ones the sweep found. */
+@media (max-width: 720px) {
+  .back-link { align-items: center; display: inline-flex; min-height: 44px; }
+  .ibx-row-action { min-height: 44px; min-width: 64px; justify-content: center; }
+  .automation-detail .button,
+  .automation-detail .segmented-option { min-height: 44px; }
+  .auto-row-name,
+  .ins-post-title { display: inline-block; padding-block: 10px; margin-block: -10px; }
+  .automation-detail .text-link,
+  .prefs-row .text-link { display: inline-flex; align-items: center; min-height: 44px; }
+}

@@ -302,9 +302,9 @@
   background: rgb(255 255 255 / 72%);
   border: 1px solid rgb(23 24 29 / 12%);
   border-radius: 999px;
-  font-size: .6875rem;
+  font-size: .8125rem;
   font-weight: 700;
-  letter-spacing: .035em;
+  letter-spacing: 0;
 }
 
 .statusDot {

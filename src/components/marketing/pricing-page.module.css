@@ -1046,7 +1046,7 @@
 
 .threadWho span {
   color: rgb(16 17 22 / 58%);
-  font-size: .7rem;
+  font-size: .8125rem;
   font-weight: 650;
 }
 
@@ -1211,11 +1211,8 @@
 
 .meter figcaption {
   color: var(--marketing-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .6rem;
-  font-weight: 750;
-  letter-spacing: .05em;
-  text-transform: uppercase;
+  font-size: .8125rem;
+  font-weight: 650;
 }
 
 .meterTotal {
@@ -1235,7 +1232,7 @@
 
 .meterTotal span {
   color: var(--marketing-muted);
-  font-size: .78rem;
+  font-size: .8125rem;
   font-weight: 650;
 }
 
@@ -1373,12 +1370,9 @@
 }
 
 .invoiceKind {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .62rem;
-  font-weight: 800;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  opacity: .55;
+  font-size: .8125rem;
+  font-weight: 650;
+  opacity: .62;
 }
 
 .invoiceLines {
