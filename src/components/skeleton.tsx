@@ -95,22 +95,18 @@ export function ContactsContentSkeleton({ withToolbar = true }: { withToolbar?: 
   return <LoadingRegion label="Loading contacts" className="skeleton-content">{withToolbar ? <SkeletonToolbar filters={5} /> : null}<SkeletonListRows count={5} /></LoadingRegion>;
 }
 
-/** Same KPI row and Reply volume card as Home, then the two detail cards. */
+/** Insights below its filters: headline, the trend card, then funnel and top posts side by side. */
 export function InsightsContentSkeleton() {
   return (
-    <LoadingRegion label="Loading insights data" className="skeleton-content skeleton-insights-content">
-      <KpiSkeletonRow />
-      <SectionCard className="chart-panel" title="Reply volume" description="Replies sent and people reached per day, last 14 days."><DashboardChartSkeleton /></SectionCard>
-      <div className="insights-detail-grid" aria-hidden>
-        <SectionCard title="Automation journey" description="Where people currently sit in your flows."><SkeletonListRows count={4} compact /></SectionCard>
-        <SectionCard title="Content performance" description="Top posts by matched comments."><SkeletonListRows count={3} compact /></SectionCard>
+    <LoadingRegion label="Loading insights data" className="skeleton-content ins-content">
+      <div className="ins-summary" aria-hidden><Skeleton className="ins-skeleton-headline" /><Skeleton className="ins-skeleton-line" /></div>
+      <div className="surface ins-trend" aria-hidden><Skeleton className="ins-skeleton-figures" /><Skeleton className="home-chart-skeleton" /></div>
+      <div className="ins-grid" aria-hidden>
+        <SectionCard title="From comment to link"><SkeletonListRows count={4} compact /></SectionCard>
+        <SectionCard title="Top posts"><SkeletonListRows count={4} compact /></SectionCard>
       </div>
     </LoadingRegion>
   );
-}
-
-export function DashboardChartSkeleton() {
-  return <div className="dashboard-chart-skeleton" aria-label="Loading performance data" aria-busy="true"><div className="skeleton-chart-bars" aria-hidden>{Array.from({ length: 14 }, (_, index) => <Skeleton className={`skeleton-chart-bar h-${(index % 5) + 1}`} key={index} />)}</div></div>;
 }
 
 /** Rows shaped like the automation table: channel tile, name over its rule,
@@ -141,7 +137,7 @@ export function AutomationListContentSkeleton({ count = 5 }: { count?: number })
 
 export function ScreenSkeleton() { return <WorkspaceScreen label="Loading workspace"><SkeletonListRows count={4} /></WorkspaceScreen>; }
 
-/** Mirrors StatTile: icon + label, value, note. Shared by Home and Insights. */
+/** Mirrors StatTile: icon + label, value, note. Used by the campaign performance page. */
 function KpiSkeletonRow() {
   return (
     <div className="kpi-grid" aria-hidden>
@@ -158,17 +154,20 @@ function KpiSkeletonRow() {
   );
 }
 
+/** Home's shape: greeting and status line, then the performance panel beside the automation list. */
 export function DashboardSkeleton() {
   return (
     <WorkspaceScreen
       label="Loading Home"
-      header={<PageHeader className="home-greeting" title={<Skeleton className="skeleton-word skeleton-title" />} description="Welcome back - here’s how your replies performed over the last 14 days." actions={<Skeleton className="skeleton-button" />} />}
+      header={<PageHeader className="home-greeting" title={<Skeleton className="skeleton-word skeleton-title" />} description={<Skeleton className="skeleton-word skeleton-lede" />} actions={<Skeleton className="skeleton-button" />} />}
     >
-      <KpiSkeletonRow />
-      <SectionCard className="chart-panel" title="Reply volume" description="Replies sent and people reached per day, last 14 days."><DashboardChartSkeleton /></SectionCard>
-      <div className="dashboard-columns">
-        <SectionCard className="automations-panel" title="Your automations"><SkeletonListRows count={3} compact /></SectionCard>
-        <SectionCard title="Recent failures"><SkeletonListRows count={3} compact /></SectionCard>
+      <div className="home-grid" aria-hidden>
+        <section className="surface home-performance">
+          <div className="home-panel-head"><h2 className="home-section-title">Last 14 days</h2></div>
+          <Skeleton className="ins-skeleton-figures" />
+          <Skeleton className="home-chart-skeleton" />
+        </section>
+        <SectionCard className="home-automations" title="Your automations"><SkeletonListRows count={4} compact /></SectionCard>
       </div>
     </WorkspaceScreen>
   );

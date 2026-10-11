@@ -7,7 +7,7 @@ import { InlineContentSkeleton } from "./skeleton";
 import { relativeTimeLabel } from "./workspace-primitives";
 import { formatDateTime } from "@/src/lib/format-date";
 
-type Failure = {
+export type DeliveryFailure = {
   id: string;
   kind: string;
   state: "FAILED";
@@ -17,19 +17,54 @@ type Failure = {
   updatedAt: string;
 };
 
+/** GET /api/insights/failures: the workspace's most recent failed deliveries, newest first. */
+export async function fetchRecentFailures(): Promise<DeliveryFailure[]> {
+  const response = await fetch("/api/insights/failures");
+  const payload = (await response.json().catch(() => ({}))) as { data?: DeliveryFailure[]; error?: string };
+  if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load failures");
+  return payload.data;
+}
+
+/** The failed deliveries themselves, explanation first; `limit` folds the rest behind "Show all". */
+export function FailureList({ failures, limit }: { failures: DeliveryFailure[]; limit?: number }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = limit && !showAll ? failures.slice(0, limit) : failures;
+  return (
+    <>
+      <ul className="failure-list" aria-label="Recent failed deliveries">
+        {visible.map((failure) => (
+          <DeliveryIssueRow
+            key={failure.id}
+            label={deliveryKindLabel(failure.kind)}
+            lastError={failure.lastError}
+            // Plain retry count; the Instagram-scoped person ID is noise here.
+            detail={attemptsLabel(failure.attemptCount)}
+            timestamp={failure.updatedAt}
+            timeLabel={relativeTimeLabel(failure.updatedAt)}
+            timeTitle={formatDateTime(failure.updatedAt)}
+          />
+        ))}
+      </ul>
+      {limit && failures.length > limit ? (
+        <button className="list-toggle" type="button" onClick={() => setShowAll((value) => !value)}>
+          {showAll ? "Show fewer" : `Show all ${failures.length}`}
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * Lists the most recent FAILED outbound deliveries so a workspace admin can
- * spot a misconfigured webhook, a token problem, or a recurring 5xx from Meta.
+ * spot a misconfigured lead forward, a token problem, or a recurring 5xx from Meta.
  */
 export function FailurePanel({ limit }: { limit?: number } = {}) {
-  const [showAll, setShowAll] = useState(false);
-  const [failures, setFailures] = useState<Failure[]>([]);
+  const [failures, setFailures] = useState<DeliveryFailure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    let active = true;
     let cancelled = false;
     void (async () => {
       if (!cancelled) {
@@ -37,12 +72,8 @@ export function FailurePanel({ limit }: { limit?: number } = {}) {
         setError("");
       }
       try {
-        const response = await fetch("/api/insights/failures");
-        const payload = (await response.json().catch(() => ({}))) as { data?: Failure[]; error?: string };
-        if (cancelled) return;
-        if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not load failures");
-        if (!active) return;
-        setFailures(payload.data);
+        const data = await fetchRecentFailures();
+        if (!cancelled) setFailures(data);
       } catch (caught: unknown) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : "Could not load failures");
       } finally {
@@ -50,7 +81,6 @@ export function FailurePanel({ limit }: { limit?: number } = {}) {
       }
     })();
     return () => {
-      active = false;
       cancelled = true;
     };
   }, [reloadKey]);
@@ -77,28 +107,5 @@ export function FailurePanel({ limit }: { limit?: number } = {}) {
       </p>
     );
   }
-  const visible = limit && !showAll ? failures.slice(0, limit) : failures;
-  return (
-    <>
-    <ul className="failure-list" aria-label="Recent failed deliveries">
-      {visible.map((failure) => (
-        <DeliveryIssueRow
-          key={failure.id}
-          label={deliveryKindLabel(failure.kind)}
-          lastError={failure.lastError}
-          // Plain retry count; the Instagram-scoped person ID is noise here.
-          detail={attemptsLabel(failure.attemptCount)}
-          timestamp={failure.updatedAt}
-          timeLabel={relativeTimeLabel(failure.updatedAt)}
-          timeTitle={formatDateTime(failure.updatedAt)}
-        />
-      ))}
-    </ul>
-    {limit && failures.length > limit ? (
-      <button className="list-toggle" type="button" onClick={() => setShowAll((value) => !value)}>
-        {showAll ? "Show fewer" : `Show all ${failures.length}`}
-      </button>
-    ) : null}
-    </>
-  );
+  return <FailureList failures={failures} limit={limit} />;
 }

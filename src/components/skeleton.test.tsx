@@ -23,14 +23,13 @@ describe("ScreenSkeleton", () => {
     expect(screen.getByLabelText("Loading workspace")).toBeTruthy();
   });
 
-  it("matches the Insights metric, chart, and lower-detail structure", () => {
+  it("matches the Insights headline, trend card, and funnel/posts structure", () => {
     const { container } = render(<InsightsContentSkeleton />);
 
     expect(screen.getByLabelText("Loading insights data").getAttribute("aria-busy")).toBe("true");
-    // Same KPI row and Reply volume card as Home, so the two pages load alike.
-    expect(container.querySelectorAll(".kpi-grid .stat-tile")).toHaveLength(4);
-    expect(container.querySelector(".chart-panel .dashboard-chart-skeleton")).toBeTruthy();
-    expect(container.querySelectorAll(".insights-detail-grid > .surface")).toHaveLength(2);
+    expect(container.querySelector(".ins-summary .ins-skeleton-headline")).toBeTruthy();
+    expect(container.querySelector(".ins-trend .home-chart-skeleton")).toBeTruthy();
+    expect(container.querySelectorAll(".ins-grid > .surface")).toHaveLength(2);
   });
 
   it("provides content-only loaders that match the Inbox desk and Contacts rows", () => {
