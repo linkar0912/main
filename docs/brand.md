@@ -164,6 +164,28 @@ ink text, a magenta bar, an ink underline or an ink outline. The old
 The selected state is read from `aria-current`, `aria-selected`,
 `aria-pressed`, `aria-checked`, a checked input, or `.is-active` /
 `.is-selected` / `.is-on`, so markup only has to say what is selected.
+Adopting them takes a class and the sliding-indicator ref:
+
+```tsx
+// Side list of sections: magenta bar glides between items.
+<nav ref={slidingThumbRef} className="nav-list" aria-label="Report sections">
+  <a className="nav-item" href="/x" aria-current="page"><Icon /> Overview</a>
+</nav>
+
+// View tabs: ink underline glides along the row; .tab-count is a quiet count.
+<div ref={slidingThumbRef} className="tab-underline" role="tablist" aria-label="Views">
+  <button role="tab" aria-selected="true">All <span className="tab-count">12</span></button>
+</div>
+
+<button className="template-card select-outline" aria-pressed={picked}>…</button>
+<li className="contact-row select-rail is-selected"><strong>@handle</strong>…</li>
+<div className="topbar-menu"><a className="menu-item" href="/x"><span className="menu-item-label">Label</span><span className="menu-item-hint">One line</span></a></div>
+```
+
+The tokens behind them are `--select-bar` (magenta), `--select-bar-w` /
+`--select-bar-h` (3px x 20px) and `--select-line` (ink). Screens with their
+own tab classes (the Inbox's `.page-tabs`) draw the same 2px ink underline
+from these tokens.
 
 Allowed non-transparent backgrounds: the page canvas, panels and cards,
 buttons (primary ink, secondary outline is transparent), warning/danger
@@ -172,6 +194,30 @@ ink thumbs/knobs of segmented switches and toggles. Code and ID chips are
 transparent with a 1px line. `app/globals.test.ts` ("selection style: never
 a grey fill") fails if a selected/active/current/hover rule sets any other
 background.
+
+## Shell: top bar, search and accounts
+
+- **Top bar** (`.app-topbar`, `src/components/top-bar.tsx`), above the page
+  content and never over the sidebar, in the workspace and the owner console:
+  a search field ("Search automations, contacts, messages…" with a ⌘K / Ctrl K
+  hint) on the left, lined up with the page content; on the right the ink
+  "New automation" split button (click = template picker, caret = New
+  automation, Quick automation, From a template, New tracked link, New
+  broadcast) and the account avatar with the plan sticker. Under 900px it also
+  carries the menu button and wordmark; under 768px the search field is a
+  44px icon. Sticky page panels sit `--topbar-h` (64px) + 20px from the top.
+- **Command palette** (`src/components/command-palette.tsx`): ⌘K / Ctrl K
+  anywhere or "/" outside a text field. Recent picks, Pages (every nav
+  destination and Settings section), Actions, then live Automations, Contacts
+  and Conversations (owner console: Workspaces and Users). Arrow keys, Enter,
+  Escape; the highlighted row is a magenta bar, never a fill. Full-screen
+  sheet on phones.
+- **Accounts** in the sidebar: each connected Instagram account and Facebook
+  Page with its avatar or initial and a status dot (quiet green; amber or red
+  with a soft halo when it needs a reconnect, problems listed first). Five
+  show, the rest fold behind "Show all". "Connect account" appears while the
+  plan has room. A row opens Settings → Connections with that account
+  outlined (`/settings?account=<id>`).
 
 Sidebar group labels are quiet sentence-case Manrope (`.sidebar-label`). The
 owner console shows "Owner console" as a quiet line under the logo instead

@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({ pathname: "/dashboard" }));
 
-vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+
+vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname, useRouter: () => router }));
 
 const { AppShell } = await import("./app-shell");
 const { notifyWorkspaceChanged } = await import("@/src/lib/client/workspace-data");
@@ -20,6 +22,9 @@ function stubShellFetch(role = "MEMBER", igAvatarUrl: string | null = null, plat
     }
     if (url.includes("/api/contacts")) {
       return { ok: true, json: async () => ({ data: { count: 3 } }) } as Response;
+    }
+    if (url.includes("/api/meta/connection") || url.includes("/api/facebook/connection")) {
+      return { ok: true, json: async () => ({ data: [] }) } as Response;
     }
     throw new Error(`Unexpected fetch to ${url}`);
   }));
@@ -55,11 +60,76 @@ describe("AppShell", () => {
 
     render(<AppShell><main>Workspace</main></AppShell>);
 
+    // The account menu moved to the top bar; its head names the role.
+    fireEvent.click(await screen.findByRole("button", { name: "Account menu" }));
     expect(await screen.findByText("Member")).toBeTruthy();
     expect(screen.queryByText("Owner")).toBeNull();
-    // The identity chip is no longer a link - "My profile" is the one way in.
-    expect(screen.getByRole("link", { name: "My profile" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "My profile" }).getAttribute("href")).toBe("/profile");
     expect(screen.queryByTitle("Open my profile")).toBeNull();
+  });
+
+  it("keeps the plan sticker visible in the top bar", async () => {
+    stubShellFetch("OWNER");
+    render(<AppShell><main>Workspace</main></AppShell>);
+
+    const account = await screen.findByRole("button", { name: "Account menu" });
+    expect(account.querySelector(".plan-tag")?.textContent).toBe("free");
+    expect(account.closest("header")?.className).toContain("app-topbar");
+  });
+
+  it("opens the command palette from the search field, ⌘K, Ctrl K and /", async () => {
+    stubShellFetch();
+    render(<AppShell><main><input aria-label="Page field" /></main></AppShell>);
+    await screen.findByRole("button", { name: "Account menu" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(screen.getByRole("dialog", { name: "Search Linkar" })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("combobox"));
+    fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Search Linkar" })).toBeNull());
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    expect(screen.getByRole("dialog", { name: "Search Linkar" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Search Linkar" })).toBeNull());
+
+    // "/" opens it, except while typing in a field.
+    fireEvent.keyDown(screen.getByLabelText("Page field"), { key: "/" });
+    expect(screen.queryByRole("dialog", { name: "Search Linkar" })).toBeNull();
+    fireEvent.keyDown(document.body, { key: "/" });
+    expect(screen.getByRole("dialog", { name: "Search Linkar" })).toBeTruthy();
+  });
+
+  it("finds pages from the palette and opens them with the keyboard", async () => {
+    stubShellFetch();
+    router.push.mockClear();
+    render(<AppShell><main>Workspace</main></AppShell>);
+    await screen.findByRole("button", { name: "Account menu" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "billing" } });
+    const first = screen.getAllByRole("option")[0];
+    expect(first.textContent).toContain("Billing");
+    expect(first.getAttribute("aria-selected")).toBe("true");
+    expect(input.getAttribute("aria-activedescendant")).toBe(first.id);
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(router.push).toHaveBeenCalledWith("/settings?section=billing");
+  });
+
+  it("lists every way to create from the + menu", async () => {
+    stubShellFetch();
+    render(<AppShell><main>Workspace</main></AppShell>);
+    await screen.findByRole("button", { name: "Account menu" });
+
+    fireEvent.click(screen.getByRole("button", { name: "More ways to create" }));
+    const menu = document.getElementById("create-menu") as HTMLElement;
+    expect(within(menu).getByRole("link", { name: /^New automation/ }).getAttribute("href")).toBe("/automations/new");
+    expect(within(menu).getByRole("link", { name: /^Quick automation/ }).getAttribute("href")).toBe("/quick-automation");
+    expect(within(menu).getByRole("button", { name: /^From a template/ })).toBeTruthy();
+    expect(within(menu).getByRole("link", { name: /^New tracked link/ }).getAttribute("href")).toBe("/insights#tracked-links");
+    expect(within(menu).getByRole("link", { name: /^New broadcast/ }).getAttribute("href")).toBe("/automations/broadcasts#new-broadcast");
   });
 
   it("renders the Linkar mark beside the wordmark in the sidebar", async () => {
@@ -67,7 +137,7 @@ describe("AppShell", () => {
 
     render(<AppShell><main>Workspace</main></AppShell>);
 
-    await screen.findByText("Member");
+    await screen.findByRole("button", { name: "Account menu" });
     expect(document.querySelector(".sidebar-brand svg.brand-mark")).toBeTruthy();
     expect(screen.getAllByText("Linkar").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Linkar" }).getAttribute("href")).toBe("/dashboard");
@@ -86,7 +156,7 @@ describe("AppShell", () => {
     stubShellFetch();
     render(<AppShell><main>Workspace</main></AppShell>);
 
-    await screen.findByText("Member");
+    await screen.findByRole("button", { name: "Account menu" });
     const navigation = screen.getByRole("navigation", { name: "Workspace sections" });
     expect(within(navigation).getByRole("link", { name: "Quick automation" }).getAttribute("href")).toBe("/quick-automation");
     expect(within(navigation).getByRole("link", { name: "Insights" }).getAttribute("href")).toBe("/insights");
@@ -98,7 +168,7 @@ describe("AppShell", () => {
     stubShellFetch();
     render(<AppShell><main>Workspace</main></AppShell>);
 
-    await screen.findByText("Member");
+    await screen.findByRole("button", { name: "Account menu" });
     const account = screen.getByRole("navigation", { name: "Account" });
     expect(within(account).queryByRole("link", { name: "Pricing" })).toBeNull();
   });
@@ -107,7 +177,7 @@ describe("AppShell", () => {
     stubShellFetch();
     render(<AppShell><main>Workspace</main></AppShell>);
 
-    await screen.findByText("Member");
+    await screen.findByRole("button", { name: "Account menu" });
     expect(screen.queryByRole("navigation", { name: "Workspace resources" })).toBeNull();
     // The copyright footer was dropped: the sidebar account block is the only chrome.
     expect(document.querySelector(".app-footer")).toBeNull();
@@ -122,7 +192,7 @@ describe("AppShell", () => {
     cleanup();
     stubShellFetch("OWNER", null, false);
     render(<AppShell><main>Workspace</main></AppShell>);
-    await screen.findByText("Owner");
+    await screen.findByRole("button", { name: "Account menu" });
     expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
   });
 
@@ -188,13 +258,13 @@ describe("AppShell", () => {
     expect(skip.getAttribute("href")).toBe("#main-content");
     // First in the tab order, ahead of the sidebar.
     expect(document.querySelector("a[href], button")).toBe(skip);
-    await screen.findByText("Member");
+    await screen.findByRole("button", { name: "Account menu" });
   });
 
   it("uses a disclosure for the account menu and returns focus to its toggle on Escape", async () => {
     stubShellFetch();
     render(<AppShell><main>Workspace</main></AppShell>);
-    await screen.findByText("Member");
+    await screen.findByRole("button", { name: "Account menu" });
 
     const toggle = screen.getByRole("button", { name: "Account menu" });
     expect(toggle.hasAttribute("aria-haspopup")).toBe(false);

@@ -246,7 +246,7 @@ export function BroadcastsScreen() {
               )}
               </div>
             </section>
-            <form className="surface composer-card" onSubmit={send} aria-label="New broadcast">
+            <form className="surface composer-card" id="new-broadcast" onSubmit={send} aria-label="New broadcast">
               <div className="surface-head">
                 <div className="surface-head-copy"><h2>New broadcast</h2><p>Write one message and send it to a group of contacts.</p></div>
               </div>
