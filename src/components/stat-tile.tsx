@@ -1,6 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import type { DayPoint } from "./reply-volume-chart";
+import type { DayPoint } from "@/src/lib/insights-summary";
 import { Skeleton } from "./skeleton";
 
 export type StatDelta = { dir: "up" | "down" | "flat"; label: string; detail?: string };

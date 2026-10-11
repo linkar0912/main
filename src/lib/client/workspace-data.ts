@@ -87,9 +87,12 @@ export type BillingView = {
 export type InsightsDayPoint = { day: string; count: number };
 export type InsightsOverview = {
   timeseries?: {
+    days?: number;
     participantsPerDay?: InsightsDayPoint[];
     sentPerDay?: InsightsDayPoint[];
   };
+  /** Totals for the window before the series, for "up 18% on the previous 14 days". */
+  previous?: { sent?: number; reached?: number };
   capturedEmails?: number;
   optedOut?: number;
 };
