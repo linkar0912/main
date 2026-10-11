@@ -8560,3 +8560,15 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .not-found-actions { flex-direction: column; inline-size: 100%; }
   .not-found-actions .button { justify-content: center; }
 }
+
+/* === UX sweep: final pass === */
+/* On narrow phones a trigger's keyword chips must wrap inside the row (the
+   trigger never shrank, so its chips pushed the page 2px wider at 360px), and
+   a failure's time may wrap rather than widen the row. */
+@media (max-width: 820px) {
+  .automation-trigger { flex: 1 1 auto; max-width: 100%; min-width: 0; }
+  .automation-keyword { max-width: 100%; overflow-wrap: anywhere; }
+}
+@media (max-width: 420px) {
+  .failure-row-time { white-space: normal; }
+}
