@@ -8203,7 +8203,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
    right), then nothing moves unless the person does something. */
 
 /* ── Shared entrance ───────────────────────────────────────────────────── */
-.home-enter { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; animation-delay: var(--enter-delay, 0ms); }
+.home-enter { animation: motion-fade-up var(--dur-3) var(--ease-emph) backwards; animation-delay: var(--enter-delay, 0ms); }
 .home-page .page-header.home-enter,
 .insights-page .page-header.home-enter { animation-name: motion-fade-down; }
 
@@ -8378,7 +8378,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .start-step[data-state="todo"] .start-body h3 { color: var(--slate); }
 .start-body p { color: var(--muted); font-size: .9375rem; line-height: 1.5; margin: 0 0 14px; }
 .start-step:is([data-state="done"], [data-state="todo"], [data-state="checking"]) .start-body p { margin-bottom: 0; }
-.start-step[data-state="current"] .start-body { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; }
+.start-step[data-state="current"] .start-body { animation: motion-fade-up var(--dur-3) var(--ease-emph) backwards; }
 .start-recipes { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 10px; }
 .start-recipe {
   align-content: start;
@@ -8641,10 +8641,10 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 /* Browsers without View Transitions get the same arrival as a mount fade. */
 .app-content-slot > * { animation: none; }
 @supports not (view-transition-class: none) {
-  .app-content-slot > * { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; }
+  .app-content-slot > * { animation: motion-fade-up var(--dur-3) var(--ease-emph) backwards; }
 }
 /* Automation sections share a layout, so only their body cross-fades. */
-.automation-section-body { animation: motion-fade-up var(--dur-2) var(--ease-out) both; }
+.automation-section-body { animation: motion-fade-up var(--dur-2) var(--ease-out) backwards; }
 
 /* ── Sliding selection indicators (useSlidingThumb) ────────────────────────
    Selection is never a grey fill (docs/brand.md "Selection"). The segmented
@@ -8706,7 +8706,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 /* Switched content arrives instead of snapping: tab panels, Inbox channels,
    the phone preview's Post / Comments / DM views. A hidden panel restarts
    its animation every time it is shown. */
-:is(.workspace-panel, .ibx-panel):not([hidden]) { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; }
+:is(.workspace-panel, .ibx-panel):not([hidden]) { animation: motion-fade-up var(--dur-3) var(--ease-emph) backwards; }
 .ig-phone > .ig-screen { animation: motion-fade-in-soft var(--dur-2) var(--ease-out) both; }
 
 /* ── App shell: mobile drawer and account menu ─────────────────────────── */
@@ -8849,7 +8849,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
    in the same rhythm as the app. The marketing site keeps its own scroll
    reveal (src/components/marketing/primitives.module.css). */
 .auth-page-section { animation: none; }
-.auth-page-frame > :not(.form-error, .form-success) { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; }
+.auth-page-frame > :not(.form-error, .form-success) { animation: motion-fade-up var(--dur-3) var(--ease-emph) backwards; }
 .auth-page-frame > :nth-child(2) { animation-delay: calc(var(--stagger) * 1); }
 .auth-page-frame > :nth-child(3) { animation-delay: calc(var(--stagger) * 2); }
 .auth-page-frame > :nth-child(4) { animation-delay: calc(var(--stagger) * 3); }
@@ -9994,7 +9994,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 .auto-detail-switch .status-switch-label { font-size: .875rem; font-weight: 700; }
 .auto-detail-error { margin: 12px 0 0; }
 .auto-detail-body { min-width: 0; }
-.auto-detail-body > * { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; }
+.auto-detail-body > * { animation: motion-fade-up var(--dur-3) var(--ease-emph) backwards; }
 /* Edit: the header above already names the automation, so the builder keeps
    only its step progress. */
 .automation-detail .builder-embedded .builder-header .page-header-row { display: none; }
@@ -10471,7 +10471,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 
 /* Sections and groups. */
 .prefs-main { min-width: 0; }
-.prefs-section { animation: motion-fade-up var(--dur-2) var(--ease-out) both; display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+.prefs-section { animation: motion-fade-up var(--dur-2) var(--ease-out) backwards; display: flex; flex-direction: column; gap: 32px; min-width: 0; }
 .prefs-section.settings-billing { display: block; }
 .prefs-section-head h2 { color: var(--ink); font-size: 1.25rem; font-weight: 700; letter-spacing: -.01em; line-height: 1.3; margin: 0; }
 .prefs-section-head p { color: var(--muted); font-size: .9375rem; line-height: 1.5; margin: 6px 0 0; max-width: 62ch; }

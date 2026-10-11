@@ -156,6 +156,15 @@ describe("workspace palette contract", () => {
   });
 
   it("keeps builder overlays inside an iPhone viewport", () => {
+    // Page-level entrance animations must not keep holding a transform once
+    // they finish: a held transform turns the wrapper into the containing
+    // block for position: fixed, so the phone preview sheet (and any other
+    // full-screen layer inside the page) would scroll away with the page.
+    for (const wrapper of [/\.app-content-slot > \*/, /\.auto-detail-body > \*/, /\.automation-section-body/, /\.prefs-section/, /:is\(\.workspace-panel, \.ibx-panel\):not\(\[hidden\]\)/]) {
+      const rule = new RegExp(`${wrapper.source}\\s*{[^}]*animation:\\s*motion-fade-up[^;}]*`).exec(css)?.[0] ?? "";
+      expect(rule).toMatch(/backwards/);
+      expect(rule).not.toMatch(/\bboth\b/);
+    }
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.action-notice\s*{[^}]*left:\s*14px[^}]*right:\s*14px[^}]*transform:\s*none[^}]*width:\s*auto/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.builder-preview\.is-open\s*{[^}]*height:\s*100dvh[^}]*inset:\s*0/);
     // The preview phone keeps a real iPhone's 393:852 screen everywhere and
