@@ -1,5 +1,6 @@
 "use client";
 
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { useEffect, useRef } from "react";
 import {
   BatteryFull,
@@ -247,7 +248,7 @@ export function InstagramPreview({
       {/* The switch sits above the phone so it reads as "what am I looking at";
           a DM-only flow has nothing to switch between, so it has no switch. */}
       {(showPost || showComments) && (
-        <div className="segmented is-block ig-preview-tabs" role="tablist" aria-label="Preview surface">
+        <div ref={slidingThumbRef} className="segmented is-block ig-preview-tabs" role="tablist" aria-label="Preview surface">
           {showPost && (
             <button type="button" role="tab" aria-selected={view === "post"} className={`segmented-option${view === "post" ? " is-active" : ""}`} onClick={() => onViewChange("post")}>Post</button>
           )}

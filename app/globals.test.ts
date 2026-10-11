@@ -282,3 +282,32 @@ describe("workspace palette contract", () => {
     expect(css).toMatch(/\.skip-link:focus\s*{[^}]*transform:\s*none/);
   });
 });
+
+describe("motion system", () => {
+  const motion = css.slice(css.indexOf("/* === round 4: motion === */"));
+
+  it("moves the selection thumb with clip-path, never width or position", () => {
+    expect(css).toMatch(/\.segmented\[style\*="--thumb-w"\]::before\s*{[^}]*clip-path:\s*inset\(var\(--thumb-y\) var\(--thumb-r\) var\(--thumb-b\) var\(--thumb-x\)/);
+    expect(css).toMatch(/\.segmented\[style\*="--thumb-w"\]::before\s*{[^}]*transition:\s*var\(--thumb-motion,\s*clip-path var\(--dur-3\)/);
+    expect(css).not.toMatch(/\.segmented::before\s*{[^}]*transition:[^}]*width/);
+  });
+
+  it("gives every overlay an exit keyed off data-state=closing", () => {
+    for (const selector of ["\\.account-menu", "\\.admin-menu-list", "\\.admin-detail-drawer", "\\.action-notice"]) {
+      expect(motion).toMatch(new RegExp(`${selector}\\[data-state="closing"\\]\\s*{[^}]*animation:\\s*motion-[a-z-]+ calc\\(var\\(--dur-[23]\\) \\* \\.7\\) var\\(--ease-in\\)`));
+    }
+    expect(motion).toMatch(/\[data-state="closing"\] > :is\(\.modal-panel, \.admin-reason-dialog\)\s*{[^}]*motion-scale-out/);
+  });
+
+  it("cross-fades page content on route changes, not the shell", () => {
+    expect(motion).toMatch(/::view-transition-old\(root\)\s*{\s*display:\s*none/);
+    expect(motion).toMatch(/::view-transition-new\(\.page-enter\)\s*{[^}]*motion-fade-up var\(--dur-3\)/);
+  });
+
+  it("switches all of it off for reduced motion", () => {
+    const reduced = motion.slice(motion.lastIndexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(reduced).toMatch(/::view-transition-new\(\*\)\s*{\s*animation:\s*none !important/);
+    expect(reduced).toMatch(/\.skeleton-block, \.media-skeleton, \.quick-reel-skeleton\s*{\s*animation:\s*none/);
+    expect(reduced).toMatch(/\.collapse, \.collapse\[data-state="closing"\]\s*{\s*transition:\s*none/);
+  });
+});

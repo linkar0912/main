@@ -4,6 +4,7 @@ import { Check, Eye, Plus, X } from "lucide-react";
 import {
   cloneElement,
   isValidElement,
+  useEffect,
   useId,
   useState,
   type KeyboardEvent,
@@ -11,6 +12,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { EXIT_MS, Presence, prefersReducedMotion, usePresence } from "@/src/components/ui/use-presence";
 
 /**
  * Presentational pieces shared by both automation builders (classic and
@@ -30,8 +32,16 @@ export function BuilderStepper({ steps, active, unlocked, onSelect }: {
   unlocked: number;
   onSelect: (index: number) => void;
 }) {
+  // Which way the last step change went, so the new step's card slides in
+  // from that side (globals.css reads data-direction off the stepper).
+  const [shown, setShown] = useState(active);
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
+  if (active !== shown) {
+    setShown(active);
+    setDirection(active < shown ? "back" : "forward");
+  }
   return (
-    <nav className="builder-stepper" aria-label="Builder steps">
+    <nav className="builder-stepper" aria-label="Builder steps" data-direction={direction}>
       <ol>
         {steps.map((step, index) => {
           const state = index === active ? "is-active" : index < active || index <= unlocked ? (index < active ? "is-done" : "is-open") : "is-upcoming";
@@ -269,8 +279,27 @@ export function KeywordInput({ label, value, onChange, placeholder, hint, error,
       event.preventDefault();
       if (draftKey) emit([...committed, draftKey], "");
     } else if (event.key === "Backspace" && !draft && committed.length > 0) {
-      emit(committed.slice(0, -1), "");
+      remove(committed[committed.length - 1], "");
     }
+  }
+
+  // A removed chip lingers for one exit beat (shrinks and fades in place)
+  // instead of vanishing; the value itself changes immediately.
+  const [leaving, setLeaving] = useState<{ word: string; index: number } | null>(null);
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => setLeaving(null), EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [leaving]);
+
+  function remove(keyword: string, nextDraft: string) {
+    if (!prefersReducedMotion()) setLeaving({ word: keyword, index: committed.indexOf(keyword) });
+    emit(committed.filter((item) => item !== keyword), nextDraft);
+  }
+
+  const chips: Array<{ word: string; leaving: boolean }> = committed.map((word) => ({ word, leaving: false }));
+  if (leaving && !committedKeys.has(leaving.word.toLowerCase())) {
+    chips.splice(Math.min(leaving.index, chips.length), 0, { word: leaving.word, leaving: true });
   }
 
   const remaining = suggestions.filter((suggestion) => !committedKeys.has(suggestion.toLowerCase()) && suggestion.toLowerCase() !== draftKey.toLowerCase());
@@ -279,10 +308,14 @@ export function KeywordInput({ label, value, onChange, placeholder, hint, error,
     <div className="builder-field">
       <label className="builder-field-text" htmlFor={id}>{label}</label>
       <div className={`keyword-input${error ? " is-invalid" : ""}`}>
-        {committed.map((keyword) => (
+        {chips.map(({ word: keyword, leaving: isLeaving }) => isLeaving ? (
+          <span className="keyword-chip" key={`leaving:${keyword.toLowerCase()}`} data-state="closing" aria-hidden>
+            {keyword}
+          </span>
+        ) : (
           <span className="keyword-chip" key={keyword.toLowerCase()}>
             {keyword}
-            <button type="button" aria-label={`Remove ${keyword}`} onClick={() => emit(committed.filter((item) => item !== keyword), draft)}>
+            <button type="button" aria-label={`Remove ${keyword}`} onClick={() => remove(keyword, draft)}>
               <X size={13} strokeWidth={2.4} />
             </button>
           </span>
@@ -380,7 +413,7 @@ export function BuilderFooter({
 }) {
   return (
     <div className={`builder-footer${isLast ? " is-last" : ""}`}>
-      {notice ? <div className="builder-footer-notice">{notice}</div> : null}
+      <Presence>{notice ? <div className="builder-footer-notice">{notice}</div> : null}</Presence>
       <div className="builder-footer-bar">
         <button type="button" className="button button-secondary builder-mobile-preview-trigger" aria-expanded={previewOpen} onClick={onPreview}>
           <Eye size={16} /> Preview
@@ -433,13 +466,16 @@ export function PreviewPanel({ open, onClose, panelRef, closeRef, hint, children
   hint?: ReactNode;
   children: ReactNode;
 }) {
+  // On phones the sheet slides back down before it hides (ui/use-presence).
+  const sheet = usePresence(open);
   return (
     <>
-      {open ? <button type="button" className="builder-preview-scrim" aria-label="Close phone mockup backdrop" onClick={onClose} /> : null}
+      {sheet.mounted ? <button type="button" className="builder-preview-scrim" aria-label="Close phone mockup backdrop" data-state={sheet.state} onClick={onClose} /> : null}
       <aside
         ref={panelRef}
         tabIndex={-1}
-        className={`builder-preview${open ? " is-open" : ""}`}
+        className={`builder-preview${sheet.mounted ? " is-open" : ""}`}
+        data-state={sheet.mounted ? sheet.state : undefined}
         aria-label="Message preview"
         {...(open ? { role: "dialog", "aria-modal": true } : {})}
       >

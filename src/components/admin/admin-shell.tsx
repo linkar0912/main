@@ -22,6 +22,8 @@ import {
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { LinkarMark } from "@/src/components/linkar-mark";
 import { ThemeToggle } from "@/src/components/theme-toggle";
+import { usePresence } from "@/src/components/ui/use-presence";
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 
 // Grouped by what the owner is doing: looking around, managing accounts,
 // fixing things, and the safety rails around all of it.
@@ -81,6 +83,7 @@ export function AdminShell({
   const restoreMenuFocus = useRef(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const drawer = usePresence(drawerOpen);
 
   function closeDrawer(restoreFocus = false) {
     setDrawerOpen(false);
@@ -150,14 +153,15 @@ export function AdminShell({
         <span className="sidebar-context">Owner console</span>
       </header>
 
-      {drawerOpen ? (
-        <button className="scrim" type="button" aria-label="Close operator navigation" onClick={() => closeDrawer(true)} />
+      {drawer.mounted ? (
+        <button className="scrim" type="button" aria-label="Close operator navigation" data-state={drawer.state} onClick={() => closeDrawer(true)} />
       ) : null}
 
       <aside
         ref={sidebarRef}
         className="sidebar admin-sidebar"
         data-open={String(drawerOpen)}
+        data-state={drawer.mounted ? drawer.state : undefined}
         aria-label="Operator sidebar"
         aria-modal={drawerOpen || undefined}
         role={drawerOpen ? "dialog" : undefined}
@@ -171,7 +175,7 @@ export function AdminShell({
         <p className="sidebar-context">Owner console</p>
 
         {operatorNavigation.map((group) => (
-          <nav className="sidebar-nav" aria-label={group.label ? `${group.label} sections` : "Operator sections"} key={group.label ?? "home"}>
+          <nav ref={slidingThumbRef} className="sidebar-nav" aria-label={group.label ? `${group.label} sections` : "Operator sections"} key={group.label ?? "home"}>
             {group.label ? <span className="sidebar-label" aria-hidden>{group.label}</span> : null}
             {group.items.map(({ href, label, icon: Icon }) => {
               const active = isActive(pathname, href);

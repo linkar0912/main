@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import { useLayoutEffect, useState } from "react";
 
 import type { AdminOperationDetail } from "@/src/lib/admin/operations/types";
@@ -84,7 +85,7 @@ export function OperationActions({
           </button>
         ))}
       </div>
-      {action ? (
+      <Presence>{action ? (
         <ReasonDialog
           title={`${actionLabel(action)}: ${detail.title}`}
           warning={warning[action]}
@@ -108,7 +109,7 @@ export function OperationActions({
             </label>
           ) : null}
         </ReasonDialog>
-      ) : null}
+      ) : null}</Presence>
     </div>
   );
 }

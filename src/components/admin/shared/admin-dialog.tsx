@@ -3,6 +3,7 @@
 import { FormEvent, useId } from "react";
 import { X } from "lucide-react";
 
+import { presenceProps, usePresenceState } from "@/src/components/ui/use-presence";
 import { useAdminDialog } from "./use-admin-dialog";
 
 /**
@@ -34,9 +35,10 @@ export function AdminDialog({
 }) {
   const titleId = useId();
   const dialogRef = useAdminDialog<HTMLFormElement>(onClose, busy);
+  const presence = usePresenceState();
 
   return (
-    <div className="admin-dialog-backdrop" role="presentation">
+    <div className="admin-dialog-backdrop" role="presentation" {...presenceProps(presence)}>
       <form
         ref={dialogRef}
         tabIndex={-1}

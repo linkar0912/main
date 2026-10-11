@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { basicAutomationTemplates } from "@/src/lib/automation/templates";
 import { QuickReelsContentSkeleton } from "./skeleton";
 import { PageHeader } from "./page-header";
+import { prefersReducedMotion } from "./ui/use-presence";
 import { formatDate as formatDateLabel } from "@/src/lib/format-date";
 
 type QuickMedia = {
@@ -104,7 +105,7 @@ export function QuickAutomationScreen() {
 
   useEffect(() => {
     if (!selectedId) return;
-    flowStageRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    flowStageRef.current?.scrollIntoView?.({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
   }, [selectedId]);
 
   async function retry() {

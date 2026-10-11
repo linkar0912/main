@@ -1,5 +1,6 @@
 "use client";
 
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { useRef, useState, type KeyboardEvent } from "react";
 import { FacebookActivity } from "./facebook-activity";
 import { InstagramInbox } from "./instagram-inbox";
@@ -40,7 +41,7 @@ export function InboxWorkspace() {
       className="ibx-page-header"
       title="Inbox"
       description="Reply to Instagram DMs and keep an eye on Facebook Page comments."
-      actions={<div className="ibx-channels" role="tablist" aria-label="Inbox channels">
+      actions={<div ref={slidingThumbRef} className="ibx-channels" role="tablist" aria-label="Inbox channels">
         <button ref={(element) => { tabRefs.current.instagram = element; }} type="button" role="tab" id="instagram-tab" aria-controls="instagram-panel" aria-selected={active === "instagram"} tabIndex={active === "instagram" ? 0 : -1} onKeyDown={onTabKeyDown} onClick={() => select("instagram")}><InstagramGlyph size={16} />Instagram DMs</button>
         <button ref={(element) => { tabRefs.current.facebook = element; }} type="button" role="tab" id="facebook-tab" aria-controls="facebook-panel" aria-selected={active === "facebook"} tabIndex={active === "facebook" ? 0 : -1} onKeyDown={onTabKeyDown} onClick={() => select("facebook")}><FacebookGlyph size={16} />Facebook comments</button>
       </div>}

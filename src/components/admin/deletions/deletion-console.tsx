@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -171,7 +172,7 @@ export function DeletionConsole({
 
       <SyntheticCleanupPanel />
 
-      {pending ? (
+      <Presence>{pending ? (
         <ReasonDialog
           title={`${pending.action === "cancel" ? "Cancel" : "Retry"} deleting this ${targetName(pending.job).toLowerCase()}`}
           intro={pending.action === "cancel"
@@ -185,7 +186,7 @@ export function DeletionConsole({
           onCancel={() => { setPending(null); setError(null); }}
           onConfirm={(reason) => void command(reason)}
         />
-      ) : null}
+      ) : null}</Presence>
     </main>
   );
 }

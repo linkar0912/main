@@ -1,5 +1,7 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Download, Search, UsersRound } from "lucide-react";
 import { ContactDetailModal, type ContactUpdate } from "./contact-detail-modal";
@@ -394,7 +396,7 @@ export function ContactsScreen() {
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
-          <div className="segmented filter-chips" role="group" aria-label="Filter contacts by lead stage">
+          <div ref={slidingThumbRef} className="segmented filter-chips" role="group" aria-label="Filter contacts by lead stage">
             <button type="button" className={`segmented-option filter-chip ${status === "" ? "is-on" : ""}`} aria-pressed={status === ""} onClick={() => selectStatus("")}>All <span className="chip-count">{total}</span></button>
             {STATUS_ORDER.map((value) => (
               <button key={value} type="button" className={`segmented-option filter-chip ${status === value ? "is-on" : ""}`} aria-pressed={status === value} onClick={() => selectStatus(value)}>
@@ -475,7 +477,7 @@ export function ContactsScreen() {
           </button>
         ) : null}
         </div>
-        {openContactId ? (
+        <Presence>{openContactId ? (
           <ContactDetailModal
             key={openContactId}
             contactId={openContactId}
@@ -483,7 +485,7 @@ export function ContactsScreen() {
             onClose={() => setOpenContactId(null)}
             onUpdated={(update) => applyContactUpdate(openContactId, update)}
           />
-        ) : null}
+        ) : null}</Presence>
       </div>
     </>
   );

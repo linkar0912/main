@@ -23,7 +23,8 @@ import { PRODUCT_NAME } from "@/src/lib/branding";
 import { friendlyFirstName } from "@/src/lib/display-name";
 import { LinkarMark } from "@/src/components/linkar-mark";
 import { getWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT } from "@/src/lib/client/workspace-data";
-import { SegmentedIndicator } from "./segmented-indicator";
+import { presenceProps, usePresence } from "./ui/use-presence";
+import { slidingThumbRef } from "./ui/use-sliding-thumb";
 import { Skeleton } from "./skeleton";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -108,12 +109,24 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const accountMenuButtonRef = useRef<HTMLButtonElement>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
+  // Both leave with a short exit beat instead of vanishing (ui/use-presence).
+  const drawer = usePresence(drawerOpen);
+  const accountMenu = usePresence(accountMenuOpen);
 
+  const restoreMenuFocus = useRef(false);
   const closeDrawer = () => setDrawerOpen(false);
+  // The top bar is inert while the drawer is open, so focus can only go back
+  // to the menu button after the close has rendered (effect below).
   const closeDrawerAndRestoreFocus = () => {
+    restoreMenuFocus.current = true;
     setDrawerOpen(false);
-    menuButtonRef.current?.focus();
   };
+
+  useEffect(() => {
+    if (drawerOpen || !restoreMenuFocus.current) return;
+    restoreMenuFocus.current = false;
+    menuButtonRef.current?.focus();
+  }, [drawerOpen]);
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -234,7 +247,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
   return (
     <AccountIdentityContext.Provider value={{ email, role, plan, supportEmail, mode }}>
-      <SegmentedIndicator />
       <a className="skip-link" href="#main-content">Skip to content</a>
       <div className="app-frame">
       <header className="mobile-topbar" inert={drawerOpen}>
@@ -254,16 +266,17 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </Link>
       </header>
 
-      {drawerOpen && (
+      {drawer.mounted && (
         // Pointer-only: keyboard and screen-reader users get the labelled close
         // button inside the drawer, so the scrim stays out of the tab order.
-        <button className="scrim" type="button" aria-hidden tabIndex={-1} onClick={closeDrawerAndRestoreFocus} />
+        <button className="scrim" type="button" aria-hidden tabIndex={-1} data-state={drawer.state} onClick={closeDrawerAndRestoreFocus} />
       )}
 
       <aside
         ref={sidebarRef}
         className="sidebar"
         data-open={String(drawerOpen)}
+        data-state={drawer.mounted ? drawer.state : undefined}
         aria-label="Workspace sidebar"
         aria-modal={drawerOpen || undefined}
         role={drawerOpen ? "dialog" : undefined}
@@ -282,7 +295,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           ) : null}
         </div>
 
-        <nav className="sidebar-nav" aria-label="Workspace sections">
+        <nav ref={slidingThumbRef} className="sidebar-nav" aria-label="Workspace sections">
           {[...workspaceNavigation, ...automateNavigation].map(({ href, label, icon: Icon }, index) => (
             <Fragment key={href}>
               {index === workspaceNavigation.length ? <span className="sidebar-label" aria-hidden>Automate</span> : null}
@@ -309,7 +322,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           </nav>
         ) : null}
 
-        <nav className="sidebar-nav" aria-label="Account">
+        <nav ref={slidingThumbRef} className="sidebar-nav" aria-label="Account">
           {accountNavigation.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
@@ -333,8 +346,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             )
           ) : (
             <>
-              {accountMenuOpen ? (
-                <div className="account-menu" id="account-menu">
+              {accountMenu.mounted ? (
+                <div className="account-menu" id="account-menu" {...presenceProps(accountMenu.state)}>
                   <div className="account-menu-head">
                     <strong>{displayNameFromEmail(email)}</strong>
                     <small>{email || `${PRODUCT_NAME} workspace`}</small>

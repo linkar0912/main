@@ -6,6 +6,7 @@ import { History, X } from "lucide-react";
 import { InlineConfirm } from "./inline-confirm";
 import { RelativeTime } from "./ui/relative-time";
 import { useFocusTrap } from "./use-focus-trap";
+import { presenceProps, usePresenceState } from "./ui/use-presence";
 import { InlineContentSkeleton } from "./skeleton";
 import type { FlowDefinition } from "@/src/lib/automation/types";
 
@@ -156,9 +157,10 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
 export function AutomationVersionsModal({ automationId, onClose, onRestored }: { automationId: string; onClose: () => void; onRestored?: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, { onEscape: onClose });
+  const presence = usePresenceState();
 
   return portal(
-    <div className="modal-scrim" role="presentation" onClick={onClose}>
+    <div className="modal-scrim" role="presentation" onClick={onClose} {...presenceProps(presence)}>
       <div
         ref={panelRef}
         tabIndex={-1}
