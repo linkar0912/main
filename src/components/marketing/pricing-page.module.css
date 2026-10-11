@@ -993,11 +993,8 @@
 
 .finderPreviewTitle {
   margin: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .64rem;
+  font-size: .8125rem;
   font-weight: 800;
-  letter-spacing: .07em;
-  text-transform: uppercase;
   opacity: .78;
 }
 
@@ -1397,11 +1394,8 @@
 }
 
 .invoiceLines dt span {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .6rem;
+  font-size: .8125rem;
   font-weight: 750;
-  letter-spacing: .05em;
-  text-transform: uppercase;
   opacity: .55;
 }
 
@@ -1418,11 +1412,8 @@
   color: var(--on-volt);
   background: var(--volt);
   border-radius: 999px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .58rem;
+  font-size: .8125rem;
   font-weight: 850;
-  letter-spacing: .06em;
-  text-transform: uppercase;
 }
 
 .invoiceTotal {
@@ -1435,11 +1426,8 @@
 }
 
 .invoiceTotal span {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .64rem;
+  font-size: .8125rem;
   font-weight: 800;
-  letter-spacing: .07em;
-  text-transform: uppercase;
   opacity: .6;
 }
 
@@ -1463,11 +1451,8 @@
 }
 
 .invoicePaidLabel {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .6rem;
+  font-size: .8125rem;
   font-weight: 800;
-  letter-spacing: .07em;
-  text-transform: uppercase;
   opacity: .55;
 }
 
