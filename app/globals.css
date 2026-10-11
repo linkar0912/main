@@ -8400,6 +8400,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .admin-section-title > .button { width: 100%; }
   .admin-reason-dialog .admin-dialog-foot { flex-wrap: wrap; }
   .admin-dialog-foot > .admin-dialog-foot-start { flex-basis: 100%; margin-right: 0; order: 2; }
+}
 
 /* === UX sweep: builder === */
 /* Header: tighter rhythm so the first question shows on a 745px-tall laptop. */
