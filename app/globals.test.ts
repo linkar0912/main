@@ -38,17 +38,77 @@ describe("workspace palette contract", () => {
 
   it("reserves red styling for errors and failed statuses", () => {
     expect(css).toMatch(/\.form-error\s*{[^}]*var\(--danger\)/);
-    expect(css).toMatch(/\.status-expired,\s*\.status-failed\s*{[^}]*var\(--danger\)/);
+    expect(css).toMatch(/\.status-expired,\s*\.status-failed\s*{[^}]*var\(--status-danger-fill\)[^}]*var\(--status-danger-text\)/);
     expect(css).not.toMatch(/\.icon-button\.icon-danger:hover\s*{[^}]*var\(--danger\)/);
     expect(css).not.toMatch(/\.signout-button:hover\s*{[^}]*var\(--danger\)/);
     expect(css).not.toMatch(/\.delta-pill\[data-dir="down"\]\s*{[^}]*var\(--danger\)/);
   });
 
-  it("reserves success green for pills that actually moved up", () => {
-    // `NeutralPill` renders a bare `.delta-pill` with no data-dir, so a green
-    // base rule paints "all time" and "respected" as if they were gains.
-    expect(css).not.toMatch(/\.delta-pill\s*{[^}]*var\(--green\)/);
-    expect(css).toMatch(/\.delta-pill\[data-dir="up"\]\s*{[^}]*var\(--green\)/);
+  it("shows a rising trend with a green arrow, not green text on a mint pill", () => {
+    // `NeutralPill` renders a bare `.delta-pill` with no data-dir; neither it
+    // nor an upward delta may paint the number green.
+    expect(css).not.toMatch(/\.delta-pill\s*{[^}]*var\(--(green|leaf|status-ok)/);
+    expect(css).toMatch(/\.delta-pill\[data-dir="up"\]\s*{[^}]*background:\s*transparent[^}]*color:\s*var\(--ink\)/);
+    expect(css).toMatch(/\.delta-pill\[data-dir="up"\] svg\s*{[^}]*color:\s*var\(--status-ok\)/);
+    expect(css).toMatch(/\.stat-delta\[data-dir="up"\]\s*{[^}]*background:\s*transparent[^}]*color:\s*var\(--ink\)/);
+  });
+
+  // "The green on white looks weird": every healthy row used to be a mint pill
+  // with green text, so whole screens became fields of chips that drowned the
+  // one real problem. Normal states are now a dot and a word in the text
+  // colour; only warning and danger get a filled chip.
+  describe("status colour: quiet when fine, loud when not", () => {
+    const rules = (css.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+{[^{}]*}/g) ?? []).map((rule) => {
+      const [selector, body] = rule.split("{");
+      return { selector: selector.trim(), body };
+    });
+    // The automation builder and its previews are being redesigned separately
+    // and keep their own markers until they adopt the shared badge.
+    const builder = /\.(builder|wizard|ig-|facebook-preview|template-picker|media-picker|qa-)/;
+    const owned = rules.filter((rule) => !builder.test(rule.selector) && !rule.selector.startsWith("--"));
+
+    it("gives success and neutral badges no fill, border or coloured text", () => {
+      expect(css).toMatch(/\.status-chip\s*{[^}]*background:\s*transparent[^}]*color:\s*var\(--ink\)/);
+      expect(css).not.toMatch(/\.status-chip\.is-(success|neutral)\s*{/);
+      expect(css).toMatch(/\.status-chip\.is-success \.status-chip-dot\s*{[^}]*background:\s*var\(--status-ok\)/);
+      expect(css).toMatch(/\.status-chip-dot\s*{[^}]*background:\s*var\(--status-neutral\)[^}]*height:\s*8px[^}]*width:\s*8px/);
+    });
+
+    it("fills only warning and danger chips, with darker matching text", () => {
+      expect(css).toMatch(/\.status-chip\.is-warning\s*{[^}]*background:\s*var\(--status-warning-fill\)[^}]*color:\s*var\(--status-warning-text\)/);
+      expect(css).toMatch(/\.status-chip\.is-danger\s*{[^}]*background:\s*var\(--status-danger-fill\)[^}]*color:\s*var\(--status-danger-text\)/);
+      for (const theme of [/:root\s*{([^}]*--status-ok[^}]*)}/, /\[data-theme="dark"\]\s*{([^}]*--status-warning-fill[^}]*)}/]) {
+        const block = css.match(theme)?.[1] ?? "";
+        expect(block).toMatch(/--status-warning-fill:\s*#[0-9a-f]{6}/);
+        expect(block).toMatch(/--status-danger-text:\s*#[0-9a-f]{6}/);
+      }
+    });
+
+    it("uses a success green that sits beside magenta, light and dark", () => {
+      expect(css).toMatch(/:root\s*{[^}]*--leaf:\s*#12b76a/);
+      expect(css).toMatch(/\[data-theme="dark"\]\s*{[^}]*--leaf:\s*#32d583/);
+      expect(css).not.toMatch(/#0f7b3f|#008a68|#55ddb0|#62e6b9/);
+      expect(css).not.toMatch(/--green(-soft|-line)?:/);
+    });
+
+    it("never tints a card, panel or chip green", () => {
+      const tinted = owned.filter((rule) => /var\(--(leaf-soft|leaf-line|green-soft|green-line|mint)\)/.test(rule.body));
+      expect(tinted.map((rule) => rule.selector)).toEqual([]);
+    });
+
+    it("never colours text green; only dots and small icons carry the green", () => {
+      const greenText = owned.filter((rule) =>
+        /(^|[;\s{])color:\s*var\(--(leaf|green|success|success-ink|status-ok|mint)\)/.test(rule.body)
+        && !/(svg|icon)\s*$/.test(rule.selector.split(",").at(-1) ?? ""));
+      expect(greenText.map((rule) => rule.selector)).toEqual([]);
+    });
+
+    it("reads confirmations in the text colour with a check", () => {
+      expect(css).toMatch(/\.form-success\s*{[^}]*color:\s*var\(--ink\)/);
+      expect(css).toMatch(/\.form-success:not\(:has\(svg\)\)::before\s*{[^}]*background:\s*var\(--status-ok\)/);
+      expect(css).toMatch(/\.notice-success\s*{[^}]*background:\s*var\(--surface-soft\)/);
+      expect(css).toMatch(/\.admin-message\.form-success\s*{[^}]*background:\s*var\(--surface-soft\)[^}]*color:\s*var\(--ink\)/);
+    });
   });
 
   it("uses the brand palette by semantic role", () => {

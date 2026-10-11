@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { IdChip, shortId } from "./id-chip";
 import { fullTimeLabel, RelativeTime, relativeTimeLabel } from "./relative-time";
 import { StatusBadge } from "./status-badge";
+import { splitByStatus, StatusSummary } from "./status-summary";
 
 afterEach(() => {
   cleanup();
@@ -88,5 +89,24 @@ describe("StatusBadge", () => {
     const badge = screen.getByText("Needs attention");
     expect(badge.className).toContain("status-chip is-warning");
     expect(badge.querySelector(".status-chip-dot")).toBeTruthy();
+  });
+
+  it("marks each tone so only problems get the filled chip", () => {
+    render(<><StatusBadge tone="success" label="Healthy" /><StatusBadge tone="neutral" label="Draft" /><StatusBadge tone="danger" label="Down" /></>);
+    expect(screen.getByText("Healthy").className).toBe("status-chip is-success");
+    expect(screen.getByText("Draft").className).toBe("status-chip is-neutral");
+    expect(screen.getByText("Down").className).toBe("status-chip is-danger");
+  });
+});
+
+describe("StatusSummary", () => {
+  it("collapses the normal items behind one line and keeps exceptions apart", () => {
+    const { exceptions, normal } = splitByStatus([{ name: "a", ok: true }, { name: "b", ok: false }, { name: "c", ok: true }], (item) => item.ok);
+    expect(exceptions.map((item) => item.name)).toEqual(["b"]);
+    expect(normal.map((item) => item.name)).toEqual(["a", "c"]);
+    const { container } = render(<StatusSummary label="All 2 other settings ready"><ul><li>a</li><li>c</li></ul></StatusSummary>);
+    const details = container.querySelector("details.status-summary") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(screen.getByText("All 2 other settings ready").closest("summary")).toBeTruthy();
   });
 });

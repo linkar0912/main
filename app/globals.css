@@ -59,9 +59,13 @@
   --grape-soft: #f1e9fb;
   --flame: #ff4b00;
   --flame-soft: #ffe9e0;
-  --leaf: #008a68;
-  --leaf-soft: #e7f8f2;
-  --leaf-line: #afe7d5;
+  /* Success green is a status *dot* (and the odd check icon), never a fill,
+     border or text colour: "quiet when fine". It was a cool forest green that
+     fought the magenta; this brighter green sits beside it without clashing.
+     The soft/line tints only survive for the automation builder's own rules. */
+  --leaf: #12b76a;
+  --leaf-soft: #ecfdf3;
+  --leaf-line: #abefc6;
   --honey: #b45309;
   --honey-soft: #fdf1dc;
   --honey-line: #eed9b4;
@@ -72,12 +76,12 @@
      only reaches 3.4:1 as body copy on a dark panel, so warning sentences get
      their own token that is contrast-checked against the page in both themes. */
   --warning-ink: #8a5a09;
-  /* Success/"connected" *text*, same reasoning as --warning-ink: --leaf is
-     tuned to sit on --leaf-soft as an icon/fill, not as pill or badge text on
-     a dark panel. */
-  --success-ink: var(--leaf);
+  /* A deeper step of the same green for the few filled success markers that
+     carry white text (builder step numbers). Normal states never use it as
+     text: success is a dot plus a word in the normal text colour. */
+  --success-ink: #067647;
   /* Fill colours for status dots and markers; previously referenced but never defined. */
-  --success: var(--success-ink);
+  --success: var(--leaf);
   --warning: var(--warning-ink);
   /* Skeleton shimmer. Previously hardcoded light grays with no dark-mode
      counterpart, so every route-level loading screen flashed near-white on the
@@ -86,9 +90,6 @@
   --skeleton-sheen: #f4f5f7;
 
   /* Semantic aliases consumed by existing components. */
-  --green: var(--leaf);
-  --green-soft: var(--leaf-soft);
-  --green-line: var(--leaf-line);
   --amber: var(--honey);
   --amber-soft: var(--honey-soft);
   --amber-line: var(--honey-line);
@@ -174,9 +175,9 @@ html {
   --on-volt: #101116;
   --grape-soft: #2a1b40;
   --flame-soft: #3a2013;
-  --leaf: #55ddb0;
-  --leaf-soft: #12352d;
-  --leaf-line: #286a59;
+  --leaf: #32d583;
+  --leaf-soft: #0f2e1f;
+  --leaf-line: #1d5c3c;
   --honey-soft: #33230d;
   --honey-line: #57431c;
   /* #b42318 reads at ~2.6:1 on the graphite panels; error text and danger
@@ -185,7 +186,7 @@ html {
   --danger-soft: #3a1512;
   --danger-line: #6b2b25;
   --warning-ink: #e3ab4d;
-  --success-ink: #62e6b9;
+  --success-ink: #32d583;
   --skeleton-base: #25262e;
   --skeleton-sheen: #303139;
   --shadow: 0 1px 2px rgba(0, 0, 0, .45);
@@ -428,7 +429,7 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
 
 .form-error, .form-success, .form-warning { align-items: center; display: flex; font-size: var(--type-body); gap: 6px; margin: 0; }
 .form-error { color: var(--danger); }
-.form-success { color: var(--green); animation: pop-in .3s var(--ease-out) both; }
+.form-success { color: var(--ink); animation: pop-in .3s var(--ease-out) both; }
 .form-warning { color: var(--warning-ink); margin-top: var(--space-1); }
 
 .action-notice {
@@ -484,7 +485,8 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
 .notice-banner p { color: var(--ink); font-size: .85rem; font-weight: 600; margin: 0; }
 /* Success/warning both need a matching background + line + icon color, not
    just a text color - a mismatched pink card with green text read as broken. */
-.notice-success { background: var(--leaf-soft); border-color: var(--leaf-line); color: var(--leaf); }
+.notice-success { background: var(--surface-soft); border-color: var(--line); color: var(--ink); }
+.notice-success svg { color: var(--status-ok); }
 .notice-warning { background: var(--honey-soft); border-color: var(--honey-line); color: var(--honey); }
 
 /* ── App shell: fixed left sidebar + scrollable content ────────────────── */
@@ -993,7 +995,8 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
    data-dir, so a green base rule painted "all time" and "respected" as if they
    were gains - success green has to be opted into by an explicit direction. */
 .delta-pill { align-items: center; background: transparent; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); display: inline-flex; font-size: .68rem; font-weight: 750; gap: 4px; padding: 3px 9px; }
-.delta-pill[data-dir="up"] { background: var(--green-soft); color: var(--green); }
+.delta-pill[data-dir="up"] { background: transparent; color: var(--ink); }
+.delta-pill[data-dir="up"] svg { color: var(--status-ok); }
 .delta-pill[data-dir="down"] { background: transparent; color: var(--muted); }
 .chart-empty { align-items: center; color: var(--muted); display: flex; font-size: .85rem; height: 200px; justify-content: center; }
 /* Tier two of the performance panel: context and health metrics. Deliberately
@@ -1080,14 +1083,16 @@ a.setup-row:hover .setup-cta, button.setup-row:hover .setup-cta { color: var(--i
   letter-spacing: .02em;
 }
 .row-divider { color: var(--subtle); padding: 0 4px; }
-.status-badge { border: 1px solid; border-radius: 99px; display: inline-flex; font-size: .62rem; font-weight: 800; letter-spacing: .03em; padding: 3px 8px; text-transform: capitalize; }
-.status-active, .status-connected { background: var(--green-soft); border-color: var(--green-line); color: var(--success-ink); }
-.status-paused, .status-disconnected { background: var(--surface-soft); border-color: var(--line-strong); color: var(--muted); }
-.status-draft { background: transparent; border-color: var(--line-strong); border-style: dashed; color: var(--muted); }
-.status-follow_required { background: var(--amber-soft); border-color: var(--amber-line); color: var(--amber); }
-.status-expired, .status-failed { background: var(--danger-soft); border-color: var(--danger-line); color: var(--danger); }
-.status-comment_matched, .status-opening_sent { background: var(--surface-soft); border-color: var(--line-strong); color: var(--slate); }
-.status-opted_in, .status-follow_verified, .status-link_sent { background: var(--green-soft); border-color: var(--green-line); color: var(--success-ink); }
+/* Legacy enum badges (participant and delivery states) follow the shared
+   status rule: a dot and the word for normal states, a filled chip only for
+   problems. */
+.status-badge { align-items: center; background: transparent; border: 0; border-radius: 999px; color: var(--ink); display: inline-flex; font-size: .8125rem; font-weight: 600; gap: 7px; line-height: 1.25; padding: 4px 0; text-transform: capitalize; white-space: nowrap; }
+.status-badge::before { background: var(--status-neutral); border-radius: 50%; content: ""; flex: 0 0 8px; height: 8px; width: 8px; }
+.status-active::before, .status-connected::before, .status-sent::before, .status-completed::before, .status-opted_in::before, .status-follow_verified::before, .status-link_sent::before { background: var(--status-ok); }
+.status-follow_required { background: var(--status-warning-fill); color: var(--status-warning-text); padding: 4px 10px 4px 9px; }
+.status-follow_required::before { background: var(--status-warning); }
+.status-expired, .status-failed { background: var(--status-danger-fill); color: var(--status-danger-text); padding: 4px 10px 4px 9px; }
+.status-expired::before, .status-failed::before { background: var(--status-danger); }
 .row-link { color: var(--subtle); padding: 8px 0 8px 5px; }
 .list-more { border-top: 1px solid var(--line); justify-content: center; padding-top: var(--space-4); width: 100%; }
 .empty-state { align-items: center; color: var(--muted); display: flex; flex-direction: column; min-height: 230px; justify-content: center; padding: var(--space-6); text-align: center; }
@@ -1167,7 +1172,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .funnel-cell { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 8px; min-height: 112px; min-width: 0; padding: var(--space-4); }
 .funnel-cell-head { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; }
 .funnel-cell-head strong { font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif; font-size: 1.5rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
-.funnel-conv { color: var(--leaf); font-size: .66rem; font-weight: 800; }
+.funnel-conv { color: var(--muted); font-size: .66rem; font-weight: 800; }
 .funnel-conv.is-low { color: var(--honey); }
 .funnel-cell-label { color: var(--muted); font-size: .61rem; font-weight: 800; letter-spacing: .04em; line-height: 1.35; min-height: 2.7em; text-transform: uppercase; }
 .funnel-cell-bar { background: var(--surface-sunk); border-radius: 99px; display: block; height: 4px; overflow: hidden; }
@@ -1326,7 +1331,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .journey-steps .is-expired .journey-dot { background: var(--honey); border-color: var(--honey); }
 
 .delivery-cell { font-size: .74rem; font-weight: 650; }
-.delivery-cell.tone-ok { color: var(--leaf); }
+.delivery-cell.tone-ok { color: var(--ink); }
 .delivery-cell.tone-bad { color: var(--danger); }
 .delivery-cell.tone-skip { color: var(--subtle); }
 .delivery-cell.tone-wait { color: var(--muted); }
@@ -1340,7 +1345,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .journey-cell { display: grid; gap: 5px; justify-items: start; min-width: 0; }
 /* Five bare dots never said which stage a participant was stuck at. */
 .journey-caption { color: var(--muted); font-size: var(--type-meta); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.journey-caption.is-complete { color: var(--leaf); }
+.journey-caption.is-complete { color: var(--ink); }
 .row-status { display: grid; gap: 4px; justify-items: start; min-width: 0; }
 .row-detail-toggle::-webkit-details-marker { display: none; }
 .row-detail-toggle:hover { color: var(--slate); }
@@ -1357,7 +1362,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .diagnostic dt { align-items: center; color: var(--muted); display: flex; font-size: .63rem; font-weight: 800; gap: 5px; letter-spacing: .06em; margin-bottom: 3px; text-transform: uppercase; }
 .diagnostic dt svg { flex-shrink: 0; }
 .diagnostic dd { color: var(--slate); font-size: .78rem; margin: 0; overflow-wrap: anywhere; }
-.tone-ok dt { color: var(--leaf); }
+.tone-ok dt { color: var(--ink); }
 .tone-bad dt, .tone-bad dd { color: var(--danger); }
 .tone-bad dd { font-weight: 650; }
 .tone-wait dt { color: var(--subtle); }
@@ -1854,10 +1859,10 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
    were silently colliding in the cascade. */
 .connection-state { align-items: center; color: var(--muted); display: inline-flex; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, "SF Mono", Menlo, monospace; font-size: var(--type-meta); font-weight: 750; gap: 7px; letter-spacing: .03em; text-transform: uppercase; }
 .connection-state-dot { background: var(--line-strong); border-radius: 50%; flex: 0 0 8px; height: 8px; width: 8px; }
-.connection-state[data-status="connected"] { color: var(--success-ink); }
-.connection-state[data-status="connected"] .connection-state-dot { background: var(--success-ink); box-shadow: 0 0 0 3px var(--leaf-soft); }
-.connection-state[data-status="expired"] { color: var(--danger); }
-.connection-state[data-status="expired"] .connection-state-dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.connection-state[data-status="connected"] { color: var(--ink); }
+.connection-state[data-status="connected"] .connection-state-dot { background: var(--status-ok); }
+.connection-state[data-status="expired"] { background: var(--status-danger-fill); border-radius: 999px; color: var(--status-danger-text); padding: 3px 9px 3px 8px; }
+.connection-state[data-status="expired"] .connection-state-dot { background: var(--status-danger); }
 .settings-hero { align-items: center; display: flex; gap: var(--space-4); margin-bottom: var(--space-4); }
 .settings-icon { align-items: center; background: var(--accent-soft); border-radius: 11px; color: var(--accent-text); display: flex; flex: 0 0 48px; height: 48px; justify-content: center; width: 48px; }
 .settings-avatar { border-radius: 11px; flex: 0 0 48px; height: 48px; object-fit: cover; width: 48px; }
@@ -1875,8 +1880,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .check-list li { align-items: flex-start; color: var(--muted); display: flex; font-size: var(--type-body); gap: var(--space-2); }
 .check-list svg { color: var(--accent); flex: 0 0 16px; margin-top: 2px; }
 .mode-orb { border-radius: 50%; display: block; height: 12px; margin: 5px 4px 0 0; width: 12px; }
-.orb-demo { background: var(--warning-ink); box-shadow: 0 0 0 5px var(--honey-soft); }
-.orb-live { background: var(--success-ink); box-shadow: 0 0 0 5px var(--leaf-soft); }
+.orb-demo { background: var(--status-warning); }
+.orb-live { background: var(--status-ok); }
 .account-form { display: grid; gap: var(--space-3); margin: var(--space-4) 0 var(--space-4); max-width: 340px; }
 .account-form + form { margin-top: 4px; }
 .team-list { display: grid; gap: 9px; list-style: none; margin: var(--space-5) 0 0; padding: 0; }
@@ -1905,7 +1910,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .profile-identity-facts dt { color: var(--muted); font-size: var(--type-meta); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .profile-identity-facts dd { color: var(--ink); font-size: var(--type-body); font-weight: 750; margin: 0; min-height: 18px; overflow-wrap: anywhere; }
 .profile-identity-facts dd[data-tone="accent"] { color: var(--accent-text); }
-.profile-identity-facts dd[data-tone="ok"] { color: var(--leaf); }
+.profile-identity-facts dd[data-tone="ok"] { color: var(--ink); }
 .profile-identity-facts dd[data-tone="warn"] { color: var(--honey); }
 .profile-layout { align-items: start; display: grid; gap: var(--space-5); grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); margin-top: var(--space-5); }
 .profile-main, .profile-side { display: grid; gap: var(--space-5); min-width: 0; }
@@ -1934,11 +1939,11 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .connection-card-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .connection-card-id strong { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .connection-status { align-items: center; color: var(--muted); display: inline-flex; font-size: .74rem; gap: 6px; }
-.status-dot-connected { background: var(--mint); }
-.status-dot-expired { background: var(--honey); }
+.status-dot-connected { background: var(--status-ok); }
+.status-dot-expired { background: var(--status-danger); }
 .status-dot-disconnected { background: var(--subtle); }
-.signal-dot.status-dot-connected { background: var(--success-ink); box-shadow: 0 0 0 4px var(--leaf-soft); }
-.signal-dot.status-dot-expired { background: var(--warning-ink); box-shadow: 0 0 0 4px var(--honey-soft); }
+.signal-dot.status-dot-connected { animation: none; background: var(--status-ok); box-shadow: none; }
+.signal-dot.status-dot-expired { animation: none; background: var(--status-danger); box-shadow: none; }
 .signal-dot.status-dot-disconnected { background: var(--subtle); box-shadow: 0 0 0 4px var(--surface-sunk); }
 .connection-empty { font-size: .8rem; margin: 0 0 var(--space-4); }
 .profile-channel-list { display: grid; gap: 10px; margin-bottom: var(--space-4); }
@@ -1947,7 +1952,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .profile-channels-card { box-shadow: none; }
 .profile-channels-card .panel-heading { margin-bottom: var(--space-4); }
 .profile-channels-card .connection-card { border: 1px solid var(--line); border-radius: 13px; padding: 11px 12px; }
-.profile-channels-card .connection-status { color: var(--success-ink); }
+.profile-channels-card .connection-status { color: var(--ink); }
 .button-block { display: inline-flex; justify-content: center; width: 100%; }
 
 .related-links { display: grid; }
@@ -2049,10 +2054,10 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .connected-channels-heading p { color: var(--muted); font-size: var(--type-body); line-height: 1.5; margin: 0; }
 .connected-channels-total {
   align-items: center;
-  background: var(--leaf-soft);
-  border: 1px solid var(--leaf-line);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 999px;
-  color: var(--success-ink);
+  color: var(--ink);
   display: inline-flex;
   flex: 0 0 auto;
   font-size: .78rem;
@@ -2061,7 +2066,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   padding: 7px 12px;
 }
 .connected-channels-total .health-orb { flex: 0 0 8px; height: 8px; margin: 0; width: 8px; }
-.connected-channels-total[data-state="empty"] { background: var(--honey-soft); border-color: var(--honey-line); color: var(--warning-ink); }
+.connected-channels-total[data-state="empty"] { background: var(--status-warning-fill); border-color: transparent; color: var(--status-warning-text); }
 .connected-channels-list { align-items: start; display: grid; gap: var(--space-4); grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .channel-settings-card {
   background: var(--panel);
@@ -2130,11 +2135,11 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
    uses between its header and the connection list (border-top + space-4
    padding-top, flush to the card's own left edge) - not a second box stacked
    tight under the connection-row box, which is what read as misaligned. */
-.channel-health { align-items: flex-start; background: color-mix(in srgb, var(--leaf-soft) 62%, var(--panel)); border-radius: 12px; display: flex; gap: var(--space-3); margin: 0; padding: var(--space-3); }
+.channel-health { align-items: flex-start; background: var(--surface-soft); border-radius: 12px; display: flex; gap: var(--space-3); margin: 0; padding: var(--space-3); }
 .health-orb { border-radius: 50%; flex: 0 0 11px; height: 11px; margin-top: 3px; width: 11px; }
-.health-orb[data-state="ok"] { background: var(--success-ink); box-shadow: 0 0 0 4px var(--leaf-soft); }
-.health-orb[data-state="warn"] { background: var(--warning-ink); box-shadow: 0 0 0 4px var(--honey-soft); }
-.health-orb[data-state="error"] { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+.health-orb[data-state="ok"] { background: var(--status-ok); }
+.health-orb[data-state="warn"] { background: var(--status-warning); }
+.health-orb[data-state="error"] { background: var(--status-danger); }
 .health-copy { display: grid; gap: 9px; min-width: 0; }
 .health-copy > strong { font-size: var(--type-body); line-height: 1.3; }
 .health-fields { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
@@ -2148,7 +2153,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   font-weight: 700;
   padding: 5px 10px;
 }
-.health-fields li[data-live="true"] { background: var(--leaf-soft); border-color: var(--leaf-line); color: var(--success-ink); }
+.health-fields li[data-live="true"] { background: transparent; border-color: var(--line); color: var(--ink); }
 .channel-health > .health-copy > .muted { font-size: var(--type-body); line-height: 1.55; margin: 0; }
 .settings-wrap .settings-grid { gap: var(--space-5); margin-bottom: var(--space-5); }
 .settings-wrap .settings-grid > *:nth-child(even) { border-left: 1px solid var(--line); padding-left: var(--space-6); }
@@ -2254,7 +2259,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 .billing-capacity svg { color: var(--accent-text); }
 .billing-plan ul { display: grid; gap: 8px; list-style: none; margin: var(--space-4) 0 var(--space-5); padding: 0; }
 .billing-plan li { align-items: flex-start; color: var(--slate); display: flex; font-size: .75rem; gap: 7px; line-height: 1.4; }
-.billing-plan li svg { color: var(--success-ink); flex: 0 0 auto; margin-top: 1px; }
+.billing-plan li svg { color: var(--status-ok); flex: 0 0 auto; margin-top: 1px; }
 .billing-plan > .button { justify-content: center; margin-top: auto; width: 100%; }
 .billing-subscription { align-items: center; display: flex; justify-content: space-between; margin: 0; padding: var(--space-5) var(--space-6); }
 .billing-subscription p { font-size: var(--type-meta); margin: 4px 0 0; }
@@ -3590,8 +3595,10 @@ a.automation-row:hover .row-chevron { color: var(--ink); }
   width: 100%;
 }
 .list-toggle:hover { color: var(--ink); }
-.all-clear { align-items: center; color: var(--success-ink); display: flex; font-size: .84rem; font-weight: 650; gap: 8px; margin: 0; }
+.all-clear { align-items: center; color: var(--ink); display: flex; font-size: .84rem; font-weight: 650; gap: 8px; margin: 0; }
+.all-clear > svg { color: var(--status-ok); flex: 0 0 auto; }
 .all-clear.is-neutral { color: var(--muted); }
+.all-clear.is-neutral > svg { color: currentColor; }
 
 .empty-state { min-height: 200px; text-align: center; }
 .empty-state.is-inline { min-height: 0; padding: 36px 20px; }
@@ -3980,7 +3987,7 @@ a.automation-row:hover .row-chevron { color: var(--ink); }
 
 /* Safeguards + policies. */
 .settings-group .check-list .settings-row { align-items: center; color: var(--slate); display: flex; gap: 10px; }
-.settings-group .check-list .settings-row > svg { color: var(--success-ink); flex: 0 0 auto; }
+.settings-group .check-list .settings-row > svg { color: var(--status-ok); flex: 0 0 auto; }
 .settings-group .check-list .settings-row-split { justify-content: space-between; }
 .settings-link-list > li:first-child .settings-row { border-top: 0; }
 .settings-link-row { align-items: center; color: var(--ink); display: flex; gap: 12px; justify-content: space-between; }
@@ -4097,7 +4104,7 @@ a.automation-row:hover .row-chevron { color: var(--ink); }
   font-weight: 650;
   padding: 2px 9px;
 }
-.settings-group .channel-health .health-fields li[data-live="false"] { background: var(--honey-soft); color: var(--warning-ink); text-decoration: line-through; }
+.settings-group .channel-health .health-fields li[data-live="false"] { background: var(--status-warning-fill); color: var(--status-warning-text); text-decoration: line-through; }
 .settings-group .channel-health .muted { flex-basis: 100%; font-size: .76rem; margin: 2px 0 0; }
 .settings-group .channel-health[data-state="warn"],
 .settings-group .channel-health[data-state="error"] {
@@ -4122,7 +4129,7 @@ a.automation-row:hover .row-chevron { color: var(--ink); }
   padding: 2px 9px 2px 7px;
   text-transform: none;
 }
-.connection-title .connection-state[data-status="connected"] { background: var(--leaf-soft); }
+.connection-title .connection-state[data-status="connected"] { background: transparent; }
 .connection-title .connection-state[data-status="expired"] { background: var(--danger-soft); }
 .connection-title .connection-state-dot { box-shadow: none !important; flex-basis: 6px; height: 6px; width: 6px; }
 .connection-main .connection-copy small { font-family: var(--font-sans, "Manrope"), sans-serif; letter-spacing: 0; text-transform: none; }
@@ -4146,7 +4153,7 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 .profile-facts dt { color: var(--muted); font-size: .72rem; font-weight: 700; }
 .profile-facts dd { align-items: center; color: var(--ink); display: flex; font-size: .9rem; font-weight: 750; gap: 5px; margin: 0; }
 .profile-facts dd[data-tone="accent"] { color: var(--accent-text); }
-.profile-facts dd[data-tone="ok"] { color: var(--success-ink); }
+.profile-facts dd[data-tone="ok"] { color: var(--ink); }
 .profile-facts dd[data-tone="warn"] { color: var(--warning-ink); }
 .profile-verify-row { background: var(--honey-soft); }
 
@@ -4158,7 +4165,7 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 .profile-channel-row .social-avatar { flex-basis: 38px; height: 38px; width: 38px; }
 .profile-channel-row .connection-status { align-items: center; display: flex; gap: 6px; }
 .profile-channel-row .signal-dot { animation: none; box-shadow: none; flex-basis: 6px; height: 6px; width: 6px; }
-.profile-channel-row .status-dot-connected { background: var(--success-ink); }
+.profile-channel-row .status-dot-connected { background: var(--status-ok); }
 .settings-link-row .settings-row-copy strong svg { color: var(--muted); }
 
 @media (max-width: 1100px) {
@@ -4280,12 +4287,12 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 }
 .segmented .segmented-option:is(.is-on, .is-active, [aria-pressed="true"]) .chip-count { color: var(--muted); }
 .segmented-badge {
-  background: var(--leaf-soft);
+  background: var(--surface-sunk);
   border-radius: 999px;
-  color: var(--success-ink);
-  font-size: .64rem;
-  font-weight: 800;
-  padding: 2px 7px;
+  color: var(--slate);
+  font-size: .8125rem;
+  font-weight: 600;
+  padding: 1px 8px;
 }
 .segmented .template-channel-brand-mark { height: 18px; width: 18px; }
 .segmented .template-channel-brand-mark svg { height: 16px; width: 16px; }
@@ -4361,8 +4368,8 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 /* ── Automations screen ─────────────────────────────────────────────────── */
 .automations-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .status-dot { background: var(--line-strong); border-radius: 50%; display: inline-block; flex: 0 0 8px; height: 8px; width: 8px; }
-.status-dot[data-status="active"] { background: var(--success-ink); }
-.status-dot[data-status="paused"] { background: var(--honey); }
+.status-dot[data-status="active"] { background: var(--status-ok); }
+.status-dot[data-status="paused"] { background: var(--status-neutral); }
 .status-dot[data-status="draft"] { background: transparent; border: 1.5px dashed var(--muted); }
 
 .list-toolbar { align-items: center; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 14px var(--surface-pad); }
@@ -4471,9 +4478,10 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
   transition: transform var(--speed) var(--ease-out);
   width: 14px;
 }
-.status-switch[aria-pressed="true"] { color: var(--success-ink); }
-.status-switch[aria-pressed="true"] .status-switch-track { background: var(--success-ink); }
+.status-switch[aria-pressed="true"] { color: var(--ink); }
+.status-switch[aria-pressed="true"] .status-switch-track { background: var(--ink); }
 .status-switch[aria-pressed="true"] .status-switch-track > span { transform: translateX(14px); }
+[data-theme="dark"] .status-switch[aria-pressed="true"] .status-switch-track > span { background: #101116; box-shadow: none; }
 .status-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
 .status-switch:disabled { cursor: wait; opacity: .6; }
 
@@ -5322,10 +5330,10 @@ a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-vo
 .campaign-participants .journey-steps > li.is-current { background: color-mix(in srgb, var(--accent) 35%, var(--line)); }
 .campaign-participants .journey-steps > li.is-failed { background: var(--danger); }
 .campaign-participants .journey-steps > li.is-expired { background: var(--honey); }
-.campaign-participants .participant-row.tone-ok .journey-steps > li.is-done { background: var(--success-ink); }
+.campaign-participants .participant-row.tone-ok .journey-steps > li.is-done { background: var(--status-ok); }
 .journey-meta { color: var(--muted); font-size: .74rem; }
 .campaign-participants .journey-caption { color: var(--ink); font-size: .74rem; font-weight: 700; letter-spacing: 0; text-transform: none; }
-.campaign-participants .journey-caption.is-complete { color: var(--success-ink); }
+.campaign-participants .journey-caption.is-complete { color: var(--ink); }
 
 /* Status: dot + state, outcome underneath. */
 .campaign-participants .row-status { align-items: flex-start; display: grid; gap: 3px; justify-items: start; }
@@ -5342,12 +5350,12 @@ a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-vo
   text-transform: capitalize;
 }
 .campaign-participants .row-status .status-badge::before { background: var(--muted); border-radius: 50%; content: ""; flex: 0 0 8px; height: 8px; width: 8px; }
-.campaign-participants .participant-row.tone-ok .row-status .status-badge::before { background: var(--success-ink); }
+.campaign-participants .participant-row.tone-ok .row-status .status-badge::before { background: var(--status-ok); }
 .campaign-participants .participant-row.tone-bad .row-status .status-badge::before { background: var(--danger); }
 .campaign-participants .participant-row.tone-skip .row-status .status-badge::before { background: var(--honey); }
 .campaign-participants .participant-row.tone-wait .row-status .status-badge::before { background: var(--accent); }
 .campaign-participants .delivery-cell { color: var(--muted); font-size: .74rem; font-weight: 600; padding-left: 15px; }
-.campaign-participants .delivery-cell.tone-ok { color: var(--success-ink); }
+.campaign-participants .delivery-cell.tone-ok { color: var(--ink); }
 .campaign-participants .delivery-cell.tone-bad { color: var(--danger); }
 
 /* Actions: external link + (retry) + the details chevron docked at the end. */
@@ -5415,7 +5423,7 @@ a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-vo
   width: 18px;
 }
 .campaign-participants .diagnostic dt { padding-top: 0; }
-.campaign-participants .diagnostic.tone-ok dt { color: var(--success-ink); }
+.campaign-participants .diagnostic.tone-ok dt { color: var(--ink); }
 .campaign-participants .diagnostic.tone-bad dt { color: var(--danger); }
 .campaign-participants .diagnostic.tone-skip dt { color: var(--honey); }
 .campaign-participants .diagnostic dd { color: var(--slate); font-size: .8rem; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
@@ -5531,9 +5539,12 @@ a.section-nav-link.is-active:hover { background: var(--volt); color: var(--on-vo
   padding: 2px 7px 2px 5px;
   white-space: nowrap;
 }
-.stat-delta[data-dir="up"] { background: var(--leaf-soft); color: var(--success-ink); }
-.stat-delta[data-dir="down"] { background: var(--danger-soft); color: var(--danger); }
-[data-theme="dark"] .stat-delta[data-dir="down"] { color: #ff8a80; }
+/* A trend is not a status: the number stays in the text colour and only the
+   arrow carries direction (green up, muted down). */
+.stat-delta[data-dir="up"] { background: transparent; color: var(--ink); }
+.stat-delta[data-dir="up"] svg { color: var(--status-ok); }
+.stat-delta[data-dir="down"] { background: transparent; color: var(--ink); }
+.stat-delta[data-dir="down"] svg { color: var(--muted); }
 .stat-spark { flex: 0 1 96px; height: 30px; min-width: 48px; overflow: visible; }
 .stat-spark-area { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
 .stat-spark-line { fill: none; stroke: var(--accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
@@ -5855,8 +5866,8 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .ibx-who:hover .ibx-who-info, .ibx-who:focus-visible .ibx-who-info { opacity: 1; }
 .ibx-window { align-items: center; color: var(--muted); display: inline-flex; font-size: .74rem; gap: 6px; }
 .ibx-window::before { background: var(--line-strong); border-radius: 50%; content: ""; height: 7px; width: 7px; }
-.ibx-window.is-open { color: var(--success-ink); }
-.ibx-window.is-open::before { background: var(--leaf); }
+.ibx-window.is-open { color: var(--slate); }
+.ibx-window.is-open::before { background: var(--status-ok); }
 
 .ibx-actions { align-items: center; display: flex; flex: 0 1 auto; gap: 6px; min-width: 0; }
 .ibx-icon-button,
@@ -6121,12 +6132,28 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   --workspace-gutter: 40px;
   /* Soft neutral fill for the selected nav item: ink at ~6%. */
   --nav-active-fill: rgba(23, 24, 29, .06);
+  /* Status: quiet when fine, loud when not. Normal and neutral states are a
+     dot plus a word in the normal text colour; only warning and danger get a
+     filled chip, so the one real problem on a screen is the one that shows. */
+  --status-ok: var(--leaf);
+  --status-neutral: #a3a4ab;
   /* Warning dots need a clear amber; --honey reads brown at dot size. */
   --status-warning: #d98c00;
+  --status-warning-fill: #fdf1dc;
+  --status-warning-text: #7a4a00;
+  --status-danger: #d92d20;
+  --status-danger-fill: #fdeceb;
+  --status-danger-text: #a8201a;
 }
 [data-theme="dark"] {
   --nav-active-fill: rgba(255, 255, 255, .08);
+  --status-neutral: #73747e;
   --status-warning: #e3ab4d;
+  --status-warning-fill: #3a2a0f;
+  --status-warning-text: #f4c46c;
+  --status-danger: #ff8a80;
+  --status-danger-fill: #401816;
+  --status-danger-text: #ffa39b;
 }
 
 /* Bricolage is for page titles (and the wordmark) only; every other heading
@@ -6188,10 +6215,14 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .account-row-name .plan-tag,
 .account-row-id small .plan-tag { font-size: .625rem; padding: 2px 7px; }
 
-/* ── Status badge: a dot plus a plain word, same everywhere ─────────────── */
+/* ── Status badge: quiet when fine, loud when not ────────────────────────
+   success / neutral: an 8px dot and the word in the normal text colour, with
+   no fill, border or tinted text, so a list of healthy rows stays calm.
+   warning / danger: the only filled status chips in the product, a soft
+   amber or red fill with darker matching text (AA in both themes). */
 .status-chip {
   align-items: center;
-  background: rgba(23, 24, 29, .05);
+  background: transparent;
   border-radius: 999px;
   color: var(--ink);
   display: inline-flex;
@@ -6200,14 +6231,50 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   font-weight: 600;
   gap: 7px;
   line-height: 1.25;
-  padding: 4px 10px 4px 9px;
+  padding: 4px 0;
   white-space: nowrap;
 }
-[data-theme="dark"] .status-chip { background: rgba(255, 255, 255, .07); }
-.status-chip-dot { background: var(--subtle); border-radius: 50%; flex: 0 0 8px; height: 8px; width: 8px; }
-.status-chip.is-success .status-chip-dot { background: var(--leaf); }
+.status-chip-dot { background: var(--status-neutral); border-radius: 50%; flex: 0 0 8px; height: 8px; width: 8px; }
+.status-chip.is-success .status-chip-dot { background: var(--status-ok); }
+.status-chip.is-warning { background: var(--status-warning-fill); color: var(--status-warning-text); padding: 4px 10px 4px 9px; }
 .status-chip.is-warning .status-chip-dot { background: var(--status-warning); }
-.status-chip.is-danger .status-chip-dot { background: var(--danger); }
+.status-chip.is-danger { background: var(--status-danger-fill); color: var(--status-danger-text); padding: 4px 10px 4px 9px; }
+.status-chip.is-danger .status-chip-dot { background: var(--status-danger); }
+
+/* Confirmations ("Saved.", "Plan and limits saved.") read in the normal text
+   colour with a small check, never as green text. Messages that bring their
+   own icon keep it; the rest get the check drawn here. */
+.form-success > svg { color: var(--status-ok); flex: 0 0 auto; }
+.form-success:not(:has(svg))::before {
+  background: var(--status-ok);
+  content: "";
+  flex: 0 0 16px;
+  height: 16px;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+  width: 16px;
+}
+
+/* Collapsed run of normal items under the exceptions ("All 7 other settings
+   ready"). A disclosure, so the full list is one click away. */
+.status-summary { border-top: 1px solid var(--line); }
+.status-summary > summary {
+  align-items: center;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--type-label);
+  font-weight: 600;
+  gap: 8px;
+  list-style: none;
+  min-height: 48px;
+  padding: 12px 0;
+}
+.status-summary > summary::-webkit-details-marker { display: none; }
+.status-summary > summary .status-summary-chevron { color: var(--muted); margin-left: auto; transition: transform var(--speed) var(--ease-out); }
+.status-summary[open] > summary .status-summary-chevron { transform: rotate(90deg); }
+.status-summary > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .status-summary > summary .status-summary-chevron { transition: none; } }
 
 /* ── ID chip: mono only here, short and copyable ────────────────────────── */
 .id-chip { align-items: center; color: var(--muted); display: inline-flex; gap: 2px; max-width: 100%; min-width: 0; vertical-align: middle; }
@@ -6428,7 +6495,9 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .admin-activity > li { align-items: start; border-top: 1px solid var(--line); display: grid; gap: 4px 12px; grid-template-columns: 8px minmax(0, 1fr) auto; padding: 14px 24px; }
 .admin-activity > li:first-child { border-top: 0; }
 .admin-activity-dot { background: var(--subtle); border-radius: 50%; height: 8px; margin-top: 8px; width: 8px; }
-.admin-activity-dot.is-success { background: var(--leaf); }
+/* A successful admin action is the normal case in an activity feed, so it
+   stays grey; a green dot on every row would carry no information. */
+.admin-activity-dot.is-success { background: var(--status-neutral); }
 .admin-activity-dot.is-warning { background: var(--status-warning); }
 .admin-activity-dot.is-danger { background: var(--danger); }
 .admin-activity-body { display: grid; gap: 3px; min-width: 0; }
@@ -6488,7 +6557,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 /* Messages and callouts */
 .admin-message { border: 1px solid; border-radius: var(--radius-control); font-size: .9375rem; margin: 0; padding: 12px 16px; }
 .admin-message.form-error { background: var(--danger-soft); border-color: var(--danger-line); color: var(--danger); }
-.admin-message.form-success { animation: none; background: var(--leaf-soft); border-color: var(--leaf-line); color: var(--success-ink); }
+.admin-message.form-success { animation: none; background: var(--surface-soft); border-color: var(--line); color: var(--ink); }
 .admin-callout { align-items: flex-start; background: rgba(23, 24, 29, .035); border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--slate); display: flex; font-size: .9rem; gap: 10px; line-height: 1.5; margin: 0; padding: 12px 16px; }
 [data-theme="dark"] .admin-callout { background: rgba(255, 255, 255, .04); }
 .admin-callout > svg { color: var(--status-warning); flex: 0 0 auto; margin-top: 3px; }
@@ -6551,7 +6620,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .admin-qr-frame img { display: block; height: auto; width: 100%; }
 .admin-secret { background: rgba(23, 24, 29, .05); border-radius: var(--radius-control); display: block; font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace; font-size: .8125rem; overflow-wrap: anywhere; padding: 10px 12px; user-select: all; }
 [data-theme="dark"] .admin-secret { background: rgba(255, 255, 255, .07); }
-.admin-created-code { align-items: center; background: var(--leaf-soft); border: 1px solid var(--leaf-line); border-radius: var(--radius-control); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 12px 16px; }
+.admin-created-code { align-items: center; background: var(--surface-soft); border: 1px solid var(--line); border-radius: var(--radius-control); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 12px 16px; }
 .admin-created-code code { font-family: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace; font-size: .9375rem; font-weight: 700; overflow-wrap: anywhere; }
 
 /* Plans */
@@ -6666,10 +6735,9 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   white-space: nowrap;
 }
 .ws-status-dot { background: var(--muted); border-radius: 50%; flex: 0 0 8px; height: 8px; width: 8px; }
-.ws-status[data-tone="success"] .ws-status-dot { background: var(--leaf); }
-.ws-status[data-tone="warning"] .ws-status-dot { background: var(--honey); }
-.ws-status[data-tone="danger"] .ws-status-dot { background: var(--danger); }
-[data-theme="dark"] .ws-status[data-tone="warning"] .ws-status-dot { background: var(--warning-ink); }
+.ws-status[data-tone="success"] .ws-status-dot { background: var(--status-ok); }
+.ws-status[data-tone="warning"] .ws-status-dot { background: var(--status-warning); }
+.ws-status[data-tone="danger"] .ws-status-dot { background: var(--status-danger); }
 
 /* ── ID chip: demoted, copyable ────────────────────────────────────────── */
 .ws-id-chip { align-items: center; color: var(--muted); display: inline-flex; gap: 2px; max-width: 100%; }

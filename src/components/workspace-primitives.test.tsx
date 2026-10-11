@@ -42,8 +42,10 @@ describe("shortId and LocalIdChip", () => {
 
 describe("LocalStatusBadge", () => {
   it("renders a dot and a plain word", () => {
-    const { container } = render(<LocalStatusBadge {...lifecycleStatus("PAUSED")} />);
+    const { container } = render(<><LocalStatusBadge {...lifecycleStatus("PAUSED")} /><LocalStatusBadge {...lifecycleStatus("EXPIRED")} /></>);
     expect(screen.getByText("Paused")).toBeTruthy();
-    expect(container.querySelector(".status-chip")?.classList.contains("is-warning")).toBe(true);
+    // Pausing is the user's own choice, so it reads quietly; a lost connection is the problem.
+    expect(screen.getByText("Paused").classList.contains("is-neutral")).toBe(true);
+    expect(container.querySelector(".status-chip.is-danger")?.textContent).toBe("Expired");
   });
 });
