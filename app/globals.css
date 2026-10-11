@@ -8827,7 +8827,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 
 /* ── Lists: rows rise in once, on first mount or when genuinely new ────────
    Keyed rows never remount on refresh or polling, so this does not replay.
-   Only the first six are staggered (45ms apart, 225ms at most). Home and
+   Only the first five are staggered (45ms apart, 180ms at most). Home and
    Insights run their own sequence and are left out. */
 :is(.data-table tbody > tr, .admin-list > li, .admin-activity > li, .contacts-list > li, .ibx-rows > li, .ibx-fb-list > li, .version-list > li, .tracked-link-list > li, .timeline-list > li, .template-picker-grid > *, .automations-surface .automation-row, .faq-list > .faq-item):not(:is(.dashboard-page, .insights-page) *) {
   animation: motion-fade-up var(--dur-2) var(--ease-out) both;
