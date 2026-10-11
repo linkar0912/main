@@ -247,3 +247,101 @@ export const systemSnapshotAllNormal: AdminSystemSnapshot = {
   billing: { configured: true, failedWebhooksLastHour: 0, driftedSubscriptions: 0 },
   queues: systemSnapshot.queues.map((queue) => ({ ...queue, failed: 0, lastFailedCode: null })),
 };
+
+// ── Edge cases (?state=empty | long) ─────────────────────────────────────────
+// Long content: very long names, emoji, a 40-character unbroken word and
+// 200-character reasons, so wrapping and truncation can be checked.
+const UNBROKEN = "Thisisafortycharacterwordwithoutanybreak";
+const LONG_NAME = "Shree Ganesh Handloom & Sarees 🪔 Wholesale and Retail Collective (Mumbai, Pune, Nashik)";
+const LONG_REASON = "Customer wrote in three times about replies going to the wrong people after their Diwali campaign; pausing everything until we confirm the keyword list with them on a call tomorrow morning 🙏";
+const LONG_EMAIL = "rajeshwari.venkataraman.operations-team@shreeganeshhandloomandsarees.co.in";
+
+export type PreviewState = "empty" | "long" | null;
+export function previewState(value: unknown): PreviewState {
+  return value === "empty" || value === "long" ? value : null;
+}
+
+export const workspacesEmpty: CursorPage<AdminWorkspaceSummary> = { nextCursor: null, items: [] };
+export const workspacesLong: CursorPage<AdminWorkspaceSummary> = {
+  nextCursor: "next",
+  items: [
+    { ...workspaces.items[0], name: LONG_NAME, slug: "shree-ganesh-handloom-and-sarees-wholesale-retail-collective", memberCount: 12840, automationCount: 1204 },
+    { ...workspaces.items[1], name: UNBROKEN, slug: UNBROKEN.toLowerCase() },
+    ...workspaces.items.slice(2),
+  ],
+};
+
+export const usersEmpty: CursorPage<AdminUserSummary> = { nextCursor: null, items: [] };
+export const usersLong: CursorPage<AdminUserSummary> = {
+  nextCursor: "next",
+  items: [{ ...users.items[0], email: LONG_EMAIL, workspaceCount: 1240 }, { ...users.items[1], email: `${UNBROKEN}@gmail.com` }, ...users.items.slice(2)],
+};
+
+export const userDetailLong: AdminUserDetail = {
+  ...userDetail,
+  email: LONG_EMAIL,
+  status: "SUSPENDED",
+  suspendedReason: LONG_REASON,
+  suspendedAt: ago(60 * 5),
+  authBannedUntil: ahead(60 * 24 * 365 * 100),
+  workspaces: [{ id: W.acme, name: LONG_NAME, status: "SUSPENDED", role: "OWNER" }],
+};
+
+export const workspaceDetailLong: AdminWorkspaceDetail = {
+  ...workspaceDetail,
+  name: LONG_NAME,
+  slug: "shree-ganesh-handloom-and-sarees-wholesale-retail-collective",
+  members: [{ userId: "8d3f2a10-55b1-4c2e-9f0a-7b6c5d4e3f21", email: LONG_EMAIL, role: "OWNER" }, ...(workspaceDetail.members ?? []).slice(1)],
+  instagramConnections: (workspaceDetail.instagramConnections ?? []).map((item, index) => index === 0 ? { ...item, username: UNBROKEN.toLowerCase() } : item),
+};
+export const workspaceDetailEmpty: AdminWorkspaceDetail = {
+  ...workspaceDetail,
+  memberCount: 0,
+  automationCount: 0,
+  instagramConnectionCount: 0,
+  facebookConnectionCount: 0,
+  members: [],
+  instagramConnections: [],
+  facebookConnections: [],
+};
+
+export const overviewEmpty: AdminOverviewDTO = {
+  ...overview,
+  workspaces: { active: 0, suspended: 0 },
+  users: { active: 0 },
+  connections: { instagram: 0, facebook: 0 },
+  automations: { active: 0 },
+  queue: { state: "not_configured", waiting: 0, active: 0, delayed: 0, failed: 0 },
+  health: { ...overview.health, release: null, redis: "not_configured", instagram: "not_configured", facebook: "not_configured" },
+  operatorTape: [],
+};
+export const overviewLong: AdminOverviewDTO = {
+  ...overview,
+  workspaces: { active: 1284093, suspended: 12 },
+  users: { active: 2093118 },
+  connections: { instagram: 970231, facebook: 410992 },
+  automations: { active: 3620112 },
+  operatorTape: overview.operatorTape.map((item, index) => index % 2
+    ? { ...item, detail: LONG_REASON, workspaceName: item.workspaceName ? LONG_NAME : null, actor: item.actor ? LONG_EMAIL : null }
+    : { ...item, detail: UNBROKEN }),
+};
+
+export const plansLong = plans.map((plan, index) => index === 2 ? { ...plan, name: "Growth plus annual (founding members) 🚀", key: "growth-plus-annual-founding-members" } : plan);
+export const inviteCodesLong = [{ ...inviteCodes[0], label: LONG_REASON }, { ...inviteCodes[1], label: UNBROKEN }, ...inviteCodes.slice(2)];
+
+export const operationsLong: AdminOperationItem[] = operations.map((item, index) => index === 0
+  ? { ...item, title: "Diwali mega giveaway 🪔 comment GIVEAWAY to get the 40% off code and the lookbook link in your DMs", workspace: { ...item.workspace, name: LONG_NAME } }
+  : index === 1 ? { ...item, title: UNBROKEN, status: "FAILED", safeErrorCode: "PROVIDER_REJECTED" } : item);
+
+export const integrationsLong: AdminIntegrationItem[] = integrations.map((item, index) => index === 0
+  ? { ...item, accountName: `@${UNBROKEN.toLowerCase()}`, workspace: { ...item.workspace, name: LONG_NAME } }
+  : item);
+
+export const auditEventsLong = auditEvents.map((event, index) => index === 0
+  ? { ...event, reason: LONG_REASON, actorEmail: LONG_EMAIL, after: { note: UNBROKEN, keywords: ["GIVEAWAY", "DIWALI", "OFFER", "LOOKBOOK", "PRICE"] } }
+  : index === 1 ? { ...event, reason: UNBROKEN } : event);
+
+export const deletionJobsLong = [
+  ...deletionJobs,
+  ...deletionJobs.map((job, index) => ({ ...job, id: `${job.id}_more_${index}`, terminalErrorCode: index === 1 ? "auth_provider_unavailable_after_many_retries_please_check_supabase" : job.terminalErrorCode })),
+];

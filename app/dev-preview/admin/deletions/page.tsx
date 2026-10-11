@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 
 import { DeletionConsole } from "@/src/components/admin/deletions/deletion-console";
-import { deletionJobs } from "../fixtures";
+import { deletionJobs, deletionJobsLong, previewState } from "../fixtures";
 
-export default function DeletionsPreview() {
+export default async function DeletionsPreview({ searchParams }: PageProps<"/dev-preview/admin/deletions">) {
   if (process.env.NODE_ENV !== "development") notFound();
-  return <DeletionConsole jobs={deletionJobs} />;
+  const state = previewState((await searchParams).state);
+  return <DeletionConsole jobs={state === "empty" ? [] : state === "long" ? deletionJobsLong : deletionJobs} />;
 }

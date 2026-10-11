@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { AdminShell } from "@/src/components/admin/admin-shell";
+import { AdminPreviewFetch } from "./_preview/admin-preview-fetch";
 import { OWNER_EMAIL } from "./fixtures";
 
 // Development-only: renders the real owner-console screens with fixture data so
@@ -11,5 +12,5 @@ export const metadata: Metadata = { title: "Owner console preview", robots: { in
 
 export default function AdminPreviewLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   if (process.env.NODE_ENV !== "development") notFound();
-  return <AdminShell owner={{ email: OWNER_EMAIL }}>{children}</AdminShell>;
+  return <AdminShell owner={{ email: OWNER_EMAIL }}><AdminPreviewFetch>{children}</AdminPreviewFetch></AdminShell>;
 }

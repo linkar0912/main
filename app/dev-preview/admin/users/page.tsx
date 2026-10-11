@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 
 import { UsersScreen } from "@/src/components/admin/users-screen";
-import { users } from "../fixtures";
+import { previewState, users, usersEmpty, usersLong } from "../fixtures";
 
-export default function UsersPreview() {
+export default async function UsersPreview({ searchParams }: PageProps<"/dev-preview/admin/users">) {
   if (process.env.NODE_ENV !== "development") notFound();
-  return <UsersScreen page={users} />;
+  const state = previewState((await searchParams).state);
+  return <UsersScreen page={state === "empty" ? usersEmpty : state === "long" ? usersLong : users} />;
 }

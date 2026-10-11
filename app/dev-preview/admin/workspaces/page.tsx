@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 
 import { WorkspacesScreen } from "@/src/components/admin/workspaces-screen";
-import { workspaces } from "../fixtures";
+import { previewState, workspaces, workspacesEmpty, workspacesLong } from "../fixtures";
 
-export default function WorkspacesPreview() {
+export default async function WorkspacesPreview({ searchParams }: PageProps<"/dev-preview/admin/workspaces">) {
   if (process.env.NODE_ENV !== "development") notFound();
-  return <WorkspacesScreen page={workspaces} />;
+  const state = previewState((await searchParams).state);
+  return <WorkspacesScreen page={state === "empty" ? workspacesEmpty : state === "long" ? workspacesLong : workspaces} />;
 }
