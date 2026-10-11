@@ -7922,4 +7922,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .insights-content.is-flush .insights-table :is(td, th),
   .insights-content .insights-table :is(td, th):is(:first-child, :last-child) { padding: 0; }
   .insights-content .insights-table td.is-number { text-align: left; }
+  /* Four participant filters don't fit one phone row; two by two, none hidden. */
+  .campaign-participants .list-toolbar .segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .campaign-participants .list-toolbar .segmented-option { justify-content: center; }
 }
