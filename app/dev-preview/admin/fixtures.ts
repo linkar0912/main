@@ -64,24 +64,49 @@ export const workspaceDetail: AdminWorkspaceDetail = {
     { email: "new.hire@acmestudio.in", role: "MEMBER" },
   ],
   instagramConnections: [
-    { id: "ig_conn_1", igUserId: "17841400008460056", username: "acmestudio", status: "CONNECTED", connectedAt: ago(60 * 24 * 100) },
-    { id: "ig_conn_2", igUserId: "17841400008460099", username: "acme.shop", status: "EXPIRED", connectedAt: ago(60 * 24 * 80) },
+    { id: "ig_conn_1", igUserId: "17841400008460056", username: "acmestudio", status: "CONNECTED", connectedAt: ago(60 * 24 * 100), tokenExpiresAt: ahead(60 * 24 * 48) },
+    { id: "ig_conn_2", igUserId: "17841400008460099", username: "acme.shop", status: "EXPIRED", connectedAt: ago(60 * 24 * 80), tokenExpiresAt: ago(60 * 24 * 2) },
   ],
   facebookConnections: [
-    { id: "fb_conn_1", pageId: "104998812345678", pageName: "Acme Studio", status: "CONNECTED", connectedAt: ago(60 * 24 * 90) },
+    { id: "fb_conn_1", pageId: "104998812345678", pageName: "Acme Studio", status: "CONNECTED", connectedAt: ago(60 * 24 * 90), tokenExpiresAt: null },
   ],
 };
 
+// Growth plan with a custom message allowance and exports switched off: one
+// limit close to full (broadcasts), the rest comfortably inside.
+const growthDefaults = {
+  memberLimit: 5, automationLimit: 25, instagramConnectionLimit: 3, facebookConnectionLimit: 2, sequenceLimit: 10, monthlyBroadcastLimit: 12, monthlyDeliveryLimit: 25000,
+  sequencesEnabled: true, broadcastsEnabled: true, trackedLinksEnabled: true, teamEnabled: true, facebookEnabled: true, exportsEnabled: true,
+};
 export const workspaceEntitlement = {
   plan: { id: "plan_growth", key: "growth", name: "Growth" },
   effectivePlan: { id: "plan_growth", key: "growth", name: "Growth" },
   premiumExpiresAt: null,
-  defaults: {},
-  overrides: { monthlyDeliveryLimit: 30000 },
-  effective: { memberLimit: 5, automationLimit: 25, instagramConnectionLimit: 3, facebookConnectionLimit: 2, monthlyDeliveryLimit: 30000, broadcastsEnabled: true, exportsEnabled: false, sequenceLimit: null },
+  defaults: growthDefaults,
+  overrides: { monthlyDeliveryLimit: 30000, sequenceLimit: null, exportsEnabled: false },
+  effective: { ...growthDefaults, monthlyDeliveryLimit: 30000, sequenceLimit: null, exportsEnabled: false },
   version: 3,
-  usage: { deliveriesReserved: 18432, broadcastsCreated: 6, periodStart: ago(60 * 24 * 10) },
+  usage: { deliveriesReserved: 18432, broadcastsCreated: 11, periodStart: ago(60 * 24 * 10) },
 };
+
+// The same workspace over two limits and suspended (?state=over).
+export const workspaceDetailOver: AdminWorkspaceDetail = {
+  ...workspaceDetail,
+  status: "SUSPENDED",
+  suspendedReason: "Repeated spam reports from Meta",
+  memberCount: 6,
+  members: [...(workspaceDetail.members ?? []), { userId: "7e6d5c4b-3a29-4180-9f7e-6d5c4b3a2918", email: "intern@acmestudio.in", role: "MEMBER" }, { userId: "6d5c4b3a-2918-4f7e-8d6c-5b4a39281706", email: "ops@acmestudio.in", role: "ADMIN" }],
+};
+export const workspaceEntitlementOver = {
+  ...workspaceEntitlement,
+  usage: { ...workspaceEntitlement.usage, deliveriesReserved: 31240, broadcastsCreated: 12 },
+};
+
+export const workspaceActivity = [
+  { id: "wa_1", phase: "SUCCESS", actorEmail: OWNER_EMAIL, action: "workspace.entitlement.update", reason: "Upgrade agreed on support call", errorCode: null, createdAt: ago(60 * 26) },
+  { id: "wa_2", phase: "FAILURE", actorEmail: OWNER_EMAIL, action: "integration.refresh_token", reason: "Customer reported replies stopped", errorCode: "token_refresh_rejected", createdAt: ago(60 * 30) },
+  { id: "wa_3", phase: "SUCCESS", actorEmail: OWNER_EMAIL, action: "workspace.automations.pause_all", reason: "Loop reported by customer", errorCode: null, createdAt: ago(60 * 24 * 6) },
+];
 
 export const plansForWorkspace = [
   { id: "plan_free", key: "free", name: "Free", isActive: true },

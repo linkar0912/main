@@ -10,7 +10,9 @@ export const REASON_LABEL = "Reason (saved to the audit log)";
 
 export function ReasonDialog({
   title,
+  intro,
   warning,
+  wide = false,
   onCancel,
   onConfirm,
   busy,
@@ -21,7 +23,11 @@ export function ReasonDialog({
   confirmLabel = "Confirm",
 }: {
   title: string;
+  /** One plain sentence on what the action does, above any warning. */
+  intro?: React.ReactNode;
   warning?: string;
+  /** For dialogs that hold a form (plan and limits). */
+  wide?: boolean;
   onCancel: () => void;
   onConfirm: (reason: string) => void;
   busy: boolean;
@@ -42,8 +48,9 @@ export function ReasonDialog({
 
   return (
     <div className="admin-dialog-backdrop" role="presentation">
-      <form ref={dialogRef} tabIndex={-1} data-admin-confirmation="true" className="admin-reason-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title" onSubmit={submit}>
+      <form ref={dialogRef} tabIndex={-1} data-admin-confirmation="true" className={`admin-reason-dialog ${wide ? "is-wide" : ""}`.trim()} role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title" onSubmit={submit}>
         <h2 id="admin-dialog-title">{title}</h2>
+        {intro ? <p className="admin-dialog-intro">{intro}</p> : null}
         {warning ? <p className={`admin-callout ${danger ? "is-danger" : ""}`}><TriangleAlert size={16} aria-hidden /><span>{warning}</span></p> : null}
         {error ? <div className="form-error admin-message" role="alert">{error}</div> : null}
         {children}

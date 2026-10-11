@@ -158,8 +158,8 @@ export function createPrismaAdminAccountsRepository(
         include: {
           entitlement: { include: { plan: { select: { key: true, name: true } } } },
           members: { orderBy: [{ role: "asc" }, { email: "asc" }], select: { userId: true, email: true, role: true } },
-          connections: { orderBy: { connectedAt: "desc" }, select: { id: true, igUserId: true, username: true, status: true, connectedAt: true } },
-          facebookPages: { orderBy: { connectedAt: "desc" }, select: { id: true, pageId: true, pageName: true, status: true, connectedAt: true } },
+          connections: { orderBy: { connectedAt: "desc" }, select: { id: true, igUserId: true, username: true, status: true, connectedAt: true, tokenExpiresAt: true } },
+          facebookPages: { orderBy: { connectedAt: "desc" }, select: { id: true, pageId: true, pageName: true, status: true, connectedAt: true, tokenExpiresAt: true } },
           _count: { select: { members: true, automations: true, connections: true, facebookPages: true } },
         },
       });
@@ -171,8 +171,8 @@ export function createPrismaAdminAccountsRepository(
         deletionScheduledAt: record.deletionScheduledAt?.toISOString(),
         entitlementVersion: record.entitlement?.version,
         members: record.members.map((member) => ({ userId: member.userId ?? undefined, email: member.email, role: member.role })),
-        instagramConnections: record.connections.map((connection) => ({ ...connection, status: String(connection.status), connectedAt: connection.connectedAt.toISOString() })),
-        facebookConnections: record.facebookPages.map((connection) => ({ ...connection, status: String(connection.status), connectedAt: connection.connectedAt.toISOString() })),
+        instagramConnections: record.connections.map((connection) => ({ ...connection, status: String(connection.status), connectedAt: connection.connectedAt.toISOString(), tokenExpiresAt: connection.tokenExpiresAt?.toISOString() ?? null })),
+        facebookConnections: record.facebookPages.map((connection) => ({ ...connection, status: String(connection.status), connectedAt: connection.connectedAt.toISOString(), tokenExpiresAt: connection.tokenExpiresAt?.toISOString() ?? null })),
       };
     },
 
