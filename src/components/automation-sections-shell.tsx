@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { AutomationSectionNav } from "./automation-section-nav";
 import { ContextHelpLink } from "./context-help-link";
@@ -30,29 +31,32 @@ const SECTIONS: Record<Section, { title: string; description: string; helpTopic:
 };
 
 function sectionFor(pathname: string): Section {
-  if (pathname.startsWith("/automations/sequences")) return "sequences";
-  if (pathname.startsWith("/automations/broadcasts")) return "broadcasts";
+  if (pathname.includes("/automations/sequences")) return "sequences";
+  if (pathname.includes("/automations/broadcasts")) return "broadcasts";
   return "my";
 }
 
 /**
- * Persistent frame for My Automations / Sequences / Broadcasts. It lives in the
- * (sections) route layout, so switching sections keeps the header and the
- * section switch mounted - only the content below swaps. Each page used to
- * render its own header, and the shared loading state showed the Automations
- * header first, so every switch flashed the wrong title and bounced the pill.
+ * Persistent frame for Automations / Sequences / Broadcasts. It lives in the
+ * (sections) route layout, so switching sections keeps the header mounted -
+ * only the content below swaps. The Automations list draws its own view tabs
+ * (they carry its counts) with Sequences and Broadcasts linked at the end;
+ * those two pages get a back link and a tab row of their own here.
  */
-export function AutomationSectionsShell({ children, section: sectionOverride }: {
+export function AutomationSectionsShell({ children, section: sectionOverride, basePath = "/automations" }: {
   children: ReactNode;
   /** Pins the section when the route path can't say it (app/dev-preview). */
   section?: Section;
+  /** Where the sections live; the dev preview mounts them elsewhere. */
+  basePath?: string;
 }) {
   const routeSection = sectionFor(usePathname());
   const section = sectionOverride ?? routeSection;
   const { title, description, helpTopic } = SECTIONS[section];
   return (
-    <div className="page-wrap ws-page automation-sections">
+    <div className={`page-wrap ws-page automation-sections is-${section}`}>
       <PageHeader
+        back={section === "my" ? undefined : <Link className="back-link" href={basePath}><ArrowLeft size={15} /> Automations</Link>}
         title={title}
         description={description}
         actions={(
@@ -63,7 +67,7 @@ export function AutomationSectionsShell({ children, section: sectionOverride }: 
             ) : null}
           </>
         )}
-        tabs={<AutomationSectionNav active={section} />}
+        tabs={section === "my" ? undefined : <AutomationSectionNav active={section} basePath={basePath} />}
       />
       <div className="automation-section-body" key={section}>{children}</div>
     </div>

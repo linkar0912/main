@@ -10,7 +10,11 @@ import type { AutomationRecord } from "@/src/lib/repository";
 /** Why the editor could not open: the automation is gone, or loading failed and may work on a retry. */
 type LoadError = "missing" | "failed";
 
-export function AutomationEditorScreen({ automationId }: { automationId: string }) {
+export function AutomationEditorScreen({ automationId, embedded = false }: {
+  automationId: string;
+  /** Inside the automation's header and tabs ([id] layout): no page frame or back link of its own. */
+  embedded?: boolean;
+}) {
   const [automation, setAutomation] = useState<AutomationRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadError | null>(null);
@@ -47,8 +51,8 @@ export function AutomationEditorScreen({ automationId }: { automationId: string 
 
   return (
     <>
-      <div className="page-wrap builder-wrap">
-        <Link className="back-link" href="/automations"><ArrowLeft size={16} /> Back to automations</Link>
+      <div className={embedded ? "builder-embedded" : "page-wrap builder-wrap"}>
+        {embedded ? null : <Link className="back-link" href="/automations"><ArrowLeft size={16} /> Back to automations</Link>}
         {loading && (
           <InlineContentSkeleton label="Loading automation editor" rows={5} />
         )}

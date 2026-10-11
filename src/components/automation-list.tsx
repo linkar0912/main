@@ -2,16 +2,21 @@
 
 import { Presence } from "@/src/components/ui/use-presence";
 import Link from "next/link";
-import { Activity, ArrowRight, ArrowUpRight, Copy, History, Pencil, Trash2, Workflow } from "lucide-react";
+import { Activity, ChevronDown, Copy, History, Pencil, Trash2, Workflow } from "lucide-react";
 import { FacebookGlyph } from "./facebook-glyph";
 import { InstagramGlyph } from "./instagram-glyph";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CreateAutomationButton } from "./create-automation-button";
+import { AutomationOverflowMenu, type OverflowMenuItem } from "./automation-overflow-menu";
 import { AutomationVersionsModal } from "./automation-versions-modal";
 import { AutomationListContentSkeleton } from "./skeleton";
-import { StatusBadge } from "./status-badge";
+import { Collapse } from "./ui/collapse";
+import { RelativeTime } from "./ui/relative-time";
+import { StatusBadge } from "./ui/status-badge";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
-import { getInstagramConnections, getFacebookPages } from "@/src/lib/client/workspace-data";
+import type { FacebookPageSummary, InstagramConnectionSummary } from "@/src/lib/client/workspace-data";
+import { isFacebookAutomation, type AutomationAttention } from "@/src/lib/automation-attention";
+import { groupAutomations, type AutomationGroupKey, type AutomationView } from "@/src/lib/automation-groups";
 import { toReadableApiError } from "@/src/lib/validation-error";
 
 async function requestAutomations(signal?: AbortSignal): Promise<AutomationRecord[]> {
@@ -51,6 +56,18 @@ function storeAutomations(value: AutomationRecord[]): void {
 export function clearAutomationsCache(): void {
   automationsCache.value = undefined;
   automationsCache.fetchedAt = undefined;
+}
+
+/** Puts one updated automation into the shared list cache (detail page edits). */
+export function syncAutomationInCache(automation: AutomationRecord): void {
+  if (automationsCache.value === undefined) return;
+  automationsCache.value = automationsCache.value.map((item) => item.id === automation.id ? automation : item);
+}
+
+/** Drops a deleted automation from the shared list cache. */
+export function removeAutomationFromCache(id: string): void {
+  if (automationsCache.value === undefined) return;
+  automationsCache.value = automationsCache.value.filter((item) => item.id !== id);
 }
 
 export function useAutomations(initialData?: AutomationRecord[]) {
@@ -144,95 +161,60 @@ export function useAutomations(initialData?: AutomationRecord[]) {
   return { automations, loading, error, reload, setStatus, addAutomation };
 }
 
-/** What starts the automation, split so keywords can render as chips. */
-function triggerParts(automation: AutomationRecord): { source: string; keywords: string[] } {
-  const trigger = automation.definition.trigger;
-  if (trigger.type === "referral") return { source: "Referral link tap", keywords: [] };
-  if (trigger.type === "optin") return { source: "Opt-in tap", keywords: [] };
-  if (trigger.type === "first_contact") return { source: "First-time contact", keywords: [] };
-  if (trigger.type === "story_mention") return { source: "Story mention", keywords: [] };
-  const noun = trigger.type === "comment" ? "comment" : trigger.type === "story_reply" ? "Story reply" : "DM";
-  if (trigger.match === "any" || trigger.keywords.length === 0) return { source: `Any ${noun}`, keywords: [] };
-  return { source: `${noun === "comment" ? "Comment" : noun} has`, keywords: trigger.keywords };
-}
-
-function TriggerRule({ automation }: { automation: AutomationRecord }) {
-  const { source, keywords } = triggerParts(automation);
-  const shown = keywords.slice(0, 3);
-  return (
-    <span className="automation-trigger">
-      <span className="automation-trigger-source">{source}</span>
-      {shown.map((keyword) => <span className="automation-keyword" key={keyword}>{keyword}</span>)}
-      {keywords.length > shown.length ? <span className="automation-keyword is-more" title={keywords.slice(3).join(", ")}>+{keywords.length - shown.length}</span> : null}
-    </span>
-  );
-}
-
-function actionSummary(automation: AutomationRecord): string {
-  if (automation.definition.version !== 1) return "Follow-gated DM delivery";
-
-  if (automation.facebookPageId) return "Public comment reply";
-
-  const action = automation.definition.actions[0];
-  if (!action) return "No action configured";
-  // Every action type gets its own label - `send_image` and `quick_replies`
-  // used to fall through the bottom of this chain and read as "Send a button".
-  switch (action.type) {
-    case "private_reply": return "Private reply";
-    case "send_text": return "Send a DM";
-    case "send_link": return "Send a link";
-    case "send_image": return "Send an image";
-    case "quick_replies": return "Send quick replies";
-    case "send_button": return "Send a button";
+/** What starts it, as neutral chips: the trigger, then up to two keywords. */
+export function triggerChips(automation: AutomationRecord): { trigger: string; keywords: string[]; more: string[] } {
+  const split = (trigger: string, keywords: string[]) => ({ trigger, keywords: keywords.slice(0, 2), more: keywords.slice(2) });
+  const definition = automation.definition;
+  if (definition.version === 2) {
+    const keywords = definition.trigger.match === "keyword" ? definition.trigger.keywords : [];
+    return split(keywords.length ? "Comment" : "Any comment", keywords);
+  }
+  const trigger = definition.trigger;
+  switch (trigger.type) {
+    case "referral": return split("Referral link", []);
+    case "optin": return split("Opt-in tap", []);
+    case "first_contact": return split("First message", []);
+    case "story_mention": return split("Story mention", []);
+    default: {
+      const noun = trigger.type === "comment"
+        ? isFacebookAutomation(automation) ? "Page comment" : "Comment"
+        : trigger.type === "story_reply" ? "Story reply" : "DM";
+      const keywords = trigger.match === "keyword" ? trigger.keywords : [];
+      if (keywords.length) return split(noun, keywords);
+      return split(noun === "DM" ? "Any DM" : `Any ${noun.toLowerCase()}`, []);
+    }
   }
 }
 
-/** igUserId -> @username for every connected account, for the per-row account chips. */
-function useConnectionUsernames(): Map<string, string> {
-  const [usernames, setUsernames] = useState<Map<string, string>>(new Map());
-  useEffect(() => {
-    let active = true;
-    getInstagramConnections()
-      .then((data) => {
-        if (!active) return;
-        setUsernames(new Map(
-          data
-            .filter((connection) => connection.igUserId && connection.username)
-            .map((connection) => [connection.igUserId!, connection.username!]),
-        ));
-      })
-      .catch(() => undefined);
-    return () => { active = false; };
-  }, []);
-  return usernames;
+export type AutomationRowStats = { sent: number; failed: number };
+export type AutomationConnections = { instagram: InstagramConnectionSummary[]; facebook: FacebookPageSummary[] };
+
+/** Which account or Page it runs on - only worth saying when there is more than one. */
+function placeLabel(automation: AutomationRecord, connections: AutomationConnections | null | undefined): string | null {
+  if (!connections) return null;
+  if (isFacebookAutomation(automation)) {
+    if (connections.facebook.length < 2) return null;
+    return connections.facebook.find((page) => page.pageId === automation.facebookPageId)?.pageName ?? "A Facebook Page";
+  }
+  if (connections.instagram.length < 2) return null;
+  if (!automation.instagramAccountId) return "All accounts";
+  const username = connections.instagram.find((account) => account.igUserId === automation.instagramAccountId)?.username;
+  return username ? `@${username.replace(/^@/, "")}` : "An Instagram account";
 }
 
-/** id-by-pageId map for Facebook Page pin badges. The list view doesn't
- * display the Page name unless the user hovers; a future iteration can
- * promote this to a chip with the page glyph. */
-function useFacebookPageNames(): Map<string, string> {
-  const [names, setNames] = useState<Map<string, string>>(new Map());
-  useEffect(() => {
-    let active = true;
-    getFacebookPages()
-      .then((data) => {
-        if (!active) return;
-        setNames(new Map(
-          data
-            .filter((page) => page.pageId && page.pageName)
-            .map((page) => [page.pageId, page.pageName]),
-        ));
-      })
-      .catch(() => undefined);
-    return () => { active = false; };
-  }, []);
-  return names;
+function count(value: number): string {
+  return value.toLocaleString("en-IN");
 }
 
 export function AutomationList({
   automations,
   loading,
-  compact = false,
+  view = "all",
+  attention,
+  stats,
+  rangeDays = 7,
+  connections,
+  basePath = "/automations",
   onStatusChange,
   onDuplicate,
   onDelete,
@@ -240,57 +222,27 @@ export function AutomationList({
 }: {
   automations: AutomationRecord[];
   loading: boolean;
-  compact?: boolean;
+  /** The view tab: narrows the status groups shown. */
+  view?: AutomationView;
+  /** Live automations with a problem, by id; they lead in "Needs attention". */
+  attention?: ReadonlyMap<string, AutomationAttention>;
+  /** Replies and failures per automation in the toolbar's range; null while unknown. */
+  stats?: ReadonlyMap<string, AutomationRowStats> | null;
+  rangeDays?: number;
+  connections?: AutomationConnections | null;
+  /** Where the detail pages live (the dev preview mounts them elsewhere). */
+  basePath?: string;
   onStatusChange: (id: string, status: AutomationStatus) => Promise<void>;
-  /** Optional management actions; omitted by the dashboard's compact list. */
   onDuplicate?: (id: string) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   /** Called after something changed server-side (e.g. a version restore). */
   onChanged?: () => void;
 }) {
   const [pendingId, setPendingId] = useState("");
-  const [confirmDeleteId, setConfirmDeleteId] = useState("");
-  const confirmDeleteRef = useRef<HTMLButtonElement>(null);
-  // Move focus onto the confirmation so blur/Escape can back out of it.
-  useEffect(() => {
-    if (confirmDeleteId) confirmDeleteRef.current?.focus();
-  }, [confirmDeleteId]);
   const [historyForId, setHistoryForId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
-  const usernames = useConnectionUsernames();
-  const facebookPageNames = useFacebookPageNames();
-  // With a single connection the account chip adds nothing - every automation
-  // runs on that one account anyway. Show chips only for multi-account workspaces.
-  const showAccountChips = usernames.size > 1;
-  // Same logic for Facebook Pages: a single Page means every Facebook-pinned
-  // automation targets it, so the chip is noise. Multi-Page workspaces need
-  // to see which Page is pinned.
-  const showFacebookPageChips = facebookPageNames.size > 1;
-
-  function accountChip(automation: AutomationRecord) {
-    if (!showAccountChips) return null;
-    return (
-      <span className="automation-account" title={automation.instagramAccountId ?? undefined}>
-        {automation.instagramAccountId ? `@${usernames.get(automation.instagramAccountId) ?? "account"}` : "All accounts"}
-      </span>
-    );
-  }
-
-  function facebookPageChip(automation: AutomationRecord) {
-    if (!automation.facebookPageId) return null;
-    if (showFacebookPageChips) {
-      return (
-        <span className="automation-account" title={automation.facebookPageId}>
-          Page: {facebookPageNames.get(automation.facebookPageId) ?? automation.facebookPageId}
-        </span>
-      );
-    }
-    return (
-      <span className="automation-account" title={automation.facebookPageId}>
-        Pinned to Facebook Page
-      </span>
-    );
-  }
+  const [collapsed, setCollapsed] = useState<ReadonlySet<AutomationGroupKey>>(() => new Set());
+  const baseId = useId();
 
   async function runAction(id: string, action: () => Promise<void>) {
     if (pendingId) return;
@@ -298,12 +250,20 @@ export function AutomationList({
     setActionError("");
     try {
       await action();
-      setConfirmDeleteId("");
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "That action failed.");
     } finally {
       setPendingId("");
     }
+  }
+
+  function toggleGroup(key: AutomationGroupKey) {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   if (loading && automations.length === 0) {
@@ -320,144 +280,154 @@ export function AutomationList({
     );
   }
 
-  const visible = compact ? automations.slice(0, 3) : automations;
-  return (
-    <div className={`automation-list ${compact ? "is-compact" : ""}`}>
-      {actionError && <p className="form-error" role="alert">{actionError}</p>}
-      {!compact && (
-        <div className="automation-columns" aria-hidden>
-          <span>Automation</span><span>Channel</span><span>Status</span>
-        </div>
-      )}
-      {visible.map((automation) => {
-        const isFacebook = automation.provider === "FACEBOOK" || Boolean(automation.facebookPageId);
-        const isActive = automation.status === "ACTIVE";
-        const pending = pendingId === automation.id;
-        return (
-        <article className="automation-row" key={automation.id} data-status={automation.status.toLowerCase()}>
-          <div className="automation-identity">
-            <span className={`automation-channel ${isFacebook ? "is-facebook" : "is-instagram"}`} aria-hidden>
-              {isFacebook ? <FacebookGlyph size={18} brand /> : <InstagramGlyph size={18} brand />}
-            </span>
-            <div className="automation-copy">
-              <div className="automation-title">
-                <Link className="automation-name" href={`/automations/${automation.id}/edit`}><strong>{automation.name}</strong></Link>
-                {compact ? <StatusBadge status={automation.status} /> : null}
-              </div>
-              <p className="automation-rule">
-                <TriggerRule automation={automation} />
-                <ArrowRight size={13} aria-hidden />
-                <span className="automation-response">{actionSummary(automation)}</span>
-              </p>
-            </div>
+  function statsLine(automation: AutomationRecord) {
+    if (automation.status === "DRAFT") {
+      return <span>Not turned on yet. Edited <RelativeTime value={automation.updatedAt} inline /></span>;
+    }
+    if (!stats) return <span>Edited <RelativeTime value={automation.updatedAt} inline /></span>;
+    const row = stats.get(automation.id);
+    const sent = row?.sent ?? 0;
+    return (
+      <>
+        <span>{sent === 0 ? `No replies in ${rangeDays} days` : `${count(sent)} ${sent === 1 ? "reply" : "replies"} in ${rangeDays} days`}</span>
+        {row && row.failed > 0 ? <span>{count(row.failed)} failed</span> : null}
+      </>
+    );
+  }
+
+  function renderRow(automation: AutomationRecord) {
+    const facebook = isFacebookAutomation(automation);
+    const isActive = automation.status === "ACTIVE";
+    const isDraft = automation.status === "DRAFT";
+    const pending = pendingId === automation.id;
+    const problem = attention?.get(automation.id) ?? null;
+    const chips = triggerChips(automation);
+    const place = placeLabel(automation, connections);
+    const detailHref = `${basePath}/${automation.id}`;
+    const hasActivity = automation.definition.version === 2 || facebook;
+    const name = automation.name;
+
+    const menuItems: OverflowMenuItem[] = [
+      { key: "edit", label: "Edit", icon: <Pencil size={16} aria-hidden />, href: `${detailHref}/edit`, ariaLabel: `Edit ${name}` },
+      ...(hasActivity
+        ? [{ key: "activity", label: "View activity", icon: <Activity size={16} aria-hidden />, href: `${detailHref}/activity`, ariaLabel: `View activity for ${name}` }]
+        : []),
+      { key: "history", label: "Version history", icon: <History size={16} aria-hidden />, ariaLabel: `View history for ${name}`, onSelect: () => setHistoryForId(automation.id) },
+      ...(onDuplicate
+        ? [{ key: "duplicate", label: "Duplicate", icon: <Copy size={16} aria-hidden />, ariaLabel: `Duplicate ${name}`, disabled: pending, onSelect: () => void runAction(automation.id, () => onDuplicate(automation.id)) }]
+        : []),
+      ...(onDelete
+        ? [{
+          key: "delete",
+          label: "Delete",
+          icon: <Trash2 size={16} aria-hidden />,
+          danger: true,
+          ariaLabel: `Delete ${name}`,
+          confirm: { label: "Confirm delete?", ariaLabel: `Confirm delete ${name}` },
+          onSelect: () => void runAction(automation.id, () => onDelete(automation.id)),
+        }]
+        : []),
+    ];
+
+    // One contextual action at most: fix what's broken, or turn a draft on.
+    let contextual = null;
+    if (problem && problem.reason !== "failures") {
+      contextual = <Link className="button button-secondary button-small auto-row-cta" href="/settings" aria-label={`${problem.actionLabel} the account for ${name}`}>{problem.actionLabel}</Link>;
+    } else if (problem) {
+      contextual = <Link className="button button-secondary button-small auto-row-cta" href={detailHref} aria-label={`Fix ${name}`}>{problem.actionLabel}</Link>;
+    } else if (isDraft) {
+      contextual = (
+        <button
+          className="button button-secondary button-small auto-row-cta"
+          type="button"
+          disabled={pending}
+          aria-label={`Turn on ${name}`}
+          onClick={() => void runAction(automation.id, () => onStatusChange(automation.id, "ACTIVE"))}
+        >
+          Turn on
+        </button>
+      );
+    }
+
+    return (
+      <li key={automation.id}>
+        <article className="auto-row" data-status={automation.status.toLowerCase()} aria-labelledby={`${baseId}-${automation.id}`}>
+          <span className={`auto-row-channel ${facebook ? "is-facebook" : "is-instagram"}`} aria-hidden>
+            {facebook ? <FacebookGlyph size={18} brand /> : <InstagramGlyph size={18} brand />}
+          </span>
+          <div className="auto-row-main">
+            <Link className="auto-row-name" id={`${baseId}-${automation.id}`} href={detailHref} title={name}>{name}</Link>
+            <p className="auto-row-line">
+              <span className="auto-row-chips" title={chips.more.length ? [...chips.keywords, ...chips.more].join(", ") : undefined}>
+                <span className="auto-chip is-trigger">{chips.trigger}</span>
+                {chips.keywords.map((keyword) => <span className="auto-chip" key={keyword}>{keyword}</span>)}
+                {chips.more.length ? <span className="auto-chip is-more">+{chips.more.length}</span> : null}
+              </span>
+              {problem ? (
+                <span className="auto-row-problem" title={problem.text}>
+                  <StatusBadge tone={problem.tone} label={problem.chip} />
+                  <span className="auto-row-problem-text">{problem.short}</span>
+                </span>
+              ) : (
+                <span className="auto-row-stats">
+                  {statsLine(automation)}
+                  {place ? <span>{place}</span> : null}
+                </span>
+              )}
+            </p>
           </div>
-          <div className="automation-meta">
-            <span>{isFacebook ? "Facebook" : "Instagram"}</span>
-            <span>{isFacebook ? "Page comments" : automation.definition.trigger.type === "comment" ? "Comments" : "Messaging"}</span>
-            {showAccountChips ? accountChip(automation) : null}
-            {facebookPageChip(automation)}
-          </div>
-          {!compact && (
-            <div className="automation-actions" role="group" aria-label={`Actions for ${automation.name}`}>
+          <div className="auto-row-actions" role="group" aria-label={`Actions for ${name}`}>
+            {contextual}
+            {!isDraft ? (
               <button
-                className="status-switch"
+                className="status-switch auto-row-switch"
                 type="button"
                 data-state={automation.status.toLowerCase()}
                 aria-pressed={isActive}
                 disabled={pending}
-                aria-label={`${isActive ? "Pause" : "Activate"} ${automation.name}`}
-                title={isActive ? "Pause automation" : "Activate automation"}
-                onClick={() => void runAction(
-                  automation.id,
-                  () => onStatusChange(automation.id, isActive ? "PAUSED" : "ACTIVE"),
-                )}
+                aria-label={`${isActive ? "Pause" : "Activate"} ${name}`}
+                title={isActive ? "Live. Click to pause." : "Paused. Click to turn on."}
+                onClick={() => void runAction(automation.id, () => onStatusChange(automation.id, isActive ? "PAUSED" : "ACTIVE"))}
               >
                 <span className="status-switch-track" aria-hidden><span /></span>
-                <span className="status-switch-label">{isActive ? "Active" : automation.status === "DRAFT" ? "Draft" : "Paused"}</span>
               </button>
-              <Link
-                className="icon-button"
-                href={`/automations/${automation.id}/edit`}
-                aria-label={`Edit ${automation.name}`}
-                title="Edit automation"
-              >
-                <Pencil size={15} />
-              </Link>
-              {(automation.definition.version === 2 || isFacebook) ? (
-                <Link
-                  className="icon-button"
-                  href={`/automations/${automation.id}/activity`}
-                  aria-label={`View activity for ${automation.name}`}
-                  title="View activity"
-                >
-                  <Activity size={15} />
-                </Link>
-              ) : (
-                // Holds the slot so every row's icons line up in the same columns.
-                <span className="icon-button-slot" aria-hidden />
-              )}
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={`View history for ${automation.name}`}
-                title="Version history"
-                onClick={() => setHistoryForId(automation.id)}
-              >
-                <History size={15} />
-              </button>
-              {onDuplicate && (
-                <button
-                  className="icon-button"
-                  type="button"
-                  disabled={pending}
-                  aria-label={`Duplicate ${automation.name}`}
-                  title="Duplicate automation"
-                  onClick={() => void runAction(automation.id, () => onDuplicate(automation.id))}
-                >
-                  <Copy size={15} />
-                </button>
-              )}
-              {onDelete && (
-                confirmDeleteId === automation.id ? (
-                  // Spelled out rather than a recoloured trash icon, and it backs
-                  // out on blur or Escape so a stray click later can't delete.
-                  <button
-                    className="button button-danger button-small is-confirming"
-                    type="button"
-                    disabled={pending}
-                    ref={confirmDeleteRef}
-                    aria-label={`Confirm delete ${automation.name}`}
-                    title="Permanently delete this automation"
-                    onClick={() => void runAction(automation.id, () => onDelete(automation.id))}
-                    onBlur={() => { if (!pending) setConfirmDeleteId(""); }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        event.stopPropagation();
-                        setConfirmDeleteId("");
-                      }
-                    }}
-                  >
-                    Confirm delete?
-                  </button>
-                ) : (
-                  <button
-                    className="icon-button icon-danger"
-                    type="button"
-                    aria-label={`Delete ${automation.name}`}
-                    title="Delete automation"
-                    onClick={() => setConfirmDeleteId(automation.id)}
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                )
-              )}
-            </div>
-          )}
-          {compact && <Link className="row-link" href="/automations" aria-label="Open automations"><ArrowUpRight size={17} /></Link>}
+            ) : null}
+            <AutomationOverflowMenu label={`More actions for ${name}`} items={menuItems} />
+          </div>
         </article>
+      </li>
+    );
+  }
+
+  const groups = groupAutomations(automations, view, (automation) => attention?.has(automation.id) ?? false);
+  // One group needs no heading: the selected tab already names it.
+  const showHeads = groups.length > 1;
+  return (
+    <div className="auto-list">
+      {actionError && <p className="form-error auto-list-error" role="alert">{actionError}</p>}
+      {groups.map((group) => {
+        const open = !collapsed.has(group.key);
+        const bodyId = `${baseId}-group-${group.key}`;
+        const rows = (
+          <ul className="auto-rows" aria-label={showHeads ? undefined : group.label}>
+            {group.items.map(renderRow)}
+          </ul>
+        );
+        return (
+          <section key={group.key} className="auto-group" data-group={group.key} aria-label={`${group.label} (${group.items.length})`}>
+            {showHeads ? (
+              <h2 className="auto-group-head">
+                <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={() => toggleGroup(group.key)}>
+                  <ChevronDown className="auto-group-chevron" size={16} aria-hidden />
+                  <span>{group.label}</span>
+                  <span className="auto-group-count">{group.items.length}</span>
+                </button>
+              </h2>
+            ) : null}
+            {showHeads ? <Collapse open={open} id={bodyId}>{open && rows}</Collapse> : rows}
+          </section>
         );
       })}
-      {compact && automations.length > visible.length && <Link className="list-more" href="/automations">View all {automations.length} automations</Link>}
       <Presence>{historyForId && (
         <AutomationVersionsModal
           automationId={historyForId}
@@ -468,3 +438,4 @@ export function AutomationList({
     </div>
   );
 }
+

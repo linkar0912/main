@@ -6,7 +6,7 @@ import { formatDateTime } from "@/src/lib/format-date";
 import { attemptsLabel, DeliveryIssueRow, deliveryKindLabel } from "./delivery-issue-row";
 import { relativeTimeLabel } from "./workspace-primitives";
 
-type DeliveryProblem = {
+export type DeliveryProblem = {
   kind: string;
   state: "FAILED" | "UNKNOWN";
   attemptCount: number;
@@ -19,10 +19,26 @@ type DeliveryProblem = {
 
 const PREVIEW_COUNT = 3;
 
-export function DeliveryDiagnostics() {
-  const [problems, setProblems] = useState<DeliveryProblem[] | null>(null);
+/** GET /api/automations/deliveries: recent messages that failed or are waiting on a retry. */
+export async function requestDeliveryProblems(limit = 25, signal?: AbortSignal): Promise<DeliveryProblem[]> {
+  const response = await fetch(`/api/automations/deliveries?limit=${limit}`, { signal });
+  if (!response.ok) return [];
+  const payload = (await response.json().catch(() => null)) as { data?: DeliveryProblem[] } | null;
+  return payload?.data ?? [];
+}
+
+/**
+ * Recent delivery problems across the workspace. The Automations list already
+ * loads them (they decide its "Needs attention" group), so it hands them in
+ * through `problems` instead of a second request.
+ */
+export function DeliveryDiagnostics({ problems: provided }: { problems?: DeliveryProblem[] | null } = {}) {
+  const [fetched, setProblems] = useState<DeliveryProblem[] | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const external = provided !== undefined;
+  const problems = external ? provided : fetched;
   useEffect(() => {
+    if (external) return;
     let cancelled = false;
     fetch("/api/automations/deliveries?limit=25")
       .then((response) => response.ok ? response.json() : null)
@@ -31,7 +47,7 @@ export function DeliveryDiagnostics() {
       })
       .catch(() => { if (!cancelled) setProblems([]); });
     return () => { cancelled = true; };
-  }, []);
+  }, [external]);
 
   if (!problems?.length) return null;
   const visible = showAll ? problems : problems.slice(0, PREVIEW_COUNT);
