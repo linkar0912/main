@@ -1,5 +1,7 @@
 import { Plus, Trash2 } from "lucide-react";
+import { Field } from "./wizard";
 
+/** Extra versions of a Facebook Page's public reply (the first one is the action text). */
 export function PublicPageReplyVariants({
   variants,
   onChange,
@@ -8,28 +10,29 @@ export function PublicPageReplyVariants({
   onChange: (variants: string[]) => void;
 }) {
   return (
-    <div className="field-spaced">
+    <>
       {variants.map((variant, index) => (
-        <div className="public-reply-row" key={index}>
-          <label className="field public-reply-input">
-            <span>Variation {index + 2}</span>
+        <div className="reply-version" key={index}>
+          <Field label={`Reply ${index + 2}`}>
             <textarea
-              aria-label={`Public Page reply variation ${index + 2}`}
               value={variant}
-              rows={3}
+              rows={2}
               maxLength={1_000}
+              placeholder="Another way to say it"
               onChange={(event) => onChange(variants.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
             />
-          </label>
-          <button type="button" className="icon-button" aria-label={`Remove reply variation ${index + 2}`} onClick={() => onChange(variants.filter((_, itemIndex) => itemIndex !== index))}>
-            <Trash2 size={15} />
+          </Field>
+          <button type="button" className="icon-button" aria-label={`Remove reply ${index + 2}`} onClick={() => onChange(variants.filter((_, itemIndex) => itemIndex !== index))}>
+            <Trash2 size={16} />
           </button>
         </div>
       ))}
-      <button type="button" className="button button-secondary" disabled={variants.length >= 4} onClick={() => onChange([...variants, ""])}>
-        <Plus size={15} /> {variants.length === 3 ? "Add final reply variation" : "Add reply variation"}
-      </button>
-      <small>Linkar rotates up to five public replies to keep responses natural.</small>
-    </div>
+      <div className="builder-add-row">
+        <button type="button" className="button button-secondary" disabled={variants.length >= 4} onClick={() => onChange([...variants, ""])}>
+          <Plus size={16} /> {variants.length === 3 ? "Add a final version" : "Add another version"}
+        </button>
+        <p>Up to five. Linkar takes turns so your replies don’t look copy-pasted.</p>
+      </div>
+    </>
   );
 }

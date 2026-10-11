@@ -10,7 +10,7 @@ describe("PublicPageReplyVariants", () => {
 
     render(<PublicPageReplyVariants variants={variants} onChange={onChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add final reply variation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a final version" }));
     expect(onChange).toHaveBeenCalledWith([...variants, ""]);
   });
 });

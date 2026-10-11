@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Film, ImageOff, Layers } from "lucide-react";
+import { Check, Film, ImageOff, Layers } from "lucide-react";
 import type { MediaSnapshot } from "@/src/lib/automation/types";
 
 type PickerMedia = {
@@ -234,6 +234,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
                 }
               }}
             >
+              <span className="media-check" aria-hidden="true"><Check size={13} strokeWidth={3} /></span>
               <span className="media-thumb">
                 {thumbnail ? (
                   // eslint-disable-next-line @next/next/no-img-element

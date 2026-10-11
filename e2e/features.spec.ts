@@ -23,10 +23,10 @@ test("price-list recipe prefills an image card reply", async ({ page }) => {
   await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [] } }));
   await page.goto("/automations/new?type=classic&template=price-list-responder");
 
-  await expect(page.getByLabel("Reply name")).toHaveValue(/Send prices when someone asks/i);
-  const imageInput = page.getByLabel("Image URL");
+  await expect(page.getByLabel("Automation name")).toHaveValue(/Send prices when someone asks/i);
+  const imageInput = page.getByLabel("Photo link");
   await expect(imageInput).toHaveValue("https://example.com/images/price-list.jpg");
-  await expect(page.getByLabel("Caption")).toHaveValue(/price list/i);
+  await expect(page.getByLabel("Caption", { exact: true })).toHaveValue(/price list/i);
   // And the phone preview renders the image bubble.
   await expect(page.getByLabel(/message preview/i).locator(".ig-dm-image")).toBeVisible();
 });
@@ -44,17 +44,17 @@ test("builder exposes image actions, token hints, suggestions, and follow-ups", 
   await page.route("**/api/automations/suggest-keywords", (route) =>
     route.fulfill({ json: { data: ["kurti", "price", "collab"] } }));
   await page.goto("/automations/new?type=classic");
-  await page.getByLabel("Reply name").fill("Feature coverage flow");
+  await page.getByLabel("Automation name").fill("Feature coverage flow");
 
   // Keyword suggestion chips render from the endpoint.
   const chips = page.getByTestId("keyword-suggestions");
   await expect(chips.getByRole("button", { name: "+ kurti" })).toBeVisible();
   await chips.getByRole("button", { name: "+ kurti" }).click();
-  await expect(page.getByLabel("Words to look for", { exact: true })).toHaveValue(/kurti/);
+  await expect(page.getByRole("button", { name: "Remove kurti" })).toBeVisible();
 
   // Switch to a DM trigger, then move to the action step
   // (Trigger → Condition → Action).
-  await page.getByLabel("Where will it start?").selectOption("message");
+  await page.getByLabel("Starts when").selectOption("message");
   await advance(page);
   await advance(page);
 
@@ -64,19 +64,20 @@ test("builder exposes image actions, token hints, suggestions, and follow-ups", 
 
   // Follow-up nudge editor on DM triggers.
   await page.getByRole("button", { name: "Add a reminder message" }).click();
-  await page.getByLabel("Reminder 1 delay in minutes").fill("1440");
-  await page
-    .getByLabel("Reminder 1 message")
+  const reminder = page.getByRole("group", { name: "Reminder 1" });
+  await reminder.getByLabel("Wait before sending (minutes)").fill("1440");
+  await reminder
+    .getByLabel("Reminder message")
     .fill("Still interested, {username}? Your offer ends tonight.");
-  await page.getByLabel("Reminder 1 button label").fill("Claim");
-  await page.getByLabel("Reminder 1 link URL").fill("https://example.com/offer");
+  await reminder.getByLabel("Reminder button text").fill("Claim");
+  await reminder.getByLabel("Reminder button link").fill("https://example.com/offer");
 
   // Walk to Review (Email collector → Guardrails → Review) and confirm the
   // summary calls out the scheduled nudge.
   await advance(page);
   await advance(page);
   await advance(page);
-  await expect(page.getByText(/1 reminder message scheduled/i)).toBeVisible();
+  await expect(page.getByText(/1 reminder message follows, 1 day later/i)).toBeVisible();
 });
 
 test("capture fields support answer types and stop words", async ({ page }) => {
@@ -84,8 +85,8 @@ test("capture fields support answer types and stop words", async ({ page }) => {
   await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [] } }));
   await page.goto("/automations/new?type=classic");
 
-  await page.getByLabel("Reply name").fill("Capture fields test");
-  await page.getByLabel("Where will it start?").selectOption("message");
+  await page.getByLabel("Automation name").fill("Capture fields test");
+  await page.getByLabel("Starts when").selectOption("message");
   // Walk to the email collector step (Condition → Action → Email collector).
   await advance(page);
   await advance(page);
@@ -93,15 +94,17 @@ test("capture fields support answer types and stop words", async ({ page }) => {
   await advance(page);
   await page.getByRole("checkbox", { name: /ask for the person/i }).check();
   await page.waitForTimeout(150);
-  await page.getByLabel("Email prompt").fill("Your email?");
-  await page.getByLabel("Email confirmation message").fill("You are in!");
+  await page.getByLabel("Question asking for their email").fill("Your email?");
+  await page.getByLabel("Thank-you message").fill("You are in!");
+  await page.getByText("Extra questions and other apps").click();
   await page.getByRole("button", { name: "Add question" }).click();
 
-  await expect(page.getByLabel("Question 1 answer type")).toBeVisible();
-  await page.getByLabel("Question 1 answer type").selectOption("phone");
-  await page.getByLabel("Question 1 stop words").fill("no, not now");
+  const question = page.getByRole("group", { name: "Question 1" });
+  await expect(question.getByLabel("Answer type")).toBeVisible();
+  await question.getByLabel("Answer type").selectOption("phone");
+  await question.getByLabel("Words that end the questions").fill("no, not now");
 
-  await expect(page.getByText(/Stop-words message/i)).toBeVisible();
+  await expect(page.getByLabel("Message when they stop")).toBeVisible();
 });
 
 test("broadcasts screen offers eligible contact segments", async ({ page }) => {

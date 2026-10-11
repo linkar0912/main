@@ -34,8 +34,8 @@ export default async function NewAutomationPage({ searchParams }: NewAutomationP
           <ArrowLeft size={16} /> Back to automations
         </Link>
         {template && setup && (
-          <p className="template-prefill-note muted">
-            Started from the “{template.title}” recipe - tweak anything before saving.
+          <p className="template-prefill-note">
+            Started from the “{template.title}” template. Change anything you like before saving.
           </p>
         )}
         <AutomationBuilder
