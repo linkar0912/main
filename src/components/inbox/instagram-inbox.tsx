@@ -593,6 +593,24 @@ export function InstagramInbox() {
     void openConversation(contact);
   }
 
+  // A link like /activity?contact=<id> (from the command palette) opens that
+  // conversation once it appears in the loaded list. Read once, then forgotten,
+  // so later list refreshes never steal the selection back.
+  const linkedContactRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (linkedContactRef.current === undefined) {
+      linkedContactRef.current = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("contact");
+    }
+    const linkedId = linkedContactRef.current;
+    if (!linkedId) return;
+    const linked = contacts.find((contact) => contact.id === linkedId);
+    if (!linked) return;
+    linkedContactRef.current = null;
+    void openConversation(linked);
+    // openConversation is recreated each render; the ref guard makes this run once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contacts]);
+
   // After "Reply", the composer for the newly opened thread takes focus.
   useEffect(() => {
     if (!focusComposerRef.current || !selectedId) return;

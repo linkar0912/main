@@ -113,7 +113,7 @@ describe("palette contents", () => {
   });
 
   it("turns API rows into plain-language results", () => {
-    expect(automationItem({ id: "a1", name: "Price reply", status: "ACTIVE", provider: "INSTAGRAM" })).toMatchObject({ label: "Price reply", hint: "Live · Instagram", href: "/automations/a1/edit" });
+    expect(automationItem({ id: "a1", name: "Price reply", status: "ACTIVE", provider: "INSTAGRAM" })).toMatchObject({ label: "Price reply", hint: "Live · Instagram", href: "/automations/a1" });
     expect(contactItem({ id: "c1", instagramUsername: "meera.styles", leadStatus: "CUSTOMER" })).toMatchObject({ label: "@meera.styles", hint: "Customer", href: "/contacts?q=meera.styles" });
     expect(contactItem({ id: "c2" })).toBeNull();
     expect(conversationItem({ id: "c1", username: "meera.styles", preview: "Is this in stock?" })).toMatchObject({ label: "@meera.styles", hint: "Is this in stock?", href: "/activity?contact=c1" });

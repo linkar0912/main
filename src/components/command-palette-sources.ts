@@ -56,7 +56,7 @@ export function automationItem(automation: AutomationSummary): PaletteItem {
     kind: "automation",
     label: automation.name || "Untitled automation",
     hint: `${STATUS_WORDS[automation.status] ?? "Draft"} · ${channel}`,
-    href: `/automations/${encodeURIComponent(automation.id)}/edit`,
+    href: `/automations/${encodeURIComponent(automation.id)}`,
   };
 }
 

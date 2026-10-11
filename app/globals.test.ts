@@ -295,15 +295,14 @@ describe("selection style: never a grey fill", () => {
     return { selector: selector.trim().replace(/\s+/g, " "), body };
   });
   const state = /:hover|:focus|\.is-(active|selected|on|current|open|focused)\b|\[aria-(current|selected|pressed|checked|expanded)|:checked/;
-  // Restyled on parallel branches this round (the Inbox and the Automations
-  // list adopt these same rules); this exclusion goes once they merge.
-  const parallel = /\.ibx-|\.automation-row|\.automations-surface|\.facebook-activity/;
-  const allowed = /^(transparent|none|var\(--(panel|canvas|paper|ink|ink-strong|accent|accent-hover|white|danger|select-bar|select-line)\)|#101116|#fff|#ffffff)$/;
+  // Status dots (e.g. the inbox's "reply window open" marker) carry a status
+  // colour by design; that is a state indicator, not a selection fill.
+  const allowed = /^(transparent|none|var\(--(panel|canvas|paper|ink|ink-strong|accent|accent-hover|white|danger|select-bar|select-line|status-ok|status-warning|status-danger)\)|#101116|#fff|#ffffff)$/;
 
   it("never fills a selected, current, active or hovered thing with a tint", () => {
     const offenders = rules.flatMap((rule) => {
       if (rule.selector.startsWith("@")) return [];
-      const parts = rule.selector.split(",").map((part) => part.trim()).filter((part) => state.test(part) && !parallel.test(part));
+      const parts = rule.selector.split(",").map((part) => part.trim()).filter((part) => state.test(part));
       if (parts.length === 0) return [];
       const values = [...rule.body.matchAll(/background(?:-color)?:\s*([^;]+)/g)].map((match) => match[1].replace(/!important/, "").trim());
       // Volt belongs to the plan sticker (and the billing "save" badge) only.

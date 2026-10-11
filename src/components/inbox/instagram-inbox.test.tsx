@@ -176,6 +176,25 @@ describe("InstagramInbox", () => {
     expect(await screen.findByText("Oldest")).toBeTruthy();
   });
 
+  it("opens the conversation named in a ?contact= link once the list loads", async () => {
+    window.history.replaceState(null, "", "/activity?contact=contact_2");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/inbox") return new Response(JSON.stringify({ data: { contacts: [aanya, arjun], members: [] } }), { status: 200 });
+      if (url === "/api/inbox/contact_2" && !init?.method) return new Response(JSON.stringify({ data: { messages: [{ id: "m9", direction: "inbound", text: "Linked thread", at: "2026-09-04T10:00:00.000Z", status: "received" }] } }), { status: 200 });
+      if (init?.method === "PATCH") return new Response(JSON.stringify({ data: { contact: arjun } }), { status: 200 });
+      throw new Error(`unexpected ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      render(<InstagramInbox />);
+      expect(await screen.findByText("Linked thread")).toBeTruthy();
+      expect(fetchMock).not.toHaveBeenCalledWith("/api/inbox/contact_1", expect.anything());
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
   it("updates favourite and open state with text-only controls", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
