@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import { useCallback, useMemo, useState } from "react";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 
@@ -370,7 +371,7 @@ export function AdminSecurityScreen({
         </div>
       </section>
 
-      {removal ? (
+      <Presence>{removal ? (
         <AdminDialog
           title={`Remove ${removal.factor.friendlyName}`}
           busy={busy}
@@ -393,7 +394,7 @@ export function AdminSecurityScreen({
             <input value={removal.confirmation} autoComplete="off" autoCapitalize="none" spellCheck={false} onChange={(event) => setRemoval({ ...removal, confirmation: event.target.value })} />
           </label>
         </AdminDialog>
-      ) : null}
+      ) : null}</Presence>
     </main>
   );
 }

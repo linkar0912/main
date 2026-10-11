@@ -1,5 +1,7 @@
 "use client";
 
+import { presenceProps, usePresenceState } from "@/src/components/ui/use-presence";
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
@@ -90,6 +92,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
   const [facebookPagesAttempt, setFacebookPagesAttempt] = useState(0);
   const [facebookPageId, setFacebookPageId] = useState("");
   const headingId = useId();
+  const presence = usePresenceState();
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -176,7 +179,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
   const rest = visible.filter((item) => !item.popular);
 
   return createPortal(
-    <div className="modal-scrim template-picker-scrim" onMouseDown={onClose}>
+    <div className="modal-scrim template-picker-scrim" onMouseDown={onClose} {...presenceProps(presence)}>
       <div ref={panelRef} tabIndex={-1} className="modal-panel is-wide template-picker" role="dialog" aria-modal="true" aria-labelledby={headingId} onMouseDown={(event) => event.stopPropagation()}>
         <header className="template-picker-head">
           <h2 id={headingId}>Templates</h2>
@@ -213,7 +216,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
         >
           <div className="template-channel-choice">
             <span className="template-channel-context-label">Build for</span>
-            <div className="segmented template-channel-switch" role="group" aria-label="Choose a channel">
+            <div ref={slidingThumbRef} className="segmented template-channel-switch" role="group" aria-label="Choose a channel">
               <button
                 type="button"
                 className={`segmented-option template-channel-option is-instagram ${provider === "INSTAGRAM" ? "is-active" : ""}`}
@@ -303,7 +306,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="template-picker-layout">
-          <nav className="template-picker-categories" aria-label="Template categories">
+          <nav ref={slidingThumbRef} className="template-picker-categories" aria-label="Template categories">
             <button type="button" className={`template-picker-category ${category === null ? "is-active" : ""}`} onClick={() => setCategory(null)}>
               <LayoutGrid size={16} strokeWidth={1.8} />
               <span>All templates</span>

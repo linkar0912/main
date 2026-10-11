@@ -4546,23 +4546,28 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 }
 
 /* ── Sliding switch indicator ──────────────────────────────────────────────
-   SegmentedIndicator (app-shell) writes --seg-x/y/w/h for the selected option;
-   one ink thumb glides between options instead of the fill jumping. Until it
-   has measured (or without JS) the per-option fill above still applies. */
+   useSlidingThumb (src/components/ui/use-sliding-thumb.ts) writes the selected
+   option's box as --thumb-* properties on the switch. One ink layer, clipped
+   to that box, glides between options instead of the fill jumping; moving it
+   is a clip-path change, never layout. Until it has measured (or without JS)
+   the per-option fill above still applies. */
 .segmented { isolation: isolate; position: relative; }
-/* Geometry comes from SegmentedIndicator's generated stylesheet (content,
-   size and position per switch); this only sets the look and motion. */
-.segmented::before {
+.segmented[style*="--thumb-w"]::before {
   background: var(--ink);
-  border-radius: 7px;
+  clip-path: inset(var(--thumb-y) var(--thumb-r) var(--thumb-b) var(--thumb-x) round 7px);
+  content: "";
+  height: var(--thumb-sh);
   left: 0;
+  opacity: var(--thumb-o, 1);
   pointer-events: none;
   position: absolute;
   top: 0;
-  transition: transform .28s var(--ease-snap), width .28s var(--ease-snap), height .28s var(--ease-snap);
+  transition: var(--thumb-motion, clip-path var(--dur-3) var(--ease-emph), opacity var(--dur-2) var(--ease-out));
+  width: var(--thumb-sw);
   z-index: -1;
 }
-.segmented .segmented-option { transition: color .2s ease; }
+.segmented[style*="--thumb-w"] .segmented-option:is(.is-on, .is-active, [aria-pressed="true"], [aria-selected="true"], [aria-current="page"], :has(input:checked)) { background: transparent !important; }
+.segmented .segmented-option { transition: color var(--dur-2) var(--ease-out); }
 
 /* Switched content fades in rather than snapping (Inbox channels). */
 
@@ -8594,4 +8599,282 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 }
 @media (max-width: 420px) {
   .failure-row-time { white-space: normal; }
+}
+
+/* === Round 4: motion === */
+/* One motion language for every surface except Home and Insights (which own
+   their first-load sequence). Tokens: --dur-1 hover/press/toggles, --dur-2
+   things appearing, --dur-3 panels moving, --dur-4 bars filling. Entrances
+   settle with --ease-emph; exits run at ~70% of the entrance with --ease-in.
+   Exits are driven by data-state="closing" from src/components/ui/use-presence
+   (the element stays mounted for EXIT_MS, then unmounts). Only opacity,
+   transform and clip-path move, except the two height disclosures (grid rows
+   and ::details-content), which are user-triggered and short. Reduced motion
+   turns every one of these off (bottom of this block). docs/brand.md has the
+   rules; round4/motion/MOTION.md lists what moves where. */
+@keyframes motion-fade-in-soft { from { opacity: 0; } to { opacity: 1; } }
+@keyframes motion-slide-out-right { from { transform: none; } to { transform: translateX(100%); } }
+@keyframes motion-slide-out-left { from { transform: none; } to { transform: translateX(-100%); } }
+@keyframes motion-sheet-down { from { transform: none; } to { transform: translateY(100%); } }
+@keyframes motion-panel-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes motion-panel-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(12px); } }
+@keyframes motion-drop-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes motion-drop-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(.98); } }
+@keyframes motion-toast-in { from { opacity: 0; transform: translateY(-10px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes motion-toast-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-8px) scale(.98); } }
+@keyframes motion-step-forward { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes motion-step-back { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+@keyframes motion-chip-in { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+@keyframes motion-chip-out {
+  from { max-width: 240px; opacity: 1; transform: none; }
+  to { margin-inline: -2px; max-width: 0; opacity: 0; padding-inline: 0; transform: scale(.85); }
+}
+
+/* ── Route changes ─────────────────────────────────────────────────────────
+   <PageTransition> (src/components/ui/page-transition.tsx, mounted from each
+   area's template.tsx) names the outgoing and incoming page content. The old
+   page fades out quickly; the new one settles up into place. The sidebar and
+   top bar sit outside the boundary, so they never move. Clicks pass through
+   the transition overlay to the live page. */
+::view-transition { pointer-events: none; }
+/* The rest of the page is not part of the transition: no root cross-fade,
+   so the sidebar stays live and its thumb glides while the content swaps. */
+::view-transition-old(root) { display: none; }
+::view-transition-new(root) { animation: none; }
+::view-transition-old(.page-exit) { animation: motion-fade-out calc(var(--dur-2) * .7) var(--ease-in) both; }
+::view-transition-new(.page-enter) { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; }
+/* Browsers without View Transitions get the same arrival as a mount fade. */
+.app-content-slot > * { animation: none; }
+@supports not (view-transition-class: none) {
+  .app-content-slot > * { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; }
+}
+/* Automation sections share a layout, so only their body cross-fades. */
+.automation-section-body { animation: motion-fade-up var(--dur-2) var(--ease-out) both; }
+
+/* ── Sliding selection thumbs (useSlidingThumb) ────────────────────────────
+   The segmented switch rules live with the switch above; these give the same
+   gliding thumb to the sidebars, Settings and Help navs, the Inbox channel
+   switch and the template categories (a soft fill), and to the owner-console
+   tab rows (an accent underline). */
+.sidebar-nav, .ibx-channels, .template-picker-categories { isolation: isolate; position: relative; }
+.settings-nav, .section-nav { isolation: isolate; }
+:is(.sidebar-nav, .settings-nav, .section-nav, .ibx-channels, .template-picker-categories)[style*="--thumb-w"]::before {
+  background: var(--nav-active-fill);
+  clip-path: inset(var(--thumb-y) var(--thumb-r) var(--thumb-b) var(--thumb-x) round var(--radius-control));
+  content: "";
+  height: var(--thumb-sh);
+  left: 0;
+  opacity: var(--thumb-o, 1);
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  transition: var(--thumb-motion, clip-path var(--dur-3) var(--ease-emph), opacity var(--dur-2) var(--ease-out));
+  width: var(--thumb-sw);
+  z-index: -1;
+}
+:is(.settings-nav, .section-nav)[style*="--thumb-w"]::before { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+[data-theme="dark"] :is(.settings-nav, .section-nav)[style*="--thumb-w"]::before { background: color-mix(in srgb, #ffffff 8%, transparent); }
+.ibx-channels[style*="--thumb-w"]::before { background: var(--ink); clip-path: inset(var(--thumb-y) var(--thumb-r) var(--thumb-b) var(--thumb-x) round 9px); }
+.sidebar-nav[style*="--thumb-w"] .sidebar-link.is-active,
+.sidebar-nav[style*="--thumb-w"] .sidebar-link.is-active:hover,
+.ws-page :is(.settings-nav, .section-nav)[style*="--thumb-w"] :is(.settings-nav-link, .section-nav-link).is-active,
+.ws-page :is(.settings-nav, .section-nav)[style*="--thumb-w"] :is(.settings-nav-link, .section-nav-link).is-active:hover,
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav)[style*="--thumb-w"] :is(.settings-nav-link, .section-nav-link).is-active,
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav)[style*="--thumb-w"] :is(.settings-nav-link, .section-nav-link).is-active:hover,
+.ibx-channels[style*="--thumb-w"] button[aria-selected="true"],
+.template-picker-categories[style*="--thumb-w"] .template-picker-category.is-active,
+[data-theme="dark"] .template-picker .template-picker-categories[style*="--thumb-w"] .template-picker-category.is-active { background: transparent; }
+:is(.sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .ibx-channels button) {
+  transition: background-color var(--dur-1) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.sidebar-link svg { transition: color var(--dur-2) var(--ease-out); }
+.admin-tabs { position: relative; }
+.admin-tabs[style*="--thumb-w"]::after {
+  background: var(--accent);
+  bottom: 0;
+  clip-path: inset(0 var(--thumb-r) 0 var(--thumb-x));
+  content: "";
+  height: 2px;
+  left: 0;
+  opacity: var(--thumb-o, 1);
+  pointer-events: none;
+  position: absolute;
+  transition: var(--thumb-motion, clip-path var(--dur-3) var(--ease-emph), opacity var(--dur-2) var(--ease-out));
+  width: var(--thumb-sw);
+}
+.admin-tabs[style*="--thumb-w"] > .is-active { border-bottom-color: transparent; }
+.admin-tabs > :is(a, button) { transition: color var(--dur-2) var(--ease-out), background-color var(--dur-1) var(--ease-out); }
+@media (max-width: 720px) {
+  /* Tabs wrap into chips here; each chip carries its own state. */
+  .admin-tabs[style*="--thumb-w"]::after { content: none; }
+  .admin-tabs[style*="--thumb-w"] > .is-active { border-bottom-color: var(--ink); }
+}
+
+/* Switched content arrives instead of snapping: tab panels, Inbox channels,
+   the phone preview's Post / Comments / DM views. A hidden panel restarts
+   its animation every time it is shown. */
+:is(.workspace-panel, .ibx-panel):not([hidden]) { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; }
+.ig-phone > .ig-screen { animation: motion-fade-in-soft var(--dur-2) var(--ease-out) both; }
+
+/* ── App shell: mobile drawer and account menu ─────────────────────────── */
+@media (max-width: 900px) {
+  .sidebar { animation: motion-slide-in-left var(--dur-3) var(--ease-emph) both; }
+  .sidebar[data-open="false"][data-state="closing"] { animation: motion-slide-out-left calc(var(--dur-3) * .7) var(--ease-in) both; display: flex; pointer-events: none; }
+}
+.scrim { animation: motion-fade-in-soft var(--dur-2) var(--ease-out) both; }
+.account-menu { animation: motion-scale-in var(--dur-2) var(--ease-emph) both; transform-origin: 50% 100%; }
+.account-menu[data-state="closing"] { animation: motion-scale-out calc(var(--dur-2) * .7) var(--ease-in) both; pointer-events: none; }
+.account-row-more svg { transition: transform var(--dur-2) var(--ease-out); }
+.account-row-more[aria-expanded="true"] svg { transform: rotate(90deg); }
+.admin-menu-list { animation: motion-drop-in var(--dur-2) var(--ease-emph) both; transform-origin: 100% 0; }
+.admin-menu-list[data-state="closing"] { animation: motion-drop-out calc(var(--dur-2) * .7) var(--ease-in) both; pointer-events: none; }
+
+/* ── Dialogs, drawers and sheets ───────────────────────────────────────── */
+:is(.modal-scrim, .admin-dialog-backdrop, .admin-drawer-scrim, .builder-preview-scrim) { animation: motion-fade-in-soft var(--dur-2) var(--ease-out) both; }
+:is(.scrim, .modal-scrim, .admin-dialog-backdrop, .admin-drawer-scrim, .builder-preview-scrim)[data-state="closing"] {
+  animation: motion-fade-out calc(var(--dur-3) * .7) var(--ease-in) both;
+  pointer-events: none;
+}
+.modal-panel, .admin-reason-dialog { animation: motion-scale-in var(--dur-3) var(--ease-emph) both; }
+:is(.modal-scrim, .admin-dialog-backdrop)[data-state="closing"] > :is(.modal-panel, .admin-reason-dialog) { animation: motion-scale-out calc(var(--dur-3) * .7) var(--ease-in) both; }
+.admin-detail-drawer { animation: motion-slide-in-right var(--dur-3) var(--ease-emph) both; }
+.admin-detail-drawer[data-state="closing"] { animation: motion-slide-out-right calc(var(--dur-3) * .7) var(--ease-in) both; pointer-events: none; }
+.contact-detail-drawer { animation: motion-panel-in var(--dur-3) var(--ease-emph) both; }
+.contact-detail-scrim[data-state="closing"] > .contact-detail-drawer { animation: motion-panel-out calc(var(--dur-3) * .7) var(--ease-in) both; pointer-events: none; }
+@media (max-width: 600px) {
+  /* Phone sheets rise from the bottom edge and slide back down. */
+  .modal-panel.versions-modal { animation: motion-sheet-up var(--dur-3) var(--ease-emph) both; }
+  .modal-scrim[data-state="closing"] > .modal-panel.versions-modal { animation: motion-sheet-down calc(var(--dur-3) * .7) var(--ease-in) both; }
+  .contact-detail-drawer { animation: motion-sheet-up var(--dur-3) var(--ease-emph) both; }
+  .contact-detail-scrim[data-state="closing"] > .contact-detail-drawer { animation: motion-sheet-down calc(var(--dur-3) * .7) var(--ease-in) both; }
+}
+@media (max-width: 900px) {
+  .builder-preview.is-open { animation: motion-sheet-up var(--dur-3) var(--ease-emph) both; }
+  .builder-preview.is-open[data-state="closing"] { animation: motion-sheet-down calc(var(--dur-3) * .7) var(--ease-in) both; pointer-events: none; }
+}
+
+/* ── Toasts, notices, inline confirms, validation ──────────────────────── */
+/* Centred with the independent translate property, so the entrance's
+   transform no longer knocks the toast sideways while it animates. */
+.action-notice { animation: motion-toast-in var(--dur-2) var(--ease-emph) both; transform: none; translate: -50% 0; }
+@media (max-width: 600px) { .action-notice { translate: none; } }
+.builder-footer .action-notice { animation: motion-fade-up var(--dur-2) var(--ease-emph) both; translate: none; }
+.action-notice[data-state="closing"] { animation: motion-toast-out calc(var(--dur-2) * .7) var(--ease-in) both; pointer-events: none; }
+.inline-confirm { animation: motion-fade-down var(--dur-2) var(--ease-emph) both; }
+:is(.form-error, .form-success, .field-error, .builder-field-error, .ibx-banner, .notice-banner, .demo-banner) { animation: motion-fade-down var(--dur-2) var(--ease-out) both; }
+.app-frame :is(.notice-banner, .demo-banner), .admin-message.form-success { animation: motion-fade-down var(--dur-2) var(--ease-out) both; }
+:is(.field, .builder-field, .ibx-composer-field) :is(input, select, textarea),
+.keyword-input { transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out); }
+
+/* ── Disclosures ───────────────────────────────────────────────────────── */
+/* React-driven ones (<Collapse>): a one-row grid from 0fr to 1fr. */
+.collapse { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows var(--dur-3) var(--ease-emph), opacity var(--dur-2) var(--ease-out); }
+@starting-style { .collapse { grid-template-rows: 0fr; opacity: 0; } }
+.collapse[data-state="closing"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition-duration: calc(var(--dur-3) * .7), calc(var(--dur-2) * .7);
+  transition-timing-function: var(--ease-in);
+}
+.collapse > .collapse-inner { min-height: 0; min-width: 0; overflow: clip; overflow-clip-margin: 6px; }
+.tracked-link-row > .collapse { grid-column: 1 / -1; }
+.faq-chevron, .status-summary-chevron { transition: transform var(--dur-2) var(--ease-out); }
+/* Native <details>: the content box eases open and shut where supported. */
+:is(.status-summary, .builder-disclosure, .row-detail, .admin-audit-details) { interpolate-size: allow-keywords; }
+:is(.status-summary, .builder-disclosure, .row-detail, .admin-audit-details)::details-content {
+  block-size: 0;
+  opacity: 0;
+  overflow-y: clip;
+  transition: block-size var(--dur-3) var(--ease-emph), opacity var(--dur-2) var(--ease-out), content-visibility var(--dur-3) allow-discrete;
+}
+:is(.status-summary, .builder-disclosure, .row-detail, .admin-audit-details)[open]::details-content { block-size: auto; opacity: 1; }
+
+/* ── Buttons, chips and cards: hover and press ─────────────────────────── */
+.button {
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), filter var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-snap);
+}
+.icon-button { transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-snap); }
+:is(.button, .icon-button, .account-row-more, .segmented-option, .keyword-suggestion-chip, .ibx-chip):not(:disabled):active { transform: scale(.98); }
+.template-picker .template-picker-tile { transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out); }
+.template-picker .template-picker-tile:hover { transform: translateY(-1px); }
+.template-picker .template-picker-tile:active { transform: scale(.99); }
+:is(.media-card, .quick-reel-card) { transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out); }
+.quick-reel-card:hover { transform: translateY(-1px); }
+:is(.media-card, .quick-reel-card):active { transform: scale(.99); }
+:is(.media-skeleton, .quick-reel-skeleton) {
+  animation: motion-shimmer 1.6s ease-in-out infinite, motion-fade-in-soft var(--dur-2) var(--ease-out) 120ms both;
+  background: linear-gradient(90deg, var(--skeleton-base) 40%, var(--skeleton-sheen) 50%, var(--skeleton-base) 60%) fixed;
+  background-size: 200% 100%;
+}
+.keyword-input .keyword-chip { animation: motion-chip-in var(--dur-2) var(--ease-emph) both; }
+.keyword-input .keyword-chip[data-state="closing"] { animation: motion-chip-out calc(var(--dur-2) * .7) var(--ease-in) both; pointer-events: none; }
+.status-chip-dot { transition: background-color var(--dur-2) var(--ease-out); }
+.status-chip.is-changed { animation: motion-fade-in-soft var(--dur-2) var(--ease-out) both; }
+
+/* Switches and toggles: the knob glides on the snap curve, the track eases. */
+.status-switch-track, .builder-toggle input { transition: background-color var(--dur-2) var(--ease-out); }
+.status-switch-track > span, .builder-toggle input::before { transition: transform var(--dur-2) var(--ease-snap); }
+
+/* ── Builder: the next step slides in from the side it came from ───────── */
+.builder-main > .wizard-step:not(.is-hidden) { animation: motion-step-forward var(--dur-3) var(--ease-emph) both; }
+.builder-main:has(.builder-stepper[data-direction="back"]) > .wizard-step:not(.is-hidden) { animation-name: motion-step-back; }
+.builder-stepper-dot { transition: background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
+.builder-stepper-item:not(:last-child)::before { transition: background-color var(--dur-3) var(--ease-out); }
+
+/* ── Progress: usage and send bars fill from the left on first show ────── */
+:is(.usage-bar, .billing-usage-meter, .broadcast-progress) > span { animation: motion-grow-x var(--dur-4) var(--ease-out) both; transform-origin: 0 50%; }
+:is(.usage-bar, .billing-usage-meter) > span { transition: width var(--dur-4) var(--ease-out), background-color var(--dur-2) var(--ease-out); }
+
+/* ── Lists: rows rise in once, on first mount or when genuinely new ────────
+   Keyed rows never remount on refresh or polling, so this does not replay.
+   Only the first six are staggered (45ms apart, 225ms at most). Home and
+   Insights run their own sequence and are left out. */
+:is(.data-table tbody > tr, .admin-list > li, .admin-activity > li, .contacts-list > li, .ibx-rows > li, .ibx-fb-list > li, .version-list > li, .tracked-link-list > li, .timeline-list > li, .template-picker-grid > *, .automations-surface .automation-row, .faq-list > .faq-item):not(:is(.dashboard-page, .insights-page) *) {
+  animation: motion-fade-up var(--dur-2) var(--ease-out) both;
+}
+:is(.data-table tbody > tr, .admin-list > li, .admin-activity > li, .contacts-list > li, .ibx-rows > li, .ibx-fb-list > li, .version-list > li, .tracked-link-list > li, .timeline-list > li, .template-picker-grid > *, .automations-surface .automation-row, .faq-list > .faq-item):not(:is(.dashboard-page, .insights-page) *):nth-child(2) { animation-delay: calc(var(--stagger) * 1); }
+:is(.data-table tbody > tr, .admin-list > li, .admin-activity > li, .contacts-list > li, .ibx-rows > li, .ibx-fb-list > li, .version-list > li, .tracked-link-list > li, .timeline-list > li, .template-picker-grid > *, .automations-surface .automation-row, .faq-list > .faq-item):not(:is(.dashboard-page, .insights-page) *):nth-child(3) { animation-delay: calc(var(--stagger) * 2); }
+:is(.data-table tbody > tr, .admin-list > li, .admin-activity > li, .contacts-list > li, .ibx-rows > li, .ibx-fb-list > li, .version-list > li, .tracked-link-list > li, .timeline-list > li, .template-picker-grid > *, .automations-surface .automation-row, .faq-list > .faq-item):not(:is(.dashboard-page, .insights-page) *):nth-child(4) { animation-delay: calc(var(--stagger) * 3); }
+:is(.data-table tbody > tr, .admin-list > li, .admin-activity > li, .contacts-list > li, .ibx-rows > li, .ibx-fb-list > li, .version-list > li, .tracked-link-list > li, .timeline-list > li, .template-picker-grid > *, .automations-surface .automation-row, .faq-list > .faq-item):not(:is(.dashboard-page, .insights-page) *):nth-child(n+5) { animation-delay: calc(var(--stagger) * 4); }
+/* Chat bubbles: a thread switch brings the whole conversation up together; a
+   new message (sent or received) rises on its own. */
+.ibx-bubble { animation: motion-fade-up var(--dur-2) var(--ease-out) both; }
+
+/* ── Skeletons: one slow sweep across every block, after a short beat ──────
+   background-attachment: fixed lines all blocks up on the same gradient, so
+   the shimmer reads as one light passing over the layout rather than dozens
+   of bars flickering out of step. Fast loads never flash a skeleton: it
+   waits 120ms before fading in. */
+.skeleton-block {
+  animation: motion-shimmer 1.6s ease-in-out infinite, motion-fade-in-soft var(--dur-2) var(--ease-out) 120ms both;
+  background: linear-gradient(90deg, var(--skeleton-base) 40%, var(--skeleton-sheen) 50%, var(--skeleton-base) 60%) fixed;
+  background-size: 200% 100%;
+}
+
+/* ── Sign in, sign up, password pages: one short arrival ──────────────────
+   The title, lede, sign-in buttons and form settle in order (45ms apart),
+   in the same rhythm as the app. The marketing site keeps its own scroll
+   reveal (src/components/marketing/primitives.module.css). */
+.auth-page-section { animation: none; }
+.auth-page-frame > :not(.form-error, .form-success) { animation: motion-fade-up var(--dur-3) var(--ease-emph) both; }
+.auth-page-frame > :nth-child(2) { animation-delay: calc(var(--stagger) * 1); }
+.auth-page-frame > :nth-child(3) { animation-delay: calc(var(--stagger) * 2); }
+.auth-page-frame > :nth-child(4) { animation-delay: calc(var(--stagger) * 3); }
+.auth-page-frame > :nth-child(5) { animation-delay: calc(var(--stagger) * 4); }
+.auth-page-frame > :nth-child(n+6) { animation-delay: calc(var(--stagger) * 5); }
+
+/* ── Reduced motion: nothing moves; state still changes instantly ───────── */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+  .skeleton-block, .media-skeleton, .quick-reel-skeleton { animation: none; background: var(--skeleton-base); }
+  .quick-reel-card:hover, :is(.media-card, .quick-reel-card):active { transform: none; }
+  .collapse, .collapse[data-state="closing"] { transition: none; }
+  :is(.status-summary, .builder-disclosure, .row-detail, .admin-audit-details)::details-content { transition: none; }
+  :is(.sidebar-nav, .settings-nav, .section-nav, .ibx-channels, .template-picker-categories, .segmented)::before,
+  .admin-tabs::after { transition: none !important; }
+  :is(.button, .icon-button, .account-row-more, .segmented-option, .keyword-suggestion-chip, .ibx-chip):not(:disabled):active,
+  .template-picker .template-picker-tile:hover,
+  .template-picker .template-picker-tile:active { transform: none; }
 }

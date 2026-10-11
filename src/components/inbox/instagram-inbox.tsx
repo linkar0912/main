@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import { Fragment, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, ExternalLink, Inbox, Info, MoreHorizontal, PauseCircle, RotateCcw, Star, UserRound } from "lucide-react";
 import Link from "next/link";
@@ -719,7 +720,7 @@ export function InstagramInbox() {
           </div> : messages.length === 0 ? <div className="ibx-thread-empty"><p>No messages with this contact yet.</p></div> : groups.map((group) => <Fragment key={group.key}>
             {group.day && <div className="ibx-day" role="separator"><span>{formatDayLabel(group.day)}</span></div>}
             <div className={`ibx-group is-${group.direction}`}>
-              {group.messages.map((message, index) => <article className={`ibx-bubble is-${message.direction} ${message.status === "failed" ? "is-failed" : ""} ${message.status === "sending" ? "is-sending" : ""}`} key={message.id}>
+              {group.messages.map((message, index) => <article className={`ibx-bubble is-${message.direction} ${message.status === "failed" ? "is-failed" : ""} ${message.status === "sending" ? "is-sending" : ""}`} key={message.clientKey ?? message.id}>
                 <MessageBody message={message} />
                 {index === group.messages.length - 1 && <footer><time dateTime={message.at}>{formatBubbleTime(message.at)}</time><DeliveryState message={message} onRetry={retryMessage} /></footer>}
                 {message.error && <small>{message.error}</small>}
@@ -752,6 +753,6 @@ export function InstagramInbox() {
       </>}
     </div>
     <p className="sr-only ibx-live-announcement" role="status" aria-atomic="true">{liveAnnouncement}</p>
-    {openContactId && <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} onUpdated={(update) => applyContactUpdate(openContactId, update)} />}
+    <Presence>{openContactId && <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} onUpdated={(update) => applyContactUpdate(openContactId, update)} />}</Presence>
   </section>;
 }

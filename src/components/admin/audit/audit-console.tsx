@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
@@ -202,7 +203,7 @@ export function AuditConsole({ events, nextCursor, filters, cursor = null, histo
         />
       </section>
 
-      {exporting ? (
+      <Presence>{exporting ? (
         <ReasonDialog
           title="Export the audit log"
           intro={filtered
@@ -214,7 +215,7 @@ export function AuditConsole({ events, nextCursor, filters, cursor = null, histo
           onCancel={() => { setExporting(false); setError(null); }}
           onConfirm={(reason) => void exportCsv(reason)}
         />
-      ) : null}
+      ) : null}</Presence>
     </main>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence, PresenceSlot, presenceProps } from "@/src/components/ui/use-presence";
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -252,10 +253,10 @@ export function IntegrationsConsole({ items, filters, nextCursor = null, history
         />
       </section>
 
-      {selected ? (
-        <>
-          <button className="admin-drawer-scrim" type="button" disabled={action !== null} onClick={() => setSelected(null)} aria-label="Close integration detail" />
-          <aside ref={drawerRef} tabIndex={-1} className="admin-detail-drawer" role="dialog" aria-modal="true" aria-label="Integration detail">
+      <Presence>{selected ? (
+        <PresenceSlot>{(drawerState) => (<>
+          <button className="admin-drawer-scrim" type="button" data-state={drawerState} disabled={action !== null} onClick={() => setSelected(null)} aria-label="Close integration detail" />
+          <aside ref={drawerRef} tabIndex={-1} className="admin-detail-drawer" {...presenceProps(drawerState)} role="dialog" aria-modal="true" aria-label="Integration detail">
             <div className="admin-drawer-head">
               <div>
                 <h2>{selected.accountName}</h2>
@@ -293,17 +294,17 @@ export function IntegrationsConsole({ items, filters, nextCursor = null, history
               </div>
             </div>
           </aside>
-        </>
-      ) : null}
+        </>)}</PresenceSlot>
+      ) : null}</Presence>
 
-      {selected && action ? (
+      <Presence>{selected && action ? (
         <ActionDialog
           item={selected}
           action={action}
           onClose={() => setAction(null)}
           onDone={(message) => { setNotice(message); setAction(null); setSelected(null); router.refresh(); }}
         />
-      ) : null}
+      ) : null}</Presence>
     </main>
   );
 }

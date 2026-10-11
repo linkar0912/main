@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
@@ -17,7 +18,7 @@ export function CreateAutomationButton({ className, children }: { className: str
       <button type="button" className={className} onClick={() => setOpen(true)}>
         {children}
       </button>
-      {open && <TemplatePickerModal onClose={() => setOpen(false)} />}
+      <Presence>{open && <TemplatePickerModal onClose={() => setOpen(false)} />}</Presence>
     </>
   );
 }

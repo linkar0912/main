@@ -1,5 +1,6 @@
 "use client";
 
+import { Collapse } from "@/src/components/ui/collapse";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, X } from "lucide-react";
@@ -7,6 +8,7 @@ import { InlineContentSkeleton } from "./skeleton";
 import { SocialAvatar } from "./social-avatar";
 import { loadTeamMembers, type TeamMember } from "@/src/lib/client/team-members";
 import { RelativeTime } from "./ui/relative-time";
+import { presenceProps, usePresenceState } from "./ui/use-presence";
 
 type LeadStatus = "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
 
@@ -82,6 +84,7 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
   onUpdated?: (update: ContactUpdate) => void;
 }) {
   const [contact, setContact] = useState<ContactDetail | null>(initial ?? null);
+  const presence = usePresenceState();
   // Notes, timeline and the pause flag only exist in the full record; editing
   // waits for it so a save can never blank notes that had not loaded yet.
   const [detailLoaded, setDetailLoaded] = useState(false);
@@ -307,7 +310,7 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
   return portal(
     // A side panel, not a modal: the list behind stays visible and clickable,
     // so picking another contact switches the panel instead of closing it.
-    <div className="contact-detail-scrim" role="presentation">
+    <div className="contact-detail-scrim" role="presentation" {...presenceProps(presence)}>
       <div
         className="modal-panel contact-detail-drawer"
         role="dialog"
@@ -430,7 +433,7 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
                 </button>
               </div>
             ) : null}
-            {showHandoffForm && (
+            <Collapse open={showHandoffForm}>{showHandoffForm && (
               <form
                 className="field-spaced"
                 onSubmit={async (event) => {
@@ -466,7 +469,7 @@ export function ContactDetailModal({ contactId, initial, onClose, onUpdated }: {
                   {saving === "handoff" ? "Saving…" : "Confirm handoff"}
                 </button>
               </form>
-            )}
+            )}</Collapse>
             </section>
 
             <section className="contact-detail-section" aria-labelledby="contact-tags-title">

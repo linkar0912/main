@@ -1,5 +1,7 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { Check, CreditCard, Gauge, Sparkles, TicketCheck } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
@@ -285,13 +287,13 @@ export function BillingSettings() {
   const usageValue = Math.min(view.deliveriesUsed, usageMaximum);
   return (
     <section className="billing-shell" aria-labelledby="billing-title">
-      {inviteNotice ? <ActionNotice tone={inviteNotice.tone} message={inviteNotice.message} onDismiss={() => setInviteNotice(null)} /> : null}
+      <Presence>{inviteNotice ? <ActionNotice tone={inviteNotice.tone} message={inviteNotice.message} onDismiss={() => setInviteNotice(null)} /> : null}</Presence>
       <header className="billing-heading">
         <div>
           <h2 id="billing-title">Plan and usage</h2>
           <p className="muted">Choose the capacity that fits your conversations. GST is included.</p>
         </div>
-        <fieldset className="segmented billing-period" aria-label="Billing period">
+        <fieldset ref={slidingThumbRef} className="segmented billing-period" aria-label="Billing period">
           <legend>Billing period</legend>
           <label className="segmented-option"><input type="radio" name="billing-period" value="MONTHLY" checked={interval === "MONTHLY"} onChange={() => { setInterval("MONTHLY"); setPendingChange(null); }} /> Monthly</label>
           <label className="segmented-option"><input type="radio" name="billing-period" value="ANNUAL" checked={interval === "ANNUAL"} onChange={() => { setInterval("ANNUAL"); setPendingChange(null); }} /> Annual <span className="segmented-badge">Save 2 months</span></label>

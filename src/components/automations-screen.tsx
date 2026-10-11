@@ -1,5 +1,6 @@
 "use client";
 
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -73,7 +74,7 @@ export function AutomationsScreen({ initialAutomations }: { initialAutomations?:
                   onChange={(event) => setQuery(event.target.value)}
                 />
               </label>
-              <div className="segmented" role="group" aria-label="Filter automations by status">
+              <div ref={slidingThumbRef} className="segmented" role="group" aria-label="Filter automations by status">
                 {STATUS_FILTERS.map(({ key, label }) => (
                   <button
                     key={key}

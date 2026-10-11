@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { ListOrdered, Megaphone, Workflow } from "lucide-react";
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 
 type SectionKey = "my" | "sequences" | "broadcasts";
 
@@ -23,7 +24,7 @@ export function AutomationSectionNav({ active }: { active: SectionKey }) {
   const shown = pending && pending.from === pathname ? pending.key : active;
 
   return (
-    <nav className="segmented page-switch" aria-label="Automation sections">
+    <nav ref={slidingThumbRef} className="segmented page-switch" aria-label="Automation sections">
       {SECTIONS.map(({ key, href, label, icon: Icon }) => (
         <Link
           key={key}

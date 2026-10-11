@@ -1,5 +1,7 @@
 "use client";
 
+import { Collapse } from "@/src/components/ui/collapse";
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -798,7 +800,7 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
             ))}
           </select>
         </label>
-        <nav className="section-nav" aria-label="Help topics">
+        <nav ref={slidingThumbRef} className="section-nav" aria-label="Help topics">
           <button
             type="button"
             className={`section-nav-link ${!searching && activeTopicId === null ? "is-active" : ""}`}
@@ -856,7 +858,7 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
                             {article.q}
                             <ChevronDown className="faq-chevron" size={16} aria-hidden />
                           </button>
-                          {open && (
+                          <Collapse open={open}>{open && (
                             <div className="faq-answer">
                               {article.a}
                               <div className="help-feedback" aria-label="Article feedback">
@@ -886,7 +888,7 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
                                 )}
                               </div>
                             </div>
-                          )}
+                          )}</Collapse>
                         </div>
                       );
                     })}

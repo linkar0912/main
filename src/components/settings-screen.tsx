@@ -1,5 +1,6 @@
 "use client";
 
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -588,7 +589,7 @@ export function SettingsScreen() {
       {facebookState && <div className={`notice-banner ${facebookState === "connected" || facebookState === "select-page" ? "notice-success" : "notice-warning"}`} role="status">{facebookState === "connected" ? <Check size={17} /> : facebookState === "select-page" ? <Info size={17} /> : <AlertCircle size={17} />}<p>{facebookStatusMessage[facebookState] ?? "Facebook connection status updated."}</p></div>}
 
       <div className="settings-shell">
-        <nav className="settings-nav" aria-label="Settings sections">
+        <nav ref={slidingThumbRef} className="settings-nav" aria-label="Settings sections">
           {navGroups.map((group) => (
             <div className="settings-nav-group" key={group.label}>
               <span className="settings-nav-label">{group.label}</span>

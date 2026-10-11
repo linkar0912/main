@@ -1,5 +1,6 @@
 "use client";
 
+import { Collapse } from "@/src/components/ui/collapse";
 import { Check, Copy, Link as LinkIcon, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { InlineConfirm } from "./inline-confirm";
@@ -211,7 +212,7 @@ export function TrackedLinksPanel() {
       </div>
       <div className="surface-body">
       {error && <p className="form-error" role="alert">{error}</p>}
-      {showForm && (
+      <Collapse open={showForm}>{showForm && (
         <form className="tracked-link-form" onSubmit={createLink} noValidate>
           <div className="field-grid">
             <div className="field">
@@ -314,7 +315,7 @@ export function TrackedLinksPanel() {
             </button>
           </div>
         </form>
-      )}
+      )}</Collapse>
       {loading ? (
         <InlineContentSkeleton label="Loading tracked links" rows={3} />
       ) : loadError ? (
@@ -385,7 +386,7 @@ export function TrackedLinksPanel() {
                     onCancel={() => setConfirmDeleteId("")}
                   />
                 ) : null}
-                {statsFor === link.slug && statsEntry && (
+                <Collapse open={Boolean(statsFor === link.slug && statsEntry)}>{statsFor === link.slug && statsEntry && (
                   <div className="tracked-link-stats">
                     <span className="tracked-link-stat"><strong>{plural(statsEntry.totalClicks, "click", "clicks")}</strong></span>
                     <span className="tracked-link-stat"><strong>{plural(statsEntry.uniqueClicks, "person", "people")}</strong></span>
@@ -396,7 +397,7 @@ export function TrackedLinksPanel() {
                       </p>
                     )}
                   </div>
-                )}
+                )}</Collapse>
               </li>
             );
           })}

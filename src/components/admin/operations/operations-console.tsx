@@ -1,5 +1,7 @@
 "use client";
 
+import { Presence, PresenceSlot } from "@/src/components/ui/use-presence";
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCcw } from "lucide-react";
@@ -108,7 +110,7 @@ export function OperationsConsole({ kind, page, filters, cursor = null, history 
       />
 
       <div className="admin-section">
-        <nav className="admin-tabs" aria-label="Operation types">
+        <nav ref={slidingThumbRef} className="admin-tabs" aria-label="Operation types">
           {adminOperationKinds.map((item) => (
             <button className={item === kind ? "is-active" : ""} aria-current={item === kind ? "page" : undefined} type="button" key={item} onClick={() => switchKind(item)}>
               {kindLabels[item].plural}
@@ -146,12 +148,12 @@ export function OperationsConsole({ kind, page, filters, cursor = null, history 
         />
       </section>
 
-      {drawerOpen ? (
+      <Presence>{drawerOpen ? (
         <>
-          <button className="admin-drawer-scrim" type="button" aria-label="Close operation detail" onClick={close} />
+          <PresenceSlot>{(state) => <button className="admin-drawer-scrim" type="button" aria-label="Close operation detail" data-state={state} onClick={close} />}</PresenceSlot>
           <OperationDetailDrawer detail={selected} loading={loading} error={error} onClose={close} onComplete={complete} />
         </>
-      ) : null}
+      ) : null}</Presence>
     </main>
   );
 }

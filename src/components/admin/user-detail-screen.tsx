@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -158,7 +159,7 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
         </ul>
       </section>
 
-      {command ? (
+      <Presence>{command ? (
         <ReasonDialog
           title={`${commands[command].title} for ${user.email}`}
           intro={commands[command].description}
@@ -177,7 +178,7 @@ export function UserDetailScreen({ user }: { user: AdminUserDetail }) {
             </label>
           ) : null}
         </ReasonDialog>
-      ) : null}
+      ) : null}</Presence>
     </main>
   );
 }

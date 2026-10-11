@@ -1,5 +1,7 @@
 "use client";
 
+import { Collapse } from "@/src/components/ui/collapse";
+import { Presence } from "@/src/components/ui/use-presence";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Database, Gauge, RadioTower, Server } from "lucide-react";
@@ -315,14 +317,14 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
                     </button>
                   ) : null}
                 </div>
-                {failedList?.queue === queue.name ? (
+                <Collapse open={failedList?.queue === queue.name}>{failedList?.queue === queue.name ? (
                   <FailedJobsPanel
                     list={failedList}
                     onToggle={toggleJob}
                     onToggleAll={toggleAll}
                     onRetry={() => openCommand({ type: "retry", queue: queue.name, jobIds: failedList.selected.slice(0, MAX_RETRY_BATCH) })}
                   />
-                ) : null}
+                ) : null}</Collapse>
               </div>
             );
           })}
@@ -384,7 +386,7 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
         </aside>
       </div>
 
-      {pending ? (
+      <Presence>{pending ? (
         <ReasonDialog
           error={error}
           title={commandLabel(pending)}
@@ -394,7 +396,7 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
           onCancel={cancelCommand}
           onConfirm={execute}
         />
-      ) : null}
+      ) : null}</Presence>
     </main>
   );
 }

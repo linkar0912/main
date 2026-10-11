@@ -1,5 +1,6 @@
 "use client";
 
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import {
   AlertTriangle,
   Check,
@@ -451,7 +452,7 @@ function FacebookPageActivityView({ activity }: { activity: FacebookPageActivity
       description="Public comment replies only. These replies do not open a Messenger conversation, so they can't be followed by a DM."
     >
       <div className="list-toolbar">
-      <div className="segmented filter-chips facebook-result-filters" role="group" aria-label="Facebook Page activity filters">
+      <div ref={slidingThumbRef} className="segmented filter-chips facebook-result-filters" role="group" aria-label="Facebook Page activity filters">
         {filters.map((filter) => (
           <button
             className={`segmented-option filter-chip${result === filter.key ? " is-on" : ""}`}
@@ -688,7 +689,7 @@ export function AutomationActivity({ automationId, aside }: { automationId: stri
         )}
       >
         <div className="list-toolbar">
-          <div className="segmented filter-chips" role="group" aria-label="Filter by status">
+          <div ref={slidingThumbRef} className="segmented filter-chips" role="group" aria-label="Filter by status">
             {FEED_FILTERS.map((filter) => (
               <button
                 key={filter.key}
