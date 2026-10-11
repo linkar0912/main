@@ -3,6 +3,7 @@
 import { Presence } from "@/src/components/ui/use-presence";
 import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Download, Search, UsersRound } from "lucide-react";
 import { ContactDetailModal, type ContactUpdate } from "./contact-detail-modal";
 import { ContextHelpLink } from "./context-help-link";
@@ -101,18 +102,25 @@ type ContactsListPayload = {
   contacts?: ContactRow[];
   needsProfileEnrichment?: boolean;
   hasMore?: boolean;
+  nextCursor?: string;
+  /** Present when the list answers a search (`q`). */
+  query?: string;
 };
 
 const PAGE_SIZE = 200;
+/** Wait this long after the last keystroke before searching the server. */
+export const CONTACT_SEARCH_DEBOUNCE_MS = 250;
 
 async function fetchContactsList(
   enrich = false,
   signal?: AbortSignal,
-  page: { leadStatus?: LeadStatus; offset?: number } = {},
-): Promise<ContactsSnapshot> {
+  page: { leadStatus?: LeadStatus; offset?: number; q?: string; cursor?: string } = {},
+): Promise<ContactsSnapshot & { nextCursor?: string }> {
   let url = `/api/contacts?scope=all&limit=${PAGE_SIZE}`;
+  if (page.q) url += `&q=${encodeURIComponent(page.q)}`;
   if (page.leadStatus) url += `&leadStatus=${page.leadStatus}`;
-  if (page.offset) url += `&offset=${page.offset}`;
+  if (page.cursor) url += `&cursor=${encodeURIComponent(page.cursor)}`;
+  else if (page.offset) url += `&offset=${page.offset}`;
   if (enrich) url += "&enrich=1";
   const response = await fetch(url, { signal });
   const payload = await response.json().catch(() => ({})) as { data?: ContactsListPayload; error?: string };
@@ -124,9 +132,28 @@ async function fetchContactsList(
     counts: payload.data.counts ?? EMPTY_COUNTS,
     needsProfileEnrichment: payload.data.needsProfileEnrichment,
     hasMore: payload.data.hasMore,
+    nextCursor: payload.data.nextCursor,
     fetchedAt: Date.now(),
     fetcher: fetch,
   };
+}
+
+/**
+ * One server search: the rows the API matched across the whole workspace
+ * (not just the rows loaded here), for `query` and stage `status`.
+ */
+type SearchResult = {
+  query: string;
+  status: LeadStatus | "";
+  rows: ContactRow[];
+  counts: Record<LeadStatus, number>;
+  nextCursor?: string;
+  error: string;
+};
+
+/** Every word of `query` in the contact's name, email, owner or tags - the instant, on-screen guess. */
+function matchesLocally(contact: ContactRow, needle: string, owner: string): boolean {
+  return [contactName(contact), contact.email ?? "", owner, ...contact.tags].join(" ").toLowerCase().includes(needle);
 }
 
 /** Newest activity first - the order every server page uses. */
@@ -174,19 +201,64 @@ export function ContactsScreen() {
   const [loaded, setLoaded] = useState(() => readContactsCache() !== undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // /contacts?q=text starts searched; /contacts?contact=<id> (a contact
+  // picked in the ⌘K palette) opens that person's drawer. Both follow the
+  // URL while the page is open, so a second pick from the palette works too.
+  const urlQuery = searchParams.get("q")?.trim() ?? "";
+  const urlContact = searchParams.get("contact")?.trim() ?? "";
+  const [query, setQuery] = useState(urlQuery);
   const [status, setStatus] = useState<LeadStatus | "">("");
-  const [openContactId, setOpenContactId] = useState<string | null>(null);
+  const [openContactId, setOpenContactId] = useState<string | null>(urlContact || null);
+  const [seenUrl, setSeenUrl] = useState({ q: urlQuery, contact: urlContact });
+  if (seenUrl.q !== urlQuery || seenUrl.contact !== urlContact) {
+    // Adjusting state to a new URL while rendering (no effect round trip).
+    setSeenUrl({ q: urlQuery, contact: urlContact });
+    if (seenUrl.q !== urlQuery) setQuery(urlQuery);
+    if (seenUrl.contact !== urlContact && urlContact) setOpenContactId(urlContact);
+  }
   // Bumped by "Try again" after a failed first load to rerun the loader.
   const [loadAttempt, setLoadAttempt] = useState(0);
   const members = useTeamMembers();
 
-  // /contacts?q=@handle (a contact picked in the ⌘K palette) starts filtered.
+  // Server search: the box (and ?q=) searches every contact in the
+  // workspace, not only the rows loaded here. Typing filters the loaded rows
+  // at once; the server's answer replaces them a moment later.
+  const trimmedQuery = query.trim();
+  const [debouncedQuery, setDebouncedQuery] = useState(trimmedQuery);
+  const [search, setSearch] = useState<SearchResult | null>(null);
+  const [searchingMore, setSearchingMore] = useState(false);
   useEffect(() => {
-    const initial = new URLSearchParams(window.location.search).get("q")?.trim();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the URL after mount.
-    if (initial) setQuery(initial);
-  }, []);
+    const timer = window.setTimeout(() => setDebouncedQuery(trimmedQuery), trimmedQuery ? CONTACT_SEARCH_DEBOUNCE_MS : 0);
+    return () => window.clearTimeout(timer);
+  }, [trimmedQuery]);
+  useEffect(() => {
+    if (!debouncedQuery) return;
+    const controller = new AbortController();
+    const request = { q: debouncedQuery, ...(status ? { leadStatus: status } : {}) };
+    fetchContactsList(false, controller.signal, request).then(
+      (page) => {
+        if (controller.signal.aborted) return;
+        setSearch({ query: debouncedQuery, status, rows: page.contacts, counts: page.counts, nextCursor: page.nextCursor, error: "" });
+        if (!page.needsProfileEnrichment) return;
+        void fetchContactsList(true, controller.signal, request)
+          .then((enriched) => {
+            if (controller.signal.aborted) return;
+            setSearch((current) => current && current.query === debouncedQuery && current.status === status
+              ? { ...current, rows: mergeRows(current.rows, enriched.contacts.filter((row) => current.rows.some((shown) => shown.id === row.id))) }
+              : current);
+          })
+          .catch(() => undefined);
+      },
+      (caught: unknown) => {
+        if (controller.signal.aborted) return;
+        setSearch({ query: debouncedQuery, status, rows: [], counts: EMPTY_COUNTS, error: caught instanceof Error ? caught.message : "Could not search contacts" });
+      },
+    );
+    return () => controller.abort();
+  }, [debouncedQuery, status]);
   const autoLoadedStatus = useRef(new Set<LeadStatus>());
   // Contacts whose stage changed in the drawer -> the stage the server last
   // listed them under. Keeps stage pagination offsets honest (stagePageOffset).
@@ -295,10 +367,42 @@ export function ContactsScreen() {
     return () => { cancelled = true; };
   }, [loadAttempt]);
 
-  const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
-  const loadedForStatus = status ? contacts.filter((contact) => contact.leadStatus === status).length : allOffset;
-  const availableForStatus = status ? counts[status] : total;
-  const hasMore = loaded && loadedForStatus < availableForStatus;
+  const searchActive = Boolean(trimmedQuery);
+  // The server's answer for exactly what is asked now (text and stage).
+  const searchFresh = searchActive && search && search.query === trimmedQuery && search.status === status ? search : null;
+  const searchPending = searchActive && !searchFresh;
+  // Stage counts follow the search once the server has answered for the text.
+  const shownCounts = searchActive && search && search.query === trimmedQuery && !search.error ? search.counts : counts;
+  const total = Object.values(shownCounts).reduce((sum, value) => sum + value, 0);
+  const loadedForStatus = searchFresh
+    ? searchFresh.rows.length
+    : status ? contacts.filter((contact) => contact.leadStatus === status).length : allOffset;
+  const availableForStatus = status ? shownCounts[status] : total;
+  const hasMore = searchActive
+    ? Boolean(searchFresh?.nextCursor)
+    : loaded && loadedForStatus < availableForStatus;
+
+  // The next server page of the current search (keyset cursor).
+  async function loadMoreSearch() {
+    const current = searchFresh;
+    if (!current?.nextCursor || searchingMore) return;
+    setSearchingMore(true);
+    try {
+      const page = await fetchContactsList(false, undefined, {
+        q: current.query,
+        cursor: current.nextCursor,
+        ...(current.status ? { leadStatus: current.status } : {}),
+      });
+      setSearch((latest) => latest && latest.query === current.query && latest.status === current.status
+        ? { ...latest, rows: mergeRows(latest.rows, page.contacts), counts: page.counts, nextCursor: page.nextCursor }
+        : latest);
+      setError("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load more contacts");
+    } finally {
+      setSearchingMore(false);
+    }
+  }
 
   const loadMore = useCallback(async (target: LeadStatus | "" = status) => {
     if (loadingMore) return;
@@ -344,17 +448,16 @@ export function ContactsScreen() {
   }
 
   const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    if (searchFresh) return searchFresh.rows.filter((contact) => !status || contact.leadStatus === status);
+    // No server answer yet: filter what is loaded, so typing responds at once.
+    const needle = trimmedQuery.toLowerCase();
     return contacts.filter((contact) => {
       if (status && contact.leadStatus !== status) return false;
       if (!needle) return true;
       const owner = contact.assigneeUserId ? members.get(contact.assigneeUserId) ?? contact.assigneeUserId : "";
-      return [contactName(contact), contact.email ?? "", owner, ...contact.tags]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle);
+      return matchesLocally(contact, needle, owner);
     });
-  }, [contacts, members, query, status]);
+  }, [contacts, members, searchFresh, status, trimmedQuery]);
 
   function retryFirstLoad() {
     setError("");
@@ -363,9 +466,21 @@ export function ContactsScreen() {
   }
 
   const firstLoadFailed = Boolean(error) && contacts.length === 0;
-  const filtering = Boolean(query.trim()) || status !== "";
+  const filtering = Boolean(trimmedQuery) || status !== "";
+
+  // Closing the drawer also drops ?contact= so a reload does not reopen it.
+  function setOpenContact(next: string | null) {
+    setOpenContactId(next);
+    if (next || !searchParams.has("contact")) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("contact");
+    const rest = params.toString();
+    router.replace(rest ? `${pathname}?${rest}` : pathname, { scroll: false });
+  }
+  const toggleContact = (id: string) => setOpenContact(openContactId === id ? null : id);
 
   function applyContactUpdate(id: string, update: ContactUpdate) {
+    setSearch((current) => current && { ...current, rows: current.rows.map((contact) => (contact.id === id ? { ...contact, ...update } : contact)) });
     const previous = contacts.find((contact) => contact.id === id);
     const rows = contacts.map((contact) => (contact.id === id ? { ...contact, ...update } : contact));
     let nextCounts = counts;
@@ -397,7 +512,7 @@ export function ContactsScreen() {
             <button type="button" className={status === "" ? "is-active" : undefined} aria-pressed={status === ""} onClick={() => selectStatus("")}>All <span className="tab-count">{total}</span></button>
             {STATUS_ORDER.map((value) => (
               <button key={value} type="button" className={status === value ? "is-active" : undefined} aria-pressed={status === value} onClick={() => selectStatus(value)}>
-                {STATUS_LABELS[value]} <span className="tab-count">{counts[value]}</span>
+                {STATUS_LABELS[value]} <span className="tab-count">{shownCounts[value]}</span>
               </button>
             ))}
           </div>
@@ -418,12 +533,12 @@ export function ContactsScreen() {
         </section>}
 
         {error && !firstLoadFailed ? <p className="form-error contacts-error" role="alert">{error}</p> : null}
-        {query.trim() && hasMore ? (
-          <p className="muted contacts-scope-note">
-            Searching the {loadedForStatus.toLocaleString()} most recent of {availableForStatus.toLocaleString()} contacts. Load more to search further back.
-          </p>
-        ) : null}
-        {!loaded ? (
+        {searchFresh?.error ? <p className="form-error contacts-error" role="alert">{searchFresh.error}</p> : null}
+        {/* Announces the server's answer to screen readers as it lands. */}
+        <p className="sr-only" role="status">
+          {searchFresh && !searchFresh.error ? `${availableForStatus.toLocaleString()} ${availableForStatus === 1 ? "contact matches" : "contacts match"}` : ""}
+        </p>
+        {!loaded && !searchFresh ? (
           <ContactsContentSkeleton withToolbar={false} />
         ) : firstLoadFailed ? (
           <div className="empty-state is-inline contacts-load-error" role="alert">
@@ -432,12 +547,18 @@ export function ContactsScreen() {
             <p>{error}</p>
             <button className="button button-secondary button-small" type="button" onClick={retryFirstLoad}>Try again</button>
           </div>
+        ) : visible.length === 0 && searchPending ? (
+          <div className="empty-state is-inline contacts-searching" role="status">
+            <span className="empty-icon"><Search size={20} /></span>
+            <h2>Searching all contacts…</h2>
+            <p>Looking for “{trimmedQuery}” in handles, emails, tags and owners.</p>
+          </div>
         ) : visible.length === 0 ? (
           <div className="empty-state is-inline">
             <span className="empty-icon"><UsersRound size={20} /></span>
-            <h2>{contacts.length === 0 ? "No contacts yet" : loadingMore ? "Loading contacts…" : "No matching contacts"}</h2>
-            <p>{contacts.length === 0 ? "Contacts appear after someone interacts with an Instagram automation." : "Try another search or lead-stage filter."}</p>
-            {contacts.length > 0 && filtering && !loadingMore ? (
+            <h2>{contacts.length === 0 && !searchActive ? "No contacts yet" : loadingMore ? "Loading contacts…" : "No matching contacts"}</h2>
+            <p>{contacts.length === 0 && !searchActive ? "Contacts appear after someone interacts with an Instagram automation." : "Try another search or lead-stage filter."}</p>
+            {(contacts.length > 0 || searchActive) && filtering && !loadingMore ? (
               <button className="button button-secondary button-small" type="button" onClick={() => { setQuery(""); setStatus(""); }}>Clear search and filters</button>
             ) : null}
           </div>
@@ -455,7 +576,7 @@ export function ContactsScreen() {
                     // The whole row toggles the panel; the button below stays the
                     // keyboard-accessible control.
                     if ((event.target as HTMLElement).closest("button, a")) return;
-                    setOpenContactId((current) => (current === contact.id ? null : contact.id));
+                    toggleContact(contact.id);
                   }}
                 >
                   <div className="contact-primary">
@@ -473,7 +594,7 @@ export function ContactsScreen() {
                     type="button"
                     aria-label={`${openContactId === contact.id ? "Close" : "Open"} ${contactName(contact)}`}
                     aria-expanded={openContactId === contact.id}
-                    onClick={() => setOpenContactId((current) => (current === contact.id ? null : contact.id))}
+                    onClick={() => toggleContact(contact.id)}
                   >
                     {openContactId === contact.id ? "Close" : "Open"}
                   </button>
@@ -482,9 +603,14 @@ export function ContactsScreen() {
             </ul>
           </section>
         )}
-        {hasMore && contacts.length > 0 ? (
-          <button className="list-toggle contacts-load-more" type="button" onClick={() => void loadMore()} disabled={loadingMore}>
-            {loadingMore ? "Loading…" : `Load more (showing ${loadedForStatus.toLocaleString()} of ${availableForStatus.toLocaleString()})`}
+        {hasMore && (contacts.length > 0 || searchFresh) ? (
+          <button
+            className="list-toggle contacts-load-more"
+            type="button"
+            onClick={() => void (searchActive ? loadMoreSearch() : loadMore())}
+            disabled={searchActive ? searchingMore : loadingMore}
+          >
+            {(searchActive ? searchingMore : loadingMore) ? "Loading…" : `Load more (showing ${loadedForStatus.toLocaleString()} of ${availableForStatus.toLocaleString()})`}
           </button>
         ) : null}
         </div>
@@ -492,8 +618,8 @@ export function ContactsScreen() {
           <ContactDetailModal
             key={openContactId}
             contactId={openContactId}
-            initial={contacts.find((contact) => contact.id === openContactId)}
-            onClose={() => setOpenContactId(null)}
+            initial={contacts.find((contact) => contact.id === openContactId) ?? search?.rows.find((contact) => contact.id === openContactId)}
+            onClose={() => setOpenContact(null)}
             onUpdated={(update) => applyContactUpdate(openContactId, update)}
           />
         ) : null}</Presence>

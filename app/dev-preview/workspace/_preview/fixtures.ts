@@ -620,10 +620,14 @@ function contactsList(scenario: PreviewScenario, url: URL) {
   }
   const now = Date.now();
   const stage = url.searchParams.get("leadStatus");
+  // ?q= searches handle, email and tags, like the real API.
+  const q = url.searchParams.get("q")?.trim().replace(/^@+/, "").toLowerCase() ?? "";
+  const matched = CONTACTS.filter((contact) => !q || [contact.handle, contact.email ?? "", ...contact.tags].some((value) => value.toLowerCase().includes(q)));
   const counts = { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 };
-  for (const contact of CONTACTS) counts[contact.leadStatus] += 1;
-  const rows = CONTACTS.filter((contact) => !stage || contact.leadStatus === stage).map((contact) => contactRow(contact, now));
-  return { data: { count: rows.length, counts, contacts: rows, hasMore: false } };
+  for (const contact of matched) counts[contact.leadStatus] += 1;
+  const limit = Number(url.searchParams.get("limit") ?? 200);
+  const rows = matched.filter((contact) => !stage || contact.leadStatus === stage).slice(0, limit).map((contact) => contactRow(contact, now));
+  return { data: { count: rows.length, counts, contacts: rows, hasMore: false, ...(q ? { query: q } : {}) } };
 }
 
 /**

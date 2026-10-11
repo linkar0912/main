@@ -2,7 +2,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/contacts" }));
+const navigation = vi.hoisted(() => ({ search: "", replace: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/contacts",
+  useSearchParams: () => new URLSearchParams(navigation.search),
+  useRouter: () => ({ replace: navigation.replace, push: vi.fn() }),
+}));
 const { ContactsScreen, stagePageOffset } = await import("./contacts-screen");
 
 const contacts = [
@@ -33,10 +38,38 @@ const contacts = [
   },
 ];
 
+/** The contacts API: `q` searches handle, email and tags of every contact, as the server does. */
+function contactsApi(all: typeof contacts, extra: (url: string) => Response | undefined = () => undefined) {
+  const requests: string[] = [];
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    requests.push(url);
+    const special = extra(url);
+    if (special) return special;
+    if (init?.method === "POST") return new Response(JSON.stringify({ data: { reconciled: 0 } }));
+    if (url.includes("scope=all")) {
+      const params = new URL(url, "https://app.linkar.in").searchParams;
+      const q = params.get("q")?.toLowerCase();
+      const stage = params.get("leadStatus");
+      const limit = Number(params.get("limit") ?? 200);
+      const matched = all.filter((row) => !q || [row.instagramUsername ?? "", row.email ?? "", ...row.tags].some((value) => value.toLowerCase().includes(q)));
+      const counts = { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 } as Record<string, number>;
+      for (const row of matched) counts[row.leadStatus] += 1;
+      const rows = matched.filter((row) => !stage || row.leadStatus === stage);
+      return new Response(JSON.stringify({ data: { count: rows.length, counts, contacts: rows.slice(0, limit), hasMore: rows.length > limit } }));
+    }
+    return new Response(JSON.stringify({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }));
+  });
+  return { fetchMock, requests };
+}
+
 describe("ContactsScreen", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
+    navigation.search = "";
+    navigation.replace.mockReset();
   });
 
   it("uses the page-shaped Contacts loader while the contact list is pending", () => {
@@ -71,22 +104,74 @@ describe("ContactsScreen", () => {
   });
 
   it("searches and filters the customer contact workspace", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input).includes("scope=all")) return new Response(JSON.stringify({ data: { count: 2, counts: { NEW: 1, ENGAGED: 0, QUALIFIED: 1, CUSTOMER: 0 }, contacts } }));
-      return new Response(JSON.stringify({ data: { email: "owner@example.com", role: "OWNER", plan: "free" } }));
-    }));
+    const { fetchMock, requests } = contactsApi(contacts);
+    vi.stubGlobal("fetch", fetchMock);
     render(<ContactsScreen />);
 
     expect(await screen.findByText("maya@example.com")).toBeTruthy();
     expect(screen.getByRole("img", { name: "maya@example.com profile photo" }).getAttribute("src")).toBe("/api/contacts/contact_1/avatar");
     fireEvent.change(screen.getByRole("searchbox", { name: "Search contacts" }), { target: { value: "probablymansi" } });
+    // The loaded rows filter at once; the server answer follows.
     expect(screen.queryByText("maya@example.com")).toBeNull();
     expect(screen.getByText("@probablymansi")).toBeTruthy();
+    await waitFor(() => expect(requests.some((url) => url.includes("q=probablymansi"))).toBe(true));
+    expect(await screen.findByRole("button", { name: "New 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Qualified 0" })).toBeTruthy();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "Search contacts" }), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Qualified 1" }));
     expect(screen.getByText("maya@example.com")).toBeTruthy();
     expect(screen.queryByText("@probablymansi")).toBeNull();
+  });
+
+  // Searching used to filter only the newest 200 rows loaded in the browser,
+  // so in a workspace of thousands most people could not be found.
+  it("finds a contact the loaded page does not include by searching the server", async () => {
+    const recent = Array.from({ length: 200 }, (_, index) => ({
+      ...contacts[1],
+      id: `recent_${index}`,
+      instagramUsername: `recent_${index}`,
+      lastSeenAt: new Date(Date.UTC(2026, 8, 10, 0, index)).toISOString(),
+    }));
+    const old = { ...contacts[1], id: "contact_old", instagramUsername: "meera.styles", lastSeenAt: "2026-01-01T00:00:00.000Z" };
+    const { fetchMock } = contactsApi([...recent, old]);
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ContactsScreen />);
+    expect(await screen.findByText("@recent_0")).toBeTruthy();
+    expect(screen.queryByText("@meera.styles")).toBeNull();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search contacts" }), { target: { value: "meera" } });
+    expect(screen.getByRole("heading", { name: "Searching all contacts…" })).toBeTruthy();
+    expect(await screen.findByText("@meera.styles")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "All 1" })).toBeTruthy();
+  });
+
+  it("follows ?q= changes while the page is open", async () => {
+    const { fetchMock } = contactsApi(contacts);
+    vi.stubGlobal("fetch", fetchMock);
+    navigation.search = "q=maya";
+    const { rerender } = render(<ContactsScreen />);
+    expect((screen.getByRole("searchbox", { name: "Search contacts" }) as HTMLInputElement).value).toBe("maya");
+    expect(await screen.findByText("maya@example.com")).toBeTruthy();
+
+    navigation.search = "q=probablymansi";
+    rerender(<ContactsScreen />);
+    expect((screen.getByRole("searchbox", { name: "Search contacts" }) as HTMLInputElement).value).toBe("probablymansi");
+    expect(await screen.findByText("@probablymansi")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("maya@example.com")).toBeNull());
+  });
+
+  it("opens the drawer for ?contact=<id> and drops the parameter when it closes", async () => {
+    const { fetchMock } = contactsApi(contacts, (url) => (url.includes("/api/contacts/contact_2")
+      ? new Response(JSON.stringify({ data: { contact: contacts[1], timeline: [] } }))
+      : undefined));
+    vi.stubGlobal("fetch", fetchMock);
+    navigation.search = "contact=contact_2";
+    render(<ContactsScreen />);
+
+    expect(await screen.findByRole("dialog", { name: "Contact details" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Close @probablymansi" }));
+    expect(navigation.replace).toHaveBeenCalledWith("/contacts", { scroll: false });
   });
 
   it("loads the list first, then adds contacts from historical activity", async () => {
