@@ -143,14 +143,39 @@ text clears WCAG AA on the fill in both themes (6.4-8.5:1).
 - Enforced by `app/globals.test.ts` ("status colour: quiet when fine, loud
   when not").
 
-## Navigation
+## Selection: never a grey fill
 
-The active sidebar item - in the app and the owner console alike - is a
-soft neutral fill (`--nav-active-fill`: ink at 6% on light, white at 8% on
-dark), the label in ink at weight 700 and the icon in `--accent-text`.
-Hover changes colour only. Sidebar group labels are quiet sentence-case
-Manrope (`.sidebar-label`). The owner console shows "Owner console" as a
-quiet line under the logo instead of a badge.
+Owner feedback (round 5): "I don't want that grey bg selected tile - I don't
+have grey bg anywhere." Nothing that is selected, current, active or hovered
+gets a grey or tinted background, in either theme. Selection is shown with
+ink text, a magenta bar, an ink underline or an ink outline. The old
+`--nav-active-fill` token is gone.
+
+| Pattern | Class (container > item) | Selected | Hover |
+|---|---|---|---|
+| Vertical navigation - sidebars, owner console, Settings/Help section navs, template categories, any side list of sections | `.nav-list > .nav-item` (also `.sidebar-nav > .sidebar-link`, `.settings-nav`, `.section-nav`, `.template-picker-categories`) | Text `--ink` 700, icon `--accent`, a 3px x 20px rounded magenta bar (`--select-bar`) on the item's left edge, vertically centred. The bar glides between items on `transform` (`ref={slidingThumbRef}` on the container) | Text and icon go to ink |
+| Horizontal tabs - page view tabs, records tabs, workspace detail tabs, contacts stages | `.tab-underline > a, button` (owner console: `.admin-tabs`); optional `.tab-count` | Ink 700 text and a 2px ink underline (`--select-line`) that slides along the row | Ink text |
+| Segmented control | `.segmented > .segmented-option` | Solid ink thumb (it is not grey) | Ink text; the track has no fill, just a 1px line |
+| Selectable cards and tiles - template cards, choice cards, post picker tiles | `.select-outline` | Background stays the panel colour; 1.5px ink outline, ink title | The hairline darkens to `--line-strong` |
+| Dense list rows - inbox conversations, contact rows | `.select-rail` (title in `strong` or `.select-title`) | A 3px magenta rail on the left edge, ink 700 title | Title goes to ink |
+| Menu items - account menu, Actions menus, the + menu, dropdowns | `.menu-item` (also `.account-menu-item`, `.admin-menu-list > button`) | - | Ink text and icon; keyboard focus gets an inset 2px magenta ring |
+| Table rows | `.data-table` | - | No fill; the row's primary link underlines |
+
+The selected state is read from `aria-current`, `aria-selected`,
+`aria-pressed`, `aria-checked`, a checked input, or `.is-active` /
+`.is-selected` / `.is-on`, so markup only has to say what is selected.
+
+Allowed non-transparent backgrounds: the page canvas, panels and cards,
+buttons (primary ink, secondary outline is transparent), warning/danger
+status chips, the plan sticker, skeleton loaders, avatars, and the solid
+ink thumbs/knobs of segmented switches and toggles. Code and ID chips are
+transparent with a 1px line. `app/globals.test.ts` ("selection style: never
+a grey fill") fails if a selected/active/current/hover rule sets any other
+background.
+
+Sidebar group labels are quiet sentence-case Manrope (`.sidebar-label`). The
+owner console shows "Owner console" as a quiet line under the logo instead
+of a badge.
 
 ## Shape & depth
 
@@ -200,7 +225,8 @@ Rules:
 - Selection moves, it does not jump: every segmented switch, tab row and
   side nav gets `ref={slidingThumbRef}`
   (`src/components/ui/use-sliding-thumb.ts`), which measures the selected
-  option and glides one thumb between options.
+  option and glides one indicator between options (the segmented ink thumb,
+  the side-nav magenta bar, the tab underline - see "Selection").
 - Route changes cross-fade the page content only (React `<ViewTransition>`
   from each area's `template.tsx`); the sidebar never moves.
 - Lists animate rows on first mount or when a row is genuinely new, never on
