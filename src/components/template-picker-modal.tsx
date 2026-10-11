@@ -24,6 +24,11 @@ import { FacebookGlyph } from "./facebook-glyph";
 import { useFocusTrap } from "./use-focus-trap";
 import { InstagramGlyph } from "./instagram-glyph";
 import { basicAutomationTemplates, getCompatibleTemplates, triggerLabel, type PremadeTemplate, type TemplateTriggerType } from "@/src/lib/automation/templates";
+import type { Goal } from "@/src/lib/onboarding/answers";
+import { rankTemplates } from "@/src/lib/onboarding/recommendations";
+
+/** How many goal-matched templates lead the list as "Recommended for you". */
+const RECOMMENDED_COUNT = 3;
 
 type Provider = "INSTAGRAM" | "FACEBOOK";
 
@@ -63,6 +68,8 @@ type PickerItem = {
   category: TemplateTriggerType;
   popular?: boolean;
   featured?: boolean;
+  /** Matches the goals saved in onboarding; shown first. */
+  recommended?: boolean;
   href: string;
 };
 
@@ -102,7 +109,9 @@ function Tile({ item, provider, onSelect }: { item: PickerItem; provider: Provid
       )}
       <span className="template-picker-tile-foot">
         <span>{item.featured ? "Quick automation" : categoryLabel(item.category, provider)}</span>
-        {item.popular && <span className="template-picker-badge">Popular</span>}
+        {item.recommended
+          ? <span className="template-picker-badge">Recommended for you</span>
+          : item.popular && <span className="template-picker-badge">Popular</span>}
       </span>
     </button>
   );
@@ -114,7 +123,11 @@ function Tile({ item, provider, onSelect }: { item: PickerItem; provider: Provid
  * Replaces the old separate /automations/templates page and /automations/new
  * type chooser: nothing to browse to, just pick and go.
  */
-export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
+export function TemplatePickerModal({ onClose, goals = [] }: {
+  onClose: () => void;
+  /** Goals saved in onboarding; templates that serve them lead the list. */
+  goals?: readonly Goal[];
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<TemplateTriggerType | null>(null);
@@ -210,6 +223,13 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
     return provider === "INSTAGRAM" ? [campaign, ...recipes] : recipes;
   }, [facebookPageId, provider]);
 
+  // Same ranking as the onboarding plan: the best goal matches for this channel.
+  const recommendedOrder = useMemo(() => {
+    if (goals.length === 0) return new Map<string, number>();
+    const ranked = rankTemplates({ goals: [...goals], channels: provider === "FACEBOOK" ? ["facebook"] : ["instagram"] });
+    return new Map(ranked.filter((item) => item.goal).slice(0, RECOMMENDED_COUNT).map((item, index) => [item.id, index]));
+  }, [goals, provider]);
+
   const categoryCounts = useMemo(() => {
     const counts = new Map<TemplateTriggerType, number>();
     for (const item of items) counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
@@ -221,8 +241,14 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
     if (!query.trim()) return true;
     return matchesQuery(item.title, query) || matchesQuery(item.description, query);
   });
-  // Popular templates lead (each carries a "Popular" chip); the rest keep their order.
-  const visible = [...matching.filter((item) => item.popular), ...matching.filter((item) => !item.popular)];
+  // Templates recommended from onboarding goals lead, then popular ones
+  // (each carries its chip); the rest keep their order.
+  const recommended = matching
+    .filter((item) => recommendedOrder.has(item.id))
+    .sort((a, b) => (recommendedOrder.get(a.id) ?? 0) - (recommendedOrder.get(b.id) ?? 0))
+    .map((item) => ({ ...item, recommended: true }));
+  const others = matching.filter((item) => !recommendedOrder.has(item.id));
+  const visible = [...recommended, ...others.filter((item) => item.popular), ...others.filter((item) => !item.popular)];
 
   const resultsTitle = category ? categoryLabel(category, provider) : "All templates";
   const surfaceHint = provider === "FACEBOOK" ? "Works with comments on your Facebook Page" : "Works with comments and messages on Instagram";

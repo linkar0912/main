@@ -10,6 +10,7 @@ import { ArrowLeft, Ban, ChevronDown, Download, Info, PauseCircle, PlayCircle, R
 import { PageHeader } from "@/src/components/page-header";
 import { IdChip } from "@/src/components/ui/id-chip";
 import { RelativeTime } from "@/src/components/ui/relative-time";
+import type { WorkspaceAbout } from "@/src/lib/onboarding/about";
 import { StatusBadge } from "@/src/components/ui/status-badge";
 import type { AdminWorkspaceDetail } from "@/src/lib/admin/accounts-repository";
 import { adminCommand, adminCommandResponse, adminErrorMessage, downloadAdminFile, humanizeAdminCode } from "./shared/admin-request";
@@ -255,11 +256,41 @@ function LimitsFields({ form, setForm, defaults, samePlan, invalid }: { form: Li
   );
 }
 
+/** Read-only answers from first-time onboarding (src/lib/onboarding/about.ts). */
+function AboutWorkspace({ about }: { about: WorkspaceAbout }) {
+  const status = about.status === "completed" ? "Completed"
+    : about.status === "skipped" ? "Skipped"
+      : about.status === "in_progress" ? `In progress, ${about.progress?.toLowerCase() ?? ""}`
+        : about.status === "existing" ? "Not started (workspace predates onboarding)"
+          : "Not started";
+  return (
+    <section className="admin-card" aria-labelledby="overview-about-title">
+      <div className="admin-card-head">
+        <h2 id="overview-about-title">About this workspace</h2>
+      </div>
+      <dl className="admin-kv">
+        <div>
+          <dt>Onboarding</dt>
+          <dd>{status}{about.at ? <> <RelativeTime inline value={about.at} /></> : null}</dd>
+        </div>
+        {about.rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+      {about.rows.length === 0 ? <p className="admin-hint">The owner hasn’t answered the onboarding questions.</p> : null}
+    </section>
+  );
+}
+
 export function WorkspaceDetailScreen({
   workspace,
   entitlement,
   plans = [],
   activity,
+  about,
   initialTab = "overview",
 }: {
   workspace: AdminWorkspaceDetail;
@@ -267,6 +298,8 @@ export function WorkspaceDetailScreen({
   plans?: Array<{ id: string; key: string; name: string; isActive: boolean }>;
   /** Omitted when the audit log could not be read; the Activity tab is then left out. */
   activity?: WorkspaceActivityEvent[];
+  /** Onboarding answers; omitted when they could not be read. */
+  about?: WorkspaceAbout;
   initialTab?: string;
 }) {
   const router = useRouter();
@@ -489,6 +522,7 @@ export function WorkspaceDetailScreen({
               )}
           </section>
         </div>
+        {about ? <AboutWorkspace about={about} /> : null}
         <p className="admin-results workspace-ids">
           <IdChip id={workspace.id} prefix="Workspace ID" />
           <span>Last changed <RelativeTime inline value={workspace.updatedAt} /></span>

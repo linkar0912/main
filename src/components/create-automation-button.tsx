@@ -4,6 +4,7 @@ import { Presence } from "@/src/components/ui/use-presence";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
+import { useAccountIdentity } from "./app-shell";
 
 const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
 
@@ -13,12 +14,13 @@ const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then
  */
 export function CreateAutomationButton({ className, children }: { className: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const { onboarding } = useAccountIdentity();
   return (
     <>
       <button type="button" className={className} onClick={() => setOpen(true)}>
         {children}
       </button>
-      <Presence>{open && <TemplatePickerModal onClose={() => setOpen(false)} />}</Presence>
+      <Presence>{open && <TemplatePickerModal goals={onboarding?.goals} onClose={() => setOpen(false)} />}</Presence>
     </>
   );
 }

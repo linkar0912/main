@@ -288,4 +288,20 @@ describe("TemplatePickerModal", () => {
     expect(await screen.findByRole("option", { name: "Linkar Demo" })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("leads with templates that fit the goals saved in onboarding", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ data: [] }) })));
+    render(<TemplatePickerModal onClose={() => {}} goals={["giveaways"]} />);
+    const tiles = within(screen.getByRole("region", { name: "Template results" })).getAllByRole("button");
+    expect(tiles[0].textContent).toMatch(/Confirm giveaway comments/);
+    expect(tiles[0].textContent).toMatch(/Recommended for you/);
+  });
+
+  it("keeps popular-first ordering without saved goals", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ data: [] }) })));
+    render(<TemplatePickerModal onClose={() => {}} />);
+    const tiles = within(screen.getByRole("region", { name: "Template results" })).getAllByRole("button");
+    expect(tiles[0].textContent).toMatch(/Popular/);
+    expect(screen.queryByText("Recommended for you")).toBeNull();
+  });
 });

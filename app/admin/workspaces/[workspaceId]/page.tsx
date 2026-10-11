@@ -6,11 +6,13 @@ import { WorkspaceDetailScreen } from "@/src/components/admin/workspace-detail-s
 import { getAdminAccountsRepository } from "@/src/lib/admin/accounts-provider";
 import { listAdminAuditEvents } from "@/src/lib/admin/audit/repository";
 import { listAdminPlans, loadAdminWorkspaceEntitlement } from "@/src/lib/admin/plan-service";
+import { describeOnboarding } from "@/src/lib/onboarding/about";
+import { getRepository } from "@/src/lib/repository-provider";
 
 async function WorkspaceData({ workspaceId, tab }: { workspaceId: string; tab?: string }) {
   const workspace = await getAdminAccountsRepository().getAdminWorkspace(workspaceId);
   if (!workspace) notFound();
-  const [entitlement, plans, activity] = await Promise.all([
+  const [entitlement, plans, activity, onboarding] = await Promise.all([
     loadAdminWorkspaceEntitlement(workspaceId).catch((error: unknown) => {
       if (error instanceof AdminWorkspaceError && error.code === "workspace_entitlement_missing") return undefined;
       throw error;
@@ -22,6 +24,8 @@ async function WorkspaceData({ workspaceId, tab }: { workspaceId: string; tab?: 
       console.error("admin_workspace_activity_unavailable", error instanceof Error ? error.message : error);
       return undefined;
     }),
+    // "About this workspace" is read-only context; without it the page still loads.
+    getRepository().getWorkspaceOnboarding(workspaceId).then(describeOnboarding).catch(() => undefined),
   ]);
   return (
     <WorkspaceDetailScreen
@@ -29,6 +33,7 @@ async function WorkspaceData({ workspaceId, tab }: { workspaceId: string; tab?: 
       workspace={workspace}
       entitlement={entitlement}
       plans={plans.map(({ id, key, name, isActive }) => ({ id, key, name, isActive }))}
+      about={onboarding}
       activity={activity?.map(({ id, phase, actorEmail, action, reason, errorCode, createdAt }) => ({ id, phase, actorEmail, action, reason, errorCode, createdAt: createdAt.toISOString() }))}
       initialTab={tab}
     />

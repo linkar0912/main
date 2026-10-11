@@ -9,10 +9,12 @@ const ORIGINAL_FETCH = Symbol.for("linkar.devPreview.originalFetch");
 
 type PreviewWindow = Window & { [ORIGINAL_FETCH]?: typeof fetch };
 
-/** ?state=empty | error | slow | busy | fresh; anything else is the populated workspace. Read per request. */
+const SCENARIOS: readonly PreviewScenario[] = ["empty", "error", "slow", "busy", "fresh", "plan", "invite"];
+
+/** ?state=empty | error | slow | busy | fresh | plan | invite; anything else is the populated workspace. Read per request. */
 function currentScenario(): PreviewScenario {
   const state = new URLSearchParams(window.location.search).get("state");
-  return state === "empty" || state === "error" || state === "slow" || state === "busy" || state === "fresh" ? state : "populated";
+  return SCENARIOS.find((scenario) => scenario === state) ?? "populated";
 }
 
 function abortError(): DOMException {

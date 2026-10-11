@@ -24,6 +24,9 @@ import { getFacebookPages, getInstagramConnections, getInsightsOverview, seedWor
 import { greetingFor } from "@/src/lib/display-name";
 import { deriveAttentionItems, type AttentionConnection, type AttentionItem } from "@/src/lib/home-attention";
 import { sumPoints } from "@/src/lib/insights-summary";
+import { recommendTemplates } from "@/src/lib/onboarding/recommendations";
+import type { Goal } from "@/src/lib/onboarding/answers";
+import { OnboardingInviteCard, RecommendedLabel, YourPlanCard } from "./onboarding/home-onboarding";
 
 const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
 
@@ -371,7 +374,12 @@ type StepState = "done" | "current" | "todo" | "checking";
  * It really is a sequence, so the steps are numbered; only the current one
  * is open, finished ones fold to a line with a check.
  */
-function GuidedStart({ connections, onBrowseTemplates }: { connections: AttentionConnection[] | null; onBrowseTemplates: () => void }) {
+function GuidedStart({ connections, goals, onBrowseTemplates }: { connections: AttentionConnection[] | null; goals: Goal[]; onBrowseTemplates: () => void }) {
+  // With saved onboarding goals the recipes are picked for this person
+  // (same ranking as the onboarding plan); otherwise the three defaults.
+  const recipes = goals.length > 0
+    ? recommendTemplates({ goals }).map((item) => ({ id: item.id, title: item.title, detail: item.why, popular: false, href: item.href }))
+    : QUICKSTART_TEMPLATES.map((template) => ({ ...template, href: `/automations/new?type=classic&template=${template.id}` }));
   const connected = connections?.filter((connection) => connection.status === "CONNECTED") ?? [];
   const connectState: StepState = connections === null ? "checking" : connected.length > 0 ? "done" : "current";
   const pickState: StepState = connectState === "done" ? "current" : "todo";
@@ -407,9 +415,10 @@ function GuidedStart({ connections, onBrowseTemplates }: { connections: Attentio
             <p>Start from a recipe. You can change every word before it goes live.</p>
             {pickState === "current" ? (
               <>
+                {goals.length > 0 ? <RecommendedLabel /> : null}
                 <div className="start-recipes">
-                  {QUICKSTART_TEMPLATES.map((template) => (
-                    <Link className="start-recipe" key={template.id} href={`/automations/new?type=classic&template=${template.id}`}>
+                  {recipes.map((template) => (
+                    <Link className="start-recipe" key={template.id} href={template.href}>
                       <span className="start-recipe-title">
                         <strong>{template.title}</strong>
                         {template.popular ? <span className="quickstart-badge">Popular</span> : null}
@@ -438,6 +447,10 @@ function GuidedStart({ connections, onBrowseTemplates }: { connections: Attentio
 
 export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection, initialEmail, initialDisplayName }: DashboardScreenProps = {}) {
   const { automations, loading, error: automationsError = "", reload: reloadAutomations } = useAutomations(initialAutomations);
+  const { onboarding, role } = useAccountIdentity();
+  // Hidden straight away on dismiss; the server keeps it hidden for good.
+  const [inviteHidden, setInviteHidden] = useState(false);
+  const [planHidden, setPlanHidden] = useState(false);
   // A failed load must not read as a brand-new workspace: no guided start,
   // no "create your first automation".
   const automationsFailed = Boolean(automationsError) && automations.length === 0;
@@ -518,12 +531,17 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
   const attention = deriveAttentionItems({ connections, automations, automationsKnown, failures, usage });
   const everythingKnown = connections !== null && automationsKnown && failures !== null;
   const allClear = everythingKnown && attention.length === 0 && !isNewWorkspace;
+  const showInvite = Boolean(onboarding?.invite) && role === "OWNER" && !inviteHidden;
+  // "Your plan" stands in for the generic guided start until the first
+  // automation exists or it is hidden.
+  const showPlan = Boolean(onboarding?.planCard) && isNewWorkspace && !planHidden;
+  const liveConnection = connections === null ? null : connections.some((connection) => connection.status === "CONNECTED");
 
   return (
     <div className="page-wrap ws-page dashboard-page home-page">
       <HomeHeader
         fallbackEmail={initialEmail ?? ""}
-        displayName={initialDisplayName}
+        displayName={initialDisplayName ?? onboarding?.displayName ?? undefined}
         status={isNewWorkspace ? "Let’s get your first automatic reply live." : (
           <StatusLine connections={connections} automations={automations} automationsKnown={automationsKnown} allClear={allClear} />
         )}
@@ -531,9 +549,15 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
 
       <DemoBanner />
 
+      {showInvite ? <OnboardingInviteCard onDismiss={() => setInviteHidden(true)} /> : null}
+
       {isNewWorkspace ? (
         <>
-          <GuidedStart connections={connections} onBrowseTemplates={() => setPickerOpen(true)} />
+          {showPlan ? (
+            <YourPlanCard connected={liveConnection} enterDelay={ENTER.start} onDismiss={() => setPlanHidden(true)} onBrowseTemplates={() => setPickerOpen(true)} />
+          ) : (
+            <GuidedStart connections={connections} goals={onboarding?.goals ?? []} onBrowseTemplates={() => setPickerOpen(true)} />
+          )}
           <TrackedLinksRow />
         </>
       ) : (
@@ -552,7 +576,7 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
           <TrackedLinksRow />
         </>
       )}
-      <Presence>{pickerOpen && <TemplatePickerModal onClose={() => setPickerOpen(false)} />}</Presence>
+      <Presence>{pickerOpen && <TemplatePickerModal goals={onboarding?.goals} onClose={() => setPickerOpen(false)} />}</Presence>
     </div>
   );
 }
