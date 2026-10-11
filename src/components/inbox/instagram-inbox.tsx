@@ -1,9 +1,11 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, ExternalLink, Inbox, Info, PauseCircle, RotateCcw, Star, UserRound } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, ExternalLink, Inbox, Info, MoreHorizontal, PauseCircle, RotateCcw, Star, UserRound } from "lucide-react";
+import Link from "next/link";
 import { ContactDetailModal, type ContactUpdate } from "../contact-detail-modal";
-import { formatDateParts, formatShortDate, formatTime } from "@/src/lib/format-date";
+import { formatDateParts, formatDateTime, formatShortDate, formatTime } from "@/src/lib/format-date";
+import { RelativeTime } from "../ui/relative-time";
 import { ActivityContentSkeleton } from "../skeleton";
 import { SocialAvatar } from "../social-avatar";
 import { ConversationHeaderActions, type InboxOperation } from "./conversation-header-actions";
@@ -62,9 +64,10 @@ function isReminderDue(value?: string): boolean {
   return value ? Date.parse(value) <= Date.now() : false;
 }
 
-function formatReminder(value: string): string {
-  if (isReminderDue(value)) return "Reminder due";
-  return formatShortDate(value);
+/** "Reminder due", or when it is set for ("Tomorrow 10:00") with the full time on hover. */
+function ReminderLabel({ value }: { value: string }) {
+  if (isReminderDue(value)) return <>Reminder due</>;
+  return <RelativeTime value={value} />;
 }
 
 function isAutomationPaused(contact: InboxContact): boolean {
@@ -283,6 +286,9 @@ export function InstagramInbox() {
   const [listError, setListError] = useState("");
   const [threadError, setThreadError] = useState("");
   const [openContactId, setOpenContactId] = useState<string | null>(null);
+  // Phones fold the owner / reminder / close controls behind one button so the
+  // thread keeps its height; wider panes always show them.
+  const [optionsOpen, setOptionsOpen] = useState(false);
   // Screen readers hear only newly arrived inbound messages, not every
   // re-render of the thread (sends, status changes, loading earlier pages).
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
@@ -499,6 +505,7 @@ export function InstagramInbox() {
     conversationAbortRef.current = controller;
     activeContactIdRef.current = contact.id;
     setSelectedId(contact.id);
+    setOptionsOpen(false);
     setConversationLoading(true);
     setMessages([]);
     setMessageCursor(undefined);
@@ -613,13 +620,14 @@ export function InstagramInbox() {
   if (!loaded) return <ActivityContentSkeleton />;
 
   const tooLong = draft.trim().length > MAX_MESSAGE_LENGTH;
+  const inboxEmpty = contacts.length === 0 && !filtersActive && !filterLoading && !listError;
 
   return <section className={`ibx-desk ${selected ? "has-thread" : ""}`} aria-label="Instagram inbox conversations">
     <aside className="ibx-list" aria-label="Contacts">
       <div className="ibx-list-head">
         <div className="ibx-list-title">
           <h2>Messages</h2>
-          <span>{contacts.length}{nextCursor ? "+" : ""} {contacts.length === 1 && !nextCursor ? "person" : "people"}</span>
+          {contacts.length > 0 && <span>{contacts.length}{nextCursor ? "+" : ""} {contacts.length === 1 && !nextCursor ? "person" : "people"}</span>}
         </div>
         <InboxFilters value={filters} labels={labels} onChange={(next) => {
           closeConversation();
@@ -630,15 +638,22 @@ export function InstagramInbox() {
       </div>
 
       <div className="ibx-list-body">
-        {listError && <p className="ibx-banner is-error" role="alert"><AlertCircle size={15} aria-hidden="true" />{listError}<button type="button" onClick={() => void loadContacts(true)}>Try again</button></p>}
-        {filterLoading ? <div className="ibx-list-loading" aria-label="Loading conversations" aria-busy="true">
+        {listError && contacts.length > 0 && <p className="ibx-banner is-error" role="alert"><AlertCircle size={16} aria-hidden="true" /><span>{listError}</span><button type="button" onClick={() => void loadContacts(true)}>Try again</button></p>}
+        {listError && contacts.length === 0 && !filterLoading ? <div className="ibx-list-empty is-error" role="alert">
+          <AlertCircle size={22} aria-hidden="true" />
+          <p><strong>Your conversations didn’t load.</strong> {listError}</p>
+          <button type="button" className="button button-secondary button-small" onClick={() => void loadContacts(true)}>Try again</button>
+        </div> : filterLoading ? <div className="ibx-list-loading" aria-label="Loading conversations" aria-busy="true">
           {[0, 1, 2, 3, 4].map((index) => <div className="ibx-row-skeleton" key={index}><span className="skeleton-block skeleton-avatar" /><span className="skeleton-stack skeleton-row-copy"><span className="skeleton-block skeleton-word skeleton-row-title" /><span className="skeleton-block skeleton-word skeleton-row-meta" /></span></div>)}
-        </div> : contacts.length === 0 ? <div className="ibx-list-empty">
+        </div> : contacts.length === 0 ? <div className={`ibx-list-empty ${inboxEmpty ? "is-account-empty" : ""}`}>
           <Inbox size={22} aria-hidden="true" />
           {filtersActive ? <>
             <p>No conversations match these filters.</p>
-            <button type="button" className="ibx-link-button" onClick={() => { setFilterLoading(!readInboxCache(DEFAULT_FILTERS).snapshot); setFilters(DEFAULT_FILTERS); }}>Clear filters</button>
-          </> : <p>No messages yet. When someone DMs your Instagram account, they show up here.</p>}
+            <button type="button" className="button button-secondary button-small" onClick={() => { setFilterLoading(!readInboxCache(DEFAULT_FILTERS).snapshot); setFilters(DEFAULT_FILTERS); }}>Clear filters</button>
+          </> : <>
+            <p>No messages yet. When someone DMs your Instagram account, they show up here.</p>
+            <Link className="button button-secondary button-small" href="/automations">Set up an automation</Link>
+          </>}
         </div> : <>
           <ul className="ibx-rows">
             {contacts.map((contact) => {
@@ -651,15 +666,15 @@ export function InstagramInbox() {
                     <span className="ibx-row-top">
                       <strong>{displayName(contact)}</strong>
                       {contact.favorite && <Star className="ibx-row-star" size={12} fill="currentColor" aria-label="Favourite" />}
-                      <time dateTime={contact.lastMessageAt}>{formatListTime(contact.lastMessageAt)}</time>
+                      <time dateTime={contact.lastMessageAt} title={formatDateTime(contact.lastMessageAt)}>{formatListTime(contact.lastMessageAt)}</time>
                     </span>
                     <span className="ibx-row-preview">{contact.preview}</span>
                     {(contact.inboxStatus === "CLOSED" || assignee || contact.reminderAt || !contact.canMessage || isAutomationPaused(contact)) && <span className="ibx-row-tags">
                       {contact.inboxStatus === "CLOSED" && <span className="ibx-tag">Closed</span>}
-                      {contact.reminderAt && <span className={`ibx-tag ${reminderDue ? "is-due" : ""}`}><BellRing size={11} aria-hidden="true" />{formatReminder(contact.reminderAt)}</span>}
-                      {assignee && <span className="ibx-tag"><UserRound size={11} aria-hidden="true" />{assignee}</span>}
+                      {contact.reminderAt && <span className={`ibx-tag ${reminderDue ? "is-due" : ""}`}><BellRing size={12} aria-hidden="true" /><ReminderLabel value={contact.reminderAt} /></span>}
+                      {assignee && <span className="ibx-tag" title={`Owner: ${assignee}`}><UserRound size={12} aria-hidden="true" /><span className="ibx-tag-text">{assignee}</span></span>}
                       {!contact.canMessage && contact.inboxStatus !== "CLOSED" && <span className="ibx-tag is-muted">Window closed</span>}
-                      {isAutomationPaused(contact) && <span className="ibx-tag"><PauseCircle size={11} aria-hidden="true" />Bot paused</span>}
+                      {isAutomationPaused(contact) && <span className="ibx-tag"><PauseCircle size={12} aria-hidden="true" />Automations paused</span>}
                     </span>}
                   </span>
                 </button>
@@ -674,10 +689,16 @@ export function InstagramInbox() {
     <div className="ibx-thread">
       {!selected ? <div className="ibx-thread-blank">
         <span className="ibx-blank-mark"><Inbox size={22} aria-hidden="true" /></span>
-        <h2>Pick a conversation</h2>
-        <p>Choose someone from the list to read the thread and reply.</p>
+        {inboxEmpty ? <>
+          <h2>No conversations yet</h2>
+          <p>Replies your automations send, and every DM people send you, will appear here.</p>
+          <Link className="button button-secondary button-small" href="/automations">Set up an automation</Link>
+        </> : <>
+          <h2>Pick a conversation</h2>
+          <p>Choose someone from the list to read the thread and reply.</p>
+        </>}
       </div> : <>
-        <header className="ibx-thread-head">
+        <header className={`ibx-thread-head ${optionsOpen ? "is-options-open" : ""}`}>
           <button className="ibx-back" type="button" aria-label="Back to contacts" onClick={closeConversation}><ArrowLeft size={19} /></button>
           <button className="ibx-who" type="button" aria-label={`View details for ${displayName(selected)}`} onClick={() => setOpenContactId(selected.id)}>
             <SocialAvatar channel="instagram" name={displayName(selected)} src={selected.avatarUrl} />
@@ -687,6 +708,7 @@ export function InstagramInbox() {
             </span>
             <Info className="ibx-who-info" size={16} aria-hidden="true" />
           </button>
+          <button className="ibx-options-toggle" type="button" aria-expanded={optionsOpen} aria-controls="ibx-conversation-actions" aria-label={optionsOpen ? "Hide conversation options" : "Conversation options"} onClick={() => setOptionsOpen((open) => !open)}><MoreHorizontal size={20} aria-hidden="true" /></button>
           <ConversationHeaderActions contact={selected} members={members} onOperation={(operation) => void patchContact(selected.id, operation)} />
         </header>
 

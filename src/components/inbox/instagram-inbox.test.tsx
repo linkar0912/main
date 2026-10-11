@@ -251,4 +251,41 @@ describe("InstagramInbox", () => {
     expect(keys).toHaveLength(2);
     expect(keys[0]).toBe(keys[1]);
   });
+
+  it("shows a load failure as an error with Try again, not as an empty inbox", async () => {
+    let fail = true;
+    vi.stubGlobal("fetch", vi.fn(async () => fail
+      ? new Response(JSON.stringify({ error: "Inbox is unavailable" }), { status: 500 })
+      : new Response(JSON.stringify({ data: { contacts: [aanya], members: [] } }), { status: 200 })));
+    render(<InstagramInbox />);
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Inbox is unavailable");
+    expect(screen.queryByText(/No messages yet/)).toBeNull();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("button", { name: /open conversation with @aanya/i })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("points a brand-new inbox at automations instead of asking to pick a conversation", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { contacts: [], members: [] } }), { status: 200 })));
+    render(<InstagramInbox />);
+
+    expect(await screen.findByRole("heading", { name: "No conversations yet" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Pick a conversation" })).toBeNull();
+    expect(screen.getAllByRole("link", { name: "Set up an automation" })[0].getAttribute("href")).toBe("/automations");
+  });
+
+  it("folds the owner, reminder and close controls behind one options button", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input) === "/api/inbox"
+      ? new Response(JSON.stringify({ data: { contacts: [aanya], members: [] } }), { status: 200 })
+      : new Response(JSON.stringify({ data: { messages: [] } }), { status: 200 })));
+    render(<InstagramInbox />);
+    fireEvent.click(await screen.findByRole("button", { name: /open conversation with @aanya/i }));
+    const toggle = await screen.findByRole("button", { name: "Conversation options" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-controls")).toBe(screen.getByRole("toolbar", { name: "Conversation actions" }).id);
+    fireEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "Hide conversation options" }).getAttribute("aria-expanded")).toBe("true");
+  });
 });

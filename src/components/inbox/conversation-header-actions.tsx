@@ -36,7 +36,10 @@ function ReminderField({ value, onCommit }: { value?: string; onCommit: (reminde
     onCommit(date ? date.toISOString() : null);
   }
 
-  return <input
+  return <>
+    {/* A native date-time box shows "dd/mm/yyyy, --:--" when empty; say what it is for instead. */}
+    {!draft && <span className="ibx-reminder-placeholder" aria-hidden="true">Set a reminder</span>}
+    <input
     aria-label="Conversation reminder"
     type="datetime-local"
     value={draft}
@@ -46,12 +49,13 @@ function ReminderField({ value, onCommit }: { value?: string; onCommit: (reminde
       if (event.key === "Enter") { event.preventDefault(); commit(); }
       if (event.key === "Escape") setDraft(saved);
     }}
-  />;
+  />
+  </>;
 }
 
 export function ConversationHeaderActions({ contact, members, onOperation }: { contact: InboxContact; members: InboxMember[]; onOperation: (operation: InboxOperation) => void }) {
   const open = contact.inboxStatus === "OPEN";
-  return <div className="ibx-actions" role="toolbar" aria-label="Conversation actions">
+  return <div className="ibx-actions" id="ibx-conversation-actions" role="toolbar" aria-label="Conversation actions">
     <button className={`ibx-icon-button ${contact.favorite ? "is-on" : ""}`} type="button" aria-pressed={contact.favorite} aria-label={contact.favorite ? "Remove from favourites" : "Add to favourites"} title={contact.favorite ? "Starred" : "Star"} onClick={() => onOperation({ action: "set_favorite", favorite: !contact.favorite })}>
       <Star size={16} fill={contact.favorite ? "currentColor" : "none"} />
     </button>
@@ -59,7 +63,7 @@ export function ConversationHeaderActions({ contact, members, onOperation }: { c
       {open ? <Archive size={15} aria-hidden="true" /> : <ArchiveRestore size={15} aria-hidden="true" />}
       <span>{open ? "Close" : "Reopen"}</span>
     </button>
-    <label className="ibx-field ibx-assignee" title="Owner">
+    <label className="ibx-field ibx-assignee" title={contact.assigneeUserId ? `Owner: ${members.find((member) => member.userId === contact.assigneeUserId)?.email ?? "former member"}` : "Owner"}>
       <UserRound size={15} aria-hidden="true" />
       <select aria-label="Assign conversation" value={contact.assigneeUserId ?? ""} onChange={(event) => onOperation({ action: "set_assignment", assigneeUserId: event.target.value || null })}>
         <option value="">Unassigned</option>
