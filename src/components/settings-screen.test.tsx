@@ -81,7 +81,7 @@ describe("SettingsScreen webhook health panel", () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/workspace/messaging"))).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: /Team/ }));
-    await screen.findByLabelText("Invite by email");
+    await screen.findByLabelText("Email address");
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/team/invitations"))).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: /Delivery/ }));
@@ -238,19 +238,23 @@ describe("SettingsScreen webhook health panel", () => {
     await act(async () => { render(<SettingsScreen />); });
 
     expect(await screen.findByText("No Page connected")).toBeTruthy();
-    const connectLink = screen.getByRole("link", { name: /Connect Facebook Page/ });
+    const connectLink = screen.getByRole("link", { name: /Connect a Facebook Page/ });
     expect(connectLink.getAttribute("href")).toBe("/api/facebook/oauth/start");
+    // The empty state guides with the primary action, not a "connect another".
+    expect(connectLink.classList.contains("button-primary")).toBe(true);
+    expect(screen.queryByRole("link", { name: /Connect another/ })).toBeNull();
 
-    const instagramCard = screen.getByText("Instagram connections").closest("[data-channel-card]");
-    const facebookCard = screen.getByText("Facebook Pages").closest("[data-channel-card]");
-    expect(instagramCard?.getAttribute("data-channel-card")).toBe("instagram");
-    expect(facebookCard?.getAttribute("data-channel-card")).toBe("facebook");
-    expect(instagramCard?.classList.contains("channel-settings-card")).toBe(true);
-    expect(facebookCard?.classList.contains("channel-settings-card")).toBe(true);
-    expect(instagramCard?.querySelector('[data-brand-logo="instagram"]')).toBeTruthy();
-    expect(facebookCard?.querySelector('[data-brand-logo="facebook"]')).toBeTruthy();
-    expect(instagramCard?.querySelector('[data-channel-health="instagram"]')).toBeNull();
-    expect(facebookCard?.querySelector('[data-channel-health="facebook"]')).toBeNull();
+    const instagramCard = screen.getByRole("region", { name: "Instagram" });
+    const facebookCard = screen.getByRole("region", { name: "Facebook Pages" });
+    expect(instagramCard.getAttribute("data-channel-card")).toBe("instagram");
+    expect(facebookCard.getAttribute("data-channel-card")).toBe("facebook");
+    expect(within(instagramCard).getByText("No account connected")).toBeTruthy();
+    // Nothing to troubleshoot until something is connected.
+    expect(screen.queryByRole("region", { name: "Troubleshooting" })).toBeNull();
+    expect(instagramCard.querySelector('[data-brand-logo="instagram"]')).toBeTruthy();
+    expect(facebookCard.querySelector('[data-brand-logo="facebook"]')).toBeTruthy();
+    expect(instagramCard.querySelector('[data-channel-health="instagram"]')).toBeNull();
+    expect(facebookCard.querySelector('[data-channel-health="facebook"]')).toBeNull();
   });
 
   it("summarizes the workspace and keeps each webhook status with its channel", async () => {
@@ -287,17 +291,21 @@ describe("SettingsScreen webhook health panel", () => {
 
     await act(async () => { render(<SettingsScreen />); });
 
-    const summary = await screen.findByRole("region", { name: "Workspace pulse" });
-    expect(summary.textContent).toContain("2 connected channels");
+    const summary = await screen.findByRole("region", { name: "Workspace status" });
+    await vi.waitFor(() => expect(summary.textContent).toContain("2 channels connected"));
     expect(summary.textContent).toContain("Live");
     expect(within(summary).getByRole("group", { name: "Mode status" })).toBeTruthy();
     expect(within(summary).getByRole("group", { name: "Channel status" })).toBeTruthy();
+    expect(within(summary).getByRole("group", { name: "Incoming messages status" }).textContent).toContain("Incoming messages healthy");
     expect(screen.getByRole("button", { name: /Connections/ }).getAttribute("aria-pressed")).toBe("true");
 
-    const instagramCard = screen.getByText("Instagram connections").closest('[data-channel-card="instagram"]');
-    const facebookCard = screen.getByText("Facebook Pages").closest('[data-channel-card="facebook"]');
-    expect(instagramCard?.querySelector('[data-channel-health="instagram"]')).toBeTruthy();
-    expect(facebookCard?.querySelector('[data-channel-health="facebook"]')).toBeTruthy();
+    const instagramCard = screen.getByRole("region", { name: "Instagram" });
+    const facebookCard = screen.getByRole("region", { name: "Facebook Pages" });
+    expect(instagramCard.querySelector('[data-channel-health="instagram"]')).toBeTruthy();
+    expect(facebookCard.querySelector('[data-channel-health="facebook"]')).toBeTruthy();
+    // One status word per account, quiet when fine.
+    expect(within(instagramCard).getByText("Connected").className).toContain("is-success");
+    expect(screen.getByRole("region", { name: "Troubleshooting" })).toBeTruthy();
   });
 
   it("groups both channel managers into one accessible connections console", async () => {
@@ -315,10 +323,13 @@ describe("SettingsScreen webhook health panel", () => {
 
     await act(async () => { render(<SettingsScreen />); });
 
-    const consoleRegion = await screen.findByRole("region", { name: "Connected channels" });
+    const consoleRegion = await screen.findByRole("region", { name: "Connections" });
+    await within(consoleRegion).findByText("@creator");
     expect(consoleRegion.querySelectorAll("[data-channel-card]")).toHaveLength(2);
-    expect(within(consoleRegion).getByRole("region", { name: "Instagram channel" })).toBeTruthy();
-    expect(within(consoleRegion).getByRole("region", { name: "Facebook channel" })).toBeTruthy();
+    expect(within(consoleRegion).getByRole("region", { name: "Instagram" })).toBeTruthy();
+    expect(within(consoleRegion).getByRole("region", { name: "Facebook Pages" })).toBeTruthy();
+    expect(within(consoleRegion).getByRole("link", { name: /Connect another account/ }).getAttribute("href")).toBe("/api/meta/oauth/start");
+    expect(within(consoleRegion).getByRole("link", { name: /Connect another Page/ }).getAttribute("href")).toBe("/api/facebook/oauth/start");
     expect(consoleRegion.querySelector('[data-channel-card="instagram"]')).toBeTruthy();
     expect(consoleRegion.querySelector('[data-channel-card="facebook"]')).toBeTruthy();
     expect(consoleRegion.querySelector('a[href="/api/meta/oauth/start"]')).toBeTruthy();
@@ -461,8 +472,23 @@ describe("SettingsScreen webhook health panel", () => {
 
     await act(async () => { render(<SettingsScreen />); });
 
-    expect(await screen.findByText("@creator_one: All caught up")).toBeTruthy();
-    expect(await screen.findByText("@creator_two: Some fields need a reconnect")).toBeTruthy();
+    const first = await screen.findByLabelText("Connection check for @creator_one");
+    const second = await screen.findByLabelText("Connection check for @creator_two");
+    expect(first.textContent).toContain("All caught up");
+    expect(second.textContent).toContain("Some fields need a reconnect");
+    // Each status sits in its own account row, and only the account with a
+    // problem asks for a reconnect.
+    expect(first.closest("#account-connection_1")).toBeTruthy();
+    expect(second.closest("#account-connection_2")).toBeTruthy();
+    expect(within(screen.getByText("@creator_two").closest("li")!).getByText("Needs reconnect")).toBeTruthy();
+    expect(within(screen.getByText("@creator_one").closest("li")!).queryByText("Needs reconnect")).toBeNull();
+    // Problems open their field list; a healthy account keeps it folded away.
+    expect(within(second).getByRole("button", { name: /Some fields need a reconnect/ }).getAttribute("aria-expanded")).toBe("true");
+    const healthy = within(first).getByRole("button", { name: /All caught up/ });
+    expect(healthy.getAttribute("aria-expanded")).toBe("false");
+    expect(within(first).queryByText("Comments")).toBeNull();
+    fireEvent.click(healthy);
+    expect(within(first).getByText("Comments")).toBeTruthy();
   });
 });
 
@@ -549,8 +575,8 @@ describe("SettingsScreen confirmations and team feedback", () => {
 
     await act(async () => { render(<SettingsScreen />); });
     fireEvent.click(screen.getByRole("button", { name: /Team/ }));
-    fireEvent.change(await screen.findByLabelText("Invite by email"), { target: { value: "new@example.com" } });
-    await act(async () => { fireEvent.submit(screen.getByLabelText("Invite by email").closest("form")!); });
+    fireEvent.change(await screen.findByLabelText("Email address"), { target: { value: "new@example.com" } });
+    await act(async () => { fireEvent.submit(screen.getByLabelText("Email address").closest("form")!); });
 
     expect(await screen.findByText("Invitation sent to new@example.com.")).toBeTruthy();
     expect(screen.getByText(/team list could not refresh/i)).toBeTruthy();
@@ -566,8 +592,8 @@ describe("SettingsScreen confirmations and team feedback", () => {
 
     await act(async () => { render(<SettingsScreen />); });
     fireEvent.click(screen.getByRole("button", { name: /Team/ }));
-    fireEvent.change(await screen.findByLabelText("Invite by email"), { target: { value: "new@example.com" } });
-    await act(async () => { fireEvent.submit(screen.getByLabelText("Invite by email").closest("form")!); });
+    fireEvent.change(await screen.findByLabelText("Email address"), { target: { value: "new@example.com" } });
+    await act(async () => { fireEvent.submit(screen.getByLabelText("Email address").closest("form")!); });
 
     expect(await screen.findByText(/Your plan includes 3 team seats/)).toBeTruthy();
   });
@@ -609,14 +635,27 @@ describe("SettingsScreen confirmations and team feedback", () => {
     await vi.waitFor(() => expect((screen.getByLabelText("Workspace timezone") as HTMLSelectElement).value).toBe(browserZone));
     expect(screen.getByLabelText("Workspace timezone").tagName).toBe("SELECT");
     expect(screen.getByText("Quiet hours disabled")).toBeTruthy();
+    // No save bar while nothing has changed.
+    expect(screen.queryByRole("region", { name: "Unsaved quiet hours" })).toBeNull();
 
     fireEvent.click(screen.getByRole("switch", { name: "Hold automated DMs during quiet hours" }));
     // Not "enabled" until it is actually saved.
     expect(screen.queryByText("Quiet hours enabled")).toBeNull();
     expect(screen.getByText("Quiet hours on, not saved yet")).toBeTruthy();
+    const bar = screen.getByRole("region", { name: "Unsaved quiet hours" });
+    expect(bar.textContent).toContain("Unsaved changes");
 
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save messaging hours" })); });
+    // Discard puts back what the server holds.
+    fireEvent.click(within(bar).getByRole("button", { name: "Discard" }));
+    expect(screen.getByText("Quiet hours disabled")).toBeTruthy();
+    expect((screen.getByRole("switch", { name: "Hold automated DMs during quiet hours" }) as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByRole("region", { name: "Unsaved quiet hours" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Hold automated DMs during quiet hours" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save changes" })); });
     expect(await screen.findByText("Quiet hours enabled")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Unsaved quiet hours" }).textContent).toContain("Saved.");
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
   });
 
   it("describes demo mode in plain language", async () => {
@@ -627,5 +666,76 @@ describe("SettingsScreen confirmations and team feedback", () => {
 
     expect(await screen.findByText(/Live delivery isn't set up for this workspace yet/)).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/DATABASE_URL|credentials/);
+  });
+});
+
+describe("SettingsScreen layout", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/settings");
+  });
+
+  it("opens on the list of sections on phones and drills into one", async () => {
+    stubSettingsFetch(() => undefined);
+    const { container } = await act(async () => render(<SettingsScreen />));
+    const root = container.querySelector(".prefs");
+    // A bare /settings is the section list (phones show only that).
+    expect(root?.getAttribute("data-view")).toBe("index");
+
+    fireEvent.click(screen.getByRole("button", { name: /Delivery/ }));
+    expect(root?.getAttribute("data-view")).toBe("section");
+    expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
+  });
+
+  it("treats a section link or an OAuth return as a section page", async () => {
+    window.history.replaceState({}, "", "/settings?meta=connected");
+    stubSettingsFetch(() => undefined);
+    const { container } = await act(async () => render(<SettingsScreen />));
+    expect(container.querySelector(".prefs")?.getAttribute("data-view")).toBe("section");
+  });
+
+  it("groups the nav into Workspace and Account, with one selected item", async () => {
+    window.history.replaceState({}, "", "/settings?section=billing");
+    stubSettingsFetch((url) => (url === "/api/billing"
+      ? { body: { data: { catalog: [], canManage: true, billingConfigured: true, entitlementPlanKey: "free", deliveriesUsed: 0, subscription: null } } }
+      : url.startsWith("/api/team") ? { status: 500, body: {} } : undefined));
+    await act(async () => { render(<SettingsScreen />); });
+
+    const nav = screen.getByRole("navigation", { name: "Settings sections" });
+    expect(nav.querySelector(".prefs-nav-tile")).toBeTruthy();
+    expect(within(nav).getAllByRole("button").map((button) => button.querySelector(".prefs-nav-name")?.textContent))
+      .toEqual(["Connections", "Delivery", "Team", "Billing", "Policies", "Security"]);
+    expect(within(nav).getAllByRole("button").filter((button) => button.getAttribute("aria-pressed") === "true")).toHaveLength(1);
+    expect(within(nav).getByRole("button", { name: /Billing/ }).classList.contains("is-active")).toBe(true);
+    // A team that fails to load only leaves the seat meter out of Billing.
+    expect(await screen.findByRole("heading", { name: "Plan and usage" })).toBeTruthy();
+    expect(screen.queryByText(/Could not load team settings/)).toBeNull();
+  });
+
+  it("keeps sign-in and account links under Security", async () => {
+    window.history.replaceState({}, "", "/settings?section=security");
+    stubSettingsFetch(() => undefined);
+    await act(async () => { render(<SettingsScreen />); });
+
+    const security = screen.getByRole("region", { name: "Security" });
+    expect(within(security).getByRole("link", { name: "Change password" }).getAttribute("href")).toBe("/profile");
+    expect(within(security).getByRole("link", { name: "Manage sessions" }).getAttribute("href")).toBe("/profile");
+    expect(within(security).getByRole("link", { name: /^Delete your data/ }).getAttribute("href")).toBe("/data-deletion");
+  });
+
+  it("marks the signed-in person in the member list", async () => {
+    window.history.replaceState({}, "", "/settings?section=team");
+    stubSettingsFetch((url) => (url.startsWith("/api/team/invitations")
+      ? { body: { members: [{ email: "owner@example.com", role: "OWNER" }, { email: "helper@example.com", role: "MEMBER" }], invitations: [] } }
+      : undefined));
+    await act(async () => { render(<SettingsScreen />); });
+
+    const members = await screen.findByRole("region", { name: /Members/ });
+    await vi.waitFor(() => expect(within(screen.getByText("owner@example.com").closest("li")!).getByText("You")).toBeTruthy());
+    expect(within(screen.getByText("helper@example.com").closest("li")!).queryByText("You")).toBeNull();
+    expect(within(members).getByText("Owner")).toBeTruthy();
+    // No pending invitations, so no empty group for them.
+    expect(screen.queryByRole("region", { name: /Pending invitations/ })).toBeNull();
   });
 });

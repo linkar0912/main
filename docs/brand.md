@@ -286,6 +286,28 @@ Sidebar group labels are quiet sentence-case Manrope (`.sidebar-label`). The
 owner console shows "Owner console" as a quiet line under the logo instead
 of a badge.
 
+## Settings: the preferences list
+
+Settings (`src/components/settings-screen.tsx`, primitives in
+`src/components/settings/prefs.tsx`) reads as a calm preferences pane, not
+a stack of cards:
+
+- A 220px section nav ("Workspace" / "Account") beside content capped at
+  760px. The selected section sits on the white tile from "Selection".
+- Each section is an `h2` plus one line, then groups. A group is a quiet
+  title (with an optional action on the right) over **one** card whose rows
+  are split by hairlines: label and helper on the left, the control or value
+  on the right (`PrefsGroupHead`, `PrefsRow`). Never one card per row.
+- Destructive actions that affect the whole section live in a last "Danger
+  zone" group; row-level ones (Disconnect, Revoke) stay quiet slate text
+  until hovered and always confirm in place.
+- A sticky save bar ("Unsaved changes" · Discard · Save changes) appears only
+  while a section has unsaved edits, then says "Saved." and leaves.
+- Usage meters (`UsageMeter`): an allowance turns amber at 80% and red when
+  used up; a count (accounts, seats) is amber only when every slot is taken.
+- Phones drill in: `/settings` is the list of sections, a section is its own
+  page with a "Settings" back link, and rows stack the control under the copy.
+
 ## Shape & depth
 
 - One radius family: 12px cards and panels (`--radius-card`), 10px inputs and

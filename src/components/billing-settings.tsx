@@ -2,8 +2,8 @@
 
 import { Presence } from "@/src/components/ui/use-presence";
 import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
-import { Check, CreditCard, Gauge, Sparkles, TicketCheck } from "lucide-react";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Check } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { openRazorpaySubscriptionCheckout } from "@/src/lib/client/razorpay-checkout";
 import { getBillingView, invalidateWorkspaceResource, notifyWorkspaceChanged, type BillingView } from "@/src/lib/client/workspace-data";
@@ -13,6 +13,7 @@ import { ActionNotice } from "./action-notice";
 import { InlineConfirm } from "./inline-confirm";
 import { InlineContentSkeleton } from "./skeleton";
 import { StatusBadge, type StatusTone } from "./ui/status-badge";
+import { PrefsGroupHead, PrefsSectionHead, UsageMeter } from "./settings/prefs";
 
 const ACTIVATION_POLL_MS = 3_000;
 const ACTIVATION_TIMEOUT_MS = 45_000;
@@ -62,7 +63,15 @@ type PendingPlanChange = { plan: BillingPlanKey; interval: BillingInterval; next
 
 const SUBSCRIPTION_EXISTS_MESSAGE = "This workspace already has a subscription, so no new checkout was started. Refresh in a moment to manage it here.";
 
-export function BillingSettings() {
+/** What the workspace uses against its plan, when Settings already knows it. */
+export type BillingUsage = { instagram: number; facebook: number; seats?: number };
+
+export function BillingSettings({ usage, back }: {
+  /** Connected accounts and team seats in use; their meters are left out without it. */
+  usage?: BillingUsage;
+  /** The phone-only "Settings" back link of the drill-in layout. */
+  back?: ReactNode;
+} = {}) {
   const [view, setView] = useState<BillingView | null>(null);
   const [interval, setInterval] = useState<BillingInterval>("MONTHLY");
   const [busyPlan, setBusyPlan] = useState("");
@@ -269,10 +278,19 @@ export function BillingSettings() {
     }
   }
 
-  if (!view && !error) return <section className="billing-shell" aria-label="Billing"><InlineContentSkeleton label="Loading billing" rows={4} /></section>;
+  const head = (
+    <PrefsSectionHead
+      id="billing-section-title"
+      title="Billing"
+      description="Your plan, what this workspace has used this month, and the other plans. Prices include GST."
+      back={back}
+    />
+  );
+  if (!view && !error) return <section className="billing-shell" aria-label="Billing">{head}<InlineContentSkeleton label="Loading billing" rows={4} /></section>;
   if (!view) {
     return (
       <section className="billing-shell" aria-label="Billing">
+        {head}
         <div className="notice-banner notice-warning billing-load-error" role="alert">
           <p>{error}</p>
           <button className="button button-secondary button-small" type="button" onClick={() => { setError(""); setLoadAttempt((attempt) => attempt + 1); }}>Try again</button>
@@ -284,115 +302,168 @@ export function BillingSettings() {
   const plans = [FREE_BILLING_PLAN, ...view.catalog];
   const currentPlan = plans.find((plan) => plan.key === view.entitlementPlanKey) ?? FREE_BILLING_PLAN;
   const usageMaximum = currentPlan.monthlyDeliveryLimit;
-  const usageValue = Math.min(view.deliveriesUsed, usageMaximum);
+  const subscription = view.subscription;
+  const billedPlan = subscription?.planId ? plans.find((plan) => `plan_${plan.key}` === subscription.planId) : undefined;
+  const billedPrice = billedPlan && subscription?.status === "ACTIVE"
+    ? `${formatRupees(subscription.interval === "ANNUAL" ? billedPlan.annualPaise : billedPlan.monthlyPaise)} a ${subscription.interval === "ANNUAL" ? "year" : "month"}`
+    : null;
   return (
-    <section className="billing-shell" aria-labelledby="billing-title">
+    <section className="billing-shell" aria-labelledby="billing-section-title">
       <Presence>{inviteNotice ? <ActionNotice tone={inviteNotice.tone} message={inviteNotice.message} onDismiss={() => setInviteNotice(null)} /> : null}</Presence>
-      <header className="billing-heading">
-        <div>
-          <h2 id="billing-title">Plan and usage</h2>
-          <p className="muted">Choose the capacity that fits your conversations. GST is included.</p>
-        </div>
-        <fieldset ref={slidingThumbRef} className="segmented billing-period" aria-label="Billing period">
-          <legend>Billing period</legend>
-          <label className="segmented-option"><input type="radio" name="billing-period" value="MONTHLY" checked={interval === "MONTHLY"} onChange={() => { setInterval("MONTHLY"); setPendingChange(null); }} /> Monthly</label>
-          <label className="segmented-option"><input type="radio" name="billing-period" value="ANNUAL" checked={interval === "ANNUAL"} onChange={() => { setInterval("ANNUAL"); setPendingChange(null); }} /> Annual <span className="segmented-badge">Save 2 months</span></label>
-        </fieldset>
-      </header>
-
-      <section className="billing-current panel" aria-label="Current billing summary">
-        <div className="billing-current-plan"><span><CreditCard size={18} /></span><div><small>Current plan</small><strong>{currentPlan.name}</strong></div></div>
-        <div className="billing-usage-copy"><small>Monthly deliveries</small><strong>{view.deliveriesUsed.toLocaleString("en-IN")} <span>of {usageMaximum.toLocaleString("en-IN")}</span></strong></div>
-        <div className="billing-usage-meter" role="progressbar" aria-label="Monthly delivery usage" aria-valuemin={0} aria-valuemax={usageMaximum} aria-valuenow={usageValue}><span style={{ inlineSize: `${Math.min(100, (usageValue / usageMaximum) * 100)}%` }} /></div>
-        <p>{Math.max(0, usageMaximum - view.deliveriesUsed).toLocaleString("en-IN")} deliveries remaining</p>
-      </section>
+      {head}
 
       {!view.canManage && <p className="notice-banner notice-warning">Only the workspace owner can change billing. You can still review plans and usage.</p>}
       {!view.billingConfigured && <p className="notice-banner notice-warning">Secure checkout is unavailable because the payment connection is incomplete. Plan changes will be enabled once the setup is finished.</p>}
       {message && <p className="notice-banner notice-success" role="status"><Check size={17} /> {message}</p>}
       {error && <p className="notice-banner notice-warning" role="alert">{error}</p>}
 
-      <section className="billing-invite panel" aria-labelledby="premium-invite-title">
-        <div className="billing-invite-copy">
-          <span><TicketCheck size={18} /></span>
-          <div><h3 id="premium-invite-title">Have an invite code?</h3><p>It unlocks the plan in your invite for 30 days. Your current subscription doesn’t change, and if you already pay for a higher plan, that one stays.</p></div>
-        </div>
-        <div className="billing-invite-form">
-          <label className="sr-only" htmlFor="premium-invite-code">Premium invite code</label>
-          <input id="premium-invite-code" value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="LINKAR-XXXX-XXXX-XXXX" autoComplete="off" />
-          <button className="button button-primary billing-invite-submit" type="button" disabled={!view.canManage || !inviteCode.trim() || redeemingInvite} onClick={() => void redeemInvite()}>{redeemingInvite ? "Applying…" : "Apply invite"}</button>
+      <section className="prefs-group" aria-labelledby="billing-title">
+        <PrefsGroupHead id="billing-title" title="Plan and usage" />
+        <div className="prefs-card billing-summary" aria-label="Current billing summary" role="group">
+          <div className="billing-summary-head">
+            <div className="billing-summary-plan">
+              <span className="plan-tag">{currentPlan.name}</span>
+              <strong>{currentPlan.name} plan</strong>
+              {billedPrice ? <span className="billing-summary-price">{billedPrice}</span> : null}
+            </div>
+            {subscription ? (
+              <div className="billing-summary-status">
+                <p className="billing-subscription-line">Subscription <StatusBadge {...subscriptionStatus(subscription.status)} /></p>
+                {subscription.currentPeriodEnd ? (
+                  <p className="muted">
+                    {subscription.cancelAtPeriodEnd ? "Ends" : "Paid through"} {formatDate(subscription.currentPeriodEnd)}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="billing-summary-status muted">No paid subscription. Choose a plan below to upgrade.</p>
+            )}
+          </div>
+          <div className="billing-meters">
+            <UsageMeter label="Deliveries this month" ariaLabel="Monthly delivery usage" used={view.deliveriesUsed} limit={usageMaximum} />
+            {usage ? (
+              <>
+                <UsageMeter kind="count" label="Instagram accounts" used={usage.instagram} limit={currentPlan.instagramConnectionLimit} />
+                <UsageMeter kind="count" label="Facebook Pages" used={usage.facebook} limit={currentPlan.facebookConnectionLimit} />
+                {usage.seats !== undefined ? <UsageMeter kind="count" label="Team seats" used={usage.seats} limit={currentPlan.memberLimit} /> : null}
+              </>
+            ) : null}
+          </div>
+          <p className="billing-remaining muted">{Math.max(0, usageMaximum - view.deliveriesUsed).toLocaleString("en-IN")} deliveries left this month</p>
         </div>
       </section>
 
-      <div className="billing-plan-grid">
-        {view.catalog.map((plan) => {
-          const current = view.entitlementPlanKey === plan.key;
-          const currentBillingSelection = view.subscription?.status === "ACTIVE"
-            && view.subscription.planId === `plan_${plan.key}`
-            && view.subscription.interval === interval;
-          const price = interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise;
-          return (
-            <Fragment key={plan.key}>
-            <article className={`billing-plan ${current ? "is-current" : ""} ${plan.key === "growth" ? "is-featured" : ""}`} aria-label={`${plan.name} plan`}>
-              <div className="billing-plan-top">
-                <h3>{plan.name}</h3>
-                {current ? <span className="billing-plan-current"><Sparkles size={13} /> Current</span> : plan.key === "growth" ? <span className="billing-plan-best">Best fit</span> : null}
-              </div>
-              <p className="billing-price"><strong>{formatRupees(price)}</strong><span>/{interval === "ANNUAL" ? "year" : "month"}</span></p>
-              <p className="billing-saving">{interval === "ANNUAL" ? "2 months free" : "Billed monthly"}</p>
-              <div className="billing-capacity" aria-label={`${plan.name} limits`}>
-                <span><Gauge size={14} /><strong>{plan.monthlyDeliveryLimit.toLocaleString("en-IN")}</strong> deliveries</span>
-                <span><strong>{plan.automationLimit}</strong> automations</span>
-                <span><strong>{plan.instagramConnectionLimit} + {plan.facebookConnectionLimit}</strong> Instagram + Facebook</span>
-                <span><strong>{plan.memberLimit}</strong> {plan.memberLimit === 1 ? "seat" : "seats"}</span>
-              </div>
-              <ul>{plan.features.map((feature) => <li key={feature}><Check size={14} />{feature}</li>)}</ul>
-              <button className={`button ${currentBillingSelection ? "button-secondary" : "button-primary"}`} type="button" aria-expanded={pendingChange ? pendingChange.plan === plan.key : undefined} disabled={currentBillingSelection || activating || !view.canManage || !view.billingConfigured || Boolean(busyPlan)} onClick={() => void choosePlan(plan.key)}>
-                {currentBillingSelection ? "Your current plan" : busyPlan === plan.key && !pendingChange ? "Opening…" : `Choose ${plan.name}`}
-              </button>
-            </article>
-            {pendingChange?.plan === plan.key ? (
-              <div className="billing-plan-confirm">
-                <InlineConfirm
-                  label={`Confirm switching to ${plan.name}`}
-                  message={pendingChange.message}
-                  confirmLabel={`Switch to ${plan.name}`}
-                  busyLabel="Scheduling…"
-                  busy={busyPlan === plan.key}
-                  tone="primary"
-                  onConfirm={() => void confirmPlanChange()}
-                  onCancel={() => setPendingChange(null)}
-                />
-              </div>
-            ) : null}
-            </Fragment>
-          );
-        })}
-      </div>
+      <section className="prefs-group" aria-labelledby="billing-plans-title">
+        <PrefsGroupHead
+          id="billing-plans-title"
+          title="Plans"
+          description="Switching plans takes effect at the end of the current billing cycle."
+          action={(
+            <fieldset ref={slidingThumbRef} className="segmented billing-period" aria-label="Billing period">
+              <legend>Billing period</legend>
+              <label className="segmented-option"><input type="radio" name="billing-period" value="MONTHLY" checked={interval === "MONTHLY"} onChange={() => { setInterval("MONTHLY"); setPendingChange(null); }} /> Monthly</label>
+              <label className="segmented-option"><input type="radio" name="billing-period" value="ANNUAL" checked={interval === "ANNUAL"} onChange={() => { setInterval("ANNUAL"); setPendingChange(null); }} /> Annual <span className="segmented-badge">Save 2 months</span></label>
+            </fieldset>
+          )}
+        />
+        <div className="billing-plan-grid">
+          {view.catalog.map((plan) => {
+            const current = view.entitlementPlanKey === plan.key;
+            const currentBillingSelection = view.subscription?.status === "ACTIVE"
+              && view.subscription.planId === `plan_${plan.key}`
+              && view.subscription.interval === interval;
+            const price = interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise;
+            return (
+              <Fragment key={plan.key}>
+                <article className={`billing-plan${current ? " is-current" : ""}`} aria-label={`${plan.name} plan`}>
+                  <div className="billing-plan-top">
+                    <h4>{plan.name}</h4>
+                    {current ? <span className="billing-plan-flag">Current</span> : plan.key === "growth" ? <span className="billing-plan-flag is-quiet">Best fit</span> : null}
+                  </div>
+                  <p className="billing-price"><strong>{formatRupees(price)}</strong><span>/{interval === "ANNUAL" ? "year" : "month"}</span></p>
+                  <p className="billing-saving">{interval === "ANNUAL" ? "2 months free" : "Billed monthly"}</p>
+                  <ul className="billing-capacity" aria-label={`${plan.name} limits`}>
+                    <li><strong>{plan.monthlyDeliveryLimit.toLocaleString("en-IN")}</strong> deliveries a month</li>
+                    <li><strong>{plan.automationLimit}</strong> automations</li>
+                    <li><strong>{plan.instagramConnectionLimit} + {plan.facebookConnectionLimit}</strong> Instagram + Facebook</li>
+                    <li><strong>{plan.memberLimit}</strong> team {plan.memberLimit === 1 ? "seat" : "seats"}</li>
+                  </ul>
+                  <ul className="billing-features">{plan.features.map((feature) => <li key={feature}><Check size={14} aria-hidden="true" />{feature}</li>)}</ul>
+                  <button className={`button ${currentBillingSelection ? "button-secondary" : current ? "button-secondary" : "button-primary"}`} type="button" aria-expanded={pendingChange ? pendingChange.plan === plan.key : undefined} disabled={currentBillingSelection || activating || !view.canManage || !view.billingConfigured || Boolean(busyPlan)} onClick={() => void choosePlan(plan.key)}>
+                    {currentBillingSelection ? "Your current plan" : busyPlan === plan.key && !pendingChange ? "Opening…" : `Choose ${plan.name}`}
+                  </button>
+                </article>
+                {pendingChange?.plan === plan.key ? (
+                  <div className="billing-plan-confirm">
+                    <InlineConfirm
+                      label={`Confirm switching to ${plan.name}`}
+                      message={pendingChange.message}
+                      confirmLabel={`Switch to ${plan.name}`}
+                      busyLabel="Scheduling…"
+                      busy={busyPlan === plan.key}
+                      tone="primary"
+                      onConfirm={() => void confirmPlanChange()}
+                      onCancel={() => setPendingChange(null)}
+                    />
+                  </div>
+                ) : null}
+              </Fragment>
+            );
+          })}
+        </div>
+      </section>
 
-      {view.subscription && (
-        <footer className="billing-subscription panel">
-          <div className="billing-subscription-copy">
-            <strong>Subscription <StatusBadge {...subscriptionStatus(view.subscription.status)} /></strong>
-            {view.subscription.currentPeriodEnd && <p className="muted">Paid through {formatDate(view.subscription.currentPeriodEnd)}</p>}
+      <section className="prefs-group" aria-labelledby="premium-invite-title">
+        <PrefsGroupHead id="premium-invite-title" title="Invite code" />
+        <div className="prefs-card">
+          <div className="prefs-row billing-code">
+            <div className="prefs-row-copy">
+              <strong>Have an invite code?</strong>
+              <small>It unlocks the plan in your invite for 30 days. Your subscription doesn’t change, and a higher plan you already pay for stays.</small>
+            </div>
+            <div className="billing-code-form">
+              <label className="sr-only" htmlFor="premium-invite-code">Premium invite code</label>
+              <input id="premium-invite-code" value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="LINKAR-XXXX-XXXX-XXXX" autoComplete="off" spellCheck={false} />
+              <button className="button button-secondary billing-code-submit" type="button" disabled={!view.canManage || !inviteCode.trim() || redeemingInvite} onClick={() => void redeemInvite()}>{redeemingInvite ? "Applying…" : "Apply invite"}</button>
+            </div>
           </div>
-          {view.subscription.cancelAtPeriodEnd
-            ? <span className="billing-ending">Cancellation scheduled</span>
-            : view.canManage && !confirmingCancel && <button className="button button-ghost button-small billing-cancel" type="button" onClick={() => { setPendingChange(null); setConfirmingCancel(true); }}>Cancel at period end</button>}
-          {confirmingCancel && !view.subscription.cancelAtPeriodEnd ? (
-            <InlineConfirm
-              label="Confirm cancelling the subscription"
-              message={`Cancel at the end of the current billing cycle? Paid access stays active${view.subscription.currentPeriodEnd ? ` until ${formatDate(view.subscription.currentPeriodEnd)}` : " through the current billing period"}.`}
-              confirmLabel="Cancel subscription"
-              cancelLabel="Keep subscription"
-              busyLabel="Cancelling…"
-              busy={cancelling}
-              onConfirm={() => void cancelSubscription()}
-              onCancel={() => setConfirmingCancel(false)}
-            />
-          ) : null}
-        </footer>
-      )}
+        </div>
+      </section>
+
+      {subscription && (subscription.cancelAtPeriodEnd || view.canManage) ? (
+        <section className="prefs-group prefs-danger-zone" aria-labelledby="billing-danger-title">
+          <PrefsGroupHead id="billing-danger-title" title="Danger zone" />
+          <div className="prefs-card">
+            <div className="prefs-row billing-cancel-row">
+              <div className="prefs-row-copy">
+                <strong>Cancel subscription</strong>
+                <small>
+                  {subscription.cancelAtPeriodEnd
+                    ? `Cancellation is scheduled. Paid access stays active${subscription.currentPeriodEnd ? ` until ${formatDate(subscription.currentPeriodEnd)}` : " through the current billing period"}.`
+                    : `Stops renewal at the end of the current billing cycle. Paid features stay on${subscription.currentPeriodEnd ? ` until ${formatDate(subscription.currentPeriodEnd)}` : " until then"}.`}
+                </small>
+              </div>
+              <div className="prefs-row-control">
+                {subscription.cancelAtPeriodEnd
+                  ? <span className="billing-ending">Cancellation scheduled</span>
+                  : !confirmingCancel && <button className="button button-secondary button-small prefs-danger-text billing-cancel" type="button" onClick={() => { setPendingChange(null); setConfirmingCancel(true); }}>Cancel at period end</button>}
+              </div>
+              {confirmingCancel && !subscription.cancelAtPeriodEnd ? (
+                <InlineConfirm
+                  label="Confirm cancelling the subscription"
+                  message={`Cancel at the end of the current billing cycle? Paid access stays active${subscription.currentPeriodEnd ? ` until ${formatDate(subscription.currentPeriodEnd)}` : " through the current billing period"}.`}
+                  confirmLabel="Cancel subscription"
+                  cancelLabel="Keep subscription"
+                  busyLabel="Cancelling…"
+                  busy={cancelling}
+                  onConfirm={() => void cancelSubscription()}
+                  onCancel={() => setConfirmingCancel(false)}
+                />
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }
