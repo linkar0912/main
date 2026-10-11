@@ -169,12 +169,52 @@ quiet line under the logo instead of a badge.
 
 ## Motion
 
-Rise/fade entrances, staggered lists, pop-in confirmations use
-`--ease-out` (`cubic-bezier(.22,.61,.21,1)`) at `.22s`. Interactive hover/
-press transforms (buttons, links) use `--ease-snap`
-(`cubic-bezier(.43,.195,.02,1)`) - ManyChat's actual button curve: a fast
-start that eases hard into the stop, snappier than a generic ease. Reduced-
-motion is fully respected.
+Motion answers what the person just did: something opened, moved, was
+added, changed state. One system for the whole product (tokens in
+`app/globals.css`, the "Round 4: motion" block):
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `--dur-1` | 140ms | hover, press, toggles, colour changes |
+| `--dur-2` | 220ms | things appearing: menus, toasts, list rows, errors, chips |
+| `--dur-3` | 340ms | panels moving: dialogs, drawers, sheets, page and tab content, thumbs |
+| `--dur-4` | 520ms | bars filling, charts drawing |
+| `--stagger` | 45ms | between siblings; first five only, 180ms at most |
+| `--ease-emph` | `cubic-bezier(.2,.9,.1,1)` | entrances: a quick start and a soft settle |
+| `--ease-out` | `cubic-bezier(.22,.61,.21,1)` | fades, small state changes |
+| `--ease-in` | `cubic-bezier(.4,0,1,1)` | exits |
+| `--ease-snap` | `cubic-bezier(.43,.195,.02,1)` | press and switch knobs |
+
+Rules:
+
+- Animate only `opacity` and `transform` (and `clip-path` for the sliding
+  selection thumbs and charts). The two exceptions are disclosure height
+  (grid rows `0fr` to `1fr`, `::details-content`) and the keyword chip
+  collapsing on remove: short, user-triggered, never on a timer.
+- Entrances settle: fade plus a 6-8px rise, or a .97 scale. Exits are faster
+  (about 70% of the entrance) and use `--ease-in`. Things that leave animate
+  out too: wrap conditional overlays in `<Presence>`
+  (`src/components/ui/use-presence.tsx`) and put `presenceProps(state)` on the
+  overlay root; CSS keys the exit off `data-state="closing"`. React-driven
+  disclosures use `<Collapse>` (`src/components/ui/collapse.tsx`).
+- Selection moves, it does not jump: every segmented switch, tab row and
+  side nav gets `ref={slidingThumbRef}`
+  (`src/components/ui/use-sliding-thumb.ts`), which measures the selected
+  option and glides one thumb between options.
+- Route changes cross-fade the page content only (React `<ViewTransition>`
+  from each area's `template.tsx`); the sidebar never moves.
+- Lists animate rows on first mount or when a row is genuinely new, never on
+  refresh or polling. Keys must be stable (an optimistic message keeps its
+  client key when the server confirms it).
+- Hover is a colour or border change; press is `scale(.98)`. Nothing bounces
+  and nothing loops except loading indicators (one slow skeleton sweep, which
+  waits 120ms so fast loads never flash).
+- `prefers-reduced-motion: reduce` turns all of it off: CSS durations go to
+  zero, `<Presence>` unmounts immediately, smooth scrolling becomes instant
+  (`prefersReducedMotion()` from `use-presence.tsx` for JS), and view
+  transitions do not animate.
+- The marketing site keeps its own scroll reveal (700ms, 56px rise) for
+  long-form storytelling; product screens never use it.
 
 The `.grid-texture` utility overlays a faint white grid
 (`rgba(255,255,255,.06)`, 32px cells) via `::before` - reserved for the
