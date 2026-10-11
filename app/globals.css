@@ -4154,6 +4154,7 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 .profile-facts dd { align-items: center; color: var(--ink); display: flex; font-size: .9rem; font-weight: 750; gap: 5px; margin: 0; }
 .profile-facts dd[data-tone="accent"] { color: var(--accent-text); }
 .profile-facts dd[data-tone="ok"] { color: var(--ink); }
+.profile-facts dd[data-tone="ok"] svg, .profile-identity-facts dd[data-tone="ok"] svg { color: var(--status-ok); }
 .profile-facts dd[data-tone="warn"] { color: var(--warning-ink); }
 .profile-verify-row { background: var(--honey-soft); }
 
