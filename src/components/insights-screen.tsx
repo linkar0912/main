@@ -19,12 +19,13 @@ type InsightsPayload = {
   usage: { deliveriesThisMonth: number; monthlyDeliveryLimit: number | null };
 };
 
+// Same stage names as the campaign funnel on each automation's activity page.
 const FUNNEL_STAGES = [
-  ["COMMENT_MATCHED", "Matched"],
-  ["OPENING_SENT", "Opening sent"],
+  ["COMMENT_MATCHED", "Commented"],
+  ["OPENING_SENT", "Got the DM"],
   ["OPTED_IN", "Opted in"],
-  ["FOLLOW_VERIFIED", "Follow verified"],
-  ["LINK_SENT", "Link delivered"],
+  ["FOLLOW_VERIFIED", "Followed"],
+  ["LINK_SENT", "Got the link"],
 ] as const;
 
 // Stale-while-revalidate like contacts/automations: a revisit paints the last
@@ -121,27 +122,38 @@ export function InsightsScreen() {
               <StatTile label="Replies sent" icon={Send} value={totals.sent} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.sentPerDay)} trend={data.timeseries.sentPerDay} />
               <StatTile label="People reached" icon={UsersRound} value={totals.reached} note={`Last ${data.timeseries.days} days`} delta={halfWindowDelta(data.timeseries.participantsPerDay)} trend={data.timeseries.participantsPerDay} />
               <StatTile label="Emails captured" icon={MailCheck} value={data.capturedEmails} note={data.optedOut > 0 ? `${data.optedOut.toLocaleString()} opted out` : "All time"} />
-              <StatTile label="Link clicks" icon={MousePointerClick} value={data.mediaPerformance.reduce((total, row) => total + row.clicked, 0)} note="From tracked links" />
+              <StatTile label="Link clicks" icon={MousePointerClick} value={data.mediaPerformance.reduce((total, row) => total + row.clicked, 0)} note="On links sent in DMs" />
             </StatGrid>
 
             <ReplyVolumeCard sent={data.timeseries.sentPerDay} reached={data.timeseries.participantsPerDay} days={data.timeseries.days} />
 
             <div className="insights-detail-grid">
-              <SectionCard className="insights-journey" aria-label="Automation journey" title="Automation journey" description="Where people currently sit in your flows.">
-                <ol>
-                  {FUNNEL_STAGES.map(([key, label]) => (
-                    <li key={key}><span>{label}</span><strong>{(data.funnel[key] ?? 0).toLocaleString()}</strong></li>
-                  ))}
-                </ol>
+              <SectionCard className="insights-journey" aria-label="Automation journey" title="Automation journey" description="How far people got in your comment-to-link flows.">
+                {FUNNEL_STAGES.every(([key]) => !data.funnel[key]) ? (
+                  // Five rows of zeros said nothing a sentence can't.
+                  <p className="muted insights-empty-copy">Nobody has gone through a comment-to-link flow yet. Each step fills in here as people do.</p>
+                ) : (
+                  <ol>
+                    {FUNNEL_STAGES.map(([key, label]) => (
+                      <li key={key}><span>{label}</span><strong>{(data.funnel[key] ?? 0).toLocaleString()}</strong></li>
+                    ))}
+                  </ol>
+                )}
               </SectionCard>
 
               <SectionCard className="insights-content" flush aria-label="Content performance" title="Content performance" description="Top posts by matched comments.">
                 {data.mediaPerformance.length ? (
                   <div className="table-scroll">
                     <table className="insights-table" aria-label="Top content performance">
-                      <thead><tr><th>Post</th><th>Matched</th><th>Delivered</th><th>Clicks</th><th>Click rate</th></tr></thead>
+                      <thead><tr><th>Post</th><th className="is-number">Matched</th><th className="is-number">Delivered</th><th className="is-number">Clicks</th><th className="is-number">Click rate</th></tr></thead>
                       <tbody>{data.mediaPerformance.map((row) => (
-                        <tr key={row.mediaId}><td className="media-cell"><span>Instagram post</span><LocalIdChip id={row.mediaId} label="post ID" /></td><td>{row.matched}</td><td>{row.delivered}</td><td>{row.clicked}</td><td>{row.delivered ? `${Math.round((row.clicked / row.delivered) * 100)}%` : "-"}</td></tr>
+                        <tr key={row.mediaId}>
+                          <td className="media-cell"><span>Instagram post</span><LocalIdChip id={row.mediaId} label="post ID" /></td>
+                          <td className="is-number" data-label="Matched">{row.matched.toLocaleString()}</td>
+                          <td className="is-number" data-label="Delivered">{row.delivered.toLocaleString()}</td>
+                          <td className="is-number" data-label="Clicks">{row.clicked.toLocaleString()}</td>
+                          <td className="is-number" data-label="Click rate">{row.delivered ? `${Math.round((row.clicked / row.delivered) * 100)}%` : "–"}</td>
+                        </tr>
                       ))}</tbody>
                     </table>
                   </div>

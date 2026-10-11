@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { History, X } from "lucide-react";
+import { InlineConfirm } from "./inline-confirm";
+import { RelativeTime } from "./ui/relative-time";
 import { useFocusTrap } from "./use-focus-trap";
 import { InlineContentSkeleton } from "./skeleton";
 import type { FlowDefinition } from "@/src/lib/automation/types";
@@ -19,19 +21,13 @@ type Version = {
   snapshotAt: string;
 };
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
 function summarizeTrigger(definition: FlowDefinition): string {
   const trigger = definition.trigger;
   if (trigger.type === "comment") {
-    const match = trigger.match === "any" ? "any comment" : trigger.keywords.join(", ");
-    return `Comment matching ${match}`;
+    return trigger.match === "any" ? "Replies to any comment" : `Comment has ${trigger.keywords.join(", ")}`;
   }
   if (trigger.type === "message") {
-    const match = trigger.match === "any" ? "any DM" : trigger.keywords.join(", ");
-    return `DM matching ${match}`;
+    return trigger.match === "any" ? "Replies to any DM" : `DM has ${trigger.keywords.join(", ")}`;
   }
   if (trigger.type === "referral") return "Referral tap";
   if (trigger.type === "optin") return "One-time notification opt-in";
@@ -48,6 +44,9 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
   // the person was just looking at.
   const [restoreError, setRestoreError] = useState("");
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  // Restoring replaces the live flow, so it asks first - in place, not in a
+  // browser confirm box that looks like a different app.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -74,17 +73,13 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
   }, [automationId]);
 
   async function restore(versionId: string) {
-    // Restoring brings back the saved on/off state too, so say so: restoring a
-    // draft snapshot switches a live automation off.
-    const target = versions.find((version) => version.id === versionId);
-    const state = target?.status === "ACTIVE" ? "switched on" : target?.status === "PAUSED" ? "paused" : "a draft (switched off)";
-    if (!confirm(`Restore v${target?.version ?? ""}? It replaces the current flow and the automation will be ${state}, as it was in that version.`)) return;
     setRestoringId(versionId);
     setRestoreError("");
     try {
       const response = await fetch(`/api/automations/${automationId}/versions/${versionId}/restore`, { method: "POST" });
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Could not restore this version");
+      setConfirmingId(null);
       onRestored?.();
       // Re-fetch the list so the new pre-restore snapshot is visible at the top.
       const refreshed = await fetch(`/api/automations/${automationId}/versions`);
@@ -103,38 +98,55 @@ export function AutomationVersionsPanel({ automationId, onRestored }: { automati
   if (error) return <p className="form-error" role="alert">{error}</p>;
   if (versions.length === 0) {
     return (
-      <p className="muted">
-        <History size={14} /> No history yet. Every saved edit creates a new version you can restore.
+      <p className="all-clear is-neutral">
+        <History size={15} aria-hidden /> No history yet. Every saved edit creates a version you can restore.
       </p>
     );
   }
   return (
     <>
     {restoreError ? <p className="form-error" role="alert">{restoreError}</p> : null}
-    <ol className="timeline-list" aria-label="Automation version history">
-      {versions.map((version) => (
-        <li key={version.id}>
-          <div className="activity-row">
-            <span>
-              <strong>v{version.version}</strong> · {version.name}
-            </span>
-            <time dateTime={version.snapshotAt}>{formatDate(version.snapshotAt)}</time>
-          </div>
-          <p className="muted activity-summary">
-            {version.status ? `${version.status === "ACTIVE" ? "Active" : version.status === "PAUSED" ? "Paused" : "Draft"} · ` : ""}
-            {summarizeTrigger(version.definition)}
-            {version.snapshotBy ? ` · by ${version.snapshotBy}` : ""}
-          </p>
-          <button
-            className="button button-secondary button-small"
-            type="button"
-            disabled={restoringId === version.id}
-            onClick={() => void restore(version.id)}
-          >
-            {restoringId === version.id ? "Restoring…" : "Restore this version"}
-          </button>
-        </li>
-      ))}
+    <ol className="version-list" aria-label="Automation version history">
+      {versions.map((version, index) => {
+        // Restoring brings back the saved on/off state too, so say so:
+        // restoring a draft snapshot switches a live automation off.
+        const state = version.status === "ACTIVE" ? "switched on" : version.status === "PAUSED" ? "paused" : "a draft (switched off)";
+        const statusLabel = version.status === "ACTIVE" ? "Active" : version.status === "PAUSED" ? "Paused" : version.status === "DRAFT" ? "Draft" : "";
+        return (
+          <li className="version-item" key={version.id}>
+            <div className="version-item-head">
+              <strong className="version-number">v{version.version}</strong>
+              {index === 0 ? <span className="version-latest">Latest</span> : null}
+              <RelativeTime className="version-time" value={version.snapshotAt} />
+            </div>
+            <p className="version-name">{version.name}</p>
+            <p className="version-summary">
+              {statusLabel ? `${statusLabel}. ` : ""}{summarizeTrigger(version.definition)}
+            </p>
+            {version.snapshotBy ? <p className="version-by">Saved by {version.snapshotBy}</p> : null}
+            {confirmingId === version.id ? (
+              <InlineConfirm
+                label={`Restore v${version.version}`}
+                message={`This replaces the current flow, and the automation will be ${state}, as it was in v${version.version}.`}
+                confirmLabel="Restore"
+                busyLabel="Restoring…"
+                busy={restoringId === version.id}
+                onConfirm={() => void restore(version.id)}
+                onCancel={() => setConfirmingId(null)}
+              />
+            ) : (
+              <button
+                className="button button-secondary button-small"
+                type="button"
+                disabled={restoringId !== null}
+                onClick={() => { setRestoreError(""); setConfirmingId(version.id); }}
+              >
+                Restore this version
+              </button>
+            )}
+          </li>
+        );
+      })}
     </ol>
     </>
   );
@@ -150,22 +162,23 @@ export function AutomationVersionsModal({ automationId, onClose, onRestored }: {
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="modal-panel"
+        className="modal-panel versions-modal"
         role="dialog"
         aria-modal="true"
         aria-label="Automation history"
+        aria-describedby="versions-modal-lede"
         onClick={(event) => event.stopPropagation()}
-        style={{ padding: "var(--space-6)" }}
       >
-        <div className="list-intro">
+        <div className="versions-modal-head">
           <div>
-            <p className="eyebrow">History</p>
-            <h2>Automation versions</h2>
-            <p className="muted">Each saved edit is a snapshot you can restore.</p>
+            <h2>Version history</h2>
+            <p id="versions-modal-lede">Every saved edit is kept here. Restore one to bring it back.</p>
           </div>
-          <button className="icon-button" type="button" aria-label="Close history" onClick={onClose}><X size={16} /></button>
+          <button className="icon-button versions-modal-close" type="button" aria-label="Close history" onClick={onClose}><X size={18} /></button>
         </div>
-        <AutomationVersionsPanel automationId={automationId} onRestored={onRestored} />
+        <div className="versions-modal-body">
+          <AutomationVersionsPanel automationId={automationId} onRestored={onRestored} />
+        </div>
       </div>
     </div>,
   );

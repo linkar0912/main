@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Pencil, Play, Plus, RotateCw, Trash2 } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
 import { LocalStatusBadge, lifecycleStatus } from "./workspace-primitives";
@@ -50,6 +50,10 @@ export function SequencesScreen() {
   const [sourceAutomationId, setSourceAutomationId] = useState("");
   const [steps, setSteps] = useState<SequenceStepView[]>(EMPTY_STEPS);
   const [formError, setFormError] = useState("");
+  // Field-level problems sit under the field they belong to.
+  const [nameError, setNameError] = useState("");
+  const [stepErrors, setStepErrors] = useState<Record<number, { delay?: string; text?: string }>>({});
+  const formRef = useRef<HTMLFormElement>(null);
   // Deleting takes two clicks, like automations: a sequence can have people
   // enrolled mid-way, and one stray click used to remove it outright.
   const [confirmDeleteId, setConfirmDeleteId] = useState("");
@@ -102,6 +106,8 @@ export function SequencesScreen() {
     setSourceAutomationId("");
     setSteps([{ id: nextStepId(), delayHours: 0, text: "" }]);
     setFormError("");
+    setNameError("");
+    setStepErrors({});
   }
 
   function loadForEdit(row: SequenceRow) {
@@ -110,7 +116,11 @@ export function SequencesScreen() {
     setSourceAutomationId(row.sourceAutomationId ?? "");
     setSteps(row.steps.map((step) => ({ ...step })));
     setFormError("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setNameError("");
+    setStepErrors({});
+    // The form sits beside the list on desktop but below it on phones, so
+    // bring the form itself into view rather than the top of the page.
+    formRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
 
   function updateStep(index: number, patch: Partial<SequenceStepView>) {
@@ -137,11 +147,19 @@ export function SequencesScreen() {
   async function save(event: React.FormEvent) {
     event.preventDefault();
     setFormError("");
-    if (!name.trim()) return setFormError("Give the sequence a name.");
-    if (steps.some((step) => !step.text.trim())) return setFormError("Every step needs a message.");
-    if (steps.some((step) => Number(step.delayHours) > MAX_STEP_DELAY_HOURS)) {
-      return setFormError(`Each step can wait at most ${MAX_STEP_DELAY_HOURS} hours - Meta only allows automated messages within 24 hours of the person's last message.`);
-    }
+    const nextNameError = name.trim() ? "" : "Give the sequence a name.";
+    const nextStepErrors: Record<number, { delay?: string; text?: string }> = {};
+    steps.forEach((step, index) => {
+      const problems: { delay?: string; text?: string } = {};
+      if (!step.text.trim()) problems.text = "Write the message for this step.";
+      if (Number(step.delayHours) > MAX_STEP_DELAY_HOURS) {
+        problems.delay = `Wait at most ${MAX_STEP_DELAY_HOURS} hours - Meta only allows automated messages within 24 hours of the person's last message.`;
+      }
+      if (problems.text || problems.delay) nextStepErrors[index] = problems;
+    });
+    setNameError(nextNameError);
+    setStepErrors(nextStepErrors);
+    if (nextNameError || Object.keys(nextStepErrors).length > 0) return;
 
     const payload = {
       name: name.trim(),
@@ -265,15 +283,24 @@ export function SequencesScreen() {
                     {row.status === "ACTIVE" ? <Pause size={16} /> : <Play size={16} />}
                   </button>
                   {confirmDeleteId === row.id ? (
+                    // Spelled out, like automations: the old second click on the
+                    // same trash icon only changed a tooltip nobody saw.
                     <button
-                      className="icon-button icon-danger is-confirming"
+                      className="button button-danger button-small is-confirming"
                       type="button"
+                      ref={(element) => element?.focus()}
                       aria-label={`Confirm delete ${row.name}`}
-                      title={row.enrolledCount > 0 ? `Click again to delete - ${row.enrolledCount} enrolled will stop receiving it` : "Click again to delete"}
+                      title={row.enrolledCount > 0 ? `${row.enrolledCount} enrolled will stop receiving it` : "Permanently delete this sequence"}
                       onClick={() => void remove(row)}
                       onBlur={() => setConfirmDeleteId("")}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.stopPropagation();
+                          setConfirmDeleteId("");
+                        }
+                      }}
                     >
-                      <Trash2 size={16} />
+                      Confirm delete?
                     </button>
                   ) : (
                     <button className="icon-button icon-danger" type="button" aria-label={`Delete ${row.name}`} title="Delete" onClick={() => setConfirmDeleteId(row.id)}>
@@ -285,7 +312,7 @@ export function SequencesScreen() {
               ))}
               </div>
             </section>
-            <form className="surface composer-card" onSubmit={save} aria-label={editingId ? "Edit sequence" : "New sequence"}>
+            <form ref={formRef} className="surface composer-card sequence-composer" onSubmit={save} noValidate aria-label={editingId ? "Edit sequence" : "New sequence"}>
               <div className="surface-head">
                 <div className="surface-head-copy"><h2>{editingId ? "Edit sequence" : "New sequence"}</h2><p>Timed DMs sent one after another.</p></div>
                 {justSaved && <span className="form-success" role="status"><Check size={14} /> Saved.</span>}
@@ -294,7 +321,14 @@ export function SequencesScreen() {
               {formError && <p className="form-error" role="alert">{formError}</p>}
               <label className="field">
                 <span>Sequence name</span>
-                <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="e.g. New lead nurture" />
+                <input
+                  value={name}
+                  onChange={(e) => { setName(e.target.value); setNameError(""); }}
+                  maxLength={120}
+                  placeholder="e.g. New lead nurture"
+                  aria-invalid={nameError ? true : undefined}
+                />
+                {nameError ? <small className="field-error" role="alert">{nameError}</small> : null}
               </label>
               <label className="field field-spaced">
                 <span>Enroll leads captured by</span>
@@ -322,15 +356,21 @@ export function SequencesScreen() {
                     <span>Send after (hours)</span>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min={0}
                       max={MAX_STEP_DELAY_HOURS}
                       value={String(step.delayHours)}
+                      aria-invalid={stepErrors[index]?.delay ? true : undefined}
                       onChange={(e) => updateStep(index, { delayHours: e.target.value })}
                     />
-                    <small>
-                      {index === 0 ? "0 = send right after enrollment" : "hours after the previous step"}
-                      {` - up to ${MAX_STEP_DELAY_HOURS}, because Meta only allows automated messages within 24 hours of the person’s last message.`}
-                    </small>
+                    {stepErrors[index]?.delay ? (
+                      <small className="field-error" role="alert">{stepErrors[index].delay}</small>
+                    ) : (
+                      <small>
+                        {index === 0 ? "0 sends it right after enrollment" : "Hours after the previous step"}
+                        {`, up to ${MAX_STEP_DELAY_HOURS}. Meta only allows automated messages within 24 hours of the person’s last message.`}
+                      </small>
+                    )}
                   </label>
                   <label className="field">
                     <span>Message</span>
@@ -340,8 +380,10 @@ export function SequencesScreen() {
                       value={step.text}
                       onChange={(e) => updateStep(index, { text: e.target.value })}
                       placeholder="Write the exact DM to send"
+                      aria-invalid={stepErrors[index]?.text ? true : undefined}
                     />
                   </label>
+                  {stepErrors[index]?.text ? <small className="field-error" role="alert">{stepErrors[index].text}</small> : null}
                 </div>
               ))}
               <div className="sequence-form-actions">

@@ -205,9 +205,22 @@ export function BroadcastsScreen() {
                         </div>
                         <p>
                           {broadcast.sent.toLocaleString()} of {broadcast.total.toLocaleString()} sent
-                          {broadcast.failed > 0 ? ` · ${broadcast.failed} failed` : ""}
-                          {broadcast.skipped > 0 ? ` · ${broadcast.skipped} skipped` : ""}
+                          {broadcast.failed > 0 ? ` · ${broadcast.failed.toLocaleString()} failed` : ""}
+                          {broadcast.skipped > 0 ? ` · ${broadcast.skipped.toLocaleString()} skipped` : ""}
                         </p>
+                        {broadcast.status === "RUNNING" && broadcast.total > 0 ? (
+                          // A live broadcast shows how far along it is, not just two numbers.
+                          <span
+                            className="broadcast-progress"
+                            role="progressbar"
+                            aria-label={`${broadcast.name} progress`}
+                            aria-valuemin={0}
+                            aria-valuemax={broadcast.total}
+                            aria-valuenow={broadcast.sent + broadcast.failed + broadcast.skipped}
+                          >
+                            <span style={{ width: `${Math.min(100, Math.round(((broadcast.sent + broadcast.failed + broadcast.skipped) / broadcast.total) * 100))}%` }} />
+                          </span>
+                        ) : null}
                       </div>
                       {isCancellable(broadcast.status) && (
                         <div className="button-row">
@@ -238,7 +251,6 @@ export function BroadcastsScreen() {
                 <div className="surface-head-copy"><h2>New broadcast</h2><p>Write one message and send it to a group of contacts.</p></div>
               </div>
               <div className="surface-body">
-              {error && <p className="form-error" role="alert">{error}</p>}
               {notice && <p className="form-success" role="status">{notice}</p>}
               <div className="field-stack">
                 <label className="field">
@@ -267,6 +279,8 @@ export function BroadcastsScreen() {
                 <small className="muted">Leave empty to start now. Sending also waits out your quiet hours.</small>
               </label>
               <div className="composer-footer">
+                {/* Next to the button that raised it, so it can't be missed below the fold. */}
+                {error && <p className="form-error" role="alert">{error}</p>}
                 {confirming ? (
                   <div className="broadcast-confirm" role="alert">
                     <p>

@@ -30,6 +30,11 @@ describe("BroadcastsScreen", () => {
     expect(await screen.findByText("Sending")).toBeTruthy();
     expect(screen.getByText("Scheduled")).toBeTruthy();
     expect(screen.queryByText("RUNNING")).toBeNull();
+    // Only the live broadcast shows a progress bar.
+    const progress = screen.getByRole("progressbar", { name: "Weekend offer progress" });
+    expect(progress.getAttribute("aria-valuenow")).toBe("3");
+    expect(progress.getAttribute("aria-valuemax")).toBe("10");
+    expect(screen.getAllByRole("progressbar")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel Weekend offer" }));
     expect(fetchMock).not.toHaveBeenCalledWith("/api/broadcasts/broadcast_1", expect.anything());

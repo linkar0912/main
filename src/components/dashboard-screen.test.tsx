@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AutomationRecord } from "@/src/lib/repository";
 
-const automationState = vi.hoisted(() => ({ loading: false, automations: [] as AutomationRecord[] }));
+const automationState = vi.hoisted(() => ({ loading: false, error: "", automations: [] as AutomationRecord[], reload: (() => undefined) as () => void }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
 vi.mock("./automation-list", () => ({
-  useAutomations: () => ({ automations: automationState.automations, loading: automationState.loading }),
+  useAutomations: () => ({ automations: automationState.automations, loading: automationState.loading, error: automationState.error, reload: automationState.reload }),
 }));
 
 const { DashboardScreen, INSIGHTS_TIMEOUT_MS } = await import("./dashboard-screen");
@@ -47,6 +47,7 @@ describe("DashboardScreen onboarding", () => {
     cleanup();
     vi.unstubAllGlobals();
     automationState.loading = false;
+    automationState.error = "";
     automationState.automations = [];
   });
 
@@ -137,7 +138,8 @@ describe("DashboardScreen onboarding", () => {
     }));
     render(<DashboardScreen />);
 
-    expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
+    const chart = await screen.findByRole("region", { name: "Performance over time" });
+    expect(await within(chart).findByRole("button", { name: "Try again" })).toBeTruthy();
     expect(document.querySelectorAll(".kpi-grid .kpi-skeleton")).toHaveLength(0);
     expect(screen.getAllByText("Couldn’t load")).toHaveLength(3);
   });
@@ -242,13 +244,30 @@ describe("DashboardScreen onboarding", () => {
     expect(screen.queryByText("Comment replies")).toBeNull();
   });
 
-  it("tags the Start here recipe cards as templates", async () => {
+  it("says what each Start here recipe does", async () => {
     stubDashboardFetch();
     render(<DashboardScreen />);
 
     const startHere = await screen.findByRole("region", { name: "Start here" });
-    expect(within(startHere).getAllByText("Template")).toHaveLength(3);
+    expect(within(startHere).getAllByRole("link")).toHaveLength(3);
+    expect(within(startHere).getByText(/they get your link in a DM/)).toBeTruthy();
     expect(within(startHere).queryByText("Quick Automation")).toBeNull();
+  });
+
+  it("does not treat an automations load failure as a brand-new workspace", async () => {
+    stubDashboardFetch();
+    const reload = vi.fn();
+    automationState.error = "Could not load automations";
+    automationState.reload = reload;
+    render(<DashboardScreen />);
+
+    expect(await screen.findByText("Your automations didn’t load")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Start here" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "First steps" })).toBeNull();
+    expect(screen.queryByText("No automations yet")).toBeNull();
+    const panel = screen.getByRole("region", { name: "Your automations" });
+    fireEvent.click(within(panel).getByRole("button", { name: /try again/i }));
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
   it("renders activity as one continuous chart field", async () => {

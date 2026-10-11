@@ -27,7 +27,6 @@ describe("AutomationVersionsModal", () => {
   });
 
   it("keeps the version list on screen when a restore fails", async () => {
-    vi.stubGlobal("confirm", vi.fn(() => true));
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST") {
         return new Response(JSON.stringify({ error: "Restore is unavailable right now" }), { status: 500 });
@@ -37,10 +36,26 @@ describe("AutomationVersionsModal", () => {
 
     render(<AutomationVersionsModal automationId="automation_1" onClose={() => {}} />);
     fireEvent.click(await screen.findByRole("button", { name: "Restore this version" }));
+    // Asks in place first, and says what restoring will do to the live automation.
+    const confirmation = screen.getByRole("group", { name: "Restore v3" });
+    expect(confirmation.textContent).toContain("switched on");
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
 
     expect((await screen.findByRole("alert")).textContent).toBe("Restore is unavailable right now");
     expect(screen.getByRole("list", { name: "Automation version history" })).toBeTruthy();
     expect(screen.getByText("v3")).toBeTruthy();
+  });
+
+  it("backs out of a restore without calling the API", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [version] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AutomationVersionsModal automationId="automation_1" onClose={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Restore this version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("group", { name: "Restore v3" })).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("renders on body, traps focus, closes on Escape, and returns focus to the opener", async () => {

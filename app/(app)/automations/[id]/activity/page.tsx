@@ -24,13 +24,15 @@ export default async function AutomationActivityPage({ params }: { params: Promi
     : undefined;
   if (session && automation === null) notFound();
   return (
-    <div className="page-wrap campaign-analytics-page">
+    <div className="page-wrap ws-page campaign-analytics-page">
       <PageHeader
         back={<Link className="back-link" href="/automations"><ArrowLeft size={15} /> Back to automations</Link>}
         title={automation ? (
           <span className="campaign-title">{automation.name} <StatusBadge status={automation.status} /></span>
         ) : "Campaign performance"}
-        description="Campaign performance: from comment to delivered link."
+        description={automation && (automation.provider === "FACEBOOK" || automation.facebookPageId)
+          ? "Every comment this automation answered on your Facebook Page."
+          : "Campaign performance: from comment to delivered link."}
         actions={(
           <>
             <a className="button button-secondary" href={`/api/insights/export?automationId=${encodeURIComponent(id)}`} download>

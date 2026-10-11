@@ -7615,3 +7615,314 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .media-picker.media-picker-empty { align-items: center; aspect-ratio: auto; border: 1px dashed var(--line-strong); border-radius: 12px; color: var(--slate); display: flex; flex-direction: row; flex-wrap: wrap; gap: 12px; grid-template-columns: none; height: auto; justify-content: flex-start; min-height: 0; padding: 14px 16px; text-align: left; }
 .media-picker-empty p { flex: 1 1 220px; margin: 0; }
 .media-picker-empty svg { color: var(--muted); flex: 0 0 auto; }
+
+/* === UX sweep: home-automations === */
+/* Home, Automations (list, sequences, broadcasts, version history), the
+   per-automation activity page, Insights, and the app shell / mobile nav.
+   New rules only; earlier rules for these screens were edited in place. */
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+.sidebar-head { align-items: center; display: flex; gap: 8px; justify-content: space-between; min-width: 0; padding-bottom: 18px; }
+.sidebar-head .sidebar-brand { flex: 0 1 auto; padding-bottom: 2px; padding-top: 2px; }
+.sidebar-close { display: none; }
+.sidebar .avatar { font-size: .8125rem; }
+@media (max-width: 900px) {
+  /* The drawer needs its own visible way out; the scrim is invisible to a thumb. */
+  .sidebar-close {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    color: var(--ink);
+    display: inline-flex;
+    flex: 0 0 44px;
+    height: 44px;
+    justify-content: center;
+    width: 44px;
+  }
+  .sidebar-close:hover { color: var(--accent-text); }
+  .sidebar-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sidebar-head { padding-bottom: 10px; }
+  .sidebar-head .sidebar-brand { min-height: 44px; }
+  .sidebar .sidebar-link { min-height: 44px; }
+  .sidebar .account-row-main { min-height: 44px; }
+  .sidebar .account-row-more { flex: 0 0 44px; height: 44px; width: 44px; }
+  .sidebar .account-menu-item { min-height: 44px; }
+  .mobile-topbar .brand { align-items: center; display: inline-flex; min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .scrim { animation: none !important; }
+}
+
+/* ── Shared bits for these screens ─────────────────────────────────────── */
+/* An in-card error with its one way forward. */
+.panel-state { align-items: flex-start; display: grid; gap: 12px; justify-items: start; }
+.panel-state p { color: var(--slate); font-size: .875rem; line-height: 1.5; margin: 0; }
+/* Holds an icon's column in rows that have no such action, so icons line up. */
+.icon-button-slot { display: inline-block; flex: 0 0 32px; height: 32px; width: 32px; }
+:is(.tracked-link-form, .sequence-composer) .field-error { color: var(--danger); font-size: .8125rem; font-weight: 600; line-height: 1.45; }
+:is(.tracked-link-form, .sequence-composer) :is(input, textarea)[aria-invalid="true"] { border-color: var(--danger); }
+.ws-page .empty-state[role="alert"] h3 { margin: 0; }
+
+/* ── Home ──────────────────────────────────────────────────────────────── */
+.dashboard-page .quickstart-card { gap: 10px; justify-content: flex-start; }
+.dashboard-page .quickstart-card-title { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
+.dashboard-page .quickstart-card .quickstart-card-meta { color: var(--muted); display: block; font-size: .875rem; line-height: 1.5; }
+.dashboard-page .quickstart-card-title .quickstart-badge {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--slate);
+  flex: 0 0 auto;
+  font-size: .8125rem;
+  font-weight: 650;
+  padding: 1px 10px;
+}
+.dashboard-page .automation-row .automation-icon.is-channel { background: var(--surface-soft); }
+/* A brand-new workspace's empty chart doesn't need a 300px hole. */
+.dashboard-page .chart-panel .chart-state { min-height: 180px; }
+.ws-page .chart-column .chart-date-label,
+.ws-page .chart-column small { font-size: .8125rem; }
+
+/* Stat tiles: the number sits right under its label in every tile, whatever
+   length the note below it wraps to. */
+.kpi-tile.stat-tile > .stat-block { align-content: start; grid-template-rows: auto auto 1fr; }
+.kpi-tile.stat-tile .stat-note { align-self: end; }
+.ws-page .kpi-tile .stat-note { font-size: .8125rem; }
+
+/* ── Automations list ──────────────────────────────────────────────────── */
+.automations-surface .automation-actions .status-switch { justify-content: flex-start; min-width: 92px; }
+.automations-surface .automation-meta .automation-account { overflow: visible; text-overflow: clip; white-space: normal; }
+.automation-sections .automation-keyword { font-size: .8125rem; }
+.automation-sections .segmented .chip-count { font-size: .8125rem; }
+
+/* Sequences and broadcasts: neutral row icons (magenta is for links and focus). */
+.automation-sections .automation-row .automation-icon { background: var(--surface-soft); color: var(--slate); }
+.sequence-composer { scroll-margin-top: 80px; }
+.sequence-composer .sequence-step-row { display: grid; gap: 16px; }
+.sequence-composer .sequence-step-head { margin-bottom: 0; }
+.sequence-composer .sequence-step-head strong { font-size: .9375rem; }
+.sequence-composer .field small { font-size: .8125rem; line-height: 1.45; }
+.automation-sections .automation-actions .button.is-confirming { white-space: nowrap; }
+@media (max-width: 1100px) {
+  /* Stacked: once there is something in the list, the list leads and the
+     form follows (Edit scrolls the form into view). An empty list still
+     opens on the form. */
+  .automation-sections .split-layout:has(.automation-row) > .composer-card { order: 0; }
+}
+
+/* A live broadcast shows how far along it is. */
+.broadcast-progress { background: var(--surface-sunk); border-radius: 999px; display: block; height: 6px; margin-top: 8px; max-width: 280px; overflow: hidden; }
+.broadcast-progress > span { background: var(--accent); border-radius: inherit; display: block; height: 100%; transition: width .4s var(--ease-out); }
+.automation-sections .composer-footer { display: grid; gap: 12px; justify-items: end; }
+.automation-sections .composer-footer .form-error { justify-self: stretch; margin: 0; }
+
+/* ── Version history dialog ────────────────────────────────────────────── */
+/* Header stays put, the list scrolls inside; fits a 745px-tall laptop. */
+.modal-panel.versions-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 16vh);
+  max-width: 600px;
+  overflow: hidden;
+}
+.versions-modal-head {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+}
+.versions-modal-head h2 { font-family: var(--font-sans, "Manrope"), sans-serif; font-size: 1.125rem; font-weight: 700; letter-spacing: -.01em; margin: 0; }
+.versions-modal-head p { color: var(--muted); font-size: .875rem; line-height: 1.5; margin: 4px 0 0; }
+.versions-modal-close { flex: 0 0 auto; height: 40px; width: 40px; }
+.versions-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 24px 24px; }
+.version-list { display: grid; list-style: none; margin: 0; padding: 0; }
+.version-item { border-bottom: 1px solid var(--line); display: grid; gap: 4px; justify-items: start; padding: 16px 0; }
+.version-item:last-child { border-bottom: 0; }
+.version-item-head { align-items: center; display: flex; gap: 10px; width: 100%; }
+.version-number { font-size: .9375rem; font-variant-numeric: tabular-nums; font-weight: 750; }
+.version-latest { border: 1px solid var(--line-strong); border-radius: 999px; color: var(--slate); font-size: .8125rem; font-weight: 650; padding: 0 8px; }
+.version-time { color: var(--muted); font-size: .8125rem; margin-left: auto; white-space: nowrap; }
+.version-name { color: var(--ink); font-size: .9375rem; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+.version-summary, .version-by { color: var(--muted); font-size: .8125rem; line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
+.version-item > .button { margin-top: 8px; }
+.version-item > .inline-confirm { margin-top: 8px; width: 100%; }
+@media (max-width: 600px) {
+  .modal-scrim:has(> .versions-modal) { align-items: flex-end; padding: 12px 0 0; }
+  .modal-panel.versions-modal { border-radius: 16px 16px 0 0; max-height: calc(100dvh - 12px); }
+  .versions-modal-head { padding: 16px 16px 12px; }
+  .versions-modal-body { padding: 4px 16px max(24px, env(safe-area-inset-bottom)); }
+  .versions-modal-close { height: 44px; width: 44px; }
+  .version-item > .button { min-height: 44px; }
+}
+
+/* ── Automation activity page ──────────────────────────────────────────── */
+.campaign-analytics-page.ws-page { max-width: 1240px; }
+.campaign-analytics-page .campaign-title { align-items: center; display: inline-flex; flex-wrap: wrap; gap: 6px 14px; }
+.campaign-analytics-page .campaign-title .status-chip { font-size: .875rem; }
+/* Sentence-case column labels, like every other table. */
+.campaign-participants .activity-table-head,
+.facebook-activity-table-head {
+  color: var(--muted);
+  font-size: .8125rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.campaign-participants .activity-group-head .media-type-label {
+  font-size: .8125rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  padding: 1px 8px;
+  text-transform: none;
+}
+.campaign-participants .activity-group-head .activity-caption { font-size: .875rem; }
+.campaign-participants .activity-group-count,
+.participant-meta,
+.journey-meta,
+.campaign-participants .journey-caption,
+.campaign-participants .delivery-cell { font-size: .8125rem; }
+.campaign-participants .delivery-cell { padding-left: 14px; }
+/* Journey: one colour for progress, red only for a failure, grey when it lapsed. */
+.campaign-participants .participant-row.tone-ok .journey-steps > li.is-done { background: var(--accent); }
+.campaign-participants .journey-steps > li.is-expired { background: var(--muted); }
+/* Funnel: every bar is the same series; the weakest step is called out with
+   a quiet band and a warning-coloured rate, never a brown wash. */
+.funnel-bar-row.is-worst { background: var(--surface-soft); }
+.funnel-bar-row.is-worst .funnel-conv { color: var(--status-warning-text, var(--warning-ink)); }
+.funnel-bar-row:last-child .funnel-bar-track > span { background: var(--accent); }
+.funnel-bar-label { font-size: .875rem; }
+.funnel-bar-rate, .funnel-conv { font-size: .8125rem; }
+.funnel-callout { font-size: .875rem; }
+.campaign-overview { gap: 16px; }
+.campaign-aside .insights-stack { gap: 16px; }
+.campaign-aside .usage-note { font-size: .875rem; }
+.variant-list li { gap: 2px; }
+.variant-list .variant-name { align-items: center; display: inline-flex; gap: 10px; }
+.variant-list .variant-name strong { font-size: .9375rem; }
+.variant-list .variant-best { border: 1px solid var(--line-strong); border-radius: 999px; color: var(--slate); font-size: .8125rem; font-weight: 650; padding: 0 8px; }
+.variant-list .muted { font-size: .875rem; line-height: 1.45; }
+/* Facebook Page replies sit in a card like the Instagram roster. */
+.facebook-page-activity.surface { display: block; }
+.facebook-page-activity .list-toolbar { padding: 0 var(--surface-pad) 12px; }
+.facebook-page-activity .facebook-result-filters { padding-bottom: 0; }
+.facebook-page-activity .facebook-activity-table { gap: 0; }
+.facebook-page-activity .facebook-activity-table-head { border-bottom: 1px solid var(--line); padding: 10px var(--surface-pad); }
+.facebook-page-activity .facebook-activity-row { padding: 16px var(--surface-pad); }
+.facebook-page-activity .facebook-activity-row:hover { background: transparent; }
+.facebook-page-activity .facebook-activity-row p,
+.facebook-page-activity .facebook-commenter strong { font-size: .875rem; }
+.facebook-page-activity .facebook-reply-preview.is-empty { color: var(--muted) !important; font-weight: 500; }
+.facebook-page-activity .facebook-person-mark { background: var(--surface-soft); color: var(--slate); font-size: .8125rem; }
+.facebook-page-activity .facebook-result-cell small { font-size: .8125rem; line-height: 1.4; text-transform: none; }
+.facebook-page-activity .facebook-activity-row time { color: var(--muted); font-size: .8125rem; }
+.facebook-page-activity .empty-state { padding: 32px var(--surface-pad); }
+@media (max-width: 900px) {
+  .campaign-overview.has-aside { gap: 16px; }
+}
+
+/* ── Insights ──────────────────────────────────────────────────────────── */
+/* Numbered because it is a sequence, but neutral: magenta is for links. */
+.insights-journey li span::before { background: var(--surface-soft); color: var(--slate); font-size: .8125rem; }
+.insights-journey li span { font-size: .9375rem; }
+.insights-table { font-size: .875rem; }
+.insights-table th { font-size: .8125rem; font-weight: 650; letter-spacing: 0; text-transform: none; }
+.insights-table :is(th, td).is-number { font-variant-numeric: tabular-nums; text-align: right; }
+@media (max-width: 600px) {
+  /* Each post becomes a small card: name first, its four numbers in a row. */
+  .insights-content .table-scroll { overflow: visible; }
+  .insights-table thead { display: none; }
+  .insights-table, .insights-table tbody { display: block; }
+  .insights-table tr { border-bottom: 1px solid var(--line); display: grid; gap: 8px 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 14px var(--surface-pad); }
+  .insights-table tr:last-child { border-bottom: 0; }
+  .insights-table td { border: 0; padding: 0; }
+  .insights-table td.media-cell { grid-column: 1 / -1; }
+  .insights-table td.is-number { display: grid; gap: 2px; font-weight: 700; text-align: left; }
+  .insights-table td.is-number::before { color: var(--muted); content: attr(data-label); font-size: .8125rem; font-weight: 600; }
+}
+
+/* ── Tracked links ─────────────────────────────────────────────────────── */
+.tracked-link-form .field > label { color: var(--slate); font-size: var(--type-label); font-weight: 600; }
+.tracked-link-form .tracked-link-tags { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tracked-link-form .field > .tracked-link-slug-input {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--ink);
+  display: flex;
+  font-size: inherit;
+  font-weight: 400;
+  min-width: 0;
+}
+.tracked-link-slug-input:focus-within { border-color: var(--ink); outline: 2px solid var(--accent); outline-offset: 1px; }
+.tracked-link-slug-input.has-error { border-color: var(--danger); }
+.tracked-link-slug-prefix { color: var(--muted); font-size: .9375rem; padding-left: 12px; user-select: none; }
+.tracked-link-slug-input input { background: transparent; border: 0; box-shadow: none; flex: 1 1 auto; min-width: 0; outline: none; padding-left: 2px; }
+.tracked-link-slug-input input:focus { box-shadow: none; outline: none; }
+.tracked-link-form-actions { display: flex; justify-content: flex-end; }
+.tracked-link-row > .inline-confirm { grid-column: 1 / -1; }
+.tracked-link-actions .tracked-link-delete:hover { color: var(--danger); }
+.tracked-link-copy small { overflow-wrap: anywhere; }
+@media (max-width: 820px) {
+  .tracked-link-form .tracked-link-tags { grid-template-columns: minmax(0, 1fr); }
+  .tracked-link-form-actions .button { width: 100%; }
+}
+
+/* ── Phones: 44px touch targets and no zoom-on-focus on these screens ── */
+@media (max-width: 600px) {
+  :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) :is(.button, .list-toggle) { min-height: 44px; }
+  :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) .segmented-option { min-height: 44px; }
+  :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) .icon-button { height: 44px; min-width: 44px; width: 44px; }
+  :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) :is(.surface-head-action, .quickstart-head, .context-help-link) .text-link,
+  :is(.dashboard-page, .automation-sections) .context-help-link { align-items: center; display: inline-flex; min-height: 44px; }
+  :is(.dashboard-page, .automation-sections, .campaign-analytics-page) :is(input, select, textarea) { font-size: 16px; }
+  :is(.automation-sections, .campaign-analytics-page) .list-search { min-height: 44px; }
+  .dashboard-page .tracked-link-actions .button { min-height: 44px; }
+  .dashboard-page .setup-row { min-height: 56px; }
+  .ws-id-chip button { height: 32px; width: 32px; }
+
+  /* Automations: the switch and four or five actions share one full-width row. */
+  .surface.is-flush.automations-surface .automation-row .automation-actions { flex-wrap: nowrap; gap: 0; padding-left: 0; }
+  .automations-surface .automation-actions .icon-button,
+  .automations-surface .automation-actions .icon-button-slot { flex: 0 0 44px; height: 44px; width: 44px; }
+  .automations-surface .automation-actions .status-switch { min-height: 44px; min-width: 96px; }
+  .automation-sections .automation-row .automation-actions { flex-wrap: wrap; }
+}
+
+/* Minimum 13px for everything people read on these screens. */
+.campaign-aside .insights-stack { margin: 0; }
+.automation-sections .segmented .segmented-option,
+.campaign-analytics-page .segmented .segmented-option { font-size: .8125rem; }
+.campaign-analytics-page .segmented .chip-count { font-size: .8125rem; }
+.automation-sections .automation-row .automation-copy .automation-rule,
+.automation-sections .automation-row .automation-copy p,
+.automation-sections .automation-row .automation-meta { font-size: .8125rem; }
+.campaign-participants .participant-initial { font-size: .8125rem; }
+.campaign-participants .diagnostic dd { font-size: .8125rem; }
+/* The name link keeps its look but gets a taller hit area. */
+.automations-surface .automation-name { margin-block: -11px; padding-block: 11px; }
+.automations-surface .status-switch-label { font-size: .8125rem; }
+
+@media (max-width: 600px) {
+  :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) .page-header .button,
+  :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) .surface .button { height: 44px; }
+  :is(.automation-sections, .campaign-analytics-page) .context-help-link,
+  .campaign-analytics-page .back-link,
+  .automation-sections .surface-head .text-link { align-items: center; display: inline-flex; min-height: 44px; }
+  .campaign-analytics-page .back-link { margin-bottom: 4px; }
+  .automation-sections .automation-row .automation-actions .icon-button { height: 44px; width: 44px; }
+  .campaign-participants .row-actions { padding-right: 46px; }
+  .campaign-participants .row-actions .icon-button,
+  .campaign-participants .row-detail-toggle { height: 44px; width: 44px; }
+  .campaign-participants .row-detail-toggle { top: 10px; }
+  .id-chip-copy { height: 44px; width: 44px; }
+  .insights-content.is-flush .insights-table :is(td, th),
+  .insights-content .insights-table :is(td, th):is(:first-child, :last-child) { padding: 0; }
+  .insights-content .insights-table td.is-number { text-align: left; }
+  /* Four participant filters don't fit one phone row; two by two, none hidden. */
+  .campaign-participants .list-toolbar .segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .campaign-participants .list-toolbar .segmented-option { justify-content: center; }
+}

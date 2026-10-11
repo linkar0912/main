@@ -29,6 +29,42 @@ describe("SequencesScreen", () => {
     expect(actionGroup?.textContent).toContain("Create sequence");
   });
 
+  it("explains a missing name and message next to their fields without posting", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!init?.method && (String(input) === "/api/sequences" || String(input) === "/api/automations")) {
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      }
+      throw new Error(`Unhandled fetch: ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SequencesScreen />);
+    await screen.findByText(/No sequences yet/i);
+    fireEvent.click(screen.getByRole("button", { name: /create sequence/i }));
+
+    expect(screen.getByText("Give the sequence a name.")).toBeTruthy();
+    expect(screen.getByText("Write the message for this step.")).toBeTruthy();
+    expect(screen.getByLabelText(/sequence name/i).getAttribute("aria-invalid")).toBe("true");
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+  });
+
+  it("spells out the delete confirmation instead of re-arming the same icon", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/sequences") {
+        return new Response(JSON.stringify({ data: [{ id: "sequence_1", name: "Nurture", status: "ACTIVE", enrolledCount: 4, steps: [] }] }), { status: 200 });
+      }
+      if (String(input) === "/api/automations") return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      throw new Error(`Unhandled fetch: ${String(input)}`);
+    }));
+
+    render(<SequencesScreen />);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete Nurture" }));
+    const confirm = screen.getByRole("button", { name: "Confirm delete Nurture" });
+    expect(confirm.textContent).toBe("Confirm delete?");
+    fireEvent.keyDown(confirm, { key: "Escape" });
+    expect(screen.queryByRole("button", { name: "Confirm delete Nurture" })).toBeNull();
+  });
+
   it("sends an explicit null when an existing source automation is cleared", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

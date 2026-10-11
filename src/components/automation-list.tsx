@@ -382,7 +382,7 @@ export function AutomationList({
               >
                 <Pencil size={15} />
               </Link>
-              {(automation.definition.version === 2 || isFacebook) && (
+              {(automation.definition.version === 2 || isFacebook) ? (
                 <Link
                   className="icon-button"
                   href={`/automations/${automation.id}/activity`}
@@ -391,6 +391,9 @@ export function AutomationList({
                 >
                   <Activity size={15} />
                 </Link>
+              ) : (
+                // Holds the slot so every row's icons line up in the same columns.
+                <span className="icon-button-slot" aria-hidden />
               )}
               <button
                 className="icon-button"

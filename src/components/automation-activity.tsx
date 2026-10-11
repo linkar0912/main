@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CampaignPerformanceSkeleton } from "./skeleton";
 import { SectionCard } from "./page-header";
+import { StatusBadge, type StatusTone } from "./ui/status-badge";
 import { StatGrid, StatTile } from "./stat-tile";
 import type { ParticipantState } from "@/src/lib/repository";
 import { formatDateTime, formatRelativeTime } from "@/src/lib/format-date";
@@ -78,8 +79,47 @@ function formatTimestamp(value?: string): string {
   return Number.isNaN(date.getTime()) ? "not yet" : formatDateTime(date);
 }
 
+/** Where a participant is, in the funnel's own words - never the raw enum. */
+const PARTICIPANT_STATES: Record<ParticipantState, [StatusTone, string]> = {
+  COMMENT_MATCHED: ["neutral", "Commented"],
+  OPENING_SENT: ["neutral", "Got the DM"],
+  OPTED_IN: ["neutral", "Opted in"],
+  FOLLOW_REQUIRED: ["neutral", "Needs to follow"],
+  FOLLOW_VERIFIED: ["neutral", "Followed"],
+  LINK_SENT: ["success", "Got the link"],
+  EXPIRED: ["neutral", "Expired"],
+  FAILED: ["danger", "Failed"],
+};
+
 function participantStateLabel(state: ParticipantState): string {
-  return state.toLowerCase().replaceAll("_", " ");
+  return PARTICIPANT_STATES[state]?.[1] ?? state.charAt(0) + state.slice(1).toLowerCase().replaceAll("_", " ");
+}
+
+/** "REELS" -> "Reel": the media type as a person would say it. */
+function mediaTypeLabel(media: { mediaProductType?: string; mediaType?: string }): string {
+  const kind = (media.mediaProductType ?? media.mediaType ?? "").toUpperCase();
+  if (kind === "REELS") return "Reel";
+  if (kind === "STORY") return "Story";
+  if (kind === "VIDEO") return "Video";
+  if (kind === "CAROUSEL_ALBUM") return "Carousel";
+  return "Post";
+}
+
+/** Facebook skip/failure reasons the API is allowed to expose, in plain words. */
+const FACEBOOK_REASONS: Record<string, string> = {
+  permission_missing: "Missing a Facebook permission. Reconnect the Page in Settings.",
+  connection_unhealthy: "The Page connection needs attention. Reconnect it in Settings.",
+  invalid_channel_definition: "This automation's setup doesn't fit Facebook. Open it and save again.",
+  facebook_api_error: "Facebook didn't accept the reply.",
+  facebook_delivery_failed: "The reply couldn't be posted.",
+  delivery_failed: "The reply couldn't be posted.",
+  daily_send_limit: "Today's reply limit was reached.",
+  "outside scheduled window": "Came in outside this automation's active hours.",
+  "replyOncePerUser is set and this sender already received a reply": "Already replied to this person once.",
+};
+
+function facebookReason(code: string): string {
+  return FACEBOOK_REASONS[code] ?? "The reply couldn't be posted.";
 }
 
 function hasRecordedError(participant: ParticipantActivitySummary): boolean {
@@ -172,7 +212,8 @@ function deliveryLabel(participant: ParticipantActivitySummary): string {
 }
 
 function ParticipantStateBadge({ state }: { state: ParticipantState }) {
-  return <span className={`status-badge status-${state.toLowerCase()}`}>{participantStateLabel(state)}</span>;
+  const [tone] = PARTICIPANT_STATES[state] ?? ["neutral"];
+  return <StatusBadge tone={tone} label={participantStateLabel(state)} />;
 }
 
 function Diagnostic({ label, tone, detail }: { label: string; tone: Tone; detail: string }) {
@@ -403,14 +444,13 @@ function FacebookPageActivityView({ activity }: { activity: FacebookPageActivity
     { key: "FAILED", label: "Failed", count: activity.filter((item) => item.result === "FAILED").length },
   ];
   return (
-    <div className="activity-list facebook-page-activity">
-      <header className="facebook-activity-header">
-        <div className="facebook-page-identity">
-          <span className="facebook-page-mark" aria-hidden="true">f</span>
-          <div><span className="eyebrow">Facebook page</span><strong>{connectionName}</strong></div>
-        </div>
-        <p>Public comment replies only. These replies do not open a Messenger conversation or grant messaging eligibility.</p>
-      </header>
+    <SectionCard
+      flush
+      className="activity-list facebook-page-activity"
+      title={`Replies on ${connectionName}`}
+      description="Public comment replies only. These replies do not open a Messenger conversation, so they can't be followed by a DM."
+    >
+      <div className="list-toolbar">
       <div className="segmented filter-chips facebook-result-filters" role="group" aria-label="Facebook Page activity filters">
         {filters.map((filter) => (
           <button
@@ -424,30 +464,31 @@ function FacebookPageActivityView({ activity }: { activity: FacebookPageActivity
           </button>
         ))}
       </div>
+      </div>
       {activity.length === 0 ? (
-        <div className="empty-state"><span className="empty-icon"><Radio size={22} /></span><h3>No Page activity yet.</h3><p>New matching Page comments will appear here after Linkar evaluates them.</p></div>
+        <div className="empty-state is-inline"><span className="empty-icon"><Radio size={22} /></span><h3>No Page activity yet</h3><p>Matching comments on your Page show up here after Linkar answers them.</p></div>
       ) : visible.length === 0 ? (
         <p className="muted feed-empty">No Page replies match this result.</p>
       ) : (
         <div className="facebook-activity-table">
           <div className="facebook-activity-table-head" aria-hidden="true">
-            <span>Commenter</span><span>Comment</span><span>Public reply</span><span>Result</span><span>Time</span>
+            <span>Person</span><span>Comment</span><span>Reply</span><span>Result</span><span>When</span>
           </div>
           {visible.map((item) => (
             <article className="facebook-activity-row" key={item.id}>
               <div className="facebook-commenter"><span className="facebook-person-mark" aria-hidden="true">{(item.authorName ?? "F").slice(0, 1)}</span><strong>{item.authorName ?? "Facebook user"}</strong></div>
               <p>{item.commentPreview ?? "Comment content unavailable"}</p>
-              <p className="facebook-reply-preview">{item.replyPreview ?? "No reply sent"}</p>
+              <p className={`facebook-reply-preview${item.replyPreview ? "" : " is-empty"}`}>{item.replyPreview ?? "No reply sent"}</p>
               <div className="facebook-result-cell">
-                <span className={`status-badge status-${item.result.toLowerCase()}`}>{statusBadgeLabel(item.result)}</span>
-                {item.safeErrorCode && <small>{item.safeErrorCode.replaceAll("_", " ")}</small>}
+                <StatusBadge tone={item.result === "FAILED" ? "danger" : item.result === "SENT" ? "success" : "neutral"} label={item.result === "PROCESSING" ? "Sending" : statusBadgeLabel(item.result)} />
+                {item.safeErrorCode && <small>{facebookReason(item.safeErrorCode)}</small>}
               </div>
-              <time dateTime={item.createdAt}>{formatRelativeTime(item.createdAt)}</time>
+              <time dateTime={item.createdAt} title={formatDateTime(item.createdAt)}>{formatRelativeTime(item.createdAt)}</time>
             </article>
           ))}
         </div>
       )}
-    </div>
+    </SectionCard>
   );
 }
 
@@ -580,7 +621,17 @@ export function AutomationActivity({ automationId, aside }: { automationId: stri
     });
   }, [visibleParticipants]);
 
-  if (error && !participants) return <p className="form-error" role="alert">{error}</p>;
+  if (error && !participants) {
+    return (
+      <div className="empty-state" role="alert">
+        <h3>Activity didn’t load</h3>
+        <p>{error}. Check your connection and try again.</p>
+        <button className="button button-secondary button-small" type="button" onClick={() => { setError(""); setReloadKey((key) => key + 1); }}>
+          <RefreshCw size={15} aria-hidden /> Try again
+        </button>
+      </div>
+    );
+  }
 
   if (!participants) {
     return <CampaignPerformanceSkeleton />;
@@ -592,8 +643,8 @@ export function AutomationActivity({ automationId, aside }: { automationId: stri
     return (
       <div className="empty-state">
         <span className="empty-icon"><Radio size={22} /></span>
-        <h3>No activity yet.</h3>
-        <p>Once someone comments on your gated Reel, their journey will show up here.</p>
+        <h3>No activity yet</h3>
+        <p>Once someone comments on your Reel, their journey shows up here.</p>
       </div>
     );
   }
@@ -679,7 +730,7 @@ export function AutomationActivity({ automationId, aside }: { automationId: stri
             {groups.map((group) => (
               <section className="activity-group" key={group.key} aria-label={group.media.caption || "Untitled Reel"}>
                 <header className="activity-group-head">
-                  <span className="media-type-label">{group.media.mediaProductType ?? group.media.mediaType}</span>
+                  <span className="media-type-label">{mediaTypeLabel(group.media)}</span>
                   <p className="activity-caption">{group.media.caption || "Untitled Reel"}</p>
                   <span className="activity-group-count">
                     {group.participants.length} {group.participants.length === 1 ? "person" : "people"}
