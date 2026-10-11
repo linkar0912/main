@@ -147,19 +147,34 @@ text clears WCAG AA on the fill in both themes (6.4-8.5:1).
 
 Owner feedback (round 5): "I don't want that grey bg selected tile - I don't
 have grey bg anywhere." Nothing that is selected, current, active or hovered
-gets a grey or tinted background, in either theme. Selection is shown with
-ink text, a magenta bar, an ink underline or an ink outline. The old
-`--nav-active-fill` token is gone.
+gets a grey or tinted background, in either theme. Round 6 replaced the
+magenta bar on vertical navigation with the owner's "Mondays" reference: a
+**white tile**. Everything else shows selection with ink text, an ink
+underline or an ink outline. The old `--nav-active-fill` token is gone.
 
 | Pattern | Class (container > item) | Selected | Hover |
 |---|---|---|---|
-| Vertical navigation - sidebars, owner console, Settings/Help section navs, template categories, any side list of sections | `.nav-list > .nav-item` (also `.sidebar-nav > .sidebar-link`, `.settings-nav`, `.section-nav`, `.template-picker-categories`) | Text `--ink` 700, icon `--accent`, a 3px x 20px rounded magenta bar (`--select-bar`) on the item's left edge, vertically centred. The bar glides between items on `transform` (`ref={slidingThumbRef}` on the container) | Text and icon go to ink |
+| Vertical navigation - sidebars, owner console, Settings/Help section navs, template categories, any side list of sections | `.nav-list > .nav-item` (also `.sidebar-nav > .sidebar-link`, `.settings-nav`, `.section-nav`, `.template-picker-categories`) | The white tile behind the item: panel colour (`--select-tile-bg`), 1px `--select-tile-line` hairline, 10px radius, a very soft shadow. Text `--ink` 700, icon ink (not magenta). The tile glides between items on `transform` (`ref={slidingThumbRef}` on the container) | Text and icon go to ink; no fill |
 | Horizontal tabs - page view tabs, records tabs, workspace detail tabs, contacts stages | `.tab-underline > a, button` (owner console: `.admin-tabs`); optional `.tab-count` | Ink 700 text and a 2px ink underline (`--select-line`) that slides along the row | Ink text |
 | Segmented control | `.segmented > .segmented-option` | Solid ink thumb (it is not grey) | Ink text; the track has no fill, just a 1px line |
 | Selectable cards and tiles - template cards, choice cards, post picker tiles | `.select-outline` | Background stays the panel colour; 1.5px ink outline, ink title | The hairline darkens to `--line-strong` |
 | Dense list rows - inbox conversations, contact rows | `.select-rail` (title in `strong` or `.select-title`) | A 3px magenta rail on the left edge, ink 700 title | Title goes to ink |
-| Menu items - account menu, Actions menus, the + menu, dropdowns | `.menu-item` (also `.account-menu-item`, `.admin-menu-list > button`) | - | Ink text and icon; keyboard focus gets an inset 2px magenta ring |
+| Menu items - account menu, Actions menus, the + menu, dropdowns | `.menu-item` (also `.account-menu-item`, `.admin-menu-list > button`) | - | Ink text and icon. Keyboard focus gets the white tile with a darker focus hairline (`--select-tile-focus-line`, 3:1 on the panel) |
+| ⌘K palette rows | `.palette-option` | The highlighted row is the white tile with the focus hairline | - |
 | Table rows | `.data-table` | - | No fill; the row's primary link underlines |
+
+**The white tile.** Light mode: `--panel` (white) + `--line-strong` hairline
++ `0 1px 2px rgba(23,24,29,.06), 0 1px 1px rgba(23,24,29,.04)`. Dark mode: a
+slightly raised surface, `color-mix(in srgb, var(--panel) 92%, white)`, with
+the same strong hairline - never a grey slab. On a white sidebar the tile is
+told apart by its hairline and shadow, not by a fill. The tile is drawn by the
+container's `::before`, sized to the selected item (`--thumb-w/-h`) and moved
+with `translate(--thumb-x, --thumb-y)` over `--dur-3` `--ease-emph`; reduced
+motion makes it jump. Before the hook has measured (first paint) or in a list
+without the hook, the selected item draws the same tile itself. In a row of
+chips (`.nav-list.is-row`, and the Settings/Help navs under 1020px) chips
+differ in width, so the chosen chip draws its own tile instead of a sliding
+one.
 
 The selected state is read from `aria-current`, `aria-selected`,
 `aria-pressed`, `aria-checked`, a checked input, or `.is-active` /
@@ -167,10 +182,34 @@ The selected state is read from `aria-current`, `aria-selected`,
 Adopting them takes a class and the sliding-indicator ref:
 
 ```tsx
-// Side list of sections: magenta bar glides between items.
+// Side list of sections: the white tile glides behind the current item.
+// Labels truncate (.nav-item-label); counts sit in a muted right column.
 <nav ref={slidingThumbRef} className="nav-list" aria-label="Report sections">
-  <a className="nav-item" href="/x" aria-current="page"><Icon /> Overview</a>
+  <a className="nav-item" href="/x" aria-current="page">
+    <Icon size={16} aria-hidden /> <span className="nav-item-label">Overview</span>
+    <span className="nav-item-count">12</span>
+  </a>
 </nav>
+
+// Grouped side list (e.g. Settings "Workspace" / "Account"). The hook finds
+// the selected grandchild, so one ref on the outer list moves one tile.
+<nav ref={slidingThumbRef} className="nav-list" aria-label="Settings sections">
+  <div className="nav-group" role="group" aria-labelledby="g-workspace">
+    <p className="nav-group-label" id="g-workspace">Workspace</p>
+    <a className="nav-item" href="?section=connections" aria-current="page">…</a>
+  </div>
+  <div className="nav-group" role="group" aria-labelledby="g-account">…</div>
+</nav>
+
+// Buttons work too (template categories): aria-pressed or aria-current="true".
+<div ref={slidingThumbRef} className="nav-list" role="group" aria-label="Template categories">
+  <button className="nav-item" type="button" aria-pressed="true">
+    <span className="nav-item-label">Comments</span><span className="nav-item-count">8</span>
+  </button>
+</div>
+
+// Phones: the same list as a scrollable row of chips.
+<div ref={slidingThumbRef} className="nav-list is-row" role="group" aria-label="Template categories">…</div>
 
 // View tabs: ink underline glides along the row; .tab-count is a quiet count.
 <div ref={slidingThumbRef} className="tab-underline" role="tablist" aria-label="Views">
@@ -179,21 +218,27 @@ Adopting them takes a class and the sliding-indicator ref:
 
 <button className="template-card select-outline" aria-pressed={picked}>…</button>
 <li className="contact-row select-rail is-selected"><strong>@handle</strong>…</li>
-<div className="topbar-menu"><a className="menu-item" href="/x"><span className="menu-item-label">Label</span><span className="menu-item-hint">One line</span></a></div>
+<div className="topbar-menu"><a className="menu-item" href="/x"><Icon size={16} aria-hidden /><span className="menu-item-label">Label</span></a></div>
 ```
 
-The tokens behind them are `--select-bar` (magenta), `--select-bar-w` /
-`--select-bar-h` (3px x 20px) and `--select-line` (ink). Screens with their
-own tab classes (the Inbox's `.page-tabs`) draw the same 2px ink underline
-from these tokens.
+The container needs `position: relative` (or sticky) so it is the items'
+offsetParent; `.nav-list` already is, and it isolates its stacking context so
+the tile (`z-index: -1`) sits behind the items but above the page. The
+tokens behind all of this are `--select-tile-bg`, `--select-tile-line`,
+`--select-tile-shadow`, `--select-tile-radius`, `--select-tile-focus-line`
+(the tile), `--select-line` (ink underline/outline) and `--select-bar` /
+`--select-bar-w` / `--select-bar-h` (the magenta rail on dense rows only).
+Screens with their own tab classes (the Inbox's `.page-tabs`) draw the same
+2px ink underline from these tokens.
 
 Allowed non-transparent backgrounds: the page canvas, panels and cards,
 buttons (primary ink, secondary outline is transparent), warning/danger
-status chips, the plan sticker, skeleton loaders, avatars, and the solid
-ink thumbs/knobs of segmented switches and toggles. Code and ID chips are
-transparent with a 1px line. `app/globals.test.ts` ("selection style: never
-a grey fill") fails if a selected/active/current/hover rule sets any other
-background.
+status chips, the plan sticker, skeleton loaders, avatars, the solid ink
+thumbs/knobs of segmented switches and toggles, and the white tile (vertical
+navigation, plus keyboard focus in menus and the palette). Code and ID chips
+are transparent with a 1px line. `app/globals.test.ts` ("selection style:
+never a grey fill") fails if a selected/active/current/hover rule sets any
+other background, or if the tile shows up anywhere else.
 
 ## Shell: top bar, search and accounts
 
@@ -210,7 +255,7 @@ background.
   anywhere or "/" outside a text field. Recent picks, Pages (every nav
   destination and Settings section), Actions, then live Automations, Contacts
   and Conversations (owner console: Workspaces and Users). Arrow keys, Enter,
-  Escape; the highlighted row is a magenta bar, never a fill. Full-screen
+  Escape; the highlighted row is the white tile, never a grey fill. Full-screen
   sheet on phones.
 - **Accounts** in the sidebar: each connected Instagram account and Facebook
   Page with its avatar or initial and a status dot (quiet green; amber or red
@@ -272,7 +317,7 @@ Rules:
   side nav gets `ref={slidingThumbRef}`
   (`src/components/ui/use-sliding-thumb.ts`), which measures the selected
   option and glides one indicator between options (the segmented ink thumb,
-  the side-nav magenta bar, the tab underline - see "Selection").
+  the side-nav white tile, the tab underline - see "Selection").
 - Route changes cross-fade the page content only (React `<ViewTransition>`
   from each area's `template.tsx`); the sidebar never moves.
 - Lists animate rows on first mount or when a row is genuinely new, never on

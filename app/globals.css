@@ -3675,8 +3675,6 @@ a.automation-row:hover .row-chevron { color: var(--ink); }
 .section-nav-link { min-height: 36px; padding: 7px 10px; }
 .section-nav-link:hover { color: var(--ink); }
 .section-nav-link.is-active { color: var(--ink); }
-.section-nav-link.is-active svg,
-.section-nav-link.is-active .section-nav-count { color: var(--accent-text); }
 .section-content { display: grid; gap: 20px; min-width: 0; }
 
 /* ── Settings ──────────────────────────────────────────────────────────── */
@@ -4345,7 +4343,7 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 /* Vertical section lists (Help) share the Settings list treatment. */
 .section-nav-link.is-active,
 .settings-wrap .section-nav-link.is-active { box-shadow: none; color: var(--ink); font-weight: 700; }
-.section-nav-link.is-active svg { color: var(--accent); }
+.section-nav-link.is-active svg { color: var(--ink); }
 .section-nav-link.is-active .section-nav-count { color: var(--muted); }
 .template-picker-category.is-active { color: var(--ink); font-weight: 700; }
 .template-picker-category.is-active .template-picker-count { color: var(--muted); }
@@ -4617,7 +4615,7 @@ img.profile-avatar { border-radius: 50%; object-fit: cover; }
 button.section-nav-link.is-active:hover,
 a.section-nav-link.is-active:hover { background: transparent; color: var(--ink); }
 [data-theme="dark"] button.section-nav-link.is-active:hover,
-[data-theme="dark"] a.section-nav-link.is-active:hover { color: #101116; }
+[data-theme="dark"] a.section-nav-link.is-active:hover { color: var(--ink); }
 .section-nav-link:not(.is-active):hover { background: transparent; color: var(--ink); }
 
 .page-wrap:has(.help-search-shell) .section-layout { gap: 28px; grid-template-columns: 236px minmax(0, 1fr); }
@@ -6308,9 +6306,9 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .sidebar-link.is-active,
 .sidebar-link.is-active:hover { background: transparent; color: var(--ink); font-weight: 700; }
 .sidebar-link.is-active svg,
-.sidebar-link.is-active:hover svg { color: var(--accent); }
+.sidebar-link.is-active:hover svg { color: var(--ink); }
 [data-theme="dark"] .sidebar-link.is-active { color: var(--ink-strong); }
-[data-theme="dark"] .sidebar-link.is-active svg { color: var(--accent); }
+[data-theme="dark"] .sidebar-link.is-active svg { color: var(--ink); }
 .account-row.is-active { background: transparent; }
 .account-row.is-active .account-row-main:hover strong { color: var(--accent-text); }
 .account-row.is-active .account-row-id small { color: var(--muted); }
@@ -7057,9 +7055,9 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   background: transparent;
   color: var(--ink);
 }
-.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--accent); }
+.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--ink); }
 .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count) { color: var(--muted); opacity: 1; }
-[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--accent); }
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--ink); }
 [data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count) { color: var(--muted); }
 .ws-page :is(.settings-nav-link, .section-nav-link) { font-size: .875rem; min-height: 40px; }
 .ws-page :is(.settings-nav-count, .section-nav-count) { font-size: .8125rem; font-variant-numeric: tabular-nums; }
@@ -8970,30 +8968,35 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 .automation-section-body { animation: motion-fade-up var(--dur-2) var(--ease-out) both; }
 
 /* ── Sliding selection indicators (useSlidingThumb) ────────────────────────
-   Selection is never a fill (Round 5, docs/brand.md "Selection"). The
-   segmented switch keeps its solid ink thumb (rules with the switch above).
-   Vertical lists of sections - the sidebars, Settings and Help navs, the
-   template categories, anything marked .nav-list - get a 3px x 20px magenta
-   bar on the selected item's left edge that glides between items on a
-   transform. Horizontal tab rows (.tab-underline, the owner-console tabs)
-   get a 2px ink underline that slides along the row. */
+   Selection is never a grey fill (docs/brand.md "Selection"). The segmented
+   switch keeps its solid ink thumb (rules with the switch above). Vertical
+   lists of sections - the sidebars, Settings and Help navs, the template
+   categories, anything marked .nav-list - get a white tile (Round 6): the
+   panel colour with a hairline and a very soft shadow, drawn behind the
+   items and gliding between them on a transform. Horizontal tab rows
+   (.tab-underline, the owner-console tabs) get a 2px ink underline that
+   slides along the row. */
 :is(.nav-list, .sidebar-nav, .template-picker-categories) { isolation: isolate; position: relative; }
-/* Sticky already makes these the containing block for the bar. */
+/* Sticky already makes these the containing block for the tile. */
 .settings-nav, .section-nav { isolation: isolate; }
 :is(.nav-list, .sidebar-nav, .settings-nav, .section-nav, .template-picker-categories)[style*="--thumb-w"]::before {
-  background: var(--select-bar);
-  border-radius: 3px;
+  background: var(--select-tile-bg);
+  border: 1px solid var(--select-tile-line);
+  border-radius: var(--select-tile-radius);
+  box-shadow: var(--select-tile-shadow);
+  box-sizing: border-box;
   content: "";
-  height: var(--select-bar-h);
+  height: var(--thumb-h);
   left: 0;
   opacity: var(--thumb-o, 1);
   pointer-events: none;
   position: absolute;
   top: 0;
-  transform: translate(var(--thumb-x), calc(var(--thumb-y) + (var(--thumb-h) - var(--select-bar-h)) / 2));
+  transform: translate(var(--thumb-x), var(--thumb-y));
   transition: var(--thumb-motion, transform var(--dur-3) var(--ease-emph), opacity var(--dur-2) var(--ease-out));
-  width: var(--select-bar-w);
-  z-index: 1;
+  width: var(--thumb-w);
+  /* Behind the items: each list is its own stacking context (isolate). */
+  z-index: -1;
 }
 :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category) {
   transition: color var(--dur-2) var(--ease-out);
@@ -9193,15 +9196,16 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 /* === Round 5: shell === */
 /* ── Selection: never a grey fill ──────────────────────────────────────────
    "I don't want that grey bg selected tile." Selected, current, active and
-   hovered things never get a tinted background. They show with ink text,
-   a magenta indicator bar, an ink underline or an ink outline instead. The
-   reusable pieces (documented in docs/brand.md "Selection", enforced by
-   app/globals.test.ts):
-     .nav-list > .nav-item     vertical sections: magenta bar on the left edge
+   hovered things never get a tinted background. Round 6 (owner's "Mondays"
+   reference): vertical navigation marks the selection with a white tile -
+   the panel colour, a hairline, a very soft shadow - instead of the magenta
+   bar. The reusable pieces (documented in docs/brand.md "Selection",
+   enforced by app/globals.test.ts):
+     .nav-list > .nav-item     vertical sections: the white tile glides behind the item
      .tab-underline > a|button horizontal tabs: 2px ink underline
      .select-outline           selectable cards/tiles: 1.5px ink outline
      .select-rail              dense list rows: 3px magenta rail on the left
-     .menu-item                menu rows: ink text on hover/focus, no fill
+     .menu-item                menu rows: ink text on hover; the tile on keyboard focus
    Selected state is read from aria-current, aria-selected, aria-pressed,
    aria-checked, a checked input, or .is-active / .is-selected / .is-on. */
 :root {
@@ -9209,9 +9213,23 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   --select-bar-w: 3px;
   --select-bar-h: 20px;
   --select-line: var(--ink);
+  /* The white tile: vertical-nav selection and keyboard focus in menus. */
+  --select-tile-bg: var(--panel);
+  --select-tile-line: var(--line-strong);
+  --select-tile-shadow: 0 1px 2px rgba(23, 24, 29, .06), 0 1px 1px rgba(23, 24, 29, .04);
+  --select-tile-radius: 10px;
+  /* Keyboard focus on a tile needs a hairline that reads (3:1 on the panel). */
+  --select-tile-focus-line: color-mix(in srgb, var(--ink) 50%, var(--panel));
+}
+/* Dark: a slightly raised surface with the strong hairline - a few percent
+   lighter than the panel, never a grey slab. */
+[data-theme="dark"] {
+  --select-tile-bg: color-mix(in srgb, var(--panel) 92%, white);
+  --select-tile-shadow: 0 1px 2px rgba(0, 0, 0, .4);
 }
 
-/* Vertical navigation: transparent always; the bar marks the selection. */
+/* Vertical navigation: items stay transparent; the tile behind the selected
+   one (the container's ::before) marks it. Text and icon go to ink. */
 :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category) { background: transparent; position: relative; }
 :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):hover,
 :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):hover svg { color: var(--ink); }
@@ -9221,19 +9239,13 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   color: var(--ink);
   font-weight: 700;
 }
-:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) svg { color: var(--accent); }
-/* Before the sliding bar has measured (first paint, or a list without
-   useSlidingThumb), the selected item draws its own bar. */
-:is(.nav-list, .sidebar-nav, .settings-nav, .section-nav, .template-picker-categories):not([style*="--thumb-w"]) :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"])::before {
-  background: var(--select-bar);
-  border-radius: 3px;
-  content: "";
-  height: var(--select-bar-h);
-  left: 0;
-  margin-top: calc(var(--select-bar-h) / -2);
-  position: absolute;
-  top: 50%;
-  width: var(--select-bar-w);
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) svg { color: var(--ink); }
+/* Before the sliding tile has measured (first paint, or a list without
+   useSlidingThumb), the selected item draws its own tile. */
+:is(.nav-list, .sidebar-nav, .settings-nav, .section-nav, .template-picker-categories):not([style*="--thumb-w"]) :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) {
+  background: var(--select-tile-bg);
+  border-radius: var(--select-tile-radius);
+  box-shadow: inset 0 0 0 1px var(--select-tile-line), var(--select-tile-shadow);
 }
 .nav-list { display: flex; flex-direction: column; gap: 2px; }
 .nav-item {
@@ -9249,9 +9261,33 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   min-height: 40px;
   padding: 8px 12px;
   text-align: left;
+  text-decoration: none;
   width: 100%;
 }
-.nav-item svg { color: var(--muted); flex: 0 0 auto; }
+.nav-item { cursor: pointer; transition: color var(--dur-2) var(--ease-out); }
+.nav-item svg { color: var(--muted); flex: 0 0 auto; transition: color var(--dur-2) var(--ease-out); }
+.nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The label truncates rather than wrapping; a count sits in a muted column. */
+.nav-item-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item-count { color: var(--muted); flex: 0 0 auto; font-size: .8125rem; font-variant-numeric: tabular-nums; font-weight: 600; margin-left: auto; }
+/* Grouped lists: a quiet sentence-case heading per group (not a tab stop). */
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-group + .nav-group { margin-top: 16px; }
+.nav-group-label { color: var(--muted); font-size: .8125rem; font-weight: 650; margin: 0; padding: 0 12px 6px; }
+/* Horizontal variant (phones: a scrollable row of chips). Chips differ in
+   width, so the chosen one draws its own tile instead of a sliding one. */
+.nav-list.is-row { flex-direction: row; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.nav-list.is-row::-webkit-scrollbar { display: none; }
+.nav-list.is-row > .nav-item { flex: 0 0 auto; width: auto; }
+.nav-list.is-row::before { content: none; }
+.nav-list.is-row > .nav-item:is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) {
+  background: var(--select-tile-bg);
+  border-radius: var(--select-tile-radius);
+  box-shadow: inset 0 0 0 1px var(--select-tile-line), var(--select-tile-shadow);
+}
+@media (max-width: 767px) {
+  .nav-item { min-height: 44px; }
+}
 
 /* Horizontal tabs: transparent; the selected tab is ink 700 with a 2px ink
    underline that slides (useSlidingThumb on the row). */
@@ -9301,12 +9337,18 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 .select-rail:is(.is-selected, .is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"]) { background: transparent; box-shadow: inset var(--select-bar-w) 0 0 var(--select-bar); }
 .select-rail:is(.is-selected, .is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"]) :is(strong, .select-title) { color: var(--ink); font-weight: 700; }
 
-/* Menu rows (account menu, Actions menus, the + menu): ink on hover and
-   focus, an inset focus ring for the keyboard, no fill. */
+/* Menu rows (account menu, Actions menus, the + menu): ink on hover; the
+   keyboard's place is the white tile with the focus hairline. No grey fill. */
 :is(.menu-item, .account-menu-item, .admin-menu-list > button) { background: transparent; }
-:is(.menu-item, .account-menu-item, .admin-menu-list > button):is(:hover, :focus-visible):not(:disabled),
-:is(.menu-item, .account-menu-item, .admin-menu-list > button):is(:hover, :focus-visible):not(:disabled) svg { background: transparent; color: var(--ink); }
-:is(.menu-item, .account-menu-item, .admin-menu-list > button):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+:is(.menu-item, .account-menu-item, .admin-menu-list > button):hover:not(:disabled),
+:is(.menu-item, .account-menu-item, .admin-menu-list > button):hover:not(:disabled) svg { background: transparent; color: var(--ink); }
+:is(.menu-item, .account-menu-item, .admin-menu-list > button):focus-visible:not(:disabled) {
+  background: var(--select-tile-bg);
+  box-shadow: inset 0 0 0 1px var(--select-tile-focus-line), var(--select-tile-shadow);
+  color: var(--ink);
+  outline: none;
+}
+:is(.menu-item, .account-menu-item, .admin-menu-list > button):focus-visible:not(:disabled) svg { color: var(--ink); }
 .account-menu-item.is-danger:hover, .account-menu-item.is-danger:hover svg { color: var(--danger); }
 
 /* Table rows: no hover fill; the row's primary link underlines instead. */
@@ -9555,18 +9597,12 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   padding: 6px 12px;
   position: relative;
 }
-/* The highlighted row is a dense list row: magenta rail, ink text, no fill. */
-.palette-option[aria-selected="true"] { color: var(--ink); }
-.palette-option[aria-selected="true"]::before {
-  background: var(--select-bar);
-  border-radius: 3px;
-  content: "";
-  height: var(--select-bar-h);
-  left: 0;
-  margin-top: calc(var(--select-bar-h) / -2);
-  position: absolute;
-  top: 50%;
-  width: var(--select-bar-w);
+/* The highlighted row (the keyboard's place in the list) is the white tile
+   with the focus hairline: ink text, no grey fill, no magenta bar. */
+.palette-option[aria-selected="true"] {
+  background: var(--select-tile-bg);
+  box-shadow: inset 0 0 0 1px var(--select-tile-focus-line), var(--select-tile-shadow);
+  color: var(--ink);
 }
 .palette-option-icon {
   align-items: center;
@@ -9704,12 +9740,17 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 .ins-table thead th, .ins-table thead tr { background: transparent; }
 
 @media (max-width: 1020px) {
-  /* The Settings and Help navs wrap into a row of chips here: the chosen
-     chip gets the ink outline of a selectable card and the bar steps aside. */
+  /* The Settings and Help navs wrap into a row of chips here. Chips differ
+     in width, so the chosen one draws its own white tile and the sliding
+     tile steps aside. */
   .settings-nav, .section-nav { position: relative; top: auto; }
   :is(.settings-nav, .section-nav)::before,
   :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link)::before { content: none !important; }
-  .settings-wrap .settings-nav-link.is-active { border-color: var(--select-line); box-shadow: 0 0 0 .5px var(--select-line); }
+  :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link):is(.is-active, [aria-current="page"], [aria-current="true"]) {
+    background: var(--select-tile-bg);
+    border-radius: var(--select-tile-radius);
+    box-shadow: inset 0 0 0 1px var(--select-tile-line), var(--select-tile-shadow);
+  }
 }
 
 /* === Round 5: inbox === */
