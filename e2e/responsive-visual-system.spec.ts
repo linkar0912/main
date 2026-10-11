@@ -493,37 +493,30 @@ test("settings desktop overview is bounded and balanced", async ({ page }) => {
   if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-settings-redesign.png", fullPage: true });
 });
 
-test("home and insights share one quiet performance-stat treatment", async ({ page }) => {
+test("home and insights share one headline-figure treatment", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/dashboard");
-  const homeRow = page.locator(".stat-row").first();
-  const homeStat = homeRow.locator(".stat-block").first();
-  await expect(homeStat).toBeVisible();
-  const homeStyle = await homeStat.evaluate((element) => {
+  const figureStyle = (element: Element) => {
     const style = getComputedStyle(element);
-    return { background: style.backgroundColor, border: style.borderWidth, radius: style.borderRadius, padding: style.padding };
-  });
-  expect(await homeRow.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+    return { size: style.fontSize, weight: style.fontWeight, numbers: style.fontVariantNumeric };
+  };
+  const homeItems = page.getByRole("list", { name: "Performance summary" }).getByRole("listitem");
+  await expect(homeItems).toHaveCount(3);
+  const homeStyle = await homeItems.first().locator(".perf-figure-value").evaluate(figureStyle);
+  expect(homeStyle.numbers).toContain("tabular-nums");
   if (process.env.VISUAL_REVIEW) await page.screenshot({ path: "/tmp/linkar-home-stats-redesign.png", fullPage: true });
 
   await page.goto("/insights");
   const items = page.getByRole("list", { name: "Performance summary" }).getByRole("listitem");
-  await expect(items).toHaveCount(4);
+  await expect(items).toHaveCount(3);
   const boxes = await items.evaluateAll((elements) => elements.map((element) => {
     const box = element.getBoundingClientRect();
     return { x: box.x, y: box.y, width: box.width };
   }));
+  // The two series figures sit side by side as the chart's legend.
   expect(boxes[1].x).toBeGreaterThan(boxes[0].x + boxes[0].width);
-  expect(Math.abs(boxes[0].y - boxes[3].y)).toBeLessThanOrEqual(2);
-  const insightsRow = page.getByRole("list", { name: "Performance summary" });
-  const insightsStat = insightsRow.locator(".stat-block").first();
-  await expect(insightsStat).toBeVisible();
-  const insightsStyle = await insightsStat.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { background: style.backgroundColor, border: style.borderWidth, radius: style.borderRadius, padding: style.padding };
-  });
-  expect(await insightsRow.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
-  expect(insightsStyle).toEqual(homeStyle);
+  expect(Math.abs(boxes[0].y - boxes[1].y)).toBeLessThanOrEqual(2);
+  expect(await items.first().locator(".perf-figure-value").evaluate(figureStyle)).toEqual(homeStyle);
   if (process.env.VISUAL_REVIEW) {
     await page.screenshot({ path: "/tmp/linkar-insights-redesign.png", fullPage: true });
     await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
@@ -681,8 +674,8 @@ test("mobile sequence edit actions remain comfortably tappable", async ({ page }
 test("desktop chart fills the content field", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/dashboard");
-  const panel = await page.locator(".chart-panel").boundingBox();
-  const plot = await page.locator(".chart-plot").boundingBox();
+  const panel = await page.locator(".home-performance").boundingBox();
+  const plot = await page.locator(".perf-chart").boundingBox();
   expect(panel).not.toBeNull();
   expect(plot).not.toBeNull();
   expect(plot!.width).toBeGreaterThan(panel!.width * 0.9);

@@ -11,7 +11,8 @@ import type { AutomationRecord } from "@/src/lib/repository";
 import { BILLING_PLANS } from "@/src/lib/billing/catalog";
 import { peopleAnswer } from "./people-fixtures";
 
-export type PreviewScenario = "populated" | "empty" | "error" | "slow";
+/** busy / fresh are Home and Insights review states layered on populated / empty. */
+export type PreviewScenario = "populated" | "empty" | "error" | "slow" | "busy" | "fresh";
 
 export type FixtureAnswer =
   | { kind: "json"; status: number; body: unknown }
@@ -368,14 +369,54 @@ function deliveries() {
 
 // ------------------------------------------------------------------ insights
 
-function insightsOverview(scenario: PreviewScenario) {
+/**
+ * 60 days of daily counts, oldest first, ending in the familiar 14-day
+ * fixture so Home and Insights (14 days) show the same line. Older days
+ * taper off smoothly, so every range has a believable "previous" window.
+ */
+function history(recent: number[]): number[] {
+  const older = Array.from({ length: 60 - recent.length }, (_, index) => {
+    const t = index / (60 - recent.length);
+    return Math.max(0, Math.round(recent[0] * (0.45 + 0.4 * t) + 6 * Math.sin(index * 1.3)));
+  });
+  return [...older, ...recent];
+}
+
+const SENT_60 = history(SENT_14);
+const REACHED_60 = history(REACHED_14);
+
+/** Share of the workspace's replies each automation sent (per-automation filter and table). */
+const AUTOMATION_SHARE: Record<string, { share: number; failRate: number; campaign?: boolean }> = {
+  auto_price_list: { share: 0.38, failRate: 0.012 },
+  auto_welcome_dm: { share: 0.22, failRate: 0.004 },
+  auto_story_thanks: { share: 0.16, failRate: 0 },
+  auto_diwali_sale: { share: 0.15, failRate: 0.021, campaign: true },
+  auto_fb_details: { share: 0.06, failRate: 0.008 },
+  auto_kurta_waitlist: { share: 0.03, failRate: 0.05 },
+};
+
+function windowDays(url: URL): number {
+  const days = Number(url.searchParams.get("days"));
+  return [7, 14, 30].includes(days) ? days : 14;
+}
+
+function windowSeries(full: number[], days: number, scale: number) {
+  const scaled = full.map((count) => Math.round(count * scale));
+  const current = scaled.slice(-days);
+  const previous = scaled.slice(-2 * days, -days).reduce((total, count) => total + count, 0);
+  return { current: series(current), previous };
+}
+
+function insightsOverview(scenario: PreviewScenario, url?: URL) {
   const empty = scenario === "empty";
+  const days = url ? windowDays(url) : 14;
+  const automationId = url?.searchParams.get("automationId") ?? "";
+  const scale = empty ? 0 : automationId ? AUTOMATION_SHARE[automationId]?.share ?? 0 : 1;
+  const sent = windowSeries(SENT_60, days, scale);
+  const reached = windowSeries(REACHED_60, days, scale);
   return {
-    timeseries: {
-      days: 14,
-      participantsPerDay: series(empty ? Array(14).fill(0) : REACHED_14),
-      sentPerDay: series(empty ? Array(14).fill(0) : SENT_14),
-    },
+    timeseries: { days, participantsPerDay: reached.current, sentPerDay: sent.current },
+    previous: { sent: sent.previous, reached: reached.previous },
     capturedEmails: empty ? 0 : 186,
     optedOut: empty ? 0 : 4,
     contactTotalsScope: "workspace",
@@ -389,12 +430,27 @@ function usage(scenario: PreviewScenario) {
   };
 }
 
-function insightsFull(scenario: PreviewScenario) {
+function insightsFull(scenario: PreviewScenario, url: URL) {
   const empty = scenario === "empty";
+  const overview = insightsOverview(scenario, url);
+  const automationId = url.searchParams.get("automationId") ?? "";
+  // Comment-to-link journeys and per-post numbers come from campaign flows only.
+  const campaignScope = !automationId || AUTOMATION_SHARE[automationId]?.campaign === true;
+  const windowSent = overview.timeseries.sentPerDay.reduce((total, point) => total + point.count, 0);
+  const totalSent = SENT_60.slice(-overview.timeseries.days).reduce((total, count) => total + count, 0);
   return {
-    ...insightsOverview(scenario),
-    funnel: empty ? {} : { COMMENT_MATCHED: 1_240, OPENING_SENT: 1_182, OPTED_IN: 806, FOLLOW_VERIFIED: 612, LINK_SENT: 588 },
-    mediaPerformance: empty ? [] : [
+    ...overview,
+    funnel: empty || !campaignScope ? {} : { COMMENT_MATCHED: 58, OPENING_SENT: 376, OPTED_IN: 194, FOLLOW_REQUIRED: 24, FOLLOW_VERIFIED: 24, LINK_SENT: 588 },
+    journey: empty || !campaignScope
+      ? { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 }
+      : { commented: 1_240, openingSent: 1_182, optedIn: 806, followed: 612, linkSent: 588 },
+    automations: empty ? [] : Object.entries(AUTOMATION_SHARE)
+      .filter(([id]) => !automationId || id === automationId)
+      .map(([id, { share, failRate }]) => {
+        const sent = Math.round((automationId ? windowSent : totalSent) * (automationId ? 1 : share));
+        return { automationId: id, sent, failed: Math.round(sent * failRate), skipped: Math.round(sent * 0.03) };
+      }),
+    mediaPerformance: empty || !campaignScope ? [] : [
       { mediaId: "18101928374650011", matched: 412, delivered: 371, clicked: 149 },
       { mediaId: "18042217893305561", matched: 288, delivered: 262, clicked: 87 },
       { mediaId: "17885514206612948", matched: 196, delivered: 181, clicked: 52 },
@@ -403,6 +459,44 @@ function insightsFull(scenario: PreviewScenario) {
     ],
     usage: usage(scenario),
   };
+}
+
+/**
+ * Home/Insights review states on top of the two base workspaces:
+ * - busy: the populated workspace with everything that should surface in
+ *   "Needs you" (expired Instagram, plan nearly used up, two paused
+ *   automations) and a very long automation name.
+ * - fresh: an account that connected Instagram but hasn't built anything.
+ * Returns null for anything the base scenario answers unchanged.
+ */
+function homeScenarioAnswer(verb: string, path: string, url: URL, scenario: "busy" | "fresh"): FixtureAnswer | null {
+  if (verb !== "GET") return null;
+  if (scenario === "fresh") {
+    if (path === "/api/meta/connection") return json(instagramConnections("populated"));
+    if (path === "/api/facebook/connection") return json({ data: [] });
+    if (path === "/api/workspace/bootstrap") return json(bootstrap("empty"));
+    return null;
+  }
+  if (path === "/api/meta/connection") {
+    const connections = instagramConnections("populated");
+    return json({ data: connections.data.map((connection) => ({ ...connection, status: "EXPIRED" })) });
+  }
+  if (path === "/api/insights" && url.searchParams.get("include") === "usage") {
+    const limit = BILLING_PLANS.growth.monthlyDeliveryLimit ?? 25_000;
+    return json({ usage: { deliveriesThisMonth: Math.round(limit * 0.94), monthlyDeliveryLimit: limit } });
+  }
+  if (path === "/api/automations") {
+    const now = Date.now();
+    const list = automations().map((automation) => automation.id === "auto_story_thanks" ? { ...automation, status: "PAUSED" as const } : automation);
+    const longName = {
+      ...list[0],
+      id: "auto_long_name",
+      name: "Festive season mega giveaway 🎁🪔 comment WINWINWINWINWINWINWINWINWINWINWINWINWIN to enter",
+      updatedAt: ago(40 * MINUTE, now),
+    };
+    return json({ data: [longName, ...list] });
+  }
+  return null;
 }
 
 function failures(scenario: PreviewScenario) {
@@ -861,11 +955,17 @@ function readJson(body: unknown): Record<string, unknown> {
  * Answers one same-origin /api request. `null` = not mocked (the shim then
  * returns a 404 and warns, so a missing endpoint is easy to spot).
  */
-export function answer(method: string, url: URL, scenario: PreviewScenario, rawBody?: unknown): FixtureAnswer | null {
+export function answer(method: string, url: URL, requested: PreviewScenario, rawBody?: unknown): FixtureAnswer | null {
   const people = peopleAnswer(method, url);
   if (people) return people;
   const path = url.pathname.replace(/\/+$/, "");
   const verb = method.toUpperCase();
+  if (requested === "busy" || requested === "fresh") {
+    const special = homeScenarioAnswer(verb, path, url, requested);
+    if (special) return special;
+  }
+  // Everything the review states don't override comes from their base workspace.
+  const scenario: PreviewScenario = requested === "busy" ? "populated" : requested === "fresh" ? "empty" : requested;
 
   if (scenario === "slow" && INSIGHTS_PATHS.test(path) && verb === "GET") return { kind: "hang" };
   if (scenario === "error" && verb === "GET" && (INSIGHTS_PATHS.test(path) || AUTOMATIONS_PATHS.test(path))) {
@@ -888,8 +988,8 @@ export function answer(method: string, url: URL, scenario: PreviewScenario, rawB
       case "/api/insights": {
         const include = url.searchParams.get("include");
         if (include === "usage") return json({ usage: usage(scenario) });
-        if (include === "overview") return json(insightsOverview(scenario));
-        return json(insightsFull(scenario));
+        if (include === "overview") return json(insightsOverview(scenario, url));
+        return json(insightsFull(scenario, url));
       }
       case "/api/insights/failures": return json(failures(scenario));
       case "/api/insights/ab-tests": return json(abTests(scenario));

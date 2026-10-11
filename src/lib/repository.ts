@@ -766,7 +766,8 @@ export interface AutomationRepository {
   ): Promise<{ automationId: string; sent: number; failed: number; skipped: number }[]>;
   countExecutionsSentPerDay(workspaceId: string, days: number, automationId?: string): Promise<DailyCount[]>;
   countParticipantsByMedia(workspaceId: string, automationId?: string): Promise<MediaPerformance[]>;
-  countParticipantFunnel(workspaceId: string, automationId: string): Promise<ParticipantFunnelCounts>;
+  /** Cumulative funnel for one automation, or the whole workspace when automationId is omitted. */
+  countParticipantFunnel(workspaceId: string, automationId?: string): Promise<ParticipantFunnelCounts>;
   // Click tracking for delivered links.
   getParticipantById(id: string): Promise<AutomationParticipantRecord | null>;
   markDeliveryClicked(id: string, atIso: string): Promise<boolean>;
