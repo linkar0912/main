@@ -34,21 +34,33 @@ export function incidentSource(source: string): string {
 }
 
 export function IncidentTable({ incidents, now }: { incidents: AdminIncidentSummary[]; now: string }) {
+  // A quiet day is one line, not an empty table.
+  if (incidents.length === 0) {
+    return (
+      <section id="incidents" className="health-incidents-none" aria-label="Incidents">
+        <StatusBadge tone="success" label="No incidents in the last 24 hours" />
+      </section>
+    );
+  }
+  const active = incidents.filter((incident) => incident.status !== "RESOLVED").length;
+  const recovered = incidents.length - active;
+  const summary = [
+    active ? `${active} active ${active === 1 ? "incident" : "incidents"}` : "",
+    recovered ? `${recovered} recovered in the last 24 hours` : "",
+  ].filter(Boolean).join(", ");
   return (
-    <section className="admin-card is-flush" aria-labelledby="incident-heading">
+    <section id="incidents" className="admin-card is-flush" aria-labelledby="incident-heading">
       <div className="admin-card-head">
         <div>
           <h2 id="incident-heading">Incidents</h2>
-          <p>Problems happening now, and recoveries from the last 24 hours.</p>
+          <p>{summary}</p>
         </div>
       </div>
       <div className="table-scroll">
         <table className="data-table is-stackable" aria-label="Production incidents">
           <thead><tr><th>State</th><th>What happened</th><th>Affects</th><th>Duration</th><th>Last seen</th></tr></thead>
           <tbody>
-            {incidents.length === 0 ? (
-              <tr><td colSpan={5}><span className="admin-hint">No incidents in the last 24 hours</span></td></tr>
-            ) : incidents.map((incident) => {
+            {incidents.map((incident) => {
               const badge = state(incident);
               return (
                 <tr key={incident.id}>

@@ -194,3 +194,31 @@ export const dataDeletionRequests = [
   { id: "ddr_5f2a9c1e7b3d4a68", status: "completed", requestedAt: ago(60 * 24 * 3), completedAt: ago(60 * 24 * 3 - 4) },
   { id: "ddr_0b7e4d2c9a1f3e56", status: "pending", requestedAt: ago(60 * 2), completedAt: null },
 ];
+
+// Service health on a bad day: a stalled worker, an open incident, a backed-up
+// queue with failures, a paused queue and billing not set up.
+export const systemSnapshotWithProblems: AdminSystemSnapshot = {
+  ...systemSnapshot,
+  overall: "degraded",
+  worker: { state: "degraded", detail: "No heartbeat for 3 minutes", release: "9b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c", lastSeenAt: ago(3) },
+  queues: [
+    { ...systemSnapshot.queues[0], waiting: 642, active: 0, failed: 14, oldestWaitingAgeMs: 340_000 },
+    { ...systemSnapshot.queues[1], paused: true },
+  ],
+  incidents: [
+    { id: "inc_2", severity: "CRITICAL", status: "OPEN", source: "queue:webhooks", title: "Message queue backed up", detail: "642 events have been waiting for over 5 minutes.", firstSeenAt: ago(12), lastSeenAt: ago(1), resolvedAt: null, occurrenceCount: 4 },
+    ...systemSnapshot.incidents,
+  ],
+  configurationPresence: systemSnapshot.configurationPresence.map((item) =>
+    item.requirement === "Razorpay billing" ? { ...item, present: false, fix: "Set RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET and the plan IDs on the web server, then redeploy." } : item),
+  billing: { configured: false, failedWebhooksLastHour: 0, driftedSubscriptions: 0 },
+};
+
+// A fully quiet day: nothing for the owner to do.
+export const systemSnapshotAllNormal: AdminSystemSnapshot = {
+  ...systemSnapshot,
+  incidents: [],
+  configurationPresence: systemSnapshot.configurationPresence.map((item) => ({ requirement: item.requirement, present: true })),
+  billing: { configured: true, failedWebhooksLastHour: 0, driftedSubscriptions: 0 },
+  queues: systemSnapshot.queues.map((queue) => ({ ...queue, failed: 0, lastFailedCode: null })),
+};

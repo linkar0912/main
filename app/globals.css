@@ -6339,6 +6339,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .data-table.is-stackable td { align-items: center; border: 0; display: flex; gap: 12px; height: auto; justify-content: space-between; min-width: 0; padding: 0 !important; text-align: left; width: auto; }
   .data-table.is-stackable td[data-label]::before { color: var(--muted); content: attr(data-label); flex: 0 0 auto; font-size: .8125rem; font-weight: 600; }
   .data-table.is-stackable td:first-child { display: block; }
+  .data-table.is-stackable td:first-child[data-label]::before { margin-right: 12px; }
   .data-table.is-stackable td.is-action { justify-content: flex-start; }
   .data-table.is-stackable td.is-action > .button,
   .data-table.is-stackable td.is-action > a.button { width: 100%; }
@@ -6590,23 +6591,55 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .admin-health-list > li:first-child { border-top: 0; }
 .admin-health-list span { font-weight: 600; }
 
-/* Service health */
-.admin-probes { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.admin-probe { justify-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); display: grid; gap: 10px; align-content: start; min-width: 0; padding: 20px; }
-.admin-probe-name { align-items: center; display: flex; font-weight: 700; gap: 10px; }
-.admin-probe-name svg { color: var(--muted); }
-.admin-probe p { color: var(--muted); font-size: .8125rem; line-height: 1.45; margin: 0; }
-.admin-summary-strip { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* Service health: one banner says whether anything needs the owner; the
+   rest of the page stays quiet unless it is the thing that is wrong. */
+.health-banner { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); display: grid; gap: 12px; min-width: 0; padding: 20px 24px; }
+.health-banner.is-warning { border-color: color-mix(in srgb, var(--status-warning) 45%, var(--line)); }
+.health-banner.is-danger { border-color: color-mix(in srgb, var(--status-danger) 45%, var(--line)); }
+.health-banner-head { align-items: center; display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; }
+.health-banner-head h2 { font-size: 1rem; margin: 0; }
+.health-banner-head h2 .status-chip { font-size: .9375rem; font-weight: 700; }
+.health-banner.is-normal .health-banner-head h2 .status-chip-dot { flex-basis: 10px; height: 10px; width: 10px; }
+.health-banner-meta { align-items: center; color: var(--muted); display: flex; flex-wrap: wrap; font-size: .875rem; gap: 8px 16px; }
+.health-problems { display: grid; list-style: none; margin: 0; padding: 0; }
+.health-problems > li { align-items: start; border-top: 1px solid var(--line); display: grid; gap: 12px; grid-template-columns: 8px minmax(0, 1fr) auto; padding: 12px 0; }
+.health-problems > li:last-child { padding-bottom: 0; }
+.health-problem-dot { background: var(--status-warning); border-radius: 50%; height: 8px; margin-top: 7px; width: 8px; }
+.health-problems > li.is-danger .health-problem-dot { background: var(--status-danger); }
+.health-problems strong { font-size: .9375rem; font-weight: 650; }
+.health-problems p { color: var(--slate); font-size: .875rem; line-height: 1.5; margin: 2px 0 0; max-width: 72ch; overflow-wrap: anywhere; }
+.health-problems .text-link { font-size: .875rem; font-weight: 600; white-space: nowrap; }
+
+/* Services: one compact row of four; a healthy service is a name and a dot. */
+.health-services { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); min-width: 0; }
+.health-service { align-content: start; display: grid; gap: 6px; justify-items: start; min-width: 0; padding: 16px 20px; }
+.health-service + .health-service { border-left: 1px solid var(--line); }
+.health-service-name { align-items: center; display: flex; font-weight: 650; gap: 8px; }
+.health-service-name svg { color: var(--muted); flex: 0 0 auto; }
+.health-service p { color: var(--muted); font-size: .8125rem; line-height: 1.45; margin: 0; }
+.health-service .status-chip { font-size: .8125rem; }
+
+.health-incidents-none { color: var(--ink); padding: 0 4px; }
+
+/* Setup checklist: exceptions first, the rest collapsed into one line. */
+.admin-setup > .admin-readiness { border-bottom: 1px solid var(--line); }
+.admin-setup > .status-summary { border-top: 0; padding: 0 24px; }
+.admin-setup > .status-summary[open] { padding-bottom: 4px; }
+.admin-readiness.is-ready > li { padding-left: 0; padding-right: 0; }
+.admin-readiness.is-ready > li:first-child { border-top: 1px solid var(--line); }
+.admin-readiness.is-ready .admin-readiness-row > span:first-child { font-weight: 500; }
+
 .admin-queue { border-top: 1px solid var(--line); display: grid; gap: 12px; padding: 16px 24px; }
 .admin-queue:first-of-type { border-top: 0; }
 .admin-queue-head { align-items: center; display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; }
 .admin-queue-head strong { font-size: 1rem; }
-.admin-queue-counts { display: grid; font-variant-numeric: tabular-nums; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; }
-.admin-queue-counts > div { background: rgba(23, 24, 29, .03); border-radius: var(--radius-control); display: grid; gap: 2px; padding: 10px 12px; }
-[data-theme="dark"] .admin-queue-counts > div { background: rgba(255, 255, 255, .04); }
+/* Counts are plain numbers; only a non-zero failure count is coloured. */
+.admin-queue-counts { display: grid; font-variant-numeric: tabular-nums; gap: 8px 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; }
+.admin-queue-counts > div { display: grid; gap: 2px; }
 .admin-queue-counts dt { color: var(--muted); font-size: .8125rem; }
-.admin-queue-counts dd { font-size: 1.125rem; font-weight: 700; margin: 0; }
-.admin-failed-jobs { border-top: 1px solid var(--line); display: grid; gap: 12px; padding-top: 12px; }
+.admin-queue-counts dd { font-size: 1.0625rem; font-weight: 650; margin: 0; }
+.admin-queue-counts > .is-failing dd { background: var(--status-warning-fill); border-radius: 999px; color: var(--status-warning-text); justify-self: start; padding: 0 10px; }
+
 .admin-readiness { display: grid; list-style: none; margin: 0; padding: 0; }
 .admin-readiness > li { border-top: 1px solid var(--line); display: grid; gap: 4px; padding: 12px 24px; }
 .admin-readiness > li:first-child { border-top: 0; }
@@ -6644,7 +6677,10 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 [data-theme="dark"] .admin-audit-details pre { background: rgba(255, 255, 255, .04); }
 
 @media (max-width: 1080px) {
-  .admin-stats, .admin-probes, .admin-summary-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .health-services { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .health-service:nth-child(3) { border-left: 0; }
+  .health-service:nth-child(n + 3) { border-top: 1px solid var(--line); }
   .admin-columns, .admin-columns.is-wide-left { grid-template-columns: minmax(0, 1fr); }
   .admin-fieldset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -6656,6 +6692,11 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .admin-card.is-flush > .admin-card-note { margin-left: 16px; margin-right: 16px; }
   .admin-card-body { padding-left: 16px; padding-right: 16px; }
   .admin-card.is-flush .admin-list > li, .admin-card.is-flush .admin-list-row, .admin-activity > li, .admin-queue, .admin-readiness > li { padding-left: 16px; padding-right: 16px; }
+  .admin-setup > .status-summary { padding: 0 16px; }
+  .admin-readiness.is-ready > li { padding-left: 0; padding-right: 0; }
+  .health-banner { padding: 16px; }
+  .health-problems > li { grid-template-columns: 8px minmax(0, 1fr); }
+  .health-problems .text-link { grid-column: 2; }
   .admin-card-head { flex-direction: column; }
   .admin-stat { padding: 16px; }
   .admin-stat > strong { font-size: 1.6rem; }
@@ -6675,7 +6716,8 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .admin-pagination { align-items: stretch; flex-direction: column; }
 }
 @media (max-width: 420px) {
-  .admin-probes { grid-template-columns: minmax(0, 1fr); }
+  .health-services { grid-template-columns: minmax(0, 1fr); }
+  .health-service + .health-service { border-left: 0; border-top: 1px solid var(--line); }
   .admin-stat > strong { font-size: 1.4rem; }
 }
 

@@ -8,6 +8,7 @@ import { PageHeader } from "@/src/components/page-header";
 import { IdChip } from "@/src/components/ui/id-chip";
 import { RelativeTime } from "@/src/components/ui/relative-time";
 import { StatusBadge, type StatusTone } from "@/src/components/ui/status-badge";
+import { splitByStatus, StatusSummary } from "@/src/components/ui/status-summary";
 import type { AdminProbe, AdminSystemSnapshot } from "@/src/lib/admin/system/types";
 import { adminCommand, adminErrorMessage, adminQuery, humanizeAdminCode } from "../shared/admin-request";
 import { ReasonDialog } from "../shared/reason-dialog";
@@ -46,8 +47,85 @@ const probeBadges: Record<AdminProbe["state"], { tone: StatusTone; label: string
   unavailable: { tone: "danger", label: "Down" },
 };
 
+const probeFixes: Record<string, string> = {
+  "Web app": "Check the web server's logs and the latest deploy.",
+  Database: "Check that the database is running and reachable from the web server.",
+  "Job queue (Redis)": "Check that Redis is running and REDIS_URL is set on the web server and the worker.",
+  "Background worker": "Check that the worker process is running and on the same version as the web app.",
+};
+
 function count(value: number | null | undefined): string {
   return value === null || value === undefined ? "Unknown" : value.toLocaleString("en-IN");
+}
+
+function plural(value: number, one: string, many: string): string {
+  return `${value.toLocaleString("en-IN")} ${value === 1 ? one : many}`;
+}
+
+export type ServiceProblem = { tone: "warning" | "danger"; title: string; fix: string; href: string };
+
+// Where each problem's link goes, named for the section it opens.
+const PROBLEM_LINKS: Record<string, string> = {
+  "#services": "View services",
+  "#incidents": "View incidents",
+  "#jobs": "View background jobs",
+  "#setup": "View setup checklist",
+  "/admin/deletions": "Open Delete data",
+};
+
+/**
+ * Everything on this page that needs the owner, in one list, each with what
+ * to do and where to do it. An empty list means "All systems normal". Failed
+ * jobs alone are routine churn, so they show in Background jobs, not here.
+ */
+export function serviceProblems(snapshot: AdminSystemSnapshot): ServiceProblem[] {
+  const problems: ServiceProblem[] = [];
+  const probes = [["Web app", snapshot.web], ["Database", snapshot.database], ["Job queue (Redis)", snapshot.redis], ["Background worker", snapshot.worker]] as const;
+  for (const [name, probe] of probes) {
+    if (probe.state === "healthy") continue;
+    problems.push({
+      tone: probe.state === "unavailable" ? "danger" : "warning",
+      title: probe.state === "unavailable" ? `${name} is down` : `${name} needs attention`,
+      fix: `${probe.detail ? `${probe.detail.replace(/\.$/, "")}. ` : ""}${probeFixes[name]}`,
+      href: "#services",
+    });
+  }
+  if (snapshot.operationalDataAvailable === false) {
+    problems.push({ tone: "warning", title: "Incident and workload numbers could not be loaded", fix: "The database query for them failed or timed out. Check the database, then reload this page.", href: "#incidents" });
+  }
+  for (const incident of snapshot.incidents) {
+    if (incident.status === "RESOLVED") continue;
+    problems.push({ tone: incident.severity === "CRITICAL" ? "danger" : "warning", title: incident.title, fix: incident.detail, href: "#incidents" });
+  }
+  for (const queue of snapshot.queues) {
+    if (!queue.configured || queue.paused === null) {
+      problems.push({ tone: "danger", title: `${queueName(queue.name)} queue can't be reached`, fix: "Check that Redis is running and REDIS_URL is set.", href: "#jobs" });
+    } else if (queue.paused) {
+      problems.push({ tone: "warning", title: `${queueName(queue.name)} queue is paused`, fix: "Nothing in it runs until it is resumed. Resume it once the cause is fixed.", href: "#jobs" });
+    }
+  }
+  const stuck = Math.max(snapshot.stuckClaims ?? 0, snapshot.reconciliation.expiredDeliveryClaims ?? 0);
+  if (stuck > 0) {
+    problems.push({ tone: "warning", title: `${plural(stuck, "message send", "message sends")} stopped without a result`, fix: "Use Re-check stuck sends under Background jobs.", href: "#jobs" });
+  }
+  for (const item of snapshot.configurationPresence) {
+    if (item.present) continue;
+    problems.push({ tone: "warning", title: `${item.requirement} ${item.requirement.endsWith("s") ? "are" : "is"} not set up`, fix: item.fix ?? "Add its settings on the web server, then redeploy.", href: "#setup" });
+  }
+  if (!snapshot.billing.configured && !snapshot.configurationPresence.some((item) => !item.present && /razorpay/i.test(item.requirement))) {
+    problems.push({ tone: "warning", title: "Razorpay billing is not set up", fix: "Customers cannot pay for plans until its keys and plan IDs are set on the web server.", href: "#setup" });
+  }
+  if ((snapshot.billing.failedWebhooksLastHour ?? 0) > 0) {
+    problems.push({ tone: "warning", title: `${plural(snapshot.billing.failedWebhooksLastHour ?? 0, "billing update", "billing updates")} from Razorpay failed in the last hour`, fix: "Check the webhook deliveries in the Razorpay dashboard; Razorpay retries failed ones.", href: "#setup" });
+  }
+  if ((snapshot.billing.driftedSubscriptions ?? 0) > 0) {
+    problems.push({ tone: "warning", title: `${plural(snapshot.billing.driftedSubscriptions ?? 0, "subscription needs", "subscriptions need")} attention`, fix: "Their plan in Linkar no longer matches Razorpay. Check them in Razorpay, then use Recount plan usage.", href: "#setup" });
+  }
+  if ((snapshot.deletionJobs.failed ?? 0) > 0) {
+    problems.push({ tone: "danger", title: `${plural(snapshot.deletionJobs.failed ?? 0, "permanent deletion", "permanent deletions")} failed`, fix: "Open Delete data to see why and retry.", href: "/admin/deletions" });
+  }
+  // Outages before warnings; otherwise keep the page's top-to-bottom order.
+  return [...problems.filter((problem) => problem.tone === "danger"), ...problems.filter((problem) => problem.tone === "warning")];
 }
 
 export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
@@ -129,77 +207,76 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
     ["Background worker", snapshot.worker, Server],
   ] as const;
   const stale = renderedAt - Date.parse(snapshot.generatedAt) > 60_000;
-  const activeIncidents = snapshot.incidents.filter((incident) => incident.status !== "RESOLVED").length;
-  const healthy = snapshot.overall === "healthy";
-  const missing = snapshot.configurationPresence.filter((item) => !item.present).length;
+  const problems = serviceProblems(snapshot);
+  const loud = problems.some((problem) => problem.tone === "danger") ? "danger" : "warning";
+  const { exceptions: missingSettings, normal: readySettings } = splitByStatus(snapshot.configurationPresence, (item) => item.present);
 
   return (
     <main className="page-wrap admin-page">
       <PageHeader
         title="Service health"
         description="How Linkar's servers, background jobs and settings are doing right now."
-        actions={(
-          <>
-            <StatusBadge tone={healthy ? "success" : "warning"} label={healthy ? "Healthy" : "Needs attention"} />
-            {snapshot.release ? <IdChip id={snapshot.release} prefix="Version" /> : null}
-          </>
-        )}
       />
 
       {notice ? <div className="form-success admin-message" role="status">{notice}</div> : null}
 
-      <section className="admin-section" aria-label="Production status summary">
-        <div className="admin-results">
-          <span>Checked <RelativeTime inline value={snapshot.generatedAt} />{stale ? ". This page may be out of date; it refreshes every 20 seconds." : ""}</span>
-        </div>
-        <div className="admin-summary-strip">
-          <div className="admin-stat">
-            <span>Incidents</span>
-            <strong>{snapshot.operationalDataAvailable === false ? "–" : activeIncidents}</strong>
-            <small>{snapshot.operationalDataAvailable === false ? "Incident status unavailable" : activeIncidents === 0 ? "No active incidents" : `${activeIncidents} active ${activeIncidents === 1 ? "incident" : "incidents"}`}</small>
-          </div>
-          <div className="admin-stat">
-            <span>Stuck message sends</span>
-            <strong>{count(snapshot.stuckClaims)}</strong>
-            <small>Sends that stopped without a result</small>
-          </div>
-          <div className="admin-stat">
-            <span>Meta events</span>
-            <strong>{count(snapshot.webhookThroughput.lastHour)}</strong>
-            <small>Received in the last hour</small>
-          </div>
-          <div className="admin-stat">
-            <span>Failed billing updates</span>
-            <strong>{count(snapshot.billing.failedWebhooksLastHour)}</strong>
-            <small>From Razorpay in the last hour</small>
+      <section className={`health-banner ${problems.length ? `is-${loud}` : "is-normal"}`} aria-labelledby="health-banner-title">
+        <div className="health-banner-head">
+          <h2 id="health-banner-title">
+            {problems.length === 0
+              ? <StatusBadge tone="success" label="All systems normal" />
+              : <StatusBadge tone={loud} label={`${problems.length} ${problems.length === 1 ? "thing needs" : "things need"} attention`} />}
+          </h2>
+          <div className="health-banner-meta">
+            <span>Checked <RelativeTime inline value={snapshot.generatedAt} /></span>
+            {snapshot.release ? <IdChip id={snapshot.release} prefix="Version" /> : null}
           </div>
         </div>
+        {stale ? <p className="admin-hint">This page may be out of date; it refreshes every 20 seconds.</p> : null}
+        {problems.length ? (
+          <ul className="health-problems">
+            {problems.map((problem) => (
+              <li key={`${problem.href}-${problem.title}`} className={`is-${problem.tone}`}>
+                <span className="health-problem-dot" aria-hidden />
+                <div>
+                  <strong>{problem.title}</strong>
+                  <p>{problem.fix}</p>
+                </div>
+                <a className="text-link" href={problem.href} aria-label={`${PROBLEM_LINKS[problem.href]}: ${problem.title}`}>{PROBLEM_LINKS[problem.href]}</a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
 
-      <section className="admin-probes" aria-label="Runtime probes">
+      <section id="services" className="health-services" aria-label="Services">
         {probes.map(([name, probe, Icon]) => (
-          <div className="admin-probe" key={name}>
-            <span className="admin-probe-name"><Icon size={18} aria-hidden /> {name}</span>
+          <div className={`health-service is-${probe.state}`} key={name}>
+            <span className="health-service-name"><Icon size={18} aria-hidden /> {name}</span>
             <StatusBadge tone={probeBadges[probe.state].tone} label={probeBadges[probe.state].label} />
             {probe.detail ? <p>{probe.detail}</p> : null}
-            {probe.lastSeenAt ? <p>Last check-in <RelativeTime inline value={probe.lastSeenAt} /></p> : null}
-            {probe.release ? <IdChip id={probe.release} prefix="Version" /> : null}
+            {probe.lastSeenAt ? <p>Checked in <RelativeTime inline value={probe.lastSeenAt} /></p> : null}
+            {probe.release && probe.release !== snapshot.release ? <IdChip id={probe.release} prefix="Version" /> : null}
           </div>
         ))}
       </section>
 
       {snapshot.operationalDataAvailable === false
-        ? <p className="form-error admin-message" role="status">Operational data could not be loaded, so incident and workload counts are unavailable.</p>
+        ? <p id="incidents" className="admin-callout" role="status">Incident and workload counts are unavailable because operational data could not be loaded.</p>
         : <IncidentTable incidents={snapshot.incidents} now={new Date(renderedAt).toISOString()} />}
 
       <div className="admin-columns is-wide-left">
-        <section className="admin-card is-flush" aria-labelledby="queue-heading">
+        <section id="jobs" className="admin-card is-flush" aria-labelledby="queue-heading">
           <div className="admin-card-head">
-            <div><h2 id="queue-heading">Background jobs</h2><p>Work waiting to run, and controls to pause or retry it.</p></div>
+            <div>
+              <h2 id="queue-heading">Background jobs</h2>
+              <p>Work waiting to run, and controls to pause or retry it. {count(snapshot.webhookThroughput.lastHour)} Meta events came in during the last hour.</p>
+            </div>
           </div>
           {snapshot.queues.map((queue) => {
             const state = queueState(queue);
             const shown = (value: number) => state === "unavailable" ? "–" : value.toLocaleString("en-IN");
+            const failing = state !== "unavailable" && queue.failed > 0;
             return (
               <div className="admin-queue" key={queue.name}>
                 <div className="admin-queue-head">
@@ -210,12 +287,14 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
                   <div><dt>Waiting</dt><dd>{shown(queue.waiting)}</dd></div>
                   <div><dt>In progress</dt><dd>{shown(queue.active)}</dd></div>
                   <div><dt>Scheduled</dt><dd>{shown(queue.delayed)}</dd></div>
-                  <div><dt>Failed</dt><dd>{shown(queue.failed)}</dd></div>
+                  <div className={failing ? "is-failing" : undefined}><dt>Failed</dt><dd>{shown(queue.failed)}</dd></div>
                 </dl>
-                <p className="admin-hint">{queue.lastFailedCode ? <>Latest failure: {humanizeAdminCode(queue.lastFailedCode.toLowerCase())}</> : state === "unavailable" ? "Failure history unavailable" : "No recorded failures"}</p>
+                {queue.lastFailedCode
+                  ? <p className="admin-hint">Latest failure: {humanizeAdminCode(queue.lastFailedCode.toLowerCase())}</p>
+                  : state === "unavailable" ? <p className="admin-hint">Failure history unavailable</p> : null}
                 <div className="admin-actions">
                   <button className="button button-secondary button-small" disabled={state === "unavailable"} type="button" onClick={() => openCommand({ type: "queue", queue: queue.name, action: queue.paused ? "resume" : "pause" })}>{queue.paused ? "Resume queue" : "Pause queue"}</button>
-                  {state !== "unavailable" && queue.failed > 0 ? (
+                  {failing ? (
                     <button className="button button-ghost button-small" type="button" aria-expanded={failedList?.queue === queue.name} aria-controls={`failed-jobs-${queue.name}`} onClick={() => failedList?.queue === queue.name ? setFailedList(null) : void reviewFailedJobs(queue.name)}>
                       {failedList?.queue === queue.name ? "Hide failed jobs" : "Review failed jobs"}
                     </button>
@@ -244,26 +323,45 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
           </div>
         </section>
 
-        <aside className="admin-card is-flush" aria-labelledby="posture-heading">
+        <aside id="setup" className="admin-card is-flush" aria-labelledby="posture-heading">
           <div className="admin-card-head">
             <div>
               <h2 id="posture-heading">Setup checklist</h2>
-              <p>{missing === 0 ? "Everything Linkar needs is set." : `${missing} ${missing === 1 ? "setting needs" : "settings need"} attention. Values stay secret; only presence is checked.`}</p>
+              <p>Settings Linkar needs on the server. Values stay secret; only whether each is set is checked.</p>
             </div>
           </div>
-          <ul className="admin-readiness">
-            {snapshot.configurationPresence.map((item) => (
-              <li key={item.requirement}>
-                <span className="admin-readiness-row">
-                  <span>{item.requirement}</span>
-                  <StatusBadge tone={item.present ? "success" : "warning"} label={item.present ? "Ready" : "Missing"} />
-                </span>
-                {!item.present && item.fix ? <span className="admin-hint">{item.fix}</span> : null}
-              </li>
-            ))}
-          </ul>
-          {!snapshot.billing.configured ? <p className="admin-callout admin-card-note">Razorpay billing is not set up, so customers cannot pay for plans.</p> : null}
+          <div className="admin-setup">
+            {missingSettings.length ? (
+              <ul className="admin-readiness">
+                {missingSettings.map((item) => (
+                  <li key={item.requirement}>
+                    <span className="admin-readiness-row">
+                      <span>{item.requirement}</span>
+                      <StatusBadge tone="warning" label="Missing" />
+                    </span>
+                    {item.fix ? <span className="admin-hint">{item.fix}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {readySettings.length ? (
+              <StatusSummary label={missingSettings.length ? `All ${readySettings.length} other settings ready` : `All ${readySettings.length} settings ready`}>
+                <ul className="admin-readiness is-ready">
+                  {readySettings.map((item) => (
+                    <li key={item.requirement}>
+                      <span className="admin-readiness-row">
+                        <span>{item.requirement}</span>
+                        <StatusBadge tone="success" label="Ready" />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </StatusSummary>
+            ) : null}
+          </div>
+          {!snapshot.billing.configured && !missingSettings.some((item) => /razorpay/i.test(item.requirement)) ? <p className="admin-callout admin-card-note">Razorpay billing is not set up, so customers cannot pay for plans.</p> : null}
           <dl className="admin-kv admin-card-kv">
+            <div><dt>Failed billing updates (last hour)</dt><dd>{count(snapshot.billing.failedWebhooksLastHour)}</dd></div>
             <div><dt>Subscriptions needing attention</dt><dd>{count(snapshot.billing.driftedSubscriptions)}</dd></div>
             <div><dt>Failed deletions</dt><dd>{count(snapshot.deletionJobs.failed)}</dd></div>
             <div><dt>Follow-to-unlock campaigns</dt><dd>{snapshot.capabilities.followGatedCampaigns === "enabled" ? "On" : "Off"}</dd></div>
