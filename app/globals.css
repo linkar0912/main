@@ -1691,7 +1691,7 @@ a.section-nav-link.is-active:hover { color: var(--ink); }
 .classic-action + .classic-action { margin-top: var(--space-3); }
 .keyword-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .keyword-suggestion-chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; color: var(--muted); cursor: pointer; font-size: .78rem; padding: 4px 11px; transition: border-color .15s, color .15s; }
-.keyword-suggestion-chip:hover { border-color: var(--accent); color: var(--text); }
+.keyword-suggestion-chip:hover { border-color: var(--line-strong); color: var(--ink); }
 .capture-field-options { align-items: start; }
 .classic-action-head { align-items: center; display: flex; gap: 10px; justify-content: space-between; }
 .classic-action-index { color: var(--muted); font-size: .68rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
@@ -1745,7 +1745,7 @@ a.section-nav-link.is-active:hover { color: var(--ink); }
 .quick-flow-stage { border-top: 1px solid var(--line); padding-top: var(--space-7); scroll-margin-top: var(--space-5); }
 .quick-flow-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .quick-flow-card { align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink); cursor: pointer; display: flex; gap: var(--space-4); justify-content: space-between; min-width: 0; padding: 18px; text-align: left; transition: border-color var(--speed), background var(--speed); }
-.quick-flow-card:hover { border-color: var(--accent); }
+.quick-flow-card:hover { border-color: var(--line-strong); }
 .quick-flow-card.is-featured { background: var(--ink-strong); border-color: var(--ink-strong); color: var(--white); grid-column: 1 / -1; }
 [data-theme="dark"] .quick-flow-card.is-featured { color: #101116; }
 .quick-flow-card > span { display: grid; gap: 6px; min-width: 0; }
@@ -2394,7 +2394,7 @@ a.section-nav-link.is-active:hover { color: var(--ink); }
 .help-feedback { align-items: center; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); padding-top: var(--space-3); }
 .help-feedback span, .help-feedback p { color: var(--muted); font-size: var(--type-meta); font-weight: 750; margin: 0 var(--space-1) 0 0; }
 .help-feedback button { align-items: center; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 999px; color: var(--ink); display: inline-flex; font-size: var(--type-meta); font-weight: 750; gap: 5px; padding: 6px 10px; }
-.help-feedback button:hover { border-color: var(--accent-line); color: var(--accent-strong); }
+.help-feedback button:hover { border-color: var(--line-strong); color: var(--ink); }
 .help-feedback em { color: var(--danger); font-size: var(--type-meta); font-style: normal; }
 .context-help-link { color: var(--muted); white-space: nowrap; }
 .context-help-link:hover { color: var(--ink); }
@@ -9047,7 +9047,9 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
    bar on the selected item's left edge that glides between items on a
    transform. Horizontal tab rows (.tab-underline, the owner-console tabs)
    get a 2px ink underline that slides along the row. */
-:is(.nav-list, .sidebar-nav, .settings-nav, .section-nav, .template-picker-categories) { isolation: isolate; position: relative; }
+:is(.nav-list, .sidebar-nav, .template-picker-categories) { isolation: isolate; position: relative; }
+/* Sticky already makes these the containing block for the bar. */
+.settings-nav, .section-nav { isolation: isolate; }
 :is(.nav-list, .sidebar-nav, .settings-nav, .section-nav, .template-picker-categories)[style*="--thumb-w"]::before {
   background: var(--select-bar);
   border-radius: 3px;
@@ -9769,7 +9771,13 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 .feed-toolbar { box-shadow: inset 0 0 0 1px var(--line); }
 .contacts-surface .contacts-table-head,
 .insights-content.is-flush .insights-table th,
-.ins-table thead th { background: transparent; }
-@media (max-width: 900px) {
-  .ins-table thead tr { background: transparent; }
+.ins-table thead th, .ins-table thead tr { background: transparent; }
+
+@media (max-width: 1020px) {
+  /* The Settings and Help navs wrap into a row of chips here: the chosen
+     chip gets the ink outline of a selectable card and the bar steps aside. */
+  .settings-nav, .section-nav { position: relative; top: auto; }
+  :is(.settings-nav, .section-nav)::before,
+  :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link)::before { content: none !important; }
+  .settings-wrap .settings-nav-link.is-active { border-color: var(--select-line); box-shadow: 0 0 0 .5px var(--select-line); }
 }
