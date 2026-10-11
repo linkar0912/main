@@ -319,15 +319,15 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
         <span className="sidebar-spacer" />
 
-        {platformOwner ? (
-          <nav className="sidebar-nav" aria-label="Platform administration">
-            <Link className="sidebar-link" href="/admin" onClick={closeDrawer}>
-              <ShieldCheck size={17} strokeWidth={1.9} /> Admin
-            </Link>
-          </nav>
-        ) : null}
-
+        {/* Admin sits in the same group as Settings and Help, with the same
+            row spacing, instead of floating in a block of its own. */}
         <nav ref={slidingThumbRef} className="sidebar-nav" aria-label="Account">
+          {platformOwner ? (
+            <Link className="sidebar-link" href="/admin" onClick={closeDrawer}>
+              <ShieldCheck size={17} strokeWidth={1.9} />
+              Admin
+            </Link>
+          ) : null}
           {accountNavigation.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
