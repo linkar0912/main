@@ -21,6 +21,19 @@ describe("auth pages", () => {
     expect(within(screen.getByRole("main")).queryByText("Get started")).toBeNull();
   });
 
+  it("acknowledges a paid plan picked on the pricing page instead of dropping it", async () => {
+    render(await SignupPage({ searchParams: Promise.resolve({ plan: "growth", interval: "monthly" } as never) }));
+    expect(screen.getByRole("status").textContent).toContain("You picked the Growth plan");
+
+    cleanup();
+    render(await SignupPage({ searchParams: Promise.resolve({ plan: "toString" }) }));
+    expect(screen.queryByRole("status")).toBeNull();
+
+    cleanup();
+    render(await SignupPage({ searchParams: Promise.resolve({ plan: "growth", invite: "abc123" }) }));
+    expect(screen.queryByText(/You picked the/)).toBeNull();
+  });
+
   it("starts password recovery directly with its page heading", async () => {
     render(await ForgotPasswordPage({ searchParams: Promise.resolve({}) }));
 

@@ -3,6 +3,9 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MarketingHeader } from "./marketing-header";
 
+const pathname = vi.hoisted(() => ({ current: "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => pathname.current }));
+
 let animationFrames: FrameRequestCallback[] = [];
 
 function setScrollPosition(position: number) {
@@ -307,6 +310,20 @@ describe("MarketingHeader", () => {
     expect(screen.getByRole("dialog", { name: "Menu" }).getAttribute("aria-modal")).toBe("true");
     expect(document.body.style.overflow).toBe("hidden");
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close menu" }));
+  });
+
+  it("marks the current page in the menu and ends it with the account actions", () => {
+    installBrowserControls();
+    pathname.current = "/pricing";
+    render(<MarketingHeader />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    const menu = within(screen.getByRole("dialog", { name: "Menu" }));
+    expect(menu.getByRole("link", { name: "Pricing" }).getAttribute("aria-current")).toBe("page");
+    expect(menu.getByRole("link", { name: "Product" }).getAttribute("aria-current")).toBeNull();
+    const labels = menu.getAllByRole("link").map((link) => link.textContent);
+    expect(labels.slice(-2)).toEqual(["Sign in", "Get started"]);
+    pathname.current = "/";
   });
 
   it("traps tab focus in the menu and restores focus after Escape", () => {

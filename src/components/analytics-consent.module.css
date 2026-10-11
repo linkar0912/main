@@ -70,3 +70,34 @@
   outline: 2px solid var(--ink);
   outline-offset: 3px;
 }
+
+/* While the choice is pending, the page ends with room for the banner, so the
+   last form field or call to action can always be scrolled clear of it. */
+:global(html[data-consent-banner="open"]) body {
+  padding-block-end: var(--consent-banner-space, 0px);
+}
+
+/* Phones: a compact bar across the bottom with the two choices side by side,
+   about half the height of the desktop card. */
+@media (max-width: 640px) {
+  .banner {
+    inset-inline: 8px;
+    inset-block-end: max(8px, env(safe-area-inset-bottom));
+    gap: 10px;
+    max-inline-size: none;
+    padding: 14px 16px;
+  }
+
+  .banner p {
+    font-size: .875rem;
+    line-height: 1.45;
+  }
+
+  .banner .actions {
+    flex-wrap: nowrap;
+  }
+
+  .banner .button {
+    flex: 1 1 0;
+  }
+}

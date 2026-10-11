@@ -64,7 +64,7 @@ describe("LoginScreen host routing", () => {
       .toBe("/signup?next=%2Fautomations");
     expect(screen.getByRole("link", { name: /Forgot your password/ }).getAttribute("href"))
       .toBe("/forgot-password");
-    for (const name of ["Dashboard", "Login"] as const) {
+    for (const name of ["Dashboard", "Sign in"] as const) {
       const link = screen.getAllByRole("link", { name }).at(0);
       expect(link?.getAttribute("href")?.startsWith("/"), name).toBe(true);
     }

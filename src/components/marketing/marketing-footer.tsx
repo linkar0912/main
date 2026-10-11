@@ -21,7 +21,7 @@ const columns = [
     links: [
       ["Help and support", "/support"],
       ["Contact", "/contact"],
-      ["Login", "/login"],
+      ["Sign in", "/login"],
       ["Dashboard", "/dashboard"],
     ],
   },

@@ -15,11 +15,8 @@
 
 .details dt {
   color: var(--muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .75rem;
+  font-size: .875rem;
   font-weight: 700;
-  letter-spacing: .05em;
-  text-transform: uppercase;
 }
 
 .details dd {
@@ -28,6 +25,13 @@
   font-weight: 600;
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+/* Email links fill a 44px tall tap target without adding visible space. */
+.details dd a {
+  display: inline-block;
+  margin-block: -11px;
+  padding-block: 11px;
 }
 
 @media (max-width: 560px) {

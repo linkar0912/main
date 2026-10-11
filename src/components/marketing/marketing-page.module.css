@@ -43,7 +43,7 @@
   --marketing-lede-size: clamp(1.05rem, 1.35vw, 1.3rem);
   --marketing-card-title-size: clamp(2rem, 3vw, 3.25rem);
   --marketing-body-size: 1rem;
-  --marketing-label-size: .72rem;
+  --marketing-label-size: .8125rem;
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {

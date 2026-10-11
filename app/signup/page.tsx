@@ -8,6 +8,7 @@ import { AuthLegalNotice } from "@/src/components/auth/legal-notice";
 import { SubmitButton } from "@/src/components/auth/submit-button";
 import { sanitizeInvite } from "@/src/lib/auth/auth-redirect";
 import { safeNextPath } from "@/src/lib/auth/session";
+import { BILLING_PLANS } from "@/src/lib/billing/catalog";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +19,18 @@ export const metadata: Metadata = {
 };
 
 type SignupPageProps = {
-    searchParams: Promise<{ error?: string; email?: string; next?: string; invite?: string; sent?: string; notice?: string }>;
+    searchParams: Promise<{ error?: string; email?: string; next?: string; invite?: string; sent?: string; notice?: string; plan?: string }>;
 };
+
+/**
+ * The paid plan a visitor picked on /pricing, if any. Every workspace starts on
+ * Free and upgrades from Settings, so the choice is acknowledged rather than
+ * silently dropped.
+ */
+function chosenPlanName(plan: string | undefined): string | null {
+    if (!plan || !Object.hasOwn(BILLING_PLANS, plan)) return null;
+    return BILLING_PLANS[plan as keyof typeof BILLING_PLANS].name;
+}
 
 function withContext(path: string, nextPath: string, invite: string): string {
     const params = new URLSearchParams({ next: nextPath });
@@ -86,6 +97,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                             : "";
     const emailError = params.error === "email" || params.error === "invite";
     const passwordError = params.error === "password";
+    const planName = invite ? null : chosenPlanName(params.plan);
 
     return (
         <div data-header-tone="light">
@@ -96,8 +108,13 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                     <p className="auth-page-lede">
                         {invite
                             ? "Sign up with the invited email to join the workspace."
-                            : "Start free - upgrade when your audience grows."}
+                            : "Start free, then upgrade when your audience grows."}
                     </p>
+                    {planName && (
+                        <p role="status">
+                            You picked the {planName} plan. Every account starts on Free; switch to {planName} in Settings, under Billing, once you are in.
+                        </p>
+                    )}
                     {error && <p className="form-error" role="alert" id="signup-error">{error}</p>}
                     <AuthLegalNotice siteOrigin={publicSiteUrl} />
                     <OAuthButtons next={nextPath} invite={invite} />

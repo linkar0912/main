@@ -105,7 +105,7 @@
   border-radius: 999px;
   cursor: pointer;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .72rem;
+  font-size: .8125rem;
   font-weight: 800;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -141,7 +141,7 @@
   background: var(--volt);
   border: 1px solid #e1d600;
   border-radius: 10px 10px 10px 2px;
-  font-size: .72rem;
+  font-size: .8125rem;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -197,7 +197,7 @@
   border: 1px solid #e1d600;
   border-radius: 999px;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .64rem;
+  font-size: .8125rem;
   font-weight: 850;
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -246,7 +246,7 @@
 
 .price span {
   color: var(--marketing-muted);
-  font-size: .74rem;
+  font-size: .8125rem;
   font-weight: 700;
 }
 
@@ -255,7 +255,7 @@
   margin: 8px 0 0;
   color: var(--marketing-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .68rem;
+  font-size: .8125rem;
   font-weight: 800;
   text-align: center;
 }
@@ -274,7 +274,7 @@
 
 .deliveryLead span {
   color: var(--marketing-muted);
-  font-size: .76rem;
+  font-size: .8125rem;
   font-weight: 650;
 }
 
@@ -290,7 +290,7 @@
   border: 1px solid var(--marketing-text);
   border-radius: 999px;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .72rem;
+  font-size: .8125rem;
   font-weight: 800;
 }
 
@@ -341,7 +341,7 @@
   gap: 7px;
   color: var(--marketing-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .61rem;
+  font-size: .8125rem;
   font-weight: 750;
   letter-spacing: .03em;
   text-transform: uppercase;
@@ -353,7 +353,7 @@
 
 .limits dd {
   margin: 0;
-  font-size: .76rem;
+  font-size: .8125rem;
   font-weight: 800;
   line-height: 1.35;
   text-align: end;
@@ -372,7 +372,7 @@
   align-items: center;
   gap: 8px;
   color: var(--marketing-muted);
-  font-size: .79rem;
+  font-size: .8125rem;
   font-weight: 650;
 }
 
@@ -468,7 +468,7 @@
   display: block;
   margin-block-start: 6px;
   color: var(--marketing-muted);
-  font-size: .78rem;
+  font-size: .8125rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -485,7 +485,7 @@
   border: 1px solid var(--marketing-text);
   border-radius: 999px;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .66rem;
+  font-size: .8125rem;
   font-weight: 800;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -505,7 +505,7 @@
 
 .comparison tbody th {
   color: var(--marketing-muted);
-  font-size: .78rem;
+  font-size: .8125rem;
   font-weight: 750;
 }
 
@@ -602,6 +602,36 @@
     border-inline: 0;
     border-radius: 0;
   }
+
+  /* Phones scroll the plans sideways under a pinned row label, so every value
+     keeps its label in view. */
+  .comparison table {
+    min-inline-size: 640px;
+  }
+
+  .comparison th:first-child {
+    position: sticky;
+    inset-inline-start: 0;
+    z-index: 1;
+    inline-size: 128px;
+    padding-inline: 16px 12px;
+    background: var(--marketing-raised);
+    box-shadow: 1px 0 0 var(--marketing-border);
+  }
+
+  .comparison th,
+  .comparison td {
+    padding-inline: 10px;
+  }
+
+  .chooseLead {
+    font-size: 1.05rem;
+  }
+
+  .chooseAction {
+    padding-inline: 8px;
+    letter-spacing: .02em;
+  }
 }
 
 @keyframes pricingRise {
@@ -656,7 +686,7 @@
   margin: 0;
   color: var(--marketing-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .7rem;
+  font-size: .8125rem;
   font-weight: 800;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -711,7 +741,7 @@
   color: var(--marketing-muted);
   transition: color 300ms ease;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .6rem;
+  font-size: .8125rem;
   font-weight: 750;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -756,7 +786,7 @@
   margin: 0 0 14px;
   color: var(--marketing-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .62rem;
+  font-size: .8125rem;
   font-weight: 750;
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -829,6 +859,7 @@
 
 .finderBack {
   transition: color 260ms ease, background-color 260ms ease, border-color 260ms ease, opacity 260ms ease, translate 260ms cubic-bezier(.22, .61, .21, 1);
+  min-block-size: 44px;
   padding: 8px 2px;
   color: var(--marketing-muted);
   background: none;
@@ -836,7 +867,7 @@
   cursor: pointer;
   font: inherit;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .68rem;
+  font-size: .8125rem;
   font-weight: 800;
   letter-spacing: .05em;
   text-decoration: underline;
@@ -863,7 +894,7 @@
   cursor: pointer;
   font: inherit;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .7rem;
+  font-size: .8125rem;
   font-weight: 800;
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -893,7 +924,7 @@
   margin: 0;
   color: var(--marketing-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .62rem;
+  font-size: .8125rem;
   font-weight: 750;
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -924,7 +955,7 @@
 
 .finderResultPrice span {
   color: var(--marketing-muted);
-  font-size: .78rem;
+  font-size: .8125rem;
   font-weight: 700;
 }
 
@@ -1132,7 +1163,7 @@
   margin: 0 0 18px;
   color: var(--marketing-muted);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .66rem;
+  font-size: .8125rem;
   font-weight: 800;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -1679,7 +1710,7 @@
   gap: 10px;
   border-radius: 999px;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .72rem;
+  font-size: .8125rem;
   font-weight: 800;
   letter-spacing: .05em;
   text-transform: uppercase;
@@ -1766,7 +1797,7 @@
 
 .jump {
   position: fixed;
-  inset-block-end: 24px;
+  inset-block-end: calc(24px + var(--consent-banner-space, 0px));
   inset-inline-end: 24px;
   z-index: 40;
   display: inline-flex;
@@ -1800,6 +1831,11 @@
 
 .jump:hover span,
 .jump:focus-visible span {
+  translate: 0 3px;
+}
+
+.jump[data-direction="up"]:hover span,
+.jump[data-direction="up"]:focus-visible span {
   translate: 0 -3px;
 }
 
@@ -1839,7 +1875,7 @@
   }
 
   .finderTrack span {
-    font-size: .52rem;
+    font-size: .8125rem;
   }
 
   .finderChip {
@@ -1863,11 +1899,10 @@
     text-align: center;
   }
 
+  /* The finder sits directly under the single column of plans on phones, and
+     a floating pill would cover each plan's full-width button in turn. */
   .jump {
-    inset-inline: 16px;
-    inset-block-end: 16px;
-    justify-content: space-between;
-    font-size: .82rem;
+    display: none;
   }
 }
 

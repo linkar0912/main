@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PublicPage } from "@/src/components/public-page";
+import { StatusBadge } from "@/src/components/ui/status-badge";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { getRepository } from "@/src/lib/repository-provider";
 
@@ -24,7 +25,12 @@ export default async function DataDeletionStatusPage({ params }: StatusPageProps
     <PublicPage title="Deletion request status" intro={completed ? "This Meta data deletion request has been completed." : request ? "This Meta data deletion request is still being completed." : "We could not find a deletion request with this confirmation code."}>
       <h2>Status</h2>
       {request ? (
-        <p><strong>{completed ? "Completed." : "Pending."}</strong> {completed ? "The connected Meta account and its related Linkar data were removed." : "Linkar is finishing the removal of data linked to this connection."} Confirmation code: <code>{request.confirmationCode}</code>.</p>
+        <>
+          <p className="legal-status-line">
+            <StatusBadge tone={completed ? "success" : "neutral"} label={completed ? "Completed" : "In progress"} />
+          </p>
+          <p>{completed ? "The connected Meta account and its related Linkar data were removed." : "Linkar is finishing the removal of data linked to this connection."} Confirmation code: <code>{request.confirmationCode}</code>.</p>
+        </>
       ) : (
         <p>Check the confirmation code returned by Meta and try the exact status URL again. This page does not expose Instagram or Facebook identifiers.</p>
       )}

@@ -37,7 +37,7 @@ export default async function ForgotPasswordPage({
                 <div className="auth-page-frame">
                     <h1>Reset your password</h1>
                     <p className="auth-page-lede">
-                        Request a reset link and you will be back in your control room within minutes.
+                        Enter the email you signed up with and we will send you a link to choose a new password.
                     </p>
                     {params.sent ? (
                         <p role="status">

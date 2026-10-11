@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   readAnalyticsConsent,
   subscribeAnalyticsConsent,
@@ -22,8 +22,29 @@ export function useAnalyticsConsent(): AnalyticsConsent {
  * same weight so refusing is as easy as agreeing.
  */
 export function AnalyticsConsentBanner() {
+  const bannerRef = useRef<HTMLElement>(null);
+
+  // The banner floats over the page. Publish its height so the page can add
+  // matching space at the bottom (and other floating controls can sit above
+  // it): nothing it covers stays out of reach while the choice is pending.
+  useEffect(() => {
+    const banner = bannerRef.current;
+    const root = document.documentElement;
+    if (!banner) return;
+    const publish = () => root.style.setProperty("--consent-banner-space", `${Math.ceil(banner.getBoundingClientRect().height) + 16}px`);
+    publish();
+    root.dataset.consentBanner = "open";
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
+    observer?.observe(banner);
+    return () => {
+      observer?.disconnect();
+      delete root.dataset.consentBanner;
+      root.style.removeProperty("--consent-banner-space");
+    };
+  }, []);
+
   return (
-    <section className={styles.banner} aria-label="Analytics cookies">
+    <section ref={bannerRef} className={styles.banner} aria-label="Analytics cookies">
       <p>
         We use Google Analytics cookies to see which pages are useful. They stay off unless you accept.{" "}
         <Link href="/cookies">Cookies statement</Link>

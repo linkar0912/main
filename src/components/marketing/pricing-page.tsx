@@ -240,7 +240,7 @@ function PaymentsStrip() {
 
 function PricingCta() {
   return (
-    <Reveal as="section" className={styles.cta} aria-labelledby="pricing-cta-title">
+    <Reveal as="section" className={styles.cta} aria-labelledby="pricing-cta-title" data-jump-stop="">
       <h2 id="pricing-cta-title">Start on Free. Move up when the DMs do.</h2>
       <p>A thousand deliveries a month, no card, and the same automation builder every plan gets.</p>
       <div className={styles.ctaActions}>
