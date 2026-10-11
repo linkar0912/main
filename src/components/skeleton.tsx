@@ -67,10 +67,9 @@ export function ActivityContentSkeleton() {
   return (
     <LoadingRegion label="Loading inbox activity" className="ibx-desk ibx-desk-loading">
       <div className="ibx-list">
+        {/* The toolbar renders for real above the desk; this stands in for the first group header. */}
         <div className="ibx-list-head" aria-hidden>
-          <Skeleton className="skeleton-word skeleton-section-title" />
-          <Skeleton className="skeleton-search" />
-          <div className="skeleton-chip-row"><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /><Skeleton className="skeleton-chip" /></div>
+          <Skeleton className="skeleton-word skeleton-row-meta" />
         </div>
         <SkeletonListRows count={6} compact />
       </div>

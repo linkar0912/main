@@ -60,7 +60,7 @@ test("Facebook activity is paginated and never exposes a Messenger composer", as
   });
 
   await page.goto("/activity");
-  await page.getByRole("tab", { name: "Facebook comments" }).click();
+  await page.getByRole("tab", { name: "Facebook" }).click();
   await expect(page.getByText("Guide please")).toBeVisible();
   await expect(page.getByText(/Facebook Messenger is not enabled/i)).toBeVisible();
   await page.getByRole("button", { name: "Load more Facebook activity" }).click();

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InboxContact } from "./types";
 import { INBOX_LIVE_REFRESH_MS, InstagramInbox, mergeLiveContacts, mergeLiveMessages } from "./instagram-inbox";
@@ -274,6 +274,69 @@ describe("InstagramInbox", () => {
     expect(await screen.findByRole("heading", { name: "No conversations yet" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Pick a conversation" })).toBeNull();
     expect(screen.getAllByRole("link", { name: "Set up an automation" })[0].getAttribute("href")).toBe("/automations");
+  });
+
+  it("groups conversations into Waiting on you, Open and Closed with counts", async () => {
+    const closed = { ...arjun, id: "contact_3", username: "meera", inboxStatus: "CLOSED" };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { contacts: [aanya, arjun, closed], members: [] } }), { status: 200 })));
+    render(<InstagramInbox />);
+
+    const waiting = await screen.findByRole("list", { name: "Waiting on you" });
+    expect(within(waiting).getByRole("button", { name: /open conversation with @aanya/i })).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "Open" })).getByRole("button", { name: /open conversation with @arjun/i })).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "Closed" })).getByRole("button", { name: /open conversation with @meera/i })).toBeTruthy();
+    const headers = within(screen.getByRole("complementary", { name: "Contacts" })).getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+    expect(headers).toEqual(["Waiting on you 1 conversation", "Open 1 conversation", "Closed 1 conversation"]);
+
+    // One action per row, only where it moves things on.
+    expect(screen.getByRole("button", { name: "Reply to @aanya" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reopen @meera" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /reply to @arjun/i })).toBeNull();
+
+    const toggle = screen.getByRole("button", { name: "Closed 1 conversation" });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("keeps a read conversation in Waiting on you until you reply", async () => {
+    let confirm: (response: Response) => void = () => undefined;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/inbox") return new Response(JSON.stringify({ data: { contacts: [aanya], members: [] } }), { status: 200 });
+      if (init?.method === "POST") return new Promise<Response>((resolve) => { confirm = resolve; });
+      if (init?.method === "PATCH") return new Response(JSON.stringify({ data: {} }), { status: 200 });
+      return new Response(JSON.stringify({ data: { messages: [{ id: "m1", direction: "inbound", text: "Need the guide", at: "2026-09-04T10:00:00.000Z", status: "received" }] } }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<InstagramInbox />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Reply to @aanya" }));
+    const composer = await screen.findByRole("textbox", { name: "Message @aanya" });
+    await waitFor(() => expect(document.activeElement).toBe(composer));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/inbox/contact_1", expect.objectContaining({ method: "PATCH" })));
+    // Read now, but the person spoke last: still waiting on you.
+    expect(within(screen.getByRole("list", { name: "Waiting on you" })).getByRole("button", { name: /open conversation with @aanya/i }).getAttribute("aria-current")).toBe("true");
+
+    fireEvent.change(composer, { target: { value: "Here it is" } });
+    fireEvent.keyDown(composer, { key: "Enter" });
+    expect(await screen.findByRole("list", { name: "Open" })).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Waiting on you" })).toBeNull();
+    confirm(new Response(JSON.stringify({ data: { message: { id: "sent_1", direction: "outbound", text: "Here it is", at: "2026-09-04T10:05:00.000Z", status: "sent" } } }), { status: 201 }));
+    expect(await screen.findByText("Sent")).toBeTruthy();
+  });
+
+  it("reopens a closed conversation from its row", async () => {
+    const closed = { ...arjun, inboxStatus: "CLOSED" };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => String(input) === "/api/inbox" && !init?.method
+      ? new Response(JSON.stringify({ data: { contacts: [closed], members: [] } }), { status: 200 })
+      : new Response(JSON.stringify({ data: {} }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<InstagramInbox />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Reopen @arjun" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/inbox/contact_2", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ action: "set_status", status: "OPEN" }) }));
+    expect(await screen.findByRole("list", { name: "Open" })).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Closed" })).toBeNull();
   });
 
   it("folds the owner, reminder and close controls behind one options button", async () => {

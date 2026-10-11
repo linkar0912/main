@@ -2,15 +2,17 @@
 
 import { Presence } from "@/src/components/ui/use-presence";
 import { Fragment, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, Clock3, ExternalLink, Inbox, Info, MoreHorizontal, PauseCircle, RotateCcw, Star, UserRound } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowUp, BellRing, Check, ChevronDown, Clock3, ExternalLink, Inbox, Info, MoreHorizontal, PauseCircle, RotateCcw, Star, UserRound } from "lucide-react";
 import Link from "next/link";
 import { ContactDetailModal, type ContactUpdate } from "../contact-detail-modal";
 import { formatDateParts, formatDateTime, formatShortDate, formatTime } from "@/src/lib/format-date";
 import { RelativeTime } from "../ui/relative-time";
 import { ActivityContentSkeleton } from "../skeleton";
+import { Collapse } from "../ui/collapse";
 import { SocialAvatar } from "../social-avatar";
 import { ConversationHeaderActions, type InboxOperation } from "./conversation-header-actions";
 import { InboxFilters } from "./inbox-filters";
+import { groupConversations, lastSpeaker, type ConversationGroupKey } from "./conversation-groups";
 import type { InboxContact, InboxFiltersValue, InboxMember, InboxMessage } from "./types";
 import { toReadableApiError } from "@/src/lib/validation-error";
 
@@ -293,6 +295,13 @@ export function InstagramInbox() {
   // Screen readers hear only newly arrived inbound messages, not every
   // re-render of the thread (sends, status changes, loading earlier pages).
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  // Who spoke last in threads opened during this visit (the list API only
+  // knows the latest inbound message); keeps a read-but-unanswered
+  // conversation in "Waiting on you".
+  const [knownSpeakers, setKnownSpeakers] = useState<Record<string, InboxMessage["direction"]>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<ConversationGroupKey>>(() => new Set());
+  // "Reply" on a row opens the thread with the cursor already in the composer.
+  const focusComposerRef = useRef(false);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -441,6 +450,25 @@ export function InstagramInbox() {
   const memberNames = useMemo(() => new Map(members.map((member) => [member.userId, member.email.split("@")[0]])), [members]);
   const groups = useMemo(() => groupMessages(messages), [messages]);
   const filtersActive = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
+  const openSpeaker = selectedId ? lastSpeaker(messages) : undefined;
+  const conversationGroups = useMemo(
+    () => groupConversations(contacts, (contactId) => (contactId === selectedId ? openSpeaker : undefined) ?? knownSpeakers[contactId]),
+    [contacts, knownSpeakers, openSpeaker, selectedId],
+  );
+
+  /** Remembers who spoke last in the thread being left, for its group. */
+  function rememberOpenSpeaker() {
+    if (!selectedId || !openSpeaker || knownSpeakers[selectedId] === openSpeaker) return;
+    setKnownSpeakers((current) => ({ ...current, [selectedId]: openSpeaker }));
+  }
+
+  function toggleGroup(key: ConversationGroupKey) {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   function updateContact(contactId: string, update: (contact: InboxContact) => InboxContact) {
     setContacts((current) => current.map((contact) => contact.id === contactId ? update(contact) : contact));
@@ -482,6 +510,7 @@ export function InstagramInbox() {
   }
 
   function closeConversation() {
+    rememberOpenSpeaker();
     conversationAbortRef.current?.abort();
     activeContactIdRef.current = null;
     setSelectedId(null);
@@ -501,6 +530,7 @@ export function InstagramInbox() {
 
   async function openConversation(contact: InboxContact) {
     if (activeContactIdRef.current === contact.id && !threadError) return;
+    if (activeContactIdRef.current !== contact.id) rememberOpenSpeaker();
     conversationAbortRef.current?.abort();
     const controller = new AbortController();
     conversationAbortRef.current = controller;
@@ -553,6 +583,22 @@ export function InstagramInbox() {
       setOlderLoading(false);
     }
   }
+
+  function replyTo(contact: InboxContact) {
+    if (activeContactIdRef.current === contact.id && !threadError) {
+      composerRef.current?.focus();
+      return;
+    }
+    focusComposerRef.current = true;
+    void openConversation(contact);
+  }
+
+  // After "Reply", the composer for the newly opened thread takes focus.
+  useEffect(() => {
+    if (!focusComposerRef.current || !selectedId) return;
+    focusComposerRef.current = false;
+    composerRef.current?.focus();
+  }, [selectedId]);
 
   useEffect(() => {
     if (!autoScrollRef.current) return;
@@ -618,26 +664,53 @@ export function InstagramInbox() {
     void deliver(selected.id, pending);
   }
 
-  if (!loaded) return <ActivityContentSkeleton />;
+  const toolbar = <InboxFilters value={filters} labels={labels} onChange={(next) => {
+    closeConversation();
+    const snapshot = readInboxCache(next).snapshot;
+    setContacts(snapshot?.contacts ?? []); setMembers(snapshot?.members ?? []);
+    setNextCursor(snapshot?.nextCursor); setFilterLoading(!snapshot); setFilters(next);
+  }} />;
+
+  if (!loaded) return <>{toolbar}<ActivityContentSkeleton /></>;
 
   const tooLong = draft.trim().length > MAX_MESSAGE_LENGTH;
   const inboxEmpty = contacts.length === 0 && !filtersActive && !filterLoading && !listError;
 
-  return <section className={`ibx-desk ${selected ? "has-thread" : ""}`} aria-label="Instagram inbox conversations">
-    <aside className="ibx-list" aria-label="Contacts">
-      <div className="ibx-list-head">
-        <div className="ibx-list-title">
-          <h2>Messages</h2>
-          {contacts.length > 0 && <span>{contacts.length}{nextCursor ? "+" : ""} {contacts.length === 1 && !nextCursor ? "person" : "people"}</span>}
-        </div>
-        <InboxFilters value={filters} labels={labels} onChange={(next) => {
-          closeConversation();
-          const snapshot = readInboxCache(next).snapshot;
-          setContacts(snapshot?.contacts ?? []); setMembers(snapshot?.members ?? []);
-          setNextCursor(snapshot?.nextCursor); setFilterLoading(!snapshot); setFilters(next);
-        }} />
-      </div>
+  function renderRow(contact: InboxContact, group: ConversationGroupKey) {
+    const name = displayName(contact);
+    const isSelected = selectedId === contact.id;
+    const assignee = contact.assigneeUserId ? memberNames.get(contact.assigneeUserId) ?? "Assigned" : undefined;
+    const reminderDue = isReminderDue(contact.reminderAt);
+    // One action, only where it moves the conversation on.
+    const action = group === "waiting" && contact.canMessage
+      ? <button type="button" className="ibx-row-action" aria-label={`Reply to ${name}`} onClick={() => replyTo(contact)}>Reply</button>
+      : group === "closed"
+        ? <button type="button" className="ibx-row-action" aria-label={`Reopen ${name}`} onClick={() => void patchContact(contact.id, { action: "set_status", status: "OPEN" })}>Reopen</button>
+        : null;
+    return <li key={contact.id} className={`ibx-row-item ${isSelected ? "is-selected" : ""} ${contact.unread ? "is-unread" : ""} ${action ? "has-action" : ""}`}>
+      <button type="button" className={`ibx-row ${isSelected ? "is-selected" : ""} ${contact.unread ? "is-unread" : ""}`} aria-current={isSelected ? "true" : undefined} aria-label={`Open conversation with ${name}`} onClick={() => void openConversation(contact)}>
+        <span className="ibx-avatar"><SocialAvatar channel="instagram" name={name} src={contact.avatarUrl} />{contact.unread && <span className="ibx-unread-dot" aria-label="Unread" />}</span>
+        <span className="ibx-row-copy">
+          <span className="ibx-row-top">
+            <strong>{name}</strong>
+            {contact.favorite && <Star className="ibx-row-star" size={12} fill="currentColor" aria-label="Favourite" />}
+            <time dateTime={contact.lastMessageAt} title={formatDateTime(contact.lastMessageAt)}>{formatListTime(contact.lastMessageAt)}</time>
+          </span>
+          <span className="ibx-row-preview">{contact.preview}</span>
+          {(assignee || contact.reminderAt || !contact.canMessage || isAutomationPaused(contact)) && <span className="ibx-row-tags">
+            {contact.reminderAt && <span className={`ibx-tag ${reminderDue ? "is-due" : ""}`}><BellRing size={12} aria-hidden="true" /><ReminderLabel value={contact.reminderAt} /></span>}
+            {assignee && <span className="ibx-tag" title={`Owner: ${assignee}`}><UserRound size={12} aria-hidden="true" /><span className="ibx-tag-text">{assignee}</span></span>}
+            {!contact.canMessage && contact.inboxStatus !== "CLOSED" && <span className="ibx-tag is-muted">Window closed</span>}
+            {isAutomationPaused(contact) && <span className="ibx-tag"><PauseCircle size={12} aria-hidden="true" />Automations paused</span>}
+          </span>}
+        </span>
+      </button>
+      {action}
+    </li>;
+  }
 
+  return <>{toolbar}<section className={`ibx-desk ${selected ? "has-thread" : ""}`} aria-label="Instagram inbox conversations">
+    <aside className="ibx-list" aria-label="Contacts">
       <div className="ibx-list-body">
         {listError && contacts.length > 0 && <p className="ibx-banner is-error" role="alert"><AlertCircle size={16} aria-hidden="true" /><span>{listError}</span><button type="button" onClick={() => void loadContacts(true)}>Try again</button></p>}
         {listError && contacts.length === 0 && !filterLoading ? <div className="ibx-list-empty is-error" role="alert">
@@ -656,32 +729,20 @@ export function InstagramInbox() {
             <Link className="button button-secondary button-small" href="/automations">Set up an automation</Link>
           </>}
         </div> : <>
-          <ul className="ibx-rows">
-            {contacts.map((contact) => {
-              const assignee = contact.assigneeUserId ? memberNames.get(contact.assigneeUserId) ?? "Assigned" : undefined;
-              const reminderDue = isReminderDue(contact.reminderAt);
-              return <li key={contact.id}>
-                <button type="button" className={`ibx-row ${selectedId === contact.id ? "is-selected" : ""} ${contact.unread ? "is-unread" : ""}`} aria-current={selectedId === contact.id ? "true" : undefined} aria-label={`Open conversation with ${displayName(contact)}`} onClick={() => void openConversation(contact)}>
-                  <span className="ibx-avatar"><SocialAvatar channel="instagram" name={displayName(contact)} src={contact.avatarUrl} />{contact.unread && <span className="ibx-unread-dot" aria-label="Unread" />}</span>
-                  <span className="ibx-row-copy">
-                    <span className="ibx-row-top">
-                      <strong>{displayName(contact)}</strong>
-                      {contact.favorite && <Star className="ibx-row-star" size={12} fill="currentColor" aria-label="Favourite" />}
-                      <time dateTime={contact.lastMessageAt} title={formatDateTime(contact.lastMessageAt)}>{formatListTime(contact.lastMessageAt)}</time>
-                    </span>
-                    <span className="ibx-row-preview">{contact.preview}</span>
-                    {(contact.inboxStatus === "CLOSED" || assignee || contact.reminderAt || !contact.canMessage || isAutomationPaused(contact)) && <span className="ibx-row-tags">
-                      {contact.inboxStatus === "CLOSED" && <span className="ibx-tag">Closed</span>}
-                      {contact.reminderAt && <span className={`ibx-tag ${reminderDue ? "is-due" : ""}`}><BellRing size={12} aria-hidden="true" /><ReminderLabel value={contact.reminderAt} /></span>}
-                      {assignee && <span className="ibx-tag" title={`Owner: ${assignee}`}><UserRound size={12} aria-hidden="true" /><span className="ibx-tag-text">{assignee}</span></span>}
-                      {!contact.canMessage && contact.inboxStatus !== "CLOSED" && <span className="ibx-tag is-muted">Window closed</span>}
-                      {isAutomationPaused(contact) && <span className="ibx-tag"><PauseCircle size={12} aria-hidden="true" />Automations paused</span>}
-                    </span>}
-                  </span>
+          {conversationGroups.map((group) => {
+            const open = !collapsedGroups.has(group.key);
+            const listId = `ibx-group-${group.key}`;
+            return <div key={group.key} className={`ibx-group-block is-${group.key}`}>
+              <h2 className="ibx-group-head">
+                <button type="button" aria-expanded={open} aria-controls={listId} onClick={() => toggleGroup(group.key)}>
+                  <span>{group.label}</span>{" "}
+                  <span className="ibx-group-count">{group.contacts.length}<span className="sr-only"> {group.contacts.length === 1 ? "conversation" : "conversations"}</span></span>
+                  <ChevronDown className="ibx-group-chevron" size={16} aria-hidden="true" />
                 </button>
-              </li>;
-            })}
-          </ul>
+              </h2>
+              <Collapse open={open} id={listId}>{open && <ul className="ibx-rows" aria-label={group.label}>{group.contacts.map((contact) => renderRow(contact, group.key))}</ul>}</Collapse>
+            </div>;
+          })}
           {nextCursor && <button className="ibx-load-more" type="button" aria-label="Load more conversations" disabled={loadingMore} onClick={() => void loadContacts(false, nextCursor)}>{loadingMore ? "Loading…" : "Load more"}</button>}
         </>}
       </div>
@@ -754,5 +815,5 @@ export function InstagramInbox() {
     </div>
     <p className="sr-only ibx-live-announcement" role="status" aria-atomic="true">{liveAnnouncement}</p>
     <Presence>{openContactId && <ContactDetailModal contactId={openContactId} onClose={() => setOpenContactId(null)} onUpdated={(update) => applyContactUpdate(openContactId, update)} />}</Presence>
-  </section>;
+  </section></>;
 }
