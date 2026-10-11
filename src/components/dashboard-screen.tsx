@@ -13,6 +13,8 @@ import { CreateAutomationButton } from "./create-automation-button";
 import { FailureList, fetchRecentFailures, type DeliveryFailure } from "./failure-panel";
 import { LocalStatusBadge, lifecycleStatus } from "./workspace-primitives";
 import { StatusBadge } from "./ui/status-badge";
+import { Presence } from "./ui/use-presence";
+import { Collapse } from "./ui/collapse";
 import { PageHeader, SectionCard } from "./page-header";
 import { Skeleton } from "./skeleton";
 import { TrendChart } from "./trend-chart";
@@ -221,10 +223,14 @@ function NeedsYou({ items, failures }: { items: AttentionItem[]; failures: Deliv
                 </button>
               )}
             </div>
-            {item.action.kind === "failures" && failuresOpen ? (
-              <div id="home-failures" className="attention-detail">
-                <FailureList failures={failures} limit={4} />
-              </div>
+            {item.action.kind === "failures" ? (
+              <Collapse open={failuresOpen} id="home-failures">
+                {failuresOpen && (
+                  <div className="attention-detail">
+                    <FailureList failures={failures} limit={4} />
+                  </div>
+                )}
+              </Collapse>
             ) : null}
           </li>
         ))}
@@ -549,7 +555,7 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
           <TrackedLinksRow />
         </>
       )}
-      {pickerOpen && <TemplatePickerModal onClose={() => setPickerOpen(false)} />}
+      <Presence>{pickerOpen && <TemplatePickerModal onClose={() => setPickerOpen(false)} />}</Presence>
     </div>
   );
 }

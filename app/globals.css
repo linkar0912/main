@@ -8648,7 +8648,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .attention-action:active { transform: scale(.98); }
 .attention-chevron { transition: transform var(--dur-2) var(--ease-out); }
 .attention-action[aria-expanded="true"] .attention-chevron { transform: rotate(180deg); }
-.attention-detail { animation: motion-fade-down var(--dur-2) var(--ease-out) both; padding: 0 var(--surface-pad) 16px; }
+.attention-detail { padding: 0 var(--surface-pad) 16px; }
 .attention-detail .failure-list { margin: 0; }
 
 /* ── Home: performance + automations ───────────────────────────────────── */
@@ -8995,7 +8995,6 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 
 @media (prefers-reduced-motion: reduce) {
   .home-enter,
-  .attention-detail,
   .start-step[data-state="current"] .start-body,
   .trend-chart.is-drawing .trend-svg,
   .trend-tooltip,

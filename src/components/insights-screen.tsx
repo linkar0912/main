@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useAutomations } from "./automation-list";
+import { slidingThumbRef } from "./ui/use-sliding-thumb";
 import { CreateAutomationButton } from "./create-automation-button";
 import { FacebookGlyph } from "./facebook-glyph";
 import { InstagramGlyph } from "./instagram-glyph";
@@ -379,7 +380,7 @@ export function InsightsScreen() {
       />
 
       <div className="ins-toolbar home-enter" style={enterStyle(45)}>
-        <div className="segmented ins-range" role="group" aria-label="Time range">
+        <div ref={slidingThumbRef} className="segmented ins-range" role="group" aria-label="Time range">
           {RANGE_OPTIONS.map((option) => (
             <button
               key={option}

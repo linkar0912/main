@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-/** True when the viewer asked the OS for less motion. False on the server. */
-export function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
+import { prefersReducedMotion } from "./ui/use-presence";
 
 function easeOutCubic(progress: number): number {
   return 1 - (1 - progress) ** 3;
