@@ -395,6 +395,30 @@ export type InboxContactRow = {
   unread: boolean;
 };
 export type InboxContactPage = { rows: InboxContactRow[]; nextCursor?: string };
+
+/**
+ * Directory search (Contacts page, ⌘K palette). `text` matches, case-
+ * insensitively and as a plain substring (no wildcards), the Instagram
+ * handle, the email or any tag. `assigneeUserIds` also matches contacts owned
+ * by those members (the route resolves owner emails to ids).
+ */
+export type ContactSearch = { text: string; assigneeUserIds?: string[] };
+
+/** True when `contact` answers `search` - the rule both repositories apply. */
+export function contactMatchesSearch(
+  contact: Pick<AutomationContactRecord, "instagramUsername" | "email" | "tags" | "assigneeUserId">,
+  search: ContactSearch,
+): boolean {
+  const needle = search.text.trim().toLowerCase();
+  if (!needle) return true;
+  if (contact.assigneeUserId && search.assigneeUserIds?.includes(contact.assigneeUserId)) return true;
+  return [contact.instagramUsername ?? "", contact.email ?? "", ...contact.tags].some((value) => value.toLowerCase().includes(needle));
+}
+
+/** `text` as an ILIKE pattern: %, _ and \ match themselves (ESCAPE '\'). */
+export function containsPattern(text: string): string {
+  return `%${text.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
 export type InboxRecordPage<T> = { records: T[]; nextCursor?: string };
 export type InboxStatePatch =
   | { action: "mark_read"; readAt: string }
@@ -1089,13 +1113,17 @@ export interface AutomationRepository {
     contactId: string,
     patch: { leadStatus?: LeadStatus; assigneeUserId?: string | null; notes?: string | null; sourceAutomationId?: string | null },
   ): Promise<AutomationContactRecord | null>;
-  /** Workspace-wide count of contacts grouped by lead status (for the dashboard). */
-  countContactsByLeadStatus(workspaceId: string): Promise<Record<LeadStatus, number>>;
-  /** Returns contacts matching an optional lead-status filter, newest first. */
+  /**
+   * Workspace-wide count of contacts grouped by lead status (for the dashboard).
+   * With `search`, only contacts matching it are counted.
+   */
+  countContactsByLeadStatus(workspaceId: string, search?: ContactSearch): Promise<Record<LeadStatus, number>>;
+  /** Returns contacts matching an optional lead-status filter and search, newest first. */
   listContactsByLeadStatus(
     workspaceId: string,
     options: {
       leadStatus?: LeadStatus;
+      search?: ContactSearch;
       limit: number;
       offset?: number;
       /**

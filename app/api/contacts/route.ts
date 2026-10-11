@@ -4,12 +4,13 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { MetaClient } from "@/src/lib/meta/client";
 import { hasCachedInstagramAvatar, instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
-import { LEAD_STATUSES, type LeadStatus } from "@/src/lib/repository";
+import { LEAD_STATUSES, type ContactSearch, type LeadStatus } from "@/src/lib/repository";
 import { decodeInboxCursor, encodeInboxCursor } from "@/src/lib/inbox-cursor";
 
 export const runtime = "nodejs";
 
 const CONTACT_RECONCILIATION_LIMIT = 500;
+const MAX_QUERY_LENGTH = 100;
 
 export async function POST(request: Request) {
   const session = await getValidatedSession(request);
@@ -110,10 +111,22 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
       }
     }
+    // `q` searches the whole workspace on the server (handle, email, tag, or
+    // the owner's email) - the Contacts page and the palette used to filter
+    // only the newest 200 rows in the browser. Counts follow the search.
+    const text = (url.searchParams.get("q") ?? "").trim().replace(/^@+/, "").slice(0, MAX_QUERY_LENGTH);
+    let search: ContactSearch | undefined;
+    if (text) {
+      const needle = text.toLowerCase();
+      const owners = (await repository.listMembers(session.workspaceId))
+        .flatMap((member) => (member.userId && member.email.toLowerCase().includes(needle) ? [member.userId] : []));
+      search = { text, ...(owners.length ? { assigneeUserIds: owners } : {}) };
+    }
     const [counts, page, events] = await Promise.all([
-      repository.countContactsByLeadStatus(session.workspaceId),
+      repository.countContactsByLeadStatus(session.workspaceId, search),
       repository.listContactsByLeadStatus(session.workspaceId, {
         ...(leadStatus ? { leadStatus } : {}),
+        ...(search ? { search } : {}),
         // One extra row says whether another page exists without trusting a
         // count that may have moved since.
         limit: limit + 1,
@@ -148,6 +161,7 @@ export async function GET(request: Request) {
       data: {
         count: Object.values(counts).reduce((sum, value) => sum + value, 0),
         counts,
+        ...(search ? { query: search.text } : {}),
         offset,
         hasMore: page.length > limit,
         ...(nextCursor ? { nextCursor } : {}),

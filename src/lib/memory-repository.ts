@@ -52,6 +52,7 @@ import type {
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
 import { EXECUTION_CLAIM_LEASE_MS, isAbandonedExecutionClaim } from "./repository";
+import { contactMatchesSearch } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS } from "./messaging-window";
 import { normalizeHelpQuery } from "./help-search";
@@ -1917,10 +1918,11 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return copy(updated);
     },
 
-    async countContactsByLeadStatus(workspaceId) {
+    async countContactsByLeadStatus(workspaceId, search) {
       const counts: Record<LeadStatus, number> = { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 };
       for (const contact of contacts.values()) {
         if (contact.workspaceId !== workspaceId) continue;
+        if (search && !contactMatchesSearch(contact, search)) continue;
         counts[contact.leadStatus] += 1;
       }
       return counts;
@@ -1931,6 +1933,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const filtered = [...contacts.values()].filter((contact) => {
         if (contact.workspaceId !== workspaceId) return false;
         if (options.leadStatus && contact.leadStatus !== options.leadStatus) return false;
+        if (options.search && !contactMatchesSearch(contact, options.search)) return false;
         if (after && !(contact.lastSeenAt < after.lastSeenAt
           || (contact.lastSeenAt === after.lastSeenAt && contact.id.localeCompare(after.id) > 0))) return false;
         return true;

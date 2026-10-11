@@ -46,6 +46,7 @@ import type {
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
 import { EXECUTION_CLAIM_LEASE_MS } from "./repository";
+import { containsPattern, type ContactSearch } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS, toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
@@ -550,6 +551,26 @@ async function withSerializationRetry<T>(operation: () => Promise<T>): Promise<T
       throw error;
     }
   }
+}
+
+/**
+ * WHERE fragment for a directory search (ContactSearch in repository.ts):
+ * the handle, the email or any tag contains the text, case-insensitively.
+ * The text is a bound parameter with %, _ and \ escaped (backslash is
+ * ILIKE's default escape character), so it never acts as a wildcard.
+ * Matches memory-repository's contactMatchesSearch.
+ */
+function contactSearchSql(search: ContactSearch): Prisma.Sql {
+  const pattern = containsPattern(search.text);
+  const matches = [
+    Prisma.sql`COALESCE(c."instagramUsername", '') ILIKE ${pattern}`,
+    Prisma.sql`COALESCE(c."email", '') ILIKE ${pattern}`,
+    Prisma.sql`EXISTS (SELECT 1 FROM unnest(c."tags") AS tag WHERE tag ILIKE ${pattern})`,
+  ];
+  if (search.assigneeUserIds?.length) {
+    matches.push(Prisma.sql`c."assigneeUserId" IN (${Prisma.join(search.assigneeUserIds)})`);
+  }
+  return Prisma.sql`(${Prisma.join(matches, " OR ")})`;
 }
 
 export function createPrismaRepository(client = prisma): AutomationRepository {
@@ -2648,7 +2669,18 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return mapContact(updated);
     },
 
-    async countContactsByLeadStatus(workspaceId) {
+    async countContactsByLeadStatus(workspaceId, search) {
+      if (search?.text.trim()) {
+        const matched = await client.$queryRaw<{ leadStatus: LeadStatus; count: bigint | number }[]>(Prisma.sql`
+          SELECT c."leadStatus" AS "leadStatus", COUNT(*) AS "count"
+          FROM "AutomationContact" c
+          WHERE c."workspaceId" = ${workspaceId} AND ${contactSearchSql(search)}
+          GROUP BY c."leadStatus"
+        `);
+        const counts: Record<LeadStatus, number> = { NEW: 0, ENGAGED: 0, QUALIFIED: 0, CUSTOMER: 0 };
+        for (const row of matched) counts[row.leadStatus] = Number(row.count);
+        return counts;
+      }
       const rows = await client.automationContact.groupBy({
         by: ["leadStatus"],
         where: { workspaceId },
@@ -2661,6 +2693,24 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
     async listContactsByLeadStatus(workspaceId, options) {
       const after = options.after;
+      if (options.search?.text.trim()) {
+        // Tags are a text[] and need a substring match per element, which
+        // Prisma's filters cannot express - so the search is one raw query,
+        // workspace-scoped and with every value bound as a parameter.
+        const conditions: Prisma.Sql[] = [Prisma.sql`c."workspaceId" = ${workspaceId}`, contactSearchSql(options.search)];
+        if (options.leadStatus) conditions.push(Prisma.sql`c."leadStatus" = CAST(${options.leadStatus} AS "LeadStatus")`);
+        if (after) {
+          const at = new Date(after.lastSeenAt);
+          conditions.push(Prisma.sql`(c."lastSeenAt" < ${at} OR (c."lastSeenAt" = ${at} AND c."id" > ${after.id}))`);
+        }
+        const rows = await client.$queryRaw<Parameters<typeof mapContact>[0][]>(Prisma.sql`
+          SELECT c.* FROM "AutomationContact" c
+          WHERE ${Prisma.join(conditions, " AND ")}
+          ORDER BY c."lastSeenAt" DESC, c."id" ASC
+          LIMIT ${options.limit} OFFSET ${!after && options.offset ? options.offset : 0}
+        `);
+        return rows.map(mapContact);
+      }
       const records = await client.automationContact.findMany({
         where: {
           workspaceId,

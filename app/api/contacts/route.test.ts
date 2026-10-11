@@ -100,6 +100,71 @@ describe("GET /api/contacts", () => {
     expect(invalid.status).toBe(400);
   });
 
+  describe("server-side search (?q=)", () => {
+    beforeEach(async () => {
+      await repository.touchContact("workspace_1", "ig_1", "person_meera", "2026-09-01T07:00:00.000Z");
+      await repository.rememberContactUsernames("workspace_1", [{ instagramAccountId: "ig_1", igScopedUserId: "person_meera", username: "Meera.Styles" }]);
+      await repository.touchContact("workspace_1", "ig_1", "person_tagged", "2026-09-01T07:30:00.000Z");
+      await repository.setContactTags("workspace_1", "ig_1", "person_tagged", ["repeat_vip"]);
+      await repository.rememberContactUsernames("workspace_2", [{ instagramAccountId: "ig_2", igScopedUserId: "foreign", username: "meera.elsewhere" }]);
+    });
+
+    const handles = (body: { data: { contacts: Array<{ igScopedUserId: string }> } }) => body.data.contacts.map((c) => c.igScopedUserId);
+
+    it("matches the handle, email and tags case-insensitively, scoped to the workspace", async () => {
+      const byHandle = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=MEERA"))).json();
+      expect(handles(byHandle)).toEqual(["person_meera"]);
+      expect(byHandle.data.query).toBe("MEERA");
+      // A leading @ is how people type handles.
+      expect(handles(await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=%40meera.st"))).json())).toEqual(["person_meera"]);
+      expect(handles(await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=ONE%40EXAMPLE"))).json())).toEqual(["person_1"]);
+      expect(handles(await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=vip"))).json())).toEqual(["person_tagged"]);
+      expect(handles(await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=nobody"))).json())).toEqual([]);
+    });
+
+    it("treats % and _ as plain characters, not wildcards", async () => {
+      expect(handles(await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=%25"))).json())).toEqual([]);
+      // "_" is a single-character wildcard in LIKE; it must only match a real underscore.
+      expect(handles(await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=t_vip"))).json())).toEqual(["person_tagged"]);
+      expect(handles(await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=e_s"))).json())).toEqual([]);
+    });
+
+    it("counts stages for the search, combines with the stage filter and pages with the cursor", async () => {
+      await repository.updateContactProfile("workspace_1", (await repository.getContact("workspace_1", "ig_1", "person_meera"))!.id, { leadStatus: "CUSTOMER" });
+      const body = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=e"))).json();
+      // person_1 (one@example.com), person_meera and person_tagged (repeat_vip) all contain "e".
+      expect(body.data.counts).toEqual({ NEW: 1, ENGAGED: 0, QUALIFIED: 1, CUSTOMER: 1 });
+      expect(body.data.count).toBe(3);
+      const customers = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=e&leadStatus=CUSTOMER"))).json();
+      expect(handles(customers)).toEqual(["person_meera"]);
+
+      const first = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=e&limit=2"))).json();
+      expect(handles(first)).toEqual(["person_tagged", "person_meera"]);
+      const second = await (await GET(new Request(`https://app.linkar.in/api/contacts?scope=all&q=e&limit=2&cursor=${first.data.nextCursor}`))).json();
+      expect(handles(second)).toEqual(["person_1"]);
+    });
+
+    it("finds contacts owned by a member whose email matches", async () => {
+      await repository.addMember("workspace_1", "riya.ops@example.com", "MEMBER", "user_riya");
+      const tagged = await repository.getContact("workspace_1", "ig_1", "person_tagged");
+      await repository.updateContactProfile("workspace_1", tagged!.id, { assigneeUserId: "user_riya" });
+      expect(handles(await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&q=riya"))).json())).toEqual(["person_tagged"]);
+    });
+
+    // The palette used to load the newest 200 contacts once and filter them
+    // in the browser, so anyone older was never found. The server search
+    // reaches every contact, however old.
+    it("finds a contact older than the newest 200", async () => {
+      for (let index = 0; index < 205; index += 1) {
+        await repository.touchContact("workspace_1", "ig_1", `recent_${index}`, new Date(Date.UTC(2026, 8, 5, 0, index)).toISOString());
+      }
+      const newest = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&limit=200"))).json();
+      expect(handles(newest)).not.toContain("person_meera");
+      const found = await (await GET(new Request("https://app.linkar.in/api/contacts?scope=all&limit=5&q=meera"))).json();
+      expect(handles(found)).toEqual(["person_meera"]);
+    });
+  });
+
   it("filters full contacts by a valid lead status and rejects an invalid one", async () => {
     const filtered = await GET(new Request("https://app.linkar.in/api/contacts?scope=all&leadStatus=NEW"));
     expect((await filtered.json()).data.contacts).toEqual([]);
