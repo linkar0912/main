@@ -1,12 +1,14 @@
 "use client";
 
 import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
-import { prefersReducedMotion } from "@/src/components/ui/use-presence";
+import { Presence, PresenceSlot, prefersReducedMotion, presenceProps } from "@/src/components/ui/use-presence";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   Check,
+  ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Info,
   Plus,
@@ -16,11 +18,10 @@ import {
   FileText,
   LockKeyhole,
   Plug,
-  ShieldCheck,
   UserPlus,
   Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { BillingSettings } from "./billing-settings";
 import { ContextHelpLink } from "./context-help-link";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
@@ -28,13 +29,16 @@ import { InlineConfirm } from "./inline-confirm";
 import { InstagramGlyph } from "./instagram-glyph";
 import { FacebookGlyph } from "./facebook-glyph";
 import { SocialAvatar } from "./social-avatar";
+import { Collapse } from "./ui/collapse";
 import { RelativeTime } from "./ui/relative-time";
+import { StatusBadge, type StatusTone } from "./ui/status-badge";
 import { StatusSummary } from "./ui/status-summary";
+import { PrefsGroupHead, PrefsRow, PrefsSectionHead } from "./settings/prefs";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
 import { toReadableApiError } from "@/src/lib/validation-error";
-import { SettingsConnectionsContentSkeleton, Skeleton } from "./skeleton";
+import { Skeleton } from "./skeleton";
 import { PageHeader } from "./page-header";
 import {
   clearWorkspaceDataCache,
@@ -68,13 +72,13 @@ const WEBHOOK_FIELD_LABELS: Record<string, string> = {
   messaging_referral: "Referrals",
 };
 
-function ConnectionStatusTag({ status }: { status: ConnectionStatus }) {
-  return (
-    <span className="connection-state" data-status={status.toLowerCase()}>
-      <span className="connection-state-dot" aria-hidden="true" />
-      {status.charAt(0) + status.slice(1).toLowerCase()}
-    </span>
-  );
+/** One status word per account: the record's state, then what the health check found. */
+function accountStatus(status: ConnectionStatus, health?: { checkError?: string; missingFields: string[] }): { tone: StatusTone; label: string } {
+  if (status === "EXPIRED") return { tone: "danger", label: "Expired" };
+  if (status === "DISCONNECTED") return { tone: "danger", label: "Disconnected" };
+  if (health?.checkError) return { tone: "warning", label: "Not checked" };
+  if (health && health.missingFields.length > 0) return { tone: "warning", label: "Needs reconnect" };
+  return { tone: "success", label: "Connected" };
 }
 
 type FacebookHealth = {
@@ -88,7 +92,17 @@ type FacebookHealth = {
   requiredFields: string[];
 };
 
-const SETTINGS_SECTIONS = ["connections", "delivery", "billing", "team", "policies"] as const;
+const SETTINGS_SECTIONS = ["connections", "delivery", "billing", "team", "policies", "security"] as const;
+
+/** One line per section for the phone drill-in list (hidden on wider screens). */
+const SECTION_HINTS: Record<(typeof SETTINGS_SECTIONS)[number], string> = {
+  connections: "Instagram accounts and Facebook Pages",
+  delivery: "Quiet hours and safeguards",
+  team: "Members and invitations",
+  billing: "Plan, usage and invite codes",
+  policies: "Support, terms and privacy",
+  security: "Password and sign-in",
+};
 
 /** The browser's own zone, so a new quiet-hours window starts in local time. */
 function browserTimeZone(): string {
@@ -144,6 +158,8 @@ type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 export function SettingsScreen() {
   const router = useRouter();
+  // /settings in the app; the dev preview mounts the same screen elsewhere.
+  const settingsPath = usePathname() || "/settings";
   const [connections, setConnections] = useState<Connection[]>([]);
   // One entry per connected account, matched by id at render time - a
   // workspace with more than one connected Instagram account or Facebook Page
@@ -151,6 +167,8 @@ export function SettingsScreen() {
   // first (`data?.[0]`), silently hiding the others' status entirely.
   const [health, setHealth] = useState<ConnectionHealth[]>([]);
   const [mode, setMode] = useState<"demo" | "configured">("demo");
+  // Marks the signed-in person's own row in Team.
+  const [viewerEmail, setViewerEmail] = useState("");
   // useSearchParams (not a window.location initializer) so the server and the
   // first client render agree on this value - no hydration mismatch to fix up.
   const searchParams = useSearchParams();
@@ -182,8 +200,12 @@ export function SettingsScreen() {
   const section = picked && picked.from === currentSearch ? picked.section : urlSection;
   const setSection = (next: SettingsSection) => {
     setPicked({ from: currentSearch, section: next });
-    router.push(next === "connections" ? "/settings" : `/settings?section=${next}`, { scroll: false });
+    router.push(`${settingsPath}?section=${next}`, { scroll: false });
   };
+  // Phones drill in: a bare /settings is the list of sections, and a section
+  // (or an OAuth return / a sidebar account link) is a page of its own.
+  const showsSection = Boolean(picked) || SETTINGS_SECTIONS.includes(requestedSection as SettingsSection)
+    || Boolean(focusedAccountId || metaState || facebookState);
   const [disconnectingId, setDisconnectingId] = useState("");
   const [disconnectError, setDisconnectError] = useState("");
   // Disconnecting stops every automation on that account, so it takes a
@@ -326,6 +348,14 @@ export function SettingsScreen() {
     }
   }
 
+  function discardQuietHours() {
+    setQuietEnabled(quietPersisted.enabled);
+    setQuietStart(quietPersisted.start);
+    setQuietEnd(quietPersisted.end);
+    setQuietTz(quietPersisted.timezone);
+    setQuietError("");
+  }
+
   async function disconnect(id: string) {
     // Scoped to this connection, not "is any disconnect in flight" - a
     // workspace with multiple Instagram accounts should be able to
@@ -375,6 +405,7 @@ export function SettingsScreen() {
       setConnections(connectionData);
       setFacebookPages(fbPages);
       setMode(bootstrap?.mode ?? "demo");
+      setViewerEmail(bootstrap?.email ?? "");
       setConnectionsLoading(false);
 
       // Provider health can be noticeably slower than our own connection
@@ -415,7 +446,10 @@ export function SettingsScreen() {
   }, []);
 
   useEffect(() => {
-    if (section !== "team") return;
+    // Billing shows the team seats in use, so it reads the (cached) team too;
+    // a failure there only leaves that one meter out.
+    if (section !== "team" && section !== "billing") return;
+    const quiet = section === "billing";
     const controller = new AbortController();
     void getTeamOverview(controller.signal).then(setTeam).catch((reason: unknown) => {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
@@ -423,6 +457,7 @@ export function SettingsScreen() {
         setTeamManageable(false);
         return;
       }
+      if (quiet) return;
       setTeamLoadError("Could not load team settings. Check your connection and try again.");
     });
     return () => controller.abort();
@@ -566,7 +601,7 @@ export function SettingsScreen() {
       ? "checking"
       : healthEntries.some((entry) => entry.checkError || entry.missingFields.length > 0) ? "warn" : "ok";
 
-  const navGroups: Array<{ label: string; items: Array<{ key: typeof section; label: string; icon: typeof Plug; count?: number }> }> = [
+  const navGroups: Array<{ label: string; items: Array<{ key: SettingsSection; label: string; icon: typeof Plug; count?: number }> }> = [
     {
       label: "Workspace",
       items: [
@@ -580,60 +615,62 @@ export function SettingsScreen() {
       items: [
         { key: "billing", label: "Billing", icon: CreditCard },
         { key: "policies", label: "Policies", icon: FileText },
+        { key: "security", label: "Security", icon: LockKeyhole },
       ],
     },
   ];
 
   const timeOptions = Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>);
   const quietDirty = !sameQuietHours({ enabled: quietEnabled, start: quietStart, end: quietEnd, timezone: quietTz }, quietPersisted);
+  const hour = (value: number) => `${String(value).padStart(2, "0")}:00`;
+  // Phones only: the way back to the list of sections.
+  const back = <Link className="prefs-back" href={settingsPath}><ChevronLeft size={16} aria-hidden="true" /> Settings</Link>;
+  const statusLoading = connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : null;
 
   return (
-    <div className="page-wrap settings-wrap ws-page">
+    <div className="page-wrap settings-wrap prefs ws-page" data-view={showsSection ? "section" : "index"}>
       <PageHeader
         title="Settings"
         description="Channels, delivery, team and billing for this workspace."
-        actions={<><CopyDiagnosticsButton /><ContextHelpLink topic="connecting-instagram" /></>}
+        actions={<ContextHelpLink topic="connecting-instagram" />}
       />
 
       {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{metaState === "connected" ? <Check size={17} /> : <AlertCircle size={17} />}<p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
       {facebookState && <div className={`notice-banner ${facebookState === "connected" || facebookState === "select-page" ? "notice-success" : "notice-warning"}`} role="status">{facebookState === "connected" ? <Check size={17} /> : facebookState === "select-page" ? <Info size={17} /> : <AlertCircle size={17} />}<p>{facebookStatusMessage[facebookState] ?? "Facebook connection status updated."}</p></div>}
 
-      <div className="settings-shell">
-        <nav ref={slidingThumbRef} className="settings-nav" aria-label="Settings sections">
+      <div className="prefs-shell">
+        {/* The selected section sits on a white tile that glides between items
+            (useSlidingThumb positions .prefs-nav-tile). */}
+        <nav ref={slidingThumbRef} className="prefs-nav" aria-label="Settings sections">
+          <span className="prefs-nav-tile" aria-hidden="true" />
           {navGroups.map((group) => (
-            <div className="settings-nav-group" key={group.label}>
-              <span className="settings-nav-label">{group.label}</span>
+            <div className="prefs-nav-group" key={group.label}>
+              <span className="prefs-nav-label">{group.label}</span>
               {group.items.map(({ key, label, icon: Icon, count }) => (
                 <button
                   key={key}
                   type="button"
                   aria-pressed={section === key}
-                  className={`settings-nav-link ${section === key ? "is-active" : ""}`}
+                  className={`prefs-nav-item${section === key ? " is-active" : ""}`}
                   onClick={() => setSection(key)}
                 >
-                  <Icon size={16} strokeWidth={1.9} />
-                  <span>{label}</span>
-                  {count !== undefined ? <span className="settings-nav-count">{count}</span> : null}
+                  <Icon size={16} strokeWidth={1.9} aria-hidden="true" />
+                  <span className="prefs-nav-text">
+                    <span className="prefs-nav-name">{label}</span>
+                    <span className="prefs-nav-hint">{SECTION_HINTS[key]}</span>
+                  </span>
+                  {count !== undefined ? <span className="prefs-nav-count">{count}</span> : null}
+                  <ChevronRight className="prefs-nav-chevron" size={16} aria-hidden="true" />
                 </button>
               ))}
-              {group.label === "Account" ? (
-                <Link className="settings-nav-link" href="/profile">
-                  <LockKeyhole size={16} strokeWidth={1.9} />
-                  <span>Security</span>
-                  <ChevronRight className="settings-nav-arrow" size={14} />
-                </Link>
-              ) : null}
             </div>
           ))}
         </nav>
 
-        <div className="settings-main">
+        <div className="prefs-main" key={section}>
           {section === "connections" && (
-            <section className="settings-section" aria-labelledby="connected-channels-title">
-              <header className="settings-section-head">
-                <h2 id="connected-channels-title">Connected channels</h2>
-                <p>The Instagram accounts and Facebook Pages your automations reply from.</p>
-              </header>
+            <section className="prefs-section" aria-labelledby="connections-title">
+              <PrefsSectionHead id="connections-title" title="Connections" description="The Instagram accounts and Facebook Pages your automations reply from." back={back} />
 
               {connectionsLoadError && (
                 <div className="notice-banner notice-warning settings-load-error" role="alert">
@@ -646,220 +683,196 @@ export function SettingsScreen() {
               {/* After a failed load the counts below would read as "nothing is
                   connected", so they stay hidden until a load succeeds. */}
               {connectionsLoadError ? null : <>
-              <section className="settings-overview" aria-label="Workspace pulse">
-                <div className="settings-overview-cell" role="group" aria-label="Channel status">
-                  <small>Channels</small>
-                  <strong>{connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : connectedChannelCount === 0 ? "None connected" : `${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}</strong>
-                </div>
-                <div className="settings-overview-cell" role="group" aria-label="Mode status">
-                  <small>Mode</small>
-                  <strong>
-                    {connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : (
-                      <><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" />{mode === "demo" ? "Demo mode" : "Live"}</>
-                    )}
-                  </strong>
-                </div>
-                <div className="settings-overview-cell" role="group" aria-label="Incoming messages status">
-                  <small>Incoming messages</small>
-                  <strong>
-                    {connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : (
-                      <><span className="health-orb" data-state={webhookState === "ok" ? "ok" : webhookState === "warn" ? "warn" : "idle"} aria-hidden="true" />
-                        {webhookState === "ok" ? "Healthy" : webhookState === "warn" ? "Needs attention" : webhookState === "checking" ? "Checking…" : "Not set up yet"}</>
-                    )}
-                  </strong>
-                </div>
+              <section className="prefs-status" aria-label="Workspace status">
+                <span className="prefs-status-item" role="group" aria-label="Mode status">
+                  {statusLoading ?? <><span className="prefs-dot" data-tone={mode === "demo" ? "warning" : "ok"} aria-hidden="true" />{mode === "demo" ? "Demo mode" : "Live"}</>}
+                </span>
+                <span className="prefs-status-item" role="group" aria-label="Channel status">
+                  {statusLoading ?? (connectedChannelCount === 0 ? "No channels connected" : `${connectedChannelCount} ${connectedChannelCount === 1 ? "channel" : "channels"} connected`)}
+                </span>
+                <span className="prefs-status-item" role="group" aria-label="Incoming messages status">
+                  {statusLoading ?? <>
+                    <span className="prefs-dot" data-tone={webhookState === "ok" ? "ok" : webhookState === "warn" ? "warning" : "idle"} aria-hidden="true" />
+                    {webhookState === "ok" ? "Incoming messages healthy" : webhookState === "warn" ? "Incoming messages need attention" : webhookState === "checking" ? "Checking incoming messages…" : "Incoming messages not set up yet"}
+                  </>}
+                </span>
               </section>
 
-              {connectionsLoading ? <SettingsConnectionsContentSkeleton /> : (
-                <>
-                  <section className="settings-group channel-settings-card" data-channel-card="instagram" aria-label="Instagram channel">
-                    <div className="settings-group-head">
-                      <span className="settings-group-icon"><InstagramGlyph size={22} brand /></span>
-                      <div className="settings-group-copy">
-                        <h3><span>Instagram connections</span></h3>
-                        <p><span id="instagram-channel-title" className="channel-count" data-empty={connections.length === 0}>{connections.length === 0 ? "No account connected" : `${connections.length} account${connections.length === 1 ? "" : "s"} connected`}</span><span className="channel-capability">{connections.length > 0 ? "Comments and direct messages" : `Connect a professional account to start delivering ${PRODUCT_NAME} automations.`}</span></p>
+              {connectionsLoading ? (
+                <div className="prefs-group">
+                  <div className="prefs-card" aria-busy="true" aria-label="Loading connections">
+                    {[0, 1].map((index) => (
+                      <div className="prefs-row" key={index}>
+                        <Skeleton className="skeleton-avatar" />
+                        <div className="prefs-row-copy"><Skeleton className="skeleton-word skeleton-row-title" /><Skeleton className="skeleton-word skeleton-row-meta" /></div>
                       </div>
-                      <a className="button button-secondary button-small" href="/api/meta/oauth/start">{connections.length > 0 ? <><Plus size={14} /> Connect another</> : <>Connect Instagram <ExternalLink size={13} /></>}</a>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <section className="prefs-group" data-channel-card="instagram" aria-labelledby="instagram-group-title">
+                    <PrefsGroupHead
+                      id="instagram-group-title"
+                      title={<><InstagramGlyph size={18} brand /> Instagram</>}
+                      description={connections.length > 0 ? `${connections.length} ${connections.length === 1 ? "account" : "accounts"} replying to comments and direct messages` : undefined}
+                      action={connections.length > 0 ? <a className="button button-secondary button-small" href="/api/meta/oauth/start"><Plus size={14} aria-hidden="true" /> Connect another account</a> : null}
+                    />
+                    <div className="prefs-card">
+                      {connections.length === 0 ? (
+                        <div className="prefs-row prefs-empty">
+                          <div className="prefs-row-copy">
+                            <strong id="instagram-channel-title">No account connected</strong>
+                            <small>Connect an Instagram professional account to start replying to comments and messages with {PRODUCT_NAME}.</small>
+                          </div>
+                          <div className="prefs-row-control">
+                            <a className="button button-primary button-small" href="/api/meta/oauth/start">Connect Instagram <ExternalLink size={13} aria-hidden="true" /></a>
+                          </div>
+                        </div>
+                      ) : (
+                        <ul className="prefs-list">
+                          {connections.map((connection) => {
+                            const accountHealth = health.find((entry) => entry.id === connection.id);
+                            return (
+                              <AccountRow
+                                key={connection.id}
+                                id={connection.id}
+                                channel="instagram"
+                                name={`@${connection.username}`}
+                                avatarUrl={connection.profilePictureUrl ?? undefined}
+                                description={<>Instagram account, connected {formatDate(connection.connectedAt)}</>}
+                                idTitle={`Instagram account ID ${connection.igUserId}`}
+                                status={connection.status}
+                                health={accountHealth ? {
+                                  checkError: accountHealth.checkError,
+                                  missingFields: accountHealth.missingFields,
+                                  fields: accountHealth.requiredFields.map((field) => ({ label: WEBHOOK_FIELD_LABELS[field] ?? field, live: !accountHealth.missingFields.includes(field) })),
+                                } : undefined}
+                                healthLabel={connections.length > 1 ? `Connection check for @${connection.username}` : "Connection check"}
+                                reconnectHref="/api/meta/oauth/start"
+                                reconnectHint="Reconnect Instagram to refresh the subscription."
+                                focused={focusedAccountId === connection.id}
+                                busy={disconnectingId === connection.id}
+                                confirming={confirmingDisconnect?.channel === "instagram" && confirmingDisconnect.id === connection.id}
+                                onAskDisconnect={() => setConfirmingDisconnect({ channel: "instagram", id: connection.id })}
+                                confirm={
+                                  <InlineConfirm
+                                    label={`Confirm disconnecting @${connection.username}`}
+                                    message={<>Disconnect <strong>@{connection.username}</strong>? Every automation on this account stops replying to comments and messages until you connect it again.</>}
+                                    confirmLabel={`Disconnect @${connection.username}`}
+                                    busyLabel="Disconnecting…"
+                                    busy={disconnectingId === connection.id}
+                                    onConfirm={() => void disconnect(connection.id)}
+                                    onCancel={() => setConfirmingDisconnect(null)}
+                                  />
+                                }
+                              />
+                            );
+                          })}
+                        </ul>
+                      )}
                     </div>
-                    {connections.length > 0 && (
-                      <ul className="settings-rows connection-list">
-                        {connections.map((connection) => {
-                          const accountHealth = health.find((entry) => entry.id === connection.id);
-                          return (
-                            <li className={`settings-row connection-row${focusedAccountId === connection.id ? " is-focused" : ""}`} id={`account-${connection.id}`} key={connection.id}>
-                              <div className="connection-main">
-                                <SocialAvatar channel="instagram" name={`@${connection.username}`} src={connection.profilePictureUrl ?? undefined} />
-                                <div className="connection-copy">
-                                  <span className="connection-title"><strong>@{connection.username}</strong><ConnectionStatusTag status={connection.status} /></span>
-                                  <small title={`Instagram account ID ${connection.igUserId}`}>Connected {formatDate(connection.connectedAt)}</small>
-                                </div>
-                                <div className="connection-actions">
-                                  <button
-                                    className="connection-disconnect"
-                                    type="button"
-                                    disabled={disconnectingId === connection.id}
-                                    aria-expanded={confirmingDisconnect?.id === connection.id}
-                                    onClick={() => setConfirmingDisconnect({ channel: "instagram", id: connection.id })}
-                                  >
-                                    {disconnectingId === connection.id ? "Disconnecting…" : "Disconnect"}
-                                  </button>
-                                </div>
-                              </div>
-                              {confirmingDisconnect?.channel === "instagram" && confirmingDisconnect.id === connection.id ? (
-                                <InlineConfirm
-                                  label={`Confirm disconnecting @${connection.username}`}
-                                  message={<>Disconnect <strong>@{connection.username}</strong>? Every automation on this account stops replying to comments and messages until you connect it again.</>}
-                                  confirmLabel={`Disconnect @${connection.username}`}
-                                  busyLabel="Disconnecting…"
-                                  busy={disconnectingId === connection.id}
-                                  onConfirm={() => void disconnect(connection.id)}
-                                  onCancel={() => setConfirmingDisconnect(null)}
-                                />
-                              ) : null}
-                              {accountHealth ? (
-                                <div
-                                  className="channel-health"
-                                  data-channel-health="instagram"
-                                  data-state={accountHealth.checkError ? "error" : accountHealth.missingFields.length === 0 ? "ok" : "warn"}
-                                  aria-label={connections.length > 1 ? `Connection check for @${connection.username}` : "Connection check"}
-                                >
-                                  <span className="health-orb" data-state={accountHealth.checkError ? "error" : accountHealth.missingFields.length === 0 ? "ok" : "warn"} aria-hidden="true" />
-                                  <div className="health-copy">
-                                    <strong>
-                                      {connections.length > 1 ? `@${connection.username}: ` : ""}
-                                      {accountHealth.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}
-                                    </strong>
-                                    {accountHealth.checkError ? (
-                                      <p className="muted">Could not check with Meta right now: {accountHealth.checkError}</p>
-                                    ) : (
-                                      <ul className="health-fields">
-                                        {accountHealth.requiredFields.map((field) => (
-                                          <li key={field} data-live={!accountHealth.missingFields.includes(field)}>{WEBHOOK_FIELD_LABELS[field] ?? field}</li>
-                                        ))}
-                                      </ul>
-                                    )}
-                                    {(accountHealth.missingFields.length > 0 || accountHealth.checkError) && (
-                                      <p className="muted">
-                                        Reconnect Instagram to refresh the subscription. <a className="text-link" href="/api/meta/oauth/start">Reconnect <ExternalLink size={13} /></a>
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : null}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    {disconnectError && <p className="form-error settings-row-error" role="alert">{disconnectError}</p>}
+                    {disconnectError && <p className="form-error prefs-group-error" role="alert">{disconnectError}</p>}
                   </section>
 
-                  <section className="settings-group channel-settings-card" data-channel-card="facebook" aria-label="Facebook channel">
-                    <div className="settings-group-head">
-                      <span className="settings-group-icon"><FacebookGlyph size={22} brand /></span>
-                      <div className="settings-group-copy">
-                        <h3><span>Facebook Pages</span></h3>
-                        <p><span id="facebook-channel-title" className="channel-count" data-empty={facebookPages.length === 0}>{facebookPages.length === 0 ? "No Page connected" : `${facebookPages.length} Page${facebookPages.length === 1 ? "" : "s"} connected`}</span><span className="channel-capability">{facebookPages.length > 0 ? "Public Page comments" : "Connect a Page to auto-reply to comments on public posts."}</span></p>
-                      </div>
-                      <a className="button button-secondary button-small" href="/api/facebook/oauth/start">{facebookPages.length > 0 ? <><Plus size={14} /> Connect another</> : <>Connect Facebook Page <ExternalLink size={13} /></>}</a>
-                    </div>
-                    {facebookState === "select-page" && (
-                      <div className="settings-row page-picker">
-                        <label className="field">
-                          <span>Choose Facebook Page</span>
-                          <select
-                            aria-label="Choose Facebook Page"
-                            value={selectedFacebookPageId}
-                            onChange={(event) => setSelectedFacebookPageId(event.target.value)}
+                  <section className="prefs-group" data-channel-card="facebook" aria-labelledby="facebook-group-title">
+                    <PrefsGroupHead
+                      id="facebook-group-title"
+                      title={<><FacebookGlyph size={18} brand /> Facebook Pages</>}
+                      description={facebookPages.length > 0 ? `${facebookPages.length} ${facebookPages.length === 1 ? "Page" : "Pages"} replying to public comments` : undefined}
+                      action={facebookPages.length > 0 ? <a className="button button-secondary button-small" href="/api/facebook/oauth/start"><Plus size={14} aria-hidden="true" /> Connect another Page</a> : null}
+                    />
+                    <div className="prefs-card">
+                      {facebookState === "select-page" && (
+                        <div className="prefs-row prefs-page-picker">
+                          <label className="field">
+                            <span>Choose Facebook Page</span>
+                            <select
+                              aria-label="Choose Facebook Page"
+                              value={selectedFacebookPageId}
+                              onChange={(event) => setSelectedFacebookPageId(event.target.value)}
+                            >
+                              {facebookChoices.map((page) => (
+                                <option key={page.id} value={page.id}>{page.name}{page.category ? `, ${page.category}` : ""}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            className="button button-primary"
+                            type="button"
+                            disabled={!selectedFacebookPageId || facebookSelectionBusy}
+                            onClick={() => void connectSelectedFacebookPage()}
                           >
-                            {facebookChoices.map((page) => (
-                              <option key={page.id} value={page.id}>{page.name}{page.category ? `, ${page.category}` : ""}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <button
-                          className="button button-primary"
-                          type="button"
-                          disabled={!selectedFacebookPageId || facebookSelectionBusy}
-                          onClick={() => void connectSelectedFacebookPage()}
-                        >
-                          {facebookSelectionBusy ? "Connecting…" : "Connect selected Page"}
-                        </button>
-                      </div>
-                    )}
-                    {facebookPages.length > 0 && (
-                      <ul className="settings-rows connection-list">
-                        {facebookPages.map((page) => {
-                          const pageHealth = facebookHealth.find((entry) => entry.id === page.id);
-                          return (
-                            <li className={`settings-row connection-row${focusedAccountId === page.id ? " is-focused" : ""}`} id={`account-${page.id}`} key={page.id}>
-                              <div className="connection-main">
-                                {/* Facebook's literal brand blue is set inline (matches FacebookGlyph.tsx) rather than
-                                    in globals.css - the workspace palette contract (globals.test.ts) forbids legacy
-                                    Meta blue in the shared stylesheet. */}
-                                <SocialAvatar channel="facebook" name={page.pageName} src={page.avatarUrl} />
-                                <div className="connection-copy">
-                                  <span className="connection-title"><strong>{page.pageName}</strong><ConnectionStatusTag status={page.status} /></span>
-                                  <small title={`Facebook Page ID ${page.pageId}`}>Connected {formatDate(page.connectedAt)}</small>
-                                </div>
-                                <div className="connection-actions">
-                                  <button
-                                    className="connection-disconnect"
-                                    type="button"
-                                    disabled={facebookBusyId === page.id}
-                                    aria-expanded={confirmingDisconnect?.id === page.id}
-                                    onClick={() => setConfirmingDisconnect({ channel: "facebook", id: page.id })}
-                                  >
-                                    {facebookBusyId === page.id ? "Disconnecting…" : "Disconnect"}
-                                  </button>
-                                </div>
-                              </div>
-                              {confirmingDisconnect?.channel === "facebook" && confirmingDisconnect.id === page.id ? (
-                                <InlineConfirm
-                                  label={`Confirm disconnecting ${page.pageName}`}
-                                  message={<>Disconnect <strong>{page.pageName}</strong>? Every automation on this Page stops replying to comments until you connect it again.</>}
-                                  confirmLabel={`Disconnect ${page.pageName}`}
-                                  busyLabel="Disconnecting…"
-                                  busy={facebookBusyId === page.id}
-                                  onConfirm={() => void disconnectFacebook(page.id)}
-                                  onCancel={() => setConfirmingDisconnect(null)}
-                                />
-                              ) : null}
-                              {pageHealth ? (
-                                <div
-                                  className="channel-health"
-                                  data-channel-health="facebook"
-                                  data-state={pageHealth.checkError ? "error" : pageHealth.missingFields.length === 0 ? "ok" : "warn"}
-                                  aria-label={facebookPages.length > 1 ? `Facebook connection check for ${page.pageName}` : "Facebook connection check"}
-                                >
-                                  <span className="health-orb" data-state={pageHealth.checkError ? "error" : pageHealth.missingFields.length === 0 ? "ok" : "warn"} aria-hidden="true" />
-                                  <div className="health-copy">
-                                    <strong>
-                                      {facebookPages.length > 1 ? `${page.pageName}: ` : ""}
-                                      {pageHealth.missingFields.length === 0 ? "All caught up" : "Some fields need a reconnect"}
-                                    </strong>
-                                    {pageHealth.checkError ? (
-                                      <p className="muted">Could not check with Meta right now: {pageHealth.checkError}</p>
-                                    ) : (
-                                      <ul className="health-fields">
-                                        <li data-live="true">Feed (Page posts + comments)</li>
-                                      </ul>
-                                    )}
-                                    {(pageHealth.missingFields.length > 0 || pageHealth.checkError) && (
-                                      <p className="muted">
-                                        Reconnect the Page to refresh the subscription. <a className="text-link" href="/api/facebook/oauth/start">Reconnect <ExternalLink size={13} /></a>
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : null}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    {facebookError && <p className="form-error settings-row-error" role="alert">{facebookError}</p>}
+                            {facebookSelectionBusy ? "Connecting…" : "Connect selected Page"}
+                          </button>
+                        </div>
+                      )}
+                      {facebookPages.length === 0 ? (
+                        <div className="prefs-row prefs-empty">
+                          <div className="prefs-row-copy">
+                            <strong id="facebook-channel-title">No Page connected</strong>
+                            <small>Connect a Facebook Page to auto-reply to comments on its public posts.</small>
+                          </div>
+                          <div className="prefs-row-control">
+                            <a className="button button-primary button-small" href="/api/facebook/oauth/start">Connect a Facebook Page <ExternalLink size={13} aria-hidden="true" /></a>
+                          </div>
+                        </div>
+                      ) : (
+                        <ul className="prefs-list">
+                          {facebookPages.map((page) => {
+                            const pageHealth = facebookHealth.find((entry) => entry.id === page.id);
+                            return (
+                              <AccountRow
+                                key={page.id}
+                                id={page.id}
+                                channel="facebook"
+                                name={page.pageName}
+                                avatarUrl={page.avatarUrl}
+                                description={<>Facebook Page, connected {formatDate(page.connectedAt)}</>}
+                                idTitle={`Facebook Page ID ${page.pageId}`}
+                                status={page.status}
+                                health={pageHealth ? {
+                                  checkError: pageHealth.checkError,
+                                  missingFields: pageHealth.missingFields,
+                                  fields: [{ label: "Feed (Page posts + comments)", live: !pageHealth.missingFields.includes("feed") }],
+                                } : undefined}
+                                healthLabel={facebookPages.length > 1 ? `Facebook connection check for ${page.pageName}` : "Facebook connection check"}
+                                reconnectHref="/api/facebook/oauth/start"
+                                reconnectHint="Reconnect the Page to refresh the subscription."
+                                focused={focusedAccountId === page.id}
+                                busy={facebookBusyId === page.id}
+                                confirming={confirmingDisconnect?.channel === "facebook" && confirmingDisconnect.id === page.id}
+                                onAskDisconnect={() => setConfirmingDisconnect({ channel: "facebook", id: page.id })}
+                                confirm={
+                                  <InlineConfirm
+                                    label={`Confirm disconnecting ${page.pageName}`}
+                                    message={<>Disconnect <strong>{page.pageName}</strong>? Every automation on this Page stops replying to comments until you connect it again.</>}
+                                    confirmLabel={`Disconnect ${page.pageName}`}
+                                    busyLabel="Disconnecting…"
+                                    busy={facebookBusyId === page.id}
+                                    onConfirm={() => void disconnectFacebook(page.id)}
+                                    onCancel={() => setConfirmingDisconnect(null)}
+                                  />
+                                }
+                              />
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                    {facebookError && <p className="form-error prefs-group-error" role="alert">{facebookError}</p>}
                   </section>
+
+                  {connectedChannelCount > 0 ? (
+                    <section className="prefs-group" aria-labelledby="troubleshooting-title">
+                      <PrefsGroupHead id="troubleshooting-title" title="Troubleshooting" />
+                      <div className="prefs-card">
+                        <PrefsRow label="Details for support" helper="Copies connection health and recent failed deliveries, without any message text, so support can see what went wrong.">
+                          <CopyDiagnosticsButton />
+                        </PrefsRow>
+                      </div>
+                    </section>
+                  ) : null}
                 </>
               )}
               </>}
@@ -867,42 +880,34 @@ export function SettingsScreen() {
           )}
 
           {section === "delivery" && (
-            <section className="settings-section" aria-labelledby="delivery-title">
-              <header className="settings-section-head">
-                <h2 id="delivery-title">Delivery</h2>
-                <p>When automated messages are allowed to go out, and how Linkar keeps delivery safe.</p>
-              </header>
+            <section className="prefs-section" aria-labelledby="delivery-title">
+              <PrefsSectionHead id="delivery-title" title="Delivery" description="When automated messages may go out, and the safeguards that always apply." back={back} />
 
-              <section className="settings-group" aria-label="Messaging hours">
-                <div className="settings-group-head">
-                  <span className="settings-group-icon"><Clock size={18} /></span>
-                  <div className="settings-group-copy">
-                    <h3>Messaging quiet hours</h3>
-                    <p>Sequences and broadcasts hold all DMs during this window. Direct replies to a person’s own message are never delayed.</p>
-                  </div>
-                </div>
-                {quietError && <p className="form-error settings-row-error" role="alert">{quietError}</p>}
-                <div className="settings-rows">
-                  <div className="settings-row settings-row-split">
-                    <div className="settings-row-copy">
-                      <strong>Hold automated DMs during quiet hours</strong>
-                      <small className="delivery-status" data-enabled={quietEnabled} data-unsaved={quietDirty || undefined}>
+              <section className="prefs-group" aria-label="Messaging hours">
+                <PrefsGroupHead title="Quiet hours" description="Sequences and broadcasts hold their DMs during this window. Replies to someone’s own message are never delayed." />
+                <div className="prefs-card">
+                  <PrefsRow
+                    className="prefs-row-switch"
+                    label="Hold automated DMs during quiet hours"
+                    helper={(
+                      <span className="delivery-status" data-enabled={quietEnabled} data-unsaved={quietDirty || undefined}>
                         {quietDirty
                           ? quietEnabled ? "Quiet hours on, not saved yet" : "Quiet hours off, not saved yet"
                           : quietEnabled ? "Quiet hours enabled" : "Quiet hours disabled"}
-                      </small>
-                    </div>
+                      </span>
+                    )}
+                  >
                     <label className="settings-switch">
                       <input type="checkbox" role="switch" aria-label="Hold automated DMs during quiet hours" checked={quietEnabled} onChange={(event) => setQuietEnabled(event.target.checked)} />
                       <span aria-hidden="true" />
                     </label>
-                  </div>
-                  <div className="settings-row settings-row-split" data-disabled={!quietEnabled}>
-                    <div className="settings-row-copy">
-                      <strong>Quiet window</strong>
-                      <small>Messages queued in this window go out when it ends.</small>
-                    </div>
-                    <div className="settings-inline-fields">
+                  </PrefsRow>
+                  <PrefsRow
+                    label="Quiet window"
+                    helper={quietEnabled ? `DMs queued between ${hour(quietStart)} and ${hour(quietEnd)} go out at ${hour(quietEnd)}.` : "Messages queued in this window go out when it ends."}
+                    disabled={!quietEnabled}
+                  >
+                    <div className="prefs-fields">
                       <label className="field">
                         <span>Start time</span>
                         <select value={String(quietStart)} disabled={!quietEnabled} onChange={(e) => setQuietStart(Number(e.target.value))}>{timeOptions}</select>
@@ -912,69 +917,73 @@ export function SettingsScreen() {
                         <select value={String(quietEnd)} disabled={!quietEnabled} onChange={(e) => setQuietEnd(Number(e.target.value))}>{timeOptions}</select>
                       </label>
                     </div>
-                  </div>
-                  <div className="settings-row settings-row-split" data-disabled={!quietEnabled}>
-                    <div className="settings-row-copy">
-                      <strong>Timezone</strong>
-                      <small>The quiet window follows this clock.</small>
-                    </div>
-                    <div className="settings-inline-fields">
-                      <label className="field">
-                        <span>Workspace timezone</span>
-                        <select value={quietTz} disabled={!quietEnabled} onChange={(e) => setQuietTz(e.target.value)}>
-                          {timeZoneOptions(quietTz).map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}
-                        </select>
-                      </label>
-                    </div>
-                  </div>
+                  </PrefsRow>
+                  <PrefsRow label="Timezone" helper="The quiet window follows this clock." disabled={!quietEnabled}>
+                    <label className="field prefs-field-wide">
+                      <span className="sr-only">Workspace timezone</span>
+                      <select aria-label="Workspace timezone" value={quietTz} disabled={!quietEnabled} onChange={(e) => setQuietTz(e.target.value)}>
+                        {timeZoneOptions(quietTz).map((zone) => <option key={zone} value={zone}>{zone.replaceAll("_", " ")}</option>)}
+                      </select>
+                    </label>
+                  </PrefsRow>
                 </div>
-                <div className="settings-group-foot">
-                  {quietSaved ? <span className="form-success" role="status"><Check size={15} /> Saved.</span> : quietDirty ? <span className="muted">Unsaved changes</span> : <span />}
-                  <button className="button button-primary button-small" type="button" disabled={quietBusy} onClick={() => void saveMessagingWindow(quietEnabled)}>
-                    {quietBusy ? "Saving…" : "Save messaging hours"}
-                  </button>
-                </div>
+                {quietError && <p className="form-error prefs-group-error" role="alert">{quietError}</p>}
               </section>
 
-              <aside className="settings-group" aria-label="Delivery safeguards">
-                <div className="settings-group-head">
-                  <span className="settings-group-icon"><ShieldCheck size={18} /></span>
-                  <div className="settings-group-copy">
-                    <h3>Protected by default</h3>
-                    <p>These safeguards are always on and cannot be switched off.</p>
+              <aside className="prefs-group" aria-label="Delivery safeguards">
+                <PrefsGroupHead title="Safeguards" description="Always on. They can’t be switched off." />
+                <div className="prefs-card">
+                  <div className="prefs-row prefs-safeguards">
+                    <StatusSummary label="4 safeguards always on">
+                      <ul className="check-list">
+                        <li><Check size={16} aria-hidden="true" /> Connection details are stored securely.</li>
+                        <li><Check size={16} aria-hidden="true" /> Updates from connected apps are checked before use.</li>
+                        <li><Check size={16} aria-hidden="true" /> Repeated updates are ignored safely.</li>
+                        <li><Check size={16} aria-hidden="true" /> Replies follow only the rules you save.</li>
+                      </ul>
+                    </StatusSummary>
                   </div>
+                  <PrefsRow
+                    label={<><span className="prefs-dot" data-tone={mode === "demo" ? "warning" : "ok"} aria-hidden="true" /> {mode === "demo" ? "Demo mode" : "Live"}</>}
+                    helper={mode === "demo" ? "Live delivery isn't set up for this workspace yet, so it runs on sample data." : "This workspace delivers live replies through Instagram and Facebook."}
+                  >
+                    <Link className="text-link" href="/support">Setup guidance <ExternalLink size={13} aria-hidden="true" /></Link>
+                  </PrefsRow>
                 </div>
-                <div className="settings-row settings-safeguards">
-                  <StatusSummary label="4 safeguards always on">
-                    <ul className="check-list">
-                      <li><Check size={16} aria-hidden="true" /> Connection details are stored securely.</li>
-                      <li><Check size={16} aria-hidden="true" /> Updates from connected apps are checked before use.</li>
-                      <li><Check size={16} aria-hidden="true" /> Repeated updates are ignored safely.</li>
-                      <li><Check size={16} aria-hidden="true" /> Replies follow only the rules you save.</li>
-                    </ul>
-                  </StatusSummary>
-                </div>
-                <ul className="settings-rows check-list">
-                  <li className="settings-row settings-row-split">
-                    <span className="settings-row-copy">
-                      <strong><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" /> {mode === "demo" ? "Demo mode" : "Live"}</strong>
-                      <small>{mode === "demo" ? "Live delivery isn't set up for this workspace yet, so it runs on sample data." : "This workspace delivers live replies through Instagram and Facebook."}</small>
-                    </span>
-                    <Link className="text-link" href="/support">Setup guidance <ExternalLink size={13} /></Link>
-                  </li>
-                </ul>
               </aside>
+
+              {/* Only while quiet hours have edits that are not saved yet. */}
+              <Presence>
+                {quietDirty || quietSaved ? (
+                  <PresenceSlot>
+                    {(state) => (
+                      <div className="prefs-savebar" role="region" aria-label="Unsaved quiet hours" {...presenceProps(state)}>
+                        {quietDirty ? (
+                          <>
+                            <span className="prefs-savebar-state"><span className="prefs-dot" data-tone="warning" aria-hidden="true" /> Unsaved changes</span>
+                            <div className="prefs-savebar-actions">
+                              <button className="button button-secondary button-small" type="button" disabled={quietBusy} onClick={discardQuietHours}>Discard</button>
+                              <button className="button button-primary button-small" type="button" disabled={quietBusy} onClick={() => void saveMessagingWindow(quietEnabled)}>
+                                {quietBusy ? "Saving…" : "Save changes"}
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="form-success" role="status"><Check size={15} /> Saved.</span>
+                        )}
+                      </div>
+                    )}
+                  </PresenceSlot>
+                ) : null}
+              </Presence>
             </section>
           )}
 
           {section === "team" && (
-            <section className="settings-section" aria-labelledby="team-title">
-              <header className="settings-section-head">
-                <h2 id="team-title">Team</h2>
-                <p>Who can work in this workspace. Invitations expire after 7 days and must be accepted with the invited email address.</p>
-              </header>
-              {teamNotice && <p className="form-success" role="status"><Check size={15} /> {teamNotice}</p>}
-              {teamError && <p className="form-error" role="alert">{teamError}</p>}
+            <section className="prefs-section" aria-labelledby="team-title">
+              <PrefsSectionHead id="team-title" title="Team" description="Who can work in this workspace, and who has been invited." back={back} />
+              {teamNotice && <p className="form-success prefs-notice" role="status"><Check size={15} /> {teamNotice}</p>}
+              {teamError && <p className="form-error prefs-notice" role="alert">{teamError}</p>}
               {teamLoadError && (
                 <div className="notice-banner notice-warning settings-load-error" role="alert">
                   <AlertCircle size={17} />
@@ -984,116 +993,149 @@ export function SettingsScreen() {
               )}
               {teamManageable && team ? (
                 <>
-                  <section className="settings-group" aria-label="Team">
-                    <div className="settings-group-head">
-                      <span className="settings-group-icon"><Users size={18} /></span>
-                      <div className="settings-group-copy">
-                        <h3>Members & invitations</h3>
-                        <p>{team.members.length} {team.members.length === 1 ? "member" : "members"}{team.invitations.length ? ` · ${team.invitations.length} pending` : ""}</p>
-                      </div>
-                    </div>
-                    <ul className="settings-rows team-list">
-                      {team.members.map((member) => (
-                        <li className="settings-row settings-row-split" key={member.email}>
-                          <span className="team-who">
-                            <span className="avatar avatar-small" aria-hidden>{member.email.slice(0, 2).toUpperCase()}</span>
-                            <strong>{member.email}</strong>
-                          </span>
-                          <span className="role-tag">{member.role.charAt(0) + member.role.slice(1).toLowerCase()}</span>
-                        </li>
-                      ))}
-                      {team.invitations.map((invitation) => (
-                        <li className="settings-row settings-row-split" key={invitation.id}>
-                          <span className="team-who">
-                            <span className="avatar avatar-small is-pending" aria-hidden>{invitation.email.slice(0, 2).toUpperCase()}</span>
-                            <span><strong>{invitation.email}</strong><small>{invitation.role.charAt(0) + invitation.role.slice(1).toLowerCase()}, invite expires <RelativeTime value={invitation.expiresAt} inline /></small></span>
-                          </span>
-                          <button
-                            className="text-link"
-                            type="button"
-                            disabled={revokingId === invitation.id}
-                            aria-expanded={confirmingRevokeId === invitation.id}
-                            aria-label={`Revoke invitation for ${invitation.email}`}
-                            onClick={() => setConfirmingRevokeId(invitation.id)}
-                          >
-                            {revokingId === invitation.id ? "Revoking…" : "Revoke"}
-                          </button>
-                          {confirmingRevokeId === invitation.id ? (
-                            <InlineConfirm
-                              label={`Confirm revoking the invitation for ${invitation.email}`}
-                              message={<>Revoke the invitation for <strong>{invitation.email}</strong>? Their invite link stops working right away.</>}
-                              confirmLabel="Revoke invitation"
-                              busyLabel="Revoking…"
-                              busy={revokingId === invitation.id}
-                              onConfirm={() => void revokeInvitation(invitation.id)}
-                              onCancel={() => setConfirmingRevokeId("")}
-                            />
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                  <section className="settings-group" aria-label="Invite a teammate">
-                    <div className="settings-group-head">
-                      <span className="settings-group-icon"><UserPlus size={18} /></span>
-                      <div className="settings-group-copy">
-                        <h3>Invite a teammate</h3>
-                        <p>They get an email with a link to join this workspace.</p>
-                      </div>
-                    </div>
-                    <form className="settings-row invite-form" onSubmit={(event) => void sendInvitation(event)}>
-                      <label className="field"><span>Invite by email</span><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" inputMode="email" autoComplete="off" spellCheck={false} placeholder="teammate@example.com" required /></label>
-                      <label className="field"><span>Role</span>
+                  <section className="prefs-group" aria-label="Invite a teammate">
+                    <PrefsGroupHead title="Invite a teammate" description="They get an email with a link to join. Invitations expire after 7 days and must be accepted with the invited email address." />
+                    <form className="prefs-card prefs-invite" onSubmit={(event) => void sendInvitation(event)}>
+                      <label className="field prefs-invite-email"><span>Email address</span><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" inputMode="email" autoComplete="off" spellCheck={false} placeholder="teammate@example.com" required /></label>
+                      <label className="field prefs-invite-role"><span>Role</span>
                         <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
                           <option value="MEMBER">Member</option>
                           <option value="ADMIN">Admin</option>
                         </select>
                       </label>
-                      <button className="button button-primary" type="submit" disabled={inviteBusy}><UserPlus size={15} /> {inviteBusy ? "Inviting…" : "Invite"}</button>
+                      <button className="button button-primary" type="submit" disabled={inviteBusy}><UserPlus size={15} aria-hidden="true" /> {inviteBusy ? "Inviting…" : "Send invite"}</button>
                     </form>
                   </section>
+
+                  <section className="prefs-group" aria-labelledby="members-title">
+                    <PrefsGroupHead id="members-title" title="Members" count={team.members.length} description="Admins can connect accounts and invite people. Members can build and run automations." />
+                    <ul className="prefs-card prefs-list">
+                      {team.members.map((member) => (
+                        <li className="prefs-row prefs-person" key={member.email}>
+                          <span className="prefs-person-who">
+                            <span className="avatar avatar-small" aria-hidden="true">{member.email.slice(0, 2).toUpperCase()}</span>
+                            <span className="prefs-person-copy">
+                              <strong>{member.email}</strong>
+                              {viewerEmail && viewerEmail.toLowerCase() === member.email.toLowerCase() ? <small>You</small> : null}
+                            </span>
+                          </span>
+                          <span className="prefs-person-role">{roleLabel(member.role)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  {team.invitations.length > 0 ? (
+                    <section className="prefs-group" aria-labelledby="invitations-title">
+                      <PrefsGroupHead id="invitations-title" title="Pending invitations" count={team.invitations.length} description="Pending invitations count toward your plan’s team seats." />
+                      <ul className="prefs-card prefs-list">
+                        {team.invitations.map((invitation) => (
+                          <li className="prefs-row prefs-person" key={invitation.id}>
+                            <span className="prefs-person-who">
+                              <span className="avatar avatar-small is-pending" aria-hidden="true">{invitation.email.slice(0, 2).toUpperCase()}</span>
+                              <span className="prefs-person-copy"><strong>{invitation.email}</strong><small>{roleLabel(invitation.role)}, invite expires <RelativeTime value={invitation.expiresAt} inline /></small></span>
+                            </span>
+                            <button
+                              className="button button-ghost button-small prefs-danger-text"
+                              type="button"
+                              disabled={revokingId === invitation.id}
+                              aria-expanded={confirmingRevokeId === invitation.id}
+                              aria-label={`Revoke invitation for ${invitation.email}`}
+                              onClick={() => setConfirmingRevokeId(invitation.id)}
+                            >
+                              {revokingId === invitation.id ? "Revoking…" : "Revoke"}
+                            </button>
+                            {confirmingRevokeId === invitation.id ? (
+                              <InlineConfirm
+                                label={`Confirm revoking the invitation for ${invitation.email}`}
+                                message={<>Revoke the invitation for <strong>{invitation.email}</strong>? Their invite link stops working right away.</>}
+                                confirmLabel="Revoke invitation"
+                                busyLabel="Revoking…"
+                                busy={revokingId === invitation.id}
+                                onConfirm={() => void revokeInvitation(invitation.id)}
+                                onCancel={() => setConfirmingRevokeId("")}
+                              />
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
                 </>
               ) : teamLoadError ? null : team === null && teamManageable ? (
-                <section className="settings-group"><SkeletonRowsFallback /></section>
+                <div className="prefs-group"><SkeletonRowsFallback /></div>
               ) : (
-                <section className="settings-group"><p className="settings-row muted">Only workspace owners and admins can manage the team.</p></section>
+                <div className="prefs-group">
+                  <div className="prefs-card">
+                    <PrefsRow label="Only workspace owners and admins can manage the team." helper="Ask one of them to invite people to this workspace." />
+                  </div>
+                </div>
               )}
             </section>
           )}
 
           {section === "billing" && (
-            <section className="settings-section settings-billing" aria-label="Billing">
-              <BillingSettings />
+            <section className="prefs-section settings-billing" aria-label="Billing">
+              <BillingSettings
+                back={back}
+                usage={connectionsLoading || connectionsLoadError ? undefined : {
+                  instagram: connections.length,
+                  facebook: facebookPages.length,
+                  seats: team ? sectionCounts.team : undefined,
+                }}
+              />
             </section>
           )}
 
           {section === "policies" && (
-            <section className="settings-section" aria-labelledby="policies-title">
-              <header className="settings-section-head">
-                <h2 id="policies-title">Policies & support</h2>
-                <p>Find help, understand how {PRODUCT_NAME} uses data, and review the rules that protect your workspace.</p>
-              </header>
-              <section className="settings-group review-links" aria-label="Policies and support">
-                <ul className="settings-rows settings-link-list">
-                  {[
-                    ["Support", "/support", "Contact the team and get setup help"],
-                    ["Terms of service", "/terms", "The agreement for using the product"],
-                    ["Privacy policy", "/privacy", "What we collect and why"],
-                    ["Cookies", "/cookies", "How cookies are used on the site"],
-                    ["Acceptable use", "/acceptable-use", "What automations may and may not do"],
-                    ["Data processing", "/data-processing", "How customer data is processed"],
-                    ["Service providers", "/service-providers", "Third parties that help run the service"],
-                    ["Data deletion", "/data-deletion", "How to remove your data"],
-                  ].map(([label, href, hint]) => (
-                    <li key={href}>
-                      <Link className="settings-row settings-link-row" href={href}>
-                        <span className="settings-row-copy"><strong>{label}</strong><small>{hint}</small></span>
-                        <ChevronRight size={16} />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+            <section className="prefs-section" aria-labelledby="policies-title">
+              <PrefsSectionHead id="policies-title" title="Policies and support" description={`Get help, see how ${PRODUCT_NAME} uses data, and read the rules that protect your workspace.`} back={back} />
+              <LinkGroup
+                id="support-links-title"
+                title="Support"
+                links={[
+                  ["Support", "/support", "Contact the team and get setup help"],
+                  ["Help centre", "/help", "Step-by-step guides for every feature"],
+                ]}
+              />
+              <LinkGroup
+                id="policy-links-title"
+                title="Policies"
+                links={[
+                  ["Terms of service", "/terms", "The agreement for using the product"],
+                  ["Privacy policy", "/privacy", "What we collect and why"],
+                  ["Cookies", "/cookies", "How cookies are used on the site"],
+                  ["Acceptable use", "/acceptable-use", "What automations may and may not do"],
+                  ["Data processing", "/data-processing", "How customer data is processed"],
+                  ["Service providers", "/service-providers", "Third parties that help run the service"],
+                  ["Data deletion", "/data-deletion", "How to remove your data"],
+                ]}
+              />
+            </section>
+          )}
+
+          {section === "security" && (
+            <section className="prefs-section" aria-labelledby="security-title">
+              <PrefsSectionHead id="security-title" title="Security" description="How you sign in, and where you are signed in." back={back} />
+              <section className="prefs-group" aria-labelledby="sign-in-title">
+                <PrefsGroupHead id="sign-in-title" title="Sign-in" description="Password and sessions are managed on your profile." />
+                <div className="prefs-card">
+                  <PrefsRow label="Password" helper="Change the password you use to sign in.">
+                    <Link className="button button-secondary button-small" href="/profile">Change password</Link>
+                  </PrefsRow>
+                  <PrefsRow label="Signed-in devices" helper="Sign out on every device at once, including this one.">
+                    <Link className="button button-secondary button-small" href="/profile">Manage sessions</Link>
+                  </PrefsRow>
+                </div>
               </section>
+              <LinkGroup
+                id="account-links-title"
+                title="Your account"
+                links={[
+                  ["Profile", "/profile", "Your email, verification and connected channels"],
+                  ["Delete your data", "/data-deletion", "How to remove your account and workspace data"],
+                ]}
+              />
             </section>
           )}
         </div>
@@ -1102,11 +1144,122 @@ export function SettingsScreen() {
   );
 }
 
+function roleLabel(role: string): string {
+  return role.charAt(0) + role.slice(1).toLowerCase();
+}
+
+/** A group of chevron rows that each open another page. */
+function LinkGroup({ id, title, links }: { id: string; title: string; links: Array<[label: string, href: string, hint: string]> }) {
+  return (
+    <section className="prefs-group" aria-labelledby={id}>
+      <PrefsGroupHead id={id} title={title} />
+      <ul className="prefs-card prefs-list">
+        {links.map(([label, href, hint]) => (
+          <li key={href}>
+            <Link className="prefs-row prefs-link-row" href={href}>
+              <span className="prefs-row-copy"><strong>{label}</strong><small>{hint}</small></span>
+              <ChevronRight size={16} aria-hidden="true" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+type AccountHealthView = { checkError?: string; missingFields: string[]; fields: Array<{ label: string; live: boolean }> };
+
+/**
+ * One connected Instagram account or Facebook Page: who it is, one status
+ * word, Reconnect / Disconnect, and the subscription check behind a
+ * disclosure (open from the start when something needs a reconnect).
+ */
+function AccountRow({
+  id, channel, name, avatarUrl, description, idTitle, status, health, healthLabel, reconnectHref, reconnectHint,
+  focused, busy, confirming, onAskDisconnect, confirm,
+}: {
+  id: string;
+  channel: "instagram" | "facebook";
+  name: string;
+  avatarUrl?: string;
+  description: ReactNode;
+  idTitle: string;
+  status: ConnectionStatus;
+  health?: AccountHealthView;
+  healthLabel: string;
+  reconnectHref: string;
+  reconnectHint: string;
+  focused: boolean;
+  busy: boolean;
+  confirming: boolean;
+  onAskDisconnect: () => void;
+  confirm: ReactNode;
+}) {
+  const detailId = useId();
+  const problem = Boolean(health && (health.checkError || health.missingFields.length > 0)) || status !== "CONNECTED";
+  // Health arrives after the row, so the default follows it until toggled.
+  const [toggled, setToggled] = useState<boolean | null>(null);
+  const open = toggled ?? problem;
+  const setOpen = (next: (current: boolean) => boolean) => setToggled(next(open));
+  const healthState = health?.checkError ? "error" : health && health.missingFields.length === 0 ? "ok" : "warn";
+  return (
+    <li className={`prefs-account${focused ? " is-focused" : ""}`} id={`account-${id}`}>
+      <div className="prefs-account-main">
+        <SocialAvatar channel={channel} name={name} src={avatarUrl} />
+        <div className="prefs-account-copy">
+          <strong>{name}</strong>
+          <small title={idTitle}>{description}</small>
+        </div>
+        <div className="prefs-account-actions">
+          <StatusBadge {...accountStatus(status, health)} />
+          <a className={`button ${problem ? "button-secondary" : "button-ghost"} button-small`} href={reconnectHref}>Reconnect</a>
+          <button
+            className="button button-ghost button-small prefs-danger-text"
+            type="button"
+            disabled={busy}
+            aria-expanded={confirming}
+            onClick={onAskDisconnect}
+          >
+            {busy ? "Disconnecting…" : "Disconnect"}
+          </button>
+        </div>
+      </div>
+      {confirming ? confirm : null}
+      {health ? (
+        <div className="prefs-account-health" role="group" data-channel-health={channel} data-state={healthState} aria-label={healthLabel}>
+          <button className="prefs-health-toggle" type="button" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((current) => !current)}>
+            <span className="health-orb" data-state={healthState} aria-hidden="true" />
+            <span>{health.missingFields.length > 0 ? "Some fields need a reconnect" : health.checkError ? "Could not check right now" : "All caught up"}</span>
+            <ChevronDown className="prefs-health-chevron" size={14} aria-hidden="true" />
+          </button>
+          {health.checkError || health.missingFields.length > 0 ? (
+            <p className="prefs-health-note">
+              {health.checkError ? `Meta said: ${health.checkError}. ` : ""}{reconnectHint}
+            </p>
+          ) : null}
+          <Collapse open={open} id={detailId}>
+            {open && (
+              <ul className="prefs-health-fields" aria-label="Updates this account sends">
+                {health.fields.map((field) => (
+                  <li key={field.label} data-live={field.live}>
+                    {field.live ? <Check size={14} aria-hidden="true" /> : <AlertCircle size={14} aria-hidden="true" />}
+                    {field.label}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Collapse>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
 function SkeletonRowsFallback() {
   return (
-    <div className="settings-rows" aria-busy="true" aria-label="Loading team">
+    <div className="prefs-card" aria-busy="true" aria-label="Loading team">
       {[0, 1].map((index) => (
-        <div className="settings-row" key={index}><Skeleton className="skeleton-word skeleton-row-title" /></div>
+        <div className="prefs-row" key={index}><Skeleton className="skeleton-word skeleton-row-title" /></div>
       ))}
     </div>
   );

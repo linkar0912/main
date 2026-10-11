@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { invalidateWorkspaceResource } from "@/src/lib/client/workspace-data";
+import { usageTone } from "./settings/prefs";
 
 const checkout = vi.hoisted(() => vi.fn());
 vi.mock("@/src/lib/client/razorpay-checkout", () => ({ openRazorpaySubscriptionCheckout: checkout }));
@@ -292,5 +294,66 @@ describe("BillingSettings", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("Billing details could not be loaded");
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Try again" })); });
     expect(await screen.findByText("₹199")).toBeTruthy();
+  });
+});
+
+describe("BillingSettings usage meters", () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); invalidateWorkspaceResource("billing"); });
+
+  it("meters deliveries, accounts and seats against the current plan", async () => {
+    invalidateWorkspaceResource("billing");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => billingView({ entitlementPlanKey: "creator", deliveriesUsed: 4_200 }) }));
+    await act(async () => { render(<BillingSettings usage={{ instagram: 2, facebook: 0, seats: 1 }} />); });
+
+    const deliveries = await screen.findByRole("progressbar", { name: "Monthly delivery usage" });
+    expect(deliveries.getAttribute("aria-valuemax")).toBe("5000");
+    // 84% of a monthly allowance: amber.
+    expect(deliveries.closest(".prefs-meter")?.getAttribute("data-tone")).toBe("warning");
+    // Every Instagram slot taken: amber; one of two seats: quiet.
+    expect(screen.getByRole("progressbar", { name: "Instagram accounts" }).closest(".prefs-meter")?.getAttribute("data-tone")).toBe("warning");
+    expect(screen.getByRole("progressbar", { name: "Team seats" }).closest(".prefs-meter")?.getAttribute("data-tone")).toBe("normal");
+    expect(screen.getByText("Creator plan")).toBeTruthy();
+  });
+
+  it("leaves account and seat meters out when Settings has not loaded them", async () => {
+    invalidateWorkspaceResource("billing");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => billingView() }));
+    await act(async () => { render(<BillingSettings />); });
+
+    await screen.findByRole("progressbar", { name: "Monthly delivery usage" });
+    expect(screen.queryByRole("progressbar", { name: "Team seats" })).toBeNull();
+    // No paid subscription: nothing to cancel.
+    expect(screen.queryByRole("region", { name: "Danger zone" })).toBeNull();
+  });
+
+  it("keeps cancelling in the danger zone, only for someone who can manage billing", async () => {
+    const subscription = { status: "ACTIVE", planId: "plan_creator", interval: "MONTHLY", currentPeriodEnd: "2026-11-04T00:00:00.000Z" };
+    invalidateWorkspaceResource("billing");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => billingView({ entitlementPlanKey: "creator", subscription }) }));
+    const first = await act(async () => render(<BillingSettings />));
+    const danger = await screen.findByRole("region", { name: "Danger zone" });
+    expect(within(danger).getByRole("button", { name: "Cancel at period end" })).toBeTruthy();
+    first.unmount();
+
+    invalidateWorkspaceResource("billing");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => billingView({ entitlementPlanKey: "creator", subscription, canManage: false }) }));
+    await act(async () => { render(<BillingSettings />); });
+    await screen.findByText(/Only the workspace owner can change billing/);
+    expect(screen.queryByRole("region", { name: "Danger zone" })).toBeNull();
+  });
+});
+
+describe("usageTone", () => {
+  it("warns at 80% of an allowance and alarms when it is used up", () => {
+    expect(usageTone(799, 1000, "allowance")).toBe("normal");
+    expect(usageTone(800, 1000, "allowance")).toBe("warning");
+    expect(usageTone(1000, 1000, "allowance")).toBe("danger");
+  });
+
+  it("only warns about counts when every slot is taken", () => {
+    expect(usageTone(4, 5, "count")).toBe("normal");
+    expect(usageTone(1, 1, "count")).toBe("warning");
+    expect(usageTone(6, 5, "count")).toBe("danger");
+    expect(usageTone(3, 0, "count")).toBe("normal");
   });
 });
