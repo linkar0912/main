@@ -50,6 +50,26 @@ describe("ContactsScreen", () => {
     expect(screen.getByLabelText("Loading contacts")).toBeTruthy();
   });
 
+  it("shows a failed first load as an error with Try again, not as an empty list", async () => {
+    let fail = true;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("scope=all")) {
+        return fail
+          ? new Response(JSON.stringify({ error: "Contacts are unavailable" }), { status: 500 })
+          : new Response(JSON.stringify({ data: { count: 2, counts: { NEW: 1, ENGAGED: 0, QUALIFIED: 1, CUSTOMER: 0 }, contacts } }));
+      }
+      return new Response(JSON.stringify({ data: {} }));
+    }));
+    render(<ContactsScreen />);
+
+    expect(await screen.findByRole("heading", { name: "Contacts didn’t load" })).toBeTruthy();
+    expect(screen.getByText("Contacts are unavailable")).toBeTruthy();
+    expect(screen.queryByText("No contacts yet")).toBeNull();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("maya@example.com")).toBeTruthy();
+  });
+
   it("searches and filters the customer contact workspace", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).includes("scope=all")) return new Response(JSON.stringify({ data: { count: 2, counts: { NEW: 1, ENGAGED: 0, QUALIFIED: 1, CUSTOMER: 0 }, contacts } }));

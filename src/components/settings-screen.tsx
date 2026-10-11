@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AlertCircle,
   Check,
   ChevronRight,
+  Info,
   Plus,
   Clock,
   CreditCard,
@@ -24,6 +26,8 @@ import { InlineConfirm } from "./inline-confirm";
 import { InstagramGlyph } from "./instagram-glyph";
 import { FacebookGlyph } from "./facebook-glyph";
 import { SocialAvatar } from "./social-avatar";
+import { RelativeTime } from "./ui/relative-time";
+import { StatusSummary } from "./ui/status-summary";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
@@ -187,6 +191,8 @@ export function SettingsScreen() {
   const [confirmingRevokeId, setConfirmingRevokeId] = useState("");
   const [revokingId, setRevokingId] = useState("");
   const [teamLoadError, setTeamLoadError] = useState("");
+  // Bumped by Retry after the team failed to load.
+  const [teamReload, setTeamReload] = useState(0);
   const [connectionsLoadError, setConnectionsLoadError] = useState("");
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -409,7 +415,7 @@ export function SettingsScreen() {
       setTeamLoadError("Could not load team settings. Check your connection and try again.");
     });
     return () => controller.abort();
-  }, [section]);
+  }, [section, teamReload]);
 
   async function refreshTeam() {
     invalidateWorkspaceResource("team-overview");
@@ -553,7 +559,7 @@ export function SettingsScreen() {
     {
       label: "Workspace",
       items: [
-        { key: "connections", label: "Connections", icon: Plug, count: connectionsLoading ? undefined : connections.length + facebookPages.length },
+        { key: "connections", label: "Connections", icon: Plug, count: connectionsLoading || connectionsLoadError ? undefined : connections.length + facebookPages.length },
         { key: "delivery", label: "Delivery", icon: Clock },
         { key: "team", label: "Team", icon: Users, count: team ? sectionCounts.team : undefined },
       ],
@@ -578,8 +584,8 @@ export function SettingsScreen() {
         actions={<><CopyDiagnosticsButton /><ContextHelpLink topic="connecting-instagram" /></>}
       />
 
-      {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{metaState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}<p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
-      {facebookState && <div className={`notice-banner ${facebookState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{facebookState === "connected" ? <Check size={17} /> : <LockKeyhole size={17} />}<p>{facebookStatusMessage[facebookState] ?? "Facebook connection status updated."}</p></div>}
+      {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{metaState === "connected" ? <Check size={17} /> : <AlertCircle size={17} />}<p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
+      {facebookState && <div className={`notice-banner ${facebookState === "connected" || facebookState === "select-page" ? "notice-success" : "notice-warning"}`} role="status">{facebookState === "connected" ? <Check size={17} /> : facebookState === "select-page" ? <Info size={17} /> : <AlertCircle size={17} />}<p>{facebookStatusMessage[facebookState] ?? "Facebook connection status updated."}</p></div>}
 
       <div className="settings-shell">
         <nav className="settings-nav" aria-label="Settings sections">
@@ -619,16 +625,20 @@ export function SettingsScreen() {
               </header>
 
               {connectionsLoadError && (
-                <div className="notice-banner notice-warning" role="alert">
-                  <LockKeyhole size={17} />
-                  <p>{connectionsLoadError} <button className="text-link" type="button" onClick={() => void loadConnectionsData()}>Retry</button></p>
+                <div className="notice-banner notice-warning settings-load-error" role="alert">
+                  <AlertCircle size={17} />
+                  <p>{connectionsLoadError}</p>
+                  <button className="button button-secondary button-small" type="button" onClick={() => void loadConnectionsData()}>Retry</button>
                 </div>
               )}
 
+              {/* After a failed load the counts below would read as "nothing is
+                  connected", so they stay hidden until a load succeeds. */}
+              {connectionsLoadError ? null : <>
               <section className="settings-overview" aria-label="Workspace pulse">
                 <div className="settings-overview-cell" role="group" aria-label="Channel status">
                   <small>Channels</small>
-                  <strong>{connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : `${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}</strong>
+                  <strong>{connectionsLoading ? <Skeleton className="skeleton-word skeleton-row-meta" /> : connectedChannelCount === 0 ? "None connected" : `${connectedChannelCount} connected ${connectedChannelCount === 1 ? "channel" : "channels"}`}</strong>
                 </div>
                 <div className="settings-overview-cell" role="group" aria-label="Mode status">
                   <small>Mode</small>
@@ -841,6 +851,7 @@ export function SettingsScreen() {
                   </section>
                 </>
               )}
+              </>}
             </section>
           )}
 
@@ -922,11 +933,17 @@ export function SettingsScreen() {
                     <p>These safeguards are always on and cannot be switched off.</p>
                   </div>
                 </div>
+                <div className="settings-row settings-safeguards">
+                  <StatusSummary label="4 safeguards always on">
+                    <ul className="check-list">
+                      <li><Check size={16} aria-hidden="true" /> Connection details are stored securely.</li>
+                      <li><Check size={16} aria-hidden="true" /> Updates from connected apps are checked before use.</li>
+                      <li><Check size={16} aria-hidden="true" /> Repeated updates are ignored safely.</li>
+                      <li><Check size={16} aria-hidden="true" /> Replies follow only the rules you save.</li>
+                    </ul>
+                  </StatusSummary>
+                </div>
                 <ul className="settings-rows check-list">
-                  <li className="settings-row"><Check size={16} /> Connection details are stored securely.</li>
-                  <li className="settings-row"><Check size={16} /> Updates from connected apps are checked before use.</li>
-                  <li className="settings-row"><Check size={16} /> Repeated updates are ignored safely.</li>
-                  <li className="settings-row"><Check size={16} /> Replies follow only the rules you save.</li>
                   <li className="settings-row settings-row-split">
                     <span className="settings-row-copy">
                       <strong><span className={`mode-orb ${mode === "demo" ? "orb-demo" : "orb-live"}`} aria-hidden="true" /> {mode === "demo" ? "Demo mode" : "Live"}</strong>
@@ -947,7 +964,13 @@ export function SettingsScreen() {
               </header>
               {teamNotice && <p className="form-success" role="status"><Check size={15} /> {teamNotice}</p>}
               {teamError && <p className="form-error" role="alert">{teamError}</p>}
-              {teamLoadError && <p className="form-error" role="alert">{teamLoadError}</p>}
+              {teamLoadError && (
+                <div className="notice-banner notice-warning settings-load-error" role="alert">
+                  <AlertCircle size={17} />
+                  <p>{teamLoadError}</p>
+                  <button className="button button-secondary button-small" type="button" onClick={() => { setTeamLoadError(""); setTeamReload((count) => count + 1); }}>Retry</button>
+                </div>
+              )}
               {teamManageable && team ? (
                 <>
                   <section className="settings-group" aria-label="Team">
@@ -972,7 +995,7 @@ export function SettingsScreen() {
                         <li className="settings-row settings-row-split" key={invitation.id}>
                           <span className="team-who">
                             <span className="avatar avatar-small is-pending" aria-hidden>{invitation.email.slice(0, 2).toUpperCase()}</span>
-                            <span><strong>{invitation.email}</strong><small>{invitation.role.charAt(0) + invitation.role.slice(1).toLowerCase()}, invite expires {formatDate(invitation.expiresAt)}</small></span>
+                            <span><strong>{invitation.email}</strong><small>{invitation.role.charAt(0) + invitation.role.slice(1).toLowerCase()}, invite expires <RelativeTime value={invitation.expiresAt} inline /></small></span>
                           </span>
                           <button
                             className="text-link"
@@ -1008,7 +1031,7 @@ export function SettingsScreen() {
                       </div>
                     </div>
                     <form className="settings-row invite-form" onSubmit={(event) => void sendInvitation(event)}>
-                      <label className="field"><span>Invite by email</span><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="teammate@example.com" required /></label>
+                      <label className="field"><span>Invite by email</span><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" inputMode="email" autoComplete="off" spellCheck={false} placeholder="teammate@example.com" required /></label>
                       <label className="field"><span>Role</span>
                         <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
                           <option value="MEMBER">Member</option>

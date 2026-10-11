@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, Search, UsersRound } from "lucide-react";
+import { AlertCircle, Download, Search, UsersRound } from "lucide-react";
 import { ContactDetailModal, type ContactUpdate } from "./contact-detail-modal";
 import { ContextHelpLink } from "./context-help-link";
 import { ContactsContentSkeleton } from "./skeleton";
@@ -175,6 +175,8 @@ export function ContactsScreen() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<LeadStatus | "">("");
   const [openContactId, setOpenContactId] = useState<string | null>(null);
+  // Bumped by "Try again" after a failed first load to rerun the loader.
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const members = useTeamMembers();
   const autoLoadedStatus = useRef(new Set<LeadStatus>());
   // Contacts whose stage changed in the drawer -> the stage the server last
@@ -282,7 +284,7 @@ export function ContactsScreen() {
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [loadAttempt]);
 
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
   const loadedForStatus = status ? contacts.filter((contact) => contact.leadStatus === status).length : allOffset;
@@ -345,6 +347,15 @@ export function ContactsScreen() {
     });
   }, [contacts, members, query, status]);
 
+  function retryFirstLoad() {
+    setError("");
+    setLoaded(false);
+    setLoadAttempt((attempt) => attempt + 1);
+  }
+
+  const firstLoadFailed = Boolean(error) && contacts.length === 0;
+  const filtering = Boolean(query.trim()) || status !== "";
+
   function applyContactUpdate(id: string, update: ContactUpdate) {
     const previous = contacts.find((contact) => contact.id === id);
     const rows = contacts.map((contact) => (contact.id === id ? { ...contact, ...update } : contact));
@@ -372,7 +383,7 @@ export function ContactsScreen() {
         />
 
         <div className="surface is-flush contacts-surface">
-        <section className="contacts-toolbar" aria-label="Filter contacts">
+        {firstLoadFailed ? null : <section className="contacts-toolbar" aria-label="Filter contacts">
           <label className="contacts-search">
             <Search size={18} aria-hidden />
             <input
@@ -391,9 +402,9 @@ export function ContactsScreen() {
               </button>
             ))}
           </div>
-        </section>
+        </section>}
 
-        {error ? <p className="form-error contacts-error" role="alert">{error}</p> : null}
+        {error && !firstLoadFailed ? <p className="form-error contacts-error" role="alert">{error}</p> : null}
         {query.trim() && hasMore ? (
           <p className="muted contacts-scope-note">
             Searching the {loadedForStatus.toLocaleString()} most recent of {availableForStatus.toLocaleString()} contacts. Load more to search further back.
@@ -401,11 +412,21 @@ export function ContactsScreen() {
         ) : null}
         {!loaded ? (
           <ContactsContentSkeleton withToolbar={false} />
+        ) : firstLoadFailed ? (
+          <div className="empty-state is-inline contacts-load-error" role="alert">
+            <span className="empty-icon"><AlertCircle size={20} /></span>
+            <h2>Contacts didn’t load</h2>
+            <p>{error}</p>
+            <button className="button button-secondary button-small" type="button" onClick={retryFirstLoad}>Try again</button>
+          </div>
         ) : visible.length === 0 ? (
           <div className="empty-state is-inline">
             <span className="empty-icon"><UsersRound size={20} /></span>
             <h2>{contacts.length === 0 ? "No contacts yet" : loadingMore ? "Loading contacts…" : "No matching contacts"}</h2>
             <p>{contacts.length === 0 ? "Contacts appear after someone interacts with an Instagram automation." : "Try another search or lead-stage filter."}</p>
+            {contacts.length > 0 && filtering && !loadingMore ? (
+              <button className="button button-secondary button-small" type="button" onClick={() => { setQuery(""); setStatus(""); }}>Clear search and filters</button>
+            ) : null}
           </div>
         ) : (
           <section className="contacts-panel" aria-label="Customer contacts">
@@ -426,13 +447,13 @@ export function ContactsScreen() {
                 >
                   <div className="contact-primary">
                     <SocialAvatar channel="instagram" name={contactName(contact)} src={contact.avatarUrl} />
-                    <span><strong>{contactName(contact)}</strong><small>{contactSubtitle(contact)}</small></span>
+                    <span className="contact-primary-copy"><strong title={contactName(contact)}>{contactName(contact)}</strong><small title={contactSubtitle(contact)}>{contactSubtitle(contact)}</small></span>
                   </div>
                   <span className="contact-stage">
                     <span className={`status-pill is-${contact.leadStatus.toLowerCase()}`}>{STATUS_LABELS[contact.leadStatus]}</span>
                     <span className="contact-score" title="Engagement score: rises with clicks, captured details and stage changes">{contact.score} pts{contact.suppressedAt ? ", opted out" : ""}</span>
                   </span>
-                  <span className="contact-owner">{contact.assigneeUserId ? members.get(contact.assigneeUserId) ?? "Former member" : "Unassigned"}</span>
+                  <span className="contact-owner" title={contact.assigneeUserId ? members.get(contact.assigneeUserId) : undefined}>{contact.assigneeUserId ? members.get(contact.assigneeUserId) ?? "Former member" : "Unassigned"}</span>
                   <LocalRelativeTime className="contact-last-seen" value={contact.lastSeenAt} />
                   <button
                     className="button button-ghost button-small"

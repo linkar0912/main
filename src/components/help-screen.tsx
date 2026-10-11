@@ -787,6 +787,17 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
       </section>
 
       <div className="section-layout">
+        {/* Narrow screens pick a topic from one compact control instead of a
+            twelve-row list that pushes every answer below the fold. */}
+        <label className="help-topic-select field">
+          <span>Topic</span>
+          <select value={searching ? "" : activeTopicId ?? ""} onChange={(event) => selectTopic(event.target.value || null)}>
+            <option value="">All topics, {totalArticles} guides</option>
+            {TOPICS.map(({ id, title, articles }) => (
+              <option key={id} value={id}>{title}, {articles.length} {articles.length === 1 ? "guide" : "guides"}</option>
+            ))}
+          </select>
+        </label>
         <nav className="section-nav" aria-label="Help topics">
           <button
             type="button"

@@ -407,6 +407,9 @@ describe("SettingsScreen webhook health panel", () => {
     await act(async () => { render(<SettingsScreen />); });
 
     expect(await screen.findByText(/Could not load your connections/)).toBeTruthy();
+    // A failed load must not read as "nothing is connected".
+    expect(screen.queryByText("No account connected")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Workspace pulse" })).toBeNull();
 
     shouldFail = false;
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Retry" })); });

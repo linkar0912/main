@@ -14,6 +14,8 @@ export function InlineConfirm({
   busyLabel,
   busy = false,
   confirmType = "button",
+  tone = "danger",
+  cancelLabel = "Cancel",
   onConfirm,
   onCancel,
 }: {
@@ -25,6 +27,10 @@ export function InlineConfirm({
   busy?: boolean;
   /** "submit" lets the confirm button submit an enclosing form. */
   confirmType?: "button" | "submit";
+  /** "primary" for a reversible change (switching plans); destructive steps stay "danger". */
+  tone?: "danger" | "primary";
+  /** Names what backing out keeps when "Cancel" would be ambiguous ("Keep subscription"). */
+  cancelLabel?: string;
   onConfirm?: () => void;
   onCancel: () => void;
 }) {
@@ -36,7 +42,7 @@ export function InlineConfirm({
 
   return (
     <div
-      className="inline-confirm"
+      className={`inline-confirm${tone === "primary" ? " is-neutral" : ""}`}
       role="group"
       aria-label={label}
       onKeyDown={(event) => {
@@ -48,10 +54,10 @@ export function InlineConfirm({
       <p>{message}</p>
       <div className="button-row">
         <button ref={cancelRef} className="button button-secondary button-small" type="button" disabled={busy} onClick={onCancel}>
-          Cancel
+          {cancelLabel}
         </button>
         <button
-          className="button button-danger button-small"
+          className={`button ${tone === "primary" ? "button-primary" : "button-danger"} button-small`}
           type={confirmType}
           disabled={busy}
           aria-busy={busy || undefined}

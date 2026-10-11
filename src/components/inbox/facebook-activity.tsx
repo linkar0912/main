@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MessageCircle, Search } from "lucide-react";
+import { AlertCircle, MessageCircle, Search } from "lucide-react";
 import { SocialAvatar } from "../social-avatar";
 import { InlineContentSkeleton } from "../skeleton";
 import { getFacebookPages } from "@/src/lib/client/workspace-data";
-import { formatDateTime, formatShortDate, formatTime } from "@/src/lib/format-date";
+import { RelativeTime } from "../ui/relative-time";
 
 type FacebookActivityItem = {
   id: string;
@@ -18,12 +18,6 @@ type FacebookActivityItem = {
   from?: string;
   summary?: string;
 };
-
-function formatWhen(value: string): string {
-  const date = new Date(value);
-  if (date.toDateString() === new Date().toDateString()) return formatTime(date);
-  return formatShortDate(date);
-}
 
 /** Activity carries Meta's numeric Page ID; people know their Pages by name. */
 function pageLabel(pageId: string, names: ReadonlyMap<string, string>): string {
@@ -127,19 +121,19 @@ export function FacebookActivity() {
 
   return <section className="ibx-fb" aria-label="Facebook Page activity">
     <header className="ibx-fb-head">
-      <div className="ibx-list-title"><h2>Page comments</h2><span>{loaded ? `${visible.length.toLocaleString()} loaded` : "Loading"}</span></div>
+      <div className="ibx-list-title"><h2>Page comments</h2>{loaded && visible.length > 0 && <span>Showing {visible.length.toLocaleString()} {visible.length === 1 ? "comment" : "comments"}</span>}</div>
       <p className="ibx-fb-note"><MessageCircle size={15} aria-hidden="true" /><span><strong>Public comments only.</strong> Facebook Messenger is not enabled, so replies to these go out through your comment automations.</span></p>
     </header>
     <div className="ibx-fb-tools">
       <label className="ibx-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search Facebook activity" placeholder="Search comments or people" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
       {pages.length > 1 && <select className="ibx-select" aria-label="Filter by Facebook Page" value={page} onChange={(event) => setPage(event.target.value)}><option value="">All Pages</option>{pages.map((pageId) => <option key={pageId} value={pageId}>{pageLabel(pageId, pageNames)}</option>)}</select>}
     </div>
-    {error && <p className="ibx-banner is-error" role="alert">{error}{firstLoadFailed && <button type="button" onClick={() => void load()}>Try again</button>}</p>}
+    {error && <p className="ibx-banner is-error" role="alert"><AlertCircle size={16} aria-hidden="true" /><span>{error}</span>{firstLoadFailed && <button type="button" onClick={() => void load()}>Try again</button>}</p>}
     {!loaded ? <div className="ibx-fb-loading" role="status" aria-label="Loading Facebook activity"><InlineContentSkeleton label="Loading comments" rows={4} /></div> : firstLoadFailed ? null : visible.length === 0 ? <div className="ibx-list-empty"><MessageCircle size={22} aria-hidden="true" /><p>{items.length === 0 ? "No Page comments yet. New comments on your connected Facebook Pages appear here." : "No Facebook Page comments match this view."}</p></div> : <ol className="ibx-fb-list">
       {visible.map((item) => <li key={item.id}>
         <SocialAvatar channel="facebook" name={item.from ?? "Facebook commenter"} src={item.avatarUrl} />
         <div className="ibx-fb-copy">
-          <div className="ibx-row-top"><strong>{item.from ?? "Facebook commenter"}</strong><time dateTime={item.at} title={formatDateTime(item.at)}>{formatWhen(item.at)}</time></div>
+          <div className="ibx-row-top"><strong>{item.from ?? "Facebook commenter"}</strong><RelativeTime value={item.at} /></div>
           <p>{item.summary ?? "Comment received"}</p>
           <small>{item.account ? `On ${pageLabel(item.account, pageNames)}` : item.label}</small>
         </div>
