@@ -104,4 +104,25 @@ describe("QuickAutomationScreen", () => {
     expect(await screen.findByRole("button", { name: /select reel launch reel/i })).toBeTruthy();
     await waitFor(() => expect(selected.getAttribute("aria-pressed")).toBe("true"));
   });
+
+  it("asks to connect Instagram, not to retry, when no account is connected", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "Connect Instagram first" }), { status: 409 })));
+    render(<QuickAutomationScreen />);
+
+    expect(await screen.findByRole("heading", { name: /connect instagram to see your reels/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /^connect instagram$/i }).getAttribute("href")).toBe("/settings");
+    expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
+  });
+
+  it("keeps the loaded Reels and says so when loading more fails", async () => {
+    const fetchMock = stubFetch();
+    render(<QuickAutomationScreen />);
+    await screen.findByRole("button", { name: /select reel giveaway reel/i });
+    fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ error: "Meta is down" }), { status: 502 }));
+
+    fireEvent.click(screen.getByRole("button", { name: /load more reels/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/more reels didn’t load/i);
+    expect(screen.getByRole("button", { name: /select reel giveaway reel/i })).toBeTruthy();
+  });
 });

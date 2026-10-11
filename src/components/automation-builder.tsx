@@ -52,11 +52,14 @@ import {
 import { ActionNotice } from "./action-notice";
 import { toReadableApiError } from "@/src/lib/validation-error";
 import { formatDateTime } from "@/src/lib/format-date";
+import { renderTemplate } from "@/src/lib/automation/send-limits";
 import { useFocusTrap } from "./use-focus-trap";
 import { useUnsavedChangesGuard } from "./automation-builder/unsaved-changes";
 
 type AutomationBuilderProps = {
   automationId?: string;
+  /** Title of the template this new automation was started from, shown under the header. */
+  templateTitle?: string;
   initialName?: string;
   initialDefinition?: FlowDefinition;
   initialInstagramAccountId?: string;
@@ -251,6 +254,36 @@ function isoToLocalInput(value: string | undefined): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** A sample person for the phone preview, so personalised text reads the way
+ * a follower will see it instead of showing raw {username} placeholders. */
+const PREVIEW_HANDLE = "priya.sharma";
+const PREVIEW_PAGE_FAN = "Priya Sharma";
+
+/**
+ * Fills personalisation placeholders for the preview the same way the runner
+ * does at send time: comment flows know the person's handle, DM-side events
+ * don't (so it reads "there"), {keyword} is the first keyword and {media} is
+ * "your post" when a post is involved. Unknown tokens stay as typed.
+ */
+function previewVariables({ handle, keyword, hasPost }: { handle?: string; keyword?: string; hasPost: boolean }): Record<string, string | undefined> {
+  return {
+    username: handle ?? "there",
+    ...(keyword ? { keyword } : {}),
+    ...(hasPost ? { media: "your post" } : {}),
+  };
+}
+
+/** The header lede, plus a quiet line naming the template it started from. */
+function templateLede(lede: string, templateTitle?: string) {
+  if (!templateTitle) return lede;
+  return (
+    <>
+      <span className="builder-lede-text">{lede}</span>
+      <span className="builder-template-note">Started from the “{templateTitle}” template. Change anything you like before saving.</span>
+    </>
+  );
+}
+
 /** A failed check: the message plus the field it belongs to, so it can be
  * shown (and focused) next to that field instead of in a distant banner. */
 type StepIssue = { field: string; message: string };
@@ -346,6 +379,7 @@ function classicTriggerSentence(triggerType: ClassicTriggerType, isFacebook: boo
 
 function AutomationBuilderV1({
   automationId,
+  templateTitle,
   initialName = "",
   initialDefinition = defaultDefinitionV1,
   initialInstagramAccountId = "",
@@ -355,6 +389,7 @@ function AutomationBuilderV1({
   onSaved,
 }: {
   automationId?: string;
+  templateTitle?: string;
   initialName?: string;
   initialDefinition?: FlowDefinitionV1;
   initialInstagramAccountId?: string;
@@ -894,16 +929,21 @@ function AutomationBuilderV1({
     }
   }
 
+  const previewVars = previewVariables({
+    handle: triggerType === "comment" ? (isFacebook ? PREVIEW_PAGE_FAN : PREVIEW_HANDLE) : undefined,
+    keyword: usesTextTrigger && triggerMatch === "keyword" ? parseKeywords(keywords)[0] : undefined,
+    hasPost: triggerType === "comment",
+  });
   const dmMessages: DmBubble[] = actions.flatMap((action, index) => {
     const bubbles: DmBubble[] = [];
     if (action.type === "send_image" && action.imageUrl.trim()) {
       bubbles.push({ id: `action-${index}`, from: "bot", imageUrl: action.imageUrl });
     } else if (action.type !== "send_image" && action.text.trim()) {
-      const answers = action.type === "quick_replies" ? action.replies.map((reply) => reply.trim()).filter(Boolean) : [];
-      bubbles.push({ id: `action-${index}`, from: "bot", text: action.text, ...(answers.length > 0 ? { actions: answers } : {}) });
+      const answers = action.type === "quick_replies" ? action.replies.map((reply) => renderTemplate(reply.trim(), previewVars)).filter(Boolean) : [];
+      bubbles.push({ id: `action-${index}`, from: "bot", text: renderTemplate(action.text, previewVars), ...(answers.length > 0 ? { actions: answers } : {}) });
     }
     if (action.type === "send_button" && action.buttonLabel.trim()) {
-      bubbles.push({ id: `action-${index}-button`, from: "tap", button: action.buttonLabel });
+      bubbles.push({ id: `action-${index}-button`, from: "tap", button: renderTemplate(action.buttonLabel, previewVars) });
     }
     return bubbles;
   });
@@ -1089,7 +1129,7 @@ function AutomationBuilderV1({
         <PageHeader
           className="builder-header"
           title={savedAutomationId ? "Edit automatic reply" : "New automatic reply"}
-          description="Choose when it runs and what it says. Nothing goes live until you turn it on."
+          description={templateLede("Choose when it runs and what it says. Nothing goes live until you turn it on.", templateTitle)}
           tabs={(
             <BuilderStepper
               steps={wizardSteps.map((key) => ({ label: CLASSIC_STEP_LABELS[key] }))}
@@ -1689,9 +1729,9 @@ function AutomationBuilderV1({
             pageAvatarUrl={selectedPage?.avatarUrl}
             posterName="Your brand"
             postBody=""
-            commentAuthor="A follower"
+            commentAuthor={PREVIEW_PAGE_FAN}
             commentText={triggerMatch === "keyword" ? (keywordList[0] ? `“${keywordList[0]}”` : "any comment") : "any comment"}
-            replyText={firstReplyText ?? "(reply not set)"}
+            replyText={firstReplyText ? renderTemplate(firstReplyText, previewVars) : ""}
           />
         ) : (
           <InstagramPreview
@@ -1735,6 +1775,7 @@ function looksLikeTwoLinksPastedTogether(url: string): boolean {
 
 function AutomationBuilderV2({
   automationId,
+  templateTitle,
   initialName = "",
   initialDefinition = defaultDefinitionV2,
   initialInstagramAccountId = "",
@@ -1743,6 +1784,7 @@ function AutomationBuilderV2({
   onSaved,
 }: {
   automationId?: string;
+  templateTitle?: string;
   initialName?: string;
   initialDefinition?: FlowDefinitionV2;
   initialInstagramAccountId?: string;
@@ -1867,9 +1909,10 @@ function AutomationBuilderV2({
   }
 
   function validateStep(step: number): StepIssue | null {
+    // Checked in the order the fields appear: the posts, then the name below them.
     if (step === 0) {
-      if (!name.trim()) return { field: "name", message: "Give this automation a name first." };
       if (source === "specific_media" && mediaIds.length === 0) return { field: "media", message: "Select at least one post or Reel to watch." };
+      if (!name.trim()) return { field: "name", message: "Give this automation a name first." };
     }
     if (step === 1) {
       if (match === "keyword" && parseKeywords(keywords).length === 0) return { field: "keywords", message: "Add at least one keyword." };
@@ -1909,8 +1952,8 @@ function AutomationBuilderV2({
   }
 
   function validate(): string | null {
-    if (!name.trim()) return "Give this automation a name first.";
     if (source === "specific_media" && mediaIds.length === 0) return "Select at least one post or Reel to watch.";
+    if (!name.trim()) return "Give this automation a name first.";
     if (match === "keyword" && parseKeywords(keywords).length === 0) return "Add at least one keyword.";
     if (publicReplies.map((reply) => reply.trim()).filter(Boolean).length > MAX_PUBLIC_REPLIES) {
       return `Use up to ${MAX_PUBLIC_REPLIES} replies.`;
@@ -2035,12 +2078,17 @@ function AutomationBuilderV2({
     setPreviewView(STEP_PREVIEW_VIEW[next]);
   }
 
+  const previewVars = previewVariables({
+    handle: PREVIEW_HANDLE,
+    keyword: match === "keyword" ? keywordList[0] : undefined,
+    hasPost: true,
+  });
   const dmMessages: DmBubble[] = [];
   if (openingText.trim()) {
     dmMessages.push({
       id: "opening",
       from: "bot",
-      text: openingText,
+      text: renderTemplate(openingText, previewVars),
       actions: [optInButtonLabel.trim() || "Get it"],
     });
     dmMessages.push({ id: "opt-in", from: "tap", button: optInButtonLabel.trim() || "Get it" });
@@ -2049,7 +2097,7 @@ function AutomationBuilderV2({
     dmMessages.push({
       id: "not-following",
       from: "bot",
-      text: notFollowingMessage,
+      text: renderTemplate(notFollowingMessage, previewVars),
       actions: ["Visit Profile", recheckButtonLabel.trim() || "I followed"],
     });
   }
@@ -2057,7 +2105,7 @@ function AutomationBuilderV2({
     dmMessages.push({
       id: "delivery",
       from: "bot",
-      text: deliveryText,
+      text: renderTemplate(deliveryText, previewVars),
       ...(deliveryButtonLabel.trim() ? { actions: [deliveryButtonLabel.trim()] } : {}),
     });
   }
@@ -2080,7 +2128,7 @@ function AutomationBuilderV2({
         <PageHeader
           className="builder-header"
           title={savedAutomationId ? "Edit comment reply" : "Send a link after someone follows you"}
-          description="Reply to a comment, check they follow you, then send your link in a DM."
+          description={templateLede("Reply to a comment, check they follow you, then send your link in a DM.", templateTitle)}
           tabs={<BuilderStepper steps={WIZARD_STEPS.map((label) => ({ label }))} active={activeStep} unlocked={highestUnlockedStep} onSelect={goToStep} />}
         />
 
@@ -2441,8 +2489,9 @@ function AutomationBuilderV2({
           postCaption={mediaSnapshots[0]?.caption}
           postImageUrl={mediaSnapshots[0] ? mediaIndex[mediaSnapshots[0].id]?.thumbnailUrl : undefined}
           postIsReel={mediaSnapshots[0]?.mediaProductType === "REELS"}
+          commenter={PREVIEW_HANDLE}
           triggerComment={match === "keyword" ? (keywordList[0] ? `“${keywordList[0]}”` : undefined) : "any comment"}
-          commentReply={nonEmptyReplies[0]}
+          commentReply={nonEmptyReplies[0] ? renderTemplate(nonEmptyReplies[0], previewVars) : undefined}
           messages={dmMessages}
         />
       </PreviewPanel>
@@ -2452,6 +2501,7 @@ function AutomationBuilderV2({
 
 export function AutomationBuilder({
   automationId,
+  templateTitle,
   initialName,
   initialDefinition,
   initialInstagramAccountId,
@@ -2465,6 +2515,7 @@ export function AutomationBuilder({
     return (
       <AutomationBuilderV1
         automationId={automationId}
+        templateTitle={templateTitle}
         initialName={initialName}
         initialDefinition={initialDefinition}
         initialInstagramAccountId={initialInstagramAccountId}
@@ -2479,6 +2530,7 @@ export function AutomationBuilder({
     return (
       <AutomationBuilderV1
         automationId={automationId}
+        templateTitle={templateTitle}
         initialName={initialName}
         initialInstagramAccountId={initialInstagramAccountId}
         initialFacebookPageId={initialFacebookPageId}
@@ -2491,6 +2543,7 @@ export function AutomationBuilder({
   return (
     <AutomationBuilderV2
       automationId={automationId}
+      templateTitle={templateTitle}
       initialName={initialName}
       initialDefinition={initialDefinition as FlowDefinitionV2 | undefined}
       initialInstagramAccountId={initialInstagramAccountId}

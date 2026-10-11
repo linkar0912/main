@@ -574,9 +574,10 @@ describe("AutomationBuilder", () => {
     expect(secondStage).toHaveProperty("disabled", false);
     expect(reviewStage).toHaveProperty("disabled", false);
 
-    // Jumping straight to Review stays on the unfinished first step and says why.
+    // Jumping straight to Review stays on the unfinished first step and says
+    // why, starting with the first field on it (the posts).
     fireEvent.click(reviewStage);
-    expect(screen.getByRole("alert").textContent).toBe("Give this automation a name first.");
+    expect(screen.getByRole("alert").textContent).toBe("Select at least one post or Reel to watch.");
     expect(screen.getByRole("heading", { name: /which posts should it watch/i })).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText(/automation name/i), { target: { value: "Unlocked campaign" } });
@@ -881,6 +882,21 @@ describe("AutomationBuilder", () => {
     expect(preview.textContent?.toLowerCase()).not.toContain("not sent to instagram");
     expect(preview.textContent).toContain("Instagram");
     expect(preview.textContent).not.toContain("Updated");
+  });
+
+  it("fills personalisation placeholders in the phone preview the way a follower sees them", async () => {
+    stubFetch({ media: { data: [reel], paging: {} } });
+    render(<AutomationBuilder />);
+    await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("checkbox"));
+    await fillRequiredCampaignFields();
+    fireEvent.change(screen.getByLabelText(/^first message$/i), { target: { value: "Hey {username}! Tap for the {keyword} link on {media} {unknown}" } });
+
+    const preview = screen.getByLabelText(/message preview/i);
+    fireEvent.click(within(preview).getByRole("tab", { name: "DM" }));
+    expect(preview.textContent).toContain("Hey priya.sharma! Tap for the drop link on your post {unknown}");
+    // The saved text keeps its placeholders - only the preview fills them in.
+    expect((screen.getByLabelText(/^first message$/i) as HTMLTextAreaElement).value).toContain("{username}");
   });
 
   it("shows the connected account's handle and reel media in the phone preview, without its raw ID", async () => {
