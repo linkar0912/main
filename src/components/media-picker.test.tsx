@@ -294,3 +294,21 @@ describe("MediaPicker", () => {
     ]);
   });
 });
+
+describe("MediaPicker without a connected Instagram account", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("asks to connect Instagram instead of showing an error with a pointless retry", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 409, json: async () => ({ error: "Connect Instagram first" }) })));
+    render(<MediaPicker selectedIds={[]} onChange={() => undefined} />);
+
+    const link = await screen.findByRole("link", { name: "Connect Instagram" });
+    expect(link.getAttribute("href")).toBe("/settings");
+    expect(screen.getByText("Connect an Instagram account to pick posts and Reels here.")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: /retry/i })).toBeNull();
+  });
+});

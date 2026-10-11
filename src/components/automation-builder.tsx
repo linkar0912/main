@@ -581,17 +581,23 @@ function AutomationBuilderV1({
     return null;
   }
 
+  // Any step can be opened from the stepper. Jumping ahead checks the steps
+  // in between; the first one that is not finished opens instead, with its
+  // problem shown on the field, so a click never silently does nothing.
   function goToStep(next: number) {
     const clamped = Math.max(0, Math.min(wizardSteps.length - 1, next));
-    if (clamped > highestUnlockedStep) return;
     if (clamped > clampedStep) {
       for (let i = clampedStep; i < clamped; i++) {
         const issue = validateStep(wizardSteps[i]);
         if (issue) {
-          errors.showIssue(issue, i === clampedStep);
+          setHighestUnlockedStep((current) => Math.max(current, i));
+          setActiveStep(i);
+          setPreviewView(previewViewForStep(wizardSteps[i]));
+          errors.showIssue(issue, true);
           return;
         }
       }
+      setHighestUnlockedStep((current) => Math.max(current, clamped));
     }
     errors.clear();
     setActiveStep(clamped);
@@ -1994,17 +2000,22 @@ function AutomationBuilderV2({
         ? "all of your posts"
         : "the next post you publish";
 
+  // Same rule as the classic builder: every step is reachable, and a jump
+  // ahead stops at the first unfinished step with its problem shown inline.
   function goToStep(next: number) {
     const clamped = Math.max(0, Math.min(WIZARD_STEPS.length - 1, next));
-    if (clamped > highestUnlockedStep) return;
     if (clamped > activeStep) {
       for (let i = activeStep; i < clamped; i++) {
         const issue = validateStep(i);
         if (issue) {
-          errors.showIssue(issue, i === activeStep);
+          setHighestUnlockedStep((current) => Math.max(current, i));
+          setActiveStep(i);
+          setPreviewView(STEP_PREVIEW_VIEW[i]);
+          errors.showIssue(issue, true);
           return;
         }
       }
+      setHighestUnlockedStep((current) => Math.max(current, clamped));
     }
     errors.clear();
     setActiveStep(clamped);

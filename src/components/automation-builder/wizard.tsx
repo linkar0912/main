@@ -20,9 +20,10 @@ import {
 
 export type WizardStepInfo = { label: string };
 
-/** Numbered progress for the wizard. Done steps stay clickable for review;
- * steps past the furthest unlocked one are disabled until the current step
- * passes its checks. */
+/** Numbered progress for the wizard. Every step is clickable: earlier ones
+ * for review, later ones to jump ahead (the builder stops at the first
+ * unfinished step and says what is missing). Steps already reached show a
+ * tick; the rest are plain numbered steps, never greyed out. */
 export function BuilderStepper({ steps, active, unlocked, onSelect }: {
   steps: WizardStepInfo[];
   active: number;
@@ -33,14 +34,13 @@ export function BuilderStepper({ steps, active, unlocked, onSelect }: {
     <nav className="builder-stepper" aria-label="Builder steps">
       <ol>
         {steps.map((step, index) => {
-          const state = index === active ? "is-active" : index > unlocked ? "is-locked" : index < active ? "is-done" : "is-open";
+          const state = index === active ? "is-active" : index < active || index <= unlocked ? (index < active ? "is-done" : "is-open") : "is-upcoming";
           return (
             <li key={step.label} className={`builder-stepper-item ${state}`}>
               <button
                 type="button"
                 aria-current={index === active ? "step" : undefined}
                 aria-label={`Step ${index + 1}: ${step.label}`}
-                disabled={index > unlocked}
                 onClick={() => onSelect(index)}
               >
                 <span className="builder-stepper-dot" aria-hidden>

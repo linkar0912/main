@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Check, Film, ImageOff, Layers } from "lucide-react";
+import { InstagramGlyph } from "./instagram-glyph";
 import type { MediaSnapshot } from "@/src/lib/automation/types";
 
 type PickerMedia = {
@@ -14,6 +16,13 @@ type PickerMedia = {
   thumbnailUrl?: string;
   timestamp: string;
 };
+
+const NOT_CONNECTED = "not_connected";
+class NotConnectedError extends Error {
+  constructor() {
+    super(NOT_CONNECTED);
+  }
+}
 
 export type MediaPickerProps = {
   selectedIds: string[];
@@ -77,6 +86,9 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
       paging?: { after?: string };
       error?: string;
     };
+    // 409 means no Instagram account is connected: retrying cannot help, so it
+    // becomes a "connect one" state instead of an error.
+    if (response.status === 409) throw new NotConnectedError();
     if (!response.ok) throw new Error(payload.error ?? "Could not load your Instagram media");
     if (!isActive()) return 0;
     for (const media of payload.data ?? []) {
@@ -107,7 +119,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
     mountedRef.current = true;
     loadPage(undefined, () => active && mountedRef.current)
       .catch((caught: unknown) => {
-        if (active) setError(caught instanceof Error ? caught.message : "Could not load your Instagram media");
+        if (active) setError(caught instanceof NotConnectedError ? NOT_CONNECTED : caught instanceof Error ? caught.message : "Could not load your Instagram media");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -145,7 +157,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
     try {
       await loadPage(cursor, () => mountedRef.current);
     } catch (caught) {
-      if (mountedRef.current) setError(caught instanceof Error ? caught.message : "Could not load more media");
+      if (mountedRef.current) setError(caught instanceof NotConnectedError ? NOT_CONNECTED : caught instanceof Error ? caught.message : "Could not load more media");
     } finally {
       if (mountedRef.current) setLoadingMore(false);
     }
@@ -157,7 +169,7 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
     try {
       await loadPage(undefined, () => mountedRef.current);
     } catch (caught) {
-      if (mountedRef.current) setError(caught instanceof Error ? caught.message : "Could not load your Instagram media");
+      if (mountedRef.current) setError(caught instanceof NotConnectedError ? NOT_CONNECTED : caught instanceof Error ? caught.message : "Could not load your Instagram media");
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -184,6 +196,16 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
             <div className="media-skeleton" key={key} aria-hidden="true" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (error === NOT_CONNECTED) {
+    return (
+      <div className="media-picker media-picker-empty">
+        <InstagramGlyph size={20} />
+        <p>Connect an Instagram account to pick posts and Reels here.</p>
+        <Link className="button button-secondary button-small" href="/settings">Connect Instagram</Link>
       </div>
     );
   }

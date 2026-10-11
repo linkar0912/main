@@ -79,7 +79,7 @@ describe("Field", () => {
 describe("BuilderStepper", () => {
   afterEach(cleanup);
 
-  it("marks the current step, keeps done steps reviewable and locks steps not reached yet", () => {
+  it("marks the current step and keeps every step clickable", () => {
     const onSelect = vi.fn();
     render(
       <BuilderStepper
@@ -90,9 +90,11 @@ describe("BuilderStepper", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "Step 2: What it sends" }).getAttribute("aria-current")).toBe("step");
-    expect(screen.getByRole("button", { name: "Step 3: Review" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Step 3: Review" })).toHaveProperty("disabled", false);
     fireEvent.click(screen.getByRole("button", { name: "Step 1: When it runs" }));
     expect(onSelect).toHaveBeenCalledWith(0);
+    fireEvent.click(screen.getByRole("button", { name: "Step 3: Review" }));
+    expect(onSelect).toHaveBeenCalledWith(2);
   });
 });
 

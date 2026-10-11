@@ -7217,9 +7217,9 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .builder-stepper-item.is-done .builder-stepper-dot { border-color: var(--ink); color: var(--ink); }
 .builder-stepper-item.is-done .builder-stepper-label,
 .builder-stepper-item.is-open .builder-stepper-label { color: var(--slate); }
-.builder-stepper-item.is-locked .builder-stepper-dot { border-color: var(--line); color: var(--subtle); }
-.builder-stepper-item.is-locked .builder-stepper-label { color: var(--subtle); font-weight: 500; }
-.builder-stepper-item button:not(:disabled):hover .builder-stepper-label { color: var(--ink); }
+.builder-stepper-item.is-upcoming .builder-stepper-label { color: var(--slate); }
+.builder-stepper-item button:hover .builder-stepper-dot { border-color: var(--ink); color: var(--ink); }
+.builder-stepper-item button:hover .builder-stepper-label { color: var(--ink); }
 .builder-stepper-current { display: none; }
 [data-theme="dark"] .builder-stepper-item.is-active .builder-stepper-dot { color: #101116; }
 
@@ -7386,13 +7386,18 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .builder-preview .ig-preview { gap: 14px; }
 /* The view switch: a light thumb on a sunk track, same shape as other switches. */
 .builder-preview .ig-preview-tabs { margin: 0; }
-.builder-preview .ig-preview-tabs::before { background: var(--panel); box-shadow: 0 1px 2px rgba(23, 24, 29, .12), inset 0 0 0 1px var(--line); border-radius: 999px; }
-.builder-preview .ig-preview-tabs .segmented-option { background: transparent; border-color: transparent; color: var(--slate); font-size: .8125rem; font-weight: 600; }
-.builder-preview .ig-preview-tabs .segmented-option.is-active { color: var(--ink); font-weight: 700; }
-.builder-preview .ig-device { max-width: 330px; }
-.builder-preview .ig-phone { height: min(580px, calc(100dvh - 230px)); min-height: 440px; }
-.builder-preview .facebook-device { margin: 0 auto; width: min(100%, 300px); }
-.builder-preview .facebook-phone { height: min(560px, calc(100dvh - 200px)); min-height: 440px; }
+/* The preview view switch is the standard segmented control (track + solid
+   thumb on the selected view); it no longer paints its own indicator. */
+.builder-preview .ig-preview-tabs .segmented-option { font-size: .8125rem; min-height: 32px; }
+/* The phone fits the window: its screen height follows the viewport (heading,
+   view switch and caption take about 290px around it) and the frame width
+   follows that height, so the device keeps a phone's proportions instead of
+   running off the bottom of shorter laptop screens. */
+.builder-preview { --preview-phone-height: clamp(340px, calc(100dvh - 290px), 580px); }
+.builder-preview .ig-device { max-width: 100%; width: calc(var(--preview-phone-height) * .54 + 18px); }
+.builder-preview .ig-phone { height: var(--preview-phone-height); min-height: 0; }
+.builder-preview .facebook-device { margin: 0 auto; max-width: 100%; width: calc(var(--preview-phone-height) * .52 + 18px); }
+.builder-preview .facebook-phone { height: var(--preview-phone-height); min-height: 0; }
 .builder-preview .ig-profile-meta,
 .builder-preview .facebook-preview-note { color: var(--muted); display: block; font-size: .8125rem; line-height: 1.45; margin: 0 auto; max-width: 300px; text-align: center; }
 .builder-layout .builder-preview-scrim { display: none; }
@@ -7605,3 +7610,8 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .dashboard-page .setup-row { align-items: flex-start; }
   .dashboard-page .setup-cta, .dashboard-page .setup-done-tag { padding-top: 6px; }
 }
+
+/* Post picker with no Instagram account: a calm prompt to connect, not an error. */
+.media-picker.media-picker-empty { align-items: center; aspect-ratio: auto; border: 1px dashed var(--line-strong); border-radius: 12px; color: var(--slate); display: flex; flex-direction: row; flex-wrap: wrap; gap: 12px; grid-template-columns: none; height: auto; justify-content: flex-start; min-height: 0; padding: 14px 16px; text-align: left; }
+.media-picker-empty p { flex: 1 1 220px; margin: 0; }
+.media-picker-empty svg { color: var(--muted); flex: 0 0 auto; }

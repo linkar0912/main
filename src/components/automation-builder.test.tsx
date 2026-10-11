@@ -565,30 +565,30 @@ describe("AutomationBuilder", () => {
     expect(screen.queryByRole("button", { name: /save draft/i })).toBeNull();
   });
 
-  it("keeps later campaign stages locked until the current stage is complete", () => {
+  it("lets any campaign step be clicked and stops a jump at the first unfinished step", () => {
     stubFetch();
     render(<AutomationBuilder />);
 
     const secondStage = screen.getByRole("button", { name: /step 2: comments$/i });
     const reviewStage = screen.getByRole("button", { name: /: review$/i });
-    expect(secondStage).toHaveProperty("disabled", true);
-    expect(reviewStage).toHaveProperty("disabled", true);
+    expect(secondStage).toHaveProperty("disabled", false);
+    expect(reviewStage).toHaveProperty("disabled", false);
 
-    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    // Jumping straight to Review stays on the unfinished first step and says why.
+    fireEvent.click(reviewStage);
     expect(screen.getByRole("alert").textContent).toBe("Give this automation a name first.");
     expect(screen.getByRole("heading", { name: /which posts should it watch/i })).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText(/automation name/i), { target: { value: "Unlocked campaign" } });
     fireEvent.click(screen.getByRole("radio", { name: /all my posts/i }));
     fireEvent.change(screen.getByLabelText(/words to look for/i), { target: { value: "guide" } });
-    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
 
-    expect(secondStage).toHaveProperty("disabled", false);
+    // Once step 1 is finished, the jump goes as far as the next unfinished step.
+    fireEvent.click(secondStage);
     expect(screen.getByRole("heading", { name: /what should it reply in the comments/i })).toBeTruthy();
-    expect(reviewStage).toHaveProperty("disabled", true);
   });
 
-  it("keeps later classic stages locked until the trigger stage is complete", () => {
+  it("lets any classic step be clicked once the steps before it are complete", () => {
     stubFetch();
     const legacyDefinition: FlowDefinitionV1 = {
       version: 1,
@@ -600,16 +600,16 @@ describe("AutomationBuilder", () => {
 
     const conditionStage = screen.getByRole("button", { name: /step 2: who gets it$/i });
     const reviewStage = screen.getByRole("button", { name: /: review$/i });
-    expect(conditionStage).toHaveProperty("disabled", true);
-    expect(reviewStage).toHaveProperty("disabled", true);
-
-    fireEvent.click(conditionStage);
-    expect(screen.getByRole("heading", { name: /when should this run/i })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
     expect(conditionStage).toHaveProperty("disabled", false);
+    expect(reviewStage).toHaveProperty("disabled", false);
+
+    // The trigger step is already complete here, so clicking step 2 opens it.
+    fireEvent.click(conditionStage);
     expect(screen.getByRole("heading", { name: /who should it reply to/i })).toBeTruthy();
-    expect(reviewStage).toHaveProperty("disabled", true);
+
+    // And earlier steps stay reachable for review.
+    fireEvent.click(screen.getByRole("button", { name: /step 1: when it runs$/i }));
+    expect(screen.getByRole("heading", { name: /when should this run/i })).toBeTruthy();
   });
 
   it("shows a step's validation error under the field it is about and focuses that field", () => {
@@ -691,7 +691,9 @@ describe("AutomationBuilder", () => {
     fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
 
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Select at least one post or Reel to watch.");
-    expect(screen.getByRole("button", { name: /step 2: comments$/i })).toHaveProperty("disabled", true);
+    // Clicking ahead in the stepper does not skip the missing post either.
+    fireEvent.click(screen.getByRole("button", { name: /step 2: comments$/i }));
+    expect(screen.getByRole("heading", { name: /which posts should it watch/i })).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalledWith("/api/automations", expect.anything());
   });
 
