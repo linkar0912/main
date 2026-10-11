@@ -73,7 +73,7 @@ describe("AutomationActivity", () => {
     stubFetch([participant({ state: "FOLLOW_REQUIRED" })]);
     render(<AutomationActivity automationId="automation_1" />);
 
-    await screen.findByText(/follow required/i);
+    await screen.findByText(/needs to follow/i);
     expect(screen.queryByLabelText("Campaign funnel")).toBeNull();
   });
 
@@ -83,7 +83,7 @@ describe("AutomationActivity", () => {
     ]);
     render(<AutomationActivity automationId="automation_1" />);
 
-    expect(await screen.findByText(/follow required/i)).toBeTruthy();
+    expect(await screen.findByText(/needs to follow/i)).toBeTruthy();
     expect(screen.getByText(/not following yet/i)).toBeTruthy();
     const journey = screen.getByLabelText("Participant journey");
     expect(journey.textContent).toContain("Opt-in");
@@ -122,7 +122,7 @@ describe("AutomationActivity", () => {
     ]);
     render(<AutomationActivity automationId="automation_1" />);
 
-    expect(await screen.findByText(/link sent/i)).toBeTruthy();
+    expect(await screen.findByText(/got the link/i)).toBeTruthy();
     expect(screen.getByText(/following · checked/i)).toBeTruthy();
     const deliveredRow = screen.getByText(/view on instagram/i).closest("article");
     expect(deliveredRow?.textContent).toContain("Delivered");
@@ -138,7 +138,7 @@ describe("AutomationActivity", () => {
     ]);
     render(<AutomationActivity automationId="automation_1" />);
 
-    expect(await screen.findByText("expired")).toBeTruthy();
+    expect(await screen.findByText("Expired")).toBeTruthy();
     expect(screen.getByText(/messaging window expired/i)).toBeTruthy();
   });
 
@@ -152,7 +152,7 @@ describe("AutomationActivity", () => {
     ]);
     render(<AutomationActivity automationId="automation_1" />);
 
-    expect(await screen.findByText("failed")).toBeTruthy();
+    expect(await screen.findByText("Failed")).toBeTruthy();
     expect(screen.getByText(/meta rate limit/i)).toBeTruthy();
   });
 
@@ -197,7 +197,7 @@ describe("AutomationActivity", () => {
     stubFetch([participant({ state: "FOLLOW_REQUIRED" })]);
     const { container } = render(<AutomationActivity automationId="automation_1" />);
 
-    await screen.findByText(/follow required/i);
+    await screen.findByText(/needs to follow/i);
     expect(container.innerHTML).not.toContain("cdn.example");
     expect(container.querySelectorAll("img").length).toBe(0);
   });
@@ -232,12 +232,39 @@ describe("AutomationActivity", () => {
     expect(await screen.findByText("Taylor Morgan")).toBeTruthy();
     expect(screen.getByText("Please send me the details")).toBeTruthy();
     expect(screen.getByText("Thanks for commenting!")).toBeTruthy();
-    expect(screen.getByText("Acme Page")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Replies on Acme Page" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /all 1/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /sent 1/i })).toBeTruthy();
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.getByText(/do not open a Messenger conversation/i)).toBeTruthy();
     expect(document.body.textContent).not.toContain("token");
+  });
+
+  it("labels states and media in plain words, never raw enums", async () => {
+    stubFetch([participant({ state: "OPENING_SENT" })]);
+    const { container } = render(<AutomationActivity automationId="automation_1" />);
+
+    expect(await screen.findByText("Got the DM")).toBeTruthy();
+    expect(screen.getByText("Reel", { selector: ".media-type-label" })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/REELS|OPENING_SENT|opening sent/);
+  });
+
+  it("explains why a Facebook reply was skipped or failed in plain words", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        channel: { provider: "FACEBOOK", surface: "COMMENT", connectionName: "Acme Page" },
+        data: [
+          { id: "e1", provider: "FACEBOOK", surface: "COMMENT", connectionName: "Acme Page", eventType: "comment.created", result: "SKIPPED", safeErrorCode: "replyOncePerUser is set and this sender already received a reply", createdAt: "2026-09-01T01:00:00.000Z" },
+          { id: "e2", provider: "FACEBOOK", surface: "COMMENT", connectionName: "Acme Page", eventType: "comment.created", result: "FAILED", safeErrorCode: "facebook_api_error", createdAt: "2026-09-01T01:00:00.000Z" },
+        ],
+      }),
+    }) as unknown as Response));
+    const { container } = render(<AutomationActivity automationId="automation_1" />);
+
+    expect(await screen.findByText("Already replied to this person once.")).toBeTruthy();
+    expect(screen.getByText("Facebook didn't accept the reply.")).toBeTruthy();
+    expect(container.textContent).not.toMatch(/replyOncePerUser|facebook_api_error|facebook api error/i);
   });
 
   it("names the stage a participant is currently sitting at", async () => {
@@ -273,11 +300,11 @@ describe("AutomationActivity", () => {
     })]);
     const { container } = render(<AutomationActivity automationId="automation_1" />);
 
-    await screen.findByText(/link sent/i);
+    await screen.findByText(/got the link/i);
     const status = container.querySelector(".row-status");
     expect(status).toBeTruthy();
     // participantStateLabel lowercases; the capitals are CSS text-transform.
-    expect(status?.textContent).toMatch(/link sent/i);
+    expect(status?.textContent).toMatch(/got the link/i);
     expect(status?.textContent).toMatch(/delivered/i);
   });
 
@@ -285,7 +312,7 @@ describe("AutomationActivity", () => {
     stubFetch([participant()]);
     const { container } = render(<AutomationActivity automationId="automation_1" />);
 
-    await screen.findByText(/follow required/i);
+    await screen.findByText(/needs to follow/i);
     const summary = container.querySelector("details.row-detail > summary");
     expect(summary).toBeTruthy();
     expect(summary?.textContent).toContain("Delivery details");

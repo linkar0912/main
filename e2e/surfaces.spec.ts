@@ -115,7 +115,7 @@ test("campaign activity filters by status chips and offers retries", async ({ pa
 
   const failedRow = page.locator(".activity-row", { hasText: "failed" }).first();
   await expect(failedRow.getByRole("button", { name: /retry delivery/i })).toBeVisible();
-  const deliveredRow = page.locator(".activity-row", { hasText: "link sent" }).first();
+  const deliveredRow = page.locator(".activity-row", { hasText: "got the link" }).first();
   await expect(deliveredRow.getByRole("button", { name: /retry delivery/i })).toHaveCount(0);
 
   // Status chip narrows the feed.

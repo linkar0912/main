@@ -125,4 +125,24 @@ describe("InsightsScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/insights")).toHaveLength(2));
   });
+
+  it("names journey stages the way each automation's funnel does", async () => {
+    vi.stubGlobal("fetch", stubFetch());
+    render(<InsightsScreen />);
+
+    const journey = await screen.findByRole("region", { name: "Automation journey" });
+    for (const label of ["Commented", "Got the DM", "Opted in", "Followed", "Got the link"]) {
+      expect(within(journey).getByText(label)).toBeTruthy();
+    }
+    expect(journey.textContent).not.toMatch(/Opening sent|Follow verified/);
+  });
+
+  it("says nobody has gone through a flow instead of listing five zeros", async () => {
+    vi.stubGlobal("fetch", stubFetch(new Response(JSON.stringify({ ...insights, funnel: {} }))));
+    render(<InsightsScreen />);
+
+    const journey = await screen.findByRole("region", { name: "Automation journey" });
+    expect(journey.textContent).toContain("Nobody has gone through a comment-to-link flow yet");
+    expect(within(journey).queryByRole("list")).toBeNull();
+  });
 });

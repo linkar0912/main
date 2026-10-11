@@ -19,7 +19,7 @@ describe("InsightsPanel", () => {
     render(<InsightsPanel automationId="automation_1" />);
 
     await screen.findByLabelText("Campaign export");
-    expect(screen.getByText(/3 messages sent this month of 100 on your plan/)).toBeTruthy();
+    expect(screen.getByText("3 of 100 messages used this month.")).toBeTruthy();
     expect(screen.getByRole("progressbar", { name: "Messages sent this month" }).getAttribute("aria-valuemax")).toBe("100");
     expect(fetchMock).toHaveBeenCalledWith("/api/insights?automationId=automation_1&include=usage");
     expect(screen.getByRole("link", { name: /export csv/i }).getAttribute("href"))

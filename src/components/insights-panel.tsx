@@ -59,22 +59,21 @@ export function InsightsPanel({ automationId, showExport = true }: { automationI
               </div>
             )}
             <p className="muted usage-note">
-              {usage.deliveriesThisMonth.toLocaleString()} message{usage.deliveriesThisMonth === 1 ? "" : "s"} sent this month
-              {usageLimit !== null ? ` of ${usageLimit.toLocaleString()} on your plan.` : " - your plan has no monthly limit."}
+              {usageLimit !== null
+                ? `${usage.deliveriesThisMonth.toLocaleString()} of ${usageLimit.toLocaleString()} messages used this month.`
+                : `${usage.deliveriesThisMonth.toLocaleString()} message${usage.deliveriesThisMonth === 1 ? "" : "s"} sent this month. Your plan has no monthly limit.`}
             </p>
           </div>
         </SectionCard>
       )}
 
-      {showExport && <section className="panel side-panel" aria-label="Campaign export">
-        <div className="panel-heading">
-          <div><p className="eyebrow">Raw data</p><h2>Export</h2></div>
-        </div>
-        <a className="button button-secondary button-small" href={`/api/insights/export${query}`} download>
-          <Download size={14} /> Export CSV
-        </a>
-        <p className="muted export-note">Every matched comment, delivery, and click for this campaign.</p>
-      </section>}
+      {showExport && (
+        <SectionCard className="side-panel" title="Export" description="Every matched comment, delivery and click for this campaign." aria-label="Campaign export">
+          <a className="button button-secondary button-small" href={`/api/insights/export${query}`} download>
+            <Download size={14} /> Export CSV
+          </a>
+        </SectionCard>
+      )}
 
       {automationId && <AbTestReport automationId={automationId} />}
     </div>
@@ -116,7 +115,10 @@ function AbTestReport({ automationId }: { automationId: string }) {
       <ul className="variant-list">
         {variants.map((variant) => (
           <li key={variant.variant}>
-            <span className={`tag-chip${variant.variant === best.variant ? " tag-chip-best" : ""}`}>Variant {variant.variant}</span>
+            <span className="variant-name">
+              <strong>Variant {variant.variant}</strong>
+              {variant.variant === best.variant ? <span className="variant-best">Best so far</span> : null}
+            </span>
             <span className="muted">
               {variant.participants} reached · {variant.delivered} delivered
               {variant.participants > 0 ? ` (${Math.round((variant.delivered / variant.participants) * 100)}%)` : ""}
@@ -125,7 +127,6 @@ function AbTestReport({ automationId }: { automationId: string }) {
           </li>
         ))}
       </ul>
-      <p className="muted export-note">Variant {best.variant} is converting best so far.</p>
     </SectionCard>
   );
 }
