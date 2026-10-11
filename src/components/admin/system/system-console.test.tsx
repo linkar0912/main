@@ -55,7 +55,7 @@ it("lists failed jobs and retries only the selected IDs through the reason dialo
     const dialog = screen.getByRole("dialog", { name: "Retry 1 failed job in Incoming events" });
     expect(dialog).toBeTruthy();
     await userEvent.type(screen.getByRole("textbox", { name: /^Reason/ }), "Provider outage fixed");
-    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Retry job" }));
     const [url, init] = fetchMock.mock.calls[1];
     expect(url).toBe("/api/admin/system/queues/webhooks");
     expect(init.method).toBe("PATCH");

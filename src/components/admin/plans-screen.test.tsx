@@ -64,6 +64,16 @@ const retiredPlan = {
   isActive: false,
 };
 
+function openInviteDialog() {
+  fireEvent.click(screen.getByRole("button", { name: "Create invite code" }));
+  return screen.getByRole("dialog");
+}
+
+function openPlan(name: string) {
+  fireEvent.click(screen.getByRole("button", { name }));
+  return screen.getByRole("dialog");
+}
+
 function fillInviteForm(planKey = "growth") {
   const planSelect = screen.getByRole("combobox", { name: "Invite plan" });
   const form = planSelect.closest("form");
@@ -88,13 +98,17 @@ describe("PlansScreen", () => {
       redemption: null,
     }]} />);
 
-    expect(screen.getByText("7 workspaces on this plan")).toBeTruthy();
-    expect(screen.getAllByLabelText("Members").some((input) => (input as HTMLInputElement).value === "")).toBe(true);
-    expect(screen.getByRole("button", { name: "Retire plan" })).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Exports", checked: true })).toBeTruthy();
     expect(screen.getByText("Launch cohort")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Revoke Launch cohort" })).toBeTruthy();
-    expect(screen.getByText(/code does not expire/)).toBeTruthy();
+    expect(screen.getByText(/Code does not expire/)).toBeTruthy();
+    // The plan list shows a one-line summary; unlimited limits say so.
+    expect(screen.getByText(/^Unlimited members, 50 automations/)).toBeTruthy();
+
+    const dialog = openPlan("Edit Growth");
+    expect(within(dialog).getByText(/7 workspaces on this plan/)).toBeTruthy();
+    expect(within(dialog).getAllByLabelText("Members").some((input) => (input as HTMLInputElement).value === "")).toBe(true);
+    expect(within(dialog).getByRole("button", { name: "Retire plan" })).toBeTruthy();
+    expect(within(dialog).getByRole("checkbox", { name: "Exports", checked: true })).toBeTruthy();
   });
 
   it("creates an invite for the selected active paid plan", async () => {
@@ -107,6 +121,7 @@ describe("PlansScreen", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<PlansScreen plans={[creatorPlan, growthPlan, freePlan, retiredPlan]} />);
+    openInviteDialog();
 
     const planSelect = screen.getByRole("combobox", { name: "Invite plan" });
     expect(within(planSelect).getByRole("option", { name: "Creator" })).toBeTruthy();
@@ -128,18 +143,20 @@ describe("PlansScreen", () => {
     expect(screen.getByText("LINKAR-ABCD-EFGH-IJKL")).toBeTruthy();
   });
 
-  it("shows invite creation errors in a dismissible alert popup", async () => {
+  it("shows invite creation errors inside the dialog and keeps what was typed", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       error: "invite_plan_unavailable",
     }), { status: 422 })));
 
     render(<PlansScreen plans={[creatorPlan, growthPlan]} />);
+    const dialog = openInviteDialog();
     fillInviteForm("creator");
 
-    const alert = await screen.findByRole("alert");
+    const alert = await within(dialog).findByRole("alert");
     expect(alert.textContent).toContain("Invite plan unavailable");
-    fireEvent.click(within(alert).getByRole("button", { name: "Dismiss notification" }));
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect((within(dialog).getByLabelText("Internal label") as HTMLInputElement).value).toBe("Launch cohort");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 
@@ -147,7 +164,7 @@ it("saves a plan without sending serialized timestamps or other response metadat
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: {} }), { status: 200 }));
   vi.stubGlobal("fetch", fetchMock);
   render(<PlansScreen plans={[{ ...growthPlan, createdAt: "2026-01-01", updatedAt: "2026-01-02" } as typeof growthPlan]} />);
-  const form = screen.getByRole("button", { name: "Save plan" }).closest("form")!;
+  const form = openPlan("Edit Growth");
   fireEvent.change(within(form).getByLabelText(/^Reason/), { target: { value: "Update limits" } });
   fireEvent.click(within(form).getByRole("button", { name: "Save plan" }));
   // The plan is assigned to 7 workspaces, so saving asks for a second confirmation.
@@ -165,15 +182,14 @@ describe("PlansScreen retirement", () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: {} }));
     vi.stubGlobal("fetch", fetchMock);
     render(<PlansScreen plans={[growthPlan]} />);
-    const card = screen.getByRole("heading", { name: "Growth", level: 3 }).closest("form");
-    if (!card) throw new Error("Plan card not found");
+    const card = openPlan("Edit Growth");
 
     fireEvent.click(within(card).getByRole("button", { name: "Retire plan" }));
     expect(fetchMock).not.toHaveBeenCalled();
     // Confirming without a reason used to send an empty reason that the server rejected.
     fireEvent.click(within(card).getByRole("button", { name: "Confirm retire" }));
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toContain("Add a reason before retiring a plan.");
+    expect(within(card).getByRole("alert").textContent).toContain("Add a reason before retiring a plan.");
 
     fireEvent.change(within(card).getByLabelText(/^Reason/), { target: { value: "Replaced by Scale" } });
     fireEvent.click(within(card).getByRole("button", { name: "Confirm retire" }));
@@ -183,16 +199,19 @@ describe("PlansScreen retirement", () => {
 
   it("keeps a retired plan read-only", () => {
     render(<PlansScreen plans={[retiredPlan]} />);
-    expect(screen.queryByRole("button", { name: "Save plan" })).toBeNull();
-    expect(screen.getByText(/Retired plans are read-only/)).toBeTruthy();
+    const dialog = openPlan("View Retired Agency");
+    expect(within(dialog).queryByRole("button", { name: "Save plan" })).toBeNull();
+    expect(within(dialog).getByText(/Retired plans are read-only/)).toBeTruthy();
+    expect(within(dialog).getByLabelText("Plan name").matches(":disabled")).toBe(true);
   });
 });
 
 describe("plan and invite safeguards", () => {
   it("does not offer retirement of the default free plan", () => {
     render(<PlansScreen plans={[freePlan]} />);
-    expect(screen.queryByRole("button", { name: "Retire plan" })).toBeNull();
-    expect(screen.getByText(/cannot be retired/)).toBeTruthy();
+    const dialog = openPlan("Edit Free");
+    expect(within(dialog).queryByRole("button", { name: "Retire plan" })).toBeNull();
+    expect(within(dialog).getByText(/cannot be retired/)).toBeTruthy();
   });
 
   it("revokes a code through its own reason dialog and handles a code that no longer exists", async () => {

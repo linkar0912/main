@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const refresh = vi.fn();
@@ -29,6 +29,27 @@ describe("DeletionConsole", () => {
     rerender(<DeletionConsole jobs={[{ ...job, state: "COMPLETED" }]} />);
     act(() => { vi.advanceTimersByTime(60_000); });
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a failed deletion through its own reason dialog", async () => {
+    vi.useRealTimers();
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ data: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      render(<DeletionConsole jobs={[{ ...job, id: "del_2", targetKind: "USER", targetId: "user-1", state: "FAILED" }]} />);
+      // No shared reason box: the row button is ready straight away.
+      const retry = screen.getByRole("button", { name: "Retry deletion of user user-1" }) as HTMLButtonElement;
+      expect(retry.disabled).toBe(false);
+      fireEvent.click(retry);
+      const dialog = screen.getByRole("dialog");
+      fireEvent.change(within(dialog).getByRole("textbox", { name: /^Reason/ }), { target: { value: "Auth is back" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Retry deletion" }));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/admin/deletions/del_2", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ action: "retry" }) })));
+      expect((await screen.findByRole("status")).textContent).toContain("Deletion queued again.");
+      expect(screen.queryByRole("dialog")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("links back to earlier pages", () => {

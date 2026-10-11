@@ -6549,7 +6549,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 /* The backdrop scrolls and the dialog caps its height so Confirm stays
    reachable on short phone screens and with the on-screen keyboard open. */
 .admin-dialog-backdrop { align-items: center; display: flex; justify-content: center; overflow-y: auto; overscroll-behavior: contain; padding: 16px; z-index: 80; }
-.admin-reason-dialog { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); box-shadow: var(--shadow-pop); display: grid; gap: 16px; margin: auto; max-height: calc(100dvh - 32px); max-width: 520px; overflow-y: auto; padding: 24px; width: 100%; }
+.admin-reason-dialog { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-card); box-shadow: var(--shadow-pop); display: flex; flex-direction: column; margin: auto; max-height: calc(100dvh - 32px); max-width: 520px; overflow: hidden; position: relative; width: 100%; }
 .admin-reason-dialog h2 { font-size: 1.25rem; font-weight: 700; margin: 0; }
 .admin-reason-dialog textarea { min-height: 100px; }
 .admin-reason-dialog .admin-actions { justify-content: flex-end; }

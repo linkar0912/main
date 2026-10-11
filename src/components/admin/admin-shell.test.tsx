@@ -34,6 +34,14 @@ describe("AdminShell", () => {
     expect(screen.getByRole("link", { name: "Overview" }).hasAttribute("aria-current")).toBe(false);
   });
 
+  it("highlights Delete data on the Meta deletion requests page it links back to", () => {
+    navigation.pathname = "/admin/system/data-deletions";
+    render(<AdminShell owner={{ email: "owner@linkar.in" }}><main>Requests</main></AdminShell>);
+
+    expect(screen.getByRole("link", { name: "Delete data" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Service health" }).hasAttribute("aria-current")).toBe(false);
+  });
+
   it("closes the mobile operator drawer with Escape and restores focus", async () => {
     render(<AdminShell owner={{ email: "owner@linkar.in" }}><main>Overview</main></AdminShell>);
     const button = screen.getByRole("button", { name: "Open operator navigation" });

@@ -36,6 +36,21 @@ function commandLabel(pending: Pending): string {
   return pending.action === "run_delivery_reconciliation" ? "Re-check stuck sends" : "Recount plan usage";
 }
 
+// What each command does, in one sentence, and the button that does it.
+function commandCopy(pending: Pending): { intro: string; confirm: string } {
+  if (pending.type === "retry") {
+    return { intro: "Runs the selected jobs again. Only retry the ones whose cause is fixed, or they will fail again.", confirm: `Retry ${pending.jobIds.length === 1 ? "job" : `${pending.jobIds.length} jobs`}` };
+  }
+  if (pending.type === "queue") {
+    return pending.action === "pause"
+      ? { intro: "Nothing in this queue runs until you resume it. Work already waiting is kept.", confirm: "Pause queue" }
+      : { intro: "Work waiting in this queue starts running again straight away.", confirm: "Resume queue" };
+  }
+  return pending.action === "run_delivery_reconciliation"
+    ? { intro: "Finds message sends that stopped without a result from Meta and marks their outcome unknown, so they are never sent twice.", confirm: "Re-check stuck sends" }
+    : { intro: "Recounts every workspace's messages and broadcasts this month against its plan limits.", confirm: "Recount plan usage" };
+}
+
 function queueState(queue: AdminSystemSnapshot["queues"][number]): "unavailable" | "paused" | "running" {
   if (!queue.configured || queue.paused === null) return "unavailable";
   return queue.paused ? "paused" : "running";
@@ -373,7 +388,8 @@ export function SystemConsole({ snapshot }: { snapshot: AdminSystemSnapshot }) {
         <ReasonDialog
           error={error}
           title={commandLabel(pending)}
-          warning="This changes how Linkar runs right now and is recorded in the audit log."
+          intro={commandCopy(pending).intro}
+          confirmLabel={commandCopy(pending).confirm}
           busy={busy}
           onCancel={cancelCommand}
           onConfirm={execute}

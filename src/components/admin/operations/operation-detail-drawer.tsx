@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { IdChip } from "@/src/components/ui/id-chip";
 import { RelativeTime } from "@/src/components/ui/relative-time";
 import type { AdminOperationDetail } from "@/src/lib/admin/operations/types";
+import { humanizeAdminCode } from "../shared/admin-request";
 import { StatusPill } from "../shared/status-pill";
 import { useAdminDialog } from "../shared/use-admin-dialog";
 import { kindLabels } from "./labels";
@@ -20,7 +21,10 @@ function attributeLabel(key: string): string {
 function attributeValue(value: string | number | boolean | null): string {
   if (value === null || value === "") return "None";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  return String(value);
+  if (typeof value === "number") return value.toLocaleString("en-IN");
+  // Enum values (AUTOMATION_DM, PROVIDER_REJECTED) read as words.
+  if (/^[A-Z][A-Z0-9_]+$/.test(value)) return humanizeAdminCode(value.toLowerCase());
+  return value;
 }
 
 const providerNames = { instagram: "Instagram", facebook: "Facebook" } as const;
@@ -68,7 +72,7 @@ export function OperationDetailDrawer({
             <div><dt>Record ID</dt><dd><IdChip id={detail.id} /></dd></div>
             <div><dt>Platform</dt><dd>{detail.provider ? providerNames[detail.provider] : "None"}</dd></div>
             <div><dt>Last updated</dt><dd><RelativeTime value={detail.updatedAt} fallback="Unknown" /></dd></div>
-            <div><dt>Edit number</dt><dd>{detail.version}</dd></div>
+            <div><dt>Version</dt><dd>{detail.version}</dd></div>
             {Object.entries(detail.attributes).map(([key, value]) => (
               <div key={key}><dt>{attributeLabel(key)}</dt><dd>{attributeValue(value)}</dd></div>
             ))}

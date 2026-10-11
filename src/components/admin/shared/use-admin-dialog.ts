@@ -23,7 +23,8 @@ export function useAdminDialog<T extends HTMLElement>(onClose: () => void, busy 
     const focusable = () => Array.from(element.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     ));
-    (focusable()[0] ?? element).focus();
+    // Start in the first field, not on the close button in the corner.
+    (focusable().find((target) => !target.hasAttribute("data-dialog-close")) ?? element).focus();
     const listener = (event: KeyboardEvent) => {
       if (dialogs.at(-1) !== element) return;
       if (event.key === "Escape") {
