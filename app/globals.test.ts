@@ -158,7 +158,11 @@ describe("workspace palette contract", () => {
   it("keeps builder overlays inside an iPhone viewport", () => {
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.action-notice\s*{[^}]*left:\s*14px[^}]*right:\s*14px[^}]*transform:\s*none[^}]*width:\s*auto/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.builder-preview\.is-open\s*{[^}]*height:\s*100dvh[^}]*inset:\s*0/);
-    expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.builder-preview\.is-open \.ig-phone\s*{[^}]*height:\s*min\(500px,\s*calc\(100dvh - 230px\)\)/);
+    // The preview phone keeps a real iPhone's 393:852 screen everywhere and
+    // shrinks as one piece (zoom) instead of being re-laid-out smaller.
+    expect(css).toMatch(/\.builder-preview :is\(\.ig-device, \.facebook-device\)\s*{[^}]*width:\s*318px[^}]*zoom:\s*var\(--phone-zoom/);
+    expect(css).toMatch(/\.builder-preview :is\(\.ig-phone, \.facebook-phone\)\s*{[^}]*aspect-ratio:\s*393 \/ 852[^}]*height:\s*auto/);
+    expect(css).not.toMatch(/\.builder-preview[^{]*\.(ig|facebook)-phone\s*{[^}]*height:\s*(min|var|calc)\(/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.template-picker\s*{[^}]*height:\s*100dvh/);
     expect(css).toMatch(/@media \(max-width:\s*600px\)[\s\S]*?\.template-picker-categories\s*{[^}]*flex-wrap:\s*nowrap[^}]*overflow-x:\s*auto/);
   });

@@ -2684,8 +2684,6 @@ a.section-nav-link.is-active:hover { color: var(--ink); }
   .builder-preview.is-open .builder-preview-heading { min-height: 44px; }
   .builder-preview.is-open .preview-line { margin: 8px 0 12px; }
   .builder-preview.is-open .ig-preview { gap: 10px; }
-  .builder-preview.is-open .ig-device { max-width: min(286px, calc(100vw - 48px)); }
-  .builder-preview.is-open .ig-phone { height: min(500px, calc(100dvh - 230px)); }
   .page-header { align-items: flex-start; flex-direction: column; gap: 17px; margin-bottom: var(--space-5); }
   .page-header .button, .header-actions { width: 100%; }
   .header-actions { flex-direction: column; }
@@ -7093,15 +7091,13 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 /* The preview view switch is the standard segmented control (track + solid
    thumb on the selected view); it no longer paints its own indicator. */
 .builder-preview .ig-preview-tabs .segmented-option { font-size: .8125rem; min-height: 32px; }
-/* The phone fits the window: its screen height follows the viewport (heading,
-   view switch and caption take about 290px around it) and the frame width
-   follows that height, so the device keeps a phone's proportions instead of
-   running off the bottom of shorter laptop screens. */
-.builder-preview { --preview-phone-height: clamp(340px, calc(100dvh - 290px), 580px); }
-.builder-preview .ig-device { max-width: 100%; width: calc(var(--preview-phone-height) * .54 + 18px); }
-.builder-preview .ig-phone { height: var(--preview-phone-height); min-height: 0; }
-.builder-preview .facebook-device { margin: 0 auto; max-width: 100%; width: calc(var(--preview-phone-height) * .52 + 18px); }
-.builder-preview .facebook-phone { height: var(--preview-phone-height); min-height: 0; }
+/* The preview phone keeps a real iPhone's shape and scales as one piece.
+   It is laid out at its design size - a 300px screen in the 393:852 shape of
+   an iPhone 15, inside an 18px bezel - and phoneFitRef (src/components/ui/
+   phone-fit.ts) writes --phone-zoom so the whole device shrinks evenly to the
+   room left in the window and the column. Nothing inside re-wraps or clips. */
+.builder-preview :is(.ig-device, .facebook-device) { flex: 0 0 auto; margin: 0 auto; max-width: none; width: 318px; zoom: var(--phone-zoom, .75); }
+.builder-preview :is(.ig-phone, .facebook-phone) { aspect-ratio: 393 / 852; height: auto; min-height: 0; width: 100%; }
 .builder-preview .ig-profile-meta,
 .builder-preview .facebook-preview-note { color: var(--muted); display: block; font-size: .8125rem; line-height: 1.45; margin: 0 auto; max-width: 300px; text-align: center; }
 .builder-layout .builder-preview-scrim { display: none; }
@@ -7144,8 +7140,6 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
     z-index: 1002;
   }
   .builder-layout .builder-preview.is-open .builder-preview-close { display: inline-flex; flex: 0 0 44px; height: 44px; width: 44px; }
-  .builder-layout .builder-preview.is-open .ig-phone { height: min(520px, calc(100dvh - 240px)); min-height: 0; }
-  .builder-layout .builder-preview.is-open .facebook-phone { height: min(520px, calc(100dvh - 200px)); min-height: 0; }
   .builder-layout .builder-preview-scrim { background: rgb(0 0 0 / 40%); border: 0; display: block; inset: 0; padding: 0; position: fixed; z-index: 1001; }
   .builder-layout .builder-mobile-preview-trigger { display: inline-flex; }
   /* The sticky shell top bar otherwise paints over the full-screen sheet's
@@ -8089,9 +8083,6 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 
 @media (max-width: 960px) {
   /* The full-screen preview sheet: the phone uses the height it has. */
-  .builder-layout .builder-preview.is-open { --preview-phone-height: clamp(300px, calc(100dvh - 210px), 640px); }
-  .builder-layout .builder-preview.is-open .ig-phone,
-  .builder-layout .builder-preview.is-open .facebook-phone { height: var(--preview-phone-height); }
 }
 
 /* Touch sizes: every control is at least 44px tall, and text fields use 16px

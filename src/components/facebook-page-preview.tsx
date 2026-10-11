@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import { BatteryFull, Globe2, Heart, MessageCircle, MoreHorizontal, Send, Signal, ThumbsUp, Wifi } from "lucide-react";
 import { FacebookGlyph } from "./facebook-glyph";
+import { phoneFitRef } from "./ui/phone-fit";
 import { useStickToEnd } from "./instagram-preview";
 
 export type FacebookPagePreviewProps = {
@@ -35,7 +36,7 @@ export function FacebookPagePreview({ pageName, pageAvatarUrl, postBody, comment
   const postRef = useStickToEnd<HTMLElement>(`${commentText}|${replyText}`);
   return (
     <div className="facebook-preview" style={{ "--facebook-brand": "#1877F2" } as CSSProperties}>
-      <div className="facebook-device">
+      <div className="facebook-device" ref={phoneFitRef}>
         <span className="facebook-device-button facebook-device-silent" aria-hidden="true" />
         <span className="facebook-device-button facebook-device-volume" aria-hidden="true" />
         <span className="facebook-device-button facebook-device-power" aria-hidden="true" />

@@ -1,5 +1,6 @@
 "use client";
 
+import { phoneFitRef } from "@/src/components/ui/phone-fit";
 import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { useEffect, useRef } from "react";
 import {
@@ -258,7 +259,7 @@ export function InstagramPreview({
           <button type="button" role="tab" aria-selected={view === "dm"} className={`segmented-option${view === "dm" ? " is-active" : ""}`} onClick={() => onViewChange("dm")}>DM</button>
         </div>
       )}
-      <div className="ig-device">
+      <div className="ig-device" ref={phoneFitRef}>
         <span className="ig-device-button ig-device-silent" aria-hidden="true" />
         <span className="ig-device-button ig-device-volume" aria-hidden="true" />
         <span className="ig-device-button ig-device-power" aria-hidden="true" />
