@@ -52,6 +52,8 @@ describe("AutomationsScreen", () => {
 
     render(<AutomationSectionsShell><AutomationsScreen /></AutomationSectionsShell>);
 
-    expect((await screen.findByRole("alert")).textContent).toBe("Could not load automations");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Your automations didn’t load");
+    expect(within(alert).getByRole("button", { name: /try again/i })).toBeTruthy();
   });
 });

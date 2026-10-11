@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AutomationList, useAutomations } from "./automation-list";
 import { DeliveryDiagnostics } from "./delivery-diagnostics";
@@ -58,18 +58,9 @@ export function AutomationsScreen({ initialAutomations }: { initialAutomations?:
     <>
       <div className="automation-section">
         <div className="page-stack">
-          <section className="settings-overview automations-summary" aria-label="Automation summary">
-            {STATUS_FILTERS.map(({ key, label }) => (
-              <div className="settings-overview-cell" key={key}>
-                <small>{key === "ALL" ? "Total" : label}</small>
-                <strong>
-                  {key !== "ALL" ? <span className="status-dot" data-status={key.toLowerCase()} aria-hidden /> : null}
-                  {loading && automations.length === 0 ? "–" : counts[key]}
-                </strong>
-              </div>
-            ))}
-          </section>
-
+          {/* No separate Total / Active / Paused / Drafts strip: the filter
+              below already carries those counts, and two rows of the same
+              numbers was noise. */}
           <section className="surface is-flush automations-surface" aria-label="Your automations">
             <div className="list-toolbar">
               <label className="list-search">
@@ -97,8 +88,15 @@ export function AutomationsScreen({ initialAutomations }: { initialAutomations?:
               </div>
             </div>
             <div className="surface-body">
-              {error ? (
-                <p className="form-error" role="alert">{error}</p>
+              {error && automations.length > 0 ? <p className="form-error" role="alert">{error}</p> : null}
+              {error && automations.length === 0 ? (
+                <div className="empty-state is-inline" role="alert">
+                  <h3>Your automations didn’t load</h3>
+                  <p>Check your connection and try again.</p>
+                  <button className="button button-secondary button-small" type="button" onClick={() => void reload()}>
+                    <RefreshCw size={15} aria-hidden /> Try again
+                  </button>
+                </div>
               ) : filtering && visible.length === 0 && automations.length > 0 ? (
                 <div className="empty-state is-inline">
                   <span className="empty-icon"><Search size={20} /></span>
