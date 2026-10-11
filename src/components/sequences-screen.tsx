@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ListOrdered, Pause, Pencil, Play, Plus, RotateCw, Trash2 } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
+import { prefersReducedMotion } from "./ui/use-presence";
 import { LocalStatusBadge, lifecycleStatus } from "./workspace-primitives";
 
 type SequenceStepView = { id: string; delayHours: number | string; text: string };
@@ -120,7 +121,7 @@ export function SequencesScreen() {
     setStepErrors({});
     // The form sits beside the list on desktop but below it on phones, so
     // bring the form itself into view rather than the top of the page.
-    formRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    formRef.current?.scrollIntoView?.({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
   }
 
   function updateStep(index: number, patch: Partial<SequenceStepView>) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
@@ -81,7 +82,7 @@ export function UsersScreen({ page, search = "", cursor = null, history = [] }: 
 
       {notice ? <div className="form-success admin-message" role="status">{notice}</div> : null}
 
-      {adding ? (
+      <Presence>{adding ? (
         <AdminDialog
           title="Add a user"
           busy={busy}
@@ -114,7 +115,7 @@ export function UsersScreen({ page, search = "", cursor = null, history = [] }: 
           ) : null}
           <ReasonField value={reason} onChange={setReason} rows={2} />
         </AdminDialog>
-      ) : null}
+      ) : null}</Presence>
 
       <section className="admin-section" aria-label="User identities">
         <form className="admin-toolbar" role="search" onSubmit={searchUsers}>

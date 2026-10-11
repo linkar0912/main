@@ -1,5 +1,7 @@
 "use client";
 
+import { Presence, presenceProps, usePresence } from "@/src/components/ui/use-presence";
+import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { KeyboardEvent, useEffect, useId, useRef, useState } from "react";
@@ -144,6 +146,7 @@ function useTabs(initial: WorkspaceTab, tabs: readonly WorkspaceTab[]) {
 
 function ActionsMenu({ items, onPick }: { items: Array<{ action: Action; label: string; icon: React.ReactNode; danger?: boolean; disabled?: string }>; onPick: (action: Action) => void }) {
   const [open, setOpen] = useState(false);
+  const presence = usePresence(open);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -181,8 +184,8 @@ function ActionsMenu({ items, onPick }: { items: Array<{ action: Action; label: 
         onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); } }}>
         Actions <ChevronDown size={16} aria-hidden />
       </button>
-      {open ? (
-        <div ref={menu} id={menuId} className="admin-menu-list" role="menu" aria-label="Workspace actions" onKeyDown={onMenuKey}>
+      {presence.mounted ? (
+        <div ref={menu} id={menuId} className="admin-menu-list" role="menu" aria-label="Workspace actions" onKeyDown={onMenuKey} {...presenceProps(presence.state)}>
           {items.map((item) => (
             <button key={item.action} type="button" role="menuitem" className={item.danger ? "is-danger" : undefined} disabled={Boolean(item.disabled)} title={item.disabled}
               onClick={() => { setOpen(false); onPick(item.action); }}>
@@ -432,7 +435,7 @@ export function WorkspaceDetailScreen({
           : <div className="form-success admin-message" role="status">{notice.text}</div>
       ) : null}
 
-      <div className="admin-tabs" role="tablist" aria-label="Workspace sections">
+      <div ref={slidingThumbRef} className="admin-tabs" role="tablist" aria-label="Workspace sections">
         {tabs.map((id) => (
           <button
             key={id}
@@ -607,7 +610,7 @@ export function WorkspaceDetailScreen({
         </section>
       ) : null}
 
-      {action === "plan" && entitlement ? (
+      <Presence>{action === "plan" && entitlement ? (
         <ReasonDialog
           wide
           title="Change plan & limits"
@@ -627,9 +630,9 @@ export function WorkspaceDetailScreen({
           </label>
           <LimitsFields form={limitsForm} setForm={setLimitsForm} defaults={entitlement.defaults} samePlan={planId === entitlement.plan.id} invalid={invalidLimit} />
         </ReasonDialog>
-      ) : null}
+      ) : null}</Presence>
 
-      {action === "pause" ? (
+      <Presence>{action === "pause" ? (
         <ReasonDialog
           title="Pause live automations"
           intro="Stops every live automation in this workspace. People can still sign in, and you can resume them later."
@@ -639,9 +642,9 @@ export function WorkspaceDetailScreen({
           onCancel={close}
           onConfirm={confirm}
         />
-      ) : null}
+      ) : null}</Presence>
 
-      {action === "resume" ? (
+      <Presence>{action === "resume" ? (
         <ReasonDialog
           title="Resume paused automations"
           intro="Turns back on the automations the last pause stopped, except any changed since."
@@ -651,9 +654,9 @@ export function WorkspaceDetailScreen({
           onCancel={close}
           onConfirm={confirm}
         />
-      ) : null}
+      ) : null}</Presence>
 
-      {action === "suspend" ? (
+      <Presence>{action === "suspend" ? (
         <ReasonDialog
           danger
           title="Suspend workspace"
@@ -669,9 +672,9 @@ export function WorkspaceDetailScreen({
             <input required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
           </label>
         </ReasonDialog>
-      ) : null}
+      ) : null}</Presence>
 
-      {action === "restore" ? (
+      <Presence>{action === "restore" ? (
         <ReasonDialog
           title="Reactivate workspace"
           intro={<>Members can use this workspace again.{workspace.suspendedReason ? <> It was suspended because: {workspace.suspendedReason}</> : null}</>}
@@ -681,9 +684,9 @@ export function WorkspaceDetailScreen({
           onCancel={close}
           onConfirm={confirm}
         />
-      ) : null}
+      ) : null}</Presence>
 
-      {action === "export" ? (
+      <Presence>{action === "export" ? (
         <ReasonDialog
           title="Export data"
           intro="Workspace details, members, contacts and automations. Passwords, access tokens and raw Meta data are never included. Workspaces over 50,000 rows must be exported offline."
@@ -699,7 +702,7 @@ export function WorkspaceDetailScreen({
             <label><input type="radio" name="export-format" value="json" checked={exportFormat === "json"} onChange={() => setExportFormat("json")} /> JSON</label>
           </fieldset>
         </ReasonDialog>
-      ) : null}
+      ) : null}</Presence>
     </main>
   );
 }

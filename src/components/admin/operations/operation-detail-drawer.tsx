@@ -8,6 +8,7 @@ import { RelativeTime } from "@/src/components/ui/relative-time";
 import type { AdminOperationDetail } from "@/src/lib/admin/operations/types";
 import { humanizeAdminCode } from "../shared/admin-request";
 import { StatusPill } from "../shared/status-pill";
+import { presenceProps, usePresenceState } from "@/src/components/ui/use-presence";
 import { useAdminDialog } from "../shared/use-admin-dialog";
 import { kindLabels } from "./labels";
 import { OperationActions } from "./operation-actions";
@@ -44,8 +45,9 @@ export function OperationDetailDrawer({
 }) {
   const [actionOpen, setActionOpen] = useState(false);
   const dialogRef = useAdminDialog<HTMLElement>(onClose, actionOpen);
+  const presence = usePresenceState();
   return (
-    <aside ref={dialogRef} tabIndex={-1} className="admin-detail-drawer" role="dialog" aria-modal="true" aria-label="Operation detail">
+    <aside ref={dialogRef} tabIndex={-1} className="admin-detail-drawer" {...presenceProps(presence)} role="dialog" aria-modal="true" aria-label="Operation detail">
       <div className="admin-drawer-head">
         <div>
           {detail && !loading && !error ? (

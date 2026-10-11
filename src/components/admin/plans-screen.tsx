@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, Ban, Check, Copy, Plus, Save } from "lucide-react";
@@ -124,7 +125,7 @@ function PlanFields({ value, onChange }: { value: Values; onChange: (value: Valu
 }
 
 function LocalNotice({ notice, onDismiss }: { notice: Notice | null; onDismiss: () => void }) {
-  return notice ? <ActionNotice tone={notice.tone} message={notice.message} onDismiss={onDismiss} /> : null;
+  return <Presence>{notice ? <ActionNotice tone={notice.tone} message={notice.message} onDismiss={onDismiss} /> : null}</Presence>;
 }
 
 type Confirming = "save" | "retire" | null;
@@ -475,9 +476,9 @@ function PremiumInviteManager({ plans, inviteCodes }: { plans: Plan[]; inviteCod
         )}
       </div>
 
-      {creating ? <CreateInviteDialog plans={plans} onClose={() => setCreating(false)} /> : null}
+      <Presence>{creating ? <CreateInviteDialog plans={plans} onClose={() => setCreating(false)} /> : null}</Presence>
 
-      {command ? (
+      <Presence>{command ? (
         <ReasonDialog
           title={command.type === "revoke" ? `Revoke ${command.item.label}` : `End premium access from ${command.item.label}`}
           warning={command.type === "revoke"
@@ -490,7 +491,7 @@ function PremiumInviteManager({ plans, inviteCodes }: { plans: Plan[]; inviteCod
           onCancel={() => setCommand(null)}
           onConfirm={(commandReason) => void execute(commandReason)}
         />
-      ) : null}
+      ) : null}</Presence>
     </section>
   );
 }
@@ -549,8 +550,8 @@ export function PlansScreen({ plans, inviteCodes = [] }: { plans: Plan[]; invite
         </div>
       </section>
 
-      {editing ? <PlanDialog key={`${editing.id}:${editing.version}`} plan={editing} onClose={() => setEditing(null)} onDone={done} /> : null}
-      {creating ? <CreatePlanDialog onClose={() => setCreating(false)} onDone={done} /> : null}
+      <Presence>{editing ? <PlanDialog key={`${editing.id}:${editing.version}`} plan={editing} onClose={() => setEditing(null)} onDone={done} /> : null}</Presence>
+      <Presence>{creating ? <CreatePlanDialog onClose={() => setCreating(false)} onDone={done} /> : null}</Presence>
     </main>
   );
 }

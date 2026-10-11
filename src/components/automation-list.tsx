@@ -1,5 +1,6 @@
 "use client";
 
+import { Presence } from "@/src/components/ui/use-presence";
 import Link from "next/link";
 import { Activity, ArrowRight, ArrowUpRight, Copy, History, Pencil, Trash2, Workflow } from "lucide-react";
 import { FacebookGlyph } from "./facebook-glyph";
@@ -457,13 +458,13 @@ export function AutomationList({
         );
       })}
       {compact && automations.length > visible.length && <Link className="list-more" href="/automations">View all {automations.length} automations</Link>}
-      {historyForId && (
+      <Presence>{historyForId && (
         <AutomationVersionsModal
           automationId={historyForId}
           onClose={() => setHistoryForId(null)}
           onRestored={onChanged}
         />
-      )}
+      )}</Presence>
     </div>
   );
 }

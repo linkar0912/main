@@ -2,6 +2,7 @@
 
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { useState } from "react";
+import { Collapse } from "@/src/components/ui/collapse";
 import type { InboxFiltersValue } from "./types";
 
 const STATUS_OPTIONS: { value: InboxFiltersValue["status"]; label: string }[] = [
@@ -41,11 +42,11 @@ export function InboxFilters({ value, labels, onChange }: { value: InboxFiltersV
       <button type="button" className="ibx-chip" aria-pressed={value.favorite} onClick={() => set("favorite", !value.favorite)}>Starred</button>
     </div>
 
-    {expanded && <div className="ibx-advanced" id="ibx-advanced-filters">
+    <Collapse open={expanded}>{expanded && <div className="ibx-advanced" id="ibx-advanced-filters">
       <label><span>Sort</span><select aria-label="Sort conversations" value={value.sort} onChange={(event) => set("sort", event.target.value as InboxFiltersValue["sort"])}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="unread">Unread first</option></select></label>
       <label><span>Owner</span><select aria-label="Assignment" value={value.assignment} onChange={(event) => set("assignment", event.target.value as InboxFiltersValue["assignment"])}><option value="all">Anyone</option><option value="mine">Assigned to me</option><option value="unassigned">Unassigned</option></select></label>
       <label><span>Label</span><select aria-label="Label" value={value.label} onChange={(event) => set("label", event.target.value)}><option value="">Any label</option>{labels.map((label) => <option key={label} value={label}>{label}</option>)}</select></label>
       <label><span>Reminder</span><select aria-label="Reminder filter" value={value.reminder} onChange={(event) => set("reminder", event.target.value as InboxFiltersValue["reminder"])}><option value="all">Any time</option><option value="due">Due now</option><option value="scheduled">Scheduled</option></select></label>
-    </div>}
+    </div>}</Collapse>
   </div>;
 }
