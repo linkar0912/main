@@ -8,6 +8,7 @@ import {
   ChartNoAxesCombined,
   UserRound,
   CircleHelp,
+  CreditCard,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -27,10 +28,10 @@ import { CommandPalette } from "./command-palette";
 import { WORKSPACE_RECENT_KEY, workspaceActions, workspacePages } from "./command-palette-items";
 import { workspaceSources } from "./command-palette-sources";
 import { SidebarAccountsSection } from "./sidebar-accounts";
-import { AccountMenuButton, NewMenu, SearchTrigger, usePaletteHotkey } from "./top-bar";
+import { AccountMenuButton, AccountMenuHead, MenuDivider, NewMenu, SearchTrigger, usePaletteHotkey } from "./top-bar";
 import { Presence, usePresence } from "./ui/use-presence";
 import { slidingThumbRef } from "./ui/use-sliding-thumb";
-import { ThemeToggle } from "./theme-toggle";
+import { ThemeMenuSwitch } from "./theme-toggle";
 
 const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
 
@@ -50,6 +51,14 @@ const automateNavigation = [
 /** Personal destinations pinned to the bottom of the sidebar. */
 const accountNavigation = [
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/help", label: "Help", icon: CircleHelp },
+];
+
+/** The account menu's rows, in order (the theme switch goes before Help). */
+const accountMenuLinks = [
+  { href: "/profile", label: "My profile", icon: UserRound },
+  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/settings?section=billing", label: "Billing", icon: CreditCard },
   { href: "/help", label: "Help", icon: CircleHelp },
 ];
 
@@ -80,6 +89,12 @@ export function useAccountIdentity(): AccountIdentityState {
 function displayRole(role: AccountIdentity["role"] | ""): string {
   if (!role) return "Workspace";
   return role.charAt(0) + role.slice(1).toLowerCase();
+}
+
+/** "agency" -> "Agency": the plan in plain words (the sticker stays on Billing). */
+function planLabel(plan: string): string {
+  const name = plan.trim() || "free";
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
 }
 
 /** "Tejastelkar" for tejastelkar9@..., "Your account" when no name survives. */
@@ -242,9 +257,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     };
   }, [drawerOpen]);
 
+  // The button's name is "Account menu", so the picture itself is decorative.
   const avatar = igAvatarUrl ? (
     // eslint-disable-next-line @next/next/no-img-element -- Meta CDN avatar; next/image adds no value for one remote photo.
-    <img className="avatar is-photo" src={igAvatarUrl} alt="Instagram profile picture" />
+    <img className="avatar is-photo" src={igAvatarUrl} alt="" />
   ) : (
     <span className="avatar" aria-hidden>{initialsOf(email) || <UserRound size={16} strokeWidth={2} />}</span>
   );
@@ -353,27 +369,36 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <span className="topbar-account-skeleton skeleton-block" aria-hidden />
               )
             ) : (
-              <AccountMenuButton label="Account menu" menuId="account-menu" avatar={avatar} badge={<span className="plan-tag">{plan}</span>}>
+              <AccountMenuButton label="Account menu" menuId="account-menu" avatar={avatar}>
                 {(close) => (
                   <>
-                    <div className="account-menu-head">
-                      <strong title={email}>{displayNameFromEmail(email)}</strong>
-                      <small>{email || `${PRODUCT_NAME} workspace`}</small>
-                      <small className="account-menu-role"><span>{displayRole(role)}</span><span className="plan-tag">{plan}</span></small>
-                    </div>
-                    <Link
-                      className="account-menu-item"
-                      href="/profile"
-                      aria-current={isActive(pathname, "/profile") ? "page" : undefined}
-                      onClick={close}
-                    >
-                      <UserRound size={16} strokeWidth={1.9} /> My profile
-                    </Link>
-                    <ThemeToggle className="account-menu-item" showLabel />
+                    <AccountMenuHead
+                      avatar={avatar}
+                      name={displayNameFromEmail(email)}
+                      email={email || `${PRODUCT_NAME} workspace`}
+                      meta={`${displayRole(role)} · ${planLabel(plan)} plan`}
+                    />
+                    <MenuDivider />
+                    {accountMenuLinks.map(({ href, label, icon: Icon }) => (
+                      <Fragment key={href}>
+                        {/* The theme switch sits between Billing and Help. */}
+                        {href === "/help" ? <ThemeMenuSwitch className="menu-item" /> : null}
+                        <Link
+                          className="menu-item"
+                          href={href}
+                          aria-current={pathname === href ? "page" : undefined}
+                          onClick={close}
+                        >
+                          <Icon size={16} strokeWidth={1.9} aria-hidden />
+                          <span className="menu-item-label">{label}</span>
+                        </Link>
+                      </Fragment>
+                    ))}
+                    <MenuDivider />
                     <form action="/api/auth/logout" method="post">
-                      <button className="account-menu-item is-danger" type="submit">
-                        <LogOut size={16} strokeWidth={1.9} />
-                        <span>Sign out</span>
+                      <button className="menu-item is-danger" type="submit">
+                        <LogOut size={16} strokeWidth={1.9} aria-hidden />
+                        <span className="menu-item-label">Sign out</span>
                       </button>
                     </form>
                   </>

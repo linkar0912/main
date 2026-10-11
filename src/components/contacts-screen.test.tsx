@@ -39,7 +39,9 @@ const contacts = [
 ];
 
 /** The contacts API: `q` searches handle, email and tags of every contact, as the server does. */
-function contactsApi(all: typeof contacts, extra: (url: string) => Response | undefined = () => undefined) {
+type ContactFixture = { id: string; instagramUsername?: string; email?: string; tags: string[]; leadStatus: string; lastSeenAt: string };
+
+function contactsApi(all: ContactFixture[], extra: (url: string) => Response | undefined = () => undefined) {
   const requests: string[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);

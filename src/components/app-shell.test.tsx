@@ -62,19 +62,38 @@ describe("AppShell", () => {
 
     // The account menu moved to the top bar; its head names the role.
     fireEvent.click(await screen.findByRole("button", { name: "Account menu" }));
-    expect(await screen.findByText("Member")).toBeTruthy();
-    expect(screen.queryByText("Owner")).toBeNull();
+    expect(await screen.findByText("Member · Free plan")).toBeTruthy();
+    expect(screen.queryByText(/^Owner/)).toBeNull();
     expect(screen.getByRole("link", { name: "My profile" }).getAttribute("href")).toBe("/profile");
     expect(screen.queryByTitle("Open my profile")).toBeNull();
   });
 
-  it("keeps the plan sticker visible in the top bar", async () => {
+  it("shows only the profile picture as the account button, with the plan in plain words inside", async () => {
     stubShellFetch("OWNER");
     render(<AppShell><main>Workspace</main></AppShell>);
 
     const account = await screen.findByRole("button", { name: "Account menu" });
-    expect(account.querySelector(".plan-tag")?.textContent).toBe("free");
     expect(account.closest("header")?.className).toContain("app-topbar");
+    // Avatar only: no plan sticker, name or caret in the button.
+    expect(account.querySelector(".plan-tag")).toBeNull();
+    expect(account.querySelector("svg.lucide-chevron-down")).toBeNull();
+    expect(account.textContent?.trim()).toMatch(/^.?$/);
+    expect(account.querySelector(".avatar")).toBeTruthy();
+
+    fireEvent.click(account);
+    const menu = document.getElementById("account-menu") as HTMLElement;
+    expect(menu.querySelector(".plan-tag")).toBeNull();
+    expect(menu.textContent).toContain("Owner · Free plan");
+    const rows = Array.from(menu.querySelectorAll(".menu-item")).map((row) => row.textContent?.trim());
+    expect(rows).toEqual(["My profile", "Settings", "Billing", "Dark mode", "Help", "Sign out"]);
+    expect(screen.getByRole("link", { name: "Billing" }).getAttribute("href")).toBe("/settings?section=billing");
+    const theme = screen.getByRole("switch", { name: "Dark mode" });
+    expect(theme.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(theme);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(theme.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(theme);
+    expect(document.documentElement.dataset.theme).toBeUndefined();
   });
 
   it("opens the command palette from the search field, ⌘K, Ctrl K and /", async () => {
@@ -148,8 +167,9 @@ describe("AppShell", () => {
 
     render(<AppShell><main>Workspace</main></AppShell>);
 
-    const avatar = await screen.findByAltText("Instagram profile picture");
-    expect(avatar.getAttribute("src")).toBe("https://cdn.instagram.com/dp.jpg");
+    // The picture is the whole account button (named "Account menu").
+    const account = await screen.findByRole("button", { name: "Account menu" });
+    expect(account.querySelector("img.avatar")?.getAttribute("src")).toBe("https://cdn.instagram.com/dp.jpg");
   });
 
   it("keeps primary navigation focused on automations, insights, and quick setup", async () => {
@@ -291,11 +311,12 @@ describe("AppShell", () => {
       throw new Error(`Unexpected fetch to ${url}`);
     }));
     render(<AppShell><main>Workspace</main></AppShell>);
-    expect(await screen.findByText("free")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Account menu" }));
+    expect(await screen.findByText("Owner · Free plan")).toBeTruthy();
 
     plan = "growth";
     await act(async () => { notifyWorkspaceChanged(); });
 
-    expect(await screen.findByText("growth")).toBeTruthy();
+    expect(await screen.findByText("Owner · Growth plan")).toBeTruthy();
   });
 });

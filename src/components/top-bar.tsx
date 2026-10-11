@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Plus, Search } from "lucide-react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { ChevronDown, LayoutTemplate, Link2, Megaphone, Plus, Search, Workflow, Zap } from "lucide-react";
 import { WORKSPACE_ACTIONS, isPaletteShortcut } from "./command-palette-items";
 import { presenceProps, usePresence } from "./ui/use-presence";
 
@@ -102,6 +102,17 @@ export function SearchTrigger({ placeholder, onOpen }: { placeholder: string; on
   );
 }
 
+type MenuIcon = ComponentType<{ size?: number; strokeWidth?: number; "aria-hidden"?: boolean }>;
+
+/** One icon per way to create, in the menu's icon column. */
+const CREATE_ICONS: Record<string, MenuIcon> = {
+  "action:new-automation": Workflow,
+  "action:quick-automation": Zap,
+  "action:template": LayoutTemplate,
+  "action:tracked-link": Link2,
+  "action:broadcast": Megaphone,
+};
+
 /** The workspace's create button: one click opens the template picker; the caret lists every way to start. */
 export function NewMenu({ onTemplate }: { onTemplate: () => void }) {
   const { open, mounted, state, toggle, close, rootRef, buttonRef } = useDisclosureMenu();
@@ -125,10 +136,13 @@ export function NewMenu({ onTemplate }: { onTemplate: () => void }) {
       {mounted ? (
         <div className="topbar-menu topbar-create-menu" id="create-menu" {...presenceProps(state)}>
           {WORKSPACE_ACTIONS.map((item) => {
+            const Icon = CREATE_ICONS[item.id] ?? Plus;
+            // One line per row; the longer explanation stays in the tooltip
+            // and in the ⌘K palette.
             const copy = (
               <>
-                <span className="menu-item-label">{item.label}</span>
-                {item.hint ? <span className="menu-item-hint">{item.hint}</span> : null}
+                <Icon size={16} strokeWidth={1.9} aria-hidden />
+                <span className="menu-item-label" title={item.hint}>{item.label}</span>
               </>
             );
             return item.action ? (
@@ -143,17 +157,42 @@ export function NewMenu({ onTemplate }: { onTemplate: () => void }) {
   );
 }
 
-/** Avatar button + disclosure, used by both shells' top bars. */
+/**
+ * The account menu's head: avatar, name and email on one aligned row, then
+ * one quiet line (role and plan in plain words).
+ */
+export function AccountMenuHead({ avatar, name, email, meta }: { avatar: ReactNode; name: string; email: string; meta: string }) {
+  return (
+    <div className="account-menu-head">
+      <div className="account-menu-who">
+        {avatar}
+        <span className="account-menu-id">
+          <strong title={name}>{name}</strong>
+          {email ? <small title={email}>{email}</small> : null}
+        </span>
+      </div>
+      <p className="account-menu-meta">{meta}</p>
+    </div>
+  );
+}
+
+/** A hairline between groups of menu rows. */
+export function MenuDivider() {
+  return <div className="menu-divider" role="separator" />;
+}
+
+/**
+ * The profile picture as the whole button (initials when there is none),
+ * used by both shells' top bars. A ring marks hover and the open state.
+ */
 export function AccountMenuButton({
   label,
   avatar,
-  badge,
   menuId,
   children,
 }: {
   label: string;
   avatar: ReactNode;
-  badge?: ReactNode;
   menuId: string;
   children: (close: () => void) => ReactNode;
 }) {
@@ -170,8 +209,6 @@ export function AccountMenuButton({
         onClick={toggle}
       >
         {avatar}
-        {badge}
-        <ChevronDown className="topbar-account-chevron" size={15} strokeWidth={2.2} aria-hidden />
       </button>
       {mounted ? (
         <div className="topbar-menu topbar-account-menu" id={menuId} {...presenceProps(state)}>

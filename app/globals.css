@@ -9427,50 +9427,63 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 .topbar-new-more svg { transition: transform var(--dur-2) var(--ease-out); }
 .topbar-new-more[aria-expanded="true"] svg { transform: rotate(180deg); }
 
-/* Account: avatar, the plan sticker, a caret. */
+/* Account: the profile picture is the whole button - no name, sticker or
+   caret. Hover shows a faint ring around it; open shows the full ring
+   (a 2px gap in the bar's colour, then 2px of ink). */
 .topbar-account { flex: 0 0 auto; position: relative; }
 .topbar-account-button {
+  --account-ring: transparent;
   align-items: center;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  color: var(--muted);
+  border: 0;
+  border-radius: 50%;
   cursor: pointer;
   display: inline-flex;
-  gap: 8px;
-  min-height: 44px;
-  padding: 3px 10px 3px 3px;
-  transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+  height: 44px;
+  justify-content: center;
+  padding: 0;
+  width: 44px;
 }
-.topbar-account-button:hover, .topbar-account-button[aria-expanded="true"] { border-color: var(--line-strong); color: var(--ink); }
-.topbar-account-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.topbar-account-button .avatar { flex: 0 0 36px; font-size: .8125rem; height: 36px; width: 36px; }
-.topbar-account-button .plan-tag { font-size: .625rem; margin: 0; padding: 3px 8px; }
-.topbar-account-chevron { transition: transform var(--dur-2) var(--ease-out); }
-.topbar-account-button[aria-expanded="true"] .topbar-account-chevron { transform: rotate(180deg); }
-.topbar-account-skeleton { border-radius: 999px; display: block; height: 40px; width: 96px; }
+.topbar-account-button .avatar {
+  box-shadow: 0 0 0 2px var(--workspace-canvas, var(--panel)), 0 0 0 4px var(--account-ring);
+  flex: 0 0 36px;
+  font-size: .8125rem;
+  height: 36px;
+  object-fit: cover;
+  transition: box-shadow var(--dur-1) var(--ease-out);
+  width: 36px;
+}
+.topbar-account-button:hover { --account-ring: color-mix(in srgb, var(--ink) 22%, transparent); }
+.topbar-account-button[aria-expanded="true"] { --account-ring: var(--ink); }
+.topbar-account-button:focus-visible { outline: none; }
+.topbar-account-button:focus-visible .avatar { box-shadow: 0 0 0 2px var(--workspace-canvas, var(--panel)), 0 0 0 4px var(--accent); }
+.topbar-account-skeleton { border-radius: 50%; display: block; height: 36px; margin: 4px; width: 36px; }
 .topbar-account-error { color: var(--danger); font-size: .8125rem; font-weight: 600; margin: 0; }
 
-/* Menus hanging off the bar: a panel, rows with ink hover, no fills. */
+/* Menus hanging off the bar (account, owner, create): one language - 14px
+   radius, 8px inside, a hairline and a soft shadow; 40px rows with a 16px
+   icon column; ink on hover, the white tile on keyboard focus. They scale
+   in from the top-right corner they hang from and scale out on close. */
 .topbar-menu {
-  animation: motion-drop-in var(--dur-2) var(--ease-emph) both;
+  animation: motion-scale-in var(--dur-2) var(--ease-emph) both;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: var(--radius-card);
+  border-radius: 14px;
   box-shadow: var(--shadow-pop);
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
-  min-width: 260px;
-  padding: 6px;
+  padding: 8px;
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
   transform-origin: 100% 0;
+  width: 280px;
   z-index: 60;
 }
-.topbar-menu[data-state="closing"] { animation: motion-drop-out calc(var(--dur-2) * .7) var(--ease-in) both; pointer-events: none; }
+.topbar-menu[data-state="closing"] { animation: motion-scale-out calc(var(--dur-2) * .7) var(--ease-in) both; pointer-events: none; }
 .topbar-menu form { display: contents; }
-.topbar-create-menu { min-width: 300px; }
+.topbar-create-menu { width: 248px; }
 .menu-item {
   align-content: center;
   border: 0;
@@ -9489,14 +9502,54 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 .menu-item-label { color: var(--slate); font-size: .9rem; font-weight: 650; transition: color var(--dur-1) var(--ease-out); }
 .menu-item-hint { color: var(--muted); font-size: .8125rem; line-height: 1.35; }
 .menu-item:is(:hover, :focus-visible) .menu-item-label { color: var(--ink); }
-.topbar-account-menu .account-menu-head { border-bottom: 1px solid var(--line); margin-bottom: 4px; padding: 8px 12px 12px; }
-.topbar-account-menu .account-menu-head strong { color: var(--ink); font-size: .9375rem; }
-.topbar-account-menu .account-menu-head small { font-size: .8125rem; }
-.account-menu-role { align-items: center; display: flex; gap: 8px; margin-top: 4px; }
-.account-menu-role .plan-tag { font-size: .625rem; margin: 0; padding: 2px 7px; }
-.topbar-account-menu .account-menu-item { font-size: .9rem; min-height: 44px; padding: 0 12px; }
-.topbar-account-menu .account-menu-item[aria-current="page"] { color: var(--ink); font-weight: 700; }
-.topbar-account-menu .account-menu-item[aria-current="page"] svg { color: var(--accent); }
+.topbar-menu .menu-item {
+  align-items: center;
+  border-radius: var(--select-tile-radius);
+  display: flex;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 12px;
+}
+.topbar-menu .menu-item svg { color: var(--muted); flex: 0 0 16px; transition: color var(--dur-1) var(--ease-out); }
+.topbar-menu .menu-item-label { flex: 1 1 auto; font-size: .875rem; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-menu .menu-item[aria-current="page"] .menu-item-label { color: var(--ink); font-weight: 700; }
+.topbar-menu .menu-item[aria-current="page"] svg { color: var(--ink); }
+.topbar-menu .menu-item.is-danger, .topbar-menu .menu-item.is-danger :is(svg, .menu-item-label) { color: var(--danger); }
+.topbar-menu .menu-item.is-danger:hover :is(svg, .menu-item-label) { color: var(--danger); }
+.menu-divider { background: var(--line); flex: 0 0 1px; height: 1px; margin: 6px -8px; }
+
+/* The theme row's small switch shows the current mode. */
+.menu-switch {
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  flex: 0 0 auto;
+  height: 18px;
+  position: relative;
+  transition: border-color var(--dur-1) var(--ease-out);
+  width: 30px;
+}
+.menu-switch::after {
+  background: var(--muted);
+  border-radius: 50%;
+  content: "";
+  height: 10px;
+  left: 2.5px;
+  position: absolute;
+  top: 2.5px;
+  transition: transform var(--dur-2) var(--ease-snap), background-color var(--dur-1) var(--ease-out);
+  width: 10px;
+}
+.menu-item[aria-checked="true"] .menu-switch { background: var(--ink); border-color: var(--ink); }
+.menu-item[aria-checked="true"] .menu-switch::after { background: var(--panel); transform: translateX(12px); }
+
+/* Head: avatar, name and email on one row; one quiet line under it. */
+.topbar-account-menu .account-menu-head { display: grid; gap: 8px; padding: 8px 12px 6px; }
+.account-menu-who { align-items: center; display: flex; gap: 12px; min-width: 0; }
+.account-menu-head .avatar { flex: 0 0 40px; font-size: .875rem; height: 40px; object-fit: cover; width: 40px; }
+.account-menu-id { display: grid; gap: 1px; line-height: 1.3; min-width: 0; }
+.account-menu-id strong { color: var(--ink); font-size: .9375rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-menu-id small { color: var(--muted); font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-menu-meta { color: var(--muted); font-size: .8125rem; font-weight: 500; margin: 0; }
 
 /* Sticky panels inside pages clear the bar. */
 .section-nav, .settings-wrap .section-nav, .settings-nav, .profile-side, .composer-card,
@@ -9519,11 +9572,10 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   .topbar-new-label { clip: rect(0 0 0 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
   .topbar-new-more { min-width: 40px; }
   .topbar-menu { max-width: calc(100vw - 32px); position: fixed; right: 16px; top: calc(var(--topbar-h) + 4px); }
-  .topbar-account-button { padding-right: 6px; }
+  .topbar-menu .menu-item { min-height: 44px; }
 }
 @media (max-width: 420px) {
   .app-topbar .topbar-brand .brand-name { display: none; }
-  .topbar-account-button .plan-tag { display: none; }
 }
 
 /* ── Command palette (⌘K) ──────────────────────────────────────────────── */
@@ -9615,7 +9667,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   justify-content: center;
   transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
-.palette-option[aria-selected="true"] .palette-option-icon { border-color: var(--line-strong); color: var(--accent); }
+.palette-option[aria-selected="true"] .palette-option-icon { border-color: var(--line-strong); color: var(--ink); }
 .palette-option-copy { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
 .palette-option-label { color: inherit; font-size: .9375rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .palette-option[aria-selected="true"] .palette-option-label { color: var(--ink); font-weight: 700; }

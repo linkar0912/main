@@ -70,7 +70,12 @@ describe("AdminShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Owner menu" }));
     const menu = document.getElementById("owner-menu") as HTMLElement;
     expect(menu.textContent).toContain("owner@linkar.in");
-    expect(menu.textContent).toContain("Sign out");
+    expect(menu.textContent).toContain("Owner console");
+    const rows = Array.from(menu.querySelectorAll(".menu-item")).map((row) => row.textContent?.trim());
+    expect(rows).toEqual(["Back to workspace", "Dark mode", "Sign out"]);
+    expect(screen.getByRole("switch", { name: "Dark mode" })).toBeTruthy();
+    // The button is the avatar alone.
+    expect(screen.getByRole("button", { name: "Owner menu" }).textContent?.trim()).toBe("OW");
   });
 
   it("closes the mobile operator drawer with Escape and restores focus", async () => {

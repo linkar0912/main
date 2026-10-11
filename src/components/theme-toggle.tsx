@@ -37,6 +37,22 @@ function storeTheme(theme: Theme) {
   window.dispatchEvent(new Event("linkar-theme-change"));
 }
 
+/**
+ * "Dark mode" as a menu row with a small switch on the right that shows the
+ * current mode (account menus in the top bar).
+ */
+export function ThemeMenuSwitch({ className = "" }: { className?: string }) {
+  const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, getThemeServerSnapshot);
+  const dark = theme === "dark";
+  return (
+    <button className={className} type="button" role="switch" aria-checked={dark} onClick={() => storeTheme(dark ? "light" : "dark")}>
+      <Moon size={16} strokeWidth={1.9} aria-hidden />
+      <span className="menu-item-label">Dark mode</span>
+      <span className="menu-switch" aria-hidden />
+    </button>
+  );
+}
+
 export function ThemeToggle({ className = "", showLabel = false }: { className?: string; showLabel?: boolean }) {
   const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, getThemeServerSnapshot);
   const nextTheme = theme === "dark" ? "light" : "dark";
