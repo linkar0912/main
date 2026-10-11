@@ -1,13 +1,16 @@
 "use client";
 
 import { Check, CreditCard, Gauge, Sparkles, TicketCheck } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { openRazorpaySubscriptionCheckout } from "@/src/lib/client/razorpay-checkout";
 import { getBillingView, invalidateWorkspaceResource, notifyWorkspaceChanged, type BillingView } from "@/src/lib/client/workspace-data";
 import { FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
 import type { BillingInterval, BillingPlanKey } from "@/src/lib/billing/types";
 import { ActionNotice } from "./action-notice";
+import { InlineConfirm } from "./inline-confirm";
+import { InlineContentSkeleton } from "./skeleton";
+import { StatusBadge, type StatusTone } from "./ui/status-badge";
 
 const ACTIVATION_POLL_MS = 3_000;
 const ACTIVATION_TIMEOUT_MS = 45_000;
@@ -29,6 +32,32 @@ function planNameFor(view: BillingView, planId: string | undefined): string {
   return [FREE_BILLING_PLAN, ...view.catalog].find((plan) => plan.key === key)?.name ?? "your current plan";
 }
 
+/** Razorpay subscription states in plain words, with the status tone they deserve. */
+const SUBSCRIPTION_STATUS: Record<string, { label: string; tone: StatusTone }> = {
+  ACTIVE: { label: "Active", tone: "success" },
+  AUTHENTICATED: { label: "Starting", tone: "neutral" },
+  CREATED: { label: "Not started", tone: "neutral" },
+  PENDING: { label: "Payment pending", tone: "warning" },
+  HALTED: { label: "Payment failed", tone: "danger" },
+  PAUSED: { label: "Paused", tone: "neutral" },
+  CANCELLED: { label: "Cancelled", tone: "neutral" },
+  COMPLETED: { label: "Ended", tone: "neutral" },
+  EXPIRED: { label: "Expired", tone: "neutral" },
+};
+
+function subscriptionStatus(status: string): { label: string; tone: StatusTone } {
+  return SUBSCRIPTION_STATUS[status] ?? { label: status.charAt(0) + status.slice(1).toLowerCase().replaceAll("_", " "), tone: "neutral" };
+}
+
+function billingErrorMessage(code: string): string {
+  return code === "provider_unavailable"
+    ? "Razorpay is temporarily unavailable. No plan change was made."
+    : "Billing could not be updated. Check your connection and try again.";
+}
+
+/** A plan switch waiting for the owner to confirm it, with the words they confirm. */
+type PendingPlanChange = { plan: BillingPlanKey; interval: BillingInterval; nextName: string; effective: string; message: string };
+
 const SUBSCRIPTION_EXISTS_MESSAGE = "This workspace already has a subscription, so no new checkout was started. Refresh in a moment to manage it here.";
 
 export function BillingSettings() {
@@ -41,6 +70,11 @@ export function BillingSettings() {
   const [inviteCode, setInviteCode] = useState("");
   const [redeemingInvite, setRedeemingInvite] = useState(false);
   const [inviteNotice, setInviteNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  // Switching plans and cancelling are confirmed in place, next to the button.
+  const [pendingChange, setPendingChange] = useState<PendingPlanChange | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const load = useCallback(async (fresh = false) => {
     if (fresh) invalidateWorkspaceResource("billing");
@@ -64,7 +98,7 @@ export function BillingSettings() {
         setError("Billing details could not be loaded. Try again.");
       });
     return () => controller.abort();
-  }, []);
+  }, [loadAttempt]);
 
   useEffect(() => {
     if (!activating) return;
@@ -95,7 +129,9 @@ export function BillingSettings() {
 
   // Razorpay applies plan changes at the end of the current cycle
   // (schedule_change_at: cycle_end): nothing is prorated or charged today.
-  async function changePlan(current: BillingView, plan: BillingPlanKey): Promise<void> {
+  // Asking first: the confirmation appears in the plan card, and nothing is
+  // sent until the owner confirms it there.
+  function requestPlanChange(current: BillingView, plan: BillingPlanKey): void {
     const subscription = current.subscription;
     if (!subscription) return;
     const currentName = planNameFor(current, subscription.planId);
@@ -103,18 +139,37 @@ export function BillingSettings() {
     const effective = subscription.currentPeriodEnd
       ? `on ${formatDate(subscription.currentPeriodEnd)}, when your current billing cycle ends`
       : "when your current billing cycle ends";
-    const confirmed = window.confirm(
-      `Switch from ${currentName} (${intervalLabel(subscription.interval)}) to ${nextName} (${intervalLabel(interval)})?\n\n`
-      + `The change takes effect ${effective}. You keep ${currentName} until then. Nothing is charged today; the new price applies from that date.`,
-    );
-    if (!confirmed) return;
-    const response = await fetch("/api/billing/change-plan", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan, interval }),
+    setConfirmingCancel(false);
+    setPendingChange({
+      plan,
+      interval,
+      nextName,
+      effective,
+      message: `Switch from ${currentName} (${intervalLabel(subscription.interval)}) to ${nextName} (${intervalLabel(interval)})? `
+        + `The change takes effect ${effective}. You keep ${currentName} until then. Nothing is charged today; the new price applies from that date.`,
     });
-    const payload = await response.json() as { error?: string };
-    if (!response.ok) throw new Error(payload.error ?? "plan_change_failed");
-    setMessage(`Plan change scheduled. ${nextName} starts ${effective}.`);
-    await refreshAfterChange().catch(() => undefined);
+  }
+
+  async function confirmPlanChange(): Promise<void> {
+    if (!pendingChange || busyPlan) return;
+    const { plan, interval: nextInterval, nextName, effective } = pendingChange;
+    setBusyPlan(plan);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/billing/change-plan", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan, interval: nextInterval }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "plan_change_failed");
+      setPendingChange(null);
+      setMessage(`Plan change scheduled. ${nextName} starts ${effective}.`);
+      await refreshAfterChange().catch(() => undefined);
+    } catch (reason) {
+      setError(billingErrorMessage(reason instanceof Error ? reason.message : "billing_failed"));
+    } finally {
+      setBusyPlan("");
+    }
   }
 
   async function choosePlan(plan: BillingPlanKey) {
@@ -124,7 +179,7 @@ export function BillingSettings() {
     setMessage("");
     try {
       if (view.subscription?.status === "ACTIVE") {
-        await changePlan(view, plan);
+        requestPlanChange(view, plan);
         return;
       }
       const response = await fetch("/api/billing/checkout", {
@@ -135,7 +190,7 @@ export function BillingSettings() {
         // The cached view was stale: the workspace already pays, so switch
         // plans on that subscription rather than opening a second checkout.
         const latest = await refreshAfterChange();
-        if (latest.subscription?.status === "ACTIVE") await changePlan(latest, plan);
+        if (latest.subscription?.status === "ACTIVE") requestPlanChange(latest, plan);
         else setError(SUBSCRIPTION_EXISTS_MESSAGE);
         return;
       }
@@ -155,28 +210,29 @@ export function BillingSettings() {
       setActivating(true);
       setMessage("Payment received. We’re activating your plan now.");
     } catch (reason) {
-      const code = reason instanceof Error ? reason.message : "billing_failed";
-      setError(code === "provider_unavailable"
-        ? "Razorpay is temporarily unavailable. No plan change was made."
-        : "Billing could not be updated. Check your connection and try again.");
+      setError(billingErrorMessage(reason instanceof Error ? reason.message : "billing_failed"));
     } finally {
       setBusyPlan("");
     }
   }
 
   async function cancelSubscription() {
-    if (!view?.canManage || !window.confirm("Cancel at the end of the current billing cycle?")) return;
+    if (!view?.canManage || cancelling) return;
     setError("");
+    setCancelling(true);
     try {
       const response = await fetch("/api/billing/cancel", { method: "POST" });
       if (!response.ok) {
         setError("Cancellation could not be scheduled. Try again.");
         return;
       }
+      setConfirmingCancel(false);
       setMessage("Cancellation scheduled. Paid access stays active through the current billing period.");
       await refreshAfterChange().catch(() => undefined);
     } catch {
       setError("Cancellation could not be scheduled. Try again.");
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -211,8 +267,17 @@ export function BillingSettings() {
     }
   }
 
-  if (!view && !error) return <section className="panel billing-shell" aria-label="Billing"><p className="muted">Loading billing…</p></section>;
-  if (!view) return <section className="panel billing-shell" aria-label="Billing"><p className="form-error" role="alert">{error}</p></section>;
+  if (!view && !error) return <section className="billing-shell" aria-label="Billing"><InlineContentSkeleton label="Loading billing" rows={4} /></section>;
+  if (!view) {
+    return (
+      <section className="billing-shell" aria-label="Billing">
+        <div className="notice-banner notice-warning billing-load-error" role="alert">
+          <p>{error}</p>
+          <button className="button button-secondary button-small" type="button" onClick={() => { setError(""); setLoadAttempt((attempt) => attempt + 1); }}>Try again</button>
+        </div>
+      </section>
+    );
+  }
 
   const plans = [FREE_BILLING_PLAN, ...view.catalog];
   const currentPlan = plans.find((plan) => plan.key === view.entitlementPlanKey) ?? FREE_BILLING_PLAN;
@@ -228,8 +293,8 @@ export function BillingSettings() {
         </div>
         <fieldset className="segmented billing-period" aria-label="Billing period">
           <legend>Billing period</legend>
-          <label className="segmented-option"><input type="radio" name="billing-period" value="MONTHLY" checked={interval === "MONTHLY"} onChange={() => setInterval("MONTHLY")} /> Monthly</label>
-          <label className="segmented-option"><input type="radio" name="billing-period" value="ANNUAL" checked={interval === "ANNUAL"} onChange={() => setInterval("ANNUAL")} /> Annual <span className="segmented-badge">Save 2 months</span></label>
+          <label className="segmented-option"><input type="radio" name="billing-period" value="MONTHLY" checked={interval === "MONTHLY"} onChange={() => { setInterval("MONTHLY"); setPendingChange(null); }} /> Monthly</label>
+          <label className="segmented-option"><input type="radio" name="billing-period" value="ANNUAL" checked={interval === "ANNUAL"} onChange={() => { setInterval("ANNUAL"); setPendingChange(null); }} /> Annual <span className="segmented-badge">Save 2 months</span></label>
         </fieldset>
       </header>
 
@@ -265,7 +330,8 @@ export function BillingSettings() {
             && view.subscription.interval === interval;
           const price = interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise;
           return (
-            <article className={`billing-plan ${current ? "is-current" : ""} ${plan.key === "growth" ? "is-featured" : ""}`} aria-label={`${plan.name} plan`} key={plan.key}>
+            <Fragment key={plan.key}>
+            <article className={`billing-plan ${current ? "is-current" : ""} ${plan.key === "growth" ? "is-featured" : ""}`} aria-label={`${plan.name} plan`}>
               <div className="billing-plan-top">
                 <h3>{plan.name}</h3>
                 {current ? <span className="billing-plan-current"><Sparkles size={13} /> Current</span> : plan.key === "growth" ? <span className="billing-plan-best">Best fit</span> : null}
@@ -279,18 +345,50 @@ export function BillingSettings() {
                 <span><strong>{plan.memberLimit}</strong> {plan.memberLimit === 1 ? "seat" : "seats"}</span>
               </div>
               <ul>{plan.features.map((feature) => <li key={feature}><Check size={14} />{feature}</li>)}</ul>
-              <button className={`button ${currentBillingSelection ? "button-secondary" : "button-primary"}`} type="button" disabled={currentBillingSelection || activating || !view.canManage || !view.billingConfigured || Boolean(busyPlan)} onClick={() => void choosePlan(plan.key)}>
-                {currentBillingSelection ? "Your current plan" : busyPlan === plan.key ? "Opening…" : `Choose ${plan.name}`}
+              <button className={`button ${currentBillingSelection ? "button-secondary" : "button-primary"}`} type="button" aria-expanded={pendingChange ? pendingChange.plan === plan.key : undefined} disabled={currentBillingSelection || activating || !view.canManage || !view.billingConfigured || Boolean(busyPlan)} onClick={() => void choosePlan(plan.key)}>
+                {currentBillingSelection ? "Your current plan" : busyPlan === plan.key && !pendingChange ? "Opening…" : `Choose ${plan.name}`}
               </button>
             </article>
+            {pendingChange?.plan === plan.key ? (
+              <div className="billing-plan-confirm">
+                <InlineConfirm
+                  label={`Confirm switching to ${plan.name}`}
+                  message={pendingChange.message}
+                  confirmLabel={`Switch to ${plan.name}`}
+                  busyLabel="Scheduling…"
+                  busy={busyPlan === plan.key}
+                  tone="primary"
+                  onConfirm={() => void confirmPlanChange()}
+                  onCancel={() => setPendingChange(null)}
+                />
+              </div>
+            ) : null}
+            </Fragment>
           );
         })}
       </div>
 
       {view.subscription && (
         <footer className="billing-subscription panel">
-          <div><strong>Subscription {view.subscription.status.toLowerCase()}</strong>{view.subscription.currentPeriodEnd && <p className="muted">Paid through {formatDate(view.subscription.currentPeriodEnd)}</p>}</div>
-          {view.subscription.cancelAtPeriodEnd ? <span className="billing-ending">Cancellation scheduled</span> : view.canManage && <button className="text-link" type="button" onClick={() => void cancelSubscription()}>Cancel at period end</button>}
+          <div className="billing-subscription-copy">
+            <strong>Subscription <StatusBadge {...subscriptionStatus(view.subscription.status)} /></strong>
+            {view.subscription.currentPeriodEnd && <p className="muted">Paid through {formatDate(view.subscription.currentPeriodEnd)}</p>}
+          </div>
+          {view.subscription.cancelAtPeriodEnd
+            ? <span className="billing-ending">Cancellation scheduled</span>
+            : view.canManage && !confirmingCancel && <button className="button button-ghost button-small billing-cancel" type="button" onClick={() => { setPendingChange(null); setConfirmingCancel(true); }}>Cancel at period end</button>}
+          {confirmingCancel && !view.subscription.cancelAtPeriodEnd ? (
+            <InlineConfirm
+              label="Confirm cancelling the subscription"
+              message={`Cancel at the end of the current billing cycle? Paid access stays active${view.subscription.currentPeriodEnd ? ` until ${formatDate(view.subscription.currentPeriodEnd)}` : " through the current billing period"}.`}
+              confirmLabel="Cancel subscription"
+              cancelLabel="Keep subscription"
+              busyLabel="Cancelling…"
+              busy={cancelling}
+              onConfirm={() => void cancelSubscription()}
+              onCancel={() => setConfirmingCancel(false)}
+            />
+          ) : null}
         </footer>
       )}
     </section>

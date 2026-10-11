@@ -91,7 +91,6 @@ describe("BillingSettings", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "scheduled" }) })
       .mockResolvedValue({ ok: true, json: async () => activeCreator });
     vi.stubGlobal("fetch", fetchMock);
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const workspaceChanged = vi.fn();
     window.addEventListener("linkar-workspace-change", workspaceChanged);
     await act(async () => { render(<BillingSettings />); });
@@ -102,12 +101,17 @@ describe("BillingSettings", () => {
     expect(annualButton.hasAttribute("disabled")).toBe(false);
     fireEvent.click(annualButton);
 
+    // Asked in place first: nothing is sent until the owner confirms.
+    const confirmation = await screen.findByRole("group", { name: "Confirm switching to Creator" });
+    expect(confirmation.textContent).toContain("Switch from Creator (monthly) to Creator (annual)?");
+    expect(confirmation.textContent).toContain("on 4 Nov 2026, when your current billing cycle ends");
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/billing/change-plan", expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Creator" }));
+
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/billing/change-plan", expect.objectContaining({
       method: "POST",
       body: JSON.stringify({ plan: "creator", interval: "ANNUAL" }),
     })));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Switch from Creator (monthly) to Creator (annual)?"));
-    expect(confirm.mock.calls[0][0]).toContain("on 4 Nov 2026, when your current billing cycle ends");
     expect(await screen.findByText(/Plan change scheduled\. Creator starts on 4 Nov 2026/)).toBeTruthy();
     expect(workspaceChanged).toHaveBeenCalled();
     window.removeEventListener("linkar-workspace-change", workspaceChanged);
@@ -120,12 +124,15 @@ describe("BillingSettings", () => {
     });
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => activeCreator });
     vi.stubGlobal("fetch", fetchMock);
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await act(async () => { render(<BillingSettings />); });
 
     fireEvent.click(await screen.findByRole("button", { name: "Choose Agency" }));
 
-    await waitFor(() => expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Switch from Creator (monthly) to Agency (monthly)?")));
+    const confirmation = await screen.findByRole("group", { name: "Confirm switching to Agency" });
+    expect(confirmation.textContent).toContain("Switch from Creator (monthly) to Agency (monthly)?");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("group", { name: "Confirm switching to Agency" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Choose Agency" })).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalledWith("/api/billing/change-plan", expect.anything());
   });
 
@@ -141,15 +148,17 @@ describe("BillingSettings", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "scheduled" }) })
       .mockResolvedValue({ ok: true, json: async () => activeCreator });
     vi.stubGlobal("fetch", fetchMock);
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     await act(async () => { render(<BillingSettings />); });
 
     fireEvent.click(await screen.findByRole("button", { name: "Choose Growth" }));
 
+    const confirmation = await screen.findByRole("group", { name: "Confirm switching to Growth" });
+    expect(confirmation.textContent).toContain("Switch from Creator (monthly) to Growth (monthly)?");
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Growth" }));
+
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/billing/change-plan", expect.objectContaining({
       body: JSON.stringify({ plan: "growth", interval: "MONTHLY" }),
     })));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Switch from Creator (monthly) to Growth (monthly)?"));
     expect(checkout).not.toHaveBeenCalled();
   });
 
@@ -249,5 +258,39 @@ describe("BillingSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: /apply invite/i }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("We couldn’t apply the invite. Try again.");
+  });
+
+  it("asks in place before cancelling, and keeps the subscription when the owner backs out", async () => {
+    const activeCreator = billingView({
+      entitlementPlanKey: "creator",
+      subscription: { status: "ACTIVE", planId: "plan_creator", interval: "MONTHLY", currentPeriodEnd: "2026-11-04T00:00:00.000Z" },
+    });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => activeCreator });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<BillingSettings />); });
+
+    expect((await screen.findByText("Subscription")).textContent).toContain("Active");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel at period end" }));
+    const confirmation = screen.getByRole("group", { name: "Confirm cancelling the subscription" });
+    expect(confirmation.textContent).toContain("Paid access stays active until 4 Nov 2026");
+    fireEvent.click(screen.getByRole("button", { name: "Keep subscription" }));
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/billing/cancel", expect.anything());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel at period end" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Cancel subscription" })); });
+    expect(fetchMock).toHaveBeenCalledWith("/api/billing/cancel", { method: "POST" });
+    expect(await screen.findByText(/Cancellation scheduled\. Paid access stays active/)).toBeTruthy();
+  });
+
+  it("offers Try again when billing fails to load, and recovers", async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValue({ ok: true, json: async () => billingView() });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<BillingSettings />); });
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Billing details could not be loaded");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Try again" })); });
+    expect(await screen.findByText("₹199")).toBeTruthy();
   });
 });
