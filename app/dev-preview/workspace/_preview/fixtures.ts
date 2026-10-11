@@ -772,6 +772,75 @@ function broadcasts(scenario: PreviewScenario) {
   };
 }
 
+// ------------------------------------------------- per-automation activity
+
+const DIWALI_REEL = {
+  id: "17998832451207733",
+  caption: "Diwali edit drop 1 ✨ Comment DIWALI for early access",
+  mediaType: "VIDEO",
+  mediaProductType: "REELS",
+  permalink: "https://www.instagram.com/reel/DxKav01/",
+};
+const DUPATTA_REEL = {
+  id: "18210493377802215",
+  caption: "5 ways to style one dupatta this festive season - comment LINK and we'll DM you the full lookbook with every product tagged so you can shop each look in one tap 🧣",
+  mediaType: "VIDEO",
+  mediaProductType: "REELS",
+  permalink: "https://www.instagram.com/reel/DxKav02/",
+};
+
+type ParticipantFixture = [handle: string | undefined, keyword: string, state: string, minutesAgo: number, reel: typeof DIWALI_REEL, extra?: Record<string, unknown>];
+
+const PARTICIPANTS: ParticipantFixture[] = [
+  ["ananya_reddy", "DIWALI", "LINK_SENT", 12, DIWALI_REEL, { followStatus: true, finalDeliveryStatus: "SENT", deliveryClickedAt: true, variantLabel: "B" }],
+  ["priya.sharma.styles", "diwali", "FOLLOW_REQUIRED", 26, DIWALI_REEL, { followStatus: false, variantLabel: "A" }],
+  ["rohan.k.verma", "SALE", "FAILED", 48, DIWALI_REEL, { finalDeliveryStatus: "FAILED", finalDeliveryError: "(#10) This message is sent outside of allowed window." }],
+  [undefined, "LINK", "OPENING_SENT", 95, DIWALI_REEL],
+  ["meera_iyer", "DIWALI", "LINK_SENT", 3 * 60, DIWALI_REEL, { followStatus: true, finalDeliveryStatus: "SENT", variantLabel: "A" }],
+  ["kabir.malhotra", "diwali!!", "EXPIRED", 26 * 60, DIWALI_REEL],
+  ["supercalifragilisticexpialidocious_shopper_2026", "LINK", "OPTED_IN", 30 * 60, DUPATTA_REEL],
+  ["neha.kapoor.designs", "link", "LINK_SENT", 2 * 24 * 60, DUPATTA_REEL, { followStatus: true, finalDeliveryStatus: "SENT", deliveryClickedAt: true }],
+];
+
+function activity(id: string, scenario: PreviewScenario) {
+  if (id === "auto_fb_details") {
+    const now = Date.now();
+    const rows = scenario === "empty" ? [] : [
+      { result: "SENT", authorName: "Lakshmi Narayanan", commentPreview: "Is the maroon Kanjeevaram available in a blouse size 40?", replyPreview: "Thanks for asking! Full details and sizes are on studiokavya.in", minutes: 35 },
+      { result: "SKIPPED", authorName: "Rahul Gupta", commentPreview: "Price details please", safeErrorCode: "replyOncePerUser is set and this sender already received a reply", minutes: 3 * 60 },
+      { result: "FAILED", authorName: "Farah Siddiqui", commentPreview: "Delivery to Hyderabad before Diwali?", safeErrorCode: "facebook_api_error", minutes: 9 * 60 },
+    ];
+    return {
+      channel: { provider: "FACEBOOK", surface: "COMMENT", connectionName: FB_PAGE_NAME },
+      data: rows.map(({ minutes, ...row }, index) => ({
+        id: `fbx_${index}`, provider: "FACEBOOK", surface: "COMMENT", connectionName: FB_PAGE_NAME, eventType: "comment.created",
+        ...row, createdAt: ago(minutes * MINUTE, now),
+      })),
+    };
+  }
+  if (scenario === "empty") return { data: [], summary: { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 } };
+  const now = Date.now();
+  const data = PARTICIPANTS.map(([handle, keyword, state, minutesAgo, reel, extra = {}], index) => {
+    const opened = state !== "COMMENT_MATCHED";
+    return {
+      id: `par_${index}`,
+      ...(handle ? { instagramUsername: handle } : {}),
+      sourceMediaSnapshot: { ...reel, timestamp: ago(4 * DAY, now) },
+      matchedKeyword: keyword,
+      state,
+      publicReplyStatus: "SENT",
+      openingStatus: opened ? "SENT" : "PENDING",
+      finalDeliveryStatus: "PENDING",
+      ...(extra.followStatus !== undefined ? { followCheckedAt: ago((minutesAgo - 2) * MINUTE, now) } : {}),
+      ...extra,
+      ...(extra.finalDeliveryStatus === "SENT" ? { finalDeliveredAt: ago((minutesAgo - 3) * MINUTE, now) } : {}),
+      ...(extra.deliveryClickedAt ? { deliveryClickedAt: ago((minutesAgo - 5) * MINUTE, now) } : {}),
+      createdAt: ago(minutesAgo * MINUTE, now),
+    };
+  });
+  return { data, summary: { commented: 1_240, openingSent: 1_182, optedIn: 806, followed: 612, linkSent: 588 } };
+}
+
 // ------------------------------------------------------------------- routing
 
 const INSIGHTS_PATHS = /^\/api\/insights(\/|$)/;
@@ -851,6 +920,8 @@ export function answer(method: string, url: URL, scenario: PreviewScenario, rawB
       const found = automations().find((automation) => automation.id === automationMatch[1]);
       return found ? json({ data: found }) : json({ error: "Automation not found" }, 404);
     }
+    const activityMatch = /^\/api\/automations\/([^/]+)\/activity$/.exec(path);
+    if (activityMatch) return json(activity(decodeURIComponent(activityMatch[1]), scenario));
     const versionsMatch = /^\/api\/automations\/([^/]+)\/versions$/.exec(path);
     if (versionsMatch) {
       const found = automations().find((automation) => automation.id === versionsMatch[1]);
@@ -865,8 +936,8 @@ export function answer(method: string, url: URL, scenario: PreviewScenario, rawB
           definition: found.definition,
           status: found.status,
           priority: found.priority,
-          createdAt: ago((index * 3 + 1) * DAY),
-          createdByEmail: OWNER_EMAIL,
+          snapshotAt: ago((index * 3 + 1) * DAY),
+          snapshotBy: OWNER_EMAIL,
         })),
       });
     }
@@ -882,6 +953,7 @@ export function answer(method: string, url: URL, scenario: PreviewScenario, rawB
     return json({ data: { ...found, ...(typeof body.status === "string" ? { status: body.status } : {}), version: found.version + 1, updatedAt: new Date().toISOString() } });
   }
   if (automationMatch && verb === "DELETE") return json({ deleted: true });
+  if (/^\/api\/automations\/[^/]+\/activity\/retry$/.test(path) && verb === "POST") return json({ data: { queued: true } });
   const duplicateMatch = /^\/api\/automations\/([^/]+)\/duplicate$/.exec(path);
   if (duplicateMatch && verb === "POST") {
     const found = automations().find((automation) => automation.id === duplicateMatch[1]);
