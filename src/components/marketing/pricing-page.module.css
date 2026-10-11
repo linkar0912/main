@@ -1130,16 +1130,16 @@
 
 .previewStats dt {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .55rem;
+  font-size: .8125rem;
   font-weight: 750;
-  letter-spacing: .05em;
+  letter-spacing: .03em;
   text-transform: uppercase;
   opacity: .72;
 }
 
 .previewStats dd {
   margin: 0;
-  font-size: .78rem;
+  font-size: .875rem;
   font-weight: 750;
   line-height: 1.3;
 }
@@ -1874,8 +1874,15 @@
     gap: 8px;
   }
 
+  /* Four labels share a phone-width row: sentence case sans so "Channels"
+     and "Accounts" no longer run into each other, wrapping when needed. */
   .finderTrack span {
+    font-family: var(--font-sans, ui-sans-serif, sans-serif);
     font-size: .8125rem;
+    letter-spacing: 0;
+    line-height: 1.25;
+    text-transform: none;
+    overflow-wrap: anywhere;
   }
 
   .finderChip {

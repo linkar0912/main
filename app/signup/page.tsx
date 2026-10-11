@@ -91,9 +91,9 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                 : params.error === "invite"
                     ? "This invitation link is invalid, already used, or was sent to a different email."
                     : params.error === "unknown"
-                        ? "Something went wrong creating your account. Please try again."
+                        ? "Your account could not be created just now. Try again in a moment."
                         : params.error === "oauth"
-                            ? "Something went wrong signing in. Please try again."
+                            ? "Signing in with Google or Facebook did not finish. Try again, or use your email and password."
                             : "";
     const emailError = params.error === "email" || params.error === "invite";
     const passwordError = params.error === "password";

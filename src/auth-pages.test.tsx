@@ -47,4 +47,18 @@ describe("auth pages", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Set a new password" })).toBeTruthy();
     expect(screen.queryByText("Account recovery")).toBeNull();
   });
+
+  it("gives each dead-end reset state one clear way forward", async () => {
+    render(await ResetPasswordPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByRole("link", { name: "Request a reset link" }).getAttribute("href")).toBe("/forgot-password");
+
+    cleanup();
+    render(await ResetPasswordPage({ searchParams: Promise.resolve({ error: "invalid" }) }));
+    expect(screen.getByRole("link", { name: "Request a new link" }).getAttribute("href")).toBe("/forgot-password");
+  });
+
+  it("points back to sign in with the same verb the rest of the site uses", async () => {
+    render(await ForgotPasswordPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByRole("link", { name: "Back to sign in" }).getAttribute("href")).toBe("/login");
+  });
 });

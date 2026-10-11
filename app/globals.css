@@ -7631,6 +7631,11 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
    to the auth frame so the shared field and button foundations stay as they are. */
 .auth-page-frame .field :is(input, select) { min-block-size: 44px; }
 .auth-page-frame :is(.button, button[type="submit"]) { min-block-size: 44px; }
+/* A field named in the error message is outlined, so the problem is visible
+   next to the field and not only in the summary above the form. */
+.auth-page-frame .field :is(input, select)[aria-invalid="true"] { border-color: var(--danger); }
+/* The single way forward on a dead-end state (expired or missing reset link). */
+.auth-page-frame .auth-page-action { inline-size: 100%; justify-content: center; margin-top: 8px; }
 @media (max-width: 640px) {
   .auth-page-frame .field :is(input, select, textarea) { font-size: 1rem; }
 }

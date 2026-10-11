@@ -16,6 +16,8 @@ vi.mock("next/navigation", () => ({
     mocks.redirect(path);
     throw new Error("NEXT_REDIRECT");
   },
+  // The marketing header marks the current page.
+  usePathname: () => "/login",
 }));
 vi.mock("@/src/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth: { verifyOtp: mocks.verifyOtp } }),
@@ -57,6 +59,11 @@ describe("auth pages", () => {
   it("names a cancelled OAuth sign-in as cancelled", async () => {
     render(await LoginPage({ searchParams: Promise.resolve({ error: "cancelled" }) }));
     expect(screen.getByRole("alert").textContent).toMatch(/Sign-in was cancelled/);
+  });
+
+  it("says which sign-in did not finish and what else to try", async () => {
+    render(await LoginPage({ searchParams: Promise.resolve({ error: "oauth" }) }));
+    expect(screen.getByRole("alert").textContent).toBe("Signing in with Google or Facebook did not finish. Try again, or use your email and password.");
   });
 
   it("carries an invite through the login form, OAuth links and the signup link", async () => {

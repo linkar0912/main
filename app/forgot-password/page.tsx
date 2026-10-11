@@ -51,7 +51,7 @@ export default async function ForgotPasswordPage({
                             <SubmitButton pendingLabel="Sending..."><KeyRound size={15} /> Send reset link</SubmitButton>
                         </form>
                     )}
-                    <p className="auth-page-foot">Remembered it? <Link href="/login">Back to login</Link></p>
+                    <p className="auth-page-foot">Remembered it? <Link href="/login">Back to sign in</Link></p>
                 </div>
             </main>
             <MarketingFooter siteOrigin={publicSiteUrl} />

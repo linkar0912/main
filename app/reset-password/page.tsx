@@ -57,7 +57,7 @@ export default async function ResetPasswordPage({
             <Card>
                 <h1>Reset link invalid</h1>
                 <p className="auth-page-lede">This reset link is invalid, already used, or expired.</p>
-                <p className="auth-page-foot"><Link className="text-link" href="/forgot-password">Request a new link</Link></p>
+                <Link className="button button-primary auth-page-action" href="/forgot-password">Request a new link</Link>
             </Card>
         );
     }
@@ -77,7 +77,7 @@ export default async function ResetPasswordPage({
             <Card>
                 <h1>Set a new password</h1>
                 <p className="auth-page-lede">Open the reset link from your email to choose a new password. Reset links work for 15 minutes after you open them.</p>
-                <p className="auth-page-foot"><Link className="text-link" href="/forgot-password">Request a reset link</Link></p>
+                <Link className="button button-primary auth-page-action" href="/forgot-password">Request a reset link</Link>
             </Card>
         );
     }

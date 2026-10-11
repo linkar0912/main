@@ -68,9 +68,7 @@ export default async function ConfirmPage({ searchParams }: ConfirmPageProps) {
               <p className="auth-page-lede">
                 This link is missing part of its address. Open it again from the email, or request a new one.
               </p>
-              <p className="auth-page-foot">
-                <Link href="/login" prefetch={false}>Back to sign in</Link>
-              </p>
+              <Link className="button button-primary auth-page-action" href="/login" prefetch={false}>Back to sign in</Link>
             </>
           )}
         </div>

@@ -29,7 +29,7 @@ const ERRORS: Record<string, string> = {
   invalid: "That email or password is incorrect.",
   exists: "An account with that email already exists. Sign in instead.",
   locked: "Too many attempts. Wait fifteen minutes before trying again.",
-  oauth: "Something went wrong signing in. Please try again.",
+  oauth: "Signing in with Google or Facebook did not finish. Try again, or use your email and password.",
   cancelled: "Sign-in was cancelled. Choose a way to continue when you are ready.",
   unconfirmed: "Confirm your email address before signing in. Open the link we sent, or send a new one below.",
   "resend-email": "Enter a valid email address to resend the confirmation link.",

@@ -566,7 +566,8 @@
 
 .menuSheet li[data-account="signup"] a {
   justify-content: center;
-  min-inline-size: 100%;
+  inline-size: 100%;
+  max-inline-size: 420px;
   min-block-size: 52px;
   margin-block-start: 8px;
   color: var(--marketing-inverse, #101116);
