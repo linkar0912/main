@@ -184,14 +184,10 @@ function HomeHeader({ fallbackEmail, displayName, status }: { fallbackEmail: str
       title={greetingFor(email, displayName)}
       description={status}
       actions={(
-        <>
-          <CreateAutomationButton className="button button-secondary">
-            <Plus size={16} aria-hidden /> New automation
-          </CreateAutomationButton>
-          <Link className="button button-primary" href="/quick-automation">
-            <Zap size={16} aria-hidden /> Quick automation
-          </Link>
-        </>
+        // "New automation" is in the top bar; Home keeps only the quick path.
+        <Link className="button button-secondary" href="/quick-automation">
+          <Zap size={16} aria-hidden /> Quick automation
+        </Link>
       )}
     />
   );

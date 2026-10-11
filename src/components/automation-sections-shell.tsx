@@ -60,12 +60,9 @@ export function AutomationSectionsShell({ children, section: sectionOverride, ba
         title={title}
         description={description}
         actions={(
-          <>
-            <ContextHelpLink topic={helpTopic} />
-            {section === "my" ? (
-              <CreateAutomationButton className="button button-primary"><Plus size={16} /> New automation</CreateAutomationButton>
-            ) : null}
-          </>
+          // "New automation" lives in the top bar on every page; repeating it here
+          // put two identical primary buttons on one screen.
+          <ContextHelpLink topic={helpTopic} />
         )}
         tabs={section === "my" ? undefined : <AutomationSectionNav active={section} basePath={basePath} />}
       />
