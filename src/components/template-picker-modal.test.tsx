@@ -52,9 +52,10 @@ describe("TemplatePickerModal", () => {
     render(<TemplatePickerModal onClose={() => {}} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Facebook" }));
-    const pageSelect = await screen.findByLabelText("Facebook Page");
     expect(screen.queryByText("Reply when a comment includes chosen words")).toBeNull();
-    fireEvent.change(pageSelect, { target: { value: "page_1" } });
+    const pageSelect = await screen.findByLabelText("Facebook Page");
+    // The only connected Page is picked for you.
+    await waitFor(() => expect((pageSelect as HTMLSelectElement).value).toBe("page_1"));
 
     expect(await screen.findByText("Reply when a comment includes chosen words")).toBeTruthy();
     expect(screen.queryByText(/Answer common questions/)).toBeNull();

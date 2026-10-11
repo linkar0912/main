@@ -48,11 +48,16 @@ type PickerItem = {
   href: string;
 };
 
+/** Facebook Pages have posts, not Reels, so their comment category says so. */
+function categoryLabel(type: TemplateTriggerType, provider: "INSTAGRAM" | "FACEBOOK"): string {
+  return provider === "FACEBOOK" && type === "comment" ? "Page comments" : triggerLabel(type);
+}
+
 function matchesQuery(haystack: string, query: string): boolean {
   return haystack.toLowerCase().includes(query.trim().toLowerCase());
 }
 
-function Tile({ item, onSelect }: { item: PickerItem; onSelect: () => void }) {
+function Tile({ item, provider, onSelect }: { item: PickerItem; provider: "INSTAGRAM" | "FACEBOOK"; onSelect: () => void }) {
   return (
     <button type="button" className="template-picker-tile" onClick={onSelect}>
       <strong>{item.title}</strong>
@@ -62,7 +67,7 @@ function Tile({ item, onSelect }: { item: PickerItem; onSelect: () => void }) {
         <ol>{item.howItWorks.map((step) => <li key={step}>{step}</li>)}</ol>
       </div>
       <span className="template-picker-tile-meta">
-        <span>{item.featured ? "Quick automation" : triggerLabel(item.category)}</span>
+        <span>{item.featured ? "Quick automation" : categoryLabel(item.category, provider)}</span>
         {item.popular && <span className="template-picker-badge">Popular</span>}
       </span>
     </button>
@@ -98,7 +103,10 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
         const payload = (await response.json().catch(() => ({}))) as { data?: { pageId: string; pageName: string; status: string }[] };
         if (!active) return;
         if (!response.ok) throw new Error("Could not load your Facebook Pages");
-        setFacebookPages((payload.data ?? []).filter((page) => page.status === "CONNECTED"));
+        const connected = (payload.data ?? []).filter((page) => page.status === "CONNECTED");
+        setFacebookPages(connected);
+        // One connected Page is the only possible answer - pick it.
+        if (connected.length === 1) setFacebookPageId((current) => current || connected[0].pageId);
         setFacebookPagesState("ready");
       })
       .catch(() => {
@@ -299,14 +307,14 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
             <button type="button" className={`template-picker-category ${category === null ? "is-active" : ""}`} onClick={() => setCategory(null)}>
               <LayoutGrid size={16} strokeWidth={1.8} />
               <span>All templates</span>
-              <span className="template-picker-count">{items.length}</span>
+              {items.length > 0 ? <span className="template-picker-count">{items.length}</span> : null}
             </button>
             {CATEGORY_ORDER.filter((type) => categoryCounts.has(type)).map((type) => {
               const Icon = CATEGORY_ICONS[type];
               return (
                 <button key={type} type="button" className={`template-picker-category ${category === type ? "is-active" : ""}`} onClick={() => setCategory(type)}>
                   <Icon size={16} strokeWidth={1.8} />
-                  <span>{triggerLabel(type)}</span>
+                  <span>{categoryLabel(type, provider)}</span>
                   <span className="template-picker-count">{categoryCounts.get(type)}</span>
                 </button>
               );
@@ -323,7 +331,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
                       ? "Your Facebook Pages could not load. Try again above."
                       : noFacebookPage
                         ? <>No Facebook Page connected yet - <Link className="text-link" href="/settings" onClick={onClose}>connect one in Settings</Link> to build Page automations.</>
-                        : "Select a connected Facebook Page to choose a recipe."
+                        : "Choose your Facebook Page above to see its templates."
                   : `No templates match “${query}”.`}
               </p>
             )}
@@ -332,7 +340,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
               <>
                 <p className="template-picker-section-label">Recommended</p>
                 <div className="template-picker-grid">
-                  {popular.map((item) => <Tile key={item.id} item={item} onSelect={() => go(item.href)} />)}
+                  {popular.map((item) => <Tile key={item.id} item={item} provider={provider} onSelect={() => go(item.href)} />)}
                 </div>
               </>
             )}
@@ -341,7 +349,7 @@ export function TemplatePickerModal({ onClose }: { onClose: () => void }) {
               <>
                 <p className="template-picker-section-label">More templates</p>
                 <div className="template-picker-grid">
-                  {rest.map((item) => <Tile key={item.id} item={item} onSelect={() => go(item.href)} />)}
+                  {rest.map((item) => <Tile key={item.id} item={item} provider={provider} onSelect={() => go(item.href)} />)}
                 </div>
               </>
             )}

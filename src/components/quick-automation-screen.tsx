@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, Check, Film, RefreshCw } from "lucide-react";
+import { InstagramGlyph } from "./instagram-glyph";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +28,9 @@ type MediaPage = {
 };
 
 const REELS_FRESH_FOR_MS = 120_000;
+/** /api/meta/media answers 409 when no Instagram account is connected: a setup
+ * step, not a failure, so it gets its own calm "connect" state. */
+const NOT_CONNECTED = "not_connected";
 let reelsCache: { data: QuickMedia[]; after?: string; fetchedAt: number; fetcher: typeof fetch } | undefined;
 function readReelsCache() {
   return reelsCache?.fetcher === fetch ? reelsCache : undefined;
@@ -62,6 +66,7 @@ export function QuickAutomationScreen() {
     const url = after ? `/api/meta/media?after=${encodeURIComponent(after)}` : "/api/meta/media";
     const response = await fetch(url, { signal });
     const payload = (await response.json().catch(() => ({}))) as MediaPage;
+    if (response.status === 409) throw new Error(NOT_CONNECTED);
     if (!response.ok) throw new Error(payload.error ?? "Could not load your Reels");
     if (signal?.aborted) return { added: 0 };
     const nextReels = (payload.data ?? []).filter((media) => media.mediaProductType === "REELS");
@@ -161,14 +166,21 @@ export function QuickAutomationScreen() {
 
           {loading && reels.length === 0 ? (
             <QuickReelsContentSkeleton />
+          ) : error === NOT_CONNECTED && reels.length === 0 ? (
+            <div className="empty-state quick-empty">
+              <InstagramGlyph size={24} />
+              <h3>Connect Instagram to see your Reels</h3>
+              <p>Quick automation starts from a Reel you’ve published, so Linkar needs your Instagram account first.</p>
+              <Link className="button button-primary" href="/settings">Connect Instagram</Link>
+            </div>
           ) : error && reels.length === 0 ? (
             <div className="empty-state quick-empty">
               <Film size={24} />
               <h3>Your Reels didn’t load</h3>
               <p>{error}</p>
               <div className="empty-actions">
-                <button type="button" className="button button-secondary" onClick={() => void retry()}><RefreshCw size={15} aria-hidden /> Try again</button>
-                <Link className="button button-primary" href="/settings">Check Instagram connection</Link>
+                <button type="button" className="button button-primary" onClick={() => void retry()}><RefreshCw size={15} aria-hidden /> Try again</button>
+                <Link className="button button-secondary" href="/settings">Check Instagram connection</Link>
               </div>
             </div>
           ) : reels.length === 0 ? (
@@ -190,6 +202,7 @@ export function QuickAutomationScreen() {
                       type="button"
                       className={`quick-reel-card${selected ? " is-selected" : ""}`}
                       aria-label={`Select Reel ${title}`}
+                      title={title}
                       aria-pressed={selected}
                       key={reel.id}
                       onClick={() => setSelectedId(reel.id)}
@@ -206,6 +219,8 @@ export function QuickAutomationScreen() {
                   );
                 })}
               </div>
+              {/* A failed "Load more" keeps the Reels already shown and says so. */}
+              {error ? <p className="form-error quick-load-error" role="alert">More Reels didn’t load. Try again.</p> : null}
               {cursor && !reachedEnd ? (
                 <button type="button" className="button button-secondary quick-load-more" disabled={loadingMore} onClick={() => void loadMore()}>
                   {loadingMore ? "Loading…" : "Load more Reels"}
