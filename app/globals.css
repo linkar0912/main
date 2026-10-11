@@ -132,10 +132,20 @@
   --type-label: .875rem;
   --type-meta: .8125rem;
 
-  /* Motion */
+  /* Motion: one system for the whole product. Small UI changes use --dur-1,
+     things appearing use --dur-2, panels/sheets moving use --dur-3. Every
+     animation goes through these tokens and the keyframes below, so the app
+     moves with one rhythm; reduced motion turns all of it off. */
   --ease-out: cubic-bezier(.22, .61, .21, 1);
   --ease-snap: cubic-bezier(.43, .195, .02, 1);
+  --ease-emph: cubic-bezier(.2, .9, .1, 1);
+  --ease-in: cubic-bezier(.4, 0, 1, 1);
   --speed: .22s;
+  --dur-1: 140ms;
+  --dur-2: 220ms;
+  --dur-3: 340ms;
+  --dur-4: 520ms;
+  --stagger: 45ms;
 }
 
 html {
@@ -295,6 +305,19 @@ h3 { font-size: var(--type-card-title); font-weight: 700; margin-bottom: var(--s
 @keyframes pulse-dot {
   50% { box-shadow: 0 0 0 6px rgba(var(--accent-rgb), .08); }
 }
+/* Shared enter/exit keyframes (motion system). */
+@keyframes motion-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes motion-fade-down { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes motion-scale-in { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes motion-scale-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(4px) scale(.98); } }
+@keyframes motion-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes motion-slide-in-right { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes motion-slide-in-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes motion-sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes motion-grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes motion-grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes motion-draw { from { stroke-dashoffset: var(--motion-path-length, 1000); } to { stroke-dashoffset: 0; } }
+@keyframes motion-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 
 .anim-rise { animation: rise .45s var(--ease-out) both; }
 .anim-fade { animation: fade-in .35s ease both; }
