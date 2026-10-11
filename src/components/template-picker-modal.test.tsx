@@ -15,32 +15,33 @@ describe("TemplatePickerModal", () => {
     vi.unstubAllGlobals();
   });
 
-  it("presents each channel as a branded, accessible workflow context", async () => {
+  it("opens as a titled dialog with the channel switch beside the search", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,
       json: async () => ({ data: [{ pageId: "page_1", pageName: "Linkar Demo", status: "CONNECTED" }] }),
     })));
     render(<TemplatePickerModal onClose={() => {}} />);
 
-    const runway = screen.getByLabelText("Automation channel");
-    const instagram = within(runway).getByRole("button", { name: "Instagram" });
-    const facebook = within(runway).getByRole("button", { name: "Facebook" });
+    expect(screen.getByRole("dialog", { name: "Choose a template" })).toBeTruthy();
+    const channel = screen.getByRole("group", { name: "Automation channel" });
+    const instagram = within(channel).getByRole("button", { name: "Instagram" });
+    const facebook = within(channel).getByRole("button", { name: "Facebook" });
 
     expect(instagram.getAttribute("aria-pressed")).toBe("true");
     expect(facebook.getAttribute("aria-pressed")).toBe("false");
-    expect(runway.querySelector('[data-brand-logo="instagram"]')).toBeTruthy();
-    expect(runway.querySelector('[data-brand-logo="facebook"]')).toBeTruthy();
-    expect(runway.querySelector(".template-channel-surface-icon")).toBeNull();
-    expect(within(runway).getByText("Works with")).toBeTruthy();
-    expect(within(runway).getByText("Comments & messages")).toBeTruthy();
+    expect(channel.querySelector('[data-brand-logo="instagram"]')).toBeTruthy();
+    expect(channel.querySelector('[data-brand-logo="facebook"]')).toBeTruthy();
+    // The old "Build for / Works with" runway is gone; the hint lives above the grid.
+    expect(screen.queryByText("Build for")).toBeNull();
+    expect(screen.getByText("Works with comments and messages on Instagram")).toBeTruthy();
 
     fireEvent.click(facebook);
 
     expect(instagram.getAttribute("aria-pressed")).toBe("false");
     expect(facebook.getAttribute("aria-pressed")).toBe("true");
-    expect(await within(runway).findByText("Connected Page")).toBeTruthy();
-    expect(runway.querySelector(".template-channel-select-chevron")).toBeTruthy();
-    expect(within(runway).getByText("Page comments")).toBeTruthy();
+    expect(await screen.findByLabelText("Facebook Page")).toBeTruthy();
+    expect(document.querySelector(".template-channel-select-chevron")).toBeTruthy();
+    expect(screen.getByText("Works with comments on your Facebook Page")).toBeTruthy();
     expect(screen.getByRole("region", { name: "Template results" })).toBeTruthy();
   });
 
@@ -146,14 +147,66 @@ describe("TemplatePickerModal", () => {
     expect(screen.getByText(/Collect email addresses in messages/)).toBeTruthy();
   });
 
-  it("groups the follow-gated campaign under Post & Reel comments, since that's its real trigger", () => {
+  it("groups the follow-gated campaign under Comments, since that's its real trigger", () => {
     render(<TemplatePickerModal onClose={() => {}} />);
     const categories = within(screen.getByLabelText("Template categories"));
 
-    fireEvent.click(categories.getByText("Post & Reel comments"));
+    fireEvent.click(categories.getByText("Comments"));
 
     expect(screen.getByText("Send a link after someone follows you")).toBeTruthy();
     expect(screen.queryByText(/Collect email addresses in messages/)).toBeNull();
+  });
+
+  it("keeps category labels short and marks the selected one as pressed", () => {
+    render(<TemplatePickerModal onClose={() => {}} />);
+    const nav = screen.getByLabelText("Template categories");
+    const labels = [...nav.querySelectorAll(".template-picker-category-label")].map((label) => label.textContent);
+
+    expect(labels).toEqual(["All templates", "Comments", "Messages", "Story replies", "Story mentions", "First message", "From ads", "Button taps"]);
+    for (const long of ["Post & Reel comments", "Instagram messages", "People arriving from ads"]) {
+      expect(within(nav).queryByText(long)).toBeNull();
+    }
+
+    const all = within(nav).getByRole("button", { name: /All templates/ });
+    const messages = within(nav).getByRole("button", { name: /Messages/ });
+    expect(all.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(messages);
+    expect(messages.getAttribute("aria-pressed")).toBe("true");
+    expect(all.getAttribute("aria-pressed")).toBe("false");
+    // The full category name heads the results.
+    expect(screen.getByRole("heading", { name: "Instagram messages" })).toBeTruthy();
+  });
+
+  it("puts popular templates first in one grid, each card with at most three numbered steps", () => {
+    render(<TemplatePickerModal onClose={() => {}} />);
+    const cards = [...document.querySelectorAll<HTMLElement>(".template-picker-grid > .template-picker-tile")];
+    const popular = cards.map((card) => Boolean(card.querySelector(".template-picker-badge")));
+
+    expect(cards).toHaveLength(basicAutomationTemplates.filter((t) => t.provider === "INSTAGRAM").length + 1);
+    expect(popular.indexOf(false)).toBeGreaterThan(0);
+    expect(popular.slice(popular.indexOf(false))).not.toContain(true);
+    expect(document.querySelectorAll(".template-picker-grid")).toHaveLength(1);
+    for (const card of cards) {
+      expect(card.querySelectorAll(".template-picker-steps li").length).toBeLessThanOrEqual(3);
+    }
+    const first = within(cards[0]);
+    expect(first.getByText("Send a link after someone follows you")).toBeTruthy();
+    expect(first.getByText("Quick automation")).toBeTruthy();
+    expect(first.getByText("Popular")).toBeTruthy();
+    expect(cards[0].querySelector(".template-picker-step-number")?.textContent).toBe("1");
+  });
+
+  it("offers a way out when a search matches nothing", () => {
+    render(<TemplatePickerModal onClose={() => {}} />);
+    const search = screen.getByLabelText("Search templates") as HTMLInputElement;
+
+    fireEvent.change(search, { target: { value: "zzz" } });
+    expect(screen.getByText("No templates match “zzz”.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(search.value).toBe("");
+    expect(screen.getByText("Send a link after someone follows you")).toBeTruthy();
+    expect(document.activeElement).toBe(search);
   });
 
   it("closes on Escape", () => {
@@ -215,9 +268,10 @@ describe("TemplatePickerModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Facebook" }));
 
     const links = await screen.findAllByRole("link", { name: /connect one in settings/i });
+    expect(links).toHaveLength(1);
     expect(links[0].getAttribute("href")).toBe("/settings");
     expect(screen.queryByLabelText("Facebook Page")).toBeNull();
-    expect(screen.getByText(/No Page connected/)).toBeTruthy();
+    expect(screen.getByText("No Page connected yet")).toBeTruthy();
   });
 
   it("shows an error with a retry when the Facebook Pages fail to load", async () => {
