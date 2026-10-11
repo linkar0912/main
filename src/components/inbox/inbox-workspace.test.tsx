@@ -6,20 +6,20 @@ import { InboxWorkspace } from "./inbox-workspace";
 describe("InboxWorkspace", () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it("switches between Instagram DMs and Facebook comments", async () => {
+  it("switches between the Instagram and Facebook tabs", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { contacts: [], members: [], items: [] } }), { status: 200 })));
     render(<InboxWorkspace />);
     expect(await screen.findByRole("region", { name: "Instagram inbox conversations" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "Facebook comments" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Facebook" }));
     expect(await screen.findByText(/Facebook Messenger is not enabled/i)).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Facebook comments" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Facebook" }).getAttribute("aria-selected")).toBe("true");
   });
 
   it("keeps one tab stop and moves between channels with the arrow keys", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { contacts: [], members: [], items: [] } }), { status: 200 })));
     render(<InboxWorkspace />);
-    const instagram = screen.getByRole("tab", { name: "Instagram DMs" });
-    const facebook = screen.getByRole("tab", { name: "Facebook comments" });
+    const instagram = screen.getByRole("tab", { name: "Instagram" });
+    const facebook = screen.getByRole("tab", { name: "Facebook" });
     expect(instagram.getAttribute("tabindex")).toBe("0");
     expect(facebook.getAttribute("tabindex")).toBe("-1");
 

@@ -119,26 +119,30 @@ export function FacebookActivity() {
   }, [items, page, pageNames, query]);
   const firstLoadFailed = Boolean(error) && items.length === 0;
 
-  return <section className="ibx-fb" aria-label="Facebook Page activity">
-    <header className="ibx-fb-head">
-      <div className="ibx-list-title"><h2>Page comments</h2>{loaded && visible.length > 0 && <span>Showing {visible.length.toLocaleString()} {visible.length === 1 ? "comment" : "comments"}</span>}</div>
-      <p className="ibx-fb-note"><MessageCircle size={15} aria-hidden="true" /><span><strong>Public comments only.</strong> Facebook Messenger is not enabled, so replies to these go out through your comment automations.</span></p>
-    </header>
-    <div className="ibx-fb-tools">
-      <label className="ibx-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search Facebook activity" placeholder="Search comments or people" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-      {pages.length > 1 && <select className="ibx-select" aria-label="Filter by Facebook Page" value={page} onChange={(event) => setPage(event.target.value)}><option value="">All Pages</option>{pages.map((pageId) => <option key={pageId} value={pageId}>{pageLabel(pageId, pageNames)}</option>)}</select>}
+  return <>
+    <div className="ibx-toolbar ibx-fb-tools" role="search" aria-label="Filter Facebook comments">
+      <div className="ibx-toolbar-row">
+        <label className="ibx-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search Facebook activity" placeholder="Search comments or people" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+        {pages.length > 1 && <select className="ibx-select" aria-label="Filter by Facebook Page" value={page} onChange={(event) => setPage(event.target.value)}><option value="">All Pages</option>{pages.map((pageId) => <option key={pageId} value={pageId}>{pageLabel(pageId, pageNames)}</option>)}</select>}
+      </div>
     </div>
-    {error && <p className="ibx-banner is-error" role="alert"><AlertCircle size={16} aria-hidden="true" /><span>{error}</span>{firstLoadFailed && <button type="button" onClick={() => void load()}>Try again</button>}</p>}
-    {!loaded ? <div className="ibx-fb-loading" role="status" aria-label="Loading Facebook activity"><InlineContentSkeleton label="Loading comments" rows={4} /></div> : firstLoadFailed ? null : visible.length === 0 ? <div className="ibx-list-empty"><MessageCircle size={22} aria-hidden="true" /><p>{items.length === 0 ? "No Page comments yet. New comments on your connected Facebook Pages appear here." : "No Facebook Page comments match this view."}</p></div> : <ol className="ibx-fb-list">
-      {visible.map((item) => <li key={item.id}>
-        <SocialAvatar channel="facebook" name={item.from ?? "Facebook commenter"} src={item.avatarUrl} />
-        <div className="ibx-fb-copy">
-          <div className="ibx-row-top"><strong>{item.from ?? "Facebook commenter"}</strong><RelativeTime value={item.at} /></div>
-          <p>{item.summary ?? "Comment received"}</p>
-          <small>{item.account ? `On ${pageLabel(item.account, pageNames)}` : item.label}</small>
-        </div>
-      </li>)}
-    </ol>}
-    {nextCursor && <button type="button" className="ibx-load-more" aria-label="Load more Facebook activity" disabled={loadingMore} onClick={() => void load(nextCursor)}>{loadingMore ? "Loading…" : error ? "Retry loading more" : "Load more"}</button>}
-  </section>;
+    <section className="ibx-fb" aria-label="Facebook Page activity">
+      <header className="ibx-fb-head">
+        <h2 className="ibx-group-head is-static"><span>Page comments</span>{" "}{loaded && visible.length > 0 && <span className="ibx-group-count">{visible.length.toLocaleString()}<span className="sr-only"> {visible.length === 1 ? "comment" : "comments"}</span></span>}</h2>
+        <p className="ibx-fb-note"><MessageCircle size={15} aria-hidden="true" /><span><strong>Public comments only.</strong> Facebook Messenger is not enabled, so replies to these go out through your comment automations.</span></p>
+      </header>
+      {error && <p className="ibx-banner is-error" role="alert"><AlertCircle size={16} aria-hidden="true" /><span>{error}</span>{firstLoadFailed && <button type="button" onClick={() => void load()}>Try again</button>}</p>}
+      {!loaded ? <div className="ibx-fb-loading" role="status" aria-label="Loading Facebook activity"><InlineContentSkeleton label="Loading comments" rows={4} /></div> : firstLoadFailed ? null : visible.length === 0 ? <div className="ibx-list-empty"><MessageCircle size={22} aria-hidden="true" /><p>{items.length === 0 ? "No Page comments yet. New comments on your connected Facebook Pages appear here." : "No Facebook Page comments match this view."}</p></div> : <ol className="ibx-fb-list">
+        {visible.map((item) => <li key={item.id}>
+          <SocialAvatar channel="facebook" name={item.from ?? "Facebook commenter"} src={item.avatarUrl} />
+          <div className="ibx-fb-copy">
+            <div className="ibx-row-top"><strong>{item.from ?? "Facebook commenter"}</strong><RelativeTime value={item.at} /></div>
+            <p>{item.summary ?? "Comment received"}</p>
+            <small>{item.account ? `On ${pageLabel(item.account, pageNames)}` : item.label}</small>
+          </div>
+        </li>)}
+      </ol>}
+      {nextCursor && <button type="button" className="ibx-load-more" aria-label="Load more Facebook activity" disabled={loadingMore} onClick={() => void load(nextCursor)}>{loadingMore ? "Loading…" : error ? "Retry loading more" : "Load more"}</button>}
+    </section>
+  </>;
 }

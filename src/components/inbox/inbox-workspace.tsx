@@ -41,9 +41,9 @@ export function InboxWorkspace() {
       className="ibx-page-header"
       title="Inbox"
       description="Reply to Instagram DMs and keep an eye on Facebook Page comments."
-      actions={<div ref={slidingThumbRef} className="ibx-channels" role="tablist" aria-label="Inbox channels">
-        <button ref={(element) => { tabRefs.current.instagram = element; }} type="button" role="tab" id="instagram-tab" aria-controls="instagram-panel" aria-selected={active === "instagram"} tabIndex={active === "instagram" ? 0 : -1} onKeyDown={onTabKeyDown} onClick={() => select("instagram")}><InstagramGlyph size={16} />Instagram DMs</button>
-        <button ref={(element) => { tabRefs.current.facebook = element; }} type="button" role="tab" id="facebook-tab" aria-controls="facebook-panel" aria-selected={active === "facebook"} tabIndex={active === "facebook" ? 0 : -1} onKeyDown={onTabKeyDown} onClick={() => select("facebook")}><FacebookGlyph size={16} />Facebook comments</button>
+      tabs={<div ref={slidingThumbRef} className="page-tabs ibx-tabs" role="tablist" aria-label="Inbox channels">
+        <button ref={(element) => { tabRefs.current.instagram = element; }} type="button" role="tab" className="page-tab" id="instagram-tab" aria-controls="instagram-panel" aria-selected={active === "instagram"} tabIndex={active === "instagram" ? 0 : -1} onKeyDown={onTabKeyDown} onClick={() => select("instagram")}><InstagramGlyph size={16} />Instagram</button>
+        <button ref={(element) => { tabRefs.current.facebook = element; }} type="button" role="tab" className="page-tab" id="facebook-tab" aria-controls="facebook-panel" aria-selected={active === "facebook"} tabIndex={active === "facebook" ? 0 : -1} onKeyDown={onTabKeyDown} onClick={() => select("facebook")}><FacebookGlyph size={16} />Facebook</button>
       </div>}
     />
     <div className="ibx-panel" role="tabpanel" id="instagram-panel" aria-labelledby="instagram-tab" hidden={active !== "instagram"}><InstagramInbox /></div>
