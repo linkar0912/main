@@ -9,6 +9,7 @@
  */
 import type { AutomationRecord } from "@/src/lib/repository";
 import { BILLING_PLANS } from "@/src/lib/billing/catalog";
+import { peopleAnswer } from "./people-fixtures";
 
 export type PreviewScenario = "populated" | "empty" | "error" | "slow";
 
@@ -792,6 +793,8 @@ function readJson(body: unknown): Record<string, unknown> {
  * returns a 404 and warns, so a missing endpoint is easy to spot).
  */
 export function answer(method: string, url: URL, scenario: PreviewScenario, rawBody?: unknown): FixtureAnswer | null {
+  const people = peopleAnswer(method, url);
+  if (people) return people;
   const path = url.pathname.replace(/\/+$/, "");
   const verb = method.toUpperCase();
 
