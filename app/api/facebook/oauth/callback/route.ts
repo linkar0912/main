@@ -15,11 +15,17 @@ import { FacebookApiError } from "@/src/lib/facebook/client";
 import { readOAuthState } from "@/src/lib/meta/oauth-state";
 import { FACEBOOK_OAUTH_STATE_COOKIE } from "../start/route";
 import { createFacebookPageSelection, FACEBOOK_PAGE_SELECTION_COOKIE } from "@/src/lib/facebook/page-selection";
+import { clearOnboardingReturnCookie, connectResultPath, OAUTH_RETURN_COOKIE, readsOnboardingReturn } from "@/src/lib/onboarding/oauth-return";
 
 export const runtime = "nodejs";
 
-function settingsRedirect(env: ReturnType<typeof getServerEnv>, status: string): NextResponse {
-  return NextResponse.redirect(new URL(`/settings?facebook=${status}`, env.appUrl));
+/**
+ * Status redirect: Settings as before, or back into onboarding when the
+ * connect was started there (oauth-return.ts). The return cookie is cleared
+ * on the way out either way.
+ */
+function settingsRedirect(env: ReturnType<typeof getServerEnv>, status: string, toOnboarding: boolean): NextResponse {
+  return clearOnboardingReturnCookie(NextResponse.redirect(new URL(connectResultPath("facebook", status, toOnboarding), env.appUrl)));
 }
 
 function withoutStateCookie(response: NextResponse): NextResponse {
@@ -29,6 +35,8 @@ function withoutStateCookie(response: NextResponse): NextResponse {
 
 export async function GET(request: Request) {
   const env = getServerEnv();
+  const toOnboarding = readsOnboardingReturn((await cookies()).get(OAUTH_RETURN_COOKIE)?.value);
+  const redirectTo = (status: string) => settingsRedirect(env, status, toOnboarding);
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -36,7 +44,7 @@ export async function GET(request: Request) {
   if (!code) {
     const metaError = url.searchParams.get("error");
     if (metaError === "access_denied") {
-      return settingsRedirect(env, "cancelled");
+      return redirectTo("cancelled");
     }
     if (metaError) {
       logger.warn("Facebook OAuth redirect returned an error", {
@@ -44,7 +52,7 @@ export async function GET(request: Request) {
         errorCode: url.searchParams.get("error_code"),
         description: url.searchParams.get("error_description"),
       });
-      return settingsRedirect(env, "denied");
+      return redirectTo("denied");
     }
   }
 
@@ -54,10 +62,10 @@ export async function GET(request: Request) {
     : null;
 
   if (!code || !responseState) {
-    return withoutStateCookie(settingsRedirect(env, "invalid-state"));
+    return withoutStateCookie(redirectTo("invalid-state"));
   }
   if (!env.facebookTokenEncryptionKey) {
-    return withoutStateCookie(settingsRedirect(env, "missing-encryption-key"));
+    return withoutStateCookie(redirectTo("missing-encryption-key"));
   }
 
   try {
@@ -69,9 +77,9 @@ export async function GET(request: Request) {
     const facebookUserId = await getFacebookUserId(token.accessToken, env.facebookApiVersion, undefined, env.facebookAppSecret);
     const pages: FacebookPageSummary[] = await listFacebookPages(token.accessToken, env.facebookApiVersion, undefined, env.facebookAppSecret);
     if (pages.length === 0) {
-      return withoutStateCookie(settingsRedirect(env, "no-pages"));
+      return withoutStateCookie(redirectTo("no-pages"));
     }
-    const response = settingsRedirect(env, "select-page");
+    const response = redirectTo("select-page");
     response.cookies.set({
       name: FACEBOOK_PAGE_SELECTION_COOKIE,
       value: createFacebookPageSelection({
@@ -98,6 +106,6 @@ export async function GET(request: Request) {
     if (error instanceof FacebookPermissionError) status = "missing-permissions";
     else if (error instanceof FacebookOAuthError) status = "token-exchange";
     else if (error instanceof FacebookApiError) status = "page-listing";
-    return withoutStateCookie(settingsRedirect(env, status));
+    return withoutStateCookie(redirectTo(status));
   }
 }

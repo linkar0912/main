@@ -59,6 +59,8 @@ export type MetaMedia = {
   mediaUrl?: string;
   thumbnailUrl?: string;
   timestamp: string;
+  /** Total comments, when Meta returns it. Optional: never required to list media. */
+  commentsCount?: number;
 };
 
 export type MetaMediaPage = {

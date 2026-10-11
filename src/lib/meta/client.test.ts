@@ -348,8 +348,21 @@ describe("Meta message payloads", () => {
 
     const requestUrl = new URL(String(fetcher.mock.calls[0][0]));
     expect(requestUrl.pathname).toBe("/v25.0/ig_1/media");
-    expect(requestUrl.searchParams.get("fields")).toBe("id,caption,media_type,media_product_type,permalink,media_url,thumbnail_url,timestamp");
+    expect(requestUrl.searchParams.get("fields")).toBe("id,caption,media_type,media_product_type,permalink,media_url,thumbnail_url,timestamp,comments_count");
     expect(requestUrl.searchParams.get("after")).toBe("current-page");
+  });
+
+  it("reads a valid comment count and ignores a malformed one without failing the list", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      data: [
+        { id: "media_1", media_type: "IMAGE", permalink: "https://www.instagram.com/p/1/", timestamp: "2026-08-21T10:00:00+0000", comments_count: 240 },
+        { id: "media_2", media_type: "IMAGE", permalink: "https://www.instagram.com/p/2/", timestamp: "2026-08-20T10:00:00+0000", comments_count: "many" },
+      ],
+    }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+    const page = await client.listMedia({ igUserId: "ig_1", accessToken: "access-token" });
+    expect(page.data[0].commentsCount).toBe(240);
+    expect(page.data[1]).not.toHaveProperty("commentsCount");
   });
 
   it("preserves an explicitly supplied empty media cursor", async () => {

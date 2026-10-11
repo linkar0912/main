@@ -42,6 +42,10 @@ import type {
   BroadcastRecord,
   BroadcastSegment,
   MessagingWindow,
+  WorkspaceOnboardingRecord,
+  WorkspaceOnboardingPatch,
+  MemberOnboardingRecord,
+  MemberOnboardingPatch,
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
   WorkspaceStatus,
@@ -139,6 +143,9 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
   const enrollmentIdsByPair = new Map<string, string>();
   const broadcasts = new Map<string, BroadcastRecord>();
   const messagingWindows = new Map<string, MessagingWindow>();
+  const workspaceOnboarding = new Map<string, WorkspaceOnboardingRecord>();
+  // Keyed by `${workspaceId}:${lowercased email}`, like WorkspaceMember rows.
+  const memberOnboarding = new Map<string, MemberOnboardingRecord>();
   // Keyed by automationId so we can answer "what is the next version number?" in O(1).
   const automationVersions = new Map<string, AutomationVersionRecord[]>();
   // Tracked short links: keyed by link id; clicks keyed by link id too.
@@ -2521,6 +2528,65 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     async setMessagingWindow(workspaceId, window) {
       if (window) messagingWindows.set(workspaceId, copy(window));
       else messagingWindows.delete(workspaceId);
+    },
+
+    async getWorkspaceOnboarding(workspaceId) {
+      return copy(workspaceOnboarding.get(workspaceId) ?? null);
+    },
+
+    async saveWorkspaceOnboarding(workspaceId, patch: WorkspaceOnboardingPatch) {
+      const stamp = new Date().toISOString();
+      const current: WorkspaceOnboardingRecord = workspaceOnboarding.get(workspaceId) ?? {
+        workspaceId,
+        answers: {},
+        step: 1,
+        existingWorkspace: false,
+        createdAt: stamp,
+        updatedAt: stamp,
+      };
+      const next: WorkspaceOnboardingRecord = {
+        ...current,
+        ...(patch.answers !== undefined ? { answers: copy(patch.answers) } : {}),
+        ...(patch.step !== undefined ? { step: patch.step } : {}),
+        updatedAt: stamp,
+      };
+      for (const key of ["completedAt", "skippedAt", "inviteDismissedAt", "planDismissedAt"] as const) {
+        const value = patch[key];
+        if (value === null) delete next[key];
+        else if (value !== undefined) next[key] = value;
+      }
+      workspaceOnboarding.set(workspaceId, next);
+      return copy(next);
+    },
+
+    async getMemberOnboarding(workspaceId, email) {
+      return copy(memberOnboarding.get(`${workspaceId}:${email.toLowerCase()}`) ?? null);
+    },
+
+    async saveMemberOnboarding(workspaceId, email, patch: MemberOnboardingPatch) {
+      const normalizedEmail = email.toLowerCase();
+      const key = `${workspaceId}:${normalizedEmail}`;
+      const stamp = new Date().toISOString();
+      const current: MemberOnboardingRecord = memberOnboarding.get(key) ?? {
+        workspaceId,
+        email: normalizedEmail,
+        step: 1,
+        existingMember: false,
+        createdAt: stamp,
+        updatedAt: stamp,
+      };
+      const next: MemberOnboardingRecord = {
+        ...current,
+        ...(patch.step !== undefined ? { step: patch.step } : {}),
+        updatedAt: stamp,
+      };
+      for (const field of ["displayName", "focus", "completedAt", "skippedAt"] as const) {
+        const value = patch[field];
+        if (value === null) delete next[field];
+        else if (value !== undefined) next[field] = value;
+      }
+      memberOnboarding.set(key, next);
+      return copy(next);
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {

@@ -1,5 +1,6 @@
 import type { ConnectionStatus, MemberRole } from "../repository";
 import type { BillingCatalogPlan } from "../billing/types";
+import type { OnboardingSummary } from "../onboarding/status";
 
 export type WorkspaceBootstrap = {
   email: string;
@@ -20,6 +21,12 @@ export type WorkspaceBootstrap = {
    * probes both dependencies on every call.
    */
   mode?: "demo" | "configured";
+  /**
+   * First-time onboarding: whether to redirect into /onboarding, which Home
+   * cards to show, saved goals and the name they gave. null when it could not
+   * be read (never redirect on an error); absent from older payloads.
+   */
+  onboarding?: OnboardingSummary | null;
 };
 
 /**

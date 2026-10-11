@@ -10,11 +10,17 @@ import { clearProfilePictureCache } from "@/src/lib/meta/profile-picture";
 import { getRepository } from "@/src/lib/repository-provider";
 import { InstagramAccountOwnershipError } from "@/src/lib/repository";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { clearOnboardingReturnCookie, connectResultPath, OAUTH_RETURN_COOKIE, readsOnboardingReturn } from "@/src/lib/onboarding/oauth-return";
 
 export const runtime = "nodejs";
 
-function settingsRedirect(env: ReturnType<typeof getServerEnv>, status: string): NextResponse {
-  return NextResponse.redirect(new URL(`/settings?meta=${status}`, env.appUrl));
+/**
+ * Status redirect: Settings as before, or back into onboarding when the
+ * connect was started there (oauth-return.ts). The return cookie is cleared
+ * on the way out either way.
+ */
+function settingsRedirect(env: ReturnType<typeof getServerEnv>, status: string, toOnboarding: boolean): NextResponse {
+  return clearOnboardingReturnCookie(NextResponse.redirect(new URL(connectResultPath("meta", status, toOnboarding), env.appUrl)));
 }
 
 function withoutStateCookie(response: NextResponse): NextResponse {
@@ -24,6 +30,8 @@ function withoutStateCookie(response: NextResponse): NextResponse {
 
 export async function GET(request: Request) {
   const env = getServerEnv();
+  const toOnboarding = readsOnboardingReturn((await cookies()).get(OAUTH_RETURN_COOKIE)?.value);
+  const redirectTo = (status: string) => settingsRedirect(env, status, toOnboarding);
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -33,7 +41,7 @@ export async function GET(request: Request) {
   if (!code) {
     const metaError = url.searchParams.get("error");
     if (metaError === "access_denied") {
-      return settingsRedirect(env, "cancelled");
+      return redirectTo("cancelled");
     }
     if (metaError) {
       logger.warn("Instagram OAuth redirect returned an error", {
@@ -41,7 +49,7 @@ export async function GET(request: Request) {
         errorCode: url.searchParams.get("error_code"),
         description: url.searchParams.get("error_description"),
       });
-      return settingsRedirect(env, "denied");
+      return redirectTo("denied");
     }
   }
 
@@ -51,10 +59,10 @@ export async function GET(request: Request) {
     : null;
 
   if (!code || !responseState) {
-    return withoutStateCookie(settingsRedirect(env, "invalid-state"));
+    return withoutStateCookie(redirectTo("invalid-state"));
   }
   if (!env.metaTokenEncryptionKey) {
-    return withoutStateCookie(settingsRedirect(env, "missing-encryption-key"));
+    return withoutStateCookie(redirectTo("missing-encryption-key"));
   }
 
   try {
@@ -115,7 +123,7 @@ export async function GET(request: Request) {
       status: "CONNECTED",
     });
     clearProfilePictureCache(profile.id);
-    const response = settingsRedirect(env, "connected");
+    const response = redirectTo("connected");
     response.cookies.delete(META_OAUTH_STATE_COOKIE);
     return response;
   } catch (error) {
@@ -130,6 +138,6 @@ export async function GET(request: Request) {
     else if (error instanceof InstagramAccountOwnershipError) status = "already-connected";
     else if (error instanceof Error && error.message === "entitlement_required") status = "plan-required";
     else if (error instanceof Error && error.message === "limit_reached") status = "limit-reached";
-    return withoutStateCookie(settingsRedirect(env, status));
+    return withoutStateCookie(redirectTo(status));
   }
 }

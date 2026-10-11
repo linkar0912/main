@@ -404,3 +404,54 @@ describe("broadcast reconciliation after admin cancellation", () => {
     expect(broadcast).toMatchObject({ status: "CANCELLED", completedAt: new Date(0), sent: 1, skipped: 2 });
   });
 });
+
+describe("prisma repository onboarding", () => {
+  const row = {
+    workspaceId: "workspace_1",
+    answers: { goals: ["sell"] },
+    step: 4,
+    completedAt: null,
+    skippedAt: new Date("2026-10-12T00:00:00.000Z"),
+    existingWorkspace: false,
+    inviteDismissedAt: null,
+    planDismissedAt: null,
+    createdAt: new Date("2026-10-11T00:00:00.000Z"),
+    updatedAt: new Date("2026-10-12T00:00:00.000Z"),
+  };
+
+  it("upserts only the fields in the patch, mapping null to a cleared column", async () => {
+    const upsert = vi.fn().mockResolvedValue({ ...row, skippedAt: null, completedAt: new Date("2026-10-12T02:00:00.000Z") });
+    const client = { workspaceOnboarding: { upsert } } as unknown as typeof prisma;
+    const saved = await createPrismaRepository(client).saveWorkspaceOnboarding("workspace_1", {
+      completedAt: "2026-10-12T02:00:00.000Z",
+      skippedAt: null,
+    });
+    const data = { completedAt: new Date("2026-10-12T02:00:00.000Z"), skippedAt: null };
+    expect(upsert).toHaveBeenCalledWith({ where: { workspaceId: "workspace_1" }, create: { workspaceId: "workspace_1", ...data }, update: data });
+    expect(saved).toMatchObject({ workspaceId: "workspace_1", completedAt: "2026-10-12T02:00:00.000Z", answers: { goals: ["sell"] } });
+    expect(saved).not.toHaveProperty("skippedAt");
+  });
+
+  it("reads a row back with ISO dates and never trusts a non-object answers column", async () => {
+    const findUnique = vi.fn().mockResolvedValue({ ...row, answers: ["not", "an", "object"] });
+    const client = { workspaceOnboarding: { findUnique } } as unknown as typeof prisma;
+    const record = await createPrismaRepository(client).getWorkspaceOnboarding("workspace_1");
+    expect(record).toMatchObject({ answers: {}, skippedAt: "2026-10-12T00:00:00.000Z", step: 4 });
+  });
+
+  it("keys member onboarding by workspace and lowercased email", async () => {
+    const upsert = vi.fn().mockResolvedValue({
+      workspaceId: "workspace_1", email: "arjun@team.test", displayName: "Arjun", focus: null, step: 1,
+      completedAt: null, skippedAt: null, existingMember: false, createdAt: new Date(0), updatedAt: new Date(0),
+    });
+    const client = { memberOnboarding: { upsert } } as unknown as typeof prisma;
+    const saved = await createPrismaRepository(client).saveMemberOnboarding("workspace_1", "Arjun@Team.test", { displayName: "Arjun" });
+    expect(upsert).toHaveBeenCalledWith({
+      where: { workspaceId_email: { workspaceId: "workspace_1", email: "arjun@team.test" } },
+      create: { workspaceId: "workspace_1", email: "arjun@team.test", displayName: "Arjun" },
+      update: { displayName: "Arjun" },
+    });
+    expect(saved).toMatchObject({ displayName: "Arjun", email: "arjun@team.test" });
+    expect(saved).not.toHaveProperty("focus");
+  });
+});

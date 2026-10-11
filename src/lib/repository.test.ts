@@ -1055,3 +1055,45 @@ describe("memory repository", () => {
     });
   });
 });
+
+describe("memory repository onboarding", () => {
+  it("has no row until the first save, then creates one as a new workspace", async () => {
+    const repository = createMemoryRepository();
+    expect(await repository.getWorkspaceOnboarding("workspace_a")).toBeNull();
+    const saved = await repository.saveWorkspaceOnboarding("workspace_a", { step: 3, answers: { accountType: "brand" } });
+    expect(saved).toMatchObject({ workspaceId: "workspace_a", step: 3, answers: { accountType: "brand" }, existingWorkspace: false });
+    expect(await repository.getWorkspaceOnboarding("workspace_a")).toEqual(saved);
+  });
+
+  it("applies a patch without touching other fields, and null clears a timestamp", async () => {
+    const repository = createMemoryRepository();
+    await repository.saveWorkspaceOnboarding("workspace_a", { answers: { goals: ["sell"] }, skippedAt: "2026-10-12T00:00:00.000Z" });
+    const next = await repository.saveWorkspaceOnboarding("workspace_a", { completedAt: "2026-10-12T01:00:00.000Z", skippedAt: null, step: 9 });
+    expect(next.answers).toEqual({ goals: ["sell"] });
+    expect(next.completedAt).toBe("2026-10-12T01:00:00.000Z");
+    expect(next).not.toHaveProperty("skippedAt");
+  });
+
+  it("keeps workspaces apart", async () => {
+    const repository = createMemoryRepository();
+    await repository.saveWorkspaceOnboarding("workspace_a", { step: 5 });
+    expect(await repository.getWorkspaceOnboarding("workspace_b")).toBeNull();
+  });
+
+  it("returns copies, so callers cannot mutate stored answers", async () => {
+    const repository = createMemoryRepository();
+    const saved = await repository.saveWorkspaceOnboarding("workspace_a", { answers: { goals: ["sell"] } });
+    (saved.answers.goals as string[]).push("faq");
+    expect((await repository.getWorkspaceOnboarding("workspace_a"))?.answers).toEqual({ goals: ["sell"] });
+  });
+
+  it("stores each person's name and focus by workspace and case-insensitive email", async () => {
+    const repository = createMemoryRepository();
+    await repository.saveMemberOnboarding("workspace_a", "Arjun@Team.test", { displayName: "Arjun", focus: "inbox", step: 2 });
+    expect(await repository.getMemberOnboarding("workspace_a", "arjun@team.test")).toMatchObject({ email: "arjun@team.test", displayName: "Arjun", focus: "inbox", step: 2, existingMember: false });
+    expect(await repository.getMemberOnboarding("workspace_b", "arjun@team.test")).toBeNull();
+    const cleared = await repository.saveMemberOnboarding("workspace_a", "ARJUN@team.test", { displayName: null });
+    expect(cleared).not.toHaveProperty("displayName");
+    expect(cleared.focus).toBe("inbox");
+  });
+});

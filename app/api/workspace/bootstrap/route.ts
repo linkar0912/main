@@ -6,6 +6,7 @@ import { loadProfilePictureUrl, peekProfilePictureUrl } from "@/src/lib/meta/pro
 import { getRepository } from "@/src/lib/repository-provider";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { measureServerOperation } from "@/src/lib/server-timing";
+import { deriveOnboardingSummary } from "@/src/lib/onboarding/status";
 
 export const runtime = "nodejs";
 
@@ -17,14 +18,22 @@ export async function GET(request: Request) {
 
     const env = getServerEnv();
     const repository = getRepository();
-    const [role, connections, entitlements] = await measureServerOperation(
+    const [role, connections, entitlements, workspaceOnboarding, memberOnboarding] = await measureServerOperation(
         "workspace.bootstrap.repository",
         () => Promise.all([
             repository.getMemberRole(session.workspaceId, session.email),
             repository.listConnections(session.workspaceId).catch(() => []),
             getEntitlementService().getEffectiveEntitlements(session.workspaceId),
+            // Two primary-key reads. The "needs onboarding" flag rides this
+            // payload so the shell can redirect without another round trip.
+            // A failed read is `undefined` (a missing row is null): never redirect on an error.
+            repository.getWorkspaceOnboarding(session.workspaceId).catch(() => undefined),
+            repository.getMemberOnboarding(session.workspaceId, session.email).catch(() => undefined),
         ]),
     );
+    const onboarding = workspaceOnboarding === undefined || memberOnboarding === undefined
+        ? null
+        : deriveOnboardingSummary({ role, workspace: workspaceOnboarding, member: memberOnboarding });
 
     // The avatar rides the payload only when it's already cached: awaiting a
     // live Meta Graph call here used to hold up the whole shell (sidebar chip,
@@ -56,6 +65,8 @@ export async function GET(request: Request) {
             // for this one field, paying a Redis connect plus a `SELECT 1` on
             // every mount and every window focus.
             mode: getRuntimeMode(),
+            // null when it could not be read: the shell then never redirects.
+            onboarding,
         },
     });
 }
