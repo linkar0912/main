@@ -268,7 +268,7 @@ describe("DashboardScreen", () => {
     expect(screen.queryByRole("img", { name: /daily replies sent and people reached/i })).toBeNull();
   });
 
-  it("puts what needs attention above the numbers and expands failures in place", async () => {
+  it("lists what needs attention below the numbers and expands failures in place", async () => {
     automationState.automations = [automation(), automation({ id: "automation_paused", name: "Kurta restock", status: "PAUSED" })];
     stubDashboardFetch({
       failures: [{ id: "f1", kind: "CLASSIC_ACTION", state: "FAILED", lastError: "(#551) This person isn't available right now.", attemptCount: 2, updatedAt: new Date().toISOString() }],
@@ -280,9 +280,11 @@ describe("DashboardScreen", () => {
     await within(needs).findByText("1 message couldn't be sent in the last 7 days.");
     expect(within(needs).getByText("950 of 1,000 messages used this month (95%).")).toBeTruthy();
     expect(within(needs).getByRole("link", { name: "Open" }).getAttribute("href")).toBe("/automations/automation_paused/edit");
-    // "Needs you" comes before the performance panel in reading order.
+    // "Needs you" sits below the performance panel, above tracked links.
     const panel = screen.getByRole("region", { name: "Performance over time" });
-    expect(needs.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(needs.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    const links = screen.getByRole("region", { name: "Tracked links" });
+    expect(needs.compareDocumentPosition(links) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const review = within(needs).getByRole("button", { name: "Review" });
     expect(review.getAttribute("aria-expanded")).toBe("false");

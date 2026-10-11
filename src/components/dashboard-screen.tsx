@@ -56,11 +56,12 @@ type InsightsStatus = "loading" | "ready" | "error";
 
 /**
  * First-load choreography, in ms after mount: header, status line, the
- * "Needs you" rows, then the performance panel whose figures count up while
- * the line draws, then the automation rows. Everything settles by ~700ms and
- * nothing replays on a background refresh.
+ * performance panel whose figures count up while the line draws, the
+ * automation rows, then the "Needs you" rows below them (or, for a new
+ * workspace, the guided start right under the header). Everything settles by
+ * ~700ms and nothing replays on a background refresh.
  */
-const ENTER = { header: 0, status: 45, attention: 90, panel: 135, figures: 160, list: 220 } as const;
+const ENTER = { header: 0, status: 45, start: 90, panel: 90, figures: 115, list: 175, attention: 260 } as const;
 
 /** Figures start counting this long after their panel starts to appear. */
 const FIGURE_DELAY = ENTER.figures - ENTER.panel;
@@ -356,7 +357,7 @@ function AutomationsPanel({ automations, failed, onRetry }: { automations: Autom
 
 function TrackedLinksRow() {
   return (
-    <section className="home-links home-enter" aria-labelledby="home-links-heading" style={enterStyle(ENTER.list + 90)}>
+    <section className="home-links home-enter" aria-labelledby="home-links-heading" style={enterStyle(ENTER.attention + 90)}>
       <span className="home-links-icon" aria-hidden><Link2 size={17} /></span>
       <div className="home-links-copy">
         <h2 id="home-links-heading">Tracked links</h2>
@@ -381,7 +382,7 @@ function GuidedStart({ connections, onBrowseTemplates }: { connections: Attentio
   const names = connected.map((connection) => connection.kind === "instagram" ? `@${connection.name.replace(/^@/, "")}` : connection.name);
 
   return (
-    <section className="surface home-start home-enter" aria-label="Start here" style={enterStyle(ENTER.attention)}>
+    <section className="surface home-start home-enter" aria-label="Start here" style={enterStyle(ENTER.start)}>
       <div className="home-start-head">
         <h2>Get your first reply live</h2>
         <p>Three steps. Most people finish in a few minutes.</p>
@@ -541,7 +542,6 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
         </>
       ) : (
         <>
-          {attention.length > 0 ? <NeedsYou items={attention} failures={failures ?? []} /> : null}
           <div className="home-grid">
             <PerformancePanel status={insightsStatus} insights={insights} onRetry={retryInsights} />
             {loading && automations.length === 0 ? (
@@ -552,6 +552,7 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
               <AutomationsPanel automations={automations} failed={automationsFailed} onRetry={() => void reloadAutomations?.()} />
             )}
           </div>
+          {attention.length > 0 ? <NeedsYou items={attention} failures={failures ?? []} /> : null}
           <TrackedLinksRow />
         </>
       )}
