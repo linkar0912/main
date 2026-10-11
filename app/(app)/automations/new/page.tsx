@@ -33,13 +33,9 @@ export default async function NewAutomationPage({ searchParams }: NewAutomationP
         <Link className="back-link" href="/automations">
           <ArrowLeft size={16} /> Back to automations
         </Link>
-        {template && setup && (
-          <p className="template-prefill-note">
-            Started from the “{template.title}” template. Change anything you like before saving.
-          </p>
-        )}
         <AutomationBuilder
           variant={classic ? "classic" : "campaign"}
+          templateTitle={setup ? template?.title : undefined}
           initialName={setup?.name}
           initialDefinition={setup?.definition}
           initialFacebookPageId={target.initialFacebookPageId}

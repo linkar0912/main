@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import {
   BatteryFull,
   Bookmark,
@@ -18,6 +19,27 @@ import {
 } from "lucide-react";
 
 export type PreviewView = "post" | "comments" | "dm";
+
+/**
+ * Keeps a scrolling box pinned to its end: when `key` changes, and whenever
+ * the box changes size - a preview that was hidden (the phone sheet before
+ * it opens) has no height, so it has to scroll again once it is shown.
+ */
+export function useStickToEnd<T extends HTMLElement>(key: string) {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    const toEnd = () => { box.scrollTop = box.scrollHeight; };
+    toEnd();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(toEnd);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [key]);
+  return ref;
+}
+
 
 export type DmBubble = {
   id: string;
@@ -48,6 +70,8 @@ export type InstagramPreviewProps = {
   postImageUrl?: string;
   /** Reels render at their native 9:16 inside the post view; feed posts stay full-bleed. */
   postIsReel?: boolean;
+  /** Handle shown on the triggering comment; the sample person the preview personalises for. */
+  commenter?: string;
   triggerComment?: string;
   commentReply?: string;
   messages: DmBubble[];
@@ -116,7 +140,7 @@ function PostView({ username, avatarUrl, caption, postImageUrl, postIsReel }: { 
   );
 }
 
-function CommentsView({ username, avatarUrl, triggerComment, commentReply }: { username: string; avatarUrl?: string; triggerComment?: string; commentReply?: string }) {
+function CommentsView({ username, avatarUrl, commenter, triggerComment, commentReply }: { username: string; avatarUrl?: string; commenter?: string; triggerComment?: string; commentReply?: string }) {
   return (
     <div className="ig-screen ig-screen-comments">
       <div className="ig-topbar">
@@ -129,7 +153,7 @@ function CommentsView({ username, avatarUrl, triggerComment, commentReply }: { u
           {/* Someone else commenting: Instagram's default no-photo avatar. */}
           <DefaultAvatar small />
           <div className="ig-comment-body">
-            <strong>someone <span className="ig-comment-time">2m</span></strong>
+            <strong>{commenter || "someone"} <span className="ig-comment-time">2m</span></strong>
             <p>{triggerComment || "your keyword"}</p>
             <span className="ig-comment-reply-hint">Reply</span>
           </div>
@@ -154,6 +178,11 @@ function CommentsView({ username, avatarUrl, triggerComment, commentReply }: { u
 }
 
 function DmView({ username, avatarUrl, messages }: { username: string; avatarUrl?: string; messages: DmBubble[] }) {
+  // Like a real chat, the thread opens on its newest message, so the last
+  // message of a long flow (usually the link) is never hidden below the fold.
+  const threadRef = useStickToEnd<HTMLDivElement>(
+    messages.map((bubble) => `${bubble.id}:${bubble.text ?? ""}:${bubble.button ?? ""}`).join("|"),
+  );
   return (
     <div className="ig-screen ig-screen-dm">
       <div className="ig-topbar">
@@ -164,7 +193,7 @@ function DmView({ username, avatarUrl, messages }: { username: string; avatarUrl
         <Phone size={17} strokeWidth={1.8} />
         <Video size={19} strokeWidth={1.8} />
       </div>
-      <div className="ig-dm-thread">
+      <div className="ig-dm-thread" ref={threadRef}>
         {messages.length === 0 && <p className="ig-dm-empty muted">Your messages will appear here</p>}
         {messages.map((bubble) =>
           bubble.actions?.length ? (
@@ -208,6 +237,7 @@ export function InstagramPreview({
   postCaption,
   postImageUrl,
   postIsReel,
+  commenter,
   triggerComment,
   commentReply,
   messages,
@@ -250,7 +280,7 @@ export function InstagramPreview({
               postIsReel={postIsReel}
             />
           )}
-          {view === "comments" && <CommentsView username={username} avatarUrl={avatarUrl} triggerComment={triggerComment} commentReply={commentReply} />}
+          {view === "comments" && <CommentsView username={username} avatarUrl={avatarUrl} commenter={commenter} triggerComment={triggerComment} commentReply={commentReply} />}
           {view === "dm" && <DmView username={username} avatarUrl={avatarUrl} messages={messages} />}
           <div className="ig-homebar" aria-hidden="true" />
         </div>

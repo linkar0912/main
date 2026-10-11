@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import { BatteryFull, Globe2, Heart, MessageCircle, MoreHorizontal, Send, Signal, ThumbsUp, Wifi } from "lucide-react";
 import { FacebookGlyph } from "./facebook-glyph";
+import { useStickToEnd } from "./instagram-preview";
 
 export type FacebookPagePreviewProps = {
   pageName: string;
@@ -29,6 +30,9 @@ function PageAvatar({ pageName, pageAvatarUrl, small = false }: { pageName: stri
  * device treatment as Instagram while rendering Facebook's public comment
  * model: Page post, triggering comment, then the Page's nested reply. */
 export function FacebookPagePreview({ pageName, pageAvatarUrl, postBody, commentAuthor, commentText, replyText }: FacebookPagePreviewProps) {
+  // The Page's reply is the point of the preview and sits under the post, so
+  // keep the feed scrolled to it as it changes (a short phone would hide it).
+  const postRef = useStickToEnd<HTMLElement>(`${commentText}|${replyText}`);
   return (
     <div className="facebook-preview" style={{ "--facebook-brand": "#1877F2" } as CSSProperties}>
       <div className="facebook-device">
@@ -38,7 +42,7 @@ export function FacebookPagePreview({ pageName, pageAvatarUrl, postBody, comment
         <div className="facebook-phone">
           <div className="facebook-statusbar" aria-hidden="true"><span>9:41</span><span className="facebook-statusbar-island" /><span className="facebook-statusbar-icons"><Signal size={13} /><Wifi size={13} /><BatteryFull size={16} /></span></div>
           <header className="facebook-appbar"><FacebookGlyph size={25} brand /><strong>facebook</strong><span className="facebook-appbar-actions"><span><MessageCircle size={15} /></span><span><MoreHorizontal size={16} /></span></span></header>
-          <article className="facebook-post">
+          <article className="facebook-post" ref={postRef}>
             <header className="facebook-post-head">
               <PageAvatar pageName={pageName} pageAvatarUrl={pageAvatarUrl} />
               <div><p className="facebook-page-name">{pageName}</p><p className="facebook-page-meta">2h · <Globe2 size={10} /></p></div>
@@ -56,7 +60,7 @@ export function FacebookPagePreview({ pageName, pageAvatarUrl, postBody, comment
           <div className="facebook-homebar" aria-hidden="true" />
         </div>
       </div>
-      <p className="facebook-preview-note">Preview of your Facebook Page. Nothing here is sent.</p>
+      <p className="facebook-preview-note">As people see it on your Facebook Page</p>
     </div>
   );
 }

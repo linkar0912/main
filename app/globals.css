@@ -7218,8 +7218,10 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .builder-stepper-item.is-done .builder-stepper-label,
 .builder-stepper-item.is-open .builder-stepper-label { color: var(--slate); }
 .builder-stepper-item.is-upcoming .builder-stepper-label { color: var(--slate); }
-.builder-stepper-item button:hover .builder-stepper-dot { border-color: var(--ink); color: var(--ink); }
-.builder-stepper-item button:hover .builder-stepper-label { color: var(--ink); }
+@media (hover: hover) {
+  .builder-stepper-item:not(.is-active) button:hover .builder-stepper-dot { border-color: var(--ink); color: var(--ink); }
+  .builder-stepper-item button:hover .builder-stepper-label { color: var(--ink); }
+}
 .builder-stepper-current { display: none; }
 [data-theme="dark"] .builder-stepper-item.is-active .builder-stepper-dot { color: #101116; }
 
@@ -7491,10 +7493,6 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .builder-main { gap: 20px; min-height: calc(100dvh - 140px); }
   .builder-layout .builder-header .page-header-row h1 { font-size: clamp(1.6rem, 7vw, 2rem); }
   .builder-stepper { margin-top: 20px; }
-  .builder-stepper-label { display: none; }
-  .builder-stepper-item:not(:last-child)::before { left: 34px; right: 6px; }
-  .builder-stepper-current { color: var(--muted); display: block; font-size: .875rem; margin: 12px 0 0; }
-  .builder-stepper-current strong { color: var(--ink); font-weight: 700; }
   .builder-card { gap: 20px; padding: 20px 16px 24px; }
   .builder-card-head h2 { font-size: 1.25rem; }
   .builder-group { gap: 14px; padding-top: 20px; }
@@ -7513,6 +7511,14 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .builder-footer.is-last .builder-footer-bar .button { width: 100%; }
   .builder-layout .media-grid { grid-auto-columns: 120px; grid-auto-flow: column; grid-template-columns: none; overflow-x: auto; padding: 2px; scroll-snap-type: x mandatory; scrollbar-width: none; }
   .builder-layout .reply-version > .icon-button { height: 44px; width: 44px; }
+}
+/* Labels fit under each dot down to about 640px; below that the dots stay and
+   one line names the current step. */
+@media (max-width: 640px) {
+  .builder-stepper-label { display: none; }
+  .builder-stepper-item:not(:last-child)::before { left: 34px; right: 6px; }
+  .builder-stepper-current { color: var(--muted); display: block; font-size: .875rem; margin: 12px 0 0; }
+  .builder-stepper-current strong { color: var(--ink); font-weight: 700; }
 }
 @media (max-width: 380px) {
   .builder-layout .builder-mobile-preview-trigger { padding: 0 10px; }
@@ -7615,3 +7621,90 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .media-picker.media-picker-empty { align-items: center; aspect-ratio: auto; border: 1px dashed var(--line-strong); border-radius: 12px; color: var(--slate); display: flex; flex-direction: row; flex-wrap: wrap; gap: 12px; grid-template-columns: none; height: auto; justify-content: flex-start; min-height: 0; padding: 14px 16px; text-align: left; }
 .media-picker-empty p { flex: 1 1 220px; margin: 0; }
 .media-picker-empty svg { color: var(--muted); flex: 0 0 auto; }
+
+/* === UX sweep: builder === */
+/* Header: tighter rhythm so the first question shows on a 745px-tall laptop. */
+.page-wrap.builder-wrap { padding-top: 24px; }
+.builder-wrap > .back-link { margin-bottom: 8px; }
+.builder-layout .builder-header .page-lede { display: grid; gap: 4px; }
+.builder-template-note { color: var(--muted); font-size: .875rem; }
+.builder-stepper { margin-top: 20px; }
+.builder-main { gap: 20px; }
+@media (min-width: 961px) and (max-height: 820px) {
+  .builder-layout .builder-header .page-header-row h1 { font-size: 2rem; }
+  .builder-card { gap: 20px; padding: 24px 28px 28px; }
+  .builder-layout .builder-preview { top: 16px; }
+}
+
+/* Phone preview: the newest message is never hidden. Thread items keep their
+   height (a squeezed button card overlapped the next bubble), the DM header
+   gives the account name the free space, and the Facebook reply clears the
+   home bar. */
+.ig-dm-thread > * { flex-shrink: 0; }
+.builder-preview .ig-screen-dm .ig-topbar .ig-spacer { display: none; }
+.builder-preview .facebook-comments { padding-bottom: 28px; }
+.builder-preview .facebook-preview-note { margin-top: 12px; }
+
+/* Post picker: how many are chosen, even when the chosen tiles are off screen. */
+.media-picker-count { color: var(--muted); font-size: .875rem; margin: 0; }
+
+/* Quick automation: smaller Reel tiles so a laptop shows two rows, readable
+   labels, and empty/error states that end in one clear action. */
+.quick-automation-page.ws-page .quick-reel-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+.quick-automation-page.ws-page .quick-stage-number { font-size: .875rem; }
+.quick-automation-page.ws-page .quick-reel-type { font-size: .8125rem; }
+.quick-automation-page .quick-empty p { font-size: .875rem; line-height: 1.5; max-width: 46ch; }
+.quick-automation-page .quick-empty > svg { color: var(--slate); }
+.quick-automation-page .quick-empty .empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.quick-automation-page .quick-load-error { font-size: .875rem; margin: 0; text-align: center; }
+
+@media (max-width: 960px) {
+  /* The full-screen preview sheet: the phone uses the height it has. */
+  .builder-layout .builder-preview.is-open { --preview-phone-height: clamp(300px, calc(100dvh - 210px), 640px); }
+  .builder-layout .builder-preview.is-open .ig-phone,
+  .builder-layout .builder-preview.is-open .facebook-phone { height: var(--preview-phone-height); }
+}
+
+/* Touch sizes: every control is at least 44px tall, and text fields use 16px
+   so iOS doesn't zoom the page when one is focused. */
+@media (max-width: 820px) {
+  .builder-wrap > .back-link { align-items: center; display: inline-flex; margin-bottom: 0; min-height: 44px; }
+  .builder-stepper-item button { align-content: center; min-height: 44px; }
+  .builder-field :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+  .builder-field .keyword-input input:not([type="checkbox"]):not([type="radio"]) { font-size: 16px; }
+  .builder-layout .button,
+  .builder-layout .button-small { min-height: 44px; }
+  .builder-layout .keyword-suggestion-chip,
+  .builder-layout .personalize-chip { min-height: 44px; padding-inline: 12px; }
+  .keyword-chip { padding-block: 0; }
+  .keyword-chip button { height: 44px; margin: -6px -6px -6px -2px; width: 44px; }
+  /* The whole first row of a switch (switch + label) is one 44px target. */
+  .builder-toggle { position: relative; }
+  .builder-toggle label { padding-block: 10px; }
+  .builder-toggle label::after { content: ""; height: 44px; inset: 0 0 auto; position: absolute; }
+  .builder-load-error .button { min-height: 44px; }
+  .builder-disclosure > summary { min-height: 48px; }
+  .quick-automation-page .button { min-height: 44px; }
+}
+
+@media (max-width: 640px) {
+  /* Each step card asks its own question, so the header's lede goes on
+     phones; a template note under it stays. */
+  .builder-layout .builder-header .page-lede:not(:has(.builder-template-note)),
+  .builder-lede-text { display: none; }
+  /* Last step: Preview, Back and Save draft share a row; Save and turn on
+     gets the full width so its label never truncates. */
+  .builder-footer.is-last .builder-footer-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .builder-footer.is-last .builder-actions > .button-primary { grid-column: 1 / -1; grid-row: 2; }
+  .builder-layout .builder-footer.is-last .button { padding-inline: 8px; }
+}
+
+/* Template picker: channel labels at the 13px floor; touch-sized controls and
+   16px fields (no iOS zoom) on phones and tablets. */
+.template-picker .template-channel-option { font-size: .875rem; }
+@media (max-width: 820px) {
+  .template-picker .template-picker-search input { font-size: 16px; min-height: 44px; }
+  .template-picker .template-channel-option,
+  .template-picker .template-picker-category { min-height: 44px; }
+  .template-picker .template-channel-select-shell select { font-size: 16px; min-height: 44px; }
+}

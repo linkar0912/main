@@ -280,9 +280,9 @@ export function automations(): AutomationRecord[] {
         trigger: {
           type: "comment",
           source: "specific_media",
-          mediaIds: ["17998832451207733"],
+          mediaIds: ["18101928374650011"],
           mediaSnapshots: [{
-            id: "17998832451207733",
+            id: "18101928374650011",
             caption: "Diwali edit drop 1 ✨ Comment DIWALI for early access",
             mediaType: "VIDEO",
             mediaProductType: "REELS",
@@ -394,7 +394,7 @@ function insightsFull(scenario: PreviewScenario) {
     ...insightsOverview(scenario),
     funnel: empty ? {} : { COMMENT_MATCHED: 1_240, OPENING_SENT: 1_182, OPTED_IN: 806, FOLLOW_VERIFIED: 612, LINK_SENT: 588 },
     mediaPerformance: empty ? [] : [
-      { mediaId: "17998832451207733", matched: 412, delivered: 371, clicked: 149 },
+      { mediaId: "18101928374650011", matched: 412, delivered: 371, clicked: 149 },
       { mediaId: "18042217893305561", matched: 288, delivered: 262, clicked: 87 },
       { mediaId: "17885514206612948", matched: 196, delivered: 181, clicked: 52 },
       { mediaId: "18210493377802215", matched: 121, delivered: 109, clicked: 24 },
@@ -410,7 +410,7 @@ function failures(scenario: PreviewScenario) {
   return {
     data: [
       { id: "dlv_9f21", kind: "CLASSIC_ACTION", state: "FAILED", recipientId: "6921583317842201", lastError: "(#10) This message is sent outside of allowed window.", attemptCount: 3, updatedAt: ago(2 * HOUR, now) },
-      { id: "dlv_9e87", kind: "CAMPAIGN_ACTION", state: "FAILED", recipientId: "7148822305519927", lastError: "Unsupported post request. Object with ID '17998832451207733' does not exist, cannot be loaded due to missing permissions, or does not support this operation.", attemptCount: 1, updatedAt: ago(7 * HOUR, now) },
+      { id: "dlv_9e87", kind: "CAMPAIGN_ACTION", state: "FAILED", recipientId: "7148822305519927", lastError: "Unsupported post request. Object with ID '18101928374650011' does not exist, cannot be loaded due to missing permissions, or does not support this operation.", attemptCount: 1, updatedAt: ago(7 * HOUR, now) },
       { id: "dlv_9d10", kind: "LEAD_WEBHOOK", state: "FAILED", lastError: "Webhook responded with HTTP 502 Bad Gateway", attemptCount: 5, updatedAt: ago(1 * DAY + 3 * HOUR, now) },
       { id: "dlv_9c42", kind: "SEQUENCE_STEP", state: "FAILED", recipientId: "5530981274460018", lastError: "(#551) This person isn't available right now.", attemptCount: 2, updatedAt: ago(2 * DAY, now) },
       { id: "dlv_9b05", kind: "BROADCAST_RECIPIENT", state: "FAILED", recipientId: "6610247785531190", lastError: "(#4) Application request limit reached", attemptCount: 4, updatedAt: ago(5 * DAY, now) },

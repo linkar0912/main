@@ -235,6 +235,12 @@ export function MediaPicker({ selectedIds, onChange, initialSnapshots = [], onIn
           </button>
         </div>
       ) : null}
+      {/* The count keeps the choice visible when the selected tiles are
+          scrolled out of view (a phone's sideways strip, or a saved post
+          on a page that hasn't loaded yet). */}
+      <p className="media-picker-count" aria-live="polite">
+        {selectedIds.length === 0 ? "Tap a post or Reel to select it." : `${selectedIds.length} selected`}
+      </p>
       <div className="media-grid">
         {items.map((media) => {
           const selected = selectedIds.includes(media.id);
