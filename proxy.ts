@@ -33,6 +33,13 @@ function isProviderCallbackPath(pathname: string): boolean {
 // authorization (see Next.js's Proxy guidance against using it as one).
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  // Design previews (app/dev-preview) render screens with sample data for
+  // local review only. Their pages call notFound() outside development, but a
+  // statically prerendered not-found shell is still served with HTTP 200, so
+  // answer production requests with a real 404 before Next renders anything.
+  if ((pathname === "/dev-preview" || pathname.startsWith("/dev-preview/")) && process.env.NODE_ENV !== "development") {
+    return new NextResponse(null, { status: 404 });
+  }
   // Every state-changing API call made with a browser session must come from
   // our own pages. SameSite=Lax already blocks most cross-site POSTs, but the
   // session cookie is scoped to the parent domain, so a sibling subdomain is
@@ -130,5 +137,6 @@ export const config = {
     "/help/:path*",
     "/admin/:path*",
     "/api/:path*",
+    "/dev-preview/:path*",
   ],
 };

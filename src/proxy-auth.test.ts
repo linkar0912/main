@@ -76,4 +76,14 @@ describe("proxy authentication boundaries", () => {
     expect(webhook.status).toBe(200);
     expect(mocks.getClaims).not.toHaveBeenCalled();
   });
+
+  it("answers design preview routes with a real 404 outside development", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    for (const path of ["/dev-preview", "/dev-preview/admin", "/dev-preview/workspace/dashboard"]) {
+      const result = await proxy(new NextRequest(`https://app.linkar.in${path}`));
+      expect(result.status).toBe(404);
+    }
+    expect(mocks.getClaims).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
 });
