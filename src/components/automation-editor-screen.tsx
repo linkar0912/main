@@ -38,7 +38,13 @@ export function AutomationEditorScreen({ automationId }: { automationId: string 
         {loading && (
           <InlineContentSkeleton label="Loading automation editor" rows={5} />
         )}
-        {!loading && error && <p className="form-error" role="alert">{error}</p>}
+        {!loading && error && (
+          <section className="builder-card builder-load-error" role="alert">
+            <h2>This automation couldn’t be opened</h2>
+            <p>{error.replace(/\.$/, "")}. It may have been deleted, or the page needs a refresh.</p>
+            <Link className="button button-secondary" href="/automations">Back to automations</Link>
+          </section>
+        )}
         {!loading && !error && automation && (
           <AutomationBuilder
             automationId={automation.id}

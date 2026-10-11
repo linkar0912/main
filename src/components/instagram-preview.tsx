@@ -42,7 +42,6 @@ export type InstagramPreviewProps = {
    */
   showComments?: boolean;
   username: string;
-  profileId?: string;
   /** The connected account's real profile photo; every "someone else" stays a default no-DP avatar. */
   avatarUrl?: string;
   postCaption?: string;
@@ -205,7 +204,6 @@ export function InstagramPreview({
   showPost = true,
   showComments = true,
   username,
-  profileId,
   avatarUrl,
   postCaption,
   postImageUrl,
@@ -216,6 +214,19 @@ export function InstagramPreview({
 }: InstagramPreviewProps) {
   return (
     <div className="ig-preview">
+      {/* The switch sits above the phone so it reads as "what am I looking at";
+          a DM-only flow has nothing to switch between, so it has no switch. */}
+      {(showPost || showComments) && (
+        <div className="segmented is-block ig-preview-tabs" role="tablist" aria-label="Preview surface">
+          {showPost && (
+            <button type="button" role="tab" aria-selected={view === "post"} className={`segmented-option${view === "post" ? " is-active" : ""}`} onClick={() => onViewChange("post")}>Post</button>
+          )}
+          {showComments && (
+            <button type="button" role="tab" aria-selected={view === "comments"} className={`segmented-option${view === "comments" ? " is-active" : ""}`} onClick={() => onViewChange("comments")}>Comments</button>
+          )}
+          <button type="button" role="tab" aria-selected={view === "dm"} className={`segmented-option${view === "dm" ? " is-active" : ""}`} onClick={() => onViewChange("dm")}>DM</button>
+        </div>
+      )}
       <div className="ig-device">
         <span className="ig-device-button ig-device-silent" aria-hidden="true" />
         <span className="ig-device-button ig-device-volume" aria-hidden="true" />
@@ -244,20 +255,7 @@ export function InstagramPreview({
           <div className="ig-homebar" aria-hidden="true" />
         </div>
       </div>
-      <p className="ig-profile-meta">
-        <span className="ig-profile-app">Instagram</span>
-        <span className="ig-profile-updated"><span className="ig-updated-dot" /> Updated</span>
-        <span className="ig-profile-id">@{username}{profileId ? ` - ID ${profileId}` : ""}</span>
-      </p>
-      <div className="segmented is-block ig-preview-tabs" role="tablist" aria-label="Preview surface">
-        {showPost && (
-          <button type="button" role="tab" aria-selected={view === "post"} className={`segmented-option${view === "post" ? " is-active" : ""}`} onClick={() => onViewChange("post")}>Post</button>
-        )}
-        {showComments && (
-          <button type="button" role="tab" aria-selected={view === "comments"} className={`segmented-option${view === "comments" ? " is-active" : ""}`} onClick={() => onViewChange("comments")}>Comments</button>
-        )}
-        <button type="button" role="tab" aria-selected={view === "dm"} className={`segmented-option${view === "dm" ? " is-active" : ""}`} onClick={() => onViewChange("dm")}>DM</button>
-      </div>
+      <p className="ig-profile-meta">As @{username}’s followers see it on Instagram</p>
     </div>
   );
 }

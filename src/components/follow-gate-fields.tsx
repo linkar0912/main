@@ -1,10 +1,14 @@
 "use client";
 
+import { Field } from "./automation-builder/wizard";
+
 export type FollowGateFieldsProps = {
   notFollowingMessage: string;
   onNotFollowingMessageChange: (value: string) => void;
   recheckButtonLabel: string;
   onRecheckButtonLabelChange: (value: string) => void;
+  notFollowingError?: string | null;
+  recheckError?: string | null;
 };
 
 const LABEL_MAX_LENGTH = 20;
@@ -14,32 +18,37 @@ export function FollowGateFields({
   onNotFollowingMessageChange,
   recheckButtonLabel,
   onRecheckButtonLabelChange,
+  notFollowingError,
+  recheckError,
 }: FollowGateFieldsProps) {
   return (
-    <div className="field-grid">
-      <label className="field field-wide">
-        <span>Not-following prompt</span>
+    <>
+      <Field
+        label="Message for people who don’t follow you yet"
+        hint="They follow you, then tap the button below to get the link."
+        error={notFollowingError}
+      >
         <textarea
-          aria-label="Not-following prompt"
           value={notFollowingMessage}
           onChange={(event) => onNotFollowingMessageChange(event.target.value)}
           rows={3}
-          placeholder="Shown when someone taps the opt-in button before they follow you"
+          placeholder="This one’s for followers. Follow us, then tap the button below."
           maxLength={1_000}
         />
-        <small>Sent only to people who have not followed yet. They must follow, then recheck to unlock delivery.</small>
-      </label>
-      <label className="field">
-        <span>Recheck button label</span>
+      </Field>
+      <Field
+        label="Button they tap after following"
+        hint={`${recheckButtonLabel.length} of ${LABEL_MAX_LENGTH} characters`}
+        error={recheckError}
+        className="is-short"
+      >
         <input
-          aria-label="Recheck button label"
           value={recheckButtonLabel}
           onChange={(event) => onRecheckButtonLabelChange(event.target.value)}
           placeholder="I followed"
           maxLength={LABEL_MAX_LENGTH}
         />
-        <small>{recheckButtonLabel.length}/{LABEL_MAX_LENGTH} characters</small>
-      </label>
-    </div>
+      </Field>
+    </>
   );
 }

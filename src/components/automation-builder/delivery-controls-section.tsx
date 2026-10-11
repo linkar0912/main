@@ -1,9 +1,9 @@
+import { Field } from "./wizard";
+
 export function AutomationPriorityField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <label className="field field-spaced">
-      <span>Priority</span>
-      <input aria-label="Priority" type="number" min={-100} max={100} value={value} onChange={(event) => onChange(event.target.value)} />
-      <small>Use a higher number when this reply should win over another matching reply.</small>
-    </label>
+    <Field label="Priority" hint="When two automations match the same comment or message, the higher number replies. Most people leave this at 0.">
+      <input type="number" min={-100} max={100} value={value} onChange={(event) => onChange(event.target.value)} />
+    </Field>
   );
 }

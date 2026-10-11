@@ -23,6 +23,6 @@ describe("FacebookPagePreview", () => {
     expect(screen.getByText("Our latest launch is here.")).toBeTruthy();
     expect(screen.getByText("guide")).toBeTruthy();
     expect(screen.getByText("Thanks! Here is the guide.")).toBeTruthy();
-    expect(screen.getByText(/preview only/i)).toBeTruthy();
+    expect(screen.getByText(/nothing here is sent/i)).toBeTruthy();
   });
 });

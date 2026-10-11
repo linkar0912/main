@@ -1,50 +1,69 @@
+import { useState } from "react";
 import { MediaPicker, type MediaPickerProps } from "../media-picker";
+import { ChoiceCards, Field, ToggleRow } from "./wizard";
 
-export function CommentConditionsSection({
+/**
+ * Which posts a comment reply listens on. "Any post" saves an empty list;
+ * choosing posts opens the same thumbnail picker as the campaign builder
+ * (Facebook has no picker, so it takes pasted post IDs).
+ */
+export function CommentPostsField({
   mediaIds,
-  replyOncePerUser,
   provider,
   onMediaIdsChange,
-  onReplyOncePerUserChange,
   onMediaIndexChange,
 }: {
   mediaIds: string;
-  replyOncePerUser: boolean;
   provider: "INSTAGRAM" | "FACEBOOK";
   onMediaIdsChange: (value: string) => void;
-  onReplyOncePerUserChange: (checked: boolean) => void;
   onMediaIndexChange?: MediaPickerProps["onIndexChange"];
 }) {
   const selectedIds = mediaIds.split(",").map((id) => id.trim()).filter(Boolean);
+  const [limited, setLimited] = useState(selectedIds.length > 0);
   return (
     <>
-      {provider === "INSTAGRAM" ? (
-        // Same picker as the campaign builder: choose posts by thumbnail
-        // instead of pasting raw media IDs.
-        <div className="field field-spaced">
-          <span>Limit to posts <em>optional - leave empty for every post</em></span>
-          <MediaPicker
-            selectedIds={selectedIds}
-            onIndexChange={onMediaIndexChange}
-            onChange={(ids) => onMediaIdsChange(ids.join(", "))}
-          />
-        </div>
-      ) : (
-        <label className="field field-spaced">
-          <span>Limit to posts <em>optional</em></span>
+      <ChoiceCards
+        legend="On which posts?"
+        name="comment-post-scope"
+        className="is-compact"
+        value={limited ? "some" : "all"}
+        onChange={(value) => {
+          setLimited(value === "some");
+          // "Any post" is an empty list - drop a half-made selection.
+          if (value === "all") onMediaIdsChange("");
+        }}
+        options={[
+          { value: "all", label: "Any post", description: "Including posts you publish later" },
+          { value: "some", label: "Only posts I choose", description: provider === "INSTAGRAM" ? "Pick posts and Reels" : "Paste the post IDs" },
+        ]}
+      />
+      {limited && provider === "INSTAGRAM" && (
+        <MediaPicker
+          selectedIds={selectedIds}
+          onIndexChange={onMediaIndexChange}
+          onChange={(ids) => onMediaIdsChange(ids.join(", "))}
+        />
+      )}
+      {limited && provider === "FACEBOOK" && (
+        <Field label="Post IDs" hint="Separate several with commas. A post’s ID is the number at the end of its link.">
           <input
-            aria-label="Post IDs"
             value={mediaIds}
             onChange={(event) => onMediaIdsChange(event.target.value)}
-            placeholder="Paste Facebook post IDs, separated by commas"
+            placeholder="e.g. 1234567890123456"
           />
-        </label>
+        </Field>
       )}
-      <label className="field field-spaced checkbox-field">
-        <input type="checkbox" aria-label="Reply once per person" checked={replyOncePerUser} onChange={(event) => onReplyOncePerUserChange(event.target.checked)} />
-        <span>Reply once per person</span>
-        <small>Stops this reply from being sent repeatedly to the same person.</small>
-      </label>
     </>
+  );
+}
+
+export function ReplyOncePerPersonToggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <ToggleRow
+      label="Reply once per person"
+      hint="Someone who comments again gets no second reply."
+      checked={checked}
+      onChange={onChange}
+    />
   );
 }

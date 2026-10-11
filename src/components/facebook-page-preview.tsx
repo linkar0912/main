@@ -28,7 +28,7 @@ function PageAvatar({ pageName, pageAvatarUrl, small = false }: { pageName: stri
 /** A live Facebook Page post preview. It intentionally uses the same premium
  * device treatment as Instagram while rendering Facebook's public comment
  * model: Page post, triggering comment, then the Page's nested reply. */
-export function FacebookPagePreview({ pageName, pageAvatarUrl, posterName, postBody, commentAuthor, commentText, replyText }: FacebookPagePreviewProps) {
+export function FacebookPagePreview({ pageName, pageAvatarUrl, postBody, commentAuthor, commentText, replyText }: FacebookPagePreviewProps) {
   return (
     <div className="facebook-preview" style={{ "--facebook-brand": "#1877F2" } as CSSProperties}>
       <div className="facebook-device">
@@ -56,8 +56,7 @@ export function FacebookPagePreview({ pageName, pageAvatarUrl, posterName, postB
           <div className="facebook-homebar" aria-hidden="true" />
         </div>
       </div>
-      <p className="facebook-profile-meta"><span><FacebookGlyph size={14} brand /> Facebook Page</span><span className="facebook-preview-live"><i /> Live preview</span></p>
-      <p className="facebook-preview-note">Preview only. Nothing here is sent to Facebook.{posterName ? ` Post by ${posterName}.` : ""}</p>
+      <p className="facebook-preview-note">Preview of your Facebook Page. Nothing here is sent.</p>
     </div>
   );
 }
