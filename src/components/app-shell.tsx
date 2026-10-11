@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   UsersRound,
   Workflow,
+  X,
   Zap,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
@@ -254,7 +255,9 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
       </header>
 
       {drawerOpen && (
-        <button className="scrim" type="button" aria-label="Close navigation" onClick={closeDrawerAndRestoreFocus} />
+        // Pointer-only: keyboard and screen-reader users get the labelled close
+        // button inside the drawer, so the scrim stays out of the tab order.
+        <button className="scrim" type="button" aria-hidden tabIndex={-1} onClick={closeDrawerAndRestoreFocus} />
       )}
 
       <aside
@@ -266,10 +269,18 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         role={drawerOpen ? "dialog" : undefined}
         tabIndex={-1}
       >
-        <Link className="sidebar-brand" href="/dashboard">
-          <LinkarMark className="brand-mark" />
-          <span className="brand-name">{PRODUCT_NAME}</span>
-        </Link>
+        <div className="sidebar-head">
+          <Link className="sidebar-brand" href="/dashboard" onClick={closeDrawer}>
+            <LinkarMark className="brand-mark" />
+            <span className="brand-name">{PRODUCT_NAME}</span>
+          </Link>
+          {/* The drawer's own way out: the scrim and Escape are invisible on a phone. */}
+          {drawerOpen ? (
+            <button className="sidebar-close" type="button" aria-label="Close navigation" onClick={closeDrawerAndRestoreFocus}>
+              <X size={20} aria-hidden />
+            </button>
+          ) : null}
+        </div>
 
         <nav className="sidebar-nav" aria-label="Workspace sections">
           {[...workspaceNavigation, ...automateNavigation].map(({ href, label, icon: Icon }, index) => (

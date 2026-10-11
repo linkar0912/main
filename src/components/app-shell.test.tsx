@@ -154,10 +154,27 @@ describe("AppShell", () => {
 
     const mainContent = document.querySelector(".main-content");
     expect(mainContent?.hasAttribute("inert")).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Close navigation" }));
+    fireEvent.click(document.querySelector(".scrim") as HTMLElement);
 
     await waitFor(() => expect(document.activeElement).toBe(menuButton));
     expect(mainContent?.hasAttribute("inert")).toBe(false);
+  });
+
+  it("gives the open drawer a visible close button of its own", async () => {
+    stubShellFetch();
+    render(<AppShell><main>Workspace</main></AppShell>);
+
+    const menuButton = screen.getByRole("button", { name: "Open navigation" });
+    fireEvent.click(menuButton);
+    // The scrim is pointer-only; the labelled button is the one way out for keyboards.
+    expect(screen.getAllByRole("button", { name: "Close navigation" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Close navigation" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Workspace sidebar").getAttribute("data-open")).toBe("false");
+    });
+    expect(document.activeElement).toBe(menuButton);
+    expect(screen.queryByRole("button", { name: "Close navigation" })).toBeNull();
   });
 
   it("gives page content one main landmark and a skip link to it", async () => {
