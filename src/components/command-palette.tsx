@@ -42,7 +42,9 @@ const KIND_ICONS: Record<PaletteKind, ComponentType<{ size?: number; strokeWidth
 /** Wait this long after the last keystroke before asking an API. */
 export const SEARCH_DEBOUNCE_MS = 180;
 
-type RemoteState = { status: "loading" | "ready" | "error"; items: PaletteItem[] };
+/** One live section's last answer, and the query it answered. */
+type RemoteState = { status: "loading" | "ready" | "error"; items: PaletteItem[]; query: string };
+type SectionStatus = RemoteState["status"];
 
 export type CommandPaletteProps = {
   /** Accessible name of the dialog. */
@@ -89,16 +91,16 @@ export function CommandPalette({ label, placeholder, pages, actions, sources, re
     const timer = window.setTimeout(() => {
       setRemote((current) => {
         const next: Record<string, RemoteState> = {};
-        for (const source of wanted) next[source.section] = { status: "loading", items: current[source.section]?.items ?? [] };
+        for (const source of wanted) next[source.section] = { status: "loading", items: current[source.section]?.items ?? [], query: trimmed };
         return next;
       });
       for (const source of wanted) {
         source.load(trimmed, controller.signal).then(
           (items) => {
-            if (!controller.signal.aborted) setRemote((current) => ({ ...current, [source.section]: { status: "ready", items } }));
+            if (!controller.signal.aborted) setRemote((current) => ({ ...current, [source.section]: { status: "ready", items, query: trimmed } }));
           },
           () => {
-            if (!controller.signal.aborted) setRemote((current) => ({ ...current, [source.section]: { status: "error", items: [] } }));
+            if (!controller.signal.aborted) setRemote((current) => ({ ...current, [source.section]: { status: "error", items: [], query: trimmed } }));
           },
         );
       }
@@ -108,6 +110,15 @@ export function CommandPalette({ label, placeholder, pages, actions, sources, re
       controller.abort();
     };
   }, [trimmed, sources]);
+
+  // An answer for an older query (or none yet) means this section is still
+  // searching, even inside the debounce window before the request starts.
+  const sectionStatus = (section: string): SectionStatus | undefined => {
+    const source = sources.find((entry) => entry.section === section);
+    if (!source || trimmed.length < source.minQuery) return undefined;
+    const state = remote[section];
+    return !state || state.query !== trimmed ? "loading" : state.status;
+  };
 
   const groups = useMemo<PaletteGroup[]>(() => {
     if (!trimmed) {
@@ -158,7 +169,7 @@ export function CommandPalette({ label, placeholder, pages, actions, sources, re
     }
   }
 
-  const searching = sources.some((source) => remote[source.section]?.status === "loading" && trimmed.length >= source.minQuery);
+  const searching = sources.some((source) => sectionStatus(source.section) === "loading");
   const empty = Boolean(trimmed) && options.length === 0 && !searching;
   const listboxId = `${baseId}-listbox`;
   let index = -1;
@@ -206,13 +217,17 @@ export function CommandPalette({ label, placeholder, pages, actions, sources, re
         <div ref={listRef} className="palette-results" id={listboxId} role="listbox" aria-label="Results">
           {groups.map((group) => {
             const headingId = `${baseId}-${group.section.replace(/\W+/g, "-").toLowerCase()}`;
-            const status = remote[group.section]?.status;
-            if (group.items.length === 0 && status !== "loading" && status !== "error") return null;
+            const status = sectionStatus(group.section);
+            // Pages and actions only show when they match; live sections
+            // always say what they are doing, unless nothing matched at all
+            // (one "No results" message below covers that).
+            if (group.items.length === 0 && (!status || (empty && status !== "error"))) return null;
             return (
               <div className="palette-group" role="group" aria-labelledby={headingId} key={group.section}>
                 <div className="palette-group-label" id={headingId} role="presentation">
                   {group.section === "Recent" ? <Clock3 size={13} aria-hidden /> : null}
                   {group.section}
+                  {status === "loading" && group.items.length > 0 ? <span className="palette-group-status">Searching…</span> : null}
                 </div>
                 {group.items.map((item) => {
                   index += 1;
@@ -240,7 +255,10 @@ export function CommandPalette({ label, placeholder, pages, actions, sources, re
                     </div>
                   );
                 })}
-                {group.items.length === 0 && status === "loading" ? <p className="palette-note" role="presentation">Searching {group.section.toLowerCase()}…</p> : null}
+                {group.items.length === 0 && status === "loading" ? (
+                  <p className="palette-note is-loading" role="presentation"><span className="palette-note-spinner" aria-hidden />Searching {group.section.toLowerCase()}…</p>
+                ) : null}
+                {group.items.length === 0 && status === "ready" ? <p className="palette-note" role="presentation">No matches</p> : null}
                 {status === "error" ? <p className="palette-note" role="presentation">Could not search {group.section.toLowerCase()} right now.</p> : null}
               </div>
             );
