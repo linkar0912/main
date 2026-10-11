@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
 
 import { SystemConsole } from "@/src/components/admin/system/system-console";
-import { systemSnapshot } from "../fixtures";
+import { systemSnapshot, systemSnapshotAllNormal, systemSnapshotWithProblems } from "../fixtures";
 
-export default function SystemPreview() {
+// ?state=problems shows a bad day, ?state=normal a fully quiet one.
+export default async function SystemPreview({ searchParams }: PageProps<"/dev-preview/admin/system">) {
   if (process.env.NODE_ENV !== "development") notFound();
-  return <SystemConsole snapshot={systemSnapshot} />;
+  const { state } = await searchParams;
+  const snapshot = state === "problems" ? systemSnapshotWithProblems : state === "normal" ? systemSnapshotAllNormal : systemSnapshot;
+  return <SystemConsole snapshot={snapshot} />;
 }

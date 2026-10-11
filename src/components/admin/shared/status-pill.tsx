@@ -22,7 +22,7 @@ const STATES: Record<string, [StatusTone, string]> = {
   unknown: ["warning", "Unknown"],
   drifted: ["warning", "Needs repair"],
   deletion_pending: ["warning", "Deletion pending"],
-  paused: ["warning", "Paused"],
+  paused: ["neutral", "Paused"],
   draft: ["neutral", "Draft"],
   unchecked: ["neutral", "Not checked"],
   disabled: ["neutral", "Turned off"],

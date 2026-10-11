@@ -67,7 +67,7 @@ export function LocalStatusBadge({ tone, label }: { tone: StatusTone; label: str
 export function lifecycleStatus(status: string): { tone: StatusTone; label: string } {
   switch (status) {
     case "ACTIVE": return { tone: "success", label: "Active" };
-    case "PAUSED": return { tone: "warning", label: "Paused" };
+    case "PAUSED": return { tone: "neutral", label: "Paused" };
     case "DRAFT": return { tone: "neutral", label: "Draft" };
     case "FAILED": return { tone: "danger", label: "Failed" };
     case "CONNECTED": return { tone: "success", label: "Connected" };

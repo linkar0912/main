@@ -35,8 +35,8 @@ export type AdminWorkspaceDetail = AdminWorkspaceSummary & {
   deletionScheduledAt?: string;
   entitlementVersion?: number;
   members?: Array<{ userId?: string; email: string; role: string }>;
-  instagramConnections?: Array<{ id: string; igUserId: string; username: string; status: string; connectedAt: string }>;
-  facebookConnections?: Array<{ id: string; pageId: string; pageName: string; status: string; connectedAt: string }>;
+  instagramConnections?: Array<{ id: string; igUserId: string; username: string; status: string; connectedAt: string; tokenExpiresAt?: string | null }>;
+  facebookConnections?: Array<{ id: string; pageId: string; pageName: string; status: string; connectedAt: string; tokenExpiresAt?: string | null }>;
 };
 
 export type AdminUserSummary = {
