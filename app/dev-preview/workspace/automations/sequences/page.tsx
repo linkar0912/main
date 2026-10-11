@@ -7,7 +7,7 @@ export const metadata = { title: "Sequences · Linkar (preview)" };
 export default function SequencesPreviewPage() {
   if (process.env.NODE_ENV !== "development") notFound();
   return (
-    <AutomationSectionsShell section="sequences">
+    <AutomationSectionsShell section="sequences" basePath="/dev-preview/workspace/automations">
       <SequencesScreen />
     </AutomationSectionsShell>
   );
