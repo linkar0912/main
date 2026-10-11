@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { getRepository } from "@/src/lib/repository-provider";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
+import { connectResultPath, setOnboardingReturnCookie, wantsOnboardingReturn } from "@/src/lib/onboarding/oauth-return";
 
 export const runtime = "nodejs";
 
@@ -13,19 +14,20 @@ export const runtime = "nodejs";
 // invalidate an in-flight FB sign-in (or vice versa).
 export const FACEBOOK_OAUTH_STATE_COOKIE = "linkar_facebook_oauth_state";
 
-function settingsRedirect(env: ReturnType<typeof getServerEnv>, status: string): NextResponse {
-  return NextResponse.redirect(new URL(`/settings?facebook=${status}`, env.appUrl));
+function settingsRedirect(env: ReturnType<typeof getServerEnv>, status: string, toOnboarding = false): NextResponse {
+  return NextResponse.redirect(new URL(connectResultPath("facebook", status, toOnboarding), env.appUrl));
 }
 
 export async function GET(request: Request) {
   const env = getServerEnv();
+  const toOnboarding = wantsOnboardingReturn(request);
   const session = await getValidatedSession(request);
   if (!session) {
     const login = new URL("/login", env.appUrl);
     login.searchParams.set("next", "/settings");
     return NextResponse.redirect(login);
   }
-  if (!env.facebookAppId) return settingsRedirect(env, "missing-config");
+  if (!env.facebookAppId) return settingsRedirect(env, "missing-config", toOnboarding);
   try {
     await getEntitlementService().assertEntitled(
       session.workspaceId,
@@ -55,5 +57,6 @@ export async function GET(request: Request) {
     maxAge: 600,
     path: "/",
   });
+  if (toOnboarding) setOnboardingReturnCookie(response, env.appUrl.startsWith("https://"));
   return response;
 }

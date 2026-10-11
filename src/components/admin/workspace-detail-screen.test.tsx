@@ -37,6 +37,20 @@ describe("WorkspaceDetailScreen", () => {
     expect(screen.getByRole("tabpanel", { name: "Usage & limits" })).toBeTruthy();
   });
 
+  it("shows the onboarding answers read-only in About this workspace", () => {
+    render(<WorkspaceDetailScreen workspace={workspace} about={{ status: "completed", at: "2026-10-12T05:00:00.000Z", progress: null, rows: [{ label: "Type", value: "Brand or shop" }, { label: "Goals", value: "Sell products" }] }} />);
+    const card = screen.getByRole("region", { name: "About this workspace" });
+    expect(within(card).getByText("Brand or shop")).toBeTruthy();
+    expect(within(card).getByText("Sell products")).toBeTruthy();
+    expect(within(card).getByText(/Completed/)).toBeTruthy();
+    expect(within(card).queryByRole("button")).toBeNull();
+  });
+
+  it("leaves About this workspace out when the answers could not be read", () => {
+    render(<WorkspaceDetailScreen workspace={workspace} />);
+    expect(screen.queryByRole("region", { name: "About this workspace" })).toBeNull();
+  });
+
   it("opens on the tab named in the URL", () => {
     render(<WorkspaceDetailScreen workspace={workspace} initialTab="members" />);
     const panel = screen.getByRole("tabpanel", { name: "Members" });

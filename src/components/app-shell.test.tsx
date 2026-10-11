@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({ pathname: "/dashboard" }));
 
-const router = vi.hoisted(() => ({ push: vi.fn() }));
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname, useRouter: () => router }));
 
@@ -318,5 +318,29 @@ describe("AppShell", () => {
     await act(async () => { notifyWorkspaceChanged(); });
 
     expect(await screen.findByText("Owner · Growth plan")).toBeTruthy();
+  });
+
+  it("sends someone who still needs onboarding there, and leaves everyone else alone", async () => {
+    router.replace.mockClear();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/workspace/bootstrap")) {
+        return { ok: true, json: async () => ({ data: { email: "new.owner@example.com", role: "OWNER", plan: "free", onboarding: { required: true, flow: "owner", invite: false, planCard: false, goals: [], displayName: null } } }) } as Response;
+      }
+      return { ok: true, json: async () => ({ data: [] }) } as Response;
+    }));
+    render(<AppShell><p>Home content</p></AppShell>);
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
+    // The page underneath never flashes before the redirect lands.
+    expect(screen.queryByText("Home content")).toBeNull();
+  });
+
+  it("does not redirect when the bootstrap carries no onboarding requirement", async () => {
+    router.replace.mockClear();
+    stubShellFetch("OWNER");
+    render(<AppShell><p>Home content</p></AppShell>);
+    await screen.findByRole("button", { name: "Account menu" });
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(screen.getByText("Home content")).toBeTruthy();
   });
 });

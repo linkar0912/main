@@ -43,6 +43,10 @@ import type {
   EnsureOutboundDeliveryInput,
   OutboundDeliveryRecord,
   WorkspaceStatus,
+  WorkspaceOnboardingRecord,
+  WorkspaceOnboardingPatch,
+  MemberOnboardingRecord,
+  MemberOnboardingPatch,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
 import { EXECUTION_CLAIM_LEASE_MS } from "./repository";
@@ -52,6 +56,92 @@ import { MESSAGING_WINDOW_MS, toMessagingWindow } from "./messaging-window";
 import { FOLLOWED_STATES, OPTED_IN_OR_LATER_STATES } from "./automation/activity-summary";
 import { normalizeHelpQuery } from "./help-search";
 import { decodeInboxCursor, encodeInboxCursor } from "./inbox-cursor";
+
+type WorkspaceOnboardingRow = {
+  workspaceId: string;
+  answers: Prisma.JsonValue;
+  step: number;
+  completedAt: Date | null;
+  skippedAt: Date | null;
+  existingWorkspace: boolean;
+  inviteDismissedAt: Date | null;
+  planDismissedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function mapWorkspaceOnboarding(row: WorkspaceOnboardingRow): WorkspaceOnboardingRecord {
+  const answers = row.answers && typeof row.answers === "object" && !Array.isArray(row.answers)
+    ? row.answers as Record<string, unknown>
+    : {};
+  return {
+    workspaceId: row.workspaceId,
+    answers,
+    step: row.step,
+    existingWorkspace: row.existingWorkspace,
+    ...(row.completedAt ? { completedAt: row.completedAt.toISOString() } : {}),
+    ...(row.skippedAt ? { skippedAt: row.skippedAt.toISOString() } : {}),
+    ...(row.inviteDismissedAt ? { inviteDismissedAt: row.inviteDismissedAt.toISOString() } : {}),
+    ...(row.planDismissedAt ? { planDismissedAt: row.planDismissedAt.toISOString() } : {}),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/** undefined leaves a column alone, null clears it, a string sets it. */
+function optionalDate(value: string | null | undefined): Date | null | undefined {
+  if (value === undefined) return undefined;
+  return value === null ? null : new Date(value);
+}
+
+function workspaceOnboardingData(patch: WorkspaceOnboardingPatch) {
+  return {
+    ...(patch.answers !== undefined ? { answers: patch.answers as Prisma.InputJsonValue } : {}),
+    ...(patch.step !== undefined ? { step: patch.step } : {}),
+    ...(patch.completedAt !== undefined ? { completedAt: optionalDate(patch.completedAt) } : {}),
+    ...(patch.skippedAt !== undefined ? { skippedAt: optionalDate(patch.skippedAt) } : {}),
+    ...(patch.inviteDismissedAt !== undefined ? { inviteDismissedAt: optionalDate(patch.inviteDismissedAt) } : {}),
+    ...(patch.planDismissedAt !== undefined ? { planDismissedAt: optionalDate(patch.planDismissedAt) } : {}),
+  };
+}
+
+type MemberOnboardingRow = {
+  workspaceId: string;
+  email: string;
+  displayName: string | null;
+  focus: string | null;
+  step: number;
+  completedAt: Date | null;
+  skippedAt: Date | null;
+  existingMember: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function mapMemberOnboarding(row: MemberOnboardingRow): MemberOnboardingRecord {
+  return {
+    workspaceId: row.workspaceId,
+    email: row.email,
+    step: row.step,
+    existingMember: row.existingMember,
+    ...(row.displayName ? { displayName: row.displayName } : {}),
+    ...(row.focus ? { focus: row.focus } : {}),
+    ...(row.completedAt ? { completedAt: row.completedAt.toISOString() } : {}),
+    ...(row.skippedAt ? { skippedAt: row.skippedAt.toISOString() } : {}),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function memberOnboardingData(patch: MemberOnboardingPatch) {
+  return {
+    ...(patch.displayName !== undefined ? { displayName: patch.displayName } : {}),
+    ...(patch.focus !== undefined ? { focus: patch.focus } : {}),
+    ...(patch.step !== undefined ? { step: patch.step } : {}),
+    ...(patch.completedAt !== undefined ? { completedAt: optionalDate(patch.completedAt) } : {}),
+    ...(patch.skippedAt !== undefined ? { skippedAt: optionalDate(patch.skippedAt) } : {}),
+  };
+}
 
 function mapInvitation(record: {
   id: string;
@@ -3437,6 +3527,39 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           ? { quietStartHour: window.startHour, quietEndHour: window.endHour, timezone: window.timezone }
           : { quietStartHour: null, quietEndHour: null, timezone: null },
       });
+    },
+
+    async getWorkspaceOnboarding(workspaceId) {
+      const row = await client.workspaceOnboarding.findUnique({ where: { workspaceId } });
+      return row ? mapWorkspaceOnboarding(row) : null;
+    },
+
+    async saveWorkspaceOnboarding(workspaceId, patch) {
+      const data = workspaceOnboardingData(patch);
+      const row = await client.workspaceOnboarding.upsert({
+        where: { workspaceId },
+        create: { workspaceId, ...data },
+        update: data,
+      });
+      return mapWorkspaceOnboarding(row);
+    },
+
+    async getMemberOnboarding(workspaceId, email) {
+      const row = await client.memberOnboarding.findUnique({
+        where: { workspaceId_email: { workspaceId, email: email.toLowerCase() } },
+      });
+      return row ? mapMemberOnboarding(row) : null;
+    },
+
+    async saveMemberOnboarding(workspaceId, email, patch) {
+      const normalizedEmail = email.toLowerCase();
+      const data = memberOnboardingData(patch);
+      const row = await client.memberOnboarding.upsert({
+        where: { workspaceId_email: { workspaceId, email: normalizedEmail } },
+        create: { workspaceId, email: normalizedEmail, ...data },
+        update: data,
+      });
+      return mapMemberOnboarding(row);
     },
 
     async listBroadcastRecipients(workspaceId, segment, limit) {

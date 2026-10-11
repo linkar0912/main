@@ -583,6 +583,56 @@ export type DueSequenceSend = {
 /** Optional do-not-disturb window, evaluated in the workspace timezone. */
 export type MessagingWindow = { startHour: number; endHour: number; timezone: string };
 
+/**
+ * First-time onboarding state for a workspace (the owner's answers). Answers
+ * are stored as validated JSON (OnboardingAnswersSchema); `existingWorkspace`
+ * marks rows backfilled for workspaces that predate onboarding.
+ */
+export type WorkspaceOnboardingRecord = {
+  workspaceId: string;
+  answers: Record<string, unknown>;
+  step: number;
+  completedAt?: string;
+  skippedAt?: string;
+  existingWorkspace: boolean;
+  inviteDismissedAt?: string;
+  planDismissedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Fields to change; null clears a timestamp, undefined leaves it alone. Answers replace the stored object. */
+export type WorkspaceOnboardingPatch = {
+  answers?: Record<string, unknown>;
+  step?: number;
+  completedAt?: string | null;
+  skippedAt?: string | null;
+  inviteDismissedAt?: string | null;
+  planDismissedAt?: string | null;
+};
+
+/** Per-person onboarding: display name and (for team members) their focus. */
+export type MemberOnboardingRecord = {
+  workspaceId: string;
+  email: string;
+  displayName?: string;
+  focus?: string;
+  step: number;
+  completedAt?: string;
+  skippedAt?: string;
+  existingMember: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MemberOnboardingPatch = {
+  displayName?: string | null;
+  focus?: string | null;
+  step?: number;
+  completedAt?: string | null;
+  skippedAt?: string | null;
+};
+
 export type BroadcastSegment =
   | "all_contacts"
   | "captured_email"
@@ -1232,6 +1282,13 @@ export interface AutomationRepository {
   // Workspace messaging quiet hours (null when disabled).
   getMessagingWindow(workspaceId: string): Promise<MessagingWindow | null>;
   setMessagingWindow(workspaceId: string, window: MessagingWindow | null): Promise<void>;
+  // First-time onboarding (null = this workspace / person has never started it).
+  getWorkspaceOnboarding(workspaceId: string): Promise<WorkspaceOnboardingRecord | null>;
+  /** Creates the row on first save (existingWorkspace false), otherwise applies the patch. */
+  saveWorkspaceOnboarding(workspaceId: string, patch: WorkspaceOnboardingPatch): Promise<WorkspaceOnboardingRecord>;
+  /** Email is matched case-insensitively, like workspace members. */
+  getMemberOnboarding(workspaceId: string, email: string): Promise<MemberOnboardingRecord | null>;
+  saveMemberOnboarding(workspaceId: string, email: string, patch: MemberOnboardingPatch): Promise<MemberOnboardingRecord>;
   /**
    * Recipients for a broadcast segment: not suppressed, and only people whose
    * last inbound message is inside Meta's 24-hour window (anyone else would be

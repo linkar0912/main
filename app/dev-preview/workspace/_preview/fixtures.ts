@@ -10,9 +10,14 @@
 import type { AutomationRecord } from "@/src/lib/repository";
 import { BILLING_PLANS } from "@/src/lib/billing/catalog";
 import { peopleAnswer } from "./people-fixtures";
+import { buildOnboardingPlan } from "@/src/lib/onboarding/build-plan";
 
-/** busy / fresh are Home and Insights review states layered on populated / empty. */
-export type PreviewScenario = "populated" | "empty" | "error" | "slow" | "busy" | "fresh";
+/**
+ * busy / fresh are Home and Insights review states layered on populated / empty;
+ * plan (onboarding finished, nothing built yet) and invite (a workspace that
+ * predates onboarding) show the onboarding cards on Home.
+ */
+export type PreviewScenario = "populated" | "empty" | "error" | "slow" | "busy" | "fresh" | "plan" | "invite";
 
 export type FixtureAnswer =
   | { kind: "json"; status: number; body: unknown }
@@ -959,6 +964,31 @@ function readJson(body: unknown): Record<string, unknown> {
  * Answers one same-origin /api request. `null` = not mocked (the shim then
  * returns a 404 and warns, so a missing endpoint is easy to spot).
  */
+/** Onboarding answers for the plan / invite review states. */
+const ONBOARDING_ANSWERS = { name: "Kavya", accountType: "brand", niches: ["fashion"], audience: "10k_50k", channels: ["instagram"], goals: ["sell", "faq", "links"], dailyVolume: "50_200", replyMode: "myself" } as const;
+
+function onboardingScenarioAnswer(verb: string, path: string, scenario: "plan" | "invite"): FixtureAnswer | null {
+  if (path === "/api/onboarding" && verb === "PUT") return json({ data: {} });
+  if (verb !== "GET") return null;
+  if (path === "/api/workspace/bootstrap") {
+    const base = bootstrap(scenario === "plan" ? "empty" : "populated").data;
+    return json({
+      data: {
+        ...base,
+        onboarding: scenario === "plan"
+          ? { required: false, flow: "owner", invite: false, planCard: true, goals: [...ONBOARDING_ANSWERS.goals], displayName: "Kavya" }
+          : { required: false, flow: "owner", invite: true, planCard: false, goals: [], displayName: null },
+      },
+    });
+  }
+  if (path === "/api/onboarding/plan") {
+    return json({ data: buildOnboardingPlan({ answers: { ...ONBOARDING_ANSWERS, niches: [...ONBOARDING_ANSWERS.niches], channels: [...ONBOARDING_ANSWERS.channels], goals: [...ONBOARDING_ANSWERS.goals] }, currentPlan: "free" }) });
+  }
+  // The plan state has Instagram connected but nothing built yet.
+  if (scenario === "plan" && path === "/api/meta/connection") return json(instagramConnections("populated"));
+  return null;
+}
+
 export function answer(method: string, url: URL, requested: PreviewScenario, rawBody?: unknown): FixtureAnswer | null {
   const people = peopleAnswer(method, url);
   if (people) return people;
@@ -968,8 +998,12 @@ export function answer(method: string, url: URL, requested: PreviewScenario, raw
     const special = homeScenarioAnswer(verb, path, url, requested);
     if (special) return special;
   }
+  if (requested === "plan" || requested === "invite") {
+    const special = onboardingScenarioAnswer(verb, path, requested);
+    if (special) return special;
+  }
   // Everything the review states don't override comes from their base workspace.
-  const scenario: PreviewScenario = requested === "busy" ? "populated" : requested === "fresh" ? "empty" : requested;
+  const scenario: PreviewScenario = requested === "busy" || requested === "invite" ? "populated" : requested === "fresh" || requested === "plan" ? "empty" : requested;
 
   if (scenario === "slow" && INSIGHTS_PATHS.test(path) && verb === "GET") return { kind: "hang" };
   if (scenario === "error" && verb === "GET" && (INSIGHTS_PATHS.test(path) || AUTOMATIONS_PATHS.test(path))) {

@@ -30,7 +30,9 @@ export class MetaApiError extends Error {
   }
 }
 
-const MEDIA_FIELDS = "id,caption,media_type,media_product_type,permalink,media_url,thumbnail_url,timestamp";
+// comments_count feeds the onboarding plan's "your last 12 posts got N
+// comments" line; it is optional and never fails a media read.
+const MEDIA_FIELDS = "id,caption,media_type,media_product_type,permalink,media_url,thumbnail_url,timestamp,comments_count";
 const MEDIA_TYPES = new Set<MetaMedia["mediaType"]>(["IMAGE", "VIDEO", "CAROUSEL_ALBUM"]);
 const MEDIA_PRODUCT_TYPES = new Set<NonNullable<MetaMedia["mediaProductType"]>>(["AD", "FEED", "REELS", "STORY"]);
 export const INSTAGRAM_LOGIN_API_VERSION = "v25.0";
@@ -405,6 +407,9 @@ function normalizeMedia(value: unknown): MetaMedia {
     ...(typeof media.media_product_type === "string" ? { mediaProductType: media.media_product_type as NonNullable<MetaMedia["mediaProductType"]> } : {}),
     ...(typeof media.media_url === "string" ? { mediaUrl: media.media_url } : {}),
     ...(typeof media.thumbnail_url === "string" ? { thumbnailUrl: media.thumbnail_url } : {}),
+    ...(typeof media.comments_count === "number" && Number.isInteger(media.comments_count) && media.comments_count >= 0
+      ? { commentsCount: media.comments_count }
+      : {}),
   };
 }
 

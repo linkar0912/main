@@ -19,6 +19,7 @@ const APP_ROUTE_PREFIXES = [
   "/settings",
   "/profile",
   "/help",
+  "/onboarding",
 ] as const;
 
 // Every top-level route under app/(app) must be listed here (a test enforces
@@ -33,6 +34,7 @@ const PROTECTED_APP_ROUTE_PREFIXES = [
   "/settings",
   "/profile",
   "/help",
+  "/onboarding",
   "/admin",
 ] as const;
 

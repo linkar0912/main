@@ -5,7 +5,8 @@ import type { AutomationRecord } from "@/src/lib/repository";
 
 const automationState = vi.hoisted(() => ({ loading: false, error: "", automations: [] as AutomationRecord[], reload: (() => undefined) as () => void }));
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard" }));
+const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard", useRouter: () => router }));
 vi.mock("./automation-list", () => ({
   useAutomations: () => ({ automations: automationState.automations, loading: automationState.loading, error: automationState.error, reload: automationState.reload }),
 }));
@@ -33,6 +34,8 @@ type StubOptions = {
   usage?: { deliveriesThisMonth: number; monthlyDeliveryLimit: number | null };
   captured?: number;
   email?: string;
+  onboarding?: Record<string, unknown>;
+  plan?: Record<string, unknown>;
 };
 
 function stubDashboardFetch({
@@ -44,13 +47,17 @@ function stubDashboardFetch({
   usage = { deliveriesThisMonth: 10, monthlyDeliveryLimit: 1_000 },
   captured = 12,
   email = "owner@example.com",
+  onboarding = undefined,
+  plan = undefined,
 }: StubOptions = {}) {
   const sentPerDay = sent.map((count, index) => ({ day: `2026-08-${String(index + 1).padStart(2, "0")}`, count }));
   const participantsPerDay = sentPerDay.map((point) => ({ ...point, count: Math.max(0, point.count - 1) }));
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     const ok = (body: unknown) => ({ ok: true, json: async () => body }) as Response;
-    if (url.includes("/api/workspace/bootstrap")) return ok({ data: { email, role: "OWNER", plan: "free" } });
+    if (url.includes("/api/workspace/bootstrap")) return ok({ data: { email, role: "OWNER", plan: "free", onboarding } });
+    if (url.includes("/api/onboarding/plan")) return ok({ data: plan });
+    if (url.includes("/api/onboarding")) return ok({ data: {} });
     if (url.includes("/api/meta/connection")) return ok({ data: instagram });
     if (url.includes("/api/facebook/connection")) return ok({ data: facebook });
     if (url.includes("/api/insights/failures")) return ok({ data: failures });
@@ -301,5 +308,54 @@ describe("DashboardScreen", () => {
 
     const links = screen.getByRole("region", { name: "Tracked links" });
     expect(within(links).getByRole("link", { name: "Manage links" }).getAttribute("href")).toBe("/insights#tracked-links");
+  });
+
+  describe("after onboarding", () => {
+    const summary = { required: false, flow: "owner", invite: false, planCard: false, goals: [] as string[], displayName: null as string | null };
+
+    it("greets people by the name they gave", async () => {
+      stubDashboardFetch({ email: "admin@example.com", onboarding: { ...summary, displayName: "Priya" } });
+      render(<AppShell><DashboardScreen /></AppShell>);
+      expect(await screen.findByRole("heading", { name: "Hello, Priya" })).toBeTruthy();
+    });
+
+    it("invites an existing workspace once and hides the card for good on dismiss", async () => {
+      automationState.automations = [automation()];
+      stubDashboardFetch({ onboarding: { ...summary, invite: true } });
+      render(<AppShell><DashboardScreen /></AppShell>);
+      const card = await screen.findByRole("region", { name: "Tell us about your account" });
+      expect(within(card).getByRole("link", { name: "Get my plan" }).getAttribute("href")).toBe("/onboarding");
+      fireEvent.click(within(card).getByRole("button", { name: "Dismiss the invitation" }));
+      expect(screen.queryByRole("region", { name: "Tell us about your account" })).toBeNull();
+      const calls = (fetch as unknown as { mock: { calls: Array<[string, RequestInit?]> } }).mock.calls;
+      const dismiss = calls.find(([url, init]) => String(url) === "/api/onboarding" && init?.method === "PUT");
+      expect(JSON.parse(String(dismiss?.[1]?.body))).toEqual({ action: "dismiss-invite" });
+    });
+
+    it("shows Your plan instead of the generic start for a new workspace", async () => {
+      stubDashboardFetch({
+        onboarding: { ...summary, planCard: true, goals: ["sell"] },
+        plan: {
+          name: "Priya",
+          timeBack: { kind: "time", perDay: 30, share: 0.5, handledPerMonth: 450, minutesLow: 225, minutesHigh: 338 },
+          posts: null,
+          recommendations: [{ id: "price-list-responder", title: "Send prices when someone asks", description: "", trigger: "message", provider: "INSTAGRAM", why: "Fits “Sell products”: sends prices.", href: "/automations/new?type=classic&template=price-list-responder", score: 4, goal: "sell" }],
+          planFit: null,
+          currentPlan: "free",
+        },
+      });
+      render(<AppShell><DashboardScreen /></AppShell>);
+      const card = await screen.findByRole("region", { name: "Your plan" });
+      expect(await within(card).findByText("4–6")).toBeTruthy();
+      expect(within(card).getByRole("link", { name: /set this up/i }).getAttribute("href")).toBe("/automations/new?type=classic&template=price-list-responder");
+      expect(screen.queryByRole("region", { name: "Start here" })).toBeNull();
+    });
+
+    it("recommends recipes from the saved goals in the guided start", async () => {
+      stubDashboardFetch({ instagram: [{ username: "studio.kavya", status: "CONNECTED" }], onboarding: { ...summary, goals: ["giveaways"] } });
+      render(<AppShell><DashboardScreen /></AppShell>);
+      expect(await screen.findByText("Recommended for you")).toBeTruthy();
+      expect(screen.getByRole("link", { name: /Confirm giveaway comments/ })).toBeTruthy();
+    });
   });
 });

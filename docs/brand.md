@@ -388,6 +388,22 @@ help hero and product mockups where a diagram-like surface adds context.
 Auth screens use a quieter editorial panel with a soft contour instead of a
 grid, keeping the entry flow focused and professional.
 
+## First-time onboarding
+
+`/onboarding` (`src/components/onboarding/`, styles in
+`onboarding.module.css`) is the one product screen that speaks the
+marketing site's language, because it is the bridge from the site: big
+Bricolage questions (800, tight tracking) on white, a **volt stage** beside
+each question with a live illustration that reacts to the answer, and the
+deep magenta (`#c200bf`, AA with white) for the Continue pill, progress and
+chosen marks. The volt stage, the volt "time back" block on the plan step and
+on Home's "Your plan" card are the only volt surfaces outside the plan
+sticker. Choices use the brand selection tint; no grey fills, no uppercase or
+mono labels, nothing under 13px. Every number on the plan states its
+assumption ("about 30 a day, about 5 in 10 about what you picked, 30 to 45
+seconds per reply"); nothing is shown that is not computed from the answers
+or read from the connected account.
+
 ## Voice
 
 Confident, plain-spoken, a little playful. Short sentences. Concrete outcomes

@@ -240,9 +240,48 @@ model Workspace {
   billingCheckoutAttempts  BillingCheckoutAttempt[]
   billingWebhookEvents     BillingWebhookEvent[]
   premiumInviteRedemptions PremiumInviteRedemption[]
+  onboarding               WorkspaceOnboarding?
+  memberOnboarding         MemberOnboarding[]
 
   @@index([status, createdAt])
   @@index([updatedAt, id])
+}
+
+// First-time onboarding answers for a workspace (the owner's flow). A
+// workspace without a row has never seen onboarding and is sent into it; the
+// release migration backfilled a row for every workspace that already
+// existed (existingWorkspace = true), so those get a Home invitation instead.
+model WorkspaceOnboarding {
+  workspaceId       String    @id
+  // Validated by OnboardingAnswersSchema (src/lib/onboarding/answers.ts).
+  answers           Json      @default("{}")
+  step              Int       @default(1)
+  completedAt       DateTime?
+  skippedAt         DateTime?
+  existingWorkspace Boolean   @default(false)
+  inviteDismissedAt DateTime?
+  planDismissedAt   DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// Per-person onboarding: the name someone wants to be called and, for invited
+// team members, what they will mainly do. Keyed like WorkspaceMember.
+model MemberOnboarding {
+  workspaceId    String
+  email          String
+  displayName    String?   @db.VarChar(40)
+  focus          String?
+  step           Int       @default(1)
+  completedAt    DateTime?
+  skippedAt      DateTime?
+  existingMember Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, email])
 }
 
 model HelpSearchEvent {

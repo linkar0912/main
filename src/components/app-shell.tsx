@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { usePathname } from "next/navigation";
-import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { createContext, Fragment, useContext, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   ChartNoAxesCombined,
   UserRound,
@@ -23,7 +23,9 @@ import {
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { friendlyFirstName } from "@/src/lib/display-name";
 import { LinkarMark } from "@/src/components/linkar-mark";
-import { getWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT } from "@/src/lib/client/workspace-data";
+import { getWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT, type WorkspaceBootstrap } from "@/src/lib/client/workspace-data";
+import { shouldRedirectToOnboarding } from "@/src/lib/onboarding/redirect";
+import type { OnboardingSummary } from "@/src/lib/onboarding/status";
 import { CommandPalette } from "./command-palette";
 import { WORKSPACE_RECENT_KEY, workspaceActions, workspacePages } from "./command-palette-items";
 import { workspaceSources } from "./command-palette-sources";
@@ -78,9 +80,11 @@ type AccountIdentityState = Omit<AccountIdentity, "role"> & {
   supportEmail: string;
   /** "" until the bootstrap resolves, so callers can tell "unknown" from "live". */
   mode: "demo" | "configured" | "";
+  /** First-time onboarding from the bootstrap (Home cards, saved goals, name); null until known. */
+  onboarding: OnboardingSummary | null;
 };
 
-const AccountIdentityContext = createContext<AccountIdentityState>({ email: "", plan: "free", role: "", supportEmail: "", mode: "" });
+const AccountIdentityContext = createContext<AccountIdentityState>({ email: "", plan: "free", role: "", supportEmail: "", mode: "", onboarding: null });
 
 export function useAccountIdentity(): AccountIdentityState {
   return useContext(AccountIdentityContext);
@@ -127,6 +131,9 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [igAvatarUrl, setIgAvatarUrl] = useState("");
   const [platformOwner, setPlatformOwner] = useState(false);
   const [identityError, setIdentityError] = useState("");
+  const [onboarding, setOnboarding] = useState<OnboardingSummary | null>(null);
+  const [toOnboarding, setToOnboarding] = useState(false);
+  const router = useRouter();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -166,6 +173,17 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [pathname]);
 
+  // A new owner (or invited member) who has not finished or skipped
+  // onboarding is sent there before the app. The flag rides the bootstrap
+  // payload, so this costs no extra request.
+  const routeOnboarding = useEffectEvent((data: WorkspaceBootstrap) => {
+    setOnboarding(data.onboarding ?? null);
+    if (shouldRedirectToOnboarding(data.onboarding, window.location.pathname, window.location.search)) {
+      setToOnboarding(true);
+      router.replace("/onboarding");
+    }
+  });
+
   useEffect(() => {
     let mounted = true;
     getWorkspaceBootstrap()
@@ -179,6 +197,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         setIgAvatarUrl(data.igAvatarUrl ?? "");
         setPlatformOwner(data.platformOwner ?? false);
         setIdentityError("");
+        routeOnboarding(data);
       })
       .catch((caught: unknown) => {
         if (!mounted) return;
@@ -209,6 +228,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           setIgAvatarUrl(data.igAvatarUrl ?? "");
           setPlatformOwner(data.platformOwner ?? false);
           setIdentityError("");
+          routeOnboarding(data);
         })
         .catch(() => undefined);
     }
@@ -266,7 +286,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   );
 
   return (
-    <AccountIdentityContext.Provider value={{ email, role, plan, supportEmail, mode }}>
+    <AccountIdentityContext.Provider value={{ email, role, plan, supportEmail, mode, onboarding }}>
       <a className="skip-link" href="#main-content">Skip to content</a>
       <div className="app-frame">
       {drawer.mounted && (
@@ -409,7 +429,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
           {/* The one landmark for page content; screens render plain wrappers
               inside it. tabIndex lets the skip link move focus here. */}
-          <main id="main-content" className="app-content-slot" tabIndex={-1}>{children}</main>
+          <main id="main-content" className="app-content-slot" tabIndex={-1} aria-busy={toOnboarding || undefined}>{toOnboarding ? null : children}</main>
         </div>
       </div>
 
@@ -429,7 +449,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           />
         ) : null}
       </Presence>
-      <Presence>{templateOpen ? <TemplatePickerModal onClose={() => setTemplateOpen(false)} /> : null}</Presence>
+      <Presence>{templateOpen ? <TemplatePickerModal goals={onboarding?.goals} onClose={() => setTemplateOpen(false)} /> : null}</Presence>
     </AccountIdentityContext.Provider>
   );
 }

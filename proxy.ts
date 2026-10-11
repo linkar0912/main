@@ -135,6 +135,7 @@ export const config = {
     "/settings/:path*",
     "/profile/:path*",
     "/help/:path*",
+    "/onboarding/:path*",
     "/admin/:path*",
     "/api/:path*",
     "/dev-preview/:path*",
