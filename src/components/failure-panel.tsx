@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { attemptsLabel, DeliveryIssueRow, deliveryKindLabel } from "./delivery-issue-row";
 import { InlineContentSkeleton } from "./skeleton";
@@ -26,12 +26,16 @@ export function FailurePanel({ limit }: { limit?: number } = {}) {
   const [failures, setFailures] = useState<Failure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
     let cancelled = false;
     void (async () => {
-      if (!cancelled) setLoading(true);
+      if (!cancelled) {
+        setLoading(true);
+        setError("");
+      }
       try {
         const response = await fetch("/api/insights/failures");
         const payload = (await response.json().catch(() => ({}))) as { data?: Failure[]; error?: string };
@@ -49,16 +53,27 @@ export function FailurePanel({ limit }: { limit?: number } = {}) {
       active = false;
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   if (loading) {
     return <InlineContentSkeleton label="Loading delivery failures" rows={3} />;
   }
-  if (error) return <p className="form-error" role="alert">{error}</p>;
+  if (error) {
+    return (
+      <div className="panel-state" role="alert">
+        <p>Recent failures didn’t load. Check your connection and try again.</p>
+        <button className="button button-secondary button-small" type="button" onClick={() => setReloadKey((key) => key + 1)}>
+          <RefreshCw size={15} aria-hidden /> Try again
+        </button>
+      </div>
+    );
+  }
   if (failures.length === 0) {
+    // "Everything sent" was a claim a brand-new workspace (nothing sent yet)
+    // could not back up; "nothing failed" is true either way.
     return (
       <p className="all-clear">
-        <CheckCircle2 size={15} aria-hidden /> No failed deliveries in the recent window. Everything sent.
+        <CheckCircle2 size={15} aria-hidden /> No failed deliveries recently. Nothing needs a look.
       </p>
     );
   }

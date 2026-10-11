@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FailurePanel } from "./failure-panel";
 
@@ -52,6 +52,21 @@ describe("FailurePanel", () => {
     stubFailures([]);
     render(<FailurePanel />);
 
-    expect(await screen.findByText(/No failed deliveries in the recent window/)).toBeTruthy();
+    expect(await screen.findByText(/No failed deliveries recently/)).toBeTruthy();
+    // A new workspace has sent nothing, so the all-clear must not claim it did.
+    expect(screen.queryByText(/Everything sent/)).toBeNull();
+  });
+
+  it("offers a retry when the failures don't load, and recovers", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Service temporarily unavailable" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [failure] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<FailurePanel />);
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/didn’t load/);
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+    expect(await screen.findByText(/Meta says the linked post is no longer available/)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

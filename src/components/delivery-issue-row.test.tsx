@@ -100,11 +100,22 @@ describe("DeliveryIssueRow", () => {
   it("drops Meta's numeric code prefix but keeps the raw message on hover", () => {
     render(
       <ul>
+        <DeliveryIssueRow label="Reply" lastError="(#100) Invalid parameter" timestamp="2026-09-01T11:11:00.000Z" timeLabel="Yesterday" />
+      </ul>,
+    );
+
+    const sentence = screen.getByText("Invalid parameter");
+    expect(sentence.getAttribute("title")).toBe("(#100) Invalid parameter");
+  });
+
+  it("explains the 24-hour messaging window in plain words", () => {
+    render(
+      <ul>
         <DeliveryIssueRow label="Reply" lastError="(#10) This message is sent outside of allowed window." timestamp="2026-09-01T11:11:00.000Z" timeLabel="Yesterday" />
       </ul>,
     );
 
-    const sentence = screen.getByText("This message is sent outside of allowed window.");
+    const sentence = screen.getByText(/last messaged more than 24 hours ago/);
     expect(sentence.getAttribute("title")).toBe("(#10) This message is sent outside of allowed window.");
   });
 });

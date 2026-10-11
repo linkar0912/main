@@ -10,11 +10,14 @@ import {
   MailCheck,
   Plus,
   Power,
+  RefreshCw,
   Send,
   UsersRound,
   Workflow,
   Zap,
 } from "lucide-react";
+import { FacebookGlyph } from "./facebook-glyph";
+import { InstagramGlyph } from "./instagram-glyph";
 import { useAccountIdentity } from "./app-shell";
 import { useAutomations } from "./automation-list";
 import { CreateAutomationButton } from "./create-automation-button";
@@ -85,6 +88,13 @@ function flowTriggerLabel(automation: AutomationRecord): string {
     }
   }
 }
+
+/** The three recipes a new workspace sees first; each says what it does, not just its name. */
+const QUICKSTART_TEMPLATES = [
+  { id: "comment-link-dm", title: "Send a link when someone comments", detail: "Someone comments a keyword, they get your link in a DM.", popular: true },
+  { id: "story-mention-reply", title: "Turn story mentions into DMs", detail: "Thank people who tag you in their story, automatically.", popular: false },
+  { id: "default-reply", title: "Respond to all your DMs", detail: "Send a friendly first reply to every new message.", popular: false },
+] as const;
 
 function DemoBanner() {
   const { mode } = useAccountIdentity();
@@ -182,7 +192,7 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
               {step.done ? (
                 <span className="setup-done-tag">Done</span>
               ) : isNext ? (
-                <span className="setup-cta">Start <ArrowRight size={14} aria-hidden /></span>
+                <span className="setup-cta">Start</span>
               ) : null}
             </>
           );
@@ -206,7 +216,10 @@ function SetupChecklist({ automations, hasConnection, loading }: { automations: 
 }
 
 export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection, initialEmail, initialDisplayName }: DashboardScreenProps = {}) {
-  const { automations, loading } = useAutomations(initialAutomations);
+  const { automations, loading, error: automationsError = "", reload: reloadAutomations } = useAutomations(initialAutomations);
+  // A failed load must not read as a brand-new workspace: no "Start here",
+  // no "create your first automation", no "No automations yet".
+  const automationsFailed = Boolean(automationsError) && automations.length === 0;
   const [insights, setInsights] = useState<InsightsPayload | null>(initialInsights ?? null);
   // Explicit status instead of inferring "loading" from `insights === null`:
   // a failed or never-settling request used to leave that null forever, and
@@ -301,7 +314,7 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
 
         <DemoBanner />
 
-        {!loading && automations.length === 0 ? <section className="quickstart" aria-label="Start here">
+        {!loading && !automationsFailed && automations.length === 0 ? <section className="quickstart" aria-label="Start here">
           <div className="quickstart-head">
             <div>
               <h2>Start here</h2>
@@ -312,35 +325,25 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
             </button>
           </div>
           <div className="quickstart-grid">
-            <Link className="quickstart-card" href="/automations/new?type=classic&template=comment-link-dm">
-              <strong>Send a link when someone comments</strong>
-              <span className="quickstart-card-meta">
-                <span><Zap size={13} /> Template</span>
-                <span className="quickstart-badge">Popular</span>
-              </span>
-            </Link>
-            <Link className="quickstart-card" href="/automations/new?type=classic&template=story-mention-reply">
-              <strong>Turn story mentions into DMs</strong>
-              <span className="quickstart-card-meta">
-                <span><Zap size={13} /> Template</span>
-              </span>
-            </Link>
-            <Link className="quickstart-card" href="/automations/new?type=classic&template=default-reply">
-              <strong>Respond to all your DMs</strong>
-              <span className="quickstart-card-meta">
-                <span><Zap size={13} /> Template</span>
-              </span>
-            </Link>
+            {QUICKSTART_TEMPLATES.map((template) => (
+              <Link className="quickstart-card" key={template.id} href={`/automations/new?type=classic&template=${template.id}`}>
+                <span className="quickstart-card-title">
+                  <strong>{template.title}</strong>
+                  {template.popular ? <span className="quickstart-badge">Popular</span> : null}
+                </span>
+                <span className="quickstart-card-meta">{template.detail}</span>
+              </Link>
+            ))}
           </div>
         </section> : null}
 
-        <SetupChecklist automations={automations} hasConnection={hasConnection} loading={loading} />
+        {automationsFailed ? null : <SetupChecklist automations={automations} hasConnection={hasConnection} loading={loading} />}
 
         <StatGrid>
           <StatTile label="Replies sent" icon={Send} loading={insightsLoading} value={statValue(sentTotal)} note={insightsFailed ? unavailableNote : "Last 14 days"} delta={insightsFailed ? null : sentDelta} trend={insightsFailed ? undefined : sentPerDay} />
           <StatTile label="People reached" icon={UsersRound} loading={insightsLoading} value={statValue(reachedTotal)} note={insightsFailed ? unavailableNote : "Last 14 days"} delta={insightsFailed ? null : reachedDelta} trend={insightsFailed ? undefined : participantsPerDay} />
           <StatTile label="Emails captured" icon={MailCheck} loading={insightsLoading} value={statValue(capturedTotal)} note={insightsFailed ? unavailableNote : optedOutTotal > 0 ? `${optedOutTotal.toLocaleString()} opted out` : "All time"} />
-          <StatTile label="Automations on" icon={Power} loading={loading && automations.length === 0} value={activeCount} note={`Out of ${automations.length.toLocaleString()}`} />
+          <StatTile label="Automations on" icon={Power} loading={loading && automations.length === 0} value={automationsFailed ? "–" : activeCount} note={automationsFailed ? unavailableNote : `Out of ${automations.length.toLocaleString()}`} />
         </StatGrid>
 
         <ReplyVolumeCard
@@ -352,7 +355,7 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
           placeholder={insightsFailed ? (
             <div className="chart-state" role="alert">
               <p>Reply activity didn’t load. Check your connection and try again.</p>
-              <button className="button button-secondary button-small" type="button" onClick={retryInsights}>Try again</button>
+              <button className="button button-secondary button-small" type="button" onClick={retryInsights}><RefreshCw size={15} aria-hidden /> Try again</button>
             </div>
           ) : !hasPerformanceHistory ? (
             <div className="chart-state">
@@ -376,7 +379,15 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
             description={automations.length > 0 ? `${activeCount} of ${automations.length} on` : undefined}
             action={automations.length > 0 ? <Link className="text-link" href="/automations">View all</Link> : undefined}
           >
-            {flowRows.length === 0 ? (
+            {automationsFailed ? (
+              <div className="empty-state is-inline" role="alert">
+                <h3>Your automations didn’t load</h3>
+                <p>Check your connection and try again.</p>
+                <button className="button button-secondary button-small" type="button" onClick={() => void reloadAutomations?.()}>
+                  <RefreshCw size={15} aria-hidden /> Try again
+                </button>
+              </div>
+            ) : flowRows.length === 0 ? (
               <div className="empty-state is-inline">
                 <span className="empty-icon"><Workflow size={20} /></span>
                 <h3>No automations yet</h3>
@@ -389,8 +400,11 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
               <div className="automation-list">
                 {flowRows.map((automation) => (
                   <Link className="automation-row" key={automation.id} href={`/automations/${automation.id}/edit`}>
-                    <span className="automation-icon">
-                      {automation.status === "ACTIVE" ? <Zap size={17} strokeWidth={1.8} /> : <Workflow size={17} strokeWidth={1.8} />}
+                    {/* The channel, not a decorative bolt: it's the one thing the name doesn't say. */}
+                    <span className="automation-icon is-channel" aria-hidden>
+                      {automation.provider === "FACEBOOK" || automation.facebookPageId
+                        ? <FacebookGlyph size={17} brand />
+                        : <InstagramGlyph size={17} brand />}
                     </span>
                     <span className="automation-copy">
                       <span className="automation-title"><strong>{automation.name}</strong><LocalStatusBadge {...lifecycleStatus(automation.status)} /></span>

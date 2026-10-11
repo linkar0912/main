@@ -17,6 +17,22 @@ const KNOWN_PATTERNS: Array<{ match: RegExp; text: string }> = [
     match: /unsupported post request.*does not exist/i,
     text: "Meta says the linked post is no longer available (deleted, made private, or missing permission to read it).",
   },
+  {
+    match: /outside of allowed window/i,
+    text: "This person last messaged more than 24 hours ago, so Meta doesn't allow an automated DM.",
+  },
+  {
+    match: /application request limit reached|^\(#4\)/i,
+    text: "Meta is limiting how fast messages can go out right now. It will be retried.",
+  },
+  {
+    match: /^\(#551\)|isn't available right now/i,
+    text: "This person can't receive messages right now - they may have limited who can message them.",
+  },
+  {
+    match: /webhook responded with http \d{3}/i,
+    text: "Your lead webhook didn't accept the data - check that its address is right and the service is up.",
+  },
 ];
 
 const NON_LATIN_SCRIPT = /[Ѐ-ӿͰ-Ͽ一-鿿぀-ヿ가-힯֐-׿؀-ۿ]/;

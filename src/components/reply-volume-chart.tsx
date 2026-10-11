@@ -1,3 +1,4 @@
+import { BarChart3 } from "lucide-react";
 import { formatMonthDay } from "@/src/lib/format-date";
 
 export type DayPoint = { day: string; count: number };
@@ -48,6 +49,7 @@ export function ReplyVolumeChart({
       ) : null}
       {!hasActivity ? (
         <div className="chart-state">
+          <span className="chart-state-icon" aria-hidden><BarChart3 size={20} /></span>
           <p>No replies yet in the last {days} days. Daily activity shows up here once an automation sends its first reply.</p>
         </div>
       ) : (

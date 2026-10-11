@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TrackedLinksPanel } from "./tracked-links-panel";
 
 type FetchResponse = Response & { ok: boolean; json: () => Promise<unknown> };
@@ -23,6 +23,7 @@ describe("TrackedLinksPanel", () => {
   });
 
   afterEach(() => {
+    cleanup();
     global.fetch = originalFetch;
   });
 
@@ -74,18 +75,41 @@ describe("TrackedLinksPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("12 clicks")).toBeTruthy();
     });
-    expect(screen.getByText("9 unique")).toBeTruthy();
-    expect(screen.getByText(/Top countries: US \(5\), IN \(4\)/)).toBeTruthy();
+    expect(screen.getByText("9 people")).toBeTruthy();
+    // Country names, not ISO codes.
+    expect(screen.getByText(/Top countries: United States \(5\), India \(4\)/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /Copy URL/i }));
     expect(clipboardWrite).toHaveBeenCalled();
     expect(await screen.findByRole("button", { name: /Copied/i })).toBeTruthy();
 
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    // Delete asks in place (no browser confirm box) and Cancel backs out.
     fireEvent.click(screen.getByRole("button", { name: "Delete /r/summer-sale" }));
+    expect(screen.getByRole("group", { name: "Confirm deleting /r/summer-sale" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("group", { name: "Confirm deleting /r/summer-sale" })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/links/summer-sale", { method: "DELETE" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete /r/summer-sale" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete link" }));
     await waitFor(() => expect(screen.queryByText("/r/summer-sale")).toBeNull());
     expect(fetchMock).toHaveBeenCalledWith("/api/links/summer-sale", { method: "DELETE" });
-    confirmSpy.mockRestore();
+  });
+
+  it("explains a missing name or destination next to the field instead of posting", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ data: [] }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    render(<TrackedLinksPanel />);
+    await screen.findByText(/No tracked links yet/);
+
+    fireEvent.click(screen.getByRole("button", { name: /New link/ }));
+    fireEvent.change(screen.getByLabelText("Short link"), { target: { value: "summer sale!" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create link" }));
+
+    expect(screen.getByText("Use only letters, numbers and dashes.")).toBeTruthy();
+    expect(screen.getByText("Add the page this link should open.")).toBeTruthy();
+    expect(screen.getByLabelText("Short link").getAttribute("aria-invalid")).toBe("true");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces server errors from /api/links", async () => {
