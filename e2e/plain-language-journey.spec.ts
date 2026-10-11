@@ -38,11 +38,11 @@ test.describe("plain-language journey", () => {
     await startHere.getByRole("link", { name: /send a link when someone comments/i }).click();
 
     await expect(page).toHaveURL(/\/automations\/new\?type=classic&template=comment-link-dm/);
-    await expect(page.getByRole("heading", { name: "Create an automatic reply" })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByLabel("Reply name")).toHaveValue("Send a link when someone comments");
-    await expect(page.getByText("When this happens").first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: "What should start this reply?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "New automatic reply" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel("Automation name")).toHaveValue("Send a link when someone comments");
+    await expect(page.getByText("When it runs").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "When should this run?" })).toBeVisible();
     await expect(page.getByLabel("Words to look for")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Who should get it" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Step 2: Who gets it" })).toBeVisible();
   });
 });

@@ -116,18 +116,18 @@ test("classic builder creates a keyword autoresponder", async ({ page }) => {
   });
   await page.route("**/api/automations/automation_classic", (route) => route.fulfill({ json: { data: { id: "automation_classic", ...saved, status: "ACTIVE" } } }));
   await page.goto("/automations/new?type=classic");
-  await expect(page.getByRole("heading", { name: /Create an automatic reply/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /New automatic reply/i })).toBeVisible();
 
-  await page.getByLabel("Reply name").fill(`E2E Autoresponder ${Date.now()}`);
-  await page.getByLabel("Where will it start?").selectOption("message");
+  await page.getByLabel("Automation name").fill(`E2E Autoresponder ${Date.now()}`);
+  await page.getByLabel("Starts when").selectOption("message");
   await page.getByLabel("Words to look for").fill("price");
   // Action step: Trigger → Condition → Action.
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByLabel("Message text").fill("Here is the pricing you asked for.");
-  await nextUntil(page, "Save & activate");
-  await page.getByRole("button", { name: "Save & activate" }).click();
-  await expect(page.getByText("Saved and activated.", { exact: false })).toBeVisible();
+  await nextUntil(page, "Save and turn on");
+  await page.getByRole("button", { name: "Save and turn on" }).click();
+  await expect(page.getByText("Saved and turned on.", { exact: false })).toBeVisible();
 
   await page.goto("/automations");
   await expect(page.getByText(/DM contains price/).first()).toBeVisible();
@@ -151,12 +151,12 @@ test("basic template gallery sets up a ready-to-edit automation", async ({ page 
   await expect(dialog.getByText("BETA")).toHaveCount(0);
   await startersTile.click();
 
-  await expect(page.getByRole("heading", { name: /Create an automatic reply/i })).toBeVisible();
-  await expect(page.getByLabel("Reply name")).toHaveValue("Answer common questions");
+  await expect(page.getByRole("heading", { name: /New automatic reply/i })).toBeVisible();
+  await expect(page.getByLabel("Automation name")).toHaveValue("Answer common questions");
 
-  await nextUntil(page, "Save & activate");
-  await page.getByRole("button", { name: "Save & activate" }).click();
-  await expect(page.getByText("Saved and activated.", { exact: false })).toBeVisible();
+  await nextUntil(page, "Save and turn on");
+  await page.getByRole("button", { name: "Save and turn on" }).click();
+  await expect(page.getByText("Saved and turned on.", { exact: false })).toBeVisible();
 
   await page.goto("/automations");
   await expect(page.getByText("Answer common questions").first()).toBeVisible();
@@ -167,9 +167,9 @@ test("guided builder saves an automation draft", async ({ page }) => {
   await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] } }));
   await page.route("**/api/automations", (route) => { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { data: { id: "automation_draft", ...saved } } }); });
   await page.goto("/automations/new?type=classic");
-  await page.getByLabel("Reply name").fill("E2E guide delivery");
+  await page.getByLabel("Automation name").fill("E2E guide delivery");
   await page.getByLabel("Words to look for", { exact: true }).fill("guide");
-  await nextUntil(page, "Save & activate");
+  await nextUntil(page, "Save and turn on");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("status")).toContainText("Saved to your workspace as a draft.");
   expect(saved?.name).toBe("E2E guide delivery");
@@ -203,17 +203,17 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   await dialog.locator(".template-picker-tile", { hasText: "Send a link after someone follows you" }).click();
   await expect(page.getByRole("heading", { name: /Send a link after someone follows you/i })).toBeVisible();
 
-  await page.getByLabel("Reply name").fill(automationName);
-  // Content step: pick the mocked Reel.
+  await page.getByLabel("Automation name").fill(automationName);
+  // Posts step: pick the mocked Reel.
   await page.getByRole("checkbox", { name: /test reel/i }).click();
-  // Comment & reply step.
+  // Comments step.
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByLabel("Words to look for", { exact: true }).fill("guide");
-  await page.getByLabel("Public reply variation 1").fill("Check your DMs for the guide.");
-  // Opening DM step.
+  await page.getByLabel("Reply 1", { exact: true }).fill("Check your DMs for the guide.");
+  // First DM step.
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await page.getByLabel("Opening message text").fill("Reply guide! Tap below and I will send it over.");
-  await page.getByLabel("Not-following prompt").fill("Follow us first, then tap I followed to unlock this.");
+  await page.getByLabel("First message", { exact: true }).fill("Reply guide! Tap below and I will send it over.");
+  await page.getByLabel("Message for people who don’t follow you yet").fill("Follow us first, then tap I followed to unlock this.");
   // Delivery step.
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByLabel("Message to send with the link").fill("You are verified - here is your guide.");
@@ -225,7 +225,7 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   // Review the follow gate before saving: the gate is enabled by default and
   // the review step summarizes it explicitly.
   await expect(page.getByTestId("review-summary")).toContainText(
-    "Linkar asks permission and checks whether they follow you before sending the link",
+    "If they don’t follow you yet, it asks them to follow first",
   );
 
   await page.getByRole("button", { name: "Save draft" }).click();
