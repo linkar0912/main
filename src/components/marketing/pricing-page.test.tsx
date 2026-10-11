@@ -90,7 +90,9 @@ describe("PricingPage", () => {
 
   it("offers sign in without using em dashes in public copy", () => {
     const { container } = render(<PricingPage />);
-    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
+    const signIn = screen.getAllByRole("link", { name: "Sign in" });
+    expect(signIn.length).toBeGreaterThan(0);
+    for (const link of signIn) expect(link.getAttribute("href")).toBe("/login");
     expect(container.textContent).not.toContain("\u2014");
   });
 });
@@ -162,9 +164,16 @@ describe("PricingPage plan finder", () => {
     expect(finder.textContent).not.toMatch(/inbox/i);
   });
 
-  it("keeps a shortcut to the finder in view", () => {
-    render(<PricingPage />);
-    expect(screen.getByRole("link", { name: /Pick your plan in 30 seconds/ }).getAttribute("href")).toBe("#plan-finder");
+  it("keeps a shortcut to the finder, out of the tab order until it is shown", () => {
+    const { container } = render(<PricingPage />);
+    // Hidden over the opening plan cards so it never covers their buttons; it
+    // appears once the visitor scrolls past them.
+    const jump = container.querySelector<HTMLAnchorElement>('a[href="#plan-finder"]');
+    if (!jump) throw new Error("missing finder shortcut");
+    expect(jump.textContent).toContain("Pick your plan in 30 seconds");
+    expect(jump.getAttribute("aria-hidden")).toBe("true");
+    expect(jump.hasAttribute("data-visible")).toBe(false);
+    expect(jump.getAttribute("tabindex")).toBe("-1");
   });
 });
 

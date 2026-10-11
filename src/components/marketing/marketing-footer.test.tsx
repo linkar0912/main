@@ -33,7 +33,7 @@ describe("MarketingFooter", () => {
       ["Get started", "/signup"],
       ["Help and support", "/support"],
       ["Contact", "/contact"],
-      ["Login", "/login"],
+      ["Sign in", "/login"],
       ["Dashboard", "/dashboard"],
       ["Linkar home", "/#top"],
       ["Setup", "/#setup"],

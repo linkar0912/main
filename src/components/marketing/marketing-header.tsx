@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { FacebookGlyph } from "../facebook-glyph";
 import { InstagramGlyph } from "../instagram-glyph";
 import { ButtonRoll } from "./button-roll";
@@ -55,8 +56,8 @@ const resourceGroups = [
 ] as const;
 
 const accountItems = [
-  { label: "Get started", href: "/signup" },
-  { label: "Sign in", href: "/login" },
+  { label: "Sign in", href: "/login", kind: "login" },
+  { label: "Get started", href: "/signup", kind: "signup" },
 ] as const;
 
 type MarketingHeaderProps = {
@@ -78,6 +79,7 @@ const HOVER_CLICK_GRACE_MS = 400;
 
 /** Floating marketing header with primary and account navigation, and a mobile sheet. */
 export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderProps = {}) {
+  const pathname = usePathname();
   const headerRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -322,7 +324,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                 </nav>
               ) : null}
             </li>
-            <li><Link href={marketingHref(navigationItems[1].href, siteOrigin)}>{navigationItems[1].label}</Link></li>
+            <li><Link href={marketingHref(navigationItems[1].href, siteOrigin)} aria-current={!siteOrigin && pathname === navigationItems[1].href ? "page" : undefined}>{navigationItems[1].label}</Link></li>
             <li><Link href={marketingHref(navigationItems[2].href, siteOrigin)}>{navigationItems[2].label}</Link></li>
             <li className={styles.solutionsTrigger} {...panelHoverZone}>
               <button
@@ -406,9 +408,20 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
               </button>
               <nav aria-label="Mobile primary">
                 <ul>
-                  {[...mobileNavigationItems, ...accountItems].map((item) => (
+                  {mobileNavigationItems.map((item) => (
                     <li key={item.label}>
-                      <Link href={marketingHref(item.href, siteOrigin)} onClick={() => closeMenu(false)}>{item.label}</Link>
+                      <Link
+                        href={marketingHref(item.href, siteOrigin)}
+                        aria-current={!siteOrigin && item.href === pathname ? "page" : undefined}
+                        onClick={() => closeMenu(false)}
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                  {accountItems.map((item) => (
+                    <li key={item.label} data-account={item.kind}>
+                      <Link href={marketingHref(item.href, siteOrigin)} prefetch={false} onClick={() => closeMenu(false)}>{item.label}</Link>
                     </li>
                   ))}
                 </ul>

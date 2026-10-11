@@ -96,6 +96,21 @@ describe("SiteAnalytics", () => {
     expect(container.querySelector("script")?.getAttribute("data-src")).toContain("id=G-TEST1234");
   });
 
+  it("reserves room for the banner at the end of the page until a choice is made", async () => {
+    stubConfig("G-TEST1234");
+    render(<SiteAnalytics />);
+
+    await screen.findByRole("region", { name: "Analytics cookies" });
+    const root = document.documentElement;
+    expect(root.dataset.consentBanner).toBe("open");
+    expect(root.style.getPropertyValue("--consent-banner-space")).toMatch(/px$/);
+
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Reject" })); });
+
+    expect(root.dataset.consentBanner).toBeUndefined();
+    expect(root.style.getPropertyValue("--consent-banner-space")).toBe("");
+  });
+
   it("never loads Google Analytics after Reject, and remembers the choice", async () => {
     stubConfig("G-TEST1234");
     const first = render(<SiteAnalytics />);

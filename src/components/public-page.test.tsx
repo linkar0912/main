@@ -41,6 +41,13 @@ describe("PublicPage", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Privacy" })).toBeTruthy();
   });
 
+  it("dates only policy documents, not the support and contact pages", () => {
+    render(<PublicPage title="Support" intro="How to reach us."><p>Support content</p></PublicPage>);
+
+    expect(screen.queryByText(/Effective date/)).toBeNull();
+    expect(screen.getByText("Need a hand? Email us")).toBeTruthy();
+  });
+
   it("links the three legal documents and identifies the current one", () => {
     render(<PublicPage currentPath="/privacy" title="Privacy" intro="How Linkar handles your data."><p>Policy content</p></PublicPage>);
 

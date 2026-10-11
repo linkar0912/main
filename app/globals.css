@@ -2518,16 +2518,16 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 
 .legal-contact-card p {
   color: var(--muted);
-  font-family: var(--font-mono, "JetBrains Mono"), monospace;
-  font-size: .62rem;
-  font-weight: 750;
-  letter-spacing: .05em;
-  margin: 0 0 8px;
-  text-transform: uppercase;
+  font-size: .8125rem;
+  font-weight: 650;
+  margin: 0 0 4px;
 }
 
 .legal-contact-card a {
-  font-size: .82rem;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  font-size: .9375rem;
   font-weight: 800;
   overflow-wrap: anywhere;
   text-decoration: underline;
@@ -2542,13 +2542,10 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 }
 
 .legal-meta p {
-  color: var(--ink);
-  font-family: var(--font-mono, "JetBrains Mono"), monospace;
-  font-size: .74rem;
-  font-weight: 750;
-  letter-spacing: .07em;
+  color: var(--muted);
+  font-size: .875rem;
+  font-weight: 650;
   margin: 0;
-  text-transform: uppercase;
 }
 
 .legal-content h1 {
@@ -2564,6 +2561,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   padding-block-end: .06em;
   text-wrap: balance;
 }
+
+.legal-content > h1:first-child { margin-top: 0; }
 
 .legal-content .legal-intro {
   font-size: clamp(1.05rem, 1.3vw, 1.2rem);
@@ -2591,7 +2590,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   color: var(--muted);
   content: counter(legal-section, decimal-leading-zero);
   font-family: var(--font-mono, "JetBrains Mono"), monospace;
-  font-size: .78rem;
+  font-size: .8125rem;
   font-weight: 800;
 }
 
@@ -2604,21 +2603,23 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   max-inline-size: 72ch;
 }
 
-.legal-content p { margin: 0 0 18px; }
+.legal-content p { margin: 0 0 18px; overflow-wrap: anywhere; }
 .legal-content ul { padding-left: 24px; }
 .legal-content a { color: var(--ink-strong); font-weight: 750; text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 4px; }
-.legal-content code { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font-family: var(--font-mono, "JetBrains Mono"), monospace; font-size: .78em; padding: 2px 5px; }
+.legal-content code { background: var(--surface-soft); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font-family: var(--font-mono, "JetBrains Mono"), monospace; font-size: .875em; padding: 2px 5px; }
 
 @media (max-width: 900px) {
-  .legal-layout { grid-template-columns: 1fr; gap: 48px; padding-top: clamp(112px, 18vw, 150px); }
-  .legal-rail { position: static; grid-template-columns: minmax(0, 1fr) minmax(220px, .8fr); }
+  .legal-layout { grid-template-columns: 1fr; gap: 56px; padding-top: clamp(112px, 18vw, 150px); }
+  .legal-rail { position: static; grid-template-columns: minmax(0, 1fr) minmax(220px, .8fr); order: 1; }
   .legal-content h1 { max-inline-size: none; }
+  .legal-document-nav { gap: 0; }
+  .legal-document-nav a { align-items: center; display: inline-flex; min-block-size: 44px; }
+  .legal-document-nav a::after { inset: auto 0 6px; }
 }
 
 @media (max-width: 600px) {
-  .legal-layout { gap: 40px; padding: 112px 20px 88px; }
+  .legal-layout { gap: 48px; padding: 104px 16px 72px; }
   .legal-rail { grid-template-columns: 1fr; }
-  .legal-document-nav { gap: 18px; }
   .legal-content h1 { font-size: clamp(2.4rem, 11vw, 3.4rem); }
   .legal-content h2 { grid-template-columns: 34px 1fr; gap: 12px; }
 }
@@ -2637,7 +2638,7 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   background: var(--canvas, #ffffff);
   display: grid;
   place-items: center;
-  padding: clamp(112px, 13vh, 148px) clamp(20px, 4vw, 48px) clamp(52px, 7vh, 80px);
+  padding: clamp(136px, 17vh, 168px) clamp(20px, 4vw, 48px) clamp(52px, 7vh, 80px);
   min-block-size: 100svh;
 }
 .auth-page-frame {
@@ -2665,6 +2666,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   line-height: 1.55;
   margin: 0 0 10px;
   max-inline-size: 42ch;
+  /* A long email address in "We sent a link to ..." wraps instead of widening the page. */
+  overflow-wrap: anywhere;
 }
 .auth-page-frame .oauth-buttons {
   display: grid;
@@ -2676,11 +2679,9 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   display: flex;
   align-items: center;
   gap: var(--space-3, 12px);
-  color: var(--subtle);
+  color: var(--muted);
   font-size: var(--type-label);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .04em;
   inline-size: 100%;
   margin: 4px 0;
 }
@@ -2697,15 +2698,24 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
   margin-top: 2px;
   inline-size: 100%;
 }
-.auth-page-frame .login-form .field { align-items: stretch; text-align: center; }
+.auth-page-frame .login-form .field { align-items: stretch; text-align: start; }
 .auth-page-frame .login-form .button,
 .auth-page-frame .login-form button[type="submit"] { width: 100%; justify-content: center; }
 .auth-page-frame .auth-page-hint {
-  color: var(--subtle);
+  color: var(--muted);
   font-size: var(--type-label);
   font-weight: 500;
   margin: 0;
 }
+.auth-page-frame .login-form .auth-page-hint { margin-top: -6px; text-align: start; }
+.auth-page-frame .auth-page-hint a {
+  color: var(--ink-strong);
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong, rgb(11 12 16 / 22%));
+  text-underline-offset: 3px;
+}
+.auth-page-frame .auth-page-hint a:hover { text-decoration-color: var(--accent, #fa0cf7); }
 .auth-page-frame .auth-page-foot {
   color: var(--muted);
   font-size: var(--type-body);
@@ -2713,18 +2723,16 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 }
 .auth-page-frame .auth-page-foot a {
   color: var(--ink-strong);
+  display: inline-block;
   font-weight: 700;
+  /* A 44px tall tap target without adding visible space around the line. */
+  margin-block: -12px;
+  padding-block: 12px;
   text-decoration: underline;
-  text-decoration-color: rgb(11 12 16 / 22%);
+  text-decoration-color: var(--line-strong, rgb(11 12 16 / 22%));
   text-underline-offset: 3px;
 }
 .auth-page-frame .auth-page-foot a:hover { text-decoration-color: var(--accent, #fa0cf7); }
-.auth-page-frame .auth-page-foot-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: center;
-}
 .auth-page-frame .form-error {
   background: var(--danger-soft, #fdeceb);
   border: 1px solid var(--danger-line, #f3cfcc);
@@ -2752,7 +2760,8 @@ a.section-nav-link.is-active:hover { background: var(--accent-soft); color: var(
 }
 
 @media (max-width: 640px) {
-  .auth-page-section { padding: 104px 20px 48px; }
+  /* Phones: the form starts under the header instead of floating mid-screen. */
+  .auth-page-section { align-items: start; padding: 104px 16px 48px; }
   .auth-page-frame { max-inline-size: 100%; }
   .auth-page-frame h1 { font-size: var(--type-page-title); }
 }
@@ -8487,4 +8496,67 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .template-picker .template-channel-option,
   .template-picker .template-picker-category { min-height: 44px; }
   .template-picker .template-channel-select-shell select { font-size: 16px; min-height: 44px; }
+}
+
+/* === UX sweep: public === */
+/* Auth forms (sign in, sign up, password reset, link confirmation): comfortable
+   44px controls, and 16px inputs on phones so iOS does not zoom on focus. Scoped
+   to the auth frame so the shared field and button foundations stay as they are. */
+.auth-page-frame .field :is(input, select) { min-block-size: 44px; }
+.auth-page-frame :is(.button, button[type="submit"]) { min-block-size: 44px; }
+/* A field named in the error message is outlined, so the problem is visible
+   next to the field and not only in the summary above the form. */
+.auth-page-frame .field :is(input, select)[aria-invalid="true"] { border-color: var(--danger); }
+/* The single way forward on a dead-end state (expired or missing reset link). */
+.auth-page-frame .auth-page-action { inline-size: 100%; justify-content: center; margin-top: 8px; }
+@media (max-width: 640px) {
+  .auth-page-frame .field :is(input, select, textarea) { font-size: 1rem; }
+}
+/* Legal index heading: only needed once the index follows the document on narrow screens. */
+.legal-document-nav-title { display: none; }
+@media (max-width: 900px) {
+  .legal-document-nav-title { color: var(--muted); display: block; font-size: .8125rem; font-weight: 650; margin: 0 0 4px; }
+}
+/* Deletion request status: the status badge sits on its own line above the explanation. */
+.legal-status-line { margin: 0 0 12px; }
+/* 404: the wordmark, one sentence and two ways forward, centred on the canvas. */
+.not-found-page {
+  background: var(--canvas);
+  color: var(--ink);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-block-size: 100svh;
+  padding: 24px clamp(16px, 4vw, 40px) 48px;
+}
+.not-found-wordmark {
+  align-items: center;
+  align-self: start;
+  color: var(--ink-strong);
+  display: inline-flex;
+  font-family: var(--font-display, "Bricolage Grotesque"), sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  gap: .3em;
+  justify-self: start;
+  letter-spacing: -.06em;
+  min-block-size: 44px;
+}
+.not-found-wordmark svg { block-size: 1.15em; inline-size: auto; }
+.not-found-body {
+  align-self: center;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  margin-inline: auto;
+  max-inline-size: 520px;
+  padding-block-end: 8vh;
+  text-align: center;
+}
+.not-found-body h1 { color: var(--ink-strong); margin: 0; }
+.not-found-body p { color: var(--slate); font-size: var(--type-lede); line-height: 1.55; margin: 0; }
+.not-found-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 12px; }
+.not-found-actions .button { min-block-size: 44px; }
+@media (max-width: 480px) {
+  .not-found-actions { flex-direction: column; inline-size: 100%; }
+  .not-found-actions .button { justify-content: center; }
 }

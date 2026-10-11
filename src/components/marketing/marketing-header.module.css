@@ -84,6 +84,8 @@
   display: inline-flex;
   align-items: center;
   gap: .3em;
+  /* A full-height tap target on phones without changing the wordmark size. */
+  min-block-size: 44px;
   max-inline-size: 10rem;
   white-space: nowrap;
   color: inherit;
@@ -187,9 +189,9 @@
 .mobileActions a {
   color: inherit;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .72rem;
+  font-size: .8125rem;
   font-weight: 600;
-  letter-spacing: .075em;
+  letter-spacing: .06em;
   text-decoration: none;
   text-transform: uppercase;
 }
@@ -242,6 +244,7 @@
 .solutionsButton:hover::after,
 .solutionsButton:focus-visible::after,
 .solutionsButton[aria-expanded="true"]::after,
+.primaryNavigation > ul > li > a[aria-current="page"]::after,
 .login:hover::after,
 .login:focus-visible::after {
   transform: scaleX(1);
@@ -301,7 +304,7 @@
   margin: 0 0 28px;
   color: var(--marketing-muted, var(--muted));
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .72rem;
+  font-size: .8125rem;
   font-weight: 700;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -356,7 +359,7 @@
 .channelLink small,
 .useCaseList small {
   color: var(--marketing-muted, var(--muted));
-  font-size: .78rem;
+  font-size: .8125rem;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -481,7 +484,9 @@
   z-index: 110;
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  padding: max(20px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   color: var(--marketing-on-inverse, #f4f4f5);
   background: var(--marketing-inverse, #101116);
   pointer-events: auto;
@@ -489,6 +494,10 @@
 }
 
 .closeButton {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  flex: 0 0 auto;
   align-self: flex-end;
   color: var(--marketing-on-inverse, #f4f4f5);
 }
@@ -500,23 +509,29 @@
 
 .menuSheet nav {
   display: grid;
-  flex: 1;
-  align-items: center;
+  flex: 1 0 auto;
+  align-content: center;
 }
 
 .menuSheet ul {
   display: grid;
-  gap: 16px;
+  gap: clamp(4px, 1.2svh, 14px);
 }
 
+/* Sentence case: the sheet sits inside .mobileActions, whose mono uppercase
+   label style must not leak into these display-size links. */
 .menuSheet a {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
   color: inherit;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
-  font-size: clamp(2.5rem, 12vw, 4.5rem);
+  font-size: clamp(1.9rem, min(10vw, 6.4svh), 4.5rem);
   font-weight: 800;
-  letter-spacing: -.06em;
+  letter-spacing: -.045em;
+  line-height: 1.08;
   text-decoration: none;
+  text-transform: none;
   animation: link-in 320ms cubic-bezier(.43, .195, .02, 1) both;
 }
 
@@ -525,6 +540,40 @@
 .menuSheet li:nth-child(4) a { animation-delay: 120ms; }
 .menuSheet li:nth-child(5) a { animation-delay: 160ms; }
 .menuSheet li:nth-child(6) a { animation-delay: 200ms; }
+
+.menuSheet a[aria-current="page"] {
+  text-decoration: underline;
+  text-decoration-color: var(--accent, #fa0cf7);
+  text-decoration-thickness: 3px;
+  text-underline-offset: .14em;
+}
+
+/* The account pair closes the list, set apart from the page links. */
+.menuSheet li[data-account] {
+  margin-block-start: clamp(4px, 1.6svh, 16px);
+}
+
+.menuSheet li[data-account] + li[data-account] {
+  margin-block-start: 0;
+}
+
+.menuSheet li[data-account] a {
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.menuSheet li[data-account="signup"] a {
+  justify-content: center;
+  inline-size: 100%;
+  max-inline-size: 420px;
+  min-block-size: 52px;
+  margin-block-start: 8px;
+  color: var(--marketing-inverse, #101116);
+  background: var(--marketing-on-inverse, #f4f4f5);
+  border-radius: 12px;
+}
 
 @keyframes menu-in {
   from { opacity: 0; }
