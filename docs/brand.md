@@ -248,15 +248,33 @@ other background, or if the tile shows up anywhere else.
   hint) on the left, lined up with the page content; on the right the ink
   "New automation" split button (click = template picker, caret = New
   automation, Quick automation, From a template, New tracked link, New
-  broadcast) and the account avatar with the plan sticker. Under 900px it also
-  carries the menu button and wordmark; under 768px the search field is a
-  44px icon. Sticky page panels sit `--topbar-h` (64px) + 20px from the top.
+  broadcast) and the account button. Under 900px it also carries the menu
+  button and wordmark; under 768px the search field is a 44px icon. Sticky
+  page panels sit `--topbar-h` (64px) + 20px from the top.
+- **Account button and menus** (`AccountMenuButton`, `AccountMenuHead`,
+  `MenuDivider` in `top-bar.tsx`): the button is the profile picture alone
+  (36px, initials fallback) - no name, plan sticker or caret. Hover shows a
+  faint ring; open shows a 2px gap plus a 2px ink ring. The menu is 280px,
+  14px radius, 8px inside, hairline + soft shadow: avatar (40px), name and
+  email on one row, one quiet line ("Owner · Agency plan" - plain words; the
+  plan sticker stays where the plan is the subject, like Billing), a divider,
+  then 40px `.menu-item` rows with a 16px icon column: My profile, Settings,
+  Billing, Dark mode (`ThemeMenuSwitch`, a switch showing the current mode),
+  Help, a divider, Sign out in the danger colour. The owner console menu
+  (Back to workspace, Dark mode, Sign out) and the create menu use the same
+  rows. Menus scale in from the top-right corner and scale out on close.
 - **Command palette** (`src/components/command-palette.tsx`): ⌘K / Ctrl K
   anywhere or "/" outside a text field. Recent picks, Pages (every nav
   destination and Settings section), Actions, then live Automations, Contacts
   and Conversations (owner console: Workspaces and Users). Arrow keys, Enter,
   Escape; the highlighted row is the white tile, never a grey fill. Full-screen
-  sheet on phones.
+  sheet on phones. Contacts are searched on the server on every (debounced,
+  cancelled) keystroke - `GET /api/contacts?scope=all&q=` matches handle,
+  email, tags or the owner's email across the whole workspace - and a pick
+  opens that person's drawer (`/contacts?contact=<id>`). Automations match by
+  name and trigger keyword. Each live section shows "Searching…" while it
+  waits and "No matches" when it has nothing; one "No results" message
+  covers a query nothing answers.
 - **Accounts** in the sidebar: each connected Instagram account and Facebook
   Page with its avatar or initial and a status dot (quiet green; amber or red
   with a soft halo when it needs a reconnect, problems listed first). Five
