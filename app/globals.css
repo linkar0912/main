@@ -6751,6 +6751,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .admin-segmented { border: 0; display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; }
 .admin-segmented > legend { font-size: .875rem; font-weight: 600; margin-bottom: 8px; padding: 0; }
 .admin-segmented > label { align-items: center; display: inline-flex; font-size: .9375rem; gap: 8px; min-height: 32px; }
+.admin-segmented input, .admin-limit-field .admin-check input { accent-color: var(--accent); height: 17px; margin: 0; width: 17px; }
 
 @media (max-width: 1080px) {
   .admin-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
