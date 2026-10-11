@@ -421,7 +421,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const optedInStates = new Set(["OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED", "LINK_SENT"]);
       const followedStates = new Set(["FOLLOW_VERIFIED", "LINK_SENT"]);
       for (const participant of participants.values()) {
-        if (participant.workspaceId !== workspaceId || participant.automationId !== automationId) continue;
+        if (participant.workspaceId !== workspaceId || (automationId && participant.automationId !== automationId)) continue;
         result.commented += 1;
         if (participant.openingStatus === "SENT") result.openingSent += 1;
         if (optedInStates.has(participant.state)) result.optedIn += 1;

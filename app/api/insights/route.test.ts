@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   countParticipantsPerDay: vi.fn(),
   countExecutionsSentPerDay: vi.fn(),
   countParticipantsByMedia: vi.fn(),
+  countParticipantFunnel: vi.fn(),
+  countExecutionsByStatusPerAutomation: vi.fn(),
   countParticipantsCreatedSince: vi.fn(),
   countCapturedContacts: vi.fn(),
   countSuppressedContacts: vi.fn(),
@@ -26,6 +28,8 @@ vi.mock("@/src/lib/repository-provider", () => ({
     countParticipantsPerDay: mocks.countParticipantsPerDay,
     countExecutionsSentPerDay: mocks.countExecutionsSentPerDay,
     countParticipantsByMedia: mocks.countParticipantsByMedia,
+    countParticipantFunnel: mocks.countParticipantFunnel,
+    countExecutionsByStatusPerAutomation: mocks.countExecutionsByStatusPerAutomation,
     countParticipantsCreatedSince: mocks.countParticipantsCreatedSince,
     countCapturedContacts: mocks.countCapturedContacts,
     countSuppressedContacts: mocks.countSuppressedContacts,
@@ -43,6 +47,8 @@ describe("GET /api/insights", () => {
     mocks.countParticipantsPerDay.mockReset().mockResolvedValue([]);
     mocks.countExecutionsSentPerDay.mockReset().mockResolvedValue([]);
     mocks.countParticipantsByMedia.mockReset().mockResolvedValue([]);
+    mocks.countParticipantFunnel.mockReset().mockResolvedValue({ commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 });
+    mocks.countExecutionsByStatusPerAutomation.mockReset().mockResolvedValue([]);
     mocks.countParticipantsCreatedSince.mockReset().mockResolvedValue(0);
     mocks.countCapturedContacts.mockReset().mockResolvedValue(0);
     mocks.countSuppressedContacts.mockReset().mockResolvedValue(0);
@@ -56,9 +62,56 @@ describe("GET /api/insights", () => {
     expect(response.status).toBe(200);
     expect(mocks.getAutomation).toHaveBeenCalledWith("workspace_1", "automation_1");
     expect(mocks.countParticipantsByState).toHaveBeenCalledWith("workspace_1", "automation_1");
-    expect(mocks.countParticipantsPerDay).toHaveBeenCalledWith("workspace_1", 14, "automation_1");
-    expect(mocks.countExecutionsSentPerDay).toHaveBeenCalledWith("workspace_1", 14, "automation_1");
+    // Twice the 14-day window: the older half is the comparison period.
+    expect(mocks.countParticipantsPerDay).toHaveBeenCalledWith("workspace_1", 28, "automation_1");
+    expect(mocks.countExecutionsSentPerDay).toHaveBeenCalledWith("workspace_1", 28, "automation_1");
     expect(mocks.countParticipantsByMedia).toHaveBeenCalledWith("workspace_1", "automation_1");
+    expect(mocks.countParticipantFunnel).toHaveBeenCalledWith("workspace_1", "automation_1");
+  });
+
+  it("splits the doubled series into this window and the previous window's totals", async () => {
+    const series = (counts: number[]) => counts.map((count, index) => ({ day: `2026-09-${String(index + 1).padStart(2, "0")}`, count }));
+    mocks.countExecutionsSentPerDay.mockResolvedValue(series([1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2]));
+    mocks.countParticipantsPerDay.mockResolvedValue(series([0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]));
+
+    const response = await GET(new Request("http://localhost/api/insights?days=7"));
+    const body = await response.json();
+
+    expect(mocks.countExecutionsSentPerDay).toHaveBeenCalledWith("workspace_1", 14, undefined);
+    expect(body.timeseries.days).toBe(7);
+    expect(body.timeseries.sentPerDay).toHaveLength(7);
+    expect(body.timeseries.sentPerDay[0]).toEqual({ day: "2026-09-08", count: 2 });
+    expect(body.previous).toEqual({ sent: 7, reached: 0 });
+  });
+
+  it("ignores a window the range control doesn't offer", async () => {
+    await GET(new Request("http://localhost/api/insights?days=365"));
+    expect(mocks.countParticipantsPerDay).toHaveBeenCalledWith("workspace_1", 28, undefined);
+  });
+
+  it("reports send outcomes per automation from the start of the window, narrowed by the filter", async () => {
+    mocks.countExecutionsByStatusPerAutomation.mockResolvedValue([
+      { automationId: "automation_1", sent: 9, failed: 1, skipped: 0 },
+      { automationId: "automation_2", sent: 4, failed: 0, skipped: 2 },
+    ]);
+
+    const all = await (await GET(new Request("http://localhost/api/insights?days=30"))).json();
+    expect(all.automations).toHaveLength(2);
+    const [, since] = mocks.countExecutionsByStatusPerAutomation.mock.calls[0];
+    const expectedSince = new Date();
+    expectedSince.setUTCHours(0, 0, 0, 0);
+    expectedSince.setUTCDate(expectedSince.getUTCDate() - 29);
+    expect(since).toBe(expectedSince.toISOString());
+
+    const one = await (await GET(new Request("http://localhost/api/insights?automationId=automation_1"))).json();
+    expect(one.automations).toEqual([{ automationId: "automation_1", sent: 9, failed: 1, skipped: 0 }]);
+  });
+
+  it("returns the workspace-wide cumulative journey when no automation is selected", async () => {
+    mocks.countParticipantFunnel.mockResolvedValue({ commented: 10, openingSent: 8, optedIn: 5, followed: 4, linkSent: 4 });
+    const body = await (await GET(new Request("http://localhost/api/insights"))).json();
+    expect(mocks.countParticipantFunnel).toHaveBeenCalledWith("workspace_1", undefined);
+    expect(body.journey).toEqual({ commented: 10, openingSent: 8, optedIn: 5, followed: 4, linkSent: 4 });
   });
 
   it("include=usage reports this month's deliveries against the plan's delivery limit", async () => {
@@ -86,6 +139,7 @@ describe("GET /api/insights", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       timeseries: { days: 14, participantsPerDay: [{ day: "2026-08-31", count: 3 }], sentPerDay: [{ day: "2026-08-31", count: 5 }] },
+      previous: { sent: 0, reached: 0 },
       capturedEmails: 11,
       optedOut: 2,
       contactTotalsScope: "workspace",
@@ -95,6 +149,8 @@ describe("GET /api/insights", () => {
     expect(mocks.countParticipantsByState).not.toHaveBeenCalled();
     expect(mocks.countParticipantsByMedia).not.toHaveBeenCalled();
     expect(mocks.countParticipantsCreatedSince).not.toHaveBeenCalled();
+    expect(mocks.countParticipantFunnel).not.toHaveBeenCalled();
+    expect(mocks.countExecutionsByStatusPerAutomation).not.toHaveBeenCalled();
   });
 
   it("returns 404 before analytics queries for a foreign automation", async () => {

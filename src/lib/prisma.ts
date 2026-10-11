@@ -1010,7 +1010,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async countParticipantFunnel(workspaceId, automationId) {
       const rows = await client.automationParticipant.groupBy({
         by: ["state", "openingStatus", "followStatus", "finalDeliveryStatus"],
-        where: { workspaceId, automationId },
+        where: { workspaceId, ...(automationId ? { automationId } : {}) },
         _count: { _all: true },
       });
       const result = { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 };
