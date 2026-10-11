@@ -1,0 +1,274 @@
+/* Home cards that carry onboarding forward: the one-time invitation and the
+   "Your plan" card. Same calm Home surfaces, with the onboarding volt as the
+   single accent. */
+
+.invite {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  margin-block-end: 24px;
+  padding: 18px 18px 18px 20px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card, 12px);
+}
+
+.inviteMark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 44px;
+  block-size: 44px;
+  color: #101116;
+  background: var(--volt);
+  border-radius: 50%;
+}
+
+.inviteCopy h2,
+.planHead h2 {
+  margin: 0;
+  font-size: var(--type-section-title);
+  font-weight: 700;
+}
+
+.inviteCopy p,
+.planHead p {
+  margin: 4px 0 0;
+  color: var(--slate);
+  font-size: var(--type-label);
+}
+
+.inviteAction {
+  white-space: nowrap;
+}
+
+.dismiss {
+  color: var(--muted);
+}
+
+.dismiss:hover {
+  color: var(--ink);
+}
+
+.plan {
+  display: grid;
+  gap: 18px;
+  margin-block-end: 24px;
+  padding: 22px 24px 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card, 12px);
+}
+
+.planHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.planGrid {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+  gap: 22px;
+}
+
+.planGrid:not(:has(.planTime)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.planTime {
+  display: grid;
+  align-self: start;
+  align-content: start;
+  gap: 4px;
+  padding: 20px;
+  color: #101116;
+  background: var(--volt);
+  border-radius: 16px;
+}
+
+.planTime strong {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 2.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -.05em;
+}
+
+.planTime span {
+  font-size: .9375rem;
+  font-weight: 700;
+}
+
+.planTime small {
+  margin-block-start: 8px;
+  font-size: .8125rem;
+  line-height: 1.4;
+}
+
+.planBody {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-inline-size: 0;
+}
+
+.progress {
+  display: grid;
+  gap: 8px;
+}
+
+.progressLabel {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-meta);
+  font-weight: 600;
+}
+
+.progressSteps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.progressSteps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--slate);
+  font-size: var(--type-label);
+  font-weight: 600;
+}
+
+.progressSteps li[data-done="true"] {
+  color: var(--ink);
+}
+
+.progressNode {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 22px;
+  block-size: 22px;
+  font-size: .8125rem;
+  font-weight: 700;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+}
+
+.progressSteps li[data-done="true"] .progressNode {
+  color: var(--select-mark-text, #ffffff);
+  background: var(--select-mark, var(--accent-hover));
+  border-color: var(--select-mark, var(--accent-hover));
+}
+
+.picks {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.picks li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+}
+
+.picks li + li {
+  border-block-start: 1px solid var(--line);
+}
+
+.pickCopy {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.pickCopy strong {
+  font-size: var(--type-body);
+}
+
+.pickCopy span {
+  color: var(--slate);
+  font-size: var(--type-meta);
+  line-height: 1.4;
+}
+
+.pickAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 44px;
+  color: var(--accent-text);
+  font-size: var(--type-label);
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.pickAction:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.picksSkeleton {
+  block-size: 168px;
+  border-radius: 12px;
+}
+
+.planNote {
+  margin: 0;
+  color: var(--slate);
+  font-size: var(--type-label);
+}
+
+.browse {
+  justify-self: start;
+}
+
+.recommendedLabel {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: var(--type-label);
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .invite {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 16px;
+  }
+
+  .inviteAction {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .dismiss {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  .plan {
+    padding: 18px 16px 14px;
+  }
+
+  .planGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .picks li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}

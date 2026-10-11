@@ -108,6 +108,8 @@ export type Recommendation = {
   /** Opens the builder prefilled exactly like the template picker does. */
   href: string;
   score: number;
+  /** The goal this pick mostly serves, when it serves one. */
+  goal: Goal | null;
 };
 
 function candidates(provider: "INSTAGRAM" | "FACEBOOK"): Candidate[] {
@@ -178,6 +180,7 @@ export function rankTemplates(answers: OnboardingAnswers, options: { facebookPag
           why,
           href: templateHref(candidate.id, provider, options.facebookPageId),
           score: score + (candidate.popular ? 0.5 : 0),
+          goal,
         },
         index,
       };
@@ -187,20 +190,22 @@ export function rankTemplates(answers: OnboardingAnswers, options: { facebookPag
 }
 
 /**
- * The top `count` templates, spread across trigger types: once a trigger
- * type is used, other templates of that type lose a point. Only templates
- * that actually match an answer qualify while any do.
+ * The top `count` templates, spread across jobs: once a goal is covered,
+ * other templates that mainly serve it lose two points, and once a trigger
+ * type is used, others of that type lose one. So someone who wants to sell,
+ * answer questions and send links gets one pick for each.
  */
 export function recommendTemplates(answers: OnboardingAnswers, count = 3, options: { facebookPageId?: string } = {}): Recommendation[] {
   const ranked = rankTemplates(answers, options);
   const picked: Recommendation[] = [];
   const usedTriggers = new Map<TemplateTriggerType, number>();
+  const usedGoals = new Map<Goal, number>();
   const pool = [...ranked];
   while (picked.length < count && pool.length > 0) {
     let bestIndex = 0;
     let bestScore = -Infinity;
     pool.forEach((item, index) => {
-      const adjusted = item.score - (usedTriggers.get(item.trigger) ?? 0);
+      const adjusted = item.score - (usedTriggers.get(item.trigger) ?? 0) - (item.goal ? (usedGoals.get(item.goal) ?? 0) * 2 : 0);
       if (adjusted > bestScore) {
         bestScore = adjusted;
         bestIndex = index;
@@ -209,6 +214,7 @@ export function recommendTemplates(answers: OnboardingAnswers, count = 3, option
     const [best] = pool.splice(bestIndex, 1);
     picked.push(best);
     usedTriggers.set(best.trigger, (usedTriggers.get(best.trigger) ?? 0) + 1);
+    if (best.goal) usedGoals.set(best.goal, (usedGoals.get(best.goal) ?? 0) + 1);
   }
   return picked;
 }

@@ -15,6 +15,11 @@ describe("recommendTemplates", () => {
     expect(new Set(picks.map((item) => item.trigger)).size).toBeGreaterThan(1);
   });
 
+  it("gives each picked goal its own recommendation", () => {
+    const picks = recommendTemplates({ goals: ["sell", "faq", "links"], accountType: "brand", niches: ["fashion"] });
+    expect(new Set(picks.map((item) => item.goal))).toEqual(new Set(["sell", "faq", "links"]));
+  });
+
   it("puts a coach's booking flow first when they want calls booked", () => {
     expect(recommendTemplates({ goals: ["book"], accountType: "coach", niches: ["education"] })[0].id).toBe("course-faq-booking");
   });
