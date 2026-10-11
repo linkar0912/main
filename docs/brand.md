@@ -143,38 +143,47 @@ text clears WCAG AA on the fill in both themes (6.4-8.5:1).
 - Enforced by `app/globals.test.ts` ("status colour: quiet when fine, loud
   when not").
 
-## Selection: never a grey fill
+## Selection: the brand tint, never a grey fill
 
 Owner feedback (round 5): "I don't want that grey bg selected tile - I don't
-have grey bg anywhere." Nothing that is selected, current, active or hovered
-gets a grey or tinted background, in either theme. Round 6 replaced the
-magenta bar on vertical navigation with the owner's "Mondays" reference: a
-**white tile**. Everything else shows selection with ink text, an ink
-underline or an ink outline. The old `--nav-active-fill` token is gone.
+have grey bg anywhere." Round 6 first moved vertical navigation to a white
+tile (the owner's "Mondays" reference); the owner then found the white and
+black "too much b&w" and asked for switching to match the brand. So every
+switch now uses one set of **brand selection tokens** - a soft magenta tint,
+a magenta hairline, a magenta icon or mark - and never a grey or neutral
+fill, in either theme. Text on the tint stays ink (AA); the colour lives in
+the tint, the hairline and the icon.
+
+| Token | Light | Dark | Used for |
+|---|---|---|---|
+| `--select-tile-bg` | `--accent-soft` | `--accent-soft` (dark tint) | The tile behind a selected nav item; chips that are on; menu/palette keyboard focus |
+| `--select-tile-line` | `--accent-line` | `--accent-line` | The tile's 1px hairline |
+| `--select-icon` | `--accent-hover` | `--accent-text` | The selected (and hovered) nav item's icon |
+| `--select-thumb-bg` / `--select-thumb-text` | `--accent-soft` / `--accent-text` | same tokens | The segmented thumb and its label |
+| `--select-hover-bg` | `--accent-soft` at 55% | at 60% | Hover on any switch option that is not selected (segmented options use a lighter 40%) |
+| `--select-line` | `--accent-hover` | `--accent-text` | Tab underlines, selected-card outlines, the contact-row rail |
+| `--select-mark` / `--select-mark-text` | `--accent-hover` / white | `--accent-text` / `#101116` | Solid "on"/"chosen" marks: switch tracks, radio dots, post-picker ticks, the current builder step |
 
 | Pattern | Class (container > item) | Selected | Hover |
 |---|---|---|---|
-| Vertical navigation - sidebars, owner console, Settings/Help section navs, template categories, any side list of sections | `.nav-list > .nav-item` (also `.sidebar-nav > .sidebar-link`, `.settings-nav`, `.section-nav`, `.template-picker-categories`) | The white tile behind the item: panel colour (`--select-tile-bg`), 1px `--select-tile-line` hairline, 10px radius, a very soft shadow. Text `--ink` 700, icon ink (not magenta). The tile glides between items on `transform` (`ref={slidingThumbRef}` on the container) | Text and icon go to ink; no fill |
-| Horizontal tabs - page view tabs, records tabs, workspace detail tabs, contacts stages | `.tab-underline > a, button` (owner console: `.admin-tabs`); optional `.tab-count` | Ink 700 text and a 2px ink underline (`--select-line`) that slides along the row | Ink text |
-| Segmented control | `.segmented > .segmented-option` | Solid ink thumb (it is not grey) | Ink text; the track has no fill, just a 1px line |
-| Selectable cards and tiles - template cards, choice cards, post picker tiles | `.select-outline` | Background stays the panel colour; 1.5px ink outline, ink title | The hairline darkens to `--line-strong` |
-| Dense list rows - inbox conversations, contact rows | `.select-rail` (title in `strong` or `.select-title`) | A 3px magenta rail on the left edge, ink 700 title | Title goes to ink |
-| Menu items - account menu, Actions menus, the + menu, dropdowns | `.menu-item` (also `.account-menu-item`, `.admin-menu-list > button`) | - | Ink text and icon. Keyboard focus gets the white tile with a darker focus hairline (`--select-tile-focus-line`, 3:1 on the panel) |
-| ⌘K palette rows | `.palette-option` | The highlighted row is the white tile with the focus hairline | - |
-| Table rows | `.data-table` | - | No fill; the row's primary link underlines |
+| Vertical navigation - sidebars, owner console, Settings/Help section navs, template categories | `.nav-list > .nav-item` (also `.sidebar-nav > .sidebar-link`, `.settings-nav`, `.section-nav`, `.template-picker-categories`, Settings' `.prefs-nav`) | The brand tile behind the item (tint + hairline, 10px radius), gliding on `transform` (`ref={slidingThumbRef}`). Text ink 700, icon `--select-icon` | Faint tint wash, icon to `--select-icon` |
+| Horizontal tabs | `.tab-underline`, `.auto-view-tabs`, `.page-tabs`, `.ibx-tabs`, `.admin-tabs` | Ink 700 text and a sliding 2px `--select-line` underline | Ink text |
+| Segmented control | `.segmented > .segmented-option` | The soft magenta thumb, label in `--select-thumb-text` 700 | A lighter tint wash; the track itself has no fill, just a 1px line |
+| Selectable cards and tiles - choice cards, post picker, current plan | `.select-outline`, `.builder-choice`, `.media-card`, `.quick-reel-card`, `.billing-plan.is-current` | Panel background; `--select-line` outline; radio dot / tick in `--select-mark` | The hairline darkens to `--line-strong` |
+| Switches - on/off toggles | `.settings-switch`, `.status-switch`, `.builder-toggle`, `.menu-switch` | Track in `--select-mark` | - |
+| Chips that are on | `.filter-chip.is-on`, `.ibx-chip[aria-pressed]`, `.workspace-chip.is-active` | The brand tile (tint, hairline, magenta label) | - |
+| Dense list rows - inbox conversations, contact rows | `.select-rail` | A 3px magenta rail on the left edge, ink 700 title | Title goes to ink |
+| Menu items | `.menu-item` (also `.account-menu-item`, `.admin-menu-list > button`) | - | Ink text and icon; keyboard focus gets the tile with a darker focus hairline (`--select-tile-focus-line`) |
+| ⌘K palette rows | `.palette-option` | The highlighted row is the tile with the focus hairline | - |
 
-**The white tile.** Light mode: `--panel` (white) + `--line-strong` hairline
-+ `0 1px 2px rgba(23,24,29,.06), 0 1px 1px rgba(23,24,29,.04)`. Dark mode: a
-slightly raised surface, `color-mix(in srgb, var(--panel) 92%, white)`, with
-the same strong hairline - never a grey slab. On a white sidebar the tile is
-told apart by its hairline and shadow, not by a fill. The tile is drawn by the
-container's `::before`, sized to the selected item (`--thumb-w/-h`) and moved
-with `translate(--thumb-x, --thumb-y)` over `--dur-3` `--ease-emph`; reduced
-motion makes it jump. Before the hook has measured (first paint) or in a list
-without the hook, the selected item draws the same tile itself. In a row of
-chips (`.nav-list.is-row`, and the Settings/Help navs under 1020px) chips
-differ in width, so the chosen chip draws its own tile instead of a sliding
-one.
+Primary action buttons stay ink (they are actions, not selection).
+
+**The tile.** Drawn by the container's `::before`, sized to the selected item
+(`--thumb-w/-h`) and moved with `translate(--thumb-x, --thumb-y)` over
+`--dur-3` `--ease-emph`; reduced motion makes it jump. Before the hook has
+measured (first paint) or in a list without the hook, the selected item draws
+the same tile itself. In a row of chips (`.nav-list.is-row`, and the
+Settings/Help navs under 1020px) the chosen chip draws its own tile.
 
 The selected state is read from `aria-current`, `aria-selected`,
 `aria-pressed`, `aria-checked`, a checked input, or `.is-active` /
@@ -182,7 +191,7 @@ The selected state is read from `aria-current`, `aria-selected`,
 Adopting them takes a class and the sliding-indicator ref:
 
 ```tsx
-// Side list of sections: the white tile glides behind the current item.
+// Side list of sections: the brand tile glides behind the current item.
 // Labels truncate (.nav-item-label); counts sit in a muted right column.
 <nav ref={slidingThumbRef} className="nav-list" aria-label="Report sections">
   <a className="nav-item" href="/x" aria-current="page">
@@ -234,7 +243,7 @@ Screens with their own tab classes (the Inbox's `.page-tabs`) draw the same
 Allowed non-transparent backgrounds: the page canvas, panels and cards,
 buttons (primary ink, secondary outline is transparent), warning/danger
 status chips, the plan sticker, skeleton loaders, avatars, the solid ink
-thumbs/knobs of segmented switches and toggles, and the white tile (vertical
+thumbs/knobs of segmented switches and toggles, and the brand tile (vertical
 navigation, plus keyboard focus in menus and the palette). Code and ID chips
 are transparent with a 1px line. `app/globals.test.ts` ("selection style:
 never a grey fill") fails if a selected/active/current/hover rule sets any
@@ -267,7 +276,7 @@ other background, or if the tile shows up anywhere else.
   anywhere or "/" outside a text field. Recent picks, Pages (every nav
   destination and Settings section), Actions, then live Automations, Contacts
   and Conversations (owner console: Workspaces and Users). Arrow keys, Enter,
-  Escape; the highlighted row is the white tile, never a grey fill. Full-screen
+  Escape; the highlighted row is the brand tile, never a grey fill. Full-screen
   sheet on phones. Contacts are searched on the server on every (debounced,
   cancelled) keystroke - `GET /api/contacts?scope=all&q=` matches handle,
   email, tags or the owner's email across the whole workspace - and a pick
@@ -293,7 +302,7 @@ Settings (`src/components/settings-screen.tsx`, primitives in
 a stack of cards:
 
 - A 220px section nav ("Workspace" / "Account") beside content capped at
-  760px. The selected section sits on the white tile from "Selection".
+  760px. The selected section sits on the brand tile from "Selection".
 - Each section is an `h2` plus one line, then groups. A group is a quiet
   title (with an optional action on the right) over **one** card whose rows
   are split by hairlines: label and helper on the left, the control or value

@@ -6040,9 +6040,9 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .sidebar-link.is-active,
 .sidebar-link.is-active:hover { background: transparent; color: var(--ink); font-weight: 700; }
 .sidebar-link.is-active svg,
-.sidebar-link.is-active:hover svg { color: var(--ink); }
+.sidebar-link.is-active:hover svg { color: var(--select-icon); }
 [data-theme="dark"] .sidebar-link.is-active { color: var(--ink-strong); }
-[data-theme="dark"] .sidebar-link.is-active svg { color: var(--ink); }
+[data-theme="dark"] .sidebar-link.is-active svg { color: var(--select-icon); }
 .account-row.is-active { background: transparent; }
 .account-row.is-active .account-row-main:hover strong { color: var(--accent-text); }
 .account-row.is-active .account-row-id small { color: var(--muted); }
@@ -8891,20 +8891,36 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   --select-bar: var(--accent);
   --select-bar-w: 3px;
   --select-bar-h: 20px;
-  --select-line: var(--ink);
-  /* The white tile: vertical-nav selection and keyboard focus in menus. */
-  --select-tile-bg: var(--panel);
-  --select-tile-line: var(--line-strong);
-  --select-tile-shadow: 0 1px 2px rgba(23, 24, 29, .06), 0 1px 1px rgba(23, 24, 29, .04);
+  /* Underlines and selected-card outlines: the deeper magenta, which keeps 3:1
+     against the panel where the bright accent would not. */
+  --select-line: var(--accent-hover);
+  /* The brand tile: vertical-nav selection, the segmented thumb and keyboard
+     focus in menus - a soft magenta tint with a magenta hairline. Text on it
+     stays ink (AA); the icon carries the colour. */
+  --select-tile-bg: var(--accent-soft);
+  --select-tile-line: var(--accent-line);
+  --select-tile-shadow: 0 1px 2px rgba(var(--accent-rgb), .12);
   --select-tile-radius: 10px;
+  --select-icon: var(--accent-hover);
+  --select-thumb-bg: var(--accent-soft);
+  --select-thumb-text: var(--accent-text);
+  /* Hover on anything not selected: a faint wash of the same tint. */
+  --select-hover-bg: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+  /* Solid marks for "on" and "chosen": switch tracks, radio dots, ticks, the
+     current step. The deeper magenta keeps white text and icons at AA. */
+  --select-mark: var(--accent-hover);
+  --select-mark-text: #ffffff;
   /* Keyboard focus on a tile needs a hairline that reads (3:1 on the panel). */
   --select-tile-focus-line: color-mix(in srgb, var(--ink) 50%, var(--panel));
 }
-/* Dark: a slightly raised surface with the strong hairline - a few percent
-   lighter than the panel, never a grey slab. */
+/* Dark: the dark-theme magenta tint, line and lighter magenta text. */
 [data-theme="dark"] {
-  --select-tile-bg: color-mix(in srgb, var(--panel) 92%, white);
-  --select-tile-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  --select-line: var(--accent-text);
+  --select-tile-shadow: none;
+  --select-icon: var(--accent-text);
+  --select-hover-bg: color-mix(in srgb, var(--accent-soft) 60%, transparent);
+  --select-mark: var(--accent-text);
+  --select-mark-text: #101116;
 }
 
 /* Vertical navigation: items stay transparent; the tile behind the selected
@@ -8918,7 +8934,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   color: var(--ink);
   font-weight: 700;
 }
-:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) svg { color: var(--ink); }
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) svg { color: var(--select-icon); }
 /* Before the sliding tile has measured (first paint, or a list without
    useSlidingThumb), the selected item draws its own tile. */
 :is(.nav-list, .sidebar-nav, .settings-nav, .section-nav, .template-picker-categories):not([style*="--thumb-w"]) :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) {
@@ -10787,4 +10803,116 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
   .ins-post-title { display: inline-block; padding-block: 10px; margin-block: -10px; }
   .automation-detail .text-link,
   .prefs-row .text-link { display: inline-flex; align-items: center; min-height: 44px; }
+}
+
+/* === Round 6: brand selection === */
+/* Selection and hover carry the brand instead of black and white. One set of
+   tokens drives every switch:
+     vertical navs (sidebar, Settings, Help, owner console, template
+     categories) - a soft magenta tile with a magenta hairline and icon;
+     segmented switches - the same soft magenta thumb with magenta text;
+     underline tabs - a magenta underline;
+     hover on anything not selected - a faint magenta wash.
+   Text stays ink (AA on the soft tint in both themes); the icon carries the
+   colour. */
+/* Vertical navs */
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) svg { color: var(--select-icon); }
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item):not(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]):hover {
+  background: var(--select-hover-bg);
+  border-radius: var(--select-tile-radius);
+}
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item):hover svg { color: var(--select-icon); }
+.template-picker .template-picker-category:is(.is-active, [aria-pressed="true"]) svg,
+.template-picker .template-picker-category:hover svg { color: var(--select-icon); }
+.template-picker .template-picker-category:not(.is-active, [aria-pressed="true"]):hover { background: var(--select-hover-bg); }
+.template-picker .template-picker-categories,
+[data-theme="dark"] .template-picker .template-picker-categories {
+  --tp-tile-bg: var(--select-tile-bg);
+  --tp-tile-line: var(--select-tile-line);
+  --tp-tile-shadow: var(--select-tile-shadow);
+}
+.prefs-nav-tile,
+[data-theme="dark"] .prefs-nav-tile {
+  background: var(--select-tile-bg);
+  border-color: var(--select-tile-line);
+  box-shadow: var(--select-tile-shadow);
+}
+.prefs-nav:not([style*="--thumb-w"]) .prefs-nav-item.is-active {
+  background: var(--select-tile-bg);
+  border-color: var(--select-tile-line);
+  box-shadow: var(--select-tile-shadow);
+}
+.prefs-nav-item.is-active svg { color: var(--select-icon); }
+
+/* Segmented switches */
+.segmented[style*="--thumb-w"]::before { background: var(--select-thumb-bg); }
+.segmented .segmented-option:is(.is-on, .is-active, [aria-pressed="true"], [aria-selected="true"], :has(input:checked)),
+[data-theme="dark"] .segmented .segmented-option:is(.is-on, .is-active, [aria-pressed="true"], [aria-selected="true"], :has(input:checked)) {
+  background: var(--select-thumb-bg);
+  color: var(--select-thumb-text);
+  font-weight: 700;
+}
+.segmented .segmented-option:not(.is-on, .is-active, [aria-pressed="true"], [aria-selected="true"], :has(input:checked)):hover {
+  background: var(--select-hover-bg);
+  color: var(--ink);
+}
+
+/* Every other "chosen" or "on" mark follows the same brand tokens instead of
+   black: underline tabs, chips that are on, switches, selected cards and
+   tiles, radio dots, ticks and step progress. Hover and focus borders on
+   inputs and buttons stay ink - they are not selection. */
+/* Underline tabs */
+.page-tab.is-active,
+.page-tabs .page-tab:is(.is-active, [aria-selected="true"], [aria-current="page"]),
+.ibx-tabs .page-tab[aria-selected="true"],
+.wizard-progress-step.is-active,
+.auto-view-tabs > :is(a, button):is(.is-active, [aria-selected="true"], [aria-current="page"]) { border-bottom-color: var(--select-line); }
+.admin-tabs[style*="--thumb-w"] > .is-active { border-bottom-color: transparent; }
+.auto-view-tabs[style*="--thumb-w"] > :is(a, button) { border-bottom-color: transparent; }
+:is(.ibx-tabs, .auto-view-tabs)[style*="--thumb-w"]::after { background: var(--select-line); }
+.admin-tabs > .is-active { border-color: var(--select-tile-line); box-shadow: none; }
+/* Chips and filters that are on */
+.filter-chip.is-on,
+[data-theme="dark"] .filter-chip.is-on {
+  background: var(--select-tile-bg);
+  border-color: var(--select-tile-line);
+  color: var(--select-thumb-text);
+}
+.workspace-chip.is-active,
+.ibx-chip[aria-pressed="true"],
+.ibx-toolbar .ibx-chip:is([aria-pressed="true"], [aria-expanded="true"]) {
+  background: var(--select-tile-bg);
+  border-color: var(--select-tile-line);
+  color: var(--select-thumb-text);
+}
+/* Switches */
+.settings-switch input:checked + span,
+.status-switch[aria-pressed="true"] .status-switch-track,
+.builder-toggle input:checked,
+.menu-item[aria-checked="true"] .menu-switch { background: var(--select-mark); border-color: var(--select-mark); }
+/* Selected cards and tiles */
+.builder-choice.is-selected,
+:is(.media-card, .builder-layout .media-card, .quick-reel-card, .quick-automation-page.ws-page .quick-reel-card).is-selected,
+:is(.ws-page, .prefs) .billing-plan.is-current {
+  border-color: var(--select-line);
+  box-shadow: inset 0 0 0 1px var(--select-line);
+}
+.builder-choice input:checked { border-color: var(--select-mark); }
+.media-card.is-selected .media-check { background: var(--select-mark); color: var(--select-mark-text); }
+.contacts-surface .contact-row.is-selected { box-shadow: inset 3px 0 0 var(--select-line); }
+/* Step progress */
+.builder-stepper-item.is-active .builder-stepper-dot,
+[data-theme="dark"] .builder-stepper-item.is-active .builder-stepper-dot {
+  background: var(--select-mark);
+  border-color: var(--select-mark);
+  color: var(--select-mark-text);
+}
+.builder-stepper-item.is-done::before,
+.setup-row.is-done:not(:last-child)::before { background: var(--select-mark); }
+.builder-stepper-item.is-done .builder-stepper-dot { border-color: var(--select-mark); color: var(--select-mark); }
+.wizard-progress-step.is-done { border-bottom-color: var(--select-mark); }
+.wizard-progress-step.is-done .wizard-progress-index { background: var(--select-mark); color: var(--select-mark-text); }
+/* Segmented: hover is a lighter wash than the chosen thumb. */
+.segmented .segmented-option:not(.is-on, .is-active, [aria-pressed="true"], [aria-selected="true"], :has(input:checked)):hover {
+  background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
 }

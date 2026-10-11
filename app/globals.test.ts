@@ -304,7 +304,7 @@ describe("workspace palette contract", () => {
 // reference) - a white tile: the panel colour with a hairline and a very soft
 // shadow. The only fills a state may use are solid ink/accent (switch thumbs,
 // toggles, primary buttons), the panel colour, or that tile.
-describe("selection style: never a grey fill", () => {
+describe("selection style: the brand tint, never a grey fill", () => {
   const rules = (css.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+{[^{}]*}/g) ?? []).map((rule) => {
     const [selector, body] = rule.split("{");
     return { selector: selector.trim().replace(/\s+/g, " "), body };
@@ -313,9 +313,12 @@ describe("selection style: never a grey fill", () => {
   // Status dots (e.g. the inbox's "reply window open" marker) carry a status
   // colour by design; that is a state indicator, not a selection fill.
   const allowed = /^(transparent|none|var\(--(panel|canvas|paper|ink|ink-strong|accent|accent-hover|white|danger|select-bar|select-line|status-ok|status-warning|status-danger)\)|#101116|#fff|#ffffff)$/;
-  // Where the white tile may appear: vertical-nav items, and the keyboard's
+  // Where the brand tile may appear: vertical-nav items, and the keyboard's
   // place in a menu or the ⌘K palette (the same tile, with a focus hairline).
-  const tileOwner = /(\.nav-item|\.sidebar-link|\.settings-nav-link|\.section-nav-link|\.template-picker-category|\.menu-item|\.account-menu-item|\.admin-menu-list > button|\.palette-option)\b/;
+  const tileOwner = /(\.nav-item|\.sidebar-link|\.settings-nav-link|\.section-nav-link|\.template-picker-category|\.prefs-nav-item|\.menu-item|\.account-menu-item|\.admin-menu-list > button|\.palette-option)\b/;
+  // The brand selection tokens (soft magenta tint, hover wash, solid mark) are
+  // fine on any selected, on or hovered state; neutral greys never are.
+  const brandToken = /^(var\(--select-(tile-bg|thumb-bg|hover-bg|mark)\)|color-mix\(in srgb, var\(--accent-soft\) \d+%, transparent\))$/;
   // Splits a selector list at its top-level commas (not inside :is() / :not()).
   const selectorList = (selector: string) => {
     const parts: string[] = [];
@@ -343,17 +346,20 @@ describe("selection style: never a grey fill", () => {
       const volt = parts.every((part) => /plan-tag|segmented-badge/.test(part));
       const tile = parts.every((part) => tileOwner.test(part));
       return values
-        .filter((value) => !allowed.test(value) && !(volt && value === "var(--volt)") && !(tile && value === "var(--select-tile-bg)"))
+        .filter((value) => !allowed.test(value) && !(volt && value === "var(--volt)") && !(tile && value === "var(--select-tile-bg)") && !brandToken.test(value))
         .map((value) => `${rule.selector} => ${value}`);
     });
     expect(offenders).toEqual([]);
   });
 
-  it("keeps the white tile to vertical navigation, menus and the palette", () => {
+  it("keeps the brand tile to vertical navigation, menus and the palette", () => {
     const users = rules.filter((rule) => /var\(--select-tile-bg\)/.test(rule.body) && !rule.selector.startsWith(":root") && !rule.selector.startsWith("[data-theme"));
     expect(users.length).toBeGreaterThan(2);
+    // The Settings nav and template categories draw their own sliding tile.
+    // Chips that are switched on share the tile.
+    const localTile = /(\.prefs-nav-tile|\.prefs-nav:not|\.template-picker-categories|\.filter-chip|\.workspace-chip|\.ibx-chip)/;
     for (const rule of users) {
-      const ok = navContainer.test(rule.selector) || selectorList(rule.selector).every((part) => tileOwner.test(part));
+      const ok = navContainer.test(rule.selector) || selectorList(rule.selector).every((part) => tileOwner.test(part) || localTile.test(part));
       expect(ok, rule.selector).toBe(true);
     }
   });
@@ -362,30 +368,34 @@ describe("selection style: never a grey fill", () => {
     expect(css).not.toMatch(/--nav-active-fill/);
   });
 
-  it("draws the tile from the panel colour, a hairline and a very soft shadow, raised slightly in dark mode", () => {
-    expect(css).toMatch(/:root\s*{[^}]*--select-tile-bg:\s*var\(--panel\)/);
-    expect(css).toMatch(/:root\s*{[^}]*--select-tile-line:\s*var\(--line-strong\)/);
-    expect(css).toMatch(/:root\s*{[^}]*--select-tile-radius:\s*10px/);
-    const shadow = css.match(/:root\s*{[^}]*--select-tile-shadow:\s*([^;]+);/)?.[1] ?? "";
-    const alphas = [...shadow.matchAll(/rgba\([^)]*,\s*([\d.]+)\)/g)].map((match) => Number(match[1]));
-    expect(alphas.length).toBeGreaterThan(0);
-    expect(Math.max(...alphas)).toBeLessThanOrEqual(0.08);
-    // Dark mode: a few percent lighter than the panel, never a grey token.
-    const dark = css.match(/\[data-theme="dark"\]\s*{[^}]*--select-tile-bg:\s*([^;]+);/)?.[1] ?? "";
-    expect(dark).toMatch(/^color-mix\(in srgb, var\(--panel\) (8[5-9]|9\d)%, white\)$/);
-    expect(css).not.toMatch(/--select-tile-bg:\s*var\(--(surface-soft|surface-sunk|line)/);
+  it("draws the tile in the brand tint with a magenta hairline and icon, never a grey token", () => {
+    const root = css.match(/:root\s*{[^}]*--select-tile-bg[^}]*}/)?.[0] ?? "";
+    expect(root).toMatch(/--select-tile-bg:\s*var\(--accent-soft\)/);
+    expect(root).toMatch(/--select-tile-line:\s*var\(--accent-line\)/);
+    expect(root).toMatch(/--select-tile-radius:\s*10px/);
+    expect(root).toMatch(/--select-thumb-bg:\s*var\(--accent-soft\)/);
+    expect(root).toMatch(/--select-thumb-text:\s*var\(--accent-text\)/);
+    expect(root).toMatch(/--select-icon:\s*var\(--accent-hover\)/);
+    expect(root).toMatch(/--select-hover-bg:\s*color-mix\(in srgb, var\(--accent-soft\) \d+%, transparent\)/);
+    // Dark mode picks up the dark-theme tint and the lighter magenta.
+    const dark = css.match(/\[data-theme="dark"\]\s*{[^}]*--select-icon[^}]*}/)?.[0] ?? "";
+    expect(dark).toMatch(/--select-icon:\s*var\(--accent-text\)/);
+    expect(css).not.toMatch(/--select-(tile|thumb|hover)-bg:\s*var\(--(surface-soft|surface-sunk|line|panel)/);
   });
 
-  it("paints sliding indicators in ink, never a tint; vertical navs slide the white tile", () => {
+  it("paints sliding indicators from the brand tokens; vertical navs slide the tile", () => {
     const thumbs = rules.filter((rule) => /\[style\*="--thumb-w"\]::(before|after)$/.test(rule.selector) && /background:/.test(rule.body));
     expect(thumbs.length).toBeGreaterThan(2);
     for (const thumb of thumbs) {
       if (navContainer.test(thumb.selector)) expect(thumb.body).toMatch(/background:\s*var\(--select-tile-bg\)/);
-      else expect(thumb.body).toMatch(/background:\s*var\(--(ink|select-line)\)/);
+      else expect(thumb.body).toMatch(/background:\s*var\(--(ink|select-line|select-thumb-bg)\)/);
     }
+    // The segmented thumb ends on the soft brand tint.
+    const segmented = rules.filter((rule) => rule.selector === '.segmented[style*="--thumb-w"]::before').at(-1)?.body ?? "";
+    expect(segmented).toMatch(/background:\s*var\(--select-thumb-bg\)/);
   });
 
-  it("marks vertical navigation with the white tile that glides on transform, not a magenta bar", () => {
+  it("marks vertical navigation with the brand tile that glides on transform, not a magenta bar", () => {
     const tile = rules.find((rule) => navContainer.test(rule.selector))?.body ?? "";
     expect(tile).toMatch(/background:\s*var\(--select-tile-bg\)/);
     expect(tile).toMatch(/border:\s*1px solid var\(--select-tile-line\)/);
@@ -401,9 +411,9 @@ describe("selection style: never a grey fill", () => {
     const bars = rules.filter((rule) => /(nav-item|sidebar-link|settings-nav-link|section-nav-link|template-picker-category|nav-list|sidebar-nav|settings-nav|section-nav|template-picker-categories)/.test(rule.selector)
       && /background:\s*var\(--select-bar\)/.test(rule.body));
     expect(bars.map((rule) => rule.selector)).toEqual([]);
-    // Selected text and icon are ink, not magenta.
-    expect(css).toMatch(/\.sidebar-link\.is-active svg,\s*\.sidebar-link\.is-active:hover svg\s*{[^}]*color:\s*var\(--ink\)/);
-    expect(css).toMatch(/:is\(\.nav-item, \.sidebar-link, \.settings-nav-link, \.section-nav-link, \.template-picker-category\):is\(\.is-active,[^{]*\) svg\s*{\s*color:\s*var\(--ink\)/);
+    // Selected text stays ink; the icon carries the brand colour.
+    expect(css).toMatch(/\.sidebar-link\.is-active svg,\s*\.sidebar-link\.is-active:hover svg\s*{[^}]*color:\s*var\(--select-icon\)/);
+    expect(css).toMatch(/:is\(\.nav-item, \.sidebar-link, \.settings-nav-link, \.section-nav-link, \.template-picker-category\):is\(\.is-active,[^{]*\) svg\s*{\s*color:\s*var\(--select-icon\)/);
   });
 
   it("puts the menu and palette keyboard focus on the tile with a hairline that reads", () => {
@@ -413,8 +423,8 @@ describe("selection style: never a grey fill", () => {
     expect(css).not.toMatch(/\.palette-option\[aria-selected="true"\]::before/);
   });
 
-  it("underlines horizontal tabs in ink and outlines chosen cards", () => {
-    expect(css).toMatch(/--select-line:\s*var\(--ink\)/);
+  it("underlines horizontal tabs in magenta and outlines chosen cards", () => {
+    expect(css).toMatch(/:root\s*{[^}]*--select-line:\s*var\(--accent-hover\)/);
     expect(css).toMatch(/\.tab-underline > :is\(\.is-active,[^)]*\)\s*{[^}]*color:\s*var\(--ink\)[^}]*font-weight:\s*700/);
     expect(css).toMatch(/\.select-outline:is\(\.is-selected,[^{]*{[^}]*background:\s*var\(--panel\)[^}]*border-color:\s*var\(--select-line\)/);
     expect(css).toMatch(/\.select-rail:is\(\.is-selected,[^{]*{[^}]*box-shadow:\s*inset var\(--select-bar-w\) 0 0 var\(--select-bar\)/);
