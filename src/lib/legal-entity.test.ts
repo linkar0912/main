@@ -48,7 +48,7 @@ describe("LEGAL_ENTITY", () => {
     expect(legalPostalAddress(pending)).toBeNull();
     expect(legalCopyrightHolder(pending)).toBe("Linkar");
     expect(legalJurisdiction(pending)).toBe("the competent courts in India");
-    expect(grievanceOfficerContact("support@linkar.in", pending)).toEqual({ name: "The proprietor of Linkar", email: "support@linkar.in" });
+    expect(grievanceOfficerContact("support@linkar.in", pending)).toEqual({ name: "the proprietor of Linkar", email: "support@linkar.in" });
   });
 
   it("names the proprietor, address, officer, and courts once supplied", () => {

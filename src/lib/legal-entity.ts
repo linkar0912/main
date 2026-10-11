@@ -106,7 +106,7 @@ export function grievanceOfficerContact(supportEmail: string, entity: LegalEntit
     ? entity.grievanceOfficer.name
     : isLegalValueSupplied(entity.proprietorName)
       ? entity.proprietorName
-      : `The proprietor of ${entity.tradeName}`;
+      : `the proprietor of ${entity.tradeName}`;
   const email = isLegalValueSupplied(entity.grievanceOfficer.email) ? entity.grievanceOfficer.email : supportEmail;
   return { name, email };
 }
