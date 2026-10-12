@@ -55,3 +55,9 @@ ON CONFLICT ("workspaceId") DO NOTHING;
 INSERT INTO "MemberOnboarding" ("workspaceId", "email", "step", "existingMember", "createdAt", "updatedAt")
 SELECT DISTINCT "workspaceId", lower("email"), 1, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM "WorkspaceMember"
 ON CONFLICT ("workspaceId", "email") DO NOTHING;
+
+-- Default-deny for Supabase's PostgREST roles, like every other app table
+-- (see 20260829180000_enable_rls). The app's own role owns the tables and is
+-- unaffected.
+ALTER TABLE "WorkspaceOnboarding" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "MemberOnboarding" ENABLE ROW LEVEL SECURITY;
