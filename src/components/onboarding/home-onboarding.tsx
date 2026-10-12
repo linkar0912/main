@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
-import { ArrowRight, Check, Sparkles, X } from "lucide-react";
+import { Check, ListChecks, X } from "lucide-react";
 import { invalidateWorkspaceResource } from "@/src/lib/client/workspace-data";
 import type { OnboardingPlan } from "@/src/lib/onboarding/build-plan";
 import { formatDurationRange } from "@/src/lib/onboarding/plan";
@@ -26,12 +26,12 @@ async function sendAction(action: OnboardingAction): Promise<void> {
 export function OnboardingInviteCard({ onDismiss }: { onDismiss: () => void }) {
   return (
     <section className={`${styles.invite} home-enter`} aria-labelledby="onboarding-invite-title">
-      <span className={styles.inviteMark} aria-hidden="true"><Sparkles size={22} strokeWidth={2} /></span>
+      <span className={styles.inviteMark} aria-hidden="true"><ListChecks size={18} strokeWidth={2} /></span>
       <div className={styles.inviteCopy}>
         <h2 id="onboarding-invite-title">Tell us about your account</h2>
         <p>It takes about a minute, and you get a plan made for you.</p>
       </div>
-      <Link className={`button button-primary ${styles.inviteAction}`} href="/onboarding">Get my plan</Link>
+      <Link className={`button button-secondary ${styles.inviteAction}`} href="/onboarding">Start</Link>
       <button
         type="button"
         className={`icon-button ${styles.dismiss}`}
@@ -56,8 +56,8 @@ type PlanStep = { label: string; done: boolean };
 
 /**
  * Home after onboarding, until the first automation exists or the person
- * hides it: the time Linkar can take off them, a short progress line and
- * the three automations their answers point to.
+ * hides it: the time Linkar can take off them as one sentence, a short
+ * progress line and the three automations their answers point to.
  */
 export function YourPlanCard({ connected, onDismiss, onBrowseTemplates, enterDelay = 0 }: {
   connected: boolean | null;
@@ -96,10 +96,7 @@ export function YourPlanCard({ connected, onDismiss, onBrowseTemplates, enterDel
       style={{ "--enter-delay": `${enterDelay}ms` } as CSSProperties}
     >
       <div className={styles.planHead}>
-        <div>
-          <h2 id="your-plan-title">Your plan</h2>
-          <p>Built from what you told us. Start with one of these.</p>
-        </div>
+        <h2 id="your-plan-title">Your plan</h2>
         <button
           type="button"
           className={`icon-button ${styles.dismiss}`}
@@ -113,51 +110,49 @@ export function YourPlanCard({ connected, onDismiss, onBrowseTemplates, enterDel
         </button>
       </div>
 
-      <div className={styles.planGrid}>
-        {range && time ? (
-          <div className={styles.planTime}>
-            <strong>{time.kind === "missed" ? time.handledPerMonth.toLocaleString("en-IN") : `${range.low}–${range.high}`}</strong>
-            <span>{time.kind === "missed" ? "messages a month could get an answer" : `${range.unit} a month back`}</span>
-            <small>About {time.perDay.toLocaleString("en-IN")} a day, {Math.round(time.share * 10)} in 10 about what you picked.</small>
-          </div>
-        ) : null}
+      {range && time ? (
+        <p className={styles.planTime}>
+          {time.kind === "missed"
+            ? `About ${time.handledPerMonth.toLocaleString("en-IN")} more messages a month answered.`
+            : `About ${range.low}–${range.high} ${range.unit} a month saved.`}
+          {" "}
+          <span>Based on about {time.perDay.toLocaleString("en-IN")} a day, {Math.round(time.share * 10)} in 10 about what you picked.</span>
+        </p>
+      ) : null}
 
-        <div className={styles.planBody}>
-          <div className={styles.progress}>
-            <p className={styles.progressLabel}>{doneCount} of {steps.length} done</p>
-            <ol className={styles.progressSteps}>
-              {steps.map((step, index) => (
-                <li key={step.label} data-done={step.done ? "true" : "false"}>
-                  <span className={styles.progressNode} aria-hidden="true">{step.done ? <Check size={13} strokeWidth={3} /> : index + 1}</span>
-                  <span>{step.label}{step.done ? <span className="sr-only"> (done)</span> : null}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          {plan ? (
-            <ul className={styles.picks}>
-              {plan.recommendations.map((item) => (
-                <li key={item.id}>
-                  <div className={styles.pickCopy}>
-                    <strong>{item.title}</strong>
-                    <span>{item.why}</span>
-                  </div>
-                  <Link className={styles.pickAction} href={item.href}>
-                    Set this up <ArrowRight size={15} aria-hidden />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : failed ? (
-            <p className={styles.planNote}>Your recommendations couldn’t load. You can still pick from every template.</p>
-          ) : (
-            <div className={`skeleton-block ${styles.picksSkeleton}`} aria-hidden="true" />
-          )}
-
-          <button type="button" className={`text-link ${styles.browse}`} onClick={onBrowseTemplates}>Browse all templates</button>
-        </div>
+      <div className={styles.progress}>
+        <ol className={styles.progressSteps}>
+          {steps.map((step, index) => (
+            <li key={step.label} data-done={step.done ? "true" : "false"}>
+              <span className={styles.progressNode} aria-hidden="true">{step.done ? <Check size={12} strokeWidth={3} /> : index + 1}</span>
+              <span>{step.label}{step.done ? <span className="sr-only"> (done)</span> : null}</span>
+            </li>
+          ))}
+        </ol>
+        <p className={styles.progressLabel}>{doneCount} of {steps.length} done</p>
       </div>
+
+      {plan ? (
+        <ul className={styles.picks}>
+          {plan.recommendations.map((item) => (
+            <li key={item.id}>
+              <div className={styles.pickCopy}>
+                <strong>{item.title}</strong>
+                <span>{item.why}</span>
+              </div>
+              <Link className={`button button-secondary ${styles.pickAction}`} href={item.href} aria-label={`Set up ${item.title}`}>
+                Set up
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : failed ? (
+        <p className={styles.planNote}>Your recommendations couldn’t load. You can still pick from every template.</p>
+      ) : (
+        <div className={`skeleton-block ${styles.picksSkeleton}`} aria-hidden="true" />
+      )}
+
+      <button type="button" className={`text-link ${styles.browse}`} onClick={onBrowseTemplates}>Browse all templates</button>
     </section>
   );
 }

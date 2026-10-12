@@ -324,7 +324,7 @@ describe("DashboardScreen", () => {
       stubDashboardFetch({ onboarding: { ...summary, invite: true } });
       render(<AppShell><DashboardScreen /></AppShell>);
       const card = await screen.findByRole("region", { name: "Tell us about your account" });
-      expect(within(card).getByRole("link", { name: "Get my plan" }).getAttribute("href")).toBe("/onboarding");
+      expect(within(card).getByRole("link", { name: "Start" }).getAttribute("href")).toBe("/onboarding");
       fireEvent.click(within(card).getByRole("button", { name: "Dismiss the invitation" }));
       expect(screen.queryByRole("region", { name: "Tell us about your account" })).toBeNull();
       const calls = (fetch as unknown as { mock: { calls: Array<[string, RequestInit?]> } }).mock.calls;
@@ -346,8 +346,8 @@ describe("DashboardScreen", () => {
       });
       render(<AppShell><DashboardScreen /></AppShell>);
       const card = await screen.findByRole("region", { name: "Your plan" });
-      expect(await within(card).findByText("4–6")).toBeTruthy();
-      expect(within(card).getByRole("link", { name: /set this up/i }).getAttribute("href")).toBe("/automations/new?type=classic&template=price-list-responder");
+      expect(await within(card).findByText(/About 4–6 hours a month saved/)).toBeTruthy();
+      expect(within(card).getByRole("link", { name: "Set up Send prices when someone asks" }).getAttribute("href")).toBe("/automations/new?type=classic&template=price-list-responder");
       expect(screen.queryByRole("region", { name: "Start here" })).toBeNull();
     });
 
