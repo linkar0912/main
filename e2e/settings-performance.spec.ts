@@ -1,4 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+// A section click shows the section at once and pushes ?section= to the URL;
+// wait for that navigation to land so a later click is not overtaken by it.
+async function openSection(page: Page, name: RegExp, section: string) {
+  await page.getByRole("button", { name }).click();
+  await expect(page).toHaveURL(new RegExp(`[?&]section=${section}$`));
+}
 
 test("workspace navigation only loads visible data and reuses warm resources", async ({ page }) => {
   const requests: string[] = [];
@@ -30,23 +37,23 @@ test("workspace navigation only loads visible data and reuses warm resources", a
   expect(count("/api/workspace/messaging")).toBe(0);
   expect(count("/api/billing")).toBe(0);
 
-  await page.getByRole("button", { name: /Policies/ }).click();
+  await openSection(page, /Policies/, "policies");
   await expect(page.getByRole("region", { name: "Policies and support" })).toBeVisible();
   expect(count("/api/team/invitations")).toBe(0);
   expect(count("/api/workspace/messaging")).toBe(0);
   expect(count("/api/billing")).toBe(0);
 
   const healthRequests = count("/api/meta/connection/health") + count("/api/facebook/connection/health");
-  await page.getByRole("button", { name: /Team/ }).click();
+  await openSection(page, /Team/, "team");
   await expect(page.getByRole("region", { name: "Invite a teammate" }).getByLabel("Email address")).toBeVisible();
   expect(count("/api/team/invitations")).toBe(1);
   expect(count("/api/meta/connection/health") + count("/api/facebook/connection/health")).toBe(healthRequests);
 
-  await page.getByRole("button", { name: /Billing/ }).click();
+  await openSection(page, /Billing/, "billing");
   await expect(page.getByRole("heading", { name: "Plan and usage" })).toBeVisible();
   expect(count("/api/billing")).toBe(1);
-  await page.getByRole("button", { name: /Team/ }).click();
-  await page.getByRole("button", { name: /Billing/ }).click();
+  await openSection(page, /Team/, "team");
+  await openSection(page, /Billing/, "billing");
   await expect(page.getByRole("heading", { name: "Plan and usage" })).toBeVisible();
   expect(count("/api/billing")).toBe(1);
 

@@ -108,14 +108,38 @@ for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     for (const route of routes) {
       await page.goto(route);
-      await expect(page.locator(".page-wrap")).toBeVisible();
+      // Measure the settled page: not the loading skeleton, and not while a
+      // page transition still has the outgoing copy on screen.
+      await expect(page.locator(".page-wrap")).toHaveCount(1);
+      await expect(page.locator(".page-wrap:not(.skeleton-page)")).toBeVisible();
+      // Entrances (the builder's first step slides in from the side) end
+      // before measuring; endless ones such as loading shimmer are skipped.
+      await page.evaluate(() => Promise.all(document.getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => undefined))));
       const width = await page.evaluate(() => ({
         viewport: window.innerWidth,
         document: document.documentElement.scrollWidth,
+        // Named in the failure message so an overflow says what overflowed.
+        overflowing: Array.from(document.querySelectorAll("body *"))
+          .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 0.5)
+          .slice(0, 5)
+          .map((element) => `${element.tagName.toLowerCase()}.${element.className} → ${Math.round(element.getBoundingClientRect().right)}`),
       }));
-      expect(width.document, route).toBeLessThanOrEqual(width.viewport);
+      expect(width.document, `${route} ${width.overflowing.join(", ")}`).toBeLessThanOrEqual(width.viewport);
     }
   });
+}
+
+/**
+ * The marketing home streams in behind the root loading screen, so `goto`
+ * can return before its sections exist. Measure only once the page, from the
+ * hero to the footer, is on screen.
+ */
+async function openMarketingHome(page: Page) {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: /Reply to every opportunity/i })).toBeVisible();
+  await expect(page.locator("#resources")).toBeVisible();
 }
 
 test.describe("public marketing route", () => {
@@ -129,7 +153,7 @@ test.describe("public marketing route", () => {
 
     for (const { viewport, maxFontSize } of cases) {
       await page.setViewportSize(viewport);
-      await page.goto("/");
+      await openMarketingHome(page);
       const heading = page.getByRole("heading", {
         level: 1,
         name: /Reply to every opportunity. Even when you are away./i,
@@ -150,7 +174,7 @@ test.describe("public marketing route", () => {
   for (const viewport of viewports) {
     test(`marketing home stays contained at ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport);
-      await page.goto("/");
+      await openMarketingHome(page);
       await expect(page.getByRole("heading", {
         level: 1,
         name: /Reply to every opportunity. Even when you are away./i,
@@ -165,7 +189,7 @@ test.describe("public marketing route", () => {
 
   test("tablet workflow stage fits its section without clipped overflow", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const section = page.locator("#workflows");
     const stage = section.locator("[role='tabpanel']").first().locator("..");
@@ -187,7 +211,7 @@ test.describe("public marketing route", () => {
 
   test("automation phone stays fully contained, close to its copy, and keeps reply text visible", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const section = page.locator("#how-it-works");
     const stage = section.locator("[data-desktop-stage]");
@@ -216,7 +240,7 @@ test.describe("public marketing route", () => {
 
   test("desktop automation phone fits comfortably below the sticky header", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const section = page.locator("#how-it-works");
     await section.locator("[data-chapter]").first().scrollIntoViewIfNeeded();
@@ -236,7 +260,7 @@ test.describe("public marketing route", () => {
 
   test("short desktop workflow phone stays inside the yellow section at its end boundary", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const section = page.locator("#how-it-works");
     const sectionBounds = await section.evaluate((element) => ({
@@ -264,7 +288,7 @@ test.describe("public marketing route", () => {
 
   test("top-level marketing section headings use a restrained centered type scale", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const headingNames = [
       "The best conversations should keep working after you log off.",
@@ -304,7 +328,7 @@ test.describe("public marketing route", () => {
 
   test("automation copy and phone form a balanced two-column composition", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const section = page.locator("#how-it-works");
     const [sectionBox, copyBox, phoneBox] = await Promise.all([
@@ -325,7 +349,7 @@ test.describe("public marketing route", () => {
 
   test("surface runway starts with its first card fully inside the content gutter", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const section = page.locator("#surfaces");
     await section.evaluate((element) => element.scrollIntoView({ block: "start" }));
@@ -342,7 +366,7 @@ test.describe("public marketing route", () => {
 
   test("before-and-after closing statement aligns with the centered section axis", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const section = page.locator("#outcomes");
     const closing = section.getByText(
@@ -365,7 +389,7 @@ test.describe("public marketing route", () => {
 
   test("marketing footer stays within the mobile page gutters", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const footer = page.locator("#resources");
     const navigation = footer.getByRole("navigation", { name: "Footer" });
@@ -384,7 +408,7 @@ test.describe("public marketing route", () => {
 
   test("footer get-started action remains fully inside the mobile footer", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const footer = page.locator("#resources");
     await footer.scrollIntoViewIfNeeded();
@@ -403,7 +427,7 @@ test.describe("public marketing route", () => {
 
   test("automation phone remains inside the mobile content column", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     const section = page.locator("#how-it-works");
     const chapter = section.locator("[data-chapter]").first();
@@ -418,14 +442,14 @@ test.describe("public marketing route", () => {
 
   test("automation avoids a clipped caption beneath the phone", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
+    await openMarketingHome(page);
 
     await expect(page.locator("#how-it-works [data-desktop-stage] figcaption")).toBeHidden();
   });
 
   test("public tablet navigation keeps a full-size menu target", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 });
-    await page.goto("/");
+    await openMarketingHome(page);
     const menu = await page.getByRole("button", { name: "Open menu" }).boundingBox();
     expect(menu).not.toBeNull();
     expect(menu!.width).toBeGreaterThanOrEqual(44);
