@@ -173,9 +173,12 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium webkit
 
+      # Pinned: "latest" makes the action query the GitHub releases API, which
+      # rate-limits shared runners and failed a run with "supabase: command
+      # not found". A fixed version downloads directly.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.113.0
 
       - name: Start local Supabase (Postgres + Auth)
         run: supabase start
