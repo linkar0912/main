@@ -6775,23 +6775,21 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 .automation-sections .split-layout { gap: var(--ws-gap); }
 
 
-/* ── Sub-navigation (Settings, Help): soft neutral fill, accent icon ───── */
+/* ── Sub-navigation (Settings, Help): the selected item sits on the ink tile
+   (see "Selection: ink"), so its label, icon and count use the tile text. */
 .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active,
-.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active:hover {
-  background: transparent;
-  box-shadow: none;
-  color: var(--ink);
-  font-weight: 700;
-}
+.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active:hover,
 [data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active,
 [data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active:hover {
   background: transparent;
-  color: var(--ink);
+  box-shadow: none;
+  color: var(--select-tile-text);
+  font-weight: 700;
 }
-.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--ink); }
-.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count) { color: var(--muted); opacity: 1; }
-[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--ink); }
-[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count) { color: var(--muted); }
+.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg,
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active svg { color: var(--select-icon); }
+.ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count),
+[data-theme="dark"] .ws-page :is(.settings-nav, .section-nav) :is(.settings-nav-link, .section-nav-link).is-active :is(.settings-nav-count, .section-nav-count) { color: var(--select-tile-text); opacity: .72; }
 .ws-page :is(.settings-nav-link, .section-nav-link) { font-size: .875rem; min-height: 40px; }
 .ws-page :is(.settings-nav-count, .section-nav-count) { font-size: .8125rem; font-variant-numeric: tabular-nums; }
 

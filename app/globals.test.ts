@@ -426,6 +426,21 @@ describe("selection style: ink, never a grey fill", () => {
     expect(css).not.toMatch(/\.palette-option\[aria-selected="true"\]::before/);
   });
 
+  it("never leaves a selected vertical-nav label in ink, which would sit ink-on-ink on the tile", () => {
+    const navItem = /(nav-item|sidebar-link|settings-nav-link|section-nav-link|template-picker-category|prefs-nav-item)/;
+    const selected = /(\.is-active|aria-current|aria-selected|aria-pressed)/;
+    const offenders = rules.filter((rule) => {
+      if (rule.selector.startsWith("@") || /:not\(/.test(rule.selector) || /\[data-view="index"\]/.test(rule.selector)) return false;
+      const parts = selectorList(rule.selector).filter((part) => navItem.test(part) && selected.test(part) && !/svg|count|::|:hover svg/.test(part));
+      return parts.length > 0 && /(^|;|\s)color:\s*var\(--(ink|ink-strong)\)/.test(rule.body);
+    }).map((rule) => rule.selector);
+    // Earlier, lower-specificity rules may still say ink; what matters is that
+    // the LAST rule for each pattern wins with the tile text. Check the known
+    // section navs directly.
+    expect(css).toMatch(/\.ws-page :is\(\.settings-nav, \.section-nav\) :is\(\.settings-nav-link, \.section-nav-link\)\.is-active,[^{]*{[^}]*color:\s*var\(--select-tile-text\)/);
+    expect(offenders.filter((selector) => selector.includes(".ws-page"))).toEqual([]);
+  });
+
   it("keeps the Settings nav label readable on the ink tile on bare /settings too", () => {
     // Bare /settings renders data-view="index"; on desktop it still shows the
     // ink tile, so the selected label must switch to the tile text there.
