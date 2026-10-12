@@ -223,4 +223,57 @@ describe("memory inbox repository", () => {
     expect(excluded.records.map((event) => event.payload.text)).toEqual(["older"]);
     expect(included.records.map((event) => event.payload.text)).toEqual(["same ms", "older"]);
   });
+
+  describe("who spoke last", () => {
+    async function send(
+      repository: ReturnType<typeof createMemoryRepository>,
+      key: string,
+      recipientId: string,
+      sentAt: string,
+      kind: "MANUAL_INBOX" | "CLASSIC_ACTION" | "LEAD_EMAIL" = "MANUAL_INBOX",
+    ) {
+      await repository.ensureOutboundDelivery({ deliveryKey: key, workspaceId: "workspace_1", instagramAccountId: "ig_1", recipientId, kind, payload: { text: "reply" } });
+      await repository.claimOutboundDelivery(key, "worker_1", "2026-09-05T00:00:00.000Z");
+      await repository.completeOutboundDelivery(key, "worker_1", undefined, sentAt);
+    }
+    const directions = async (repository: ReturnType<typeof createMemoryRepository>) => Object.fromEntries(
+      (await repository.listInboxContacts("workspace_1", { limit: 10, sort: "newest", now: "2026-09-04T13:00:00.000Z" }))
+        .rows.map((row) => [row.record.igScopedUserId, row.lastMessageDirection]),
+    );
+
+    it("is the person after a message comes in, and stays so once it is read", async () => {
+      const repository = createMemoryRepository();
+      const contact = await seedContact(repository, "aanya", "2026-09-04T10:00:00.000Z", "Need the guide");
+      expect(await directions(repository)).toEqual({ aanya: "INBOUND" });
+      await repository.updateInboxState("workspace_1", contact.id, { action: "mark_read", readAt: "2026-09-04T10:01:00.000Z" });
+      const [row] = (await repository.listInboxContacts("workspace_1", { limit: 10, sort: "newest", now: "2026-09-04T13:00:00.000Z" })).rows;
+      expect(row.unread).toBe(false);
+      expect(row.lastMessageDirection).toBe("INBOUND");
+    });
+
+    it("is the workspace after a manual or automated reply is sent, until the person writes again", async () => {
+      const repository = createMemoryRepository();
+      await seedContact(repository, "aanya", "2026-09-04T10:00:00.000Z", "Need the guide");
+      await seedContact(repository, "bharat", "2026-09-04T10:00:00.000Z", "Price?");
+      await send(repository, "manual_1", "aanya", "2026-09-04T10:05:00.000Z");
+      await send(repository, "auto_1", "bharat", "2026-09-04T10:00:30.000Z", "CLASSIC_ACTION");
+      expect(await directions(repository)).toEqual({ aanya: "OUTBOUND", bharat: "OUTBOUND" });
+
+      await repository.recordWebhookEvent("workspace_1", {
+        providerEventId: "event_aanya_2",
+        eventType: "message.received",
+        receivedAt: "2026-09-04T10:06:00.000Z",
+        payload: { accountId: "ig_1", recipientId: "aanya", text: "Thanks! One more thing" },
+      });
+      expect((await directions(repository)).aanya).toBe("INBOUND");
+    });
+
+    it("ignores sends that never left and lead emails, which are not messages to the person", async () => {
+      const repository = createMemoryRepository();
+      await seedContact(repository, "aanya", "2026-09-04T10:00:00.000Z", "Need the guide");
+      await repository.ensureOutboundDelivery({ deliveryKey: "pending_1", workspaceId: "workspace_1", instagramAccountId: "ig_1", recipientId: "aanya", kind: "MANUAL_INBOX", payload: { text: "draft" } });
+      await send(repository, "lead_1", "aanya", "2026-09-04T10:05:00.000Z", "LEAD_EMAIL");
+      expect(await directions(repository)).toEqual({ aanya: "INBOUND" });
+    });
+  });
 });

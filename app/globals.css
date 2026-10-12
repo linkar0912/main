@@ -11082,3 +11082,18 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
   .page-header-row.has-help > .context-help-link svg { margin: 0; vertical-align: 0; }
   .page-header-row.has-help > .header-actions { justify-self: stretch; margin-top: 8px; width: 100%; }
 }
+
+/* === Round 9: data === */
+/* Settings > Team: the role select in another member's row, with a quiet
+   "Saved" beside it that leaves on its own (motion tokens go to zero under
+   reduced motion). */
+.prefs-person-role-edit { align-items: center; display: inline-flex; gap: 10px; }
+.prefs-person-role-field { flex: 0 0 auto; min-width: 132px; }
+.prefs-person-role-field select { min-height: 40px; }
+.prefs-role-saved { align-items: center; animation: motion-fade-in-soft var(--dur-2) var(--ease-out) both; color: var(--muted); display: inline-flex; font-size: var(--type-meta); gap: 4px; }
+.prefs-role-saved svg { color: var(--status-ok); }
+/* Automation Overview: the message-to-email funnel on a row of its own. */
+.auto-analytics-grid.is-single { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 720px) {
+  .prefs-person-role-field select { font-size: 16px; min-height: 44px; }
+}

@@ -22,13 +22,14 @@ export function lastSpeaker(messages: InboxMessage[]): InboxMessage["direction"]
 
 /**
  * Closed conversations are closed. An open one is waiting on you when it has
- * unread messages or, as far as this screen has seen, the person spoke last.
- * The list API only carries the latest inbound message, so "spoke last" is
- * known for threads opened in this visit; everything else read sits in Open.
+ * unread messages or the person spoke last. "Spoke last" is the open thread's
+ * own messages when given (`speaker`, fresher than the list), otherwise the
+ * list API's `lastMessageDirection`, which the server keeps for every
+ * message in and every reply out, by hand or by an automation.
  */
 export function conversationGroupOf(contact: InboxContact, speaker?: InboxMessage["direction"]): ConversationGroupKey {
   if (contact.inboxStatus === "CLOSED") return "closed";
-  if (contact.unread || speaker === "inbound") return "waiting";
+  if (contact.unread || (speaker ?? contact.lastMessageDirection) === "inbound") return "waiting";
   return "open";
 }
 

@@ -17,6 +17,14 @@ describe("conversation groups", () => {
     expect(conversationGroupOf(base)).toBe("open");
   });
 
+  it("reads who spoke last from the server when this screen has not opened the thread", () => {
+    expect(conversationGroupOf({ ...base, lastMessageDirection: "inbound" })).toBe("waiting");
+    expect(conversationGroupOf({ ...base, lastMessageDirection: "outbound" })).toBe("open");
+    // The open thread is fresher than the list: a reply just sent answers it.
+    expect(conversationGroupOf({ ...base, lastMessageDirection: "inbound" }, "outbound")).toBe("open");
+    expect(conversationGroupOf({ ...base, unread: true, lastMessageDirection: "outbound" })).toBe("waiting");
+  });
+
   it("keeps closed conversations closed whatever was said last", () => {
     expect(conversationGroupOf({ ...base, inboxStatus: "CLOSED" }, "inbound")).toBe("closed");
   });

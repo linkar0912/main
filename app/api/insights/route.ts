@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
-import type { AutomationRepository } from "@/src/lib/repository";
+import type { AutomationRecord, AutomationRepository } from "@/src/lib/repository";
+import { collectsEmail } from "@/src/lib/automation-analytics";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 
 export const runtime = "nodejs";
@@ -71,10 +72,20 @@ function minusFunnel(wide: FunnelCounts, recent: FunnelCounts): FunnelCounts {
  * "previous" figure is (twice the window) minus (the window), so one extra
  * query per measure answers both.
  */
-async function automationAnalytics(repository: AutomationRepository, workspaceId: string, automationId: string, days: number) {
+async function automationAnalytics(repository: AutomationRepository, workspaceId: string, automation: AutomationRecord, days: number) {
+    const automationId = automation.id;
     const since = windowStart(days);
     const sinceBefore = windowStart(days * 2);
-    const [participantsSeries, sentSeries, outcomesNow, outcomesWide, funnelNow, funnelWide, mediaNow, mediaWide] = await Promise.all([
+    // Email-capture automations also count people messaged, asked and
+    // captured; nothing else has those steps, so nothing else pays for them.
+    const capturing = collectsEmail(automation);
+    const [[captureNow, captureWide], participantsSeries, sentSeries, outcomesNow, outcomesWide, funnelNow, funnelWide, mediaNow, mediaWide] = await Promise.all([
+        capturing
+            ? Promise.all([
+                repository.countEmailCaptureFunnel(workspaceId, automationId, since),
+                repository.countEmailCaptureFunnel(workspaceId, automationId, sinceBefore),
+            ])
+            : Promise.resolve([null, null] as const),
         repository.countParticipantsPerDay(workspaceId, days * 2, automationId),
         repository.countExecutionsSentPerDay(workspaceId, days * 2, automationId),
         repository.countExecutionsByStatusPerAutomation(workspaceId, since),
@@ -101,11 +112,13 @@ async function automationAnalytics(repository: AutomationRepository, workspaceId
         journey: funnelNow,
         clicks,
         mediaPerformance: mediaNow.sort((a, b) => b.matched - a.matched).slice(0, 5),
+        capture: captureNow,
         previous: {
             sent: sent.previousTotal,
             reached: participants.previousTotal,
             failed: Math.max(0, outcomeWide.failed - outcome.failed),
             clicks: Math.max(0, clicksWide - clicks),
+            captured: captureNow && captureWide ? Math.max(0, captureWide.captured - captureNow.captured) : 0,
             journey: minusFunnel(funnelWide, funnelNow),
         },
     };
@@ -124,7 +137,9 @@ async function automationAnalytics(repository: AutomationRepository, workspaceId
 //              outcomes and the usage count, none of which the dashboard displays.
 //   automation - one automation's analytics (requires automationId): series,
 //              outcomes, funnel, clicks and top posts inside the window, with
-//              the previous window's totals. No workspace-wide contact totals.
+//              the previous window's totals; for email-capture automations
+//              also the people messaged, asked and captured (`capture`). No
+//              workspace-wide contact totals.
 //   (absent) - everything, for the full insights surface.
 export async function GET(request: Request) {
     const session = await getValidatedSession(request);
@@ -133,7 +148,8 @@ export async function GET(request: Request) {
     const repository = getRepository();
     const params = new URL(request.url).searchParams;
     const automationId = params.get("automationId") ?? undefined;
-    if (automationId && !await repository.getAutomation(session.workspaceId, automationId)) {
+    const automation = automationId ? await repository.getAutomation(session.workspaceId, automationId) : null;
+    if (automationId && !automation) {
         return NextResponse.json({ error: "Automation not found" }, { status: 404 });
     }
 
@@ -154,8 +170,8 @@ export async function GET(request: Request) {
         // One automation's analytics view (its Overview tab). Everything is
         // inside the chosen window, plus the window before it for the
         // "up 18% on the previous 7 days" lines.
-        if (!automationId) return NextResponse.json({ error: "automationId is required" }, { status: 400 });
-        return NextResponse.json(await automationAnalytics(repository, session.workspaceId, automationId, days));
+        if (!automation) return NextResponse.json({ error: "automationId is required" }, { status: 400 });
+        return NextResponse.json(await automationAnalytics(repository, session.workspaceId, automation, days));
     }
 
     if (include === "overview") {

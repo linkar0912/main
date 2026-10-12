@@ -702,6 +702,20 @@ model AutomationContact {
   // per-contact lookup. Cleared when retention deletes the underlying events.
   lastInboundAt           DateTime?
   lastInboundPreview      String?
+  // Latest message the workspace sent this person (an OutboundDelivery that
+  // reached SENT) and who spoke last, "INBOUND" or "OUTBOUND". Kept by
+  // database triggers on WebhookEvent and OutboundDelivery (migration
+  // 20261012130000_contact_last_message_direction) so the inbox keeps a
+  // conversation in "Waiting on you" across reloads.
+  lastOutboundAt          DateTime?
+  lastMessageDirection    String?
+  // Email capture attribution for per-automation analytics: the automation
+  // (id) that last asked this person for an email, and the one that captured
+  // it, with when.
+  emailRequestedAt        DateTime?
+  emailRequestedBy        String?
+  emailCapturedAt         DateTime?
+  emailCapturedBy         String?
   version                 Int                  @default(1)
   lastSeenAt              DateTime             @default(now())
   createdAt               DateTime             @default(now())
@@ -720,6 +734,8 @@ model AutomationContact {
   @@index([lastInboundAt])
   @@index([workspaceId, assigneeUserId], map: "AutomationContact_assigneeUserId_idx")
   @@index([workspaceId, leadStatus], map: "AutomationContact_leadStatus_idx")
+  @@index([workspaceId, emailRequestedBy, emailRequestedAt], map: "AutomationContact_emailRequestedBy_idx")
+  @@index([workspaceId, emailCapturedBy, emailCapturedAt], map: "AutomationContact_emailCapturedBy_idx")
 }
 
 // A timed drip campaign: ordered steps, each sent to enrolled contacts after a delay.

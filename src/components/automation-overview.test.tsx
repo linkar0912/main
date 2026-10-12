@@ -179,6 +179,47 @@ describe("AutomationOverview", () => {
     expect(posts.textContent).toContain("100 comments matched, 29 links sent, 12 clicks");
   });
 
+  it("shows emails collected and the message-to-email funnel for an email-capture automation", async () => {
+    const capture = automation({
+      definition: {
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+        conditions: [],
+        actions: [{ type: "send_text", text: "Here comes the guide" }],
+        emailCapture: { promptText: "What is your email?", confirmationText: "You are in" },
+      },
+    } as Partial<AutomationRecord>);
+    const calls = stubApi({
+      payload: (days) => analytics(days, {
+        capture: { messaged: 50, asked: 40, captured: 12 },
+        previous: { sent: 40, reached: 18, failed: 0, clicks: 0, captured: 6, journey: zeroJourney },
+      }),
+    });
+    render(<AutomationOverview automation={capture} />);
+
+    const figures = await screen.findByRole("list", { name: "Key numbers" });
+    await waitFor(() => expect(within(figures).getByText("Emails collected")).toBeTruthy());
+    const collected = within(figures).getByText("Emails collected").closest("[role=listitem]") as HTMLElement;
+    await waitFor(() => expect(within(collected).getByText("12")).toBeTruthy());
+    expect(collected.textContent).toContain("24% of people messaged");
+    expect(collected.textContent).toContain("Up 100% on the previous 14 days");
+    expect(within(figures).queryByText("Link clicks")).toBeNull();
+
+    const funnel = await screen.findByRole("list", { name: "Steps from message to email" });
+    const steps = within(funnel).getAllByRole("listitem").map((step) => step.querySelector(".auto-funnel-label")?.textContent);
+    expect(steps).toEqual(["Messaged", "Asked for email", "Gave email"]);
+    expect(funnel.textContent).toContain("80% kept");
+    expect(funnel.textContent).toContain("30% kept");
+    expect(screen.getByRole("region", { name: "From message to email" }).textContent).toContain("in the last 14 days");
+    // Not a campaign: no comment-to-link funnel or top posts.
+    expect(screen.queryByRole("region", { name: "Top posts" })).toBeNull();
+
+    // The 7 / 14 / 30 switch re-asks for the same numbers in the new window.
+    fireEvent.click(screen.getByRole("button", { name: "7 days" }));
+    await waitFor(() => expect(calls).toContain("/api/insights?include=automation&automationId=auto_1&days=7"));
+    expect(await screen.findByText(/in the last 7 days, how many it asked/)).toBeTruthy();
+  });
+
   it("leaves out the follow step when the campaign doesn't ask people to follow", async () => {
     stubApi({ payload: (days) => analytics(days, { journey: { commented: 10, openingSent: 9, optedIn: 8, followed: 0, linkSent: 8 }, clicks: 2 }) });
     render(<AutomationOverview automation={campaign(false)} />);

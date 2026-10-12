@@ -6,6 +6,8 @@ export type InboxContact = {
   lastMessageAt: string;
   canMessage: boolean;
   unread: boolean;
+  /** Who spoke last, from the server; absent when no history is left to tell. */
+  lastMessageDirection?: "inbound" | "outbound";
   leadStatus: "NEW" | "ENGAGED" | "QUALIFIED" | "CUSTOMER";
   tags: string[];
   inboxStatus: "OPEN" | "CLOSED";

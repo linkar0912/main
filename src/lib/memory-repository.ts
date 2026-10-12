@@ -308,7 +308,8 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     async updateMemberRole(workspaceId, email, role: MemberRole) {
       const key = `${workspaceId}:${email.toLowerCase()}`;
       const member = membersByEmail.get(key);
-      if (!member) return false;
+      // As in Postgres: the owner's seat never changes here.
+      if (!member || member.role === "OWNER") return false;
       membersByEmail.set(key, { ...member, role });
       return true;
     },
@@ -1693,13 +1694,15 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         awaitingAutomationId: automationId,
         awaitingSince: atIso,
         attempts: 0,
+        emailRequestedBy: automationId,
+        emailRequestedAt: atIso,
         updatedAt: now(),
       };
       contacts.set(id, updated);
       return copy(updated);
     },
 
-    async captureContactEmail(workspaceId, instagramAccountId, igScopedUserId, email, atIso) {
+    async captureContactEmail(workspaceId, instagramAccountId, igScopedUserId, email, atIso, automationId) {
       const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
       if (!id) throw new Error("Contact not found");
       const current = contacts.get(id)!;
@@ -1715,6 +1718,11 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         tags: current.tags.includes("email_captured") ? current.tags : [...current.tags, "email_captured"],
         score: Math.min(current.score + 10, 9999),
         lastSeenAt: atIso > current.lastSeenAt ? atIso : current.lastSeenAt,
+        ...(automationId ? {
+          emailCapturedBy: automationId,
+          emailCapturedAt: atIso,
+          ...(current.emailRequestedBy === automationId ? {} : { emailRequestedBy: automationId, emailRequestedAt: atIso }),
+        } : {}),
         updatedAt: now(),
       };
       contacts.set(id, updated);
@@ -1803,6 +1811,23 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return [...contacts.values()].filter(
         (contact) => contact.workspaceId === workspaceId && contact.state === "CAPTURED" && Boolean(contact.email),
       ).length;
+    },
+
+    async countEmailCaptureFunnel(workspaceId, automationId, sinceIso) {
+      const recipients = new Set([...outboundDeliveries.values()]
+        .filter((delivery) => delivery.workspaceId === workspaceId
+          && delivery.kind === "CLASSIC_ACTION"
+          && delivery.automationId === automationId
+          && delivery.state === "SENT"
+          && delivery.recipientId
+          && delivery.createdAt >= sinceIso)
+        .map((delivery) => delivery.recipientId));
+      const own = [...contacts.values()].filter((contact) => contact.workspaceId === workspaceId);
+      return {
+        messaged: recipients.size,
+        asked: own.filter((contact) => contact.emailRequestedBy === automationId && (contact.emailRequestedAt ?? "") >= sinceIso).length,
+        captured: own.filter((contact) => contact.emailCapturedBy === automationId && (contact.emailCapturedAt ?? "") >= sinceIso).length,
+      };
     },
 
     async listCapturedContacts(workspaceId, limit): Promise<CapturedContactSummary[]> {
@@ -1971,7 +1996,29 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           const text = typeof latest?.payload.text === "string" && latest.payload.text.trim()
             ? latest.payload.text.trim()
             : latest ? describeInboundWithoutText(latest.eventType, latest.payload.attachmentType) : "No messages yet";
-          return { record: copy(record), preview: text, ...(latestInboundAt ? { latestInboundAt } : {}), unread };
+          // Mirrors AutomationContact.lastOutboundAt / lastMessageDirection,
+          // which Postgres keeps with triggers on WebhookEvent and on
+          // OutboundDelivery reaching SENT (lead emails/webhooks excluded).
+          const lastOutboundAt = [...outboundDeliveries.values()]
+            .filter((delivery) => delivery.workspaceId === workspaceId
+              && delivery.state === "SENT"
+              && delivery.kind !== "LEAD_EMAIL"
+              && delivery.kind !== "LEAD_WEBHOOK"
+              && delivery.instagramAccountId === record.instagramAccountId
+              && delivery.recipientId === record.igScopedUserId)
+            .map((delivery) => delivery.sentAt ?? delivery.updatedAt)
+            .sort()
+            .at(-1);
+          const lastMessageDirection = lastOutboundAt && (!latestInboundAt || lastOutboundAt >= latestInboundAt)
+            ? "OUTBOUND" as const
+            : latestInboundAt ? "INBOUND" as const : undefined;
+          return {
+            record: copy(record),
+            preview: text,
+            ...(latestInboundAt ? { latestInboundAt } : {}),
+            unread,
+            ...(lastMessageDirection ? { lastMessageDirection } : {}),
+          };
         });
       const normalizedQuery = query.query?.trim().toLowerCase();
       const filtered = rows.filter((row) => {

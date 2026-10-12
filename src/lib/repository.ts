@@ -368,10 +368,19 @@ export type AutomationContactRecord = {
   inboxFavorite: boolean;
   inboxReminderAt?: string;
   inboxLastReadAt?: string;
+  /** Automation that last asked this person for an email, and when. */
+  emailRequestedBy?: string;
+  emailRequestedAt?: string;
+  /** Automation that captured this person's email, and when. */
+  emailCapturedBy?: string;
+  emailCapturedAt?: string;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
 };
+
+/** One email-capture automation's funnel, in people. */
+export type EmailCaptureFunnelCounts = { messaged: number; asked: number; captured: number };
 
 export type InboxContactSort = "newest" | "oldest" | "unread";
 export type InboxContactQuery = {
@@ -393,6 +402,11 @@ export type InboxContactRow = {
   preview: string;
   latestInboundAt?: string;
   unread: boolean;
+  /**
+   * Who spoke last: the person (INBOUND) or the workspace, by hand or by an
+   * automation (OUTBOUND). Undefined when no history is left to tell.
+   */
+  lastMessageDirection?: "INBOUND" | "OUTBOUND";
 };
 export type InboxContactPage = { rows: InboxContactRow[]; nextCursor?: string };
 
@@ -1100,12 +1114,14 @@ export interface AutomationRepository {
     automationId: string,
     atIso: string,
   ): Promise<AutomationContactRecord>;
+  /** Stores the email; `automationId` records which automation captured it (per-automation analytics). */
   captureContactEmail(
     workspaceId: string,
     instagramAccountId: string,
     igScopedUserId: string,
     email: string,
     atIso: string,
+    automationId?: string,
   ): Promise<AutomationContactRecord>;
   /** Records one invalid reply; returns the updated attempts count. */
   bumpContactEmailAttempt(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<number>;
@@ -1136,6 +1152,12 @@ export interface AutomationRepository {
     atIso: string,
   ): Promise<AutomationContactRecord | null>;
   countCapturedContacts(workspaceId: string): Promise<number>;
+  /**
+   * One email-capture automation since `sinceIso`, in people: who it messaged
+   * (distinct recipients of its sent replies), who it asked for an email, and
+   * whose email it captured.
+   */
+  countEmailCaptureFunnel(workspaceId: string, automationId: string, sinceIso: string): Promise<EmailCaptureFunnelCounts>;
   listCapturedContacts(workspaceId: string, limit: number): Promise<CapturedContactSummary[]>;
   countSuppressedContacts(workspaceId: string): Promise<number>;
   // Contact engagement: tags, score, and timeline.

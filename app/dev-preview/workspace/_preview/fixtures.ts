@@ -169,10 +169,10 @@ function facebookHealth(scenario: PreviewScenario) {
 
 function teamOverview(scenario: PreviewScenario) {
   if (scenario === "empty") {
-    return { members: [{ email: OWNER_EMAIL, role: "OWNER" }], invitations: [] };
+    return { members: [{ id: "member_owner", email: OWNER_EMAIL, role: "OWNER" }], invitations: [] };
   }
   return {
-    members: MEMBERS.map(({ email, role }) => ({ email, role })),
+    members: MEMBERS.map(({ userId, email, role }) => ({ id: `member_${userId}`, email, role })),
     invitations: [{ id: "inv_arjun", email: "arjun.m@studiokavya.in", role: "MEMBER", expiresAt: ahead(5 * DAY) }],
   };
 }
@@ -391,13 +391,13 @@ const SENT_60 = history(SENT_14);
 const REACHED_60 = history(REACHED_14);
 
 /** Share of the workspace's replies each automation sent (per-automation filter and table). */
-const AUTOMATION_SHARE: Record<string, { share: number; failRate: number; campaign?: boolean }> = {
+const AUTOMATION_SHARE: Record<string, { share: number; failRate: number; campaign?: boolean; capture?: boolean }> = {
   auto_price_list: { share: 0.38, failRate: 0.012 },
   auto_welcome_dm: { share: 0.22, failRate: 0.004 },
   auto_story_thanks: { share: 0.16, failRate: 0 },
   auto_diwali_sale: { share: 0.15, failRate: 0.021, campaign: true },
   auto_fb_details: { share: 0.06, failRate: 0.008 },
-  auto_kurta_waitlist: { share: 0.03, failRate: 0.05 },
+  auto_kurta_waitlist: { share: 0.03, failRate: 0.05, capture: true },
 };
 
 function windowDays(url: URL): number {
@@ -493,6 +493,13 @@ function automationAnalytics(scenario: PreviewScenario, url: URL) {
   const journey = funnelFor(campaign ? Math.round(reached.current.reduce((total, point) => total + point.count, 0) * 1.6) : 0);
   const previousJourney = funnelFor(campaign ? Math.round(reached.previous * 1.6) : 0);
   const clicksFor = (linkSent: number) => Math.round(linkSent * 0.41);
+  // Email-capture automations: people messaged, asked for an email, and who gave one.
+  const captureFor = (sentCount: number) => {
+    const messaged = Math.round(sentCount * 0.8);
+    const asked = Math.round(messaged * 0.86);
+    return { messaged, asked, captured: Math.round(asked * 0.38) };
+  };
+  const capture = share?.capture ? captureFor(windowSent) : null;
   const posts = campaign ? [
     { mediaId: "18101928374650011", weight: 0.46, clickRate: 0.4 },
     { mediaId: "18042217893305561", weight: 0.27, clickRate: 0.33 },
@@ -509,11 +516,13 @@ function automationAnalytics(scenario: PreviewScenario, url: URL) {
     journey,
     clicks: clicksFor(journey.linkSent),
     mediaPerformance: posts,
+    capture,
     previous: {
       sent: sent.previous,
       reached: reached.previous,
       failed: Math.round(sent.previous * (share?.failRate ?? 0)),
       clicks: clicksFor(previousJourney.linkSent),
+      captured: share?.capture ? captureFor(sent.previous).captured : 0,
       journey: previousJourney,
     },
   };
@@ -792,6 +801,7 @@ function inboxContacts(scenario: PreviewScenario) {
       lastMessageAt: ago(last[2] * MINUTE, now),
       canMessage: minutesSinceInbound < 24 * 60,
       unread: last[0] === "inbound" && last[2] < 6 * 60,
+      lastMessageDirection: last[0],
       leadStatus: contact.leadStatus,
       tags: contact.tags,
       inboxStatus: id === "ct_ishita" ? "CLOSED" : "OPEN",
@@ -1182,6 +1192,8 @@ export function answer(method: string, url: URL, requested: PreviewScenario, raw
     return json({ invitation: { id: `inv_${Date.now()}`, email: body.email, role: body.role ?? "MEMBER", expiresAt: ahead(7 * DAY) } }, 201);
   }
   if (path === "/api/team/invitations" && verb === "DELETE") return json({ revoked: true });
+  const memberMatch = /^\/api\/team\/members\/([^/]+)$/.exec(path);
+  if (memberMatch && verb === "PATCH") return json({ member: { id: memberMatch[1], role: body.role } });
   if (path === "/api/help/analytics" && verb === "POST") return json({ ok: true });
   if ((path === "/api/sequences" || /^\/api\/sequences\/[^/]+$/.test(path)) && verb !== "DELETE") {
     return json({ data: { id: `seq_${Date.now()}`, status: "DRAFT", enrolledCount: 0, steps: [], ...body } });

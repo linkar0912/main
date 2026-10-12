@@ -237,6 +237,9 @@ describe("runner: conversation triggers end to end", () => {
 
     const contact = await repository.getContact("workspace_a", "ig_1", "person_1");
     expect(contact?.state).toBe("AWAITING_EMAIL");
+    expect(contact?.emailRequestedBy).toBe("automation_0");
+    const since = "2000-01-01T00:00:00.000Z";
+    expect(await repository.countEmailCaptureFunnel("workspace_a", "automation_0", since)).toEqual({ messaged: 1, asked: 1, captured: 0 });
 
     const reply = await processNormalizedEvent(messageEvent({ id: "c2", text: "me@Example.COM" }), repository, { client, tokenEncryptionKey: TOKEN_KEY });
     expect(reply).toEqual({ matched: 1, sent: 1, skipped: 0, failed: 0 });
@@ -245,6 +248,12 @@ describe("runner: conversation triggers end to end", () => {
     expect(stored?.state).toBe("CAPTURED");
     expect(stored?.email).toBe("me@example.com");
     expect(await repository.countCapturedContacts("workspace_a")).toBe(1);
+    // Countable per automation, after the wait (awaitingAutomationId) is cleared.
+    expect(stored?.awaitingAutomationId).toBeUndefined();
+    expect(stored?.emailCapturedBy).toBe("automation_0");
+    expect(await repository.countEmailCaptureFunnel("workspace_a", "automation_0", since)).toEqual({ messaged: 1, asked: 1, captured: 1 });
+    expect(await repository.countEmailCaptureFunnel("workspace_a", "automation_other", since)).toEqual({ messaged: 0, asked: 0, captured: 0 });
+    expect(await repository.countEmailCaptureFunnel("workspace_a", "automation_0", new Date(Date.now() + 60_000).toISOString())).toEqual({ messaged: 0, asked: 0, captured: 0 });
   });
 
   it("retries the confirmation without replaying the original automation", async () => {
@@ -335,6 +344,8 @@ describe("runner: conversation triggers end to end", () => {
     const stored = await repository.getContact("workspace_a", "ig_1", "person_1");
     expect(stored?.state).toBe("CAPTURED");
     expect(stored?.email).toBe("me@example.com");
+    // Sent before being asked: counts as asked and answered at once.
+    expect(await repository.countEmailCaptureFunnel("workspace_a", "automation_0", "2000-01-01T00:00:00.000Z")).toEqual({ messaged: 1, asked: 1, captured: 1 });
   });
 
   it("retries contact finalization without resending already delivered actions", async () => {

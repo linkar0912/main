@@ -167,7 +167,7 @@ function facebookActivity() {
 
 function team() {
   return {
-    members: MEMBERS.map(({ email, role }) => ({ email, role })),
+    members: MEMBERS.map(({ userId, email, role }) => ({ id: `member_${userId}`, email, role })),
     invitations: [
       { id: "inv_long", email: "a.very.long.invitation.address.for.the.festive.team@studiokavyaboutique.co.in", role: "ADMIN", expiresAt: ago(-6 * DAY) },
       { id: "inv_short", email: "arjun@studiokavya.in", role: "MEMBER", expiresAt: ago(-2 * DAY) },
