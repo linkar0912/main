@@ -81,7 +81,7 @@ export async function GET(request: Request) {
   const needsProfileEnrichment = !parsed.data.enrich && Boolean(env.metaTokenEncryptionKey)
     && identities.some((identity) => !usernames.has(instagramIdentityKey(identity)));
   return NextResponse.json({ data: {
-    contacts: page.rows.map(({ record, preview, latestInboundAt, unread }) => ({
+    contacts: page.rows.map(({ record, preview, latestInboundAt, unread, lastMessageDirection }) => ({
       id: record.id,
       username: usernames.get(instagramIdentityKey(record)),
       avatarUrl: hasCachedInstagramAvatar(record, env.metaApiVersion) ? `/api/contacts/${record.id}/avatar` : "",
@@ -89,6 +89,9 @@ export async function GET(request: Request) {
       lastMessageAt: latestInboundAt ?? record.lastSeenAt,
       canMessage: isWithinMessagingWindow(latestInboundAt),
       unread,
+      // Who spoke last, so a read but unanswered conversation stays in
+      // "Waiting on you" after a reload.
+      ...(lastMessageDirection ? { lastMessageDirection: lastMessageDirection === "INBOUND" ? "inbound" : "outbound" } : {}),
       leadStatus: record.leadStatus,
       tags: record.tags,
       inboxStatus: record.inboxStatus,

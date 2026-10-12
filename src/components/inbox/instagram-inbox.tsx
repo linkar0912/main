@@ -295,10 +295,6 @@ export function InstagramInbox() {
   // Screen readers hear only newly arrived inbound messages, not every
   // re-render of the thread (sends, status changes, loading earlier pages).
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
-  // Who spoke last in threads opened during this visit (the list API only
-  // knows the latest inbound message); keeps a read-but-unanswered
-  // conversation in "Waiting on you".
-  const [knownSpeakers, setKnownSpeakers] = useState<Record<string, InboxMessage["direction"]>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<ConversationGroupKey>>(() => new Set());
   // "Reply" on a row opens the thread with the cursor already in the composer.
   const focusComposerRef = useRef(false);
@@ -451,16 +447,12 @@ export function InstagramInbox() {
   const groups = useMemo(() => groupMessages(messages), [messages]);
   const filtersActive = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
   const openSpeaker = selectedId ? lastSpeaker(messages) : undefined;
+  // The open thread knows who spoke last before the list does (a reply that
+  // is still sending); every other row uses the server's lastMessageDirection.
   const conversationGroups = useMemo(
-    () => groupConversations(contacts, (contactId) => (contactId === selectedId ? openSpeaker : undefined) ?? knownSpeakers[contactId]),
-    [contacts, knownSpeakers, openSpeaker, selectedId],
+    () => groupConversations(contacts, (contactId) => (contactId === selectedId ? openSpeaker : undefined)),
+    [contacts, openSpeaker, selectedId],
   );
-
-  /** Remembers who spoke last in the thread being left, for its group. */
-  function rememberOpenSpeaker() {
-    if (!selectedId || !openSpeaker || knownSpeakers[selectedId] === openSpeaker) return;
-    setKnownSpeakers((current) => ({ ...current, [selectedId]: openSpeaker }));
-  }
 
   function toggleGroup(key: ConversationGroupKey) {
     setCollapsedGroups((current) => {
@@ -473,6 +465,14 @@ export function InstagramInbox() {
   function updateContact(contactId: string, update: (contact: InboxContact) => InboxContact) {
     setContacts((current) => current.map((contact) => contact.id === contactId ? update(contact) : contact));
     return mutateInboxCache(filters, contactId, update);
+  }
+
+  /** Carries who spoke last in the thread being left onto its row, until the next list refresh. */
+  function rememberOpenSpeaker() {
+    if (!selectedId || !openSpeaker) return;
+    const contact = contacts.find((candidate) => candidate.id === selectedId);
+    if (!contact || contact.lastMessageDirection === openSpeaker) return;
+    updateContact(selectedId, (current) => ({ ...current, lastMessageDirection: openSpeaker }));
   }
 
   async function patchContact(contactId: string, operation: InboxOperation | { action: "mark_read" }) {
@@ -650,6 +650,7 @@ export function InstagramInbox() {
         ...contact,
         preview: pending.text,
         lastMessageAt: sent.at,
+        lastMessageDirection: "outbound",
         inboxStatus: "OPEN",
         ...(pausedUntil ? { automationsPausedUntil: pausedUntil } : {}),
       }));

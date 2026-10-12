@@ -48,6 +48,32 @@ describe("GET /api/inbox", () => {
     expect(listConnections).not.toHaveBeenCalled();
   });
 
+  it("says who spoke last, so a read but unanswered conversation still waits after a reload", async () => {
+    const row = (id: string, lastMessageDirection?: "INBOUND" | "OUTBOUND") => ({
+      record: {
+        id, workspaceId: "workspace_1", instagramAccountId: "ig_1", igScopedUserId: id,
+        state: "NONE", attempts: 0, tags: [], score: 0, leadStatus: "NEW", inboxStatus: "OPEN", inboxFavorite: false,
+        lastSeenAt: "2026-09-04T10:00:00.000Z", createdAt: "2026-09-04T10:00:00.000Z", updatedAt: "2026-09-04T10:00:00.000Z",
+      },
+      preview: "hello",
+      latestInboundAt: "2026-09-04T10:00:00.000Z",
+      unread: false,
+      ...(lastMessageDirection ? { lastMessageDirection } : {}),
+    });
+    mocks.getRepository.mockReturnValue({
+      listInboxContacts: vi.fn().mockResolvedValue({ rows: [row("waiting", "INBOUND"), row("answered", "OUTBOUND"), row("unknown")] }),
+      listMembers: vi.fn().mockResolvedValue([]),
+    });
+
+    const contacts = (await (await GET(new Request("http://localhost/api/inbox"))).json()).data.contacts as Array<{ id: string; lastMessageDirection?: string }>;
+
+    expect(contacts.map((contact) => [contact.id, contact.lastMessageDirection])).toEqual([
+      ["waiting", "inbound"],
+      ["answered", "outbound"],
+      ["unknown", undefined],
+    ]);
+  });
+
   it("falls back to the un-enriched page when username enrichment fails", async () => {
     mocks.env = { metaApiVersion: "v25.0", metaTokenEncryptionKey: "key" };
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);

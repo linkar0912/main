@@ -344,6 +344,19 @@ describe("InstagramInbox", () => {
     expect(await screen.findByText("Sent")).toBeTruthy();
   });
 
+  it("still puts a read conversation the person spoke last in Waiting on you after a reload", async () => {
+    // A fresh page load: nothing opened in this visit, only what the list API says.
+    const readWaiting = { ...aanya, unread: false, lastMessageDirection: "inbound" };
+    const answered = { ...arjun, lastMessageDirection: "outbound" };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { contacts: [readWaiting, answered], members: [] } }), { status: 200 })));
+    render(<InstagramInbox />);
+
+    const waiting = await screen.findByRole("list", { name: "Waiting on you" });
+    expect(within(waiting).getByRole("button", { name: /open conversation with @aanya/i })).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "Open" })).getByRole("button", { name: /open conversation with @arjun/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reply to @aanya" })).toBeTruthy();
+  });
+
   it("reopens a closed conversation from its row", async () => {
     const closed = { ...arjun, inboxStatus: "CLOSED" };
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => String(input) === "/api/inbox" && !init?.method
