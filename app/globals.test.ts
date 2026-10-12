@@ -304,7 +304,7 @@ describe("workspace palette contract", () => {
 // reference) - a white tile: the panel colour with a hairline and a very soft
 // shadow. The only fills a state may use are solid ink/accent (switch thumbs,
 // toggles, primary buttons), the panel colour, or that tile.
-describe("selection style: the brand tint, never a grey fill", () => {
+describe("selection style: ink, never a grey fill", () => {
   const rules = (css.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+{[^{}]*}/g) ?? []).map((rule) => {
     const [selector, body] = rule.split("{");
     return { selector: selector.trim().replace(/\s+/g, " "), body };
@@ -318,7 +318,7 @@ describe("selection style: the brand tint, never a grey fill", () => {
   const tileOwner = /(\.nav-item|\.sidebar-link|\.settings-nav-link|\.section-nav-link|\.template-picker-category|\.prefs-nav-item|\.menu-item|\.account-menu-item|\.admin-menu-list > button|\.palette-option)\b/;
   // The brand selection tokens (soft magenta tint, hover wash, solid mark) are
   // fine on any selected, on or hovered state; neutral greys never are.
-  const brandToken = /^(var\(--select-(tile-bg|thumb-bg|hover-bg|mark)\)|color-mix\(in srgb, var\(--accent-soft\) \d+%, transparent\))$/;
+  const brandToken = /^var\(--select-(tile-bg|thumb-bg|hover-bg|mark|focus-bg)\)$/;
   // Splits a selector list at its top-level commas (not inside :is() / :not()).
   const selectorList = (selector: string) => {
     const parts: string[] = [];
@@ -368,19 +368,22 @@ describe("selection style: the brand tint, never a grey fill", () => {
     expect(css).not.toMatch(/--nav-active-fill/);
   });
 
-  it("draws the tile in the brand tint with a magenta hairline and icon, never a grey token", () => {
+  it("draws selection in ink: a solid ink tile with panel-coloured text, an ink thumb, ink marks, and a hairline on hover", () => {
     const root = css.match(/:root\s*{[^}]*--select-tile-bg[^}]*}/)?.[0] ?? "";
-    expect(root).toMatch(/--select-tile-bg:\s*var\(--accent-soft\)/);
-    expect(root).toMatch(/--select-tile-line:\s*var\(--accent-line\)/);
+    expect(root).toMatch(/--select-tile-bg:\s*var\(--ink\)/);
+    expect(root).toMatch(/--select-tile-text:\s*var\(--panel\)/);
     expect(root).toMatch(/--select-tile-radius:\s*10px/);
-    expect(root).toMatch(/--select-thumb-bg:\s*var\(--accent-soft\)/);
-    expect(root).toMatch(/--select-thumb-text:\s*var\(--accent-text\)/);
-    expect(root).toMatch(/--select-icon:\s*var\(--accent-hover\)/);
-    expect(root).toMatch(/--select-hover-bg:\s*color-mix\(in srgb, var\(--accent-soft\) \d+%, transparent\)/);
-    // Dark mode picks up the dark-theme tint and the lighter magenta.
-    const dark = css.match(/\[data-theme="dark"\]\s*{[^}]*--select-icon[^}]*}/)?.[0] ?? "";
-    expect(dark).toMatch(/--select-icon:\s*var\(--accent-text\)/);
-    expect(css).not.toMatch(/--select-(tile|thumb|hover)-bg:\s*var\(--(surface-soft|surface-sunk|line|panel)/);
+    expect(root).toMatch(/--select-icon:\s*var\(--panel\)/);
+    expect(root).toMatch(/--select-thumb-bg:\s*var\(--ink\)/);
+    expect(root).toMatch(/--select-thumb-text:\s*var\(--panel\)/);
+    expect(root).toMatch(/--select-mark:\s*var\(--ink\)/);
+    expect(root).toMatch(/--select-hover-bg:\s*transparent/);
+    expect(root).toMatch(/--select-hover-line:\s*var\(--line-strong\)/);
+    expect(root).toMatch(/--select-focus-bg:\s*var\(--panel\)/);
+    // No tints and no greys on any selection token.
+    expect(css).not.toMatch(/--select-(tile|thumb|hover|focus)-bg:\s*var\(--(surface-soft|surface-sunk|line|accent-soft)/);
+    // Hover is a hairline, not a fill.
+    expect(css).toMatch(/:not\(\.is-active,[^{]*\):hover\s*{\s*background:\s*transparent;[^}]*box-shadow:\s*inset 0 0 0 1px var\(--select-hover-line\)/);
   });
 
   it("paints sliding indicators from the brand tokens; vertical navs slide the tile", () => {
@@ -418,13 +421,13 @@ describe("selection style: the brand tint, never a grey fill", () => {
 
   it("puts the menu and palette keyboard focus on the tile with a hairline that reads", () => {
     expect(css).toMatch(/--select-tile-focus-line:\s*color-mix\(in srgb, var\(--ink\) [4-9]\d%, var\(--panel\)\)/);
-    expect(css).toMatch(/:is\(\.menu-item, \.account-menu-item, \.admin-menu-list > button\):focus-visible:not\(:disabled\)\s*{[^}]*background:\s*var\(--select-tile-bg\)[^}]*var\(--select-tile-focus-line\)/);
-    expect(css).toMatch(/\.palette-option\[aria-selected="true"\]\s*{[^}]*background:\s*var\(--select-tile-bg\)/);
+    expect(css).toMatch(/:is\(\.menu-item, \.account-menu-item, \.admin-menu-list > button\):focus-visible:not\(:disabled\)\s*{[^}]*background:\s*var\(--select-focus-bg\)[^}]*var\(--select-tile-focus-line\)/);
+    expect(css).toMatch(/\.palette-option\[aria-selected="true"\]\s*{[^}]*background:\s*var\(--select-focus-bg\)/);
     expect(css).not.toMatch(/\.palette-option\[aria-selected="true"\]::before/);
   });
 
-  it("underlines horizontal tabs in magenta and outlines chosen cards", () => {
-    expect(css).toMatch(/:root\s*{[^}]*--select-line:\s*var\(--accent-hover\)/);
+  it("underlines horizontal tabs in ink and outlines chosen cards", () => {
+    expect(css).toMatch(/:root\s*{[^}]*--select-line:\s*var\(--ink\)/);
     expect(css).toMatch(/\.tab-underline > :is\(\.is-active,[^)]*\)\s*{[^}]*color:\s*var\(--ink\)[^}]*font-weight:\s*700/);
     expect(css).toMatch(/\.select-outline:is\(\.is-selected,[^{]*{[^}]*background:\s*var\(--panel\)[^}]*border-color:\s*var\(--select-line\)/);
     expect(css).toMatch(/\.select-rail:is\(\.is-selected,[^{]*{[^}]*box-shadow:\s*inset var\(--select-bar-w\) 0 0 var\(--select-bar\)/);

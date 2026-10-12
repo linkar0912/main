@@ -8890,36 +8890,35 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
   --select-bar: var(--accent);
   --select-bar-w: 3px;
   --select-bar-h: 20px;
-  /* Underlines and selected-card outlines: the deeper magenta, which keeps 3:1
-     against the panel where the bright accent would not. */
-  --select-line: var(--accent-hover);
-  /* The brand tile: vertical-nav selection, the segmented thumb and keyboard
-     focus in menus - a soft magenta tint with a magenta hairline. Text on it
-     stays ink (AA); the icon carries the colour. */
-  --select-tile-bg: var(--accent-soft);
-  --select-tile-line: var(--accent-line);
-  --select-tile-shadow: 0 1px 2px rgba(var(--accent-rgb), .12);
+  /* Selection is ink (owner's choice, round 7): the selected nav item is a
+     solid ink tile with panel-coloured text and icon, the segmented thumb is
+     ink, tabs get an ink underline, chosen cards an ink outline, and "on"
+     marks (switch tracks, radio dots, ticks, the current step) are ink.
+     Ink and panel swap in dark mode, so the tile turns light there. Hover on
+     anything not selected is a hairline outline - never a fill. */
+  --select-line: var(--ink);
+  --select-tile-bg: var(--ink);
+  --select-tile-line: var(--ink);
+  --select-tile-shadow: none;
+  --select-tile-text: var(--panel);
   --select-tile-radius: 10px;
-  --select-icon: var(--accent-hover);
-  --select-thumb-bg: var(--accent-soft);
-  --select-thumb-text: var(--accent-text);
-  /* Hover on anything not selected: a faint wash of the same tint. */
-  --select-hover-bg: color-mix(in srgb, var(--accent-soft) 55%, transparent);
-  /* Solid marks for "on" and "chosen": switch tracks, radio dots, ticks, the
-     current step. The deeper magenta keeps white text and icons at AA. */
-  --select-mark: var(--accent-hover);
-  --select-mark-text: #ffffff;
+  --select-icon: var(--panel);
+  --select-thumb-bg: var(--ink);
+  --select-thumb-text: var(--panel);
+  --select-hover-bg: transparent;
+  --select-hover-line: var(--line-strong);
+  --select-mark: var(--ink);
+  --select-mark-text: var(--panel);
+  /* Menus and the ⌘K palette mark the keyboard's place with a light tile and
+     a focus hairline, so their ink text stays readable. */
+  --select-focus-bg: var(--panel);
   /* Keyboard focus on a tile needs a hairline that reads (3:1 on the panel). */
   --select-tile-focus-line: color-mix(in srgb, var(--ink) 50%, var(--panel));
 }
-/* Dark: the dark-theme magenta tint, line and lighter magenta text. */
+/* Dark: ink and panel swap, so the tile, thumb and marks turn light with
+   dark text on their own; the focus tile is raised slightly off the panel. */
 [data-theme="dark"] {
-  --select-line: var(--accent-text);
-  --select-tile-shadow: none;
-  --select-icon: var(--accent-text);
-  --select-hover-bg: color-mix(in srgb, var(--accent-soft) 60%, transparent);
-  --select-mark: var(--accent-text);
-  --select-mark-text: #101116;
+  --select-focus-bg: color-mix(in srgb, var(--panel) 92%, white);
 }
 
 /* Vertical navigation: items stay transparent; the tile behind the selected
@@ -9037,7 +9036,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 :is(.menu-item, .account-menu-item, .admin-menu-list > button):hover:not(:disabled),
 :is(.menu-item, .account-menu-item, .admin-menu-list > button):hover:not(:disabled) svg { background: transparent; color: var(--ink); }
 :is(.menu-item, .account-menu-item, .admin-menu-list > button):focus-visible:not(:disabled) {
-  background: var(--select-tile-bg);
+  background: var(--select-focus-bg);
   box-shadow: inset 0 0 0 1px var(--select-tile-focus-line), var(--select-tile-shadow);
   color: var(--ink);
   outline: none;
@@ -9346,7 +9345,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 /* The highlighted row (the keyboard's place in the list) is the white tile
    with the focus hairline: ink text, no grey fill, no magenta bar. */
 .palette-option[aria-selected="true"] {
-  background: var(--select-tile-bg);
+  background: var(--select-focus-bg);
   box-shadow: inset 0 0 0 1px var(--select-tile-focus-line), var(--select-tile-shadow);
   color: var(--ink);
 }
@@ -10804,26 +10803,38 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
   .prefs-row .text-link { display: inline-flex; align-items: center; min-height: 44px; }
 }
 
-/* === Round 6: brand selection === */
-/* Selection and hover carry the brand instead of black and white. One set of
-   tokens drives every switch:
-     vertical navs (sidebar, Settings, Help, owner console, template
-     categories) - a soft magenta tile with a magenta hairline and icon;
-     segmented switches - the same soft magenta thumb with magenta text;
-     underline tabs - a magenta underline;
-     hover on anything not selected - a faint magenta wash.
-   Text stays ink (AA on the soft tint in both themes); the icon carries the
-   colour. */
-/* Vertical navs */
-:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) svg { color: var(--select-icon); }
-:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item):not(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]):hover {
-  background: var(--select-hover-bg);
-  border-radius: var(--select-tile-radius);
+/* === Round 6: selection (ink) === */
+/* One set of selection tokens drives every switch (see :root): an ink tile
+   behind the selected nav item with panel-coloured text and icon, an ink
+   segmented thumb, ink underlines, outlines and marks. Hover on anything not
+   selected draws a hairline outline. Text colour changes over the same time
+   the tile glides, so a label never turns light before the tile reaches it. */
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item),
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item) svg {
+  transition: color var(--dur-3) var(--ease-emph), box-shadow var(--dur-1) var(--ease-out);
 }
-:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item):hover svg { color: var(--select-icon); }
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]),
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]):hover,
+.sidebar-link.is-active,
+.sidebar-link.is-active:hover,
+[data-theme="dark"] .sidebar-link.is-active,
+.template-picker .template-picker-category:is(.is-active, [aria-pressed="true"]),
+.prefs:not([data-view="index"]) .prefs-nav-item.is-active { color: var(--select-tile-text); }
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) svg,
+[data-theme="dark"] .sidebar-link.is-active svg,
 .template-picker .template-picker-category:is(.is-active, [aria-pressed="true"]) svg,
-.template-picker .template-picker-category:hover svg { color: var(--select-icon); }
-.template-picker .template-picker-category:not(.is-active, [aria-pressed="true"]):hover { background: var(--select-hover-bg); }
+.prefs:not([data-view="index"]) .prefs-nav-item.is-active svg { color: var(--select-icon); }
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) :is(.nav-item-count, .template-picker-count, .tab-count),
+.template-picker .template-picker-category:is(.is-active, [aria-pressed="true"]) .template-picker-count,
+.prefs:not([data-view="index"]) .prefs-nav-item.is-active .prefs-nav-count { color: var(--select-tile-text); opacity: .72; }
+/* Hover on items that are not selected: ink text and icon, a hairline tile. */
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item):not(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]):hover {
+  background: transparent;
+  border-radius: var(--select-tile-radius);
+  box-shadow: inset 0 0 0 1px var(--select-hover-line);
+  color: var(--ink);
+}
+:is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item):not(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]):hover svg { color: var(--ink); }
 .template-picker .template-picker-categories,
 [data-theme="dark"] .template-picker .template-picker-categories {
   --tp-tile-bg: var(--select-tile-bg);
@@ -10841,7 +10852,6 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
   border-color: var(--select-tile-line);
   box-shadow: var(--select-tile-shadow);
 }
-.prefs-nav-item.is-active svg { color: var(--select-icon); }
 
 /* Segmented switches */
 .segmented[style*="--thumb-w"]::before { background: var(--select-thumb-bg); }
@@ -10851,15 +10861,16 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
   color: var(--select-thumb-text);
   font-weight: 700;
 }
+.segmented .segmented-option { transition: color var(--dur-3) var(--ease-emph), box-shadow var(--dur-1) var(--ease-out); }
 .segmented .segmented-option:not(.is-on, .is-active, [aria-pressed="true"], [aria-selected="true"], :has(input:checked)):hover {
-  background: var(--select-hover-bg);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--select-hover-line);
   color: var(--ink);
 }
 
-/* Every other "chosen" or "on" mark follows the same brand tokens instead of
-   black: underline tabs, chips that are on, switches, selected cards and
-   tiles, radio dots, ticks and step progress. Hover and focus borders on
-   inputs and buttons stay ink - they are not selection. */
+/* Every other "chosen" or "on" mark follows the same selection tokens:
+   underline tabs, chips that are on, switches, selected cards and tiles,
+   radio dots, ticks and step progress. */
 /* Underline tabs */
 .page-tab.is-active,
 .page-tabs .page-tab:is(.is-active, [aria-selected="true"], [aria-current="page"]),
@@ -10875,14 +10886,14 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
 [data-theme="dark"] .filter-chip.is-on {
   background: var(--select-tile-bg);
   border-color: var(--select-tile-line);
-  color: var(--select-thumb-text);
+  color: var(--select-tile-text);
 }
 .workspace-chip.is-active,
 .ibx-chip[aria-pressed="true"],
 .ibx-toolbar .ibx-chip:is([aria-pressed="true"], [aria-expanded="true"]) {
   background: var(--select-tile-bg);
   border-color: var(--select-tile-line);
-  color: var(--select-thumb-text);
+  color: var(--select-tile-text);
 }
 /* Switches */
 .settings-switch input:checked + span,
@@ -10911,7 +10922,3 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
 .builder-stepper-item.is-done .builder-stepper-dot { border-color: var(--select-mark); color: var(--select-mark); }
 .wizard-progress-step.is-done { border-bottom-color: var(--select-mark); }
 .wizard-progress-step.is-done .wizard-progress-index { background: var(--select-mark); color: var(--select-mark-text); }
-/* Segmented: hover is a lighter wash than the chosen thumb. */
-.segmented .segmented-option:not(.is-on, .is-active, [aria-pressed="true"], [aria-selected="true"], :has(input:checked)):hover {
-  background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
-}
