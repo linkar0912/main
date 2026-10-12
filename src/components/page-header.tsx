@@ -3,12 +3,15 @@ import type { ReactNode } from "react";
 /**
  * The one header every workspace screen uses: title + one-line description on
  * the left, actions on the right, optional back link above and tabs below.
+ * `help` (the "Need help?" link) sits on the title's baseline at the right on
+ * desktop and under the description on phones, the same on every page.
  * Keeping it in one place is what keeps spacing and type identical per page.
  */
 export function PageHeader({
   title,
   description,
   actions,
+  help,
   back,
   tabs,
   className = "",
@@ -16,6 +19,7 @@ export function PageHeader({
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
+  help?: ReactNode;
   back?: ReactNode;
   tabs?: ReactNode;
   className?: string;
@@ -23,11 +27,12 @@ export function PageHeader({
   return (
     <header className={`page-header ${tabs ? "has-tabs" : ""} ${className}`.trim()}>
       {back}
-      <div className="page-header-row">
+      <div className={`page-header-row${help ? " has-help" : ""}`}>
         <div className="page-header-copy">
           <h1>{title}</h1>
           {description ? <p className="page-lede">{description}</p> : null}
         </div>
+        {help}
         {actions ? <div className="header-actions">{actions}</div> : null}
       </div>
       {tabs}

@@ -59,11 +59,9 @@ export function AutomationSectionsShell({ children, section: sectionOverride, ba
         back={section === "my" ? undefined : <Link className="back-link" href={basePath}><ArrowLeft size={15} /> Automations</Link>}
         title={title}
         description={description}
-        actions={(
-          // "New automation" lives in the top bar on every page; repeating it here
-          // put two identical primary buttons on one screen.
-          <ContextHelpLink topic={helpTopic} />
-        )}
+        // "New automation" lives in the top bar on every page; repeating it here
+        // put two identical primary buttons on one screen.
+        help={<ContextHelpLink topic={helpTopic} />}
         tabs={section === "my" ? undefined : <AutomationSectionNav active={section} basePath={basePath} />}
       />
       <div className="automation-section-body" key={section}>{children}</div>

@@ -2169,8 +2169,13 @@ a.section-nav-link.is-active:hover { color: var(--ink); }
 .help-feedback button { align-items: center; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 999px; color: var(--ink); display: inline-flex; font-size: var(--type-meta); font-weight: 750; gap: 5px; padding: 6px 10px; }
 .help-feedback button:hover { border-color: var(--line-strong); color: var(--ink); }
 .help-feedback em { color: var(--danger); font-size: var(--type-meta); font-style: normal; }
-.context-help-link { color: var(--muted); white-space: nowrap; }
+/* "Need help?": one quiet text link with the help icon. Inline, so the
+   link's baseline is its text and it can sit on the page title's baseline
+   (PageHeader `help`; placement in the Round 9 block). */
+.context-help-link { color: var(--muted); display: inline-block; font-family: var(--font-sans, "Manrope"), sans-serif; font-size: .875rem; font-weight: 600; letter-spacing: 0; line-height: 1.4; text-decoration: none; text-transform: none; transition: color var(--dur-1) var(--ease-out); white-space: nowrap; }
+.context-help-link svg { margin-right: 1px; vertical-align: -3px; }
 .context-help-link:hover { color: var(--ink); }
+.context-help-link:focus-visible { border-radius: 4px; outline: 2px solid var(--accent); outline-offset: 3px; }
 .copy-diagnostics { align-items: center; display: inline-flex; }
 .help-content-head { margin-bottom: var(--space-5); }
 .help-content-head h2 { margin-bottom: 4px; }
@@ -3225,7 +3230,6 @@ a.section-nav-link.is-active:hover { color: var(--ink); }
 .page-header.has-tabs { border-bottom: 1px solid var(--line); margin-bottom: 24px; }
 .page-header .header-actions { align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .header-actions .button { min-height: 40px; padding: 0 18px; }
-.header-actions .context-help-link { min-height: 40px; }
 .insights-page-header { border-bottom: 0; padding-bottom: 0; }
 
 /* Horizontal tabs under a header (Automations / Sequences / Broadcasts). */
@@ -4581,12 +4585,10 @@ a.section-nav-link.is-active:hover { background: transparent; color: var(--ink);
 .automation-section > * { margin: 0; }
 
 /* ── Dark-mode pass ───────────────────────────────────────────────────────── */
-/* .button-ghost was used (Contacts "Open", "Need help?") but never defined,
-   so it fell back to the browser's grey button face - glaring in dark mode. */
+/* .button-ghost was used (Contacts "Open") but never defined, so it fell
+   back to the browser's grey button face - glaring in dark mode. */
 .button-ghost { background: transparent; border-color: var(--line-strong); color: var(--ink); }
 .button-ghost:hover { border-color: var(--subtle); color: var(--ink-strong); }
-.context-help-link.button-ghost { border-color: transparent; color: var(--muted); }
-.context-help-link.button-ghost:hover { color: var(--ink); }
 
 /* Insights post table fits its card: no sideways scroll strip. */
 .insights-content .table-scroll { overflow-x: visible; }
@@ -6722,14 +6724,6 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 
 
 /* ── Shared screen chrome ──────────────────────────────────────────────── */
-/* "Need help?" sits beside the primary action as a quiet text link. */
-.ws-page .context-help-link {
-  font-family: var(--font-sans, "Manrope"), sans-serif;
-  font-size: .875rem;
-  font-weight: 650;
-  letter-spacing: 0;
-  text-transform: none;
-}
 /* Column headers and small labels: sentence case, readable size, no tracking. */
 .ws-page :is(.automation-columns, .list-columns, .contacts-table-head, .activity-table-head, .facebook-activity-table-head, .insights-table th, .settings-nav-label, .help-topic-group-label, .profile-identity-facts dt, .kv-label, .billing-invite-copy small, .settings-summary-intro > p, .media-type-label, .diagnostic dt, .template-example small, .metric-top, .funnel-cell-label) {
   font-family: var(--font-sans, "Manrope"), sans-serif;
@@ -7537,8 +7531,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) :is(.button, .list-toggle) { min-height: 44px; }
   :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) .segmented-option { min-height: 44px; }
   :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) .icon-button { height: 44px; min-width: 44px; width: 44px; }
-  :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) :is(.surface-head-action, .quickstart-head, .context-help-link) .text-link,
-  :is(.dashboard-page, .automation-sections) .context-help-link { align-items: center; display: inline-flex; min-height: 44px; }
+  :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) :is(.surface-head-action, .quickstart-head) .text-link { align-items: center; display: inline-flex; min-height: 44px; }
   :is(.dashboard-page, .automation-sections, .campaign-analytics-page) :is(input, select, textarea) { font-size: 16px; }
   :is(.automation-sections, .campaign-analytics-page) .list-search { min-height: 44px; }
   .dashboard-page .tracked-link-actions .button { min-height: 44px; }
@@ -7570,7 +7563,6 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 @media (max-width: 600px) {
   :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) .page-header .button,
   :is(.dashboard-page, .automation-sections, .insights-page, .campaign-analytics-page) .surface .button { height: 44px; }
-  :is(.automation-sections, .campaign-analytics-page) .context-help-link,
   .campaign-analytics-page .back-link,
   .automation-sections .surface-head .text-link { align-items: center; display: inline-flex; min-height: 44px; }
   .campaign-analytics-page .back-link { margin-bottom: 4px; }
@@ -7728,7 +7720,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
   .contacts-wrap .filter-chips .segmented-option { font-size: .875rem; }
   .contacts-surface .contacts-search { min-height: 48px; }
   /* Every action on these screens is a comfortable thumb target on phones. */
-  :is(.ibx-workspace, .contacts-wrap, .settings-wrap, .profile-wrap, .help-page, .contact-detail-drawer) :is(.button, .context-help-link) { min-height: 44px; }
+  :is(.ibx-workspace, .contacts-wrap, .settings-wrap, .profile-wrap, .help-page, .contact-detail-drawer) .button { min-height: 44px; }
 }
 
 /* ── Inline confirmation: a reversible change (switching plans) asks quietly ─ */
@@ -7828,7 +7820,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
 /* Paused automations are a state to know about, not a warning: neutral, no peach. */
 .contact-paused-note { background: var(--surface-sunk); border-color: var(--line); color: var(--ink); }
 @media (max-width: 640px) {
-  :is(.settings-wrap, .profile-wrap, .contacts-wrap, .help-page) .page-header .header-actions :is(.button, .context-help-link) { min-height: 44px; }
+  :is(.settings-wrap, .profile-wrap, .contacts-wrap, .help-page) .page-header .header-actions .button { min-height: 44px; }
   .settings-wrap .settings-switch { align-items: center; display: inline-flex; min-height: 44px; min-width: 44px; }
   .settings-wrap .check-list .text-link { align-items: center; display: inline-flex; min-height: 44px; }
 }
@@ -11064,4 +11056,28 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
   .builder-preview-heading > div { align-items: baseline; display: flex; flex-wrap: wrap; gap: 0 10px; }
   .builder-preview-heading p { margin: 0; }
   .builder-preview .ig-preview { gap: 10px; }
+}
+
+/* "Need help?" (PageHeader `help`) sits in one place on every page: on the
+   page title's baseline at the right, with any actions under it at the
+   right of the description. On phones it drops under the description, flush
+   left with the text, 44px tall. */
+.page-header-row.has-help {
+  align-items: end;
+  display: grid;
+  gap: 0 20px;
+  grid-template-areas: "title help" "lede actions";
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.page-header-row.has-help > .page-header-copy { display: contents; }
+.page-header-row.has-help h1 { align-self: baseline; grid-area: title; min-width: 0; }
+.page-header-row.has-help .page-lede { align-self: start; grid-area: lede; }
+.page-header-row.has-help > .context-help-link { align-self: baseline; grid-area: help; justify-self: end; }
+.page-header-row.has-help > .header-actions { align-self: start; grid-area: actions; justify-self: end; margin-top: 12px; width: auto; }
+@media (max-width: 720px) {
+  .page-header-row.has-help { grid-template-areas: "title" "lede" "help" "actions"; grid-template-columns: minmax(0, 1fr); }
+  .page-header-row.has-help h1 { align-self: start; }
+  .page-header-row.has-help > .context-help-link { align-items: center; align-self: start; display: inline-flex; gap: 6px; justify-self: start; margin: 4px 0 0; min-height: 44px; padding: 0; }
+  .page-header-row.has-help > .context-help-link svg { margin: 0; vertical-align: 0; }
+  .page-header-row.has-help > .header-actions { justify-self: stretch; margin-top: 8px; width: 100%; }
 }

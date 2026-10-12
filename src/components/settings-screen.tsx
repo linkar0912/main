@@ -632,7 +632,7 @@ export function SettingsScreen() {
       <PageHeader
         title="Settings"
         description="Channels, delivery, team and billing for this workspace."
-        actions={<ContextHelpLink topic="connecting-instagram" />}
+        help={<ContextHelpLink topic="connecting-instagram" />}
       />
 
       {metaState && <div className={`notice-banner ${metaState === "connected" ? "notice-success" : "notice-warning"}`} role="status">{metaState === "connected" ? <Check size={17} /> : <AlertCircle size={17} />}<p>{statusMessage[metaState] ?? "Connection status updated."}</p></div>}
