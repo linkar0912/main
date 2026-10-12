@@ -45,7 +45,8 @@ export function ThemeMenuSwitch({ className = "" }: { className?: string }) {
   const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, getThemeServerSnapshot);
   const dark = theme === "dark";
   return (
-    <button className={className} type="button" role="switch" aria-checked={dark} onClick={() => storeTheme(dark ? "light" : "dark")}>
+    // A checkable row of the account menus (WAI-ARIA menu button pattern).
+    <button className={className} type="button" role="menuitemcheckbox" tabIndex={-1} aria-checked={dark} onClick={() => storeTheme(dark ? "light" : "dark")}>
       <Moon size={16} strokeWidth={1.9} aria-hidden />
       <span className="menu-item-label">Dark mode</span>
       <span className="menu-switch" aria-hidden />

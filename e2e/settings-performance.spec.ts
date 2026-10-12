@@ -59,7 +59,7 @@ test("workspace navigation only loads visible data and reuses warm resources", a
 
   // My profile now lives in the account menu (avatar button in the top bar).
   await page.getByRole("button", { name: "Account menu" }).click();
-  await page.getByRole("link", { name: "My profile" }).click();
+  await page.getByRole("menuitem", { name: "My profile" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "My profile" })).toBeVisible();
   await page.getByRole("navigation", { name: "Workspace sections" }).getByRole("link", { name: "Home" }).click();
   // Home greets by first name when it can derive one, otherwise "Welcome back".

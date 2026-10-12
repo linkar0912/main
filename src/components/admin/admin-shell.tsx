@@ -25,7 +25,7 @@ import { ADMIN_RECENT_KEY, adminPages } from "@/src/components/command-palette-i
 import { adminSources } from "@/src/components/command-palette-sources";
 import { LinkarMark } from "@/src/components/linkar-mark";
 import { ThemeMenuSwitch } from "@/src/components/theme-toggle";
-import { AccountMenuButton, AccountMenuHead, MenuDivider, SearchTrigger, usePaletteHotkey } from "@/src/components/top-bar";
+import { AccountMenuButton, AccountMenuHead, MenuDivider, SearchTrigger, menuItemProps, usePaletteHotkey } from "@/src/components/top-bar";
 import { friendlyFirstName } from "@/src/lib/display-name";
 import { Presence, usePresence } from "@/src/components/ui/use-presence";
 import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
@@ -228,14 +228,14 @@ export function AdminShell({
                   meta="Owner console"
                 />
                 <MenuDivider />
-                <Link className="menu-item" href="/dashboard" onClick={close}>
+                <Link className="menu-item" href="/dashboard" {...menuItemProps} onClick={close}>
                   <ArrowLeft size={16} strokeWidth={1.9} aria-hidden />
                   <span className="menu-item-label">Back to workspace</span>
                 </Link>
                 <ThemeMenuSwitch className="menu-item" />
                 <MenuDivider />
                 <form action="/api/auth/logout" method="post">
-                  <button className="menu-item is-danger" type="submit">
+                  <button className="menu-item is-danger" type="submit" {...menuItemProps}>
                     <LogOut size={16} strokeWidth={1.9} aria-hidden />
                     <span className="menu-item-label">Sign out</span>
                   </button>

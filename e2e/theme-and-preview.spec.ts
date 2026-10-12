@@ -20,7 +20,7 @@ test("account menu theme switch toggles and persists dark mode", async ({ page }
   await expect(page.getByRole("heading", { level: 1, name: HOME_HEADING })).toBeVisible();
 
   const accountMenu = page.getByRole("button", { name: "Account menu" });
-  const darkMode = page.getByRole("switch", { name: "Dark mode" });
+  const darkMode = page.getByRole("menuitemcheckbox", { name: "Dark mode" });
   await accountMenu.click();
   await expect(darkMode).toHaveAttribute("aria-checked", "false");
 

@@ -64,7 +64,7 @@ describe("AppShell", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Account menu" }));
     expect(await screen.findByText("Member · Free plan")).toBeTruthy();
     expect(screen.queryByText(/^Owner/)).toBeNull();
-    expect(screen.getByRole("link", { name: "My profile" }).getAttribute("href")).toBe("/profile");
+    expect(screen.getByRole("menuitem", { name: "My profile" }).getAttribute("href")).toBe("/profile");
     expect(screen.queryByTitle("Open my profile")).toBeNull();
   });
 
@@ -86,8 +86,8 @@ describe("AppShell", () => {
     expect(menu.textContent).toContain("Owner · Free plan");
     const rows = Array.from(menu.querySelectorAll(".menu-item")).map((row) => row.textContent?.trim());
     expect(rows).toEqual(["My profile", "Settings", "Billing", "Dark mode", "Help", "Sign out"]);
-    expect(screen.getByRole("link", { name: "Billing" }).getAttribute("href")).toBe("/settings?section=billing");
-    const theme = screen.getByRole("switch", { name: "Dark mode" });
+    expect(screen.getByRole("menuitem", { name: "Billing" }).getAttribute("href")).toBe("/settings?section=billing");
+    const theme = screen.getByRole("menuitemcheckbox", { name: "Dark mode" });
     expect(theme.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(theme);
     expect(document.documentElement.dataset.theme).toBe("dark");
@@ -144,11 +144,43 @@ describe("AppShell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "More ways to create" }));
     const menu = document.getElementById("create-menu") as HTMLElement;
-    expect(within(menu).getByRole("link", { name: /^New automation/ }).getAttribute("href")).toBe("/automations/new");
-    expect(within(menu).getByRole("link", { name: /^Quick automation/ }).getAttribute("href")).toBe("/quick-automation");
-    expect(within(menu).getByRole("button", { name: /^From a template/ })).toBeTruthy();
-    expect(within(menu).getByRole("link", { name: /^New tracked link/ }).getAttribute("href")).toBe("/insights#tracked-links");
-    expect(within(menu).getByRole("link", { name: /^New broadcast/ }).getAttribute("href")).toBe("/automations/broadcasts#new-broadcast");
+    expect(within(menu).getByRole("menuitem", { name: /^New automation/ }).getAttribute("href")).toBe("/automations/new");
+    expect(within(menu).getByRole("menuitem", { name: /^Quick automation/ }).getAttribute("href")).toBe("/quick-automation");
+    expect(within(menu).getByRole("menuitem", { name: /^From a template/ }).tagName).toBe("BUTTON");
+    expect(within(menu).getByRole("menuitem", { name: /^New tracked link/ }).getAttribute("href")).toBe("/insights#tracked-links");
+    expect(within(menu).getByRole("menuitem", { name: /^New broadcast/ }).getAttribute("href")).toBe("/automations/broadcasts#new-broadcast");
+  });
+
+  it("drives the + menu from the keyboard: arrows wrap, Home/End jump, letters jump, Tab closes", async () => {
+    stubShellFetch();
+    render(<AppShell><main>Workspace</main></AppShell>);
+    await screen.findByRole("button", { name: "Account menu" });
+
+    const caret = screen.getByRole("button", { name: "More ways to create" });
+    expect(caret.getAttribute("aria-haspopup")).toBe("menu");
+    fireEvent.keyDown(caret, { key: "ArrowDown" });
+    const menu = screen.getByRole("menu", { name: "More ways to create" });
+    const items = within(menu).getAllByRole("menuitem");
+    expect(items.every((item) => item.tabIndex === -1)).toBe(true);
+    expect(document.activeElement).toBe(items[0]);
+    const press = (key: string) => fireEvent.keyDown(document.activeElement as HTMLElement, { key });
+
+    press("ArrowUp");
+    expect(document.activeElement).toBe(items[items.length - 1]);
+    press("ArrowDown");
+    expect(document.activeElement).toBe(items[0]);
+    press("End");
+    expect(document.activeElement).toBe(items[items.length - 1]);
+    press("Home");
+    press("ArrowDown");
+    expect(document.activeElement).toBe(items[1]);
+    press("f");
+    expect(document.activeElement?.textContent).toMatch(/^From a template/);
+    press("n");
+    expect(document.activeElement?.textContent).toMatch(/^New tracked link/);
+    press("Tab");
+    await waitFor(() => expect(document.getElementById("create-menu")).toBeNull());
+    expect(caret.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("renders the Linkar mark beside the wordmark in the sidebar", async () => {
@@ -281,24 +313,47 @@ describe("AppShell", () => {
     await screen.findByRole("button", { name: "Account menu" });
   });
 
-  it("uses a disclosure for the account menu and returns focus to its toggle on Escape", async () => {
+  it("follows the menu button pattern for the account menu and returns focus to its button on Escape", async () => {
     stubShellFetch();
     render(<AppShell><main>Workspace</main></AppShell>);
     await screen.findByRole("button", { name: "Account menu" });
 
     const toggle = screen.getByRole("button", { name: "Account menu" });
-    expect(toggle.hasAttribute("aria-haspopup")).toBe(false);
+    expect(toggle.getAttribute("aria-haspopup")).toBe("menu");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // Enter and Space reach the button as a click: it opens on the first row.
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(toggle.getAttribute("aria-controls")).toBe("account-menu");
-    // No menu roles without the menu keyboard pattern behind them.
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
-    expect(document.getElementById("account-menu")?.textContent).toContain("Sign out");
+    const menu = screen.getByRole("menu", { name: "Account menu" });
+    expect(menu.id).toBe("account-menu");
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "My profile" }));
+    const rows = [
+      ...within(menu).getAllByRole("menuitem"),
+      ...within(menu).getAllByRole("menuitemcheckbox"),
+    ].map((row) => row.textContent?.trim());
+    expect(rows.sort()).toEqual(["Billing", "Dark mode", "Help", "My profile", "Settings", "Sign out"]);
 
-    fireEvent.keyDown(document, { key: "Escape" });
+    const press = (key: string) => fireEvent.keyDown(document.activeElement as HTMLElement, { key });
+    press("ArrowDown");
+    press("ArrowDown");
+    press("ArrowDown");
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitemcheckbox", { name: "Dark mode" }));
+    press("s");
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "Sign out" }));
+    press("s");
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "Settings" }));
+    press("ArrowUp");
+    press("ArrowUp");
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "Sign out" }));
+
+    press("Escape");
     await waitFor(() => expect(document.getElementById("account-menu")).toBeNull());
     expect(document.activeElement).toBe(toggle);
+
+    // Arrow Up on the button opens on the last row.
+    fireEvent.keyDown(toggle, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Sign out" }));
   });
 
   it("re-reads the workspace identity when another screen reports a change", async () => {

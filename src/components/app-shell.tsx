@@ -30,7 +30,7 @@ import { CommandPalette } from "./command-palette";
 import { WORKSPACE_RECENT_KEY, workspaceActions, workspacePages } from "./command-palette-items";
 import { workspaceSources } from "./command-palette-sources";
 import { SidebarAccountsSection } from "./sidebar-accounts";
-import { AccountMenuButton, AccountMenuHead, MenuDivider, NewMenu, SearchTrigger, usePaletteHotkey } from "./top-bar";
+import { AccountMenuButton, AccountMenuHead, MenuDivider, NewMenu, SearchTrigger, menuItemProps, usePaletteHotkey } from "./top-bar";
 import { Presence, usePresence } from "./ui/use-presence";
 import { slidingThumbRef } from "./ui/use-sliding-thumb";
 import { ThemeMenuSwitch } from "./theme-toggle";
@@ -406,6 +406,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                         <Link
                           className="menu-item"
                           href={href}
+                          {...menuItemProps}
                           aria-current={pathname === href ? "page" : undefined}
                           onClick={close}
                         >
@@ -416,7 +417,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                     ))}
                     <MenuDivider />
                     <form action="/api/auth/logout" method="post">
-                      <button className="menu-item is-danger" type="submit">
+                      <button className="menu-item is-danger" type="submit" {...menuItemProps}>
                         <LogOut size={16} strokeWidth={1.9} aria-hidden />
                         <span className="menu-item-label">Sign out</span>
                       </button>
