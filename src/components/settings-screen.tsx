@@ -21,7 +21,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { BillingSettings } from "./billing-settings";
 import { ContextHelpLink } from "./context-help-link";
 import { CopyDiagnosticsButton } from "./copy-diagnostics-button";
@@ -217,6 +217,11 @@ export function SettingsScreen() {
   const [teamNotice, setTeamNotice] = useState("");
   const [confirmingRevokeId, setConfirmingRevokeId] = useState("");
   const [revokingId, setRevokingId] = useState("");
+  // Role changes: the member whose change is in flight, and the one that
+  // just saved (a quiet "Saved" beside the select that leaves on its own).
+  const [roleSavingId, setRoleSavingId] = useState("");
+  const [roleSavedId, setRoleSavedId] = useState("");
+  const roleSavedTimerRef = useRef<number | undefined>(undefined);
   const [teamLoadError, setTeamLoadError] = useState("");
   // Bumped by Retry after the team failed to load.
   const [teamReload, setTeamReload] = useState(0);
@@ -507,6 +512,45 @@ export function SettingsScreen() {
       setTeamError("The team list could not refresh. Reload the page to see the new invitation.");
     } finally {
       setInviteBusy(false);
+    }
+  }
+
+  useEffect(() => () => window.clearTimeout(roleSavedTimerRef.current), []);
+
+  /** Optimistic: the select shows the new role at once and rolls back if the server says no. */
+  async function changeMemberRole(memberId: string, email: string, role: "ADMIN" | "MEMBER") {
+    if (roleSavingId) return;
+    const before = team?.members.find((member) => member.id === memberId)?.role;
+    if (!before || before === role) return;
+    const applyRole = (next: string) => setTeam((current) => current ? {
+      ...current,
+      members: current.members.map((member) => member.id === memberId ? { ...member, role: next } : member),
+    } : current);
+    applyRole(role);
+    setRoleSavingId(memberId);
+    setRoleSavedId("");
+    setTeamError("");
+    setTeamNotice("");
+    try {
+      const response = await fetch(`/api/team/members/${encodeURIComponent(memberId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(roleErrorMessage(payload?.error, email));
+      }
+      // Billing's seat meter and other readers pick the change up next time.
+      invalidateWorkspaceResource("team-overview");
+      window.clearTimeout(roleSavedTimerRef.current);
+      setRoleSavedId(memberId);
+      roleSavedTimerRef.current = window.setTimeout(() => setRoleSavedId(""), 2_400);
+    } catch (error) {
+      applyRole(before);
+      setTeamError(error instanceof Error ? error.message : `Could not change the role for ${email}.`);
+    } finally {
+      setRoleSavingId("");
     }
   }
 
@@ -1010,18 +1054,42 @@ export function SettingsScreen() {
                   <section className="prefs-group" aria-labelledby="members-title">
                     <PrefsGroupHead id="members-title" title="Members" count={team.members.length} description="Admins can connect accounts and invite people. Members can build and run automations." />
                     <ul className="prefs-card prefs-list">
-                      {team.members.map((member) => (
-                        <li className="prefs-row prefs-person" key={member.email}>
-                          <span className="prefs-person-who">
-                            <span className="avatar avatar-small" aria-hidden="true">{member.email.slice(0, 2).toUpperCase()}</span>
-                            <span className="prefs-person-copy">
-                              <strong>{member.email}</strong>
-                              {viewerEmail && viewerEmail.toLowerCase() === member.email.toLowerCase() ? <small>You</small> : null}
+                      {team.members.map((member) => {
+                        const isViewer = Boolean(viewerEmail) && viewerEmail.toLowerCase() === member.email.toLowerCase();
+                        // Your own row and the owner's never change here.
+                        const memberId = member.id;
+                        const editable = Boolean(memberId) && Boolean(viewerEmail) && !isViewer && member.role !== "OWNER";
+                        return (
+                          <li className="prefs-row prefs-person" key={member.email}>
+                            <span className="prefs-person-who">
+                              <span className="avatar avatar-small" aria-hidden="true">{member.email.slice(0, 2).toUpperCase()}</span>
+                              <span className="prefs-person-copy">
+                                <strong>{member.email}</strong>
+                                {isViewer ? <small>You</small> : null}
+                              </span>
                             </span>
-                          </span>
-                          <span className="prefs-person-role">{roleLabel(member.role)}</span>
-                        </li>
-                      ))}
+                            {editable && memberId ? (
+                              <span className="prefs-person-role-edit">
+                                {roleSavedId === memberId ? <span className="prefs-role-saved" role="status"><Check size={14} aria-hidden="true" /> Saved</span> : null}
+                                <label className="field prefs-person-role-field">
+                                  <span className="sr-only">Role for {member.email}</span>
+                                  <select
+                                    value={member.role}
+                                    disabled={roleSavingId === memberId}
+                                    aria-busy={roleSavingId === memberId || undefined}
+                                    onChange={(event) => void changeMemberRole(memberId, member.email, event.target.value === "ADMIN" ? "ADMIN" : "MEMBER")}
+                                  >
+                                    <option value="ADMIN">Admin</option>
+                                    <option value="MEMBER">Member</option>
+                                  </select>
+                                </label>
+                              </span>
+                            ) : (
+                              <span className="prefs-person-role">{roleLabel(member.role)}</span>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </section>
 
@@ -1146,6 +1214,22 @@ export function SettingsScreen() {
 
 function roleLabel(role: string): string {
   return role.charAt(0) + role.slice(1).toLowerCase();
+}
+
+/** A sentence for a refused role change (PATCH /api/team/members/:id). */
+function roleErrorMessage(code: string | undefined, email: string): string {
+  switch (code) {
+    case "cannot_change_owner":
+      return "The workspace owner’s role can’t be changed.";
+    case "cannot_change_own_role":
+      return "You can’t change your own role. Ask another owner or admin.";
+    case "forbidden":
+      return "Only workspace owners and admins can change roles.";
+    case "not_found":
+      return `${email} is no longer in this workspace. Reload to see the current team.`;
+    default:
+      return `Could not change the role for ${email}. Try again in a moment.`;
+  }
 }
 
 /** A group of chevron rows that each open another page. */

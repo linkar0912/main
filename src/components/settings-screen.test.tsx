@@ -626,6 +626,65 @@ describe("SettingsScreen confirmations and team feedback", () => {
     await vi.waitFor(() => expect(screen.queryByText("pending@example.com")).toBeNull());
   });
 
+  const team = {
+    members: [
+      { id: "member_owner", email: "owner@example.com", role: "OWNER" },
+      { id: "member_admin", email: "ada@example.com", role: "ADMIN" },
+      { id: "member_member", email: "mo@example.com", role: "MEMBER" },
+    ],
+    invitations: [],
+  };
+
+  it("changes another member's role at once and says Saved quietly, but never the owner's or your own", async () => {
+    let finishPatch: (() => void) | undefined;
+    const fetchMock = stubSettingsFetch((url, init) => {
+      if (url.startsWith("/api/team/invitations")) return { body: team };
+      if (url.startsWith("/api/team/members/") && init?.method === "PATCH") return { body: { member: { id: "member_member", email: "mo@example.com", role: "ADMIN" } } };
+      return undefined;
+    });
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (init?.method === "PATCH") await new Promise<void>((resolve) => { finishPatch = resolve; });
+      return answer(input, init);
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Team/ }));
+    const select = await screen.findByRole("combobox", { name: "Role for mo@example.com" }) as HTMLSelectElement;
+    // The signed-in owner's own row is plain text, and so is any owner row.
+    expect(screen.queryByRole("combobox", { name: "Role for owner@example.com" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Role for ada@example.com" })).toBeTruthy();
+
+    fireEvent.change(select, { target: { value: "ADMIN" } });
+    // Optimistic: the new role shows while the request is still out.
+    expect(select.value).toBe("ADMIN");
+    expect(select.disabled).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith("/api/team/members/member_member", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ role: "ADMIN" }) }));
+
+    await act(async () => { finishPatch?.(); });
+    expect((await screen.findByText("Saved")).closest("[role=status]")).toBeTruthy();
+    expect(select.value).toBe("ADMIN");
+    expect(select.disabled).toBe(false);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("puts the role back and explains when the change is refused", async () => {
+    stubSettingsFetch((url, init) => {
+      if (url.startsWith("/api/team/invitations")) return { body: team };
+      if (url.startsWith("/api/team/members/") && init?.method === "PATCH") return { status: 403, body: { error: "cannot_change_owner" } };
+      return undefined;
+    });
+
+    await act(async () => { render(<SettingsScreen />); });
+    fireEvent.click(screen.getByRole("button", { name: /Team/ }));
+    const select = await screen.findByRole("combobox", { name: "Role for ada@example.com" }) as HTMLSelectElement;
+    await act(async () => { fireEvent.change(select, { target: { value: "MEMBER" } }); });
+
+    expect(await screen.findByText("The workspace owner’s role can’t be changed.")).toBeTruthy();
+    expect(select.value).toBe("ADMIN");
+    expect(screen.queryByText("Saved")).toBeNull();
+  });
+
   it("marks quiet-hours changes as unsaved and defaults the timezone to the browser's", async () => {
     stubSettingsFetch((url) => (url === "/api/workspace/messaging" ? { body: { data: null } } : undefined));
     const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;

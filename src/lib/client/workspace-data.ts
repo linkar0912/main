@@ -65,7 +65,8 @@ export type FacebookPageSummary = {
 };
 
 export type TeamOverview = {
-  members: Array<{ email: string; role: string }>;
+  /** `id` is what PATCH /api/team/members/:id takes; older payloads may lack it. */
+  members: Array<{ id?: string; email: string; role: string }>;
   invitations: Array<{ id: string; email: string; role: string; expiresAt: string }>;
 };
 

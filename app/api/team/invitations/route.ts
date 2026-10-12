@@ -38,7 +38,7 @@ export async function GET(request: Request) {
         repository.listInvitations(guard.session.workspaceId),
     ]);
     return NextResponse.json({
-        members: members.map(({ email, role }) => ({ email, role })),
+        members: members.map(({ id, email, role }) => ({ id, email, role })),
         invitations: invitations.map(({ id, email, role, expiresAt }) => ({ id, email, role, expiresAt })),
     });
 }
