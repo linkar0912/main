@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/src/lib/auth/session";
 import { getRepository } from "@/src/lib/repository-provider";
 import type { AutomationRecord, AutomationRepository } from "@/src/lib/repository";
-import { collectsEmail } from "@/src/lib/automation-analytics";
+import { collectsEmail, isCampaign } from "@/src/lib/automation-analytics";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 
 export const runtime = "nodejs";
@@ -86,7 +86,11 @@ async function automationAnalytics(repository: AutomationRepository, workspaceId
                 repository.countEmailCaptureFunnel(workspaceId, automationId, sinceBefore),
             ])
             : Promise.resolve([null, null] as const),
-        repository.countParticipantsPerDay(workspaceId, days * 2, automationId),
+        // Campaigns reach people as participants; classic automations have
+        // none, so their reach is the distinct people a reply was sent to.
+        isCampaign(automation)
+            ? repository.countParticipantsPerDay(workspaceId, days * 2, automationId)
+            : repository.countRecipientsPerDay(workspaceId, days * 2, automationId),
         repository.countExecutionsSentPerDay(workspaceId, days * 2, automationId),
         repository.countExecutionsByStatusPerAutomation(workspaceId, since),
         repository.countExecutionsByStatusPerAutomation(workspaceId, sinceBefore),

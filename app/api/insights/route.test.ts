@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   countParticipantsByState: vi.fn(),
   countParticipantsPerDay: vi.fn(),
   countExecutionsSentPerDay: vi.fn(),
+  countRecipientsPerDay: vi.fn(),
   countParticipantsByMedia: vi.fn(),
   countParticipantFunnel: vi.fn(),
   countExecutionsByStatusPerAutomation: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("@/src/lib/repository-provider", () => ({
     countParticipantsByState: mocks.countParticipantsByState,
     countParticipantsPerDay: mocks.countParticipantsPerDay,
     countExecutionsSentPerDay: mocks.countExecutionsSentPerDay,
+    countRecipientsPerDay: mocks.countRecipientsPerDay,
     countParticipantsByMedia: mocks.countParticipantsByMedia,
     countParticipantFunnel: mocks.countParticipantFunnel,
     countExecutionsByStatusPerAutomation: mocks.countExecutionsByStatusPerAutomation,
@@ -47,6 +49,7 @@ describe("GET /api/insights", () => {
     mocks.getAutomation.mockReset().mockResolvedValue({ id: "automation_1", definition: { version: 2, trigger: { type: "comment" } } });
     mocks.countParticipantsByState.mockReset().mockResolvedValue({});
     mocks.countParticipantsPerDay.mockReset().mockResolvedValue([]);
+    mocks.countRecipientsPerDay.mockReset().mockResolvedValue([]);
     mocks.countExecutionsSentPerDay.mockReset().mockResolvedValue([]);
     mocks.countParticipantsByMedia.mockReset().mockResolvedValue([]);
     mocks.countParticipantFunnel.mockReset().mockResolvedValue({ commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 });
@@ -183,6 +186,18 @@ describe("GET /api/insights", () => {
       since.setUTCDate(since.getUTCDate() - (days - 1));
       return since.toISOString();
     }
+
+    it("counts a classic automation's reach as the people its replies were sent to", async () => {
+      mocks.getAutomation.mockResolvedValue({ id: "automation_1", definition: { version: 1, trigger: { type: "keyword" } } });
+      mocks.countRecipientsPerDay.mockResolvedValue(Array.from({ length: 14 }, (_, index) => ({ day: `d${String(index).padStart(2, "0")}`, count: index < 7 ? 1 : 2 })));
+
+      const body = await (await GET(new Request("http://localhost/api/insights?include=automation&automationId=automation_1&days=7"))).json();
+
+      expect(mocks.countRecipientsPerDay).toHaveBeenCalledWith("workspace_1", 14, "automation_1");
+      expect(mocks.countParticipantsPerDay).not.toHaveBeenCalled();
+      expect(body.timeseries.participantsPerDay.reduce((total: number, point: { count: number }) => total + point.count, 0)).toBe(14);
+      expect(body.previous.reached).toBe(7);
+    });
 
     it("needs an automation", async () => {
       const response = await GET(new Request("http://localhost/api/insights?include=automation&days=7"));

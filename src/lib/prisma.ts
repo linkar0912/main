@@ -1098,6 +1098,23 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return mergeDayCounts(rows, days);
     },
 
+    async countRecipientsPerDay(workspaceId, days, automationId) {
+      const since = new Date();
+      since.setUTCHours(0, 0, 0, 0);
+      since.setUTCDate(since.getUTCDate() - (days - 1));
+      const rows = await client.$queryRaw<{ day: string; count: number }[]>(Prisma.sql`
+        SELECT TO_CHAR(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day, COUNT(DISTINCT "providerRecipientId")::int AS count
+        FROM "AutomationExecution"
+        WHERE "workspaceId" = ${workspaceId}
+          AND "status" = 'SENT'
+          AND "providerRecipientId" IS NOT NULL
+          AND "createdAt" >= ${since}
+          ${automationId ? Prisma.sql`AND "automationId" = ${automationId}` : Prisma.empty}
+        GROUP BY 1
+      `);
+      return mergeDayCounts(rows, days);
+    },
+
     async countParticipantsByMedia(workspaceId, automationId, sinceIso) {
       const scope = {
         workspaceId,

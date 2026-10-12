@@ -412,6 +412,21 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return bucketCountsByDay(timestamps, days);
     },
 
+    async countRecipientsPerDay(workspaceId, days, automationId) {
+      // One timestamp per person per day: the first sent reply that day.
+      const seen = new Set<string>();
+      const timestamps: string[] = [];
+      for (const execution of executions.values()) {
+        if (execution.workspaceId !== workspaceId || execution.status !== "SENT" || !execution.providerRecipientId) continue;
+        if (automationId && execution.automationId !== automationId) continue;
+        const key = `${execution.createdAt.slice(0, 10)}|${execution.providerRecipientId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        timestamps.push(execution.createdAt);
+      }
+      return bucketCountsByDay(timestamps, days);
+    },
+
     async countParticipantsByMedia(workspaceId, automationId, sinceIso) {
       const byMedia = new Map<string, { matched: number; delivered: number; clicked: number }>();
       for (const participant of participants.values()) {

@@ -853,6 +853,12 @@ export interface AutomationRepository {
     sinceIso: string,
   ): Promise<{ automationId: string; sent: number; failed: number; skipped: number }[]>;
   countExecutionsSentPerDay(workspaceId: string, days: number, automationId?: string): Promise<DailyCount[]>;
+  /**
+   * Distinct people who received a sent reply, per day (a person counts once
+   * per day). Classic automations have no participants, so this is their
+   * "people reached".
+   */
+  countRecipientsPerDay(workspaceId: string, days: number, automationId?: string): Promise<DailyCount[]>;
   /** Per-post numbers; `sinceIso` keeps only people who commented from then on. */
   countParticipantsByMedia(workspaceId: string, automationId?: string, sinceIso?: string): Promise<MediaPerformance[]>;
   /**

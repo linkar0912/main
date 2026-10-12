@@ -261,6 +261,31 @@ describe("memory repository", () => {
     expect(await repository.updateAutomation("workspace_b", created.id, { status: "PAUSED" })).toBeNull();
   });
 
+  it("counts distinct people a reply was sent to, once per person per day, scoped to the automation", async () => {
+    const repository = createMemoryRepository();
+    const send = (id: string, recipient: string | undefined, automationId = "automation_1", status: "SENT" | "FAILED" = "SENT") => repository.recordExecution({
+      workspaceId: "workspace_a",
+      automationId,
+      externalEventId: id,
+      dedupeKey: `${automationId}:${id}`,
+      status,
+      reason: "test",
+      ...(recipient ? { providerRecipientId: recipient } : {}),
+    });
+    await send("m1", "person_1");
+    await send("m2", "person_1");
+    await send("m3", "person_2");
+    await send("m4", "person_3", "automation_1", "FAILED");
+    await send("m5", "person_4", "automation_2");
+    await send("m6", undefined);
+
+    const days = await repository.countRecipientsPerDay("workspace_a", 7, "automation_1");
+    expect(days.reduce((total, point) => total + point.count, 0)).toBe(2);
+    const everyone = await repository.countRecipientsPerDay("workspace_a", 7);
+    expect(everyone.reduce((total, point) => total + point.count, 0)).toBe(3);
+    expect((await repository.countRecipientsPerDay("workspace_b", 7)).every((point) => point.count === 0)).toBe(true);
+  });
+
   it("rejects a duplicate execution dedupe key", async () => {
     const repository = createMemoryRepository();
     const first = await repository.recordExecution({
