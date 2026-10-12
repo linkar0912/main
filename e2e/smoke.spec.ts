@@ -1,4 +1,36 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Owner } from "./fixtures";
+
+// Pages that render from the database on the server (the automation list,
+// Home, an automation's own pages) are exercised in a workspace of their own
+// (the `owner` fixture) with real rows; client-fetched Meta endpoints are
+// still mocked because the seeded account has no usable Meta token.
+
+const KEYWORD_DM = {
+  version: 1,
+  trigger: { type: "message", match: "keyword", keywords: ["price"] },
+  conditions: [],
+  actions: [{ type: "send_text", text: "Here is the pricing you asked for." }],
+};
+
+/** Connects an Instagram account and answers the builder's account lookup with it. */
+async function connectInstagram(owner: Owner) {
+  const instagram = await owner.connectInstagram("testbrand");
+  await owner.page.route("**/api/meta/connection", (route) => route.fulfill({
+    json: { data: [{ id: instagram.id, igUserId: instagram.igUserId, username: instagram.username, status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] },
+  }));
+  return instagram;
+}
+
+/** Creates a real automation through the API, pinned to a connected account. */
+async function createAutomation(owner: Owner, name: string): Promise<{ id: string }> {
+  const instagram = await connectInstagram(owner);
+  const response = await owner.page.request.post("/api/automations", {
+    data: { provider: "INSTAGRAM", instagramAccountId: instagram.igUserId, name, status: "DRAFT", definition: KEYWORD_DM },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const { data } = (await response.json()) as { data: { id: string } };
+  return { id: data.id };
+}
 
 test.describe("unauthenticated visitor", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -43,11 +75,16 @@ test.describe("unauthenticated visitor", () => {
   });
 });
 
-test("owner can sign out", async ({ page }) => {
+// Signs out a workspace of its own: logging out revokes that session, which
+// must never be the one every other spec shares.
+test("owner can sign out", async ({ owner }) => {
+  const { page } = owner;
   await page.goto("/dashboard");
   await page.getByRole("button", { name: "Account menu" }).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/login\?next=%2Fdashboard$/);
 });
 
 test("new signup requires email confirmation", async ({ browser }) => {
@@ -63,31 +100,39 @@ test("new signup requires email confirmation", async ({ browser }) => {
   await context.close();
 });
 
-test("dashboard and automation list are reachable", async ({ page }) => {
+test("dashboard and automation list are reachable", async ({ owner }) => {
+  const { page } = owner;
+  const name = `E2E Home row ${Date.now()}`;
+  await createAutomation(owner, name);
   await page.goto("/dashboard");
   await expect(page.locator(".sidebar-brand")).toBeVisible();
-  await expect(page.getByRole("heading", { name: /^Hello,/ })).toBeVisible();
+  // "Hello, <name>" once a name is known, "Welcome back" otherwise.
+  await expect(page.getByRole("heading", { level: 1, name: /^(Hello, |Welcome back)/ })).toBeVisible();
   await expect(page.getByLabel("Performance over time")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Your automations" }).getByText(name)).toBeVisible();
   await page.getByRole("link", { name: "Automations", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Automations", exact: true })).toBeVisible();
+  await expect(page.getByRole("article").filter({ hasText: name })).toBeVisible();
 });
 
-test("automation delivery problems are visible without recipient payloads", async ({ page }) => {
-  await page.route("**/api/automations", (route) => route.fulfill({ json: { data: [{ id: "automation_1", name: "Diagnostics", status: "ACTIVE", version: 1, definition: { version: 1, trigger: { type: "message", match: "any", keywords: [] }, conditions: [], actions: [{ type: "send_text", text: "Hello" }] } }] } }));
-
-  await page.route("**/api/automations/deliveries?limit=25", (route) => route.fulfill({
+test("automation delivery problems are visible without recipient payloads", async ({ owner }) => {
+  const { page } = owner;
+  const automation = await createAutomation(owner, "Diagnostics");
+  // The list asks for recent delivery problems after it renders.
+  await page.route("**/api/automations/deliveries**", (route) => route.fulfill({
     json: { data: [{
       kind: "LEAD_WEBHOOK",
       state: "UNKNOWN",
       attemptCount: 1,
-      automationId: "automation_1",
+      automationId: automation.id,
       lastError: "Provider connection closed before a response",
       updatedAt: "2026-08-23T12:00:00.000Z",
     }] },
   }));
   await page.goto("/automations");
-  await expect(page.getByText("Needs review")).toBeVisible();
-  await expect(page.getByText("Provider connection closed before a response")).toBeVisible();
+  const issues = page.getByRole("region", { name: "Delivery issues" });
+  await expect(issues.getByText("Needs review")).toBeVisible();
+  await expect(issues.getByText("Provider connection closed before a response")).toBeVisible();
   await expect(page.getByText(/recipientId|payload|access-token-secret/)).toHaveCount(0);
 });
 
@@ -107,18 +152,16 @@ async function nextUntil(page: import("@playwright/test").Page, saveName: string
   }
 }
 
-test("classic builder creates a keyword autoresponder", async ({ page }) => {
-  let saved: Record<string, unknown> | undefined;
-  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] } }));
-  await page.route("**/api/automations", async (route) => {
-    if (route.request().method() === "POST") { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { data: { id: "automation_classic", ...saved } } }); }
-    return route.fulfill({ json: { data: saved ? [{ id: "automation_classic", ...saved, status: "ACTIVE", version: 1 }] : [] } });
-  });
-  await page.route("**/api/automations/automation_classic", (route) => route.fulfill({ json: { data: { id: "automation_classic", ...saved, status: "ACTIVE" } } }));
+// The builder saves through the real API, so the list afterwards shows the
+// row the server stored.
+test("classic builder creates a keyword autoresponder", async ({ owner }) => {
+  const { page } = owner;
+  const name = `E2E Autoresponder ${Date.now()}`;
+  await connectInstagram(owner);
   await page.goto("/automations/new?type=classic");
   await expect(page.getByRole("heading", { name: /New automatic reply/i })).toBeVisible();
 
-  await page.getByLabel("Automation name").fill(`E2E Autoresponder ${Date.now()}`);
+  await page.getByLabel("Automation name").fill(name);
   await page.getByLabel("Starts when").selectOption("message");
   await page.getByLabel("Words to look for").fill("price");
   // Action step: Trigger → Condition → Action.
@@ -130,17 +173,17 @@ test("classic builder creates a keyword autoresponder", async ({ page }) => {
   await expect(page.getByText("Saved and turned on.", { exact: false })).toBeVisible();
 
   await page.goto("/automations");
-  await expect(page.getByText(/DM contains price/).first()).toBeVisible();
+  const row = page.getByRole("article").filter({ hasText: name });
+  await expect(row).toBeVisible();
+  // The row says what starts it: the trigger, then its keywords, as chips.
+  await expect(row.getByText("DM", { exact: true })).toBeVisible();
+  await expect(row.getByText("price", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: `Pause ${name}` })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("basic template gallery sets up a ready-to-edit automation", async ({ page }) => {
-  let saved: Record<string, unknown> | undefined;
-  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] } }));
-  await page.route("**/api/automations", async (route) => {
-    if (route.request().method() === "POST") { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { data: { id: "automation_template", ...saved } } }); }
-    return route.fulfill({ json: { data: saved ? [{ id: "automation_template", ...saved, status: "ACTIVE", version: 1 }] : [] } });
-  });
-  await page.route("**/api/automations/automation_template", (route) => route.fulfill({ json: { data: { id: "automation_template", ...saved, status: "ACTIVE" } } }));
+test("basic template gallery sets up a ready-to-edit automation", async ({ owner }) => {
+  const { page } = owner;
+  await connectInstagram(owner);
   await page.goto("/automations");
   await page.getByRole("button", { name: /new automation/i }).click();
 
@@ -159,7 +202,7 @@ test("basic template gallery sets up a ready-to-edit automation", async ({ page 
   await expect(page.getByText("Saved and turned on.", { exact: false })).toBeVisible();
 
   await page.goto("/automations");
-  await expect(page.getByText("Answer common questions").first()).toBeVisible();
+  await expect(page.getByRole("article").filter({ hasText: "Answer common questions" })).toBeVisible();
 });
 
 test("guided builder saves an automation draft", async ({ page }) => {
@@ -175,7 +218,8 @@ test("guided builder saves an automation draft", async ({ page }) => {
   expect(saved?.name).toBe("E2E guide delivery");
 });
 
-test("guided builder creates a follow-gated Reel campaign", async ({ page }) => {
+test("guided builder creates a follow-gated Reel campaign", async ({ owner }) => {
+  const { page } = owner;
   const automationName = `E2E Reel guide ${Date.now()}`;
   const reelFixture = {
     id: "media_1",
@@ -189,12 +233,7 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   await page.route("**/api/meta/media", (route) =>
     route.fulfill({ json: { data: [reelFixture], paging: {} } }),
   );
-  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] } }));
-  let saved: Record<string, unknown> | undefined;
-  await page.route("**/api/automations", async (route) => {
-    if (route.request().method() === "POST") { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { data: { id: "automation_campaign", ...saved } } }); }
-    return route.fulfill({ json: { data: saved ? [{ id: "automation_campaign", ...saved, status: "DRAFT", version: 2 }] : [] } });
-  });
+  await connectInstagram(owner);
 
   await page.goto("/automations");
   await page.getByRole("button", { name: /new automation/i }).click();
@@ -234,7 +273,9 @@ test("guided builder creates a follow-gated Reel campaign", async ({ page }) => 
   await page.goto("/automations");
   const row = page.getByRole("article").filter({ hasText: automationName });
   await expect(row).toBeVisible();
-  await expect(row.getByRole("link", { name: /activity/i })).toBeVisible();
+  // A campaign has an activity feed, reached from the row's overflow menu.
+  await row.getByRole("button", { name: `More actions for ${automationName}` }).click();
+  await expect(page.getByRole("menuitem", { name: `View activity for ${automationName}` })).toBeVisible();
 });
 
 test("sequence load failures are visible", async ({ page }) => {
@@ -277,19 +318,16 @@ test("sequence source links can be cleared explicitly", async ({ page }) => {
   await expect.poll(() => patchBody).toMatchObject({ sourceAutomationId: null });
 });
 
-test("activity export stays scoped to the selected automation", async ({ page }) => {
-  await page.route("**/api/automations/automation_1/activity", (route) => route.fulfill({
-    json: { data: [], summary: { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 } },
-  }));
-  // The insights panel appends include=usage, so match any insights URL.
-  await page.route("**/api/insights?**", (route) => route.fulfill({
-    json: { timeseries: { days: 14, participantsPerDay: [], sentPerDay: [] }, mediaPerformance: [] },
-  }));
+// An automation's pages render only for a row the workspace owns, so this
+// one is real; its (empty) activity comes from the real API.
+test("activity export stays scoped to the selected automation", async ({ owner }) => {
+  const { page } = owner;
+  const automation = await createAutomation(owner, "Export scope");
 
-  await page.goto("/automations/automation_1/activity");
+  await page.goto(`/automations/${automation.id}/activity`);
 
   await expect(page.getByRole("link", { name: /export csv/i }))
-    .toHaveAttribute("href", "/api/insights/export?automationId=automation_1");
+    .toHaveAttribute("href", `/api/insights/export?automationId=${encodeURIComponent(automation.id)}`);
 });
 
 test("Facebook review pages are reachable", async ({ page }) => {

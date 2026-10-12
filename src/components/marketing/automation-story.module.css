@@ -738,6 +738,10 @@
 
 .screen[data-screen="thread"] {
   display: grid;
+  /* One column exactly as wide as the screen: an auto track grows to the
+     widest child's min-content, which pushed the handoff thread's sent
+     bubbles past the phone edge with wider (Linux) font metrics. */
+  grid-template-columns: minmax(0, 1fr);
   align-content: end;
   gap: 7px;
   justify-items: start;

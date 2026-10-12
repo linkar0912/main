@@ -76,4 +76,7 @@ export function assertLocalE2ETarget(mode = e2eServerMode()): void {
 
 export const E2E_RUN_FILE = ".playwright/e2e-run.json";
 
+/** One file per extra account a spec created (e2e/fixtures.ts); the teardown removes each. */
+export const E2E_USERS_DIR = ".playwright/e2e-users";
+
 export type E2ERun = { email: string; userId: string };

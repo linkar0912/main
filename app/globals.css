@@ -9250,7 +9250,7 @@ th[aria-sort="none"] .ins-sort svg { opacity: .5; }
 
 @media (max-width: 900px) {
   .app-topbar { gap: 8px; padding: 10px 16px; }
-  .app-topbar .hamburger { display: inline-flex; margin-left: -10px; }
+  .app-topbar .hamburger { display: inline-flex; flex: 0 0 44px; margin-left: -10px; }
   .app-topbar .topbar-brand { display: inline-flex; }
   .topbar-search { flex: 1 1 auto; margin-left: 8px; }
   /* The full-screen preview sheet covers the page, so the bar steps aside. */

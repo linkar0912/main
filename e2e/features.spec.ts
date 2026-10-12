@@ -1,4 +1,21 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * The builder only moves past its first step once a channel account is
+ * connected, so the builder specs answer the client-side connection lookup
+ * with one connected Instagram account (and no media to pick from).
+ */
+async function mockConnectedInstagram(page: Page) {
+  await page.route("**/api/meta/media", (route) => route.fulfill({ json: { data: [], paging: {} } }));
+  await page.route("**/api/meta/connection", (route) => route.fulfill({
+    json: { data: [{ id: "connection_1", igUserId: "ig_1", username: "testbrand", status: "CONNECTED", connectedAt: "2026-09-01T00:00:00.000Z" }] },
+  }));
+}
+
+/** Opens a builder step from the step list ("Step 3: What it sends"). */
+async function openStep(page: Page, name: string) {
+  await page.getByRole("navigation", { name: "Builder steps" }).getByRole("button", { name }).click();
+}
 
 // The feature drop: image replies, personalization tokens, follow-up nudges,
 // typed capture fields with stop words, keyword suggestions, win-back segments,
@@ -19,14 +36,15 @@ test("template picker surfaces the new India-first recipes", async ({ page }) =>
 });
 
 test("price-list recipe prefills an image card reply", async ({ page }) => {
-  await page.route("**/api/meta/media", (route) => route.fulfill({ json: { data: [], paging: {} } }));
-  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [] } }));
+  await mockConnectedInstagram(page);
   await page.goto("/automations/new?type=classic&template=price-list-responder");
 
   await expect(page.getByLabel("Automation name")).toHaveValue(/Send prices when someone asks/i);
+  // The photo and its caption are the first message on the "What it sends" step.
+  await openStep(page, "Step 3: What it sends");
   const imageInput = page.getByLabel("Photo link");
   await expect(imageInput).toHaveValue("https://example.com/images/price-list.jpg");
-  await expect(page.getByLabel("Caption", { exact: true })).toHaveValue(/price list/i);
+  await expect(page.getByRole("textbox", { name: "Caption", exact: true })).toHaveValue(/price list/i);
   // And the phone preview renders the image bubble.
   await expect(page.getByLabel(/message preview/i).locator(".ig-dm-image")).toBeVisible();
 });
@@ -39,8 +57,7 @@ async function advance(page: import("@playwright/test").Page) {
 }
 
 test("builder exposes image actions, token hints, suggestions, and follow-ups", async ({ page }) => {
-  await page.route("**/api/meta/media", (route) => route.fulfill({ json: { data: [], paging: {} } }));
-  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [] } }));
+  await mockConnectedInstagram(page);
   await page.route("**/api/automations/suggest-keywords", (route) =>
     route.fulfill({ json: { data: ["kurti", "price", "collab"] } }));
   await page.goto("/automations/new?type=classic");
@@ -81,8 +98,7 @@ test("builder exposes image actions, token hints, suggestions, and follow-ups", 
 });
 
 test("capture fields support answer types and stop words", async ({ page }) => {
-  await page.route("**/api/meta/media", (route) => route.fulfill({ json: { data: [], paging: {} } }));
-  await page.route("**/api/meta/connection", (route) => route.fulfill({ json: { data: [] } }));
+  await mockConnectedInstagram(page);
   await page.goto("/automations/new?type=classic");
 
   await page.getByLabel("Automation name").fill("Capture fields test");
@@ -112,7 +128,7 @@ test("broadcasts screen offers eligible contact segments", async ({ page }) => {
     route.fulfill({ json: { data: [] } }, ));
   await page.goto("/automations/broadcasts");
 
-  const segment = page.getByLabel("Segment");
+  const segment = page.getByRole("form", { name: "New broadcast" }).getByLabel("Send to");
   await expect(segment.getByRole("option", { name: "Leads with a captured email" })).toHaveCount(1);
   await expect(segment.getByRole("option", { name: "All known contacts" })).toHaveCount(1);
   await segment.selectOption("all_contacts");
