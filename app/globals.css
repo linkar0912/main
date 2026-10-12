@@ -10819,14 +10819,22 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
 .sidebar-link.is-active:hover,
 [data-theme="dark"] .sidebar-link.is-active,
 .template-picker .template-picker-category:is(.is-active, [aria-pressed="true"]),
-.prefs:not([data-view="index"]) .prefs-nav-item.is-active { color: var(--select-tile-text); }
+.prefs .prefs-nav-item.is-active { color: var(--select-tile-text); }
 :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) svg,
 [data-theme="dark"] .sidebar-link.is-active svg,
 .template-picker .template-picker-category:is(.is-active, [aria-pressed="true"]) svg,
-.prefs:not([data-view="index"]) .prefs-nav-item.is-active svg { color: var(--select-icon); }
+.prefs .prefs-nav-item.is-active svg { color: var(--select-icon); }
 :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category):is(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]) :is(.nav-item-count, .template-picker-count, .tab-count),
 .template-picker .template-picker-category:is(.is-active, [aria-pressed="true"]) .template-picker-count,
-.prefs:not([data-view="index"]) .prefs-nav-item.is-active .prefs-nav-count { color: var(--select-tile-text); opacity: .72; }
+.prefs .prefs-nav-item.is-active .prefs-nav-count { color: var(--select-tile-text); opacity: .72; }
+/* On phones /settings is a plain list of sections (no tile), so the current
+   section keeps ordinary text there. Desktop always shows the tile, even on
+   bare /settings, which also counts as the index view. */
+@media (max-width: 767px) {
+  .prefs[data-view="index"] .prefs-nav-item.is-active { color: var(--slate); }
+  .prefs[data-view="index"] .prefs-nav-item.is-active svg { color: var(--ink); }
+  .prefs[data-view="index"] .prefs-nav-item.is-active .prefs-nav-count { color: var(--muted); opacity: 1; }
+}
 /* Hover on items that are not selected: ink text and icon, a hairline tile. */
 :is(.nav-item, .sidebar-link, .settings-nav-link, .section-nav-link, .template-picker-category, .prefs-nav-item):not(.is-active, [aria-current="page"], [aria-current="true"], [aria-selected="true"], [aria-pressed="true"]):hover {
   background: transparent;

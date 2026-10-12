@@ -426,6 +426,13 @@ describe("selection style: ink, never a grey fill", () => {
     expect(css).not.toMatch(/\.palette-option\[aria-selected="true"\]::before/);
   });
 
+  it("keeps the Settings nav label readable on the ink tile on bare /settings too", () => {
+    // Bare /settings renders data-view="index"; on desktop it still shows the
+    // ink tile, so the selected label must switch to the tile text there.
+    expect(css).toMatch(/\.prefs \.prefs-nav-item\.is-active\s*{\s*color:\s*var\(--select-tile-text\)/);
+    expect(css).not.toMatch(/\.prefs:not\(\[data-view="index"\]\) \.prefs-nav-item\.is-active/);
+  });
+
   it("underlines horizontal tabs in ink and outlines chosen cards", () => {
     expect(css).toMatch(/:root\s*{[^}]*--select-line:\s*var\(--ink\)/);
     expect(css).toMatch(/\.tab-underline > :is\(\.is-active,[^)]*\)\s*{[^}]*color:\s*var\(--ink\)[^}]*font-weight:\s*700/);
