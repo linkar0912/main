@@ -88,11 +88,9 @@
   justify-content: center;
   min-block-size: 64px;
   color: #ffffff;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: var(--marketing-label-size);
   font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
   text-decoration: none;
   background: #050505;
   border: 2px solid #050505;
@@ -144,7 +142,7 @@
 .autoNote,
 .queueFlag,
 .figcaption {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
 }
 
 .chapter h3 {
@@ -518,10 +516,9 @@
 }
 
 .postMedia span {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .5rem;
   font-weight: 700;
-  letter-spacing: .14em;
   opacity: .85;
 }
 
@@ -925,11 +922,9 @@
   align-items: center;
   gap: 4px;
   color: var(--ig-ink);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .55rem;
   font-weight: 650;
-  letter-spacing: .04em;
-  text-transform: uppercase;
 }
 
 /* Instagram renders quick replies as outlined pills on the receiving side; the

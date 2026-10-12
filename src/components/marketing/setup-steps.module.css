@@ -61,7 +61,7 @@
 }
 
 .number,
-.illustration figcaption { font-family: var(--font-mono, ui-monospace, monospace); }
+.illustration figcaption { font-family: var(--font-sans, ui-sans-serif, sans-serif); }
 
 .number {
   margin: 0;
@@ -100,9 +100,7 @@
   margin-top: 16px;
   color: var(--marketing-text);
   font-size: .8125rem;
-  font-weight: 800;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  font-weight: 700;
 }
 .illustration figcaption > span { inline-size: 8px; block-size: 8px; background: #fff100; border-radius: 99px; }
 
@@ -129,11 +127,9 @@
   display: flex;
   gap: 5px;
   color: var(--marketing-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .58rem;
   font-weight: 700;
-  letter-spacing: .09em;
-  text-transform: uppercase;
 }
 
 .eyebrow i,
@@ -193,11 +189,9 @@
   gap: 6px;
   flex: 0 0 auto;
   padding: 5px 9px;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .58rem;
   font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
   background: var(--marketing-raised);
   border: 1px solid var(--marketing-border);
   border-radius: 999px;
@@ -226,7 +220,7 @@
   gap: 6px;
   padding-block-start: 6px;
   color: var(--marketing-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .6rem;
   font-weight: 650;
 }
@@ -291,7 +285,7 @@
 
 .keywords span {
   padding: 5px 10px;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .62rem;
   font-weight: 700;
   border-radius: 999px;
@@ -375,9 +369,9 @@
 
 .statRow > span strong {
   color: var(--marketing-text);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .82rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .statRow .statusPill { margin-inline-start: auto; }

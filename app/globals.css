@@ -2384,9 +2384,10 @@ a.section-nav-link.is-active:hover { color: var(--ink); }
 .legal-content h2::before {
   color: var(--muted);
   content: counter(legal-section, decimal-leading-zero);
-  font-family: var(--font-mono, "JetBrains Mono"), monospace;
-  font-size: .8125rem;
-  font-weight: 800;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .875rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
 .legal-content p,

@@ -80,7 +80,7 @@ function ConnectPreview() {
         </span>
       </div>
       <div className={styles.fieldGrid}>
-        {["comments", "messages", "mentions", "button taps"].map((field) => (
+        {["Comments", "Messages", "Mentions", "Button taps"].map((field) => (
           <span className={styles.fieldChip} key={field}>
             <i className={styles.tick}><TickIcon /></i>
             {field}

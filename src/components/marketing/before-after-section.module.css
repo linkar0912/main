@@ -149,9 +149,9 @@
 .waitingAge {
   flex: 0 0 auto;
   color: var(--flame);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .68rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .answered {
@@ -261,11 +261,9 @@
 
 .linkar li[data-current="true"] {
   color: #fff100;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: var(--marketing-label-size);
   font-weight: 700;
-  letter-spacing: .035em;
-  text-transform: uppercase;
 }
 
 .closing {

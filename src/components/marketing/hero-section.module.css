@@ -49,7 +49,7 @@
 
 .status,
 .proof {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
 }
 
 .title {
@@ -102,12 +102,12 @@
   place-items: center;
   padding-inline: 24px;
   color: #ffffff;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .8125rem;
-  font-weight: 800;
-  letter-spacing: -.01em;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .9375rem;
+  font-weight: 700;
+  letter-spacing: -.005em;
   text-decoration: none;
-  /* White 13px label: the brand #fa0cf7 only reaches about 3.2:1 behind it.
+  /* White 15px label: the brand #fa0cf7 only reaches about 3.2:1 behind it.
      This deeper magenta keeps the hue and clears WCAG AA (about 5.2:1). */
   background: #c200bf;
   border-radius: 999px;
@@ -138,9 +138,8 @@
 
 .proof {
   margin: 24px 0 0;
-  font-size: .8125rem;
-  font-weight: 700;
-  letter-spacing: .04em;
+  font-size: .875rem;
+  font-weight: 600;
   opacity: .82;
   text-shadow: 0 2px 12px rgb(34 18 10 / 44%);
   animation: fade-up 700ms cubic-bezier(.22, .61, .21, 1) 320ms both;

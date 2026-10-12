@@ -246,7 +246,7 @@ function CommentScene() {
       <div className={styles.screen} data-screen="feed">
         <div className={styles.post}>
           <div className={styles.postMedia}>
-            <span>REEL</span>
+            <span>Reel</span>
             <strong>Turn comments into conversations.</strong>
           </div>
           <div className={styles.postActions}>

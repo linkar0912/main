@@ -148,8 +148,7 @@
 .meta,
 .example blockquote,
 .exampleFooter {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  text-transform: uppercase;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
 }
 
 .name {

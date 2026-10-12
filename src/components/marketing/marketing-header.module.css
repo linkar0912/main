@@ -188,12 +188,11 @@
 .accountNavigation a,
 .mobileActions a {
   color: inherit;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .8125rem;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .9375rem;
   font-weight: 600;
-  letter-spacing: .06em;
+  letter-spacing: -.005em;
   text-decoration: none;
-  text-transform: uppercase;
 }
 
 .solutionsButton {
@@ -303,11 +302,9 @@
 .solutionsEyebrow {
   margin: 0 0 28px;
   color: var(--marketing-muted, var(--muted));
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .8125rem;
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .875rem;
+  font-weight: 600;
 }
 
 .channelLink,
@@ -518,8 +515,8 @@
   gap: clamp(4px, 1.2svh, 14px);
 }
 
-/* Sentence case: the sheet sits inside .mobileActions, whose mono uppercase
-   label style must not leak into these display-size links. */
+/* The sheet sits inside .mobileActions, whose small label style must not leak
+   into these display-size links. */
 .menuSheet a {
   display: inline-flex;
   align-items: center;
