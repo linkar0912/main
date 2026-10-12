@@ -81,7 +81,16 @@ setup("create the workspace owner", async ({ page }) => {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  // A brand-new workspace is sent into first-time onboarding by the app
+  // shell. The shared owner skips it through the same API the flow's "Skip"
+  // uses, so every other spec lands in the app; e2e/onboarding.spec.ts walks
+  // the flow itself with an account of its own.
+  await expect(page).toHaveURL(/\/(dashboard|onboarding)$/);
+  const skipped = await page.request.put("/api/onboarding", { data: { action: "skip" } });
+  expect(skipped.ok()).toBe(true);
+  await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
   await page.context().storageState({ path: STORAGE_STATE });
 });
