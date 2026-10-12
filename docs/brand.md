@@ -387,52 +387,21 @@ grid, keeping the entry flow focused and professional.
 
 ## First-time onboarding
 
-`/onboarding` (`src/components/onboarding/`, styles in
-`onboarding.module.css`) looks like the product, not the marketing site
-(owner feedback, October 2026: "minimal, production level"). The bar is
-Linear, Vercel and Stripe onboarding: quiet, typographic, one thing per
-screen, nothing decorative.
-
-- **Frame.** A 56px top bar (20px mark and wordmark on the left, a muted
-  "Skip for now" on the right) over a 2px progress line: `--line` track,
-  `--ink` fill that grows over `--dur-3`. Below it one centred column,
-  520px wide, with about 12vh of air above the question (less on short
-  windows).
-- **Question.** A muted "Step 2 of 9" (14px), the question in Manrope 27px
-  650 with -0.01em tracking, and one 15px `--muted` helper line. No
-  Bricolage headlines, no display numbers, no eyebrows.
-- **Answers.** Single and multiple choice are rows: 52px, 1px
-  `--line-strong`, 10px radius, an optional 18px lucide icon in `--muted`,
-  a 15px 550 label and an 18px radio (circle) or checkbox (5px radius) on
-  the right. Hover darkens the border; selected draws an ink outline (border
-  plus an inset hairline, so nothing shifts) and fills the radio or checkbox
-  with ink over 120ms. Niche is the only chip step (36px pills, ink when
-  on). Two-part steps (audience and channels, volume and reply mode) use a
-  15px sub-label per group. The rows are toggle buttons (`aria-pressed`);
-  number keys still pick, Enter continues.
-- **Connect.** Two bordered rows (brand glyph, name, one line, a secondary
-  "Connect" or a green check and the handle). Without a connection the
-  footer offers only "I'll do this later".
-- **Your setup.** One bordered card with the estimate as a 20px sentence
-  ("About 21-32 hours a month saved") and its assumption in 14px muted
-  text; the real post numbers as a plain sentence when an account is
-  connected; "Recommended automations" as a bordered list with a secondary
-  "Set up" per row; the plan fit as one muted sentence. Every number states
-  how it was worked out; nothing is shown that is not computed from the
-  answers or read from the account.
-- **Done.** A 40px ink check, "You're all set" at 22px, one line and
-  "Go to Home". No confetti.
-- **Footer.** Inline under the content on desktop: "Back" text button on
-  the left, the app's primary button on the right (disabled look until the
-  step has an answer). Under 640px it becomes a fixed bar on `--panel` with
-  a top hairline and safe-area padding.
-- **Motion.** Steps cross over in about 300ms: the old one fades out with a
-  6px drift (110ms), the new one fades in with a 6px rise (200ms),
-  direction-aware for Back. Reduced motion turns it off.
-- **Home.** The invitation is a plain bordered card (36px ink circle, title,
-  one line, secondary "Start", dismiss). "Your plan" states the estimate as a
-  normal sentence, then the three-step progress and the recommended
-  automations as rows with "Set up".
+`/onboarding` (`src/components/onboarding/`, `onboarding.module.css`) is the
+next screen after the website's sign-up page and speaks exactly its language:
+the site header with the Linkar wordmark at site size and "Skip for now"; the
+homepage's step dashes (4px ink dashes for done and current steps, `--line`
+for the rest) instead of a progress bar; one centred 480px column; a bold
+Bricolage headline (800, -0.045em) that ends in a full stop or question mark
+with one short centred line under it; answers as bordered 52px rows like
+"Continue with Google" (icon, label, ink radio or checkbox, an inset ink
+outline when chosen), niche as chips that turn ink; one full-width 48px ink
+button with Back under it (on phones a fixed bottom bar with Back beside it).
+The "Your setup" estimate is a Bricolage line in a bordered card with the
+working under it; recommended automations are rows with "Set up". No side
+panel, no illustrations, no yellow, no pink, no confetti - only a soft fade
+between steps. Every number states its assumption; nothing is shown that is
+not computed from the answers or read from the connected account.
 
 ## Voice
 

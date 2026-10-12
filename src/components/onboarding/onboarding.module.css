@@ -1,6 +1,9 @@
-/* First-time onboarding: one centred column, the app's own type, controls
-   and tokens. One question per screen, selection in ink, nothing decorative.
-   Buttons and inputs are the global .button and .field styles. */
+/* First-time onboarding: the next screen after the website's sign-up page,
+   in the same language - the site header and wordmark, the site's step
+   dashes, one centred column with a bold Bricolage headline that ends in a
+   full stop, a short centred line under it, bordered rows like "Continue
+   with Google", and one full-width ink button. Selection is ink; nothing
+   decorative. Buttons and inputs are the global .button and .field styles. */
 
 .shell {
   display: flex;
@@ -18,8 +21,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  block-size: 56px;
-  padding-inline: 24px 12px;
+  block-size: 96px;
+  padding-inline: clamp(20px, 4vw, 56px);
 }
 
 .brand {
@@ -30,13 +33,13 @@
 }
 
 .brandMark {
-  block-size: 20px;
+  block-size: 28px;
   inline-size: auto;
 }
 
 .brandName {
   font-family: var(--font-display), var(--font-sans), sans-serif;
-  font-size: 1.125rem;
+  font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: -.04em;
   line-height: 1;
@@ -66,17 +69,24 @@
 }
 
 .progress {
-  block-size: 2px;
-  overflow: hidden;
-  background: var(--line);
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  inline-size: min(100% - 40px, 440px);
+  margin: clamp(8px, 4vh, 40px) auto 0;
 }
 
-.progressFill {
-  display: block;
-  block-size: 100%;
+.progressStep {
+  flex: 1;
+  max-inline-size: 44px;
+  block-size: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  transition: background-color var(--dur-3) var(--ease-out);
+}
+
+.progressStep[data-on="true"] {
   background: var(--ink);
-  transform-origin: left center;
-  transition: transform var(--dur-3) var(--ease-out);
 }
 
 /* ── Column ───────────────────────────────────────────────────────────── */
@@ -84,9 +94,9 @@
 .main {
   flex: 1;
   inline-size: 100%;
-  max-inline-size: calc(520px + 48px);
+  max-inline-size: calc(480px + 48px);
   margin-inline: auto;
-  padding: clamp(40px, 12vh, 128px) 24px 64px;
+  padding: clamp(28px, 6vh, 64px) 24px 64px;
 }
 
 .steps {
@@ -108,11 +118,12 @@
 .title {
   margin: 0;
   color: var(--ink);
-  font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: 1.6875rem;
-  font-weight: 650;
-  letter-spacing: -.01em;
-  line-height: 1.25;
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  font-size: clamp(2rem, 1.2rem + 1.6vw, 2.5rem);
+  font-weight: 800;
+  letter-spacing: -.045em;
+  line-height: 1.05;
+  text-align: center;
   text-wrap: balance;
 }
 
@@ -121,10 +132,12 @@
 }
 
 .lede {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: var(--type-body);
+  margin: 12px 0 0;
+  color: var(--slate, var(--muted));
+  font-size: 1rem;
   line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
 }
 
 .body {
@@ -436,11 +449,12 @@
 
 .planFigure {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 650;
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.01em;
-  line-height: 1.3;
+  letter-spacing: -.035em;
+  line-height: 1.15;
 }
 
 .planAssumption {
@@ -552,7 +566,8 @@
 }
 
 .doneMark {
-  display: inline-grid;
+  display: grid;
+  margin-inline: auto;
   place-items: center;
   inline-size: 40px;
   block-size: 40px;
@@ -563,13 +578,19 @@
 }
 
 .titleDone {
-  font-size: 1.375rem;
+  font-size: clamp(2rem, 1.2rem + 1.6vw, 2.5rem);
 }
 
 .doneActions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
+}
+
+.doneActions > :global(.button) {
+  flex: 1 1 100%;
+  min-block-size: 48px;
 }
 
 .main[data-done="true"] .body {
@@ -584,14 +605,17 @@
 
 .footerRow {
   display: flex;
+  flex-direction: column-reverse;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
+/* One full-width ink button, as on the sign-up page; Back sits under it. */
 .primary {
-  min-block-size: 44px;
+  inline-size: 100%;
+  min-block-size: 48px;
   padding-inline: 20px;
+  font-size: 1rem;
 }
 
 .primary[aria-disabled="true"] {
@@ -617,12 +641,16 @@
 }
 
 .back {
-  margin-inline-start: -4px;
+  margin-inline-start: 0;
 }
 
 .later {
+  justify-content: center;
+  inline-size: 100%;
+  min-block-size: 48px;
   color: var(--ink);
-  padding-inline: 12px;
+  font-size: 1rem;
+  border: 1px solid var(--line-strong);
 }
 
 .back:hover,
@@ -709,7 +737,20 @@
 
 @media (max-width: 639px) {
   .top {
+    block-size: 64px;
     padding-inline: 20px 8px;
+  }
+
+  .brandMark {
+    block-size: 22px;
+  }
+
+  .brandName {
+    font-size: 1.25rem;
+  }
+
+  .progress {
+    margin-block-start: 4px;
   }
 
   .main {
@@ -720,12 +761,9 @@
     padding-block-start: 18vh;
   }
 
-  .title {
-    font-size: 1.5rem;
-  }
-
+  .title,
   .titleDone {
-    font-size: 1.375rem;
+    font-size: 1.875rem;
   }
 
   .body {
@@ -743,6 +781,7 @@
   }
 
   .footerRow {
+    flex-direction: row;
     gap: 8px;
   }
 
@@ -788,7 +827,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .progressFill,
+  .progressStep,
   .option,
   .optionMark,
   .optionMark::after,

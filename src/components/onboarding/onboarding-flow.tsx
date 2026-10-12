@@ -385,7 +385,6 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
-  const progress = Math.min(1, step / total);
 
   function renderStep(current: number, live: boolean): ReactNode {
     const title = owner ? ownerTitle(current, name) : memberTitle(current, name);
@@ -395,7 +394,7 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
         {done ? (
           <span className={styles.doneMark} aria-hidden="true"><Check size={20} strokeWidth={2.5} /></span>
         ) : (
-          <p className={styles.counter}>Step {current} of {total}</p>
+          <p className={`sr-only ${styles.counter}`}>Step {current} of {total}</p>
         )}
         <h1
           ref={live ? headingRef : undefined}
@@ -678,7 +677,10 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
         aria-valuenow={step}
         aria-valuetext={`Step ${step} of ${total}`}
       >
-        <span className={styles.progressFill} style={{ transform: `scaleX(${progress})` }} />
+        {/* The website's step dashes: done and current steps in ink. */}
+        {Array.from({ length: total }, (_, index) => (
+          <span key={index} className={styles.progressStep} data-on={index < step ? "true" : "false"} />
+        ))}
       </div>
 
       <main className={styles.main} aria-labelledby={headingId} data-done={step === doneStep ? "true" : undefined}>
@@ -734,23 +736,23 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
 function ownerTitle(step: number, name: string): { heading: string; lede?: string } {
   const first = name.trim().split(/\s+/)[0];
   switch (step) {
-    case 1: return { heading: "Let’s set Linkar up for you", lede: "A few quick questions, then a setup made for you." };
+    case 1: return { heading: "Let’s set Linkar up for you.", lede: "A few quick questions, then a setup made for you." };
     case 2: return { heading: first ? `What best describes you, ${first}?` : "What best describes you?", lede: "This shapes the automations we suggest." };
     case 3: return { heading: "What’s your space?", lede: "Choose all that apply." };
     case 4: return { heading: "How big is your audience?", lede: "Roughly is fine." };
     case 5: return { heading: "What should your DMs do for you?", lede: "Choose all that apply." };
     case 6: return { heading: "How busy is your inbox?", lede: "Your best guess, across your accounts." };
-    case 7: return { heading: "Connect your account", lede: "Linkar replies from the account you connect." };
-    case 8: return { heading: "Your setup", lede: "Built from your answers, with the working shown." };
-    default: return { heading: first ? `You’re all set, ${first}` : "You’re all set", lede: "Your recommended automations are waiting on Home." };
+    case 7: return { heading: "Connect your account.", lede: "Linkar replies from the account you connect." };
+    case 8: return { heading: "Your setup.", lede: "Built from your answers, with the working shown." };
+    default: return { heading: first ? `You’re all set, ${first}.` : "You’re all set.", lede: "Your recommended automations are waiting on Home." };
   }
 }
 
 function memberTitle(step: number, name: string): { heading: string; lede?: string } {
   const first = name.trim().split(/\s+/)[0];
   switch (step) {
-    case 1: return { heading: "Welcome to the team", lede: "Two quick questions and you’re in." };
+    case 1: return { heading: "Welcome to the team.", lede: "Two quick questions and you’re in." };
     case 2: return { heading: first ? `What will you mainly do, ${first}?` : "What will you mainly do?", lede: "We’ll take you straight there." };
-    default: return { heading: first ? `You’re in, ${first}` : "You’re in", lede: "Everything your team has set up is ready for you." };
+    default: return { heading: first ? `You’re in, ${first}.` : "You’re in.", lede: "Everything your team has set up is ready for you." };
   }
 }

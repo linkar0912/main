@@ -41,7 +41,7 @@ describe("OnboardingFlow (owner)", () => {
     const client = fakeClient(view);
     render(<OnboardingFlow view={view} client={client} />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "Let’s set Linkar up for you" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Let’s set Linkar up for you." })).toBeTruthy();
     const name = screen.getByLabelText("What should we call you?") as HTMLInputElement;
     expect(name.value).toBe("Priya");
 
@@ -110,7 +110,7 @@ describe("OnboardingFlow (owner)", () => {
     const view = ownerView({ step: 7, connections: { instagram: [{ username: "studio.priya", status: "CONNECTED" }], facebook: [] } });
     const client = fakeClient(view);
     render(<OnboardingFlow view={view} client={client} connectReturn={{ meta: "connected" }} />);
-    expect(await screen.findByRole("heading", { level: 1, name: "Your setup" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 1, name: "Your setup." })).toBeTruthy();
     expect(client.save).toHaveBeenCalledWith({ step: 8 });
   });
 
@@ -140,7 +140,7 @@ describe("OnboardingFlow (owner)", () => {
     render(<OnboardingFlow view={view} client={client} />);
     await screen.findByRole("region", { name: "Time Linkar can take off you" });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish" })); });
-    expect(await screen.findByRole("heading", { level: 1, name: "You’re all set, Priya" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 1, name: "You’re all set, Priya." })).toBeTruthy();
     expect(client.save).toHaveBeenCalledWith({ action: "complete" });
     fireEvent.click(screen.getByRole("button", { name: "Go to Home" }));
     expect(client.navigate).toHaveBeenCalledWith("/dashboard");
@@ -152,13 +152,13 @@ describe("OnboardingFlow (team member)", () => {
     const view: OnboardingView = { ...ownerView(), flow: "member", suggestedName: "Arjun", canConnect: false };
     const client = fakeClient(view);
     render(<OnboardingFlow view={view} client={client} />);
-    expect(screen.getByRole("heading", { level: 1, name: "Welcome to the team" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Welcome to the team." })).toBeTruthy();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuetext")).toBe("Step 1 of 3");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("heading", { level: 1, name: "What will you mainly do, Arjun?" });
     fireEvent.click(screen.getByRole("button", { name: /Reply in the inbox/ }));
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish" })); });
-    expect(await screen.findByRole("heading", { level: 1, name: "You’re in, Arjun" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 1, name: "You’re in, Arjun." })).toBeTruthy();
     expect(client.save).toHaveBeenLastCalledWith({ answers: { focus: "inbox" }, action: "complete" });
     fireEvent.click(screen.getByRole("button", { name: "Open the inbox" }));
     expect(client.navigate).toHaveBeenCalledWith("/activity");
