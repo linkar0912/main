@@ -172,7 +172,7 @@ tokens give a light tile with dark text there.
 | Menu items | `.menu-item` (also `.account-menu-item`, `.admin-menu-list > button`) | - | Ink text and icon; keyboard focus gets the light focus tile and hairline |
 | ⌘K palette rows | `.palette-option` | The highlighted row is the light focus tile | - |
 
-Magenta stays for brand moments (the logo, the onboarding flow, charts, the
+Magenta stays for brand moments (the logo, charts, the
 inbox rail) and keyboard focus rings - not for selection.
 
 **The tile.** Drawn by the container's `::before`, sized to the selected item
@@ -388,21 +388,51 @@ grid, keeping the entry flow focused and professional.
 ## First-time onboarding
 
 `/onboarding` (`src/components/onboarding/`, styles in
-`onboarding.module.css`) is the one product screen that speaks the
-marketing site's language, because it is the bridge from the site: big
-Bricolage questions (800, tight tracking) on white, and beside each question a
-white stage (1px hairline, no yellow - owner feedback) holding a live
-illustration that reacts to the answer. The phone there is a faithful
-Instagram light-mode DM screen: status bar and Dynamic Island, the follower in
-the header with call and video icons, grey incoming bubbles with a small
-avatar, Instagram's purple-to-blue outgoing bubbles with "Seen", and the
-"Message..." composer with the blue camera button - Instagram's own colours
-appear only inside that phone. The Continue pill, progress and chosen answers
-are ink, like selection in the app; no grey fills, no uppercase or mono
-labels, nothing under 13px. Every number on the plan states its assumption
-("about 30 a day, about 5 in 10 about what you picked, 30 to 45 seconds per
-reply"); nothing is shown that is not computed from the answers or read from
-the connected account.
+`onboarding.module.css`) looks like the product, not the marketing site
+(owner feedback, October 2026: "minimal, production level"). The bar is
+Linear, Vercel and Stripe onboarding: quiet, typographic, one thing per
+screen, nothing decorative.
+
+- **Frame.** A 56px top bar (20px mark and wordmark on the left, a muted
+  "Skip for now" on the right) over a 2px progress line: `--line` track,
+  `--ink` fill that grows over `--dur-3`. Below it one centred column,
+  520px wide, with about 12vh of air above the question (less on short
+  windows).
+- **Question.** A muted "Step 2 of 9" (14px), the question in Manrope 27px
+  650 with -0.01em tracking, and one 15px `--muted` helper line. No
+  Bricolage headlines, no display numbers, no eyebrows.
+- **Answers.** Single and multiple choice are rows: 52px, 1px
+  `--line-strong`, 10px radius, an optional 18px lucide icon in `--muted`,
+  a 15px 550 label and an 18px radio (circle) or checkbox (5px radius) on
+  the right. Hover darkens the border; selected draws an ink outline (border
+  plus an inset hairline, so nothing shifts) and fills the radio or checkbox
+  with ink over 120ms. Niche is the only chip step (36px pills, ink when
+  on). Two-part steps (audience and channels, volume and reply mode) use a
+  15px sub-label per group. The rows are toggle buttons (`aria-pressed`);
+  number keys still pick, Enter continues.
+- **Connect.** Two bordered rows (brand glyph, name, one line, a secondary
+  "Connect" or a green check and the handle). Without a connection the
+  footer offers only "I'll do this later".
+- **Your setup.** One bordered card with the estimate as a 20px sentence
+  ("About 21-32 hours a month saved") and its assumption in 14px muted
+  text; the real post numbers as a plain sentence when an account is
+  connected; "Recommended automations" as a bordered list with a secondary
+  "Set up" per row; the plan fit as one muted sentence. Every number states
+  how it was worked out; nothing is shown that is not computed from the
+  answers or read from the account.
+- **Done.** A 40px ink check, "You're all set" at 22px, one line and
+  "Go to Home". No confetti.
+- **Footer.** Inline under the content on desktop: "Back" text button on
+  the left, the app's primary button on the right (disabled look until the
+  step has an answer). Under 640px it becomes a fixed bar on `--panel` with
+  a top hairline and safe-area padding.
+- **Motion.** Steps cross over in about 300ms: the old one fades out with a
+  6px drift (110ms), the new one fades in with a 6px rise (200ms),
+  direction-aware for Back. Reduced motion turns it off.
+- **Home.** The invitation is a plain bordered card (36px ink circle, title,
+  one line, secondary "Start", dismiss). "Your plan" states the estimate as a
+  normal sentence, then the three-step progress and the recommended
+  automations as rows with "Set up".
 
 ## Voice
 
