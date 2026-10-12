@@ -1,29 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { expect, test as setup } from "@playwright/test";
-import { assertLocalE2ETarget, E2E_RUN_FILE, e2eServerMode, serverEnvValue, type E2ERun } from "./local-target";
+import { E2E_PASSWORD, supabaseAdmin } from "./fixtures";
+import { assertLocalE2ETarget, E2E_RUN_FILE, type E2ERun } from "./local-target";
 
 const STORAGE_STATE = ".playwright/auth.json";
-
-// Same view of Supabase as the app server under test, so the account is
-// confirmed in the project it was created in. assertLocalE2ETarget has
-// already refused anything that is not local.
-function supabaseAdmin() {
-  const mode = e2eServerMode();
-  const url = serverEnvValue("SUPABASE_URL", mode) ?? serverEnvValue("NEXT_PUBLIC_SUPABASE_URL", mode);
-  const serviceRoleKey = serverEnvValue("SUPABASE_SERVICE_ROLE_KEY", mode);
-  if (!url || !serviceRoleKey) {
-    throw new Error("e2e auth setup needs SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY");
-  }
-  return {
-    url,
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-  };
-}
 
 // Signup requires email confirmation, so there is no email inbox for e2e to
 // read. Confirm the just-created test account directly via the Supabase
@@ -63,7 +44,7 @@ setup("create the workspace owner", async ({ page }) => {
     });
   }
   const email = `owner-${Date.now()}@example.com`;
-  const password = "linkar-e2e-password";
+  const password = E2E_PASSWORD;
 
   await page.goto("/signup");
   await page.getByLabel("Email").fill(email);
