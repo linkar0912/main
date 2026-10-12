@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PHONE_DESIGN_HEIGHT, PHONE_DESIGN_WIDTH, phoneZoom } from "./phone-fit";
+import { PHONE_DESIGN_HEIGHT, PHONE_DESIGN_WIDTH, READABLE_ZOOM, phoneZoom } from "./phone-fit";
 
 describe("phoneZoom", () => {
   it("lays the device out with an iPhone's 393:852 screen inside an 18px bezel", () => {
@@ -20,5 +20,15 @@ describe("phoneZoom", () => {
   it("stays readable on very short windows and ignores unmeasured layouts", () => {
     expect(phoneZoom(100, 100)).toBe(0.5);
     expect(phoneZoom(0, 500)).toBe(1);
+  });
+
+  it("keeps the laptop side-column phone readable on short windows (the column scrolls instead)", () => {
+    expect(READABLE_ZOOM).toBeGreaterThanOrEqual(0.85);
+    // 1470x745: about 0.73 of the height is free; the text must not shrink with it.
+    expect(phoneZoom(360, PHONE_DESIGN_HEIGHT * 0.73, READABLE_ZOOM)).toBe(READABLE_ZOOM);
+    // Room to spare: the floor changes nothing.
+    expect(phoneZoom(360, PHONE_DESIGN_HEIGHT * 0.95, READABLE_ZOOM)).toBe(0.95);
+    // A narrow column still wins, so the phone never overflows sideways.
+    expect(phoneZoom(PHONE_DESIGN_WIDTH * 0.8, 200, READABLE_ZOOM)).toBe(0.8);
   });
 });

@@ -7093,7 +7093,7 @@ select:where(:not([multiple]):not([size])):disabled { cursor: not-allowed; opaci
    an iPhone 15, inside an 18px bezel - and phoneFitRef (src/components/ui/
    phone-fit.ts) writes --phone-zoom so the whole device shrinks evenly to the
    room left in the window and the column. Nothing inside re-wraps or clips. */
-.builder-preview :is(.ig-device, .facebook-device) { flex: 0 0 auto; margin: 0 auto; max-width: none; width: 318px; zoom: var(--phone-zoom, .75); }
+.builder-preview :is(.ig-device, .facebook-device) { flex: 0 0 auto; margin: 0 auto; max-width: none; width: 318px; zoom: var(--phone-zoom, .85); }
 .builder-preview :is(.ig-phone, .facebook-phone) { aspect-ratio: 393 / 852; height: auto; min-height: 0; width: 100%; }
 .builder-preview .ig-profile-meta,
 .builder-preview .facebook-preview-note { color: var(--muted); display: block; font-size: .8125rem; line-height: 1.45; margin: 0 auto; max-width: 300px; text-align: center; }
@@ -11040,4 +11040,28 @@ p.billing-summary-status { align-items: flex-start; font-size: .875rem; max-widt
   .trend-chart.is-switching,
   .auto-funnel-bar > span { animation: none !important; }
   :is(.home-performance, .auto-analytics) :is(.perf-figures, .perf-chart) { transition: none; }
+}
+
+/* === Round 9: polish === */
+/* Builder preview on laptops: the phone stays readable (phone-fit.ts keeps
+   it at READABLE_ZOOM or more), so on a short window the sticky column
+   scrolls inside instead of shrinking the phone. A 4px inset keeps focus
+   rings on the view switch clear of the clipped edge. */
+@media (min-width: 961px) {
+  .builder-layout .builder-preview {
+    margin-inline: -4px;
+    max-height: calc(100dvh - var(--topbar-h) - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px 4px 16px;
+    scrollbar-width: thin;
+  }
+}
+/* Short laptop windows: the title and its hint share one line and the gaps
+   above the phone tighten, so more of the phone shows before any scroll. */
+@media (min-width: 961px) and (max-height: 820px) {
+  .builder-layout .builder-preview { gap: 10px; max-height: calc(100dvh - var(--topbar-h) - 24px); top: calc(var(--topbar-h) + 12px); }
+  .builder-preview-heading > div { align-items: baseline; display: flex; flex-wrap: wrap; gap: 0 10px; }
+  .builder-preview-heading p { margin: 0; }
+  .builder-preview .ig-preview { gap: 10px; }
 }
