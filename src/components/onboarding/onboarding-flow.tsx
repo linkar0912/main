@@ -517,7 +517,7 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
         return (
           <>
             <p className={`${styles.groupLabel} ${styles.groupLabelFirst}`} id={`${headingId}-volume`}>Comments and DMs a day</p>
-            <div className={styles.options} role="group" aria-labelledby={`${headingId}-volume`}>
+            <div className={`${styles.options} ${styles.optionsPaired}`} role="group" aria-labelledby={`${headingId}-volume`}>
               {DAILY_VOLUMES.map((volume) => (
                 <OptionRow
                   key={volume}
@@ -528,7 +528,7 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
               ))}
             </div>
             <p className={styles.groupLabel} id={`${headingId}-mode`}>How do you reply now?</p>
-            <div className={styles.options} role="group" aria-labelledby={`${headingId}-mode`}>
+            <div className={`${styles.options} ${styles.optionsPaired}`} role="group" aria-labelledby={`${headingId}-mode`}>
               {REPLY_MODES.map((mode) => (
                 <OptionRow
                   key={mode}
