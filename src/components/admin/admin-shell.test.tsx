@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({ pathname: "/admin" }));
@@ -73,9 +73,26 @@ describe("AdminShell", () => {
     expect(menu.textContent).toContain("Owner console");
     const rows = Array.from(menu.querySelectorAll(".menu-item")).map((row) => row.textContent?.trim());
     expect(rows).toEqual(["Back to workspace", "Dark mode", "Sign out"]);
-    expect(screen.getByRole("switch", { name: "Dark mode" })).toBeTruthy();
+    expect(within(menu).getByRole("menuitemcheckbox", { name: "Dark mode" })).toBeTruthy();
     // The button is the avatar alone.
     expect(screen.getByRole("button", { name: "Owner menu" }).textContent?.trim()).toBe("OW");
+  });
+
+  it("drives the owner menu from the keyboard (menu button pattern)", async () => {
+    render(<AdminShell owner={{ email: "owner@linkar.in" }}><main>Overview</main></AdminShell>);
+    const toggle = screen.getByRole("button", { name: "Owner menu" });
+    expect(toggle.getAttribute("aria-haspopup")).toBe("menu");
+
+    fireEvent.keyDown(toggle, { key: "ArrowUp" });
+    const menu = screen.getByRole("menu", { name: "Owner menu" });
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "Sign out" }));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Home" });
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "Back to workspace" }));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "d" });
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitemcheckbox", { name: "Dark mode" }));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Escape" });
+    await waitFor(() => expect(document.getElementById("owner-menu")).toBeNull());
+    expect(document.activeElement).toBe(toggle);
   });
 
   it("closes the mobile operator drawer with Escape and restores focus", async () => {

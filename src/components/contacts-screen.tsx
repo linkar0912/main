@@ -498,12 +498,8 @@ export function ContactsScreen() {
         <PageHeader
           title="Contacts"
           description="Everyone who has talked to your automations, with their stage, owner and notes."
-          actions={(
-            <>
-              <ContextHelpLink topic="leads" />
-              <a className="button button-secondary" href="/api/contacts/export" download><Download size={16} aria-hidden /> Export CSV</a>
-            </>
-          )}
+          help={<ContextHelpLink topic="leads" />}
+          actions={<a className="button button-secondary" href="/api/contacts/export" download><Download size={16} aria-hidden /> Export CSV</a>}
         />
 
         {/* Stages are the page's views: underline tabs above the list. */}

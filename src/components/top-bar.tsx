@@ -1,24 +1,58 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ChevronDown, LayoutTemplate, Link2, Megaphone, Plus, Search, Workflow, Zap } from "lucide-react";
 import { WORKSPACE_ACTIONS, isPaletteShortcut } from "./command-palette-items";
 import { presenceProps, usePresence } from "./ui/use-presence";
 
+/** Every row a menu's keyboard pattern moves through. */
+const MENU_ITEM_SELECTOR = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
+
 /**
- * A disclosure (not an ARIA menu): Tab moves through its links as usual, a
- * click outside closes it, and Escape closes it and hands focus back to the
- * toggle. Shared by the + menu and the account menus.
+ * Spread on each row of a top-bar menu: a menu item reached with the arrow
+ * keys rather than Tab (the whole menu is one tab stop).
  */
-export function useDisclosureMenu() {
+export const menuItemProps = { role: "menuitem", tabIndex: -1 } as const;
+
+function menuItems(menu: HTMLElement | null): HTMLElement[] {
+  return Array.from(menu?.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR) ?? [])
+    .filter((item) => !item.hasAttribute("disabled") && item.getAttribute("aria-disabled") !== "true");
+}
+
+/** The next item (after `from`, wrapping) whose label starts with `letter`. */
+export function typeaheadIndex(labels: string[], from: number, letter: string): number {
+  const wanted = letter.toLocaleLowerCase();
+  for (let step = 1; step <= labels.length; step += 1) {
+    const index = (from + step + labels.length) % labels.length;
+    if (labels[index].trim().toLocaleLowerCase().startsWith(wanted)) return index;
+  }
+  return -1;
+}
+
+/**
+ * The WAI-ARIA menu button pattern, shared by the + menu and the account
+ * menus. On the button, Enter, Space or Arrow Down opens the menu on its first
+ * item and Arrow Up opens it on its last. In the menu the arrow keys move
+ * (wrapping), Home and End jump, a letter jumps to the next item starting with
+ * it, Escape closes and hands focus back to the button, and Tab closes and
+ * moves on. A click outside closes it too.
+ */
+export function useMenuButton() {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  /** Which end the menu opens on (Arrow Up opens on the last item). */
+  const openOn = useRef<"first" | "last">("first");
+  const buttonId = useId();
   const presence = usePresence(open);
 
   useEffect(() => {
     if (!open) return;
+    const items = menuItems(menuRef.current);
+    (openOn.current === "last" ? items[items.length - 1] : items[0])?.focus();
+    openOn.current = "first";
     const onPointer = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -35,6 +69,59 @@ export function useDisclosureMenu() {
     };
   }, [open]);
 
+  const openAt = (end: "first" | "last") => {
+    if (open) {
+      const items = menuItems(menuRef.current);
+      (end === "last" ? items[items.length - 1] : items[0])?.focus();
+      return;
+    }
+    openOn.current = end;
+    setOpen(true);
+  };
+
+  const onButtonKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    // Enter and Space arrive as a click, which opens on the first item.
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    openAt(event.key === "ArrowUp" ? "last" : "first");
+  };
+
+  const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = menuItems(menuRef.current);
+    if (!items.length) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const focusAt = (index: number) => {
+      event.preventDefault();
+      items[(index + items.length) % items.length]?.focus();
+    };
+    switch (event.key) {
+      case "ArrowDown": return focusAt(current + 1);
+      case "ArrowUp": return focusAt(current < 0 ? -1 : current - 1);
+      case "Home": return focusAt(0);
+      case "End": return focusAt(-1);
+      case "Escape":
+        event.preventDefault();
+        setOpen(false);
+        buttonRef.current?.focus();
+        return;
+      case "Tab":
+        // Focus moves on as usual; the menu closes behind it.
+        setOpen(false);
+        return;
+      case " ":
+        // Buttons act on Space themselves; links only know Enter.
+        if (current >= 0 && items[current].tagName === "A") {
+          event.preventDefault();
+          items[current].click();
+        }
+        return;
+    }
+    // Type-ahead: a letter jumps to the next item whose label starts with it.
+    if (event.key.length !== 1 || event.ctrlKey || event.metaKey || event.altKey || !event.key.trim()) return;
+    const index = typeaheadIndex(items.map((item) => item.textContent ?? ""), current, event.key);
+    if (index >= 0) focusAt(index);
+  };
+
   return {
     open,
     rootRef,
@@ -43,6 +130,23 @@ export function useDisclosureMenu() {
     state: presence.state,
     toggle: () => setOpen((value) => !value),
     close: () => setOpen(false),
+    /** For the menu button: its id, popup type, state and the Arrow keys. */
+    buttonProps: (menuId: string) => ({
+      id: buttonId,
+      "aria-haspopup": "menu" as const,
+      "aria-expanded": open,
+      "aria-controls": open ? menuId : undefined,
+      onKeyDown: onButtonKeyDown,
+    }),
+    /** For the popup: the menu role, its name (the button) and the keys. */
+    menuProps: (menuId: string) => ({
+      id: menuId,
+      ref: menuRef,
+      role: "menu",
+      "aria-labelledby": buttonId,
+      onKeyDown: onMenuKeyDown,
+      ...presenceProps(presence.state),
+    }),
   };
 }
 
@@ -115,7 +219,7 @@ const CREATE_ICONS: Record<string, MenuIcon> = {
 
 /** The workspace's create button: one click opens the template picker; the caret lists every way to start. */
 export function NewMenu({ onTemplate }: { onTemplate: () => void }) {
-  const { open, mounted, state, toggle, close, rootRef, buttonRef } = useDisclosureMenu();
+  const { mounted, toggle, close, rootRef, buttonRef, buttonProps, menuProps } = useMenuButton();
   return (
     <div className="topbar-new" ref={rootRef}>
       <button className="button button-primary topbar-new-main" type="button" onClick={onTemplate}>
@@ -127,14 +231,13 @@ export function NewMenu({ onTemplate }: { onTemplate: () => void }) {
         className="button button-primary topbar-new-more"
         type="button"
         aria-label="More ways to create"
-        aria-expanded={open}
-        aria-controls={open ? "create-menu" : undefined}
+        {...buttonProps("create-menu")}
         onClick={toggle}
       >
         <ChevronDown size={16} strokeWidth={2.2} aria-hidden />
       </button>
       {mounted ? (
-        <div className="topbar-menu topbar-create-menu" id="create-menu" {...presenceProps(state)}>
+        <div className="topbar-menu topbar-create-menu" {...menuProps("create-menu")}>
           {WORKSPACE_ACTIONS.map((item) => {
             const Icon = CREATE_ICONS[item.id] ?? Plus;
             // One line per row; the longer explanation stays in the tooltip
@@ -146,9 +249,9 @@ export function NewMenu({ onTemplate }: { onTemplate: () => void }) {
               </>
             );
             return item.action ? (
-              <button key={item.id} className="menu-item" type="button" onClick={() => { close(); onTemplate(); }}>{copy}</button>
+              <button key={item.id} className="menu-item" type="button" {...menuItemProps} onClick={() => { close(); onTemplate(); }}>{copy}</button>
             ) : (
-              <Link key={item.id} className="menu-item" href={item.href ?? "/"} onClick={close}>{copy}</Link>
+              <Link key={item.id} className="menu-item" href={item.href ?? "/"} {...menuItemProps} onClick={close}>{copy}</Link>
             );
           })}
         </div>
@@ -163,7 +266,8 @@ export function NewMenu({ onTemplate }: { onTemplate: () => void }) {
  */
 export function AccountMenuHead({ avatar, name, email, meta }: { avatar: ReactNode; name: string; email: string; meta: string }) {
   return (
-    <div className="account-menu-head">
+    // Context for the rows under it, not a row of its own.
+    <div className="account-menu-head" role="none">
       <div className="account-menu-who">
         {avatar}
         <span className="account-menu-id">
@@ -196,7 +300,7 @@ export function AccountMenuButton({
   menuId: string;
   children: (close: () => void) => ReactNode;
 }) {
-  const { open, mounted, state, toggle, close, rootRef, buttonRef } = useDisclosureMenu();
+  const { mounted, toggle, close, rootRef, buttonRef, buttonProps, menuProps } = useMenuButton();
   return (
     <div className="topbar-account" ref={rootRef}>
       <button
@@ -204,14 +308,13 @@ export function AccountMenuButton({
         className="topbar-account-button"
         type="button"
         aria-label={label}
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
+        {...buttonProps(menuId)}
         onClick={toggle}
       >
         {avatar}
       </button>
       {mounted ? (
-        <div className="topbar-menu topbar-account-menu" id={menuId} {...presenceProps(state)}>
+        <div className="topbar-menu topbar-account-menu" {...menuProps(menuId)}>
           {children(close)}
         </div>
       ) : null}
