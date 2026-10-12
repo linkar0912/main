@@ -94,14 +94,23 @@ describe("OnboardingFlow (owner)", () => {
     render(<OnboardingFlow view={view} client={fakeClient(view)} />);
     const links = screen.getAllByRole("link", { name: "Connect" });
     expect(links.map((link) => link.getAttribute("href"))).toEqual(["/api/meta/oauth/start?return=onboarding", "/api/facebook/oauth/start?return=onboarding"]);
-    expect(screen.getByRole("button", { name: "Do this later" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "I’ll do this later" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+  });
+
+  it("shows the connected account and continues from it", () => {
+    const view = ownerView({ step: 7, connections: { instagram: [{ username: "studio.priya", status: "CONNECTED" }], facebook: [] } });
+    render(<OnboardingFlow view={view} client={fakeClient(view)} />);
+    expect(screen.getByText("@studio.priya")).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: "Connect" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
   });
 
   it("lands on the plan after a successful connect", async () => {
     const view = ownerView({ step: 7, connections: { instagram: [{ username: "studio.priya", status: "CONNECTED" }], facebook: [] } });
     const client = fakeClient(view);
     render(<OnboardingFlow view={view} client={client} connectReturn={{ meta: "connected" }} />);
-    expect(await screen.findByRole("heading", { level: 1, name: "Here’s your plan, Priya" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 1, name: "Your setup" })).toBeTruthy();
     expect(client.save).toHaveBeenCalledWith({ step: 8 });
   });
 
@@ -111,22 +120,21 @@ describe("OnboardingFlow (owner)", () => {
     expect(screen.getByRole("status").textContent).toMatch(/Nothing was connected/);
   });
 
-  it("shows the plan with its assumptions, and Set this up finishes onboarding first", async () => {
+  it("shows the plan with its assumptions, and Set up finishes onboarding first", async () => {
     const view = ownerView({ step: 8 });
     const client = fakeClient(view);
     render(<OnboardingFlow view={view} client={client} />);
-    // jsdom has no matchMedia, which reads as reduced motion: the numbers jump to their values.
     const hero = await screen.findByRole("region", { name: "Time Linkar can take off you" });
-    expect(within(hero).getByText("4–6")).toBeTruthy();
+    expect(within(hero).getByText("About 4–6 hours a month saved")).toBeTruthy();
     expect(hero.textContent).toMatch(/about 30 comments and messages a day, about 5 in 10 of them about what you picked, and about 30 to 45 seconds/);
-    const setUp = screen.getAllByRole("button", { name: /Set this up/ });
+    const setUp = screen.getAllByRole("button", { name: /^Set up / });
     expect(setUp).toHaveLength(3);
     fireEvent.click(setUp[0]);
     await waitFor(() => expect(client.navigate).toHaveBeenCalledWith(expect.stringMatching(/^\/automations\/new/)));
     expect(client.save).toHaveBeenCalledWith({ action: "complete" });
   });
 
-  it("finishes with a celebration and a way into Home", async () => {
+  it("finishes with a confirmation and a way into Home", async () => {
     const view = ownerView({ step: 8 });
     const client = fakeClient(view);
     render(<OnboardingFlow view={view} client={client} />);

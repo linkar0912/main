@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   BriefcaseBusiness,
   CalendarCheck,
   ChartNoAxesCombined,
   Check,
+  ChevronDown,
   Clapperboard,
   Gift,
   GraduationCap,
@@ -53,7 +54,6 @@ import {
 import type { OnboardingPlan } from "@/src/lib/onboarding/build-plan";
 import type { OnboardingView } from "@/src/lib/onboarding/view";
 import type { FacebookPageChoice, OnboardingClient, OnboardingSave } from "./onboarding-client";
-import { OnboardingStage } from "./onboarding-stage";
 import { OnboardingPlanView } from "./onboarding-plan";
 import styles from "./onboarding.module.css";
 
@@ -85,8 +85,8 @@ function connectMessage(status: string | undefined, channel: "Instagram" | "Face
   return CONNECT_MESSAGES[status] ?? `${channel} couldn’t be connected. Try again, or do it later from Settings.`;
 }
 
-/** Step transitions: the old step leaves while the new one arrives. */
-const LEAVE_MS = 220;
+/** Step transitions: the old step fades out while the new one arrives. */
+const LEAVE_MS = 160;
 
 type Direction = "forward" | "back";
 
@@ -95,61 +95,31 @@ function toggle<T>(list: readonly T[] | undefined, value: T): T[] {
   return current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
 }
 
-function KeyHint({ index }: { index: number }) {
-  return index < 9 ? <span className={styles.keyHint} aria-hidden="true">{index + 1}</span> : null;
-}
-
-/** One big selectable card: icon, label, keyboard hint. */
-function ChoiceCard({ label, icon: Icon, selected, index, onSelect }: {
+/** One answer in a vertical list: optional icon, label, radio or checkbox. */
+function OptionRow({ label, icon: Icon, glyph, selected, multiple = false, compact = false, onSelect }: {
   label: string;
   icon?: typeof Store;
+  glyph?: ReactNode;
   selected: boolean;
-  index?: number;
+  multiple?: boolean;
+  compact?: boolean;
   onSelect: () => void;
 }) {
   return (
-    <button type="button" className={styles.card} aria-pressed={selected} onClick={onSelect}>
-      {Icon ? <span className={styles.cardIcon} aria-hidden="true"><Icon size={22} strokeWidth={1.8} /></span> : null}
-      <span className={styles.cardLabel}>{label}</span>
-      <span className={styles.cardMark} aria-hidden="true">{selected ? <Check size={14} strokeWidth={3} /> : null}</span>
-      {index !== undefined ? <KeyHint index={index} /> : null}
+    <button type="button" className={styles.option} data-kind={multiple ? "check" : "radio"} data-compact={compact || undefined} aria-pressed={selected} onClick={onSelect}>
+      {Icon ? <Icon className={styles.optionIcon} size={18} strokeWidth={1.75} aria-hidden="true" /> : null}
+      {glyph ? <span className={styles.optionGlyph} aria-hidden="true">{glyph}</span> : null}
+      <span className={styles.optionLabel}>{label}</span>
+      <span className={styles.optionMark} aria-hidden="true">{multiple ? <Check size={13} strokeWidth={3} /> : null}</span>
     </button>
   );
 }
 
-function Chip({ label, selected, index, onSelect, children }: {
-  label: string;
-  selected: boolean;
-  index?: number;
-  onSelect: () => void;
-  children?: ReactNode;
-}) {
+function Chip({ label, selected, onSelect }: { label: string; selected: boolean; onSelect: () => void }) {
   return (
     <button type="button" className={styles.chip} aria-pressed={selected} onClick={onSelect}>
-      {children}
-      <span>{label}</span>
-      {index !== undefined ? <KeyHint index={index} /> : null}
+      {label}
     </button>
-  );
-}
-
-function Sparks() {
-  // Fourteen particles on a ring, each flying out once. Transform/opacity only.
-  return (
-    <span className={styles.sparks} aria-hidden="true">
-      {Array.from({ length: 14 }, (_, index) => {
-        const angle = (index / 14) * Math.PI * 2;
-        const distance = 70 + (index % 3) * 22;
-        return (
-          <span
-            key={index}
-            className={styles.spark}
-            data-tone={index % 3}
-            style={{ "--dx": `${Math.cos(angle) * distance}px`, "--dy": `${Math.sin(angle) * distance}px`, "--spark-delay": `${(index % 4) * 30}ms` } as CSSProperties}
-          />
-        );
-      })}
-    </span>
   );
 }
 
@@ -415,61 +385,59 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
-  const showStage = owner ? step <= 7 : step < doneStep;
   const progress = Math.min(1, step / total);
 
   function renderStep(current: number, live: boolean): ReactNode {
     const title = owner ? ownerTitle(current, name) : memberTitle(current, name);
-    const heading = (
-      <h1
-        ref={live ? headingRef : undefined}
-        id={live ? headingId : undefined}
-        className={current === doneStep ? `${styles.title} ${styles.titleDone}` : styles.title}
-        tabIndex={-1}
-      >
-        {title.heading}
-      </h1>
-    );
+    const done = current === doneStep;
     return (
       <>
-        {current === doneStep ? (
-          <div className={styles.doneMark} aria-hidden="true">
-            <span className={styles.doneCircle}><Check size={44} strokeWidth={3} /></span>
-            {live ? <Sparks /> : null}
-          </div>
-        ) : null}
-        {heading}
+        {done ? (
+          <span className={styles.doneMark} aria-hidden="true"><Check size={20} strokeWidth={2.5} /></span>
+        ) : (
+          <p className={styles.counter}>Step {current} of {total}</p>
+        )}
+        <h1
+          ref={live ? headingRef : undefined}
+          id={live ? headingId : undefined}
+          className={done ? `${styles.title} ${styles.titleDone}` : styles.title}
+          tabIndex={-1}
+        >
+          {title.heading}
+        </h1>
         {title.lede ? <p className={styles.lede}>{title.lede}</p> : null}
         <div className={styles.body}>{owner ? ownerBody(current) : memberBody(current)}</div>
       </>
     );
   }
 
+  function nameField(value: string, onChange: (value: string) => void): ReactNode {
+    return (
+      <label className={`field ${styles.field}`}>
+        <span>What should we call you?</span>
+        <input
+          value={value}
+          maxLength={NAME_MAX}
+          autoComplete="given-name"
+          placeholder="Your first name"
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </label>
+    );
+  }
+
   function ownerBody(current: number): ReactNode {
     switch (current) {
       case 1:
-        return (
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>What should we call you?</span>
-            <input
-              className={styles.input}
-              value={answers.name ?? ""}
-              maxLength={NAME_MAX}
-              autoComplete="given-name"
-              placeholder="Your first name"
-              onChange={(event) => setAnswers((currentAnswers) => ({ ...currentAnswers, name: event.target.value }))}
-            />
-          </label>
-        );
+        return nameField(answers.name ?? "", (value) => setAnswers((currentAnswers) => ({ ...currentAnswers, name: value })));
       case 2:
         return (
-          <div className={styles.cardGrid} role="group" aria-labelledby={headingId}>
-            {ACCOUNT_TYPES.map((type, index) => (
-              <ChoiceCard
+          <div className={styles.options} role="group" aria-labelledby={headingId}>
+            {ACCOUNT_TYPES.map((type) => (
+              <OptionRow
                 key={type}
                 label={ACCOUNT_TYPE_LABELS[type]}
                 icon={TYPE_ICONS[type]}
-                index={index}
                 selected={answers.accountType === type}
                 onSelect={() => setAnswers((currentAnswers) => ({ ...currentAnswers, accountType: type }))}
               />
@@ -479,22 +447,20 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
       case 3:
         return (
           <>
-            <div className={styles.chipWrap} role="group" aria-labelledby={headingId}>
-              {NICHES.map((niche, index) => (
+            <div className={styles.chips} role="group" aria-labelledby={headingId}>
+              {NICHES.map((niche) => (
                 <Chip
                   key={niche}
                   label={NICHE_LABELS[niche]}
-                  index={index}
                   selected={answers.niches?.includes(niche) ?? false}
                   onSelect={() => setAnswers((currentAnswers) => ({ ...currentAnswers, niches: toggle(currentAnswers.niches, niche) }))}
                 />
               ))}
             </div>
             {answers.niches?.includes("other") ? (
-              <label className={`${styles.field} ${styles.fieldInline}`}>
-                <span className={styles.fieldLabel}>Tell us in a few words</span>
+              <label className={`field ${styles.field} ${styles.fieldOther}`}>
+                <span>Your space, in a few words</span>
                 <input
-                  className={styles.input}
                   value={answers.nicheOther ?? ""}
                   maxLength={NICHE_OTHER_MAX}
                   placeholder="For example, pet care"
@@ -507,41 +473,41 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
       case 4:
         return (
           <>
-            <div className={styles.chipWrap} role="group" aria-labelledby={headingId}>
-              {AUDIENCE_SIZES.map((size, index) => (
-                <Chip
+            <div className={styles.options} role="group" aria-labelledby={headingId}>
+              {AUDIENCE_SIZES.map((size) => (
+                <OptionRow
                   key={size}
                   label={AUDIENCE_LABELS[size]}
-                  index={index}
                   selected={answers.audience === size}
                   onSelect={() => setAnswers((currentAnswers) => ({ ...currentAnswers, audience: size }))}
                 />
               ))}
             </div>
             <p className={styles.groupLabel} id={`${headingId}-channels`}>Where do they follow you?</p>
-            <div className={styles.chipWrap} role="group" aria-labelledby={`${headingId}-channels`}>
+            <div className={styles.options} role="group" aria-labelledby={`${headingId}-channels`}>
               {CHANNELS.map((channel) => (
-                <Chip
+                <OptionRow
                   key={channel}
+                  multiple
+                  compact
                   label={CHANNEL_LABELS[channel]}
+                  glyph={channel === "instagram" ? <InstagramGlyph size={18} brand /> : <FacebookGlyph size={18} brand />}
                   selected={answers.channels?.includes(channel) ?? false}
                   onSelect={() => setAnswers((currentAnswers) => ({ ...currentAnswers, channels: toggle(currentAnswers.channels, channel) }))}
-                >
-                  {channel === "instagram" ? <InstagramGlyph size={18} brand /> : <FacebookGlyph size={18} brand />}
-                </Chip>
+                />
               ))}
             </div>
           </>
         );
       case 5:
         return (
-          <div className={`${styles.cardGrid} ${styles.cardGridWide}`} role="group" aria-labelledby={headingId}>
-            {GOALS.map((goal, index) => (
-              <ChoiceCard
+          <div className={styles.options} role="group" aria-labelledby={headingId}>
+            {GOALS.map((goal) => (
+              <OptionRow
                 key={goal}
+                multiple
                 label={GOAL_LABELS[goal]}
                 icon={GOAL_ICONS[goal]}
-                index={index}
                 selected={answers.goals?.includes(goal) ?? false}
                 onSelect={() => setAnswers((currentAnswers) => ({ ...currentAnswers, goals: toggle(currentAnswers.goals, goal) }))}
               />
@@ -551,21 +517,21 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
       case 6:
         return (
           <>
-            <div className={styles.chipWrap} role="group" aria-labelledby={headingId}>
-              {DAILY_VOLUMES.map((volume, index) => (
-                <Chip
+            <p className={`${styles.groupLabel} ${styles.groupLabelFirst}`} id={`${headingId}-volume`}>Comments and DMs a day</p>
+            <div className={styles.options} role="group" aria-labelledby={`${headingId}-volume`}>
+              {DAILY_VOLUMES.map((volume) => (
+                <OptionRow
                   key={volume}
                   label={DAILY_VOLUME_LABELS[volume]}
-                  index={index}
                   selected={answers.dailyVolume === volume}
                   onSelect={() => setAnswers((currentAnswers) => ({ ...currentAnswers, dailyVolume: volume }))}
                 />
               ))}
             </div>
             <p className={styles.groupLabel} id={`${headingId}-mode`}>How do you reply now?</p>
-            <div className={styles.chipWrap} role="group" aria-labelledby={`${headingId}-mode`}>
+            <div className={styles.options} role="group" aria-labelledby={`${headingId}-mode`}>
               {REPLY_MODES.map((mode) => (
-                <Chip
+                <OptionRow
                   key={mode}
                   label={REPLY_MODE_LABELS[mode]}
                   selected={answers.replyMode === mode}
@@ -578,20 +544,26 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
       case 7:
         return connectBody();
       case 8:
-        if (planState === "ready" && plan) return <OnboardingPlanView plan={plan} onOpen={(href) => void openFromPlan(href)} />;
+        if (planState === "ready" && plan) return <OnboardingPlanView plan={plan} busy={busy} onOpen={(href) => void openFromPlan(href)} />;
         if (planState === "error") {
           return (
             <div className={styles.notice} role="alert">
-              <p>Your plan couldn’t be built just now.</p>
+              <span>Your setup couldn’t be built just now.</span>
               <button type="button" className={styles.textButton} onClick={() => setPlanRequest((request) => request + 1)}>Try again</button>
             </div>
           );
         }
-        return <p className={styles.loading} role="status">Building your plan…</p>;
+        return (
+          <div className={styles.loading} role="status">
+            <span className="sr-only">Building your setup…</span>
+            <span className={styles.loadingBlock} aria-hidden="true" />
+            <span className={styles.loadingBlock} data-size="list" aria-hidden="true" />
+          </div>
+        );
       case 9:
         return (
           <div className={styles.doneActions}>
-            <button type="button" className={styles.primary} onClick={() => client.navigate("/dashboard")}>Go to Home</button>
+            <button type="button" className={`button button-primary ${styles.primary}`} onClick={() => client.navigate("/dashboard")}>Go to Home</button>
           </div>
         );
       default:
@@ -602,80 +574,68 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
   function connectBody(): ReactNode {
     const metaMessage = connectMessage(connectReturn?.meta, "Instagram");
     const facebookMessage = connectMessage(connectReturn?.facebook, "Facebook");
-    const hasAny = Boolean(instagramName || facebookName);
+    const connectedState = (label: string) => (
+      <span className={styles.connectState}>
+        <Check size={16} strokeWidth={2.5} aria-hidden="true" />
+        <span className="sr-only">Connected as </span>
+        <span className={styles.connectHandle}>{label}</span>
+      </span>
+    );
     return (
       <div className={styles.connect}>
         {metaMessage || facebookMessage ? <p className={styles.notice} role="status">{metaMessage ?? facebookMessage}</p> : null}
-        {facebookChoices ? (
-          <div className={styles.pagePicker}>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Which Facebook Page should Linkar reply on?</span>
-              <select className={styles.input} value={facebookChoice} onChange={(event) => setFacebookChoice(event.target.value)}>
-                {facebookChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.name}</option>)}
-              </select>
-            </label>
-            <button type="button" className={styles.secondary} disabled={!facebookChoice || busy} onClick={() => void connectFacebookPage()}>Connect this Page</button>
-          </div>
-        ) : null}
         {facebookError ? <p className={styles.notice} role="alert">{facebookError}</p> : null}
         <ul className={styles.connectList}>
           <li className={styles.connectRow}>
-            <span className={styles.connectIcon}><InstagramGlyph size={24} brand /></span>
+            <span className={styles.connectIcon} aria-hidden="true"><InstagramGlyph size={20} brand /></span>
             <span className={styles.connectCopy}>
-              <strong>Instagram</strong>
-              <span>{instagramName ? `Connected as @${instagramName.replace(/^@/, "")}` : "Reply to comments, DMs and Story replies."}</span>
+              <strong>Instagram account</strong>
+              <span>Replies to comments, DMs and Story replies.</span>
             </span>
-            {instagramName ? (
-              <span className={styles.connectState}><Check size={16} strokeWidth={3} aria-hidden /> Connected</span>
-            ) : view.canConnect ? (
-              <a className={styles.secondary} href={client.connectHref.instagram} onClick={() => void persist({ step: 7 })}>Connect</a>
+            {instagramName ? connectedState(`@${instagramName.replace(/^@/, "")}`) : view.canConnect ? (
+              <a className={`button button-secondary ${styles.connectAction}`} href={client.connectHref.instagram} onClick={() => void persist({ step: 7 })}>Connect</a>
             ) : null}
           </li>
           <li className={styles.connectRow}>
-            <span className={styles.connectIcon}><FacebookGlyph size={24} brand /></span>
+            <span className={styles.connectIcon} aria-hidden="true"><FacebookGlyph size={20} brand /></span>
             <span className={styles.connectCopy}>
               <strong>Facebook Page</strong>
-              <span>{facebookName ? `Connected to ${facebookName}` : "Reply to comments on your Page."}</span>
+              <span>Replies to comments on your Page.</span>
             </span>
-            {facebookName ? (
-              <span className={styles.connectState}><Check size={16} strokeWidth={3} aria-hidden /> Connected</span>
-            ) : view.canConnect ? (
-              <a className={styles.secondary} href={client.connectHref.facebook} onClick={() => void persist({ step: 7 })}>Connect</a>
+            {facebookName ? connectedState(facebookName) : view.canConnect && !facebookChoices ? (
+              <a className={`button button-secondary ${styles.connectAction}`} href={client.connectHref.facebook} onClick={() => void persist({ step: 7 })}>Connect</a>
+            ) : null}
+            {facebookChoices ? (
+              <div className={styles.pagePicker}>
+                <label className={`field ${styles.field}`}>
+                  <span>Which Page should Linkar reply on?</span>
+                  <span className="select-wrap">
+                    <select value={facebookChoice} onChange={(event) => setFacebookChoice(event.target.value)}>
+                      {facebookChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.name}</option>)}
+                    </select>
+                    <ChevronDown size={16} aria-hidden="true" />
+                  </span>
+                </label>
+                <button type="button" className={`button button-secondary ${styles.connectAction}`} disabled={!facebookChoice || busy} onClick={() => void connectFacebookPage()}>Connect this Page</button>
+              </div>
             ) : null}
           </li>
         </ul>
-        <p className={styles.connectNote}>
-          {hasAny ? "You’re connected. Continue to see your plan." : "You can do this later from Settings. Your plan works either way."}
-        </p>
+        {!view.canConnect && !connectedLabel ? <p className={styles.connectNote}>Only the owner or an admin can connect accounts.</p> : null}
       </div>
     );
   }
 
   function memberBody(current: number): ReactNode {
-    if (current === 1) {
-      return (
-        <label className={styles.field}>
-          <span className={styles.fieldLabel}>What should we call you?</span>
-          <input
-            className={styles.input}
-            value={member.name ?? ""}
-            maxLength={NAME_MAX}
-            autoComplete="given-name"
-            placeholder="Your first name"
-            onChange={(event) => setMember((currentMember) => ({ ...currentMember, name: event.target.value }))}
-          />
-        </label>
-      );
-    }
+    if (current === 1) return nameField(member.name ?? "", (value) => setMember((currentMember) => ({ ...currentMember, name: value })));
     if (current === 2) {
       return (
-        <div className={styles.cardGrid} role="group" aria-labelledby={headingId}>
-          {MEMBER_FOCUSES.map((focus, index) => (
-            <ChoiceCard
+        <div className={styles.options} role="group" aria-labelledby={headingId}>
+          {MEMBER_FOCUSES.map((focus) => (
+            <OptionRow
               key={focus}
               label={MEMBER_FOCUS_LABELS[focus]}
               icon={FOCUS_ICONS[focus]}
-              index={index}
               selected={member.focus === focus}
               onSelect={() => setMember((currentMember) => ({ ...currentMember, focus }))}
             />
@@ -686,66 +646,52 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
     const destination = member.focus ? FOCUS_HOME[member.focus] : null;
     return (
       <div className={styles.doneActions}>
-        {destination ? <button type="button" className={styles.primary} onClick={() => client.navigate(destination.href)}>{destination.label}</button> : null}
-        <button type="button" className={destination ? styles.secondary : styles.primary} onClick={() => client.navigate("/dashboard")}>Go to Home</button>
+        {destination ? <button type="button" className={`button button-primary ${styles.primary}`} onClick={() => client.navigate(destination.href)}>{destination.label}</button> : null}
+        <button type="button" className={`button ${destination ? "button-secondary" : "button-primary"} ${styles.primary}`} onClick={() => client.navigate("/dashboard")}>Go to Home</button>
       </div>
     );
   }
 
-  const continueLabel = owner
-    ? step === 7 ? (connectedLabel ? "Continue" : "Do this later") : step === 8 ? "Finish" : "Continue"
-    : step === 2 ? "Finish" : "Continue";
+  // Connecting is the step's real action; without it the footer offers to
+  // move on quietly instead of a primary button that would do the same.
+  const laterOnly = owner && step === 7 && !connectedLabel;
+  const continueLabel = owner ? (step === 8 ? "Finish" : "Continue") : step === 2 ? "Finish" : "Continue";
   const blocked = !canContinue(step);
 
   return (
-    <div className={styles.shell} data-flow={view.flow} data-step={step} data-stage={showStage ? "true" : "false"}>
-      <div className={styles.column}>
-        <header className={styles.top}>
-          <span className={styles.brand}>
-            <LinkarMark className={styles.brandMark} />
-            <span className={styles.brandName}>{PRODUCT_NAME}</span>
-          </span>
-          {step < doneStep ? (
-            <button type="button" className={styles.skip} onClick={() => void skip()} disabled={busy}>Skip for now</button>
-          ) : null}
-        </header>
-        <div
-          className={styles.progress}
-          role="progressbar"
-          aria-label="Setup progress"
-          aria-valuemin={1}
-          aria-valuemax={total}
-          aria-valuenow={step}
-          aria-valuetext={`Step ${step} of ${total}`}
-        >
-          <span className={styles.progressFill} style={{ transform: `scaleX(${progress})` }} />
-        </div>
-
-        {showStage ? (
-          <div className={styles.stageSlot}>
-            <OnboardingStage step={step} flow={view.flow} answers={answers} name={name} connected={connectedLabel} />
-          </div>
+    <div className={styles.shell} data-flow={view.flow} data-step={step}>
+      <header className={styles.top}>
+        <span className={styles.brand}>
+          <LinkarMark className={styles.brandMark} />
+          <span className={styles.brandName}>{PRODUCT_NAME}</span>
+        </span>
+        {step < doneStep ? (
+          <button type="button" className={styles.skip} onClick={() => void skip()} disabled={busy}>Skip for now</button>
         ) : null}
+      </header>
+      <div
+        className={styles.progress}
+        role="progressbar"
+        aria-label="Setup progress"
+        aria-valuemin={1}
+        aria-valuemax={total}
+        aria-valuenow={step}
+        aria-valuetext={`Step ${step} of ${total}`}
+      >
+        <span className={styles.progressFill} style={{ transform: `scaleX(${progress})` }} />
+      </div>
 
-        <main className={styles.main} aria-labelledby={headingId}>
-          <div className={styles.backRow}>
-            {step > 1 && step < doneStep ? (
-              <button type="button" className={styles.back} onClick={back}>
-                <ArrowLeft size={16} aria-hidden /> Back
-              </button>
-            ) : null}
-          </div>
-          <div className={styles.steps}>
-            {leaving && leaving.step !== step ? (
-              <section className={styles.step} data-motion="leave" data-direction={leaving.direction} aria-hidden="true" inert>
-                {renderStep(leaving.step, false)}
-              </section>
-            ) : null}
-            <section key={step} className={styles.step} data-motion={moved ? "enter" : "none"} data-direction={direction} data-step={step}>
-              {renderStep(step, true)}
+      <main className={styles.main} aria-labelledby={headingId} data-done={step === doneStep ? "true" : undefined}>
+        <div className={styles.steps}>
+          {leaving && leaving.step !== step ? (
+            <section className={styles.step} data-motion="leave" data-direction={leaving.direction} aria-hidden="true" inert>
+              {renderStep(leaving.step, false)}
             </section>
-          </div>
-        </main>
+          ) : null}
+          <section key={step} className={styles.step} data-motion={moved ? "enter" : "none"} data-direction={direction} data-step={step}>
+            {renderStep(step, true)}
+          </section>
+        </div>
 
         {step < doneStep ? (
           <footer className={styles.footer}>
@@ -754,22 +700,33 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
                 Your answers didn’t save.
                 <button type="button" className={styles.textButton} onClick={() => { if (pendingSave.current) void persist(pendingSave.current); }}>Try again</button>
               </p>
-            ) : blocked && step !== 8 ? (
-              <p className={styles.footerHint} id={hintId}>{owner && step !== 2 && step !== 4 && step !== 6 ? "Pick at least one to continue" : "Pick one to continue"}</p>
-            ) : <span />}
-            <button
-              type="button"
-              className={styles.primary}
-              onClick={() => void next()}
-              aria-disabled={blocked || busy || undefined}
-              aria-describedby={blocked ? hintId : undefined}
-              data-blocked={blocked ? "true" : undefined}
-            >
-              {busy && step === doneStep - 1 ? "Saving…" : continueLabel}
-            </button>
+            ) : null}
+            <div className={styles.footerRow}>
+              {step > 1 ? (
+                <button type="button" className={styles.back} onClick={back}>
+                  <ArrowLeft size={16} aria-hidden="true" /> Back
+                </button>
+              ) : <span />}
+              {laterOnly ? (
+                <button type="button" className={styles.later} onClick={() => void next()}>I’ll do this later</button>
+              ) : (
+                <button
+                  type="button"
+                  className={`button button-primary ${styles.primary}`}
+                  onClick={() => void next()}
+                  aria-disabled={blocked || busy || undefined}
+                  aria-describedby={blocked && step !== 8 ? hintId : undefined}
+                >
+                  {busy && step === doneStep - 1 ? "Saving…" : continueLabel}
+                </button>
+              )}
+            </div>
+            {blocked && step !== 8 ? (
+              <p className="sr-only" id={hintId}>{owner && (step === 3 || step === 5) ? "Pick at least one to continue" : "Pick one to continue"}</p>
+            ) : null}
           </footer>
         ) : null}
-      </div>
+      </main>
     </div>
   );
 }
@@ -777,15 +734,15 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
 function ownerTitle(step: number, name: string): { heading: string; lede?: string } {
   const first = name.trim().split(/\s+/)[0];
   switch (step) {
-    case 1: return { heading: "Let’s set Linkar up for you", lede: "A few quick questions, about a minute, and you get a plan made for you." };
-    case 2: return { heading: first ? `What best describes you, ${first}?` : "What best describes you?" };
-    case 3: return { heading: "What’s your space?", lede: "Pick everything that fits." };
+    case 1: return { heading: "Let’s set Linkar up for you", lede: "A few quick questions, then a setup made for you." };
+    case 2: return { heading: first ? `What best describes you, ${first}?` : "What best describes you?", lede: "This shapes the automations we suggest." };
+    case 3: return { heading: "What’s your space?", lede: "Choose all that apply." };
     case 4: return { heading: "How big is your audience?", lede: "Roughly is fine." };
-    case 5: return { heading: "What should your DMs do for you?", lede: "Pick as many as you like." };
-    case 6: return { heading: "How many comments and DMs a day?", lede: "Your best guess, across your accounts." };
-    case 7: return { heading: "Connect your account", lede: "Linkar replies from the account you connect. It takes about a minute." };
-    case 8: return { heading: first ? `Here’s your plan, ${first}` : "Here’s your plan", lede: "Built from your answers. Every number shows how we worked it out." };
-    default: return { heading: first ? `You’re all set, ${first}` : "You’re all set", lede: "Your plan is waiting on Home." };
+    case 5: return { heading: "What should your DMs do for you?", lede: "Choose all that apply." };
+    case 6: return { heading: "How busy is your inbox?", lede: "Your best guess, across your accounts." };
+    case 7: return { heading: "Connect your account", lede: "Linkar replies from the account you connect." };
+    case 8: return { heading: "Your setup", lede: "Built from your answers, with the working shown." };
+    default: return { heading: first ? `You’re all set, ${first}` : "You’re all set", lede: "Your recommended automations are waiting on Home." };
   }
 }
 

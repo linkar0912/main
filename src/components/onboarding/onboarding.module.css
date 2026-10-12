@@ -1,649 +1,312 @@
-/* First-time onboarding (docs: .claude/specs/ONBOARDING_SPEC.md).
-   The marketing site's language inside the product: big Bricolage
-   questions on white, a white stage with a real Instagram DM that answers
-   back, and ink for what is chosen (the app's selection colour). No yellow
-   panels, no grey fills, no uppercase or mono labels, nothing under 13px.
-   Motion uses the shared tokens (--dur-*, --ease-*) and only opacity and
-   transform (plus one SVG stroke). */
+/* First-time onboarding: one centred column, the app's own type, controls
+   and tokens. One question per screen, selection in ink, nothing decorative.
+   Buttons and inputs are the global .button and .field styles. */
 
 .shell {
-  /* Ink for buttons, progress, chosen answers and marks - the app's
-     selection colour - with panel-coloured text on it; both swap in dark. */
-  --ob-accent: var(--ink);
-  --ob-accent-press: color-mix(in srgb, var(--ink) 82%, var(--panel));
-  --ob-on-accent: var(--panel);
-  --ob-spark: #fa0cf7;
-  /* Instagram's own colours, only inside the phone. */
-  --ig-blue: #3797f0;
-  --ig-out: linear-gradient(160deg, #a334fa 0%, #7a4cf5 45%, #3797f0 100%);
-  --ig-in: #efefef;
-  --ob-gutter: clamp(24px, 3.8vw, 56px);
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-  grid-template-rows: auto auto 1fr auto;
-  grid-template-areas:
-    "top stage"
-    "progress stage"
-    "main stage"
-    "footer stage";
+  display: flex;
+  flex-direction: column;
   min-block-size: 100svh;
   color: var(--ink);
   background: var(--canvas);
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-.shell[data-stage="false"] {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "top"
-    "progress"
-    "main"
-    "footer";
-}
-
-/* The column is a layout-free wrapper: its children sit in the shell grid. */
-.column {
-  display: contents;
-}
-
-/* ── Top: logo, skip, progress ─────────────────────────────────────────── */
+/* ── Top bar and progress ─────────────────────────────────────────────── */
 
 .top {
-  grid-area: top;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px var(--ob-gutter) 14px;
+  block-size: 56px;
+  padding-inline: 24px 12px;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: var(--ink);
 }
 
 .brandMark {
-  block-size: 26px;
+  block-size: 20px;
   inline-size: auto;
 }
 
 .brandName {
-  font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 1.375rem;
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  font-size: 1.125rem;
   font-weight: 800;
-  letter-spacing: -.045em;
+  letter-spacing: -.04em;
+  line-height: 1;
 }
 
 .skip {
   min-block-size: 44px;
-  padding: 0 4px;
-  color: var(--slate);
+  padding: 0 12px;
+  color: var(--muted);
   font: inherit;
-  font-size: .9375rem;
+  font-size: var(--type-label);
   font-weight: 600;
-  background: transparent;
+  background: none;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition: color var(--dur-1) var(--ease-out);
 }
 
 .skip:hover {
   color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 4px;
+}
+
+.skip:disabled {
+  cursor: default;
+  opacity: .6;
 }
 
 .progress {
-  grid-area: progress;
-  position: relative;
-  block-size: 4px;
-  margin-inline: var(--ob-gutter);
+  block-size: 2px;
   overflow: hidden;
   background: var(--line);
-  border-radius: 999px;
 }
 
 .progressFill {
-  position: absolute;
-  inset: 0;
-  background: var(--ob-accent);
-  border-radius: inherit;
+  display: block;
+  block-size: 100%;
+  background: var(--ink);
   transform-origin: left center;
-  transition: transform var(--dur-4) var(--ease-emph);
+  transition: transform var(--dur-3) var(--ease-out);
 }
 
-.backRow {
-  display: flex;
-  align-items: center;
-  min-block-size: 44px;
-  margin-block-start: 12px;
-  padding-inline: var(--ob-gutter);
-}
-
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-block-size: 44px;
-  margin-inline-start: -8px;
-  padding: 0 8px;
-  color: var(--slate);
-  font: inherit;
-  font-size: .9375rem;
-  font-weight: 600;
-  background: transparent;
-  border: 0;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: color var(--dur-1) var(--ease-out);
-}
-
-.back:hover {
-  color: var(--ink);
-}
-
-/* ── The question ──────────────────────────────────────────────────────── */
+/* ── Column ───────────────────────────────────────────────────────────── */
 
 .main {
-  grid-area: main;
-  min-inline-size: 0;
+  flex: 1;
+  inline-size: 100%;
+  max-inline-size: calc(520px + 48px);
+  margin-inline: auto;
+  padding: clamp(40px, 12vh, 128px) 24px 64px;
 }
 
 .steps {
-  display: grid;
-  align-content: start;
-  min-inline-size: 0;
-  padding: 4px var(--ob-gutter) 28px;
-}
-
-.shell[data-stage="false"] .main {
-  inline-size: min(100%, 1120px);
-  margin-inline: auto;
+  position: relative;
 }
 
 .step {
-  grid-area: 1 / 1;
   min-inline-size: 0;
 }
 
-.step[data-motion="enter"][data-direction="forward"] {
-  animation: step-in-forward var(--dur-3) var(--ease-emph) both;
-}
-
-.step[data-motion="enter"][data-direction="back"] {
-  animation: step-in-back var(--dur-3) var(--ease-emph) both;
-}
-
-.step[data-motion="leave"] {
-  pointer-events: none;
-  animation: step-out-forward var(--dur-2) var(--ease-in) both;
-}
-
-.step[data-motion="leave"][data-direction="back"] {
-  animation-name: step-out-back;
-}
-
-@keyframes step-in-forward {
-  from { opacity: 0; transform: translateX(32px); }
-}
-
-@keyframes step-in-back {
-  from { opacity: 0; transform: translateX(-32px); }
-}
-
-@keyframes step-out-forward {
-  to { opacity: 0; transform: translateX(-24px); }
-}
-
-@keyframes step-out-back {
-  to { opacity: 0; transform: translateX(24px); }
+.counter {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: var(--type-label);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .title {
-  max-inline-size: 15ch;
   margin: 0;
-  font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(2.25rem, 2.6vw + 1rem, 3.6rem);
-  font-weight: 800;
-  line-height: .98;
-  letter-spacing: -.055em;
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 1.6875rem;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  line-height: 1.25;
   text-wrap: balance;
 }
 
-.shell[data-stage="false"] .title {
-  max-inline-size: 20ch;
-}
-
-/* Focus lands on the question so screen readers announce it; it is not a
-   control, so it draws no ring. */
-.title:focus,
-.title:focus-visible {
+.title:focus {
   outline: none;
 }
 
-.titleDone {
-  margin-inline: auto;
-  text-align: center;
-}
-
 .lede {
-  max-inline-size: 52ch;
-  margin: 14px 0 0;
-  color: var(--slate);
-  font-size: 1.0625rem;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--type-body);
   line-height: 1.5;
-}
-
-.step[data-step="9"] .lede,
-.shell[data-flow="member"] .step[data-step="3"] .lede {
-  margin-inline: auto;
-  text-align: center;
 }
 
 .body {
   margin-block-start: 28px;
 }
 
-/* ── Fields ────────────────────────────────────────────────────────────── */
+/* ── Answers: rows ────────────────────────────────────────────────────── */
 
-.field {
+.options {
   display: grid;
-  gap: 10px;
-  max-inline-size: 440px;
+  gap: 8px;
 }
 
-.fieldInline {
-  margin-block-start: 20px;
-}
-
-.fieldLabel,
-.groupLabel {
-  color: var(--ink);
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.groupLabel {
-  margin: 26px 0 12px;
-}
-
-.input {
-  inline-size: 100%;
-  min-block-size: 56px;
-  padding: 0 18px;
-  color: var(--ink);
-  font: inherit;
-  font-size: 1.25rem;
-  font-weight: 600;
-  background: var(--panel);
-  border: 1.5px solid var(--line-strong);
-  border-radius: 14px;
-  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
-}
-
-.input::placeholder {
-  color: var(--subtle);
-  font-weight: 500;
-}
-
-.input:focus {
-  outline: none;
-  border-color: var(--ob-accent);
-  box-shadow: inset 0 0 0 1px var(--ob-accent);
-}
-
-/* ── Choice cards and chips ────────────────────────────────────────────── */
-
-.cardGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.option {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  max-inline-size: 760px;
-}
-
-.cardGridWide {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.card {
-  position: relative;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  align-content: space-between;
-  justify-items: start;
-  gap: 18px;
-  min-block-size: 118px;
-  padding: 16px 18px 16px;
+  inline-size: 100%;
+  min-block-size: 52px;
+  padding: 0 16px;
   color: var(--ink);
   font: inherit;
   text-align: start;
   background: var(--panel);
-  border: 1.5px solid var(--line-strong);
-  border-radius: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
   cursor: pointer;
-  transition:
-    border-color var(--dur-1) var(--ease-out),
-    background-color var(--dur-1) var(--ease-out),
-    transform var(--dur-1) var(--ease-snap);
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
-.cardGridWide .card {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-rows: auto;
-  align-items: center;
-  gap: 14px;
-  min-block-size: 66px;
-  padding: 10px 16px;
+.option[data-compact] {
+  min-block-size: 44px;
 }
 
-.card:hover {
-  border-color: color-mix(in srgb, var(--ink) 45%, var(--line-strong));
+.option:hover {
+  border-color: color-mix(in srgb, var(--ink) 40%, var(--line-strong));
 }
 
-.card:active,
-.chip:active {
-  transform: scale(.98);
-}
-
-.card[aria-pressed="true"] {
-  background: var(--panel);
+.option[aria-pressed="true"] {
   border-color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--ink);
+  box-shadow: inset 0 0 0 .5px var(--ink);
 }
 
-.card:focus-visible,
-.chip:focus-visible,
-.primary:focus-visible,
-.secondary:focus-visible,
-.skip:focus-visible,
-.back:focus-visible,
-.textButton:focus-visible,
-.planCardAction:focus-visible {
-  outline: 2px solid var(--ob-accent);
-  outline-offset: 3px;
+.option:active {
+  transform: scale(.995);
 }
 
-.cardIcon {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 42px;
-  block-size: 42px;
+.optionIcon {
+  flex: none;
+  color: var(--muted);
+  transition: color var(--dur-1) var(--ease-out);
+}
+
+.option[aria-pressed="true"] .optionIcon {
   color: var(--ink);
-  border: 1.5px solid var(--line);
-  border-radius: 12px;
-  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
 }
 
-.card[aria-pressed="true"] .cardIcon {
-  color: var(--ob-on-accent);
-  background: var(--ob-accent);
-  border-color: var(--ob-accent);
-}
-
-.cardLabel {
-  align-self: end;
-  font-size: 1.0625rem;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.cardGridWide .cardLabel {
-  align-self: center;
-}
-
-.cardMark {
-  position: absolute;
-  inset-block-start: 14px;
-  inset-inline-end: 14px;
+.optionGlyph {
   display: inline-grid;
+  flex: none;
   place-items: center;
-  inline-size: 24px;
-  block-size: 24px;
-  color: #ffffff;
+}
+
+.optionLabel {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: var(--type-body);
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+/* The radio or checkbox, drawn; the row itself is the control. */
+.optionMark {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  inline-size: 18px;
+  block-size: 18px;
+  color: var(--panel);
   border: 1.5px solid var(--line-strong);
   border-radius: 50%;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
 
-.cardGridWide .cardMark {
-  position: static;
+.option[data-kind="check"] .optionMark {
+  border-radius: 5px;
 }
 
-.card[aria-pressed="true"] .cardMark {
-  color: var(--ob-on-accent);
-  background: var(--ob-accent);
-  border-color: var(--ob-accent);
-  animation: mark-in var(--dur-2) var(--ease-emph) both;
+.option[data-kind="radio"] .optionMark::after {
+  inline-size: 6px;
+  block-size: 6px;
+  background: var(--panel);
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(.4);
+  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
+  content: "";
 }
 
-@keyframes mark-in {
-  from { transform: scale(.4); }
+.option[data-kind="check"] .optionMark svg {
+  opacity: 0;
+  transform: scale(.6);
+  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
 
-.keyHint {
-  display: inline-grid;
-  place-items: center;
-  min-inline-size: 22px;
-  block-size: 22px;
-  padding-inline: 5px;
-  color: var(--muted);
-  font-size: .8125rem;
+.option[aria-pressed="true"] .optionMark {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.option[aria-pressed="true"] .optionMark::after,
+.option[aria-pressed="true"] .optionMark svg {
+  opacity: 1;
+  transform: none;
+}
+
+.groupLabel {
+  margin: 28px 0 10px;
+  color: var(--ink);
+  font-size: var(--type-body);
   font-weight: 600;
-  border: 1px solid var(--line);
-  border-radius: 6px;
 }
 
-.card > .keyHint {
-  position: absolute;
-  inset-block-end: 14px;
-  inset-inline-end: 14px;
+.groupLabelFirst {
+  margin-block-start: 0;
 }
 
-.cardGridWide .card > .keyHint {
-  position: static;
-  order: -1;
-  display: none;
-}
+/* ── Answers: chips (niche) ───────────────────────────────────────────── */
 
-.chipWrap {
+.chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  max-inline-size: 760px;
+  gap: 8px;
 }
 
 .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-block-size: 48px;
-  padding: 0 14px 0 18px;
+  min-block-size: 36px;
+  padding: 0 14px;
   color: var(--ink);
   font: inherit;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: var(--type-label);
+  font-weight: 550;
   background: var(--panel);
-  border: 1.5px solid var(--line-strong);
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
   cursor: pointer;
-  transition:
-    border-color var(--dur-1) var(--ease-out),
-    background-color var(--dur-1) var(--ease-out),
-    transform var(--dur-1) var(--ease-snap);
-}
-
-.chip:not(:has(.keyHint)) {
-  padding-inline-end: 18px;
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
 
 .chip:hover {
-  border-color: color-mix(in srgb, var(--ink) 45%, var(--line-strong));
+  border-color: color-mix(in srgb, var(--ink) 40%, var(--line-strong));
 }
 
 .chip[aria-pressed="true"] {
-  color: var(--ob-on-accent);
-  background: var(--ob-accent);
-  border-color: var(--ob-accent);
+  color: var(--panel);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
-.chip[aria-pressed="true"] .keyHint {
-  color: inherit;
-  border-color: color-mix(in srgb, var(--ob-on-accent) 45%, transparent);
+/* ── Fields ───────────────────────────────────────────────────────────── */
+
+.field input,
+.field select {
+  min-block-size: 44px;
 }
 
-/* ── Footer: the one Continue button ───────────────────────────────────── */
+.fieldOther {
+  margin-block-start: 20px;
+  animation: rise var(--dur-2) var(--ease-out) both;
+}
 
-.footer {
-  grid-area: footer;
-  position: sticky;
-  inset-block-end: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* ── Connect ──────────────────────────────────────────────────────────── */
+
+.connect {
+  display: grid;
   gap: 16px;
-  padding: 14px var(--ob-gutter) 24px;
-  background: var(--canvas);
 }
-
-.shell[data-stage="false"] .footer {
-  inline-size: min(100%, 1120px);
-  margin-inline: auto;
-}
-
-.footerHint {
-  margin: 0;
-  color: var(--muted);
-  font-size: .875rem;
-}
-
-.saveError {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  margin: 0;
-  color: var(--danger);
-  font-size: .9375rem;
-  font-weight: 600;
-}
-
-.primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-block-size: 56px;
-  min-inline-size: 168px;
-  padding: 0 30px;
-  color: var(--ob-on-accent);
-  font: inherit;
-  font-size: 1rem;
-  font-weight: 700;
-  text-decoration: none;
-  background: var(--ob-accent);
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-snap), opacity var(--dur-1) var(--ease-out);
-}
-
-.primary:hover {
-  background: var(--ob-accent-press);
-}
-
-.primary:active {
-  transform: scale(.98);
-}
-
-.primary[data-blocked="true"] {
-  cursor: not-allowed;
-  opacity: .42;
-}
-
-.secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-block-size: 44px;
-  padding: 0 20px;
-  color: var(--ink);
-  font: inherit;
-  font-size: .9375rem;
-  font-weight: 700;
-  text-decoration: none;
-  white-space: nowrap;
-  background: transparent;
-  border: 1.5px solid var(--ink);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-snap);
-}
-
-.secondary:hover {
-  color: var(--ink);
-  border-color: var(--ob-accent);
-}
-
-.secondary:active {
-  transform: scale(.98);
-}
-
-.secondary:disabled {
-  cursor: not-allowed;
-  opacity: .5;
-}
-
-.textButton {
-  min-block-size: 44px;
-  padding: 0 4px;
-  color: var(--ink);
-  font: inherit;
-  font-size: .9375rem;
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.notice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-  max-inline-size: 640px;
-  margin: 0 0 16px;
-  padding: 12px 16px;
-  color: var(--ink);
-  font-size: .9375rem;
-  line-height: 1.45;
-  background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: 14px;
-}
-
-.notice p {
-  margin: 0;
-}
-
-.loading {
-  margin: 0;
-  color: var(--slate);
-  font-size: 1rem;
-}
-
-/* ── Connect ───────────────────────────────────────────────────────────── */
 
 .connectList {
   display: grid;
-  gap: 12px;
-  max-inline-size: 640px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -653,20 +316,18 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  padding: 16px 18px;
+  gap: 4px 14px;
+  min-block-size: 68px;
+  padding: 12px 12px 12px 16px;
   background: var(--panel);
-  border: 1.5px solid var(--line-strong);
-  border-radius: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
 }
 
 .connectIcon {
   display: inline-grid;
   place-items: center;
-  inline-size: 44px;
-  block-size: 44px;
-  border: 1.5px solid var(--line);
-  border-radius: 12px;
+  inline-size: 20px;
 }
 
 .connectCopy {
@@ -676,1253 +337,470 @@
 }
 
 .connectCopy strong {
-  font-size: 1.0625rem;
+  font-size: var(--type-body);
+  font-weight: 600;
 }
 
 .connectCopy span {
-  overflow: hidden;
-  color: var(--slate);
-  font-size: .9375rem;
-  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+.connectAction {
+  min-block-size: 36px;
 }
 
 .connectState {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: .9375rem;
-  font-weight: 700;
-}
-
-.connectState svg {
-  color: var(--leaf);
-}
-
-.connectNote {
-  max-inline-size: 60ch;
-  margin: 18px 0 0;
-  color: var(--slate);
-  font-size: .9375rem;
-}
-
-.pagePicker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 12px;
-  margin-block-end: 18px;
-}
-
-/* ── The stage: a white panel with one live illustration ──────────────── */
-
-.stageSlot {
-  grid-area: stage;
-  position: sticky;
-  inset-block-start: 0;
-  block-size: 100svh;
-  padding: 16px 16px 16px 0;
-}
-
-.stage {
-  position: relative;
-  display: grid;
-  place-items: center;
-  block-size: 100%;
-  overflow: hidden;
-  color: var(--ink);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 32px;
-}
-
-.stageArt {
-  display: grid;
-  place-items: center;
-  animation: stage-in var(--dur-3) var(--ease-emph) both;
-}
-
-@keyframes stage-in {
-  from { opacity: 0; transform: translateY(14px) scale(.97); }
-}
-
-.phoneWrap {
-  display: grid;
-  justify-items: center;
-  gap: 16px;
-}
-
-/* The device body holds the side buttons, which sit outside the screen. */
-.phoneBody {
-  position: relative;
-}
-
-.phoneButton {
-  position: absolute;
-  inline-size: 4px;
-  background: linear-gradient(90deg, #3a3a3e, #1a1a1d);
-  border-radius: 2px;
-}
-
-.phoneSilent { inset-inline-start: -3px; inset-block-start: 15%; block-size: 26px; }
-.phoneVolumeUp { inset-inline-start: -3px; inset-block-start: 22%; block-size: 48px; }
-.phoneVolumeDown { inset-inline-start: -3px; inset-block-start: 31%; block-size: 48px; }
-.phonePower { inset-inline-end: -3px; inset-block-start: 25%; block-size: 76px; }
-
-/* An iPhone 15 (393:852 screen) showing Instagram's light DM screen. */
-.phone {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  inline-size: min(300px, calc((100svh - 200px) * 393 / 852 + 20px));
-  aspect-ratio: 413 / 872;
-  overflow: hidden;
-  color: #000000;
-  background: #ffffff;
-  border: 10px solid #121214;
-  border-radius: 50px;
-  box-shadow: 0 0 0 1px #2a2a2e, 0 30px 60px rgb(23 24 29 / 16%);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", var(--font-sans), sans-serif;
-}
-
-.igStatus {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  block-size: 44px;
-  padding: 6px 20px 0 26px;
-}
-
-.igTime {
-  font-size: .9375rem;
-  font-weight: 650;
-  letter-spacing: -.01em;
-}
-
-.igIsland {
-  position: absolute;
-  inset-block-start: 9px;
-  inset-inline-start: 50%;
-  inline-size: 92px;
-  block-size: 26px;
-  background: #000000;
-  border-radius: 999px;
-  transform: translateX(-50%);
-}
-
-.igSignals {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.igHead {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 14px 10px 8px;
-  border-block-end: 1px solid #dbdbdb;
-}
-
-.igBack {
-  flex: 0 0 auto;
-}
-
-.igAvatar,
-.igIntroAvatar,
-.igMiniAvatar {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  color: #ffffff;
-  font-weight: 700;
-  background: linear-gradient(135deg, #f58529 0%, #dd2a7b 55%, #8134af 100%);
-  border-radius: 50%;
-}
-
-.igAvatar {
-  inline-size: 34px;
-  block-size: 34px;
-  font-size: .875rem;
-}
-
-.igWho {
-  display: grid;
-  flex: 1;
   min-inline-size: 0;
-  line-height: 1.2;
-}
-
-.igWho strong {
-  overflow: hidden;
-  font-size: .9375rem;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.igWho span {
-  overflow: hidden;
-  color: #737373;
-  font-size: .8125rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.igActions {
-  display: inline-flex;
-  align-items: center;
-  gap: 18px;
-}
-
-.phoneThread {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 6px;
-  min-block-size: 0;
-  overflow: hidden;
-  padding: 10px 12px 8px;
-}
-
-.igIntro {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  margin-block-end: auto;
-  padding-block: 8px 4px;
-  text-align: center;
-}
-
-.igIntroAvatar {
-  inline-size: 64px;
-  block-size: 64px;
-  margin-block-end: 6px;
-  font-size: 1.5rem;
-}
-
-.igIntro strong {
-  font-size: .9375rem;
-  font-weight: 650;
-}
-
-.igIntro > span:not(.igIntroAvatar):not(.igIntroButton) {
-  color: #737373;
-  font-size: .8125rem;
-}
-
-.igIntroButton {
-  margin-block-start: 8px;
-  padding: 6px 14px;
-  font-size: .8125rem;
-  font-weight: 650;
-  background: var(--ig-in);
-  border-radius: 8px;
-}
-
-.phoneStamp {
-  align-self: center;
-  margin: 6px 0 2px;
-  color: #737373;
-  font-size: .8125rem;
-  font-weight: 500;
-}
-
-.rowThem,
-.rowYou {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  animation: bubble-in var(--dur-3) var(--ease-emph) var(--bubble-delay, 0ms) both;
-}
-
-.rowThem {
-  align-self: flex-start;
-  max-inline-size: 86%;
-}
-
-.rowYou {
-  flex-direction: column;
-  align-items: flex-end;
-  align-self: flex-end;
-  gap: 3px;
-  max-inline-size: 80%;
-}
-
-.igMiniAvatar {
-  inline-size: 24px;
-  block-size: 24px;
-  font-size: .75rem;
-}
-
-.bubbleThem,
-.bubbleYou {
-  margin: 0;
-  padding: 8px 12px;
-  font-size: .875rem;
-  font-weight: 400;
-  line-height: 1.3;
-  border-radius: 20px;
-}
-
-.bubbleThem {
-  color: #000000;
-  background: var(--ig-in);
-}
-
-.bubbleYou {
-  color: #ffffff;
-  background: var(--ig-out);
-}
-
-.igSeen {
-  padding-inline-end: 4px;
-  color: #737373;
-  font-size: .75rem;
-}
-
-@keyframes bubble-in {
-  from { opacity: 0; transform: translateY(10px) scale(.96); }
-}
-
-.igComposer {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 12px;
-  margin: 4px 10px 6px;
-  padding: 5px 14px 5px 5px;
-  color: #000000;
-  border: 1px solid #dbdbdb;
-  border-radius: 999px;
-}
-
-.igCamera {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 32px;
-  block-size: 32px;
-  color: #ffffff;
-  background: var(--ig-blue);
-  border-radius: 50%;
-}
-
-.igPlaceholder {
-  flex: 1;
-  color: #737373;
-  font-size: .875rem;
-}
-
-.igHomeBar {
-  flex: 0 0 auto;
-  align-self: center;
-  inline-size: 120px;
-  block-size: 5px;
-  margin-block: 4px 8px;
-  background: #000000;
-  border-radius: 999px;
-}
-
-/* What they picked, under the phone (Instagram itself shows none of it). */
-.phoneCaption {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 6px 8px;
-  max-inline-size: 320px;
-  margin: 0;
-  color: var(--muted);
-  font-size: .875rem;
+  max-inline-size: 180px;
+  color: var(--ink);
+  font-size: var(--type-label);
   font-weight: 600;
 }
 
-.phoneCaptionTag {
-  padding: 3px 10px;
-  color: var(--ink);
-  font-weight: 700;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  animation: pop-in-badge var(--dur-2) var(--ease-emph) both;
+.connectState svg {
+  flex: none;
+  color: var(--status-ok);
 }
 
-@keyframes pop-in-badge {
-  from { opacity: 0; transform: scale(.85); }
-}
-
-/* Audience: a crowd that grows with the answer. */
-.crowd {
-  display: grid;
-  justify-items: center;
-  gap: 28px;
-}
-
-.crowdCaption {
-  margin: 0;
-  font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(2.25rem, 3vw, 3.25rem);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -.055em;
-  text-align: center;
-  animation: pop-in-badge var(--dur-2) var(--ease-emph) both;
-}
-
-.crowdCaption small {
-  display: block;
-  margin-block-start: 6px;
-  font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.crowdCluster {
-  display: grid;
-  grid-template-columns: repeat(6, 40px);
-  gap: 12px 14px;
-}
-
-.person {
-  inline-size: 40px;
-  block-size: 46px;
-  fill: var(--line-strong);
-  transform: scale(.9);
-  transform-origin: 50% 100%;
-  transition:
-    fill var(--dur-2) var(--ease-out) var(--dot-delay),
-    transform var(--dur-3) var(--ease-emph) var(--dot-delay);
-}
-
-.person[data-on="true"] {
-  fill: var(--ink);
-  transform: scale(1);
-  animation: person-pop var(--dur-3) var(--ease-emph) var(--dot-delay) both;
-}
-
-.person[data-on="true"][data-tone="1"] {
-  fill: color-mix(in srgb, var(--ink) 78%, var(--panel));
-}
-
-.person[data-on="true"][data-tone="2"] {
-  fill: color-mix(in srgb, var(--ink) 60%, var(--panel));
-}
-
-@keyframes person-pop {
-  0% { transform: scale(.9) translateY(0); }
-  45% { transform: scale(1.08) translateY(-3px); }
-  100% { transform: scale(1) translateY(0); }
-}
-
-.crowdChannels {
-  display: flex;
-  gap: 14px;
-}
-
-.crowdChannel {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 58px;
-  block-size: 58px;
-  background: #ffffff;
-  border: 2px solid #17181d;
-  border-radius: 18px;
-  opacity: .3;
-  transform: scale(.9);
-  transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-emph);
-}
-
-.crowdChannel[data-on="true"] {
-  opacity: 1;
-  transform: scale(1);
-}
-
-/* Daily load: Instagram's comments sheet over the post, scrolling at their
-   pace (speed set through playbackRate in onboarding-stage.tsx). */
-.phoneComments {
-  background: #ffffff;
-}
-
-.igPostBehind {
-  flex: 0 0 64px;
-  background:
-    linear-gradient(rgb(0 0 0 / 45%), rgb(0 0 0 / 45%)),
-    linear-gradient(135deg, #f9a65a 0%, #e8577e 50%, #7b4fd6 100%);
-}
-
-.igSheet {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-block-size: 0;
-  margin-block-start: -14px;
-  background: #ffffff;
-  border-radius: 14px 14px 0 0;
-}
-
-.igGrab {
-  align-self: center;
-  inline-size: 36px;
-  block-size: 4px;
-  margin-block: 8px 6px;
-  background: #c7c7cc;
-  border-radius: 999px;
-}
-
-.igSheetTitle {
-  margin: 0;
-  padding-block: 4px 10px;
-  font-size: .9375rem;
-  font-weight: 700;
-  text-align: center;
-  border-block-end: 1px solid #efefef;
-}
-
-.igCommentsWindow {
-  position: relative;
-  flex: 1;
-  min-block-size: 0;
+.connectHandle {
   overflow: hidden;
-  mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
-}
-
-.igCommentsTrack {
-  display: grid;
-  gap: 16px;
-  padding: 12px 12px 12px 14px;
-  animation: stream-up 16s linear infinite;
-}
-
-@keyframes stream-up {
-  to { transform: translateY(-50%); }
-}
-
-.igComment {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 10px;
-}
-
-.igCommentAvatar {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 32px;
-  block-size: 32px;
-  color: #ffffff;
-  font-size: .8125rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #f58529, #dd2a7b);
-  border-radius: 50%;
-}
-
-.igCommentAvatar[data-tone="1"] { background: linear-gradient(135deg, #4facfe, #3a5bd9); }
-.igCommentAvatar[data-tone="2"] { background: linear-gradient(135deg, #43e97b, #189a6a); }
-.igCommentAvatar[data-tone="3"] { background: linear-gradient(135deg, #a18cd1, #7b4fd6); }
-.igCommentAvatar[data-tone="4"] { background: linear-gradient(135deg, #f6d365, #e0892f); }
-.igCommentAvatar[data-tone="me"] { background: #262626; }
-
-.igCommentBody {
-  display: grid;
-  gap: 2px;
-  min-inline-size: 0;
-}
-
-.igCommentHead {
-  overflow: hidden;
-  margin: 0;
-  font-size: .8125rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.igCommentHead strong {
-  font-weight: 650;
-}
-
-.igCommentHead span {
-  color: #737373;
-}
-
-.igCommentText {
-  margin: 0;
-  font-size: .875rem;
-  line-height: 1.3;
-}
-
-.igCommentReply {
-  color: #737373;
-  font-size: .8125rem;
-  font-weight: 650;
-}
-
-.igCommentLike {
+.pagePicker {
   display: grid;
-  justify-items: center;
-  gap: 2px;
-  padding-block-start: 6px;
-  color: #737373;
-  font-size: .8125rem;
-}
-
-.igReactions {
-  display: flex;
-  flex: 0 0 auto;
-  justify-content: space-between;
-  padding: 8px 16px 6px;
-  font-size: 1.25rem;
-  line-height: 1;
-  border-block-start: 1px solid #efefef;
-}
-
-.igAddComment {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 12px 6px;
-}
-
-.igAddPlaceholder {
-  flex: 1;
-  overflow: hidden;
-  padding: 8px 14px;
-  color: #737373;
-  font-size: .8125rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border: 1px solid #dbdbdb;
-  border-radius: 999px;
-}
-
-/* Connect: Instagram linked to Linkar. */
-.connectArt {
-  display: grid;
-  grid-template-columns: auto 120px auto;
-  align-items: center;
-  justify-items: center;
-  row-gap: 26px;
-}
-
-.connectNode {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 92px;
-  block-size: 92px;
-  background: #ffffff;
-  border: 2px solid #17181d;
-  border-radius: 28px;
-}
-
-.connectLinkar {
-  color: #17181d;
-}
-
-.connectLine {
-  inline-size: 120px;
-  overflow: visible;
-}
-
-.connectLine path {
-  fill: none;
-  stroke: #17181d;
-  stroke-dasharray: .04 .04;
-  stroke-linecap: round;
-  stroke-width: 3;
-}
-
-.connectLine path[data-connected="true"] {
-  stroke: var(--ob-accent);
-  stroke-dasharray: 1;
-  stroke-dashoffset: 0;
-  stroke-width: 4;
-  animation: draw-line var(--dur-4) var(--ease-emph) both;
-}
-
-@keyframes draw-line {
-  from { stroke-dashoffset: 1; }
-}
-
-.connectDone {
-  grid-column: 1 / -1;
-  display: inline-flex;
-  align-items: center;
+  grid-column: 2 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
   gap: 8px;
-  padding: 10px 16px;
-  color: #ffffff;
-  font-size: .9375rem;
-  font-weight: 700;
-  background: #17181d;
-  border-radius: 999px;
-  animation: pop-in-badge var(--dur-2) var(--ease-emph) both;
+  margin-block-start: 8px;
 }
 
-/* ── Your plan ─────────────────────────────────────────────────────────── */
+.connectNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--ink);
+  font-size: var(--type-label);
+  line-height: 1.45;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+}
+
+.textButton {
+  min-block-size: 32px;
+  padding: 0;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.textButton:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ── Your setup ───────────────────────────────────────────────────────── */
 
 .plan {
   display: grid;
-  gap: 18px;
+  gap: 24px;
 }
 
-.step[data-step="8"] .body {
-  margin-block-start: 22px;
-}
-
-.reveal {
-  animation: reveal-up var(--dur-3) var(--ease-emph) var(--reveal-delay, 0ms) both;
-}
-
-@keyframes reveal-up {
-  from { opacity: 0; transform: translateY(12px); }
-}
-
-.planHero {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: end;
-  gap: 16px 40px;
-  padding: 24px 32px;
-  color: var(--ink);
+.planEstimate {
+  padding: 20px;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 28px;
+  border-radius: var(--radius-card);
 }
 
 .planFigure {
-  display: grid;
-  gap: 6px;
   margin: 0;
-}
-
-.planNumber {
-  font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(3.25rem, 4vw + 1rem, 5.25rem);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: .9;
-  letter-spacing: -.06em;
-}
-
-.planUnit {
   font-size: 1.25rem;
-  font-weight: 800;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   letter-spacing: -.01em;
+  line-height: 1.3;
 }
 
 .planAssumption {
-  max-inline-size: 48ch;
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 500;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 
 .planPosts {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0;
-  padding: 14px 18px;
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.45;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 18px;
+  align-items: flex-start;
+  gap: 10px;
+  margin: -8px 0 0;
+  color: var(--slate);
+  font-size: var(--type-label);
+  line-height: 1.5;
 }
 
 .planPosts svg {
   flex: none;
-  color: var(--ink);
+  margin-block-start: 3px;
+  color: var(--muted);
 }
 
 .planPicks {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .planSubhead {
-  margin: 4px 0 0;
-  font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 1.625rem;
-  font-weight: 800;
-  letter-spacing: -.04em;
+  margin: 0;
+  font-size: var(--type-body);
+  font-weight: 600;
 }
 
-.planCards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+.planList {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.planCard {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: 8px;
-  padding: 20px 20px 12px;
   background: var(--panel);
-  border: 1.5px solid var(--line-strong);
-  border-radius: 20px;
-  transition: border-color var(--dur-1) var(--ease-out);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
 }
 
-.planCard:hover {
-  border-color: color-mix(in srgb, var(--ink) 45%, var(--line-strong));
+.planRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 14px 14px 16px;
 }
 
-.planCardTitle {
-  font-size: 1.0625rem;
-  line-height: 1.3;
+.planRow + .planRow {
+  border-block-start: 1px solid var(--line);
 }
 
-.planCardWhy {
-  color: var(--slate);
-  font-size: .9375rem;
+.planRowCopy {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.planRowCopy strong {
+  font-size: var(--type-body);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.planRowCopy span {
+  color: var(--muted);
+  font-size: var(--type-label);
   line-height: 1.45;
 }
 
-.planCardAction {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  gap: 6px;
-  min-block-size: 44px;
-  margin-inline-start: -4px;
-  padding: 0 4px;
-  color: var(--ink);
-  font: inherit;
-  font-size: .9375rem;
-  font-weight: 700;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.planCardAction svg {
-  transition: transform var(--dur-1) var(--ease-out);
-}
-
-.planCardAction:hover svg {
-  transform: translateX(3px);
+.planRowAction {
+  min-block-size: 36px;
 }
 
 .planFit {
-  max-inline-size: 78ch;
   margin: 0;
-  color: var(--ink);
-  font-size: 1rem;
-  line-height: 1.55;
-}
-
-.planFitNote {
   color: var(--muted);
-  font-size: .875rem;
+  font-size: var(--type-label);
+  line-height: 1.5;
 }
 
-/* ── Done ──────────────────────────────────────────────────────────────── */
-
-.step[data-step="9"],
-.shell[data-flow="member"] .step[data-step="3"] {
+.loading {
   display: grid;
-  justify-items: center;
-  padding-block-start: clamp(24px, 9vh, 96px);
-  text-align: center;
+  gap: 24px;
+}
+
+/* Outlines of what is coming, not grey slabs. */
+.loadingBlock {
+  display: block;
+  block-size: 108px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  animation: pulse 1200ms var(--ease-out) 120ms infinite alternate both;
+}
+
+.loadingBlock[data-size="list"] {
+  block-size: 232px;
+}
+
+/* ── Done ─────────────────────────────────────────────────────────────── */
+
+.main[data-done="true"] {
+  padding-block-start: clamp(56px, 22vh, 200px);
 }
 
 .doneMark {
-  position: relative;
-  display: grid;
-  place-items: center;
-  inline-size: 188px;
-  block-size: 188px;
-  margin-block-end: 28px;
-}
-
-.doneMark::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 2px solid var(--line-strong);
-  border-radius: 50%;
-  animation: done-pop var(--dur-4) var(--ease-emph) both;
-}
-
-.doneCircle {
   display: inline-grid;
   place-items: center;
-  inline-size: 104px;
-  block-size: 104px;
-  color: var(--ob-on-accent);
-  position: relative;
-  background: var(--ob-accent);
-  border-radius: 50%;
-  animation: done-pop var(--dur-4) var(--ease-emph) 80ms both;
-}
-
-@keyframes done-pop {
-  from { opacity: 0; transform: scale(.6); }
-}
-
-.sparks {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  pointer-events: none;
-}
-
-.spark {
-  position: absolute;
-  inline-size: 12px;
-  block-size: 12px;
-  margin: -6px 0 0 -6px;
-  background: var(--ob-spark);
-  border-radius: 3px;
-  opacity: 0;
-  animation: spark-out 1100ms var(--ease-out) var(--spark-delay, 0ms) both;
-}
-
-.spark[data-tone="1"] {
-  background: var(--ig-blue);
-}
-
-.spark[data-tone="2"] {
+  inline-size: 40px;
+  block-size: 40px;
+  margin-block-end: 20px;
+  color: var(--panel);
   background: var(--ink);
   border-radius: 50%;
 }
 
-@keyframes spark-out {
-  0% { opacity: 1; transform: translate(0, 0) scale(.4) rotate(0deg); }
-  70% { opacity: 1; }
-  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1) rotate(120deg); }
+.titleDone {
+  font-size: 1.375rem;
 }
 
 .doneActions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  gap: 8px;
+}
+
+.main[data-done="true"] .body {
+  margin-block-start: 24px;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+
+.footer {
+  margin-block-start: 32px;
+}
+
+.footerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
 }
 
-/* ── Dark mode ─────────────────────────────────────────────────────────── */
-
-:global([data-theme="dark"]) .shell {
-  /* Ink and panel swap on their own; the phone stays Instagram's light theme. */
+.primary {
+  min-block-size: 44px;
+  padding-inline: 20px;
 }
 
-:global([data-theme="dark"]) .phone {
-  border-color: #000000;
-  box-shadow: 0 0 0 1px #3a3a40, 0 30px 60px rgb(0 0 0 / 35%);
+.primary[aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
-/* ── Tablets and phones ────────────────────────────────────────────────── */
+.back,
+.later {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 44px;
+  padding: 0 4px;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--type-label);
+  font-weight: 600;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease-out);
+}
 
-@media (max-width: 1100px) {
-  .cardGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.back {
+  margin-inline-start: -4px;
+}
 
-  .planCards {
-    grid-template-columns: minmax(0, 1fr);
+.later {
+  color: var(--ink);
+  padding-inline: 12px;
+}
+
+.back:hover,
+.later:hover {
+  color: var(--ink);
+}
+
+.later:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.saveError {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0 0 12px;
+  color: var(--danger);
+  font-size: var(--type-label);
+}
+
+/* ── Motion: a short fade and 6px rise between steps ──────────────────── */
+
+.step[data-motion="enter"] {
+  animation: stepIn 200ms var(--ease-out) 100ms both;
+}
+
+.step[data-motion="enter"][data-direction="back"] {
+  animation-name: stepInBack;
+}
+
+/* The leaving step is laid over the new one and clipped to its height, so
+   the footer moves once, at the click, instead of after the fade. */
+.step[data-motion="leave"] {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  animation: stepOut 110ms var(--ease-in) both;
+}
+
+.step[data-motion="leave"][data-direction="back"] {
+  animation-name: stepOutBack;
+}
+
+@keyframes stepIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes stepInBack {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes stepOut {
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+@keyframes stepOutBack {
+  to { opacity: 0; transform: translateY(6px); }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pulse {
+  from { opacity: 1; }
+  to { opacity: .4; }
+}
+
+/* ── Short desktop windows: less air above the question ───────────────── */
+
+@media (min-width: 640px) and (max-height: 820px) {
+  .main {
+    padding-block-start: clamp(32px, 8vh, 72px);
   }
 }
 
-@media (max-width: 899px) {
-  .shell,
-  .shell[data-stage="false"] {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto 1fr auto;
-    grid-template-areas:
-      "top"
-      "progress"
-      "stage"
-      "main"
-      "footer";
-  }
+/* ── Phones: sticky action bar ────────────────────────────────────────── */
 
+@media (max-width: 639px) {
   .top {
-    padding: 12px 16px 10px;
+    padding-inline: 20px 8px;
   }
 
-  .progress {
-    margin-inline: 16px;
+  .main {
+    padding: 32px 20px calc(96px + env(safe-area-inset-bottom));
   }
 
-  .backRow,
-  .steps {
-    padding-inline: 16px;
-  }
-
-  .backRow {
-    margin-block-start: 6px;
-  }
-
-  .stageSlot {
-    position: relative;
-    block-size: 150px;
-    padding: 12px 16px 0;
-  }
-
-  .stage {
-    border-radius: 22px;
-  }
-
-  .phoneButton {
-    display: none;
-  }
-
-  /* The device body and wrapper take the strip's width, so the phone's
-     contents (DMs, the comments list) use it instead of shrinking. */
-  .phoneWrap,
-  .phoneBody {
-    inline-size: min(340px, 100%);
-  }
-
-  .phoneWrap {
-    justify-self: center;
-  }
-
-  .stageArt {
-    justify-items: center;
-    inline-size: 100%;
-  }
-
-  .phoneBody .phone {
-    inline-size: 100%;
-  }
-
-  /* The phone becomes just its latest exchange on a white strip. */
-  .phone {
-    inline-size: min(340px, 100%);
-    aspect-ratio: auto;
-    block-size: auto;
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
-  .igStatus,
-  .igHead,
-  .igIntro,
-  .phoneStamp,
-  .igComposer,
-  .igHomeBar,
-  .igSeen,
-  .phoneCaption {
-    display: none;
-  }
-
-  .phoneThread {
-    padding: 10px 14px;
-  }
-
-  .phoneThread > :nth-last-child(n + 3) {
-    display: none;
-  }
-
-  .bubbleThem {
-    box-shadow: 0 6px 16px rgb(23 24 29 / 8%);
-  }
-
-  /* The crowd lays out sideways on the strip: size, a mini crowd, channels. */
-  .crowd {
-    grid-template-columns: auto auto;
-    align-items: center;
-    gap: 8px 18px;
-    padding-inline: 16px;
-  }
-
-  .crowdCaption {
-    grid-row: span 2;
-    max-inline-size: 7.5em;
-    font-size: 1.5rem;
-    text-align: start;
-  }
-
-  .crowdCaption small {
-    font-size: .875rem;
-  }
-
-  .crowdCluster {
-    grid-template-columns: repeat(8, 14px);
-    gap: 3px 4px;
-  }
-
-  .person {
-    inline-size: 14px;
-    block-size: 16px;
-  }
-
-  .crowdChannels {
-    gap: 8px;
-  }
-
-  .crowdChannel {
-    inline-size: 36px;
-    block-size: 36px;
-    border-radius: 11px;
-  }
-
-  .crowdChannel svg {
-    inline-size: 18px;
-    block-size: 18px;
-  }
-
-  /* On the strip, the comments sheet shows just its rolling list. */
-  .phoneComments .igStatus,
-  .phoneComments .igPostBehind,
-  .phoneComments .igGrab,
-  .phoneComments .igSheetTitle,
-  .phoneComments .igReactions,
-  .phoneComments .igAddComment,
-  .phoneComments .igHomeBar {
-    display: none;
-  }
-
-  .phoneComments {
-    block-size: 118px;
-  }
-
-  .phoneComments .igSheet {
-    margin: 0;
-  }
-
-  .connectArt {
-    transform: scale(.62);
+  .main[data-done="true"] {
+    padding-block-start: 18vh;
   }
 
   .title {
-    font-size: clamp(2rem, 8.4vw, 2.6rem);
+    font-size: 1.5rem;
   }
 
-  .lede {
-    font-size: 1rem;
+  .titleDone {
+    font-size: 1.375rem;
   }
 
   .body {
-    margin-block-start: 20px;
+    margin-block-start: 24px;
   }
 
-  .cardGrid,
-  .cardGridWide {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-  }
-
-  .card,
-  .cardGridWide .card {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: auto;
-    align-items: center;
-    gap: 14px;
-    min-block-size: 60px;
-    padding: 8px 14px;
-  }
-
-  .cardIcon {
-    inline-size: 38px;
-    block-size: 38px;
-  }
-
-  .cardLabel {
-    align-self: center;
-  }
-
-  .cardMark {
-    position: static;
-  }
-
-  .card > .keyHint,
-  .chip .keyHint {
-    display: none;
-  }
-
-  .chip {
-    padding-inline: 16px;
-  }
-
-  .footer,
-  .shell[data-stage="false"] .footer {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    justify-content: stretch;
-    gap: 6px;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  .footer {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 10;
+    margin: 0;
+    padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+    background: var(--panel);
     border-block-start: 1px solid var(--line);
   }
 
-  .footer .primary {
-    inline-size: 100%;
+  .footerRow {
+    gap: 8px;
   }
 
-  .footerHint,
-  .saveError {
-    justify-self: center;
-    text-align: center;
+  .footerRow > .primary,
+  .footerRow > .later {
+    flex: 1;
+    justify-content: center;
   }
 
-  .planHero {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 24px 22px;
-    border-radius: 22px;
+  .back {
+    margin-inline-start: 0;
+    padding-inline: 8px 12px;
+  }
+
+  .doneActions > .primary {
+    flex: 1 1 100%;
   }
 
   .connectRow {
     grid-template-columns: auto minmax(0, 1fr);
+    padding-inline-end: 16px;
   }
 
-  .connectRow > :last-child {
-    grid-column: 1 / -1;
-    justify-self: stretch;
+  .connectRow > .connectAction,
+  .connectRow > .connectState {
+    grid-column: 2;
+    justify-self: start;
+    margin-block-start: 6px;
   }
 
-  .connectState {
-    justify-content: center;
+  .pagePicker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .planRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .planRowAction {
+    justify-self: start;
   }
 }
 
-@media (hover: none) {
-  .keyHint {
-    display: none;
-  }
-}
-
-/* Reduced motion: everything is instant, nothing drifts, no sparks. */
 @media (prefers-reduced-motion: reduce) {
-  .step,
-  .stageArt,
-  .rowThem,
-  .rowYou,
-  .phoneCaptionTag,
-  .igCommentsTrack,
-  .connectDone,
-  .connectLine path,
-  .reveal,
-  .doneCircle,
-  .doneMark::before,
-  .crowdCaption,
-  .person,
-  .card[aria-pressed="true"] .cardMark {
-    animation: none !important;
-  }
-
   .progressFill,
-  .person,
-  .crowdChannel,
-  .card,
-  .chip,
-  .primary,
-  .secondary {
-    transition: none !important;
+  .option,
+  .optionMark,
+  .optionMark::after,
+  .optionMark svg,
+  .chip {
+    transition: none;
   }
 
-  .sparks {
-    display: none;
+  .step[data-motion],
+  .fieldOther,
+  .loadingBlock {
+    animation: none;
   }
 
   .step[data-motion="leave"] {

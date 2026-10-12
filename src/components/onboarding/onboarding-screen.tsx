@@ -49,8 +49,8 @@ export function OnboardingScreen({ connectReturn }: { connectReturn?: ConnectRet
         <div className={styles.failed} role="alert">
           <p>Your setup couldn’t load just now.</p>
           <div className={styles.actions}>
-            <button type="button" className={styles.retry} onClick={() => { setFailed(false); setAttempt((value) => value + 1); }}>Try again</button>
-            <button type="button" className={styles.home} onClick={() => navigate("/dashboard")}>Go to Home</button>
+            <button type="button" className="button button-primary" onClick={() => { setFailed(false); setAttempt((value) => value + 1); }}>Try again</button>
+            <button type="button" className="button button-secondary" onClick={() => navigate("/dashboard")}>Go to Home</button>
           </div>
         </div>
       ) : (

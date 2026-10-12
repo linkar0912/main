@@ -11,7 +11,7 @@
 }
 
 .mark {
-  block-size: 44px;
+  block-size: 32px;
   inline-size: auto;
   animation: breathe 1400ms var(--ease-out) infinite alternate;
 }
@@ -22,44 +22,15 @@
 }
 
 .failed p {
-  margin: 0 0 14px;
-  font-size: 1.0625rem;
+  margin: 0 0 16px;
+  font-size: var(--type-body);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
-}
-
-.retry,
-.home {
-  min-block-size: 44px;
-  padding: 0 20px;
-  font: inherit;
-  font-size: .9375rem;
-  font-weight: 700;
-  border-radius: 999px;
-  cursor: pointer;
-}
-
-.retry {
-  color: #ffffff;
-  background: #c200bf;
-  border: 0;
-}
-
-.home {
-  color: var(--ink);
-  background: transparent;
-  border: 1.5px solid var(--ink);
-}
-
-.retry:focus-visible,
-.home:focus-visible {
-  outline: 2px solid #c200bf;
-  outline-offset: 3px;
+  gap: 8px;
 }
 
 @media (prefers-reduced-motion: reduce) {
