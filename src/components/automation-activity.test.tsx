@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AutomationActivity } from "./automation-activity";
 import type { ParticipantActivitySummary, ParticipantFunnelSummary } from "./automation-activity";
@@ -67,6 +67,23 @@ describe("AutomationActivity", () => {
     expect(funnel.textContent).toContain("75%");
     expect(funnel.textContent).toContain("Got the link");
     expect(funnel.textContent).toContain("3");
+  });
+
+  it("shows the campaign's all-time numbers in the same figure style as Home", async () => {
+    stubFetch(
+      [participant({ state: "LINK_SENT", followStatus: true, finalDeliveryStatus: "SENT", deliveryClickedAt: "2026-08-20T09:00:00.000Z" })],
+      { commented: 12, openingSent: 9, optedIn: 6, followed: 4, linkSent: 3 },
+    );
+    render(<AutomationActivity automationId="automation_1" />);
+
+    const summary = await screen.findByRole("list", { name: "Campaign summary" });
+    expect(screen.getByRole("heading", { name: "All time" })).toBeTruthy();
+    const labels = Array.from(summary.querySelectorAll(".perf-figure-label")).map((label) => label.textContent);
+    expect(labels).toEqual(["Commented", "Links delivered", "Link clicks", "Needs attention"]);
+    const clicks = Array.from(summary.querySelectorAll("[role=listitem]")).find((item) => item.textContent?.includes("Link clicks"))!;
+    await waitFor(() => expect(clicks.textContent).toContain("100%"));
+    expect(clicks.textContent).toContain("1 of 1 recent deliveries");
+    expect(summary.textContent).toContain("25% of commenters");
   });
 
   it("does not render a funnel summary when the server does not return one", async () => {

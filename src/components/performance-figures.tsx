@@ -10,20 +10,27 @@ import { changeSentence, periodChange } from "@/src/lib/insights-summary";
  * carry that series' swatch, so the numbers double as the chart's legend.
  * The value counts up once, the first time it is known.
  */
-export function PerformanceFigure({ value, label, tone, change, note, delay = 0 }: {
+export function PerformanceFigure({ value, label, tone, change, note, delay = 0, suffix = "" }: {
   value: number | null;
   label: string;
-  tone?: "primary" | "secondary";
+  /**
+   * primary / secondary: a chart series, with its swatch. plain: a key number
+   * in the same row without a series. Omitted: the small right-hand aside.
+   */
+  tone?: "primary" | "secondary" | "plain";
   change?: ReactNode;
   note?: ReactNode;
   /** Milliseconds to wait before counting, to line up with the page's entrance. */
   delay?: number;
+  /** Unit after the number, e.g. "%". */
+  suffix?: string;
 }) {
   const shown = useCountUp(value, { delay });
+  const series = tone === "primary" || tone === "secondary";
   return (
     <div className={`perf-figure ${tone ? `is-${tone}` : "is-aside"}`} role="listitem">
-      <span className="perf-figure-value">{shown === null ? "–" : shown.toLocaleString("en-IN")}</span>
-      <span className="perf-figure-label">{tone ? <i className={`trend-swatch is-${tone}`} aria-hidden /> : null}{label}</span>
+      <span className="perf-figure-value">{shown === null ? "–" : `${shown.toLocaleString("en-IN")}${suffix}`}</span>
+      <span className="perf-figure-label">{series ? <i className={`trend-swatch is-${tone}`} aria-hidden /> : null}{label}</span>
       {change ? <span className="perf-figure-change">{change}</span> : null}
       {note ? <span className="perf-figure-note">{note}</span> : null}
     </div>

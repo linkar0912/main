@@ -1,4 +1,5 @@
 import { AutomationOverviewScreen } from "@/src/components/automation-overview";
+import { parseRange } from "@/src/lib/analytics-range";
 import { loadAutomation } from "./load-automation";
 
 export const metadata = { title: "Automation · Linkar" };
@@ -7,8 +8,13 @@ export const metadata = { title: "Automation · Linkar" };
 // automation from another workspace.
 export const dynamic = "force-dynamic";
 
-export default async function AutomationOverviewPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function AutomationOverviewPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  /** `?range=7|14|30`: the analytics window the Overview opens on. */
+  searchParams: Promise<{ range?: string | string[] }>;
+}) {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   const { automation } = await loadAutomation(id);
-  return <AutomationOverviewScreen automationId={id} initialAutomation={automation ?? undefined} />;
+  const initialRange = parseRange(Array.isArray(query.range) ? query.range[0] : query.range);
+  return <AutomationOverviewScreen automationId={id} initialAutomation={automation ?? undefined} initialRange={initialRange} />;
 }

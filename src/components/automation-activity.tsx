@@ -2,14 +2,10 @@
 
 import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import {
-  AlertTriangle,
   Check,
   ChevronRight,
   Clock,
   ExternalLink,
-  Link2,
-  MessageCircle,
-  MousePointerClick,
   Minus,
   Radio,
   RefreshCw,
@@ -21,7 +17,9 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CampaignPerformanceSkeleton } from "./skeleton";
 import { SectionCard } from "./page-header";
 import { StatusBadge, type StatusTone } from "./ui/status-badge";
-import { StatGrid, StatTile } from "./stat-tile";
+import { AutomationFunnel } from "./automation-funnel";
+import { PerformanceFigure } from "./performance-figures";
+import { funnelSteps } from "@/src/lib/automation-analytics";
 import type { ParticipantState } from "@/src/lib/repository";
 import { formatDateTime, formatRelativeTime } from "@/src/lib/format-date";
 import {
@@ -230,60 +228,26 @@ function Diagnostic({ label, tone, detail }: { label: string; tone: Tone; detail
   );
 }
 
+/**
+ * The campaign's all-time funnel, drawn with the same funnel as the Overview
+ * tab: counts, bars against the first step, each step's share of the one
+ * before, and the biggest drop in one sentence.
+ */
 function FunnelChart({ summary }: { summary: ParticipantFunnelSummary }) {
-  const total = Math.max(1, summary.commented);
-  // The stage that loses the largest share of the previous stage is where to
-  // look first, so it gets called out instead of making the reader compare.
-  let worst = -1;
-  let worstRate = 101;
-  FUNNEL_STAGES.forEach((stage, index) => {
-    if (index === 0) return;
-    const previous = summary[FUNNEL_STAGES[index - 1].key];
-    if (previous <= 0) return;
-    const rate = (summary[stage.key] / previous) * 100;
-    if (rate < worstRate) {
-      worstRate = rate;
-      worst = index;
-    }
-  });
+  const steps = funnelSteps(FUNNEL_STAGES.map((stage) => ({ key: stage.key, label: stage.label, count: summary[stage.key] })));
   return (
     <SectionCard
       className="campaign-funnel"
-      title="Conversion funnel"
-      description="Share of commenters who reached each stage."
+      title="From comment to link"
+      description="Everyone who commented, all time, and how far they got."
       aria-label="Campaign funnel"
     >
-      <ol className="funnel-bars">
-        {FUNNEL_STAGES.map((stage, index) => {
-          const count = summary[stage.key];
-          const reach = Math.round((count / total) * 100);
-          const previous = index > 0 ? summary[FUNNEL_STAGES[index - 1].key] : null;
-          const conversion = previous && previous > 0 ? Math.round((count / previous) * 100) : null;
-          return (
-            <li className={`funnel-bar-row${index === worst && worstRate < 90 ? " is-worst" : ""}`} key={stage.key}>
-              <span className="funnel-bar-label">{stage.label}</span>
-              <span className="funnel-bar-track" aria-hidden><span style={{ width: `${Math.max(reach, count > 0 ? 1 : 0)}%` }} /></span>
-              <strong className="funnel-bar-count">{count.toLocaleString()}</strong>
-              <span className="funnel-bar-rate">
-                {conversion === null ? `${reach}%` : (
-                  <span className={`funnel-conv${conversion < 50 ? " is-low" : ""}`} title={`Converted from ${FUNNEL_STAGES[index - 1].label.toLowerCase()}`}>
-                    {conversion}%
-                  </span>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-      {worst > 0 && worstRate < 90 ? (
-        <p className="funnel-callout">
-          Biggest drop: <strong>{FUNNEL_STAGES[worst - 1].label}</strong> → <strong>{FUNNEL_STAGES[worst].label}</strong> ({Math.round(worstRate)}% continue)
-        </p>
-      ) : null}
+      <AutomationFunnel steps={steps} label="Steps from comment to link" />
     </SectionCard>
   );
 }
 
+/** The campaign's key numbers in the Home / Overview figure style, all time. */
 function CampaignKpis({ summary, clicks, attention, loaded }: {
   summary: ParticipantFunnelSummary;
   clicks: { delivered: number; clicked: number; rate: number };
@@ -292,17 +256,24 @@ function CampaignKpis({ summary, clicks, attention, loaded }: {
 }) {
   const deliveredRate = summary.commented > 0 ? Math.round((summary.linkSent / summary.commented) * 100) : 0;
   return (
-    <StatGrid label="Campaign summary" className="campaign-kpis">
-      <StatTile label="Commented" icon={MessageCircle} value={summary.commented} note="People who matched the trigger" />
-      <StatTile label="Links delivered" icon={Link2} value={summary.linkSent} note={`${deliveredRate}% of commenters`} />
-      <StatTile
-        label="Link clicks"
-        icon={MousePointerClick}
-        value={clicks.delivered > 0 ? `${clicks.rate}%` : "–"}
-        note={clicks.delivered > 0 ? `${clicks.clicked} of ${clicks.delivered} recent deliveries` : "No recent deliveries yet"}
-      />
-      <StatTile label="Needs attention" icon={AlertTriangle} value={attention} note={`In the latest ${loaded.toLocaleString()}`} />
-    </StatGrid>
+    <section className="surface campaign-summary" aria-labelledby="campaign-summary-title">
+      <div className="campaign-summary-head">
+        <h2 id="campaign-summary-title">All time</h2>
+        <p>Since this campaign started. The Overview tab has the last 7, 14 or 30 days.</p>
+      </div>
+      <div className="perf-figures auto-figures" role="list" aria-label="Campaign summary">
+        <PerformanceFigure value={summary.commented} label="Commented" tone="plain" note="People who matched the trigger" />
+        <PerformanceFigure value={summary.linkSent} label="Links delivered" tone="plain" note={`${deliveredRate}% of commenters`} />
+        <PerformanceFigure
+          value={clicks.delivered > 0 ? clicks.rate : null}
+          suffix="%"
+          label="Link clicks"
+          tone="plain"
+          note={clicks.delivered > 0 ? `${clicks.clicked} of ${clicks.delivered} recent deliveries` : "No recent deliveries yet"}
+        />
+        <PerformanceFigure value={attention} label="Needs attention" tone="plain" note={`In the latest ${loaded.toLocaleString("en-IN")}`} />
+      </div>
+    </section>
   );
 }
 

@@ -467,6 +467,59 @@ function insightsFull(scenario: PreviewScenario, url: URL) {
 }
 
 /**
+ * include=automation: one automation's window (its Overview tab). The share
+ * table scales the workspace line; automations without a share (the draft)
+ * and ?state=empty have nothing yet. The Diwali campaign also gets a
+ * comment-to-link funnel and posts sized to the window.
+ */
+function automationAnalytics(scenario: PreviewScenario, url: URL) {
+  const days = windowDays(url);
+  const automationId = url.searchParams.get("automationId") ?? "";
+  const share = scenario === "empty" ? undefined : AUTOMATION_SHARE[automationId];
+  const scale = share?.share ?? 0;
+  const sent = windowSeries(SENT_60, days, scale);
+  const reached = windowSeries(REACHED_60, days, scale);
+  const windowSent = sent.current.reduce((total, point) => total + point.count, 0);
+  const failed = Math.round(windowSent * (share?.failRate ?? 0));
+  const campaign = share?.campaign === true;
+  // People who commented in the window, and in the window before.
+  const funnelFor = (commented: number) => {
+    const openingSent = Math.round(commented * 0.95);
+    const optedIn = Math.round(openingSent * 0.68);
+    const followed = Math.round(optedIn * 0.76);
+    const linkSent = Math.round(followed * 0.96);
+    return { commented, openingSent, optedIn, followed, linkSent };
+  };
+  const journey = funnelFor(campaign ? Math.round(reached.current.reduce((total, point) => total + point.count, 0) * 1.6) : 0);
+  const previousJourney = funnelFor(campaign ? Math.round(reached.previous * 1.6) : 0);
+  const clicksFor = (linkSent: number) => Math.round(linkSent * 0.41);
+  const posts = campaign ? [
+    { mediaId: "18101928374650011", weight: 0.46, clickRate: 0.4 },
+    { mediaId: "18042217893305561", weight: 0.27, clickRate: 0.33 },
+    { mediaId: "17885514206612948", weight: 0.17, clickRate: 0.29 },
+    { mediaId: "18210493377802215", weight: 0.1, clickRate: 0.22 },
+  ].map(({ mediaId, weight, clickRate }) => {
+    const matched = Math.round(journey.commented * weight);
+    const delivered = Math.round(journey.linkSent * weight);
+    return { mediaId, matched, delivered, clicked: Math.round(delivered * clickRate) };
+  }) : [];
+  return {
+    timeseries: { days, participantsPerDay: reached.current, sentPerDay: sent.current },
+    outcome: { sent: windowSent, failed, skipped: Math.round(windowSent * 0.03) },
+    journey,
+    clicks: clicksFor(journey.linkSent),
+    mediaPerformance: posts,
+    previous: {
+      sent: sent.previous,
+      reached: reached.previous,
+      failed: Math.round(sent.previous * (share?.failRate ?? 0)),
+      clicks: clicksFor(previousJourney.linkSent),
+      journey: previousJourney,
+    },
+  };
+}
+
+/**
  * Home/Insights review states on top of the two base workspaces:
  * - busy: the populated workspace with everything that should surface in
  *   "Needs you" (expired Instagram, plan nearly used up, two paused
@@ -1035,6 +1088,7 @@ export function answer(method: string, url: URL, requested: PreviewScenario, raw
         const include = url.searchParams.get("include");
         if (include === "usage") return json({ usage: usage(scenario) });
         if (include === "overview") return json(insightsOverview(scenario, url));
+        if (include === "automation") return json(automationAnalytics(scenario, url));
         return json(insightsFull(scenario, url));
       }
       case "/api/insights/failures": return json(failures(scenario));

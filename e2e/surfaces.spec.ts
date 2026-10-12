@@ -159,7 +159,7 @@ test("campaign activity filters by status chips and offers retries", async ({ ow
 
   // Truncation notice reflects summary totals beyond the returned page.
   await expect(page.getByText("Latest 2 of 5. Export CSV for the full history.")).toBeVisible();
-  const clicks = page.getByRole("group", { name: "Link clicks" });
+  const clicks = page.getByRole("list", { name: "Campaign summary" }).getByRole("listitem").filter({ hasText: "Link clicks" });
   await expect(clicks).toContainText("100%");
   await expect(clicks).toContainText("1 of 1 recent deliveries");
 

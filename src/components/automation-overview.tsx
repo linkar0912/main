@@ -1,60 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, RefreshCw } from "lucide-react";
 import { AutomationSummary } from "./automation-summary";
+import { AutomationFunnel } from "./automation-funnel";
 import { useDeliveryProblems, useWorkspaceConnections } from "./automation-signals";
 import { attemptsLabel, DeliveryIssueRow, deliveryKindLabel } from "./delivery-issue-row";
 import { hasActivityLog } from "./automation-detail-frame";
+import { PerformanceFigure, PeriodChangeNote } from "./performance-figures";
+import { RangeSwitch } from "./range-switch";
+import { SectionCard } from "./page-header";
+import { Skeleton } from "./skeleton";
+import { TopPosts, usePostMedia } from "./top-posts";
+import { WindowTrendChart } from "./trend-chart";
 import { RelativeTime } from "./ui/relative-time";
+import { useRangePreference } from "./ui/use-range-preference";
 import { relativeTimeLabel } from "./workspace-primitives";
 import { StatusBadge, type StatusTone } from "./ui/status-badge";
-import { slidingThumbRef } from "./ui/use-sliding-thumb";
 import type { AutomationRecord, ParticipantState } from "@/src/lib/repository";
 import { automationAttention, isFacebookAutomation, recentFailureCount } from "@/src/lib/automation-attention";
+import {
+  automationFigures,
+  campaignFunnel,
+  isCampaign,
+  normalizeAutomationAnalytics,
+  type AutomationAnalytics,
+  type AutomationFigures,
+} from "@/src/lib/automation-analytics";
+import type { AnalyticsRange } from "@/src/lib/analytics-range";
 import { formatDateTime } from "@/src/lib/format-date";
 
-const RANGES = [7, 14, 30] as const;
-type Range = (typeof RANGES)[number];
 const RECENT_COUNT = 5;
 
-type DayPoint = { day: string; count: number };
-type InsightsPayload = {
-  timeseries?: { days?: number; participantsPerDay?: DayPoint[]; sentPerDay?: DayPoint[] };
-  previous?: { sent?: number; reached?: number };
-  automations?: Array<{ automationId: string; sent: number; failed: number; skipped: number }>;
-};
-
-export type OverviewNumbers = { days: number; sent: number; reached: number; failed: number; previousSent: number };
-
-function sum(points: DayPoint[] | undefined): number {
-  return (points ?? []).reduce((total, point) => total + point.count, 0);
-}
-
-export function overviewNumbers(payload: InsightsPayload, automationId: string, days: number): OverviewNumbers {
-  const outcome = payload.automations?.find((row) => row.automationId === automationId);
-  return {
-    days: payload.timeseries?.days ?? days,
-    sent: sum(payload.timeseries?.sentPerDay),
-    reached: sum(payload.timeseries?.participantsPerDay),
-    failed: outcome?.failed ?? 0,
-    previousSent: payload.previous?.sent ?? 0,
-  };
-}
-
-/** "Up 18% on the previous 7 days", in the words Home and Insights use. */
-export function comparisonSentence({ sent, previousSent, days }: OverviewNumbers): string | null {
-  if (sent === 0 && previousSent === 0) return null;
-  if (previousSent === 0) return `No replies in the ${days} days before, so this is a fresh start.`;
-  const change = Math.round(((sent - previousSent) / previousSent) * 100);
-  if (change === 0) return `Level with the previous ${days} days.`;
-  return `${change > 0 ? "Up" : "Down"} ${Math.abs(change)}% on the previous ${days} days.`;
-}
-
-function count(value: number): string {
-  return value.toLocaleString("en-IN");
-}
+/** Where this browser remembers the 7 / 14 / 30-day choice for automation analytics. */
+export const AUTOMATION_RANGE_KEY = "linkar.automation.range";
 
 type ActivityRow = { id: string; who: string; what: string; tone: StatusTone; outcome: string; at: string };
 
@@ -121,23 +101,59 @@ export function recentActivityRows(payload: ActivityPayload, facebook: boolean):
     });
 }
 
-function useOverviewNumbers(automationId: string, days: Range) {
-  const [state, setState] = useState<{ days: Range; numbers: OverviewNumbers | null; error: boolean } | null>(null);
+// Stale-while-revalidate per automation and window, like Insights: switching
+// back to a window already seen paints its numbers at once.
+const ANALYTICS_FRESH_FOR_MS = 60_000;
+const analyticsCache = new Map<string, { value: AutomationAnalytics; fetchedAt: number; fetcher: typeof fetch }>();
+
+function readAnalyticsCache(key: string) {
+  const entry = analyticsCache.get(key);
+  return entry && entry.fetcher === fetch ? entry : undefined;
+}
+
+export function automationAnalyticsUrl(automationId: string, days: AnalyticsRange): string {
+  return `/api/insights?include=automation&automationId=${encodeURIComponent(automationId)}&days=${days}`;
+}
+
+type AnalyticsState = {
+  /** The numbers on screen and the window they describe; trails `range` while a new window loads. */
+  shown: { days: AnalyticsRange; data: AutomationAnalytics } | null;
+  /** The window whose request failed, if the latest one did. */
+  failed: AnalyticsRange | null;
+};
+
+function useAutomationAnalytics(automationId: string, range: AnalyticsRange, ready: boolean) {
+  const [state, setState] = useState<AnalyticsState>({ shown: null, failed: null });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (!ready) return;
+    const key = `${automationId}|${range}`;
     const controller = new AbortController();
-    fetch(`/api/insights?automationId=${encodeURIComponent(automationId)}&days=${days}`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Numbers unavailable");
-        const payload = (await response.json()) as InsightsPayload;
-        setState({ days, numbers: overviewNumbers(payload, automationId, days), error: false });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setState((current) => ({ days, numbers: current?.numbers ?? null, error: true }));
-      });
-    return () => controller.abort();
-  }, [automationId, days, attempt]);
-  return { state, retry: () => setAttempt((value) => value + 1) };
+    // Deferred a tick so the cached paint and the request share one path
+    // (and no state is set synchronously inside the effect).
+    const timer = window.setTimeout(() => {
+      const cached = readAnalyticsCache(key);
+      if (cached) {
+        setState({ shown: { days: range, data: cached.value }, failed: null });
+        if (Date.now() - cached.fetchedAt < ANALYTICS_FRESH_FOR_MS) return;
+      }
+      fetch(automationAnalyticsUrl(automationId, range), { signal: controller.signal })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Numbers unavailable");
+          const data = normalizeAutomationAnalytics((await response.json()) as Partial<AutomationAnalytics>, range);
+          analyticsCache.set(key, { value: data, fetchedAt: Date.now(), fetcher: fetch });
+          setState({ shown: { days: range, data }, failed: null });
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setState((current) => ({ shown: current.shown, failed: range }));
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [automationId, range, ready, attempt]);
+  return { ...state, retry: () => setAttempt((value) => value + 1) };
 }
 
 function useRecentActivity(automation: AutomationRecord, enabled: boolean): ActivityRow[] | null {
@@ -159,18 +175,60 @@ function useRecentActivity(automation: AutomationRecord, enabled: boolean): Acti
   return rows;
 }
 
+/** What this view will show once there is something to count, in this automation's terms. */
+function emptyExplanation(automation: AutomationRecord, campaign: boolean, days: number): { title: string; text: string } {
+  const what = campaign
+    ? "replies sent and people reached each day, how far people get from comment to link, and which posts bring them in"
+    : "replies sent and people reached each day";
+  if (automation.status === "DRAFT") {
+    return { title: "No numbers yet", text: `Turn it on and this fills in from the first matching comment or message: ${what}.` };
+  }
+  if (automation.status === "PAUSED") {
+    return { title: `Nothing in the last ${days} days`, text: `It’s paused, so nothing new comes in. Once it’s on, this shows ${what}.` };
+  }
+  return { title: `Nothing in the last ${days} days yet`, text: `This shows ${what}, starting a minute or so after the first matching comment or message.` };
+}
+
+function FiguresRow({ figures, facebook }: { figures: AutomationFigures; facebook: boolean }) {
+  const { days, previous } = figures;
+  return (
+    <div className="perf-figures auto-figures" role="list" aria-label="Key numbers">
+      <PerformanceFigure value={figures.sent} label="Replies sent" tone="primary" change={<PeriodChangeNote current={figures.sent} previous={previous.sent} days={days} />} />
+      <PerformanceFigure value={figures.reached} label={facebook ? "Comments answered" : "People reached"} tone="secondary" change={<PeriodChangeNote current={figures.reached} previous={previous.reached} days={days} />} />
+      {figures.clicks !== null ? (
+        <PerformanceFigure value={figures.clicks} label="Link clicks" tone="plain" change={<PeriodChangeNote current={figures.clicks} previous={previous.clicks} days={days} />} />
+      ) : null}
+      {figures.failed > 0 ? (
+        <div className="perf-figure is-plain auto-figure-failed" role="listitem">
+          <span className="perf-figure-value">{figures.failed.toLocaleString("en-IN")}</span>
+          <span className="perf-figure-label"><i className="auto-warning-dot" aria-hidden />Failed deliveries</span>
+          <span className="perf-figure-note"><a className="text-link" href="#automation-problems">Fix</a></span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /**
- * The Overview tab: whether it needs you, what it does (the builder's review
- * story), how it did over the last 7 / 14 / 30 days, and the latest people it
- * answered and messages that failed. Built only from APIs the app already
- * has: /api/insights?automationId=, the deliveries list and the Activity feed.
+ * The Overview tab, read as one analytics view: the 7 / 14 / 30-day key
+ * numbers and trend (the same figures and chart as Home), the funnel and top
+ * posts for comment-to-link campaigns, the newest people it answered, its
+ * delivery issues, and how it works as a quiet side panel. Built from APIs
+ * the app already has: /api/insights?include=automation, the deliveries list
+ * and the Activity feed.
  */
-export function AutomationOverview({ automation, basePath = "/automations" }: { automation: AutomationRecord; basePath?: string }) {
-  const [range, setRange] = useState<Range>(7);
-  const { state: numbersState, retry } = useOverviewNumbers(automation.id, range);
+export function AutomationOverview({ automation, basePath = "/automations", initialRange }: {
+  automation: AutomationRecord;
+  basePath?: string;
+  /** `?range=` as the server read it. */
+  initialRange?: AnalyticsRange | null;
+}) {
+  const { range, setRange, ready } = useRangePreference(AUTOMATION_RANGE_KEY, initialRange);
+  const analytics = useAutomationAnalytics(automation.id, range, ready);
   const connections = useWorkspaceConnections();
   const problems = useDeliveryProblems();
   const facebook = isFacebookAutomation(automation);
+  const campaign = isCampaign(automation);
   const withActivity = hasActivityLog(automation);
   const recent = useRecentActivity(automation, withActivity);
   const href = `${basePath}/${encodeURIComponent(automation.id)}`;
@@ -185,9 +243,17 @@ export function AutomationOverview({ automation, basePath = "/automations" }: { 
   const accountName = connections?.instagram.find((account) => account.igUserId === automation.instagramAccountId)?.username
     ?? (connections?.instagram.length === 1 && !automation.instagramAccountId ? connections.instagram[0].username : undefined);
   const pageName = connections?.facebook.find((page) => page.pageId === automation.facebookPageId)?.pageName;
-  const numbers = numbersState?.numbers ?? null;
-  const shownDays = numbers?.days ?? range;
-  const comparison = numbers ? comparisonSentence(numbers) : null;
+
+  const shown = analytics.shown;
+  const figures = shown ? automationFigures(shown.data, campaign) : null;
+  const shownDays = shown?.days ?? range;
+  const switchFailed = shown !== null && analytics.failed === range && shown.days !== range;
+  const pending = shown !== null && shown.days !== range && !switchFailed;
+  const funnel = shown && figures && !figures.empty ? campaignFunnel(automation, shown.data.journey, shown.data.clicks) : null;
+  const posts = shown && campaign && figures && !figures.empty ? shown.data.mediaPerformance : [];
+  const ownAutomation = useMemo(() => [automation], [automation]);
+  const media = usePostMedia(ownAutomation, posts.length > 0);
+  const empty = figures?.empty ? emptyExplanation(automation, campaign, shownDays) : null;
 
   return (
     <div className="auto-overview">
@@ -203,80 +269,93 @@ export function AutomationOverview({ automation, basePath = "/automations" }: { 
         </div>
       ) : null}
 
-      <div className="auto-overview-grid">
-        <section className="surface auto-overview-story" aria-labelledby="automation-what">
-          <div className="surface-head">
-            <div className="surface-head-copy">
-              <h2 id="automation-what">What it does</h2>
-            </div>
-            <div className="surface-head-action">
-              <Link className="text-link" href={`${href}/edit`}>Change it</Link>
-            </div>
+      <section className="surface auto-analytics" aria-labelledby="automation-numbers" aria-busy={pending || !shown || undefined} data-pending={pending ? "" : undefined}>
+        <div className="auto-analytics-head">
+          <h2 id="automation-numbers">Last {range} days</h2>
+          <RangeSwitch value={range} onChange={setRange} className="auto-analytics-range" />
+        </div>
+        {switchFailed ? (
+          <div className="home-range-error" role="alert">
+            <p>The last {range} days didn’t load. These are the last {shownDays} days.</p>
+            <button className="button button-secondary button-small" type="button" onClick={analytics.retry}><RefreshCw size={15} aria-hidden /> Try again</button>
           </div>
-          <div className="surface-body">
-            <AutomationSummary automation={automation} accountName={accountName} pageName={pageName} />
+        ) : null}
+        {!shown && analytics.failed !== null ? (
+          <div className="chart-state auto-analytics-state" role="alert">
+            <p>The numbers didn’t load. Check your connection and try again.</p>
+            <button className="button button-secondary button-small" type="button" onClick={analytics.retry}><RefreshCw size={15} aria-hidden /> Try again</button>
           </div>
-        </section>
-
-        <div className="auto-overview-side">
-          <section className="surface auto-numbers" aria-labelledby="automation-numbers">
-            <div className="auto-numbers-head">
-              <h2 id="automation-numbers">Last {shownDays} days</h2>
-              <div ref={slidingThumbRef} className="segmented auto-range" role="group" aria-label="Time range">
-                {RANGES.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={`segmented-option ${range === option ? "is-on" : ""}`}
-                    aria-pressed={range === option}
-                    onClick={() => setRange(option)}
-                  >
-                    {option} days
-                  </button>
-                ))}
-              </div>
+        ) : !shown || !figures ? (
+          <>
+            <div className="perf-figures auto-figures" role="list" aria-label="Loading key numbers">
+              <div className="perf-figure" role="listitem"><Skeleton className="perf-figure-skeleton" /><span className="perf-figure-label">Replies sent</span></div>
+              <div className="perf-figure" role="listitem"><Skeleton className="perf-figure-skeleton" /><span className="perf-figure-label">{facebook ? "Comments answered" : "People reached"}</span></div>
             </div>
-            {numbersState?.error && !numbers ? (
-              <div className="auto-numbers-error" role="alert">
-                <p>The numbers didn’t load.</p>
-                <button className="button button-secondary button-small" type="button" onClick={retry}><RefreshCw size={15} aria-hidden /> Try again</button>
-              </div>
+            <Skeleton className="home-chart-skeleton" />
+          </>
+        ) : empty ? (
+          <div className="auto-analytics-empty">
+            <h3>{empty.title}</h3>
+            <p>{empty.text}</p>
+            {automation.status === "DRAFT" ? <Link className="button button-secondary button-small" href={`${href}/edit`}>Review and turn on</Link> : null}
+          </div>
+        ) : (
+          <>
+            <FiguresRow figures={figures} facebook={facebook} />
+            {figures.sent > 0 || figures.reached > 0 ? (
+              <WindowTrendChart
+                days={shownDays}
+                sentPerDay={shown.data.timeseries.sentPerDay}
+                reachedPerDay={shown.data.timeseries.participantsPerDay}
+                reachedLabel={facebook ? "comments answered" : "people reached"}
+              />
             ) : (
-              <dl className="auto-numbers-list" aria-busy={!numbers || numbersState?.days !== range}>
-                <div>
-                  <dt>Replies sent</dt>
-                  <dd>{numbers ? count(numbers.sent) : <span className="skeleton-block auto-number-skeleton" />}</dd>
-                </div>
-                <div>
-                  <dt>{facebook ? "Comments answered" : "People reached"}</dt>
-                  <dd>{numbers ? count(numbers.reached) : <span className="skeleton-block auto-number-skeleton" />}</dd>
-                </div>
-                <div>
-                  <dt>Couldn’t send</dt>
-                  <dd data-tone={numbers && numbers.failed > 0 ? "warning" : undefined}>{numbers ? count(numbers.failed) : <span className="skeleton-block auto-number-skeleton" />}</dd>
-                </div>
-              </dl>
+              <div className="chart-state auto-analytics-state">
+                <p>No replies in the last {shownDays} days. The daily line starts again with the next one.</p>
+              </div>
             )}
-            {numbers ? (
-              <p className="auto-numbers-note">
-                {comparison ?? (automation.status === "DRAFT" ? "Turn it on and replies start counting here." : `No replies in the last ${shownDays} days yet.`)}
-              </p>
-            ) : null}
-          </section>
+          </>
+        )}
+      </section>
 
+      {funnel ? (
+        <div className="auto-analytics-grid">
+          <SectionCard
+            className="auto-funnel-card"
+            aria-label="From comment to link"
+            title="From comment to link"
+            description={`People who commented in the last ${shownDays} days, and how far they got.`}
+          >
+            {funnel[0].count > 0
+              ? <AutomationFunnel steps={funnel} label="Steps from comment to link" />
+              : <p className="ins-empty-copy">Nobody commented in the last {shownDays} days. Each step fills in as people do.</p>}
+          </SectionCard>
+          <SectionCard
+            className="auto-posts-card"
+            aria-label="Top posts"
+            title="Top posts"
+            description={`Posts with the most matched comments in the last ${shownDays} days.`}
+          >
+            <TopPosts posts={posts} media={media} showDelivered emptyText={`No comments matched on any post in the last ${shownDays} days.`} />
+          </SectionCard>
+        </div>
+      ) : null}
+
+      <div className="auto-overview-grid">
+        <div className="auto-overview-main">
           {withActivity ? (
             <section className="surface auto-recent" aria-labelledby="automation-recent">
               <div className="surface-head">
-                <div className="surface-head-copy"><h2 id="automation-recent">Latest replies</h2></div>
-                <div className="surface-head-action"><Link className="text-link" href={`${href}/activity`}>See all activity</Link></div>
+                <div className="surface-head-copy"><h2 id="automation-recent">Recent activity</h2></div>
+                <div className="surface-head-action"><Link className="text-link" href={`${href}/activity`}>View all activity</Link></div>
               </div>
               <div className="surface-body">
                 {recent === null ? (
-                  <ul className="auto-recent-list" aria-busy="true" aria-label="Loading latest replies">
+                  <ul className="auto-recent-list" aria-busy="true" aria-label="Loading recent activity">
                     {[0, 1, 2].map((index) => <li key={index}><span className="skeleton-block auto-recent-skeleton" /></li>)}
                   </ul>
                 ) : recent.length === 0 ? (
-                  <p className="auto-quiet">Nobody has triggered it yet. People it answers show up here.</p>
+                  <p className="auto-quiet">Nobody has triggered it yet. The people it answers show up here, newest first.</p>
                 ) : (
                   <ul className="auto-recent-list">
                     {recent.map((row) => (
@@ -326,6 +405,20 @@ export function AutomationOverview({ automation, basePath = "/automations" }: { 
             </div>
           </section>
         </div>
+
+        <section className="surface auto-setup" aria-labelledby="automation-what">
+          <div className="surface-head">
+            <div className="surface-head-copy">
+              <h2 id="automation-what">How it works</h2>
+            </div>
+            <div className="surface-head-action">
+              <Link className="text-link" href={`${href}/edit`}>Change it</Link>
+            </div>
+          </div>
+          <div className="surface-body">
+            <AutomationSummary automation={automation} accountName={accountName} pageName={pageName} />
+          </div>
+        </section>
       </div>
     </div>
   );
@@ -335,10 +428,11 @@ export function AutomationOverview({ automation, basePath = "/automations" }: { 
  * The Overview route's client half: uses the automation the server already
  * read, or fetches it when that lookup failed.
  */
-export function AutomationOverviewScreen({ automationId, initialAutomation, basePath = "/automations" }: {
+export function AutomationOverviewScreen({ automationId, initialAutomation, basePath = "/automations", initialRange }: {
   automationId: string;
   initialAutomation?: AutomationRecord;
   basePath?: string;
+  initialRange?: AnalyticsRange | null;
 }) {
   const [automation, setAutomation] = useState<AutomationRecord | null>(initialAutomation ?? null);
   const [failed, setFailed] = useState<"missing" | "failed" | null>(null);
@@ -362,7 +456,7 @@ export function AutomationOverviewScreen({ automationId, initialAutomation, base
     return () => controller.abort();
   }, [automationId, initialAutomation, attempt]);
 
-  if (automation) return <AutomationOverview automation={automation} basePath={basePath} />;
+  if (automation) return <AutomationOverview automation={automation} basePath={basePath} initialRange={initialRange} />;
   if (failed === "missing") {
     return (
       <section className="surface auto-load-error" role="alert">
