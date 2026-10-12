@@ -23,9 +23,12 @@ import { automationAttention, isFacebookAutomation, recentFailureCount } from "@
 import {
   automationFigures,
   campaignFunnel,
+  captureFunnel,
+  collectsEmail,
   isCampaign,
   normalizeAutomationAnalytics,
   type AutomationAnalytics,
+  type AutomationAnalyticsPayload,
   type AutomationFigures,
 } from "@/src/lib/automation-analytics";
 import type { AnalyticsRange } from "@/src/lib/analytics-range";
@@ -140,7 +143,7 @@ function useAutomationAnalytics(automationId: string, range: AnalyticsRange, rea
       fetch(automationAnalyticsUrl(automationId, range), { signal: controller.signal })
         .then(async (response) => {
           if (!response.ok) throw new Error("Numbers unavailable");
-          const data = normalizeAutomationAnalytics((await response.json()) as Partial<AutomationAnalytics>, range);
+          const data = normalizeAutomationAnalytics((await response.json()) as AutomationAnalyticsPayload, range);
           analyticsCache.set(key, { value: data, fetchedAt: Date.now(), fetcher: fetch });
           setState({ shown: { days: range, data }, failed: null });
         })
@@ -179,7 +182,9 @@ function useRecentActivity(automation: AutomationRecord, enabled: boolean): Acti
 function emptyExplanation(automation: AutomationRecord, campaign: boolean, days: number): { title: string; text: string } {
   const what = campaign
     ? "replies sent and people reached each day, how far people get from comment to link, and which posts bring them in"
-    : "replies sent and people reached each day";
+    : collectsEmail(automation)
+      ? "replies sent each day, emails collected, and how many people go from your message to sharing an email"
+      : "replies sent and people reached each day";
   if (automation.status === "DRAFT") {
     return { title: "No numbers yet", text: `Turn it on and this fills in from the first matching comment or message: ${what}.` };
   }
@@ -197,6 +202,15 @@ function FiguresRow({ figures, facebook }: { figures: AutomationFigures; faceboo
       <PerformanceFigure value={figures.reached} label={facebook ? "Comments answered" : "People reached"} tone="secondary" change={<PeriodChangeNote current={figures.reached} previous={previous.reached} days={days} />} />
       {figures.clicks !== null ? (
         <PerformanceFigure value={figures.clicks} label="Link clicks" tone="plain" change={<PeriodChangeNote current={figures.clicks} previous={previous.clicks} days={days} />} />
+      ) : null}
+      {figures.captured !== null ? (
+        <PerformanceFigure
+          value={figures.captured}
+          label="Emails collected"
+          tone="plain"
+          change={<PeriodChangeNote current={figures.captured} previous={previous.captured} days={days} />}
+          note={figures.capturedShare !== null ? `${figures.capturedShare}% of people messaged` : undefined}
+        />
       ) : null}
       {figures.failed > 0 ? (
         <div className="perf-figure is-plain auto-figure-failed" role="listitem">
@@ -250,6 +264,7 @@ export function AutomationOverview({ automation, basePath = "/automations", init
   const switchFailed = shown !== null && analytics.failed === range && shown.days !== range;
   const pending = shown !== null && shown.days !== range && !switchFailed;
   const funnel = shown && figures && !figures.empty ? campaignFunnel(automation, shown.data.journey, shown.data.clicks) : null;
+  const emailFunnel = shown && figures && !figures.empty ? captureFunnel(shown.data.capture) : null;
   const posts = shown && campaign && figures && !figures.empty ? shown.data.mediaPerformance : [];
   const ownAutomation = useMemo(() => [automation], [automation]);
   const media = usePostMedia(ownAutomation, posts.length > 0);
@@ -290,6 +305,7 @@ export function AutomationOverview({ automation, basePath = "/automations", init
             <div className="perf-figures auto-figures" role="list" aria-label="Loading key numbers">
               <div className="perf-figure" role="listitem"><Skeleton className="perf-figure-skeleton" /><span className="perf-figure-label">Replies sent</span></div>
               <div className="perf-figure" role="listitem"><Skeleton className="perf-figure-skeleton" /><span className="perf-figure-label">{facebook ? "Comments answered" : "People reached"}</span></div>
+              {collectsEmail(automation) ? <div className="perf-figure" role="listitem"><Skeleton className="perf-figure-skeleton" /><span className="perf-figure-label">Emails collected</span></div> : null}
             </div>
             <Skeleton className="home-chart-skeleton" />
           </>
@@ -337,6 +353,21 @@ export function AutomationOverview({ automation, basePath = "/automations", init
             description={`Posts with the most matched comments in the last ${shownDays} days.`}
           >
             <TopPosts posts={posts} media={media} showDelivered emptyText={`No comments matched on any post in the last ${shownDays} days.`} />
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {emailFunnel ? (
+        <div className="auto-analytics-grid is-single">
+          <SectionCard
+            className="auto-funnel-card"
+            aria-label="From message to email"
+            title="From message to email"
+            description={`People it messaged in the last ${shownDays} days, how many it asked for an email, and how many shared one.`}
+          >
+            {emailFunnel[0].count > 0 || emailFunnel[2].count > 0
+              ? <AutomationFunnel steps={emailFunnel} label="Steps from message to email" />
+              : <p className="ins-empty-copy">Nobody got a message from it in the last {shownDays} days. Each step fills in as people do.</p>}
           </SectionCard>
         </div>
       ) : null}

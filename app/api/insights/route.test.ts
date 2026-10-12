@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   countExecutionsByStatusPerAutomation: vi.fn(),
   countParticipantsCreatedSince: vi.fn(),
   countCapturedContacts: vi.fn(),
+  countEmailCaptureFunnel: vi.fn(),
   countSuppressedContacts: vi.fn(),
   getWorkspaceUsage: vi.fn(),
   getMonthlyDeliveryLimit: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("@/src/lib/repository-provider", () => ({
     countExecutionsByStatusPerAutomation: mocks.countExecutionsByStatusPerAutomation,
     countParticipantsCreatedSince: mocks.countParticipantsCreatedSince,
     countCapturedContacts: mocks.countCapturedContacts,
+    countEmailCaptureFunnel: mocks.countEmailCaptureFunnel,
     countSuppressedContacts: mocks.countSuppressedContacts,
     getWorkspaceUsage: mocks.getWorkspaceUsage,
   }),
@@ -42,7 +44,7 @@ const { GET } = await import("./route");
 describe("GET /api/insights", () => {
   beforeEach(() => {
     mocks.getValidatedSession.mockReset().mockResolvedValue({ workspaceId: "workspace_1", userId: "user_1" });
-    mocks.getAutomation.mockReset().mockResolvedValue({ id: "automation_1" });
+    mocks.getAutomation.mockReset().mockResolvedValue({ id: "automation_1", definition: { version: 2, trigger: { type: "comment" } } });
     mocks.countParticipantsByState.mockReset().mockResolvedValue({});
     mocks.countParticipantsPerDay.mockReset().mockResolvedValue([]);
     mocks.countExecutionsSentPerDay.mockReset().mockResolvedValue([]);
@@ -51,6 +53,7 @@ describe("GET /api/insights", () => {
     mocks.countExecutionsByStatusPerAutomation.mockReset().mockResolvedValue([]);
     mocks.countParticipantsCreatedSince.mockReset().mockResolvedValue(0);
     mocks.countCapturedContacts.mockReset().mockResolvedValue(0);
+    mocks.countEmailCaptureFunnel.mockReset().mockResolvedValue({ messaged: 0, asked: 0, captured: 0 });
     mocks.countSuppressedContacts.mockReset().mockResolvedValue(0);
     mocks.getWorkspaceUsage.mockReset().mockResolvedValue({ deliveriesReserved: 0, broadcastsCreated: 0 });
     mocks.getMonthlyDeliveryLimit.mockReset().mockResolvedValue(null);
@@ -229,8 +232,12 @@ describe("GET /api/insights", () => {
         reached: 0,
         failed: 3,
         clicks: 2,
+        captured: 0,
         journey: { commented: 6, openingSent: 5, optedIn: 3, followed: 2, linkSent: 2 },
       });
+      // A campaign never asks for an email, so the capture queries are skipped.
+      expect(body.capture).toBeNull();
+      expect(mocks.countEmailCaptureFunnel).not.toHaveBeenCalled();
       // Workspace-wide contact totals and plan usage are not this view's business.
       expect(body.capturedEmails).toBeUndefined();
       expect(mocks.countCapturedContacts).not.toHaveBeenCalled();
@@ -243,6 +250,33 @@ describe("GET /api/insights", () => {
       expect(body.outcome).toEqual({ sent: 0, failed: 0, skipped: 0 });
       expect(body.previous.failed).toBe(0);
       expect(mocks.countParticipantFunnel).toHaveBeenCalledWith("workspace_1", "automation_1", sinceFor(30));
+    });
+
+    it("counts an email-capture automation's people messaged, asked and captured in the window", async () => {
+      mocks.getAutomation.mockResolvedValue({
+        id: "automation_1",
+        definition: { version: 1, trigger: { type: "keyword" }, emailCapture: { promptText: "Email?", confirmationText: "Thanks" } },
+      });
+      mocks.countEmailCaptureFunnel.mockImplementation(async (_workspace: string, _automation: string, since: string) => since === sinceFor(14)
+        ? { messaged: 40, asked: 30, captured: 12 }
+        : { messaged: 70, asked: 52, captured: 20 });
+
+      const body = await (await GET(new Request("http://localhost/api/insights?include=automation&automationId=automation_1&days=14"))).json();
+
+      expect(mocks.countEmailCaptureFunnel).toHaveBeenCalledWith("workspace_1", "automation_1", sinceFor(14));
+      expect(mocks.countEmailCaptureFunnel).toHaveBeenCalledWith("workspace_1", "automation_1", sinceFor(28));
+      expect(body.capture).toEqual({ messaged: 40, asked: 30, captured: 12 });
+      expect(body.previous.captured).toBe(8);
+    });
+
+    it("skips the capture queries for a comment-triggered classic automation", async () => {
+      mocks.getAutomation.mockResolvedValue({
+        id: "automation_1",
+        definition: { version: 1, trigger: { type: "comment" }, emailCapture: { promptText: "Email?", confirmationText: "Thanks" } },
+      });
+      const body = await (await GET(new Request("http://localhost/api/insights?include=automation&automationId=automation_1&days=7"))).json();
+      expect(body.capture).toBeNull();
+      expect(mocks.countEmailCaptureFunnel).not.toHaveBeenCalled();
     });
   });
 

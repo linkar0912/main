@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   automationFigures,
   campaignFunnel,
+  captureFunnel,
+  collectsEmail,
   funnelDropSentence,
   funnelSteps,
   normalizeAutomationAnalytics,
@@ -56,6 +58,52 @@ describe("automation figures", () => {
     expect(automationFigures(data, false).empty).toBe(true);
     const lastWindowOnly = normalizeAutomationAnalytics({ previous: { sent: 4, reached: 0, failed: 0, clicks: 0, journey: zero } }, 14);
     expect(automationFigures(lastWindowOnly, false).empty).toBe(false);
+  });
+});
+
+describe("email capture", () => {
+  const classic = (trigger: string, emailCapture: boolean) => ({
+    definition: {
+      version: 1,
+      trigger: { type: trigger },
+      conditions: [],
+      actions: [],
+      ...(emailCapture ? { emailCapture: { promptText: "Email?", confirmationText: "Thanks" } } : {}),
+    },
+  }) as unknown as Pick<AutomationRecord, "definition">;
+
+  it("applies to classic DM automations that ask for an email, never comment triggers or campaigns", () => {
+    expect(collectsEmail(classic("message", true))).toBe(true);
+    expect(collectsEmail(classic("story_reply", true))).toBe(true);
+    expect(collectsEmail(classic("message", false))).toBe(false);
+    expect(collectsEmail(classic("comment", true))).toBe(false);
+    expect(collectsEmail(v2(false))).toBe(false);
+  });
+
+  it("counts emails collected, their share of people messaged and the previous window", () => {
+    const data = normalizeAutomationAnalytics({
+      capture: { messaged: 40, asked: 30, captured: 10 },
+      previous: { sent: 0, reached: 0, failed: 0, clicks: 0, captured: 4, journey: zero },
+    }, 14);
+    expect(automationFigures(data, false)).toMatchObject({ captured: 10, capturedShare: 25, previous: { captured: 4 }, empty: false });
+    // Not an email-capture automation: no figure at all, not a zero.
+    const plain = automationFigures(normalizeAutomationAnalytics({}, 14), false);
+    expect(plain.captured).toBeNull();
+    expect(plain.capturedShare).toBeNull();
+    // An older payload without `captured` in previous reads as zero.
+    expect(normalizeAutomationAnalytics({ previous: { sent: 1 } }, 7).previous.captured).toBe(0);
+    expect(automationFigures(normalizeAutomationAnalytics({ capture: { messaged: 0, asked: 0, captured: 0 } }, 7), false).capturedShare).toBeNull();
+  });
+
+  it("builds the Messaged, Asked for email, Gave email funnel", () => {
+    const steps = captureFunnel({ messaged: 50, asked: 40, captured: 12 });
+    expect(steps?.map((step) => [step.label, step.count, step.kept])).toEqual([
+      ["Messaged", 50, null],
+      ["Asked for email", 40, 80],
+      ["Gave email", 12, 30],
+    ]);
+    expect(funnelDropSentence(steps!)).toBe("The biggest drop is before “Gave email”: 70% of people at “Asked for email” went no further.");
+    expect(captureFunnel(null)).toBeNull();
   });
 });
 
