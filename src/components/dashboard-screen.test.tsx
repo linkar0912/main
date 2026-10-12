@@ -11,7 +11,7 @@ vi.mock("./automation-list", () => ({
   useAutomations: () => ({ automations: automationState.automations, loading: automationState.loading, error: automationState.error, reload: automationState.reload }),
 }));
 
-const { DashboardScreen, INSIGHTS_TIMEOUT_MS } = await import("./dashboard-screen");
+const { DashboardScreen, HOME_RANGE_KEY, INSIGHTS_TIMEOUT_MS } = await import("./dashboard-screen");
 const { AppShell } = await import("./app-shell");
 const { clearWorkspaceDataCache } = await import("@/src/lib/client/workspace-data");
 
@@ -63,6 +63,12 @@ function stubDashboardFetch({
     if (url.includes("/api/insights/failures")) return ok({ data: failures });
     if (url.includes("/api/insights?include=usage")) return ok({ usage });
     if (url.includes("/api/insights")) {
+      const days = Number(new URL(url, "http://x").searchParams.get("days") ?? 14);
+      if (days !== 14) {
+        // Other windows: one reply a day, against 5 in the window before.
+        const points = Array.from({ length: days }, (_, index) => ({ day: `2026-07-${String(index + 1).padStart(2, "0")}`, count: 1 }));
+        return ok({ timeseries: { days, sentPerDay: points, participantsPerDay: points }, previous: { sent: 5, reached: 5 }, capturedEmails: captured, optedOut: 0 });
+      }
       return ok({ timeseries: { days: 14, sentPerDay, participantsPerDay }, previous: { sent: previousSent, reached: previousSent }, capturedEmails: captured, optedOut: 0 });
     }
     throw new Error(`Unexpected fetch to ${url}`);
@@ -264,6 +270,107 @@ describe("DashboardScreen", () => {
     // 1 + 2 + ... + 14 = 105 replies against 50 in the 14 days before.
     await waitFor(() => expect(figures[0].querySelector(".perf-figure-value")?.textContent).toBe("105"));
     expect(figures[0].textContent).toContain("Up 110% on the previous 14 days");
+  });
+
+  describe("range switch", () => {
+    afterEach(() => {
+      window.localStorage.clear();
+      window.history.replaceState(null, "", "/");
+    });
+
+    it("switches every number, the comparison and the chart to the chosen window, remembering it", async () => {
+      automationState.automations = [automation()];
+      stubDashboardFetch({ previousSent: 50 });
+      render(<DashboardScreen />);
+
+      const panel = await screen.findByRole("region", { name: "Performance over time" });
+      expect(within(panel).getByRole("heading", { name: "Last 14 days" })).toBeTruthy();
+      const switcher = within(panel).getByRole("group", { name: "Time range" });
+      expect(within(switcher).getByRole("button", { name: "14 days" }).getAttribute("aria-pressed")).toBe("true");
+      await waitFor(() => expect(panel.querySelector(".perf-figure-value")?.textContent).toBe("105"));
+
+      fireEvent.click(within(switcher).getByRole("button", { name: "30 days" }));
+      expect(within(panel).getByRole("heading", { name: "Last 30 days" })).toBeTruthy();
+      await waitFor(() => expect(panel.querySelector(".perf-figure-value")?.textContent).toBe("30"));
+      expect(panel.getAttribute("aria-busy")).toBeNull();
+      expect(panel.textContent).toContain("Up 500% on the previous 30 days");
+      expect(screen.getByRole("img", { name: "Daily replies sent and people reached for the last 30 days" })).toBeTruthy();
+      expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toContain("/api/insights?include=overview&days=30");
+      // Emails collected stays all time, and says so.
+      expect(panel.textContent).toContain("All time");
+
+      expect(window.localStorage.getItem(HOME_RANGE_KEY)).toBe("30");
+      expect(window.location.search).toBe("?range=30");
+
+      fireEvent.click(within(switcher).getByRole("button", { name: "14 days" }));
+      await waitFor(() => expect(panel.querySelector(".perf-figure-value")?.textContent).toBe("105"));
+      expect(window.location.search).toBe("");
+    });
+
+    it("keeps the last numbers up, dimmed, while another window loads", async () => {
+      automationState.automations = [automation()];
+      stubDashboardFetch();
+      const base = vi.mocked(fetch).getMockImplementation()!;
+      let release: (() => void) | undefined;
+      vi.mocked(fetch).mockImplementation(async (input) => {
+        if (String(input).includes("days=7")) await new Promise<void>((resolve) => { release = resolve; });
+        return base(input);
+      });
+      render(<DashboardScreen />);
+      const panel = await screen.findByRole("region", { name: "Performance over time" });
+      await waitFor(() => expect(panel.querySelector(".perf-figure-value")?.textContent).toBe("105"));
+
+      fireEvent.click(within(panel).getByRole("button", { name: "7 days" }));
+      await waitFor(() => expect(panel.getAttribute("aria-busy")).toBe("true"));
+      expect(panel.querySelector(".perf-figure-value")?.textContent).toBe("105");
+      expect(document.querySelectorAll(".perf-figure-skeleton")).toHaveLength(0);
+
+      await act(async () => { release?.(); });
+      await waitFor(() => expect(panel.querySelector(".perf-figure-value")?.textContent).toBe("7"));
+      expect(panel.getAttribute("aria-busy")).toBeNull();
+    });
+
+    it("opens on the window this browser chose last time", async () => {
+      window.localStorage.setItem(HOME_RANGE_KEY, "7");
+      automationState.automations = [automation()];
+      stubDashboardFetch();
+      render(<DashboardScreen />);
+
+      const panel = await screen.findByRole("region", { name: "Performance over time" });
+      expect(await within(panel).findByRole("heading", { name: "Last 7 days" })).toBeTruthy();
+      await waitFor(() => expect(panel.querySelector(".perf-figure-value")?.textContent).toBe("7"));
+      // The remembered window is fetched straight away, never the default first.
+      expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter((url) => url.includes("include=overview"))).toEqual(["/api/insights?include=overview&days=7"]);
+      expect(window.location.search).toBe("?range=7");
+    });
+
+    it("lets the URL win over the remembered window", async () => {
+      window.localStorage.setItem(HOME_RANGE_KEY, "7");
+      window.history.replaceState(null, "", "/dashboard?range=30");
+      automationState.automations = [automation()];
+      stubDashboardFetch();
+      render(<DashboardScreen initialRange={30} />);
+
+      const panel = await screen.findByRole("region", { name: "Performance over time" });
+      expect(within(panel).getByRole("heading", { name: "Last 30 days" })).toBeTruthy();
+      await waitFor(() => expect(panel.querySelector(".perf-figure-value")?.textContent).toBe("30"));
+    });
+
+    it("still works when the browser blocks storage", async () => {
+      const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+      const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+      try {
+        automationState.automations = [automation()];
+        stubDashboardFetch();
+        render(<DashboardScreen />);
+        const panel = await screen.findByRole("region", { name: "Performance over time" });
+        fireEvent.click(within(panel).getByRole("button", { name: "7 days" }));
+        await waitFor(() => expect(panel.querySelector(".perf-figure-value")?.textContent).toBe("7"));
+      } finally {
+        getItem.mockRestore();
+        setItem.mockRestore();
+      }
+    });
   });
 
   it("replaces the chart with an empty state when nothing has happened yet", async () => {

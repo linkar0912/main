@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Check, ChevronDown, Link2, Plus, RefreshCw, Zap } from "lucide-react";
 import { FacebookGlyph } from "./facebook-glyph";
@@ -17,10 +17,13 @@ import { Presence } from "./ui/use-presence";
 import { Collapse } from "./ui/collapse";
 import { PageHeader, SectionCard } from "./page-header";
 import { Skeleton } from "./skeleton";
-import { TrendChart } from "./trend-chart";
+import { WindowTrendChart } from "./trend-chart";
 import { PerformanceFigure, PeriodChangeNote } from "./performance-figures";
+import { RangeSwitch } from "./range-switch";
+import { useRangePreference } from "./ui/use-range-preference";
 import type { AutomationRecord } from "@/src/lib/repository";
 import { getFacebookPages, getInstagramConnections, getInsightsOverview, seedWorkspaceData, type InsightsOverview } from "@/src/lib/client/workspace-data";
+import { DEFAULT_RANGE, parseRange, type AnalyticsRange } from "@/src/lib/analytics-range";
 import { greetingFor } from "@/src/lib/display-name";
 import { deriveAttentionItems, type AttentionConnection, type AttentionItem } from "@/src/lib/home-attention";
 import { sumPoints } from "@/src/lib/insights-summary";
@@ -43,6 +46,8 @@ export type DashboardScreenProps = {
   initialEmail?: string;
   /** Profile display name, when the account has one; wins over the email. */
   initialDisplayName?: string;
+  /** `?range=` as the server read it, so the first paint shows the chosen window. */
+  initialRange?: AnalyticsRange | null;
 };
 
 /**
@@ -52,8 +57,8 @@ export type DashboardScreenProps = {
  */
 export const INSIGHTS_TIMEOUT_MS = 15_000;
 
-/** Home always shows the trailing 14 days; Insights offers other windows. */
-const HOME_DAYS = 14;
+/** Where this browser remembers Home's 7 / 14 / 30-day choice. */
+export const HOME_RANGE_KEY = "linkar.home.range";
 
 type InsightsStatus = "loading" | "ready" | "error";
 
@@ -239,13 +244,23 @@ function NeedsYou({ items, failures }: { items: AttentionItem[]; failures: Deliv
   );
 }
 
-/** "Is it working?" in numbers: the two figures are the chart's legend. */
-function PerformancePanel({ status, insights, onRetry }: {
+/**
+ * "Is it working?" in numbers: the two figures are the chart's legend.
+ * Everything but "Emails collected" (all time) follows the 7 / 14 / 30-day
+ * switch. While another window loads, the last numbers stay on screen,
+ * dimmed, and the chart redraws once the new window lands.
+ */
+function PerformancePanel({ status, insights, shownDays, range, onRangeChange, switchFailed, onRetry }: {
   status: InsightsStatus;
   insights: InsightsPayload | null;
+  /** The window the numbers on screen describe; differs from `range` while it loads. */
+  shownDays: AnalyticsRange;
+  range: AnalyticsRange;
+  onRangeChange: (range: AnalyticsRange) => void;
+  /** The chosen window failed to load while an older one is still showing. */
+  switchFailed: boolean;
   onRetry: () => void;
 }) {
-  const [drawn, setDrawn] = useState(false);
   const sentPerDay = insights?.timeseries?.sentPerDay ?? [];
   const reachedPerDay = insights?.timeseries?.participantsPerDay ?? [];
   const sent = sumPoints(sentPerDay);
@@ -254,13 +269,23 @@ function PerformancePanel({ status, insights, onRetry }: {
   const optedOut = insights?.optedOut ?? 0;
   const ready = status === "ready";
   const hasActivity = sent > 0 || reached > 0;
+  const pending = ready && range !== shownDays && !switchFailed;
 
   return (
-    <section className="surface home-performance home-enter" aria-label="Performance over time" style={enterStyle(ENTER.panel)}>
+    <section className="surface home-performance home-enter" aria-label="Performance over time" aria-busy={pending || undefined} data-pending={pending ? "" : undefined} style={enterStyle(ENTER.panel)}>
       <div className="home-panel-head">
-        <h2 className="home-section-title">Last {HOME_DAYS} days</h2>
-        <Link className="text-link" href="/insights">View insights</Link>
+        <h2 className="home-section-title">Last {range} days</h2>
+        <div className="home-panel-tools">
+          <RangeSwitch value={range} onChange={onRangeChange} className="home-range" />
+          <Link className="text-link" href="/insights">View insights</Link>
+        </div>
       </div>
+      {switchFailed ? (
+        <div className="home-range-error" role="alert">
+          <p>The last {range} days didn’t load. These are the last {shownDays} days.</p>
+          <button className="button button-secondary button-small" type="button" onClick={onRetry}><RefreshCw size={15} aria-hidden /> Try again</button>
+        </div>
+      ) : null}
       {status === "error" ? (
         <div className="chart-state" role="alert">
           <p>Reply activity didn’t load. Check your connection and try again.</p>
@@ -276,9 +301,9 @@ function PerformancePanel({ status, insights, onRetry }: {
               </>
             ) : (
               <>
-                <PerformanceFigure value={sent} label="Replies sent" tone="primary" delay={FIGURE_DELAY} change={<PeriodChangeNote current={sent} previous={insights?.previous?.sent} days={HOME_DAYS} />} />
-                <PerformanceFigure value={reached} label="People reached" tone="secondary" delay={FIGURE_DELAY} change={<PeriodChangeNote current={reached} previous={insights?.previous?.reached} days={HOME_DAYS} />} />
-                <PerformanceFigure value={captured} label="Emails collected" delay={FIGURE_DELAY} note={optedOut > 0 ? `${optedOut.toLocaleString("en-IN")} opted out` : "All time"} />
+                <PerformanceFigure value={sent} label="Replies sent" tone="primary" delay={FIGURE_DELAY} change={<PeriodChangeNote current={sent} previous={insights?.previous?.sent} days={shownDays} />} />
+                <PerformanceFigure value={reached} label="People reached" tone="secondary" delay={FIGURE_DELAY} change={<PeriodChangeNote current={reached} previous={insights?.previous?.reached} days={shownDays} />} />
+                <PerformanceFigure value={captured} label="Emails collected" delay={FIGURE_DELAY} note={optedOut > 0 ? `All time, ${optedOut.toLocaleString("en-IN")} opted out` : "All time"} />
               </>
             )}
           </div>
@@ -286,20 +311,11 @@ function PerformancePanel({ status, insights, onRetry }: {
             <Skeleton className="home-chart-skeleton" />
           ) : ready && !hasActivity ? (
             <div className="chart-state">
-              <p>No replies yet in the last {HOME_DAYS} days. The daily line starts once an automation sends its first reply.</p>
+              <p>No replies yet in the last {shownDays} days. The daily line starts once an automation sends its first reply.</p>
               <Link className="button button-secondary button-small" href="/automations">Check your automations</Link>
             </div>
           ) : (
-            <div className="perf-chart" onAnimationEnd={(event) => { if ((event.target as Element).classList.contains("trend-svg")) setDrawn(true); }}>
-              <TrendChart
-                label={`Daily replies sent and people reached for the last ${HOME_DAYS} days`}
-                animate={!drawn}
-                series={[
-                  { key: "sent", label: "replies sent", points: sentPerDay, tone: "primary" },
-                  { key: "reached", label: "people reached", points: reachedPerDay, tone: "secondary" },
-                ]}
-              />
-            </div>
+            <WindowTrendChart days={shownDays} sentPerDay={sentPerDay} reachedPerDay={reachedPerDay} />
           )}
         </>
       )}
@@ -445,7 +461,7 @@ function GuidedStart({ connections, goals, onBrowseTemplates }: { connections: A
   );
 }
 
-export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection, initialEmail, initialDisplayName }: DashboardScreenProps = {}) {
+export function DashboardScreen({ initialAutomations, initialInsights, initialHasConnection, initialEmail, initialDisplayName, initialRange }: DashboardScreenProps = {}) {
   const { automations, loading, error: automationsError = "", reload: reloadAutomations } = useAutomations(initialAutomations);
   const { onboarding, role } = useAccountIdentity();
   // Hidden straight away on dismiss; the server keeps it hidden for good.
@@ -455,10 +471,18 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
   // no "create your first automation".
   const automationsFailed = Boolean(automationsError) && automations.length === 0;
   const automationsKnown = !loading && !automationsFailed;
+  const { range, setRange, ready: rangeReady } = useRangePreference(HOME_RANGE_KEY, initialRange);
   const [insights, setInsights] = useState<InsightsPayload | null>(initialInsights ?? null);
+  // The window the numbers on screen describe; trails `range` while a newly
+  // chosen window loads, so the old numbers stay up (dimmed) meanwhile.
+  const [shownDays, setShownDays] = useState<AnalyticsRange>(parseRange(initialInsights?.timeseries?.days) ?? DEFAULT_RANGE);
   // Explicit status instead of inferring "loading" from `insights === null`:
   // a failed or never-settling request used to leave that null forever.
   const [insightsStatus, setInsightsStatus] = useState<InsightsStatus>(initialInsights ? "ready" : "loading");
+  const [switchFailed, setSwitchFailed] = useState(false);
+  const rangeRef = useRef(range);
+  const shownDaysRef = useRef(shownDays);
+  const hasInsightsRef = useRef(Boolean(initialInsights));
   // A server-known "connected" has no names yet; an empty list is only claimed once the request answers.
   const [connections, setConnections] = useState<AttentionConnection[] | null>(() => initialHasConnection === false ? [] : null);
   const [failures, setFailures] = useState<DeliveryFailure[] | null>(null);
@@ -472,19 +496,48 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
     if (initialInsights) seedWorkspaceData({ insightsOverview: initialInsights });
   }, [initialInsights]);
 
+  // Deliberately not fetching /api/contacts for the captured-lead count:
+  // /api/insights already returns it as capturedEmails off the same
+  // countCapturedContacts() query.
+  const loadInsights = useCallback((days: AnalyticsRange, isActive: () => boolean = () => true) => {
+    withTimeout(getInsightsOverview({ days }), INSIGHTS_TIMEOUT_MS)
+      .then((payload) => {
+        // A late answer for a window the person already left is dropped.
+        if (!isActive() || rangeRef.current !== days) return;
+        hasInsightsRef.current = true;
+        shownDaysRef.current = days;
+        setInsights(payload);
+        setShownDays(days);
+        setInsightsStatus("ready");
+        setSwitchFailed(false);
+      })
+      // A failed background refresh keeps the last good numbers on screen;
+      // only a load with nothing to show yet turns into the error state.
+      .catch(() => {
+        if (!isActive() || rangeRef.current !== days) return;
+        if (hasInsightsRef.current) setSwitchFailed((current) => current || days !== shownDaysRef.current);
+        else setInsightsStatus("error");
+      });
+  }, []);
+
+  // The chosen window: the first load (once the saved choice is known, so a
+  // remembered 30 days never fetches 14 first), and every switch after it.
+  useEffect(() => {
+    if (!rangeReady) return;
+    rangeRef.current = range;
+    let active = true;
+    loadInsights(range, () => active);
+    return () => { active = false; };
+  }, [range, rangeReady, loadInsights]);
+
+  function chooseRange(next: AnalyticsRange) {
+    setSwitchFailed(false);
+    setRange(next);
+  }
+
   useEffect(() => {
     let active = true;
     function refresh() {
-      // Deliberately not fetching /api/contacts for the captured-lead count:
-      // /api/insights already returns it as capturedEmails off the same
-      // countCapturedContacts() query.
-      withTimeout(getInsightsOverview(), INSIGHTS_TIMEOUT_MS)
-        .then((payload) => {
-          if (active) { setInsights(payload); setInsightsStatus("ready"); }
-        })
-        // A failed background refresh keeps the last good numbers on screen;
-        // only a load with nothing to show yet turns into the error state.
-        .catch(() => { if (active) setInsightsStatus((status) => status === "ready" ? status : "error"); });
       Promise.all([
         getInstagramConnections().catch(() => []),
         getFacebookPages().catch(() => []),
@@ -500,12 +553,16 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
     // Resource freshness prevents tab focus from producing a burst of repeat
     // requests. Connection mutations invalidate their own entries, while
     // older confirmed entries refresh after the shared freshness window.
-    window.addEventListener("focus", refresh);
+    const onFocus = () => {
+      refresh();
+      loadInsights(rangeRef.current, () => active);
+    };
+    window.addEventListener("focus", onFocus);
     return () => {
       active = false;
-      window.removeEventListener("focus", refresh);
+      window.removeEventListener("focus", onFocus);
     };
-  }, []);
+  }, [loadInsights]);
 
   // Failures and plan use only feed "Needs you"; a failure to load either
   // simply means no row, never a false alarm.
@@ -521,10 +578,9 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
   }, []);
 
   function retryInsights() {
-    setInsightsStatus("loading");
-    void withTimeout(getInsightsOverview(), INSIGHTS_TIMEOUT_MS)
-      .then((payload) => { setInsights(payload); setInsightsStatus("ready"); })
-      .catch(() => setInsightsStatus("error"));
+    if (switchFailed) setSwitchFailed(false);
+    else setInsightsStatus("loading");
+    loadInsights(range);
   }
 
   const isNewWorkspace = automationsKnown && automations.length === 0;
@@ -563,7 +619,15 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
       ) : (
         <>
           <div className="home-grid">
-            <PerformancePanel status={insightsStatus} insights={insights} onRetry={retryInsights} />
+            <PerformancePanel
+              status={insightsStatus}
+              insights={insights}
+              shownDays={shownDays}
+              range={range}
+              onRangeChange={chooseRange}
+              switchFailed={switchFailed}
+              onRetry={retryInsights}
+            />
             {loading && automations.length === 0 ? (
               <section className="surface home-automations" aria-label="Your automations" aria-busy="true">
                 <Skeleton className="home-list-skeleton" />
