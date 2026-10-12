@@ -598,6 +598,7 @@ async function processEmailCaptureReply(
         senderId,
         candidate,
         new Date(event.timestamp).toISOString(),
+        automation.id,
       );
       const fieldQueue = emailCapture.fields ?? [];
       if (fieldQueue.length > 0) {
@@ -1308,6 +1309,7 @@ export async function processNormalizedEvent(
               senderId,
               capturedEmail,
               atIso,
+              automation.id,
             );
             const fieldQueue = automation.definition.emailCapture?.fields ?? [];
             if (fieldQueue.length > 0) {

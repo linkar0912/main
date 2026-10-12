@@ -47,6 +47,7 @@ import type {
   WorkspaceOnboardingPatch,
   MemberOnboardingRecord,
   MemberOnboardingPatch,
+  InboxContactRow,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
 import { EXECUTION_CLAIM_LEASE_MS } from "./repository";
@@ -392,6 +393,10 @@ function mapContact(record: {
   inboxFavorite: boolean;
   inboxReminderAt: Date | null;
   inboxLastReadAt: Date | null;
+  emailRequestedBy?: string | null;
+  emailRequestedAt?: Date | null;
+  emailCapturedBy?: string | null;
+  emailCapturedAt?: Date | null;
   lastSeenAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -417,6 +422,10 @@ function mapContact(record: {
     inboxFavorite: record.inboxFavorite,
     inboxReminderAt: record.inboxReminderAt?.toISOString(),
     inboxLastReadAt: record.inboxLastReadAt?.toISOString(),
+    ...(record.emailRequestedBy ? { emailRequestedBy: record.emailRequestedBy } : {}),
+    ...(record.emailRequestedAt ? { emailRequestedAt: record.emailRequestedAt.toISOString() } : {}),
+    ...(record.emailCapturedBy ? { emailCapturedBy: record.emailCapturedBy } : {}),
+    ...(record.emailCapturedAt ? { emailCapturedAt: record.emailCapturedAt.toISOString() } : {}),
     fields: (record as unknown as { fields?: Record<string, string> | null }).fields ?? undefined,
     awaitingFields: (record as unknown as { awaitingFields?: { id: string; question: string }[] | null }).awaitingFields ?? undefined,
     suppressedAt: record.suppressedAt?.toISOString(),
@@ -2492,12 +2501,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
           awaitingAutomationId: automationId,
           awaitingSince: new Date(atIso),
           attempts: 0,
+          // Kept after the wait ends, for the automation's "Asked for email" step.
+          emailRequestedBy: automationId,
+          emailRequestedAt: new Date(atIso),
         },
       });
       return mapContact(updated);
     },
 
-    async captureContactEmail(workspaceId, instagramAccountId, igScopedUserId, email, atIso) {
+    async captureContactEmail(workspaceId, instagramAccountId, igScopedUserId, email, atIso, automationId) {
       const normalized = email.trim().toLowerCase();
       // Row-locked read-modify-write: score and tags are derived from the
       // current row, so two concurrent captures must not overwrite each other.
@@ -2516,6 +2528,16 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
             tags: current.tags.includes("email_captured") ? undefined : { push: "email_captured" },
             score: Math.min(current.score + 10, 9999),
             lastSeenAt: new Date(Math.max(new Date(atIso).getTime(), current.lastSeenAt.getTime())),
+            ...(automationId ? {
+              emailCapturedBy: automationId,
+              emailCapturedAt: new Date(atIso),
+              // An address sent before this automation asked counts as asked
+              // and answered at once, so its funnel never gains a step.
+              ...(current.emailRequestedBy === automationId ? {} : {
+                emailRequestedBy: automationId,
+                emailRequestedAt: new Date(atIso),
+              }),
+            } : {}),
           },
         });
         return mapContact(updated);
@@ -2621,6 +2643,27 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return client.automationContact.count({
         where: { workspaceId, state: "CAPTURED", email: { not: null } },
       });
+    },
+
+    async countEmailCaptureFunnel(workspaceId, automationId, sinceIso) {
+      const since = new Date(sinceIso);
+      // "Messaged" counts people, not sends: one person who triggers the
+      // automation three times was still messaged once.
+      const [messaged, asked, captured] = await Promise.all([
+        client.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+          SELECT COUNT(DISTINCT "recipientId")::int AS count
+          FROM "OutboundDelivery"
+          WHERE "workspaceId" = ${workspaceId}
+            AND "kind" = 'CLASSIC_ACTION'
+            AND "createdAt" >= ${since}
+            AND "automationId" = ${automationId}
+            AND "state" = 'SENT'
+            AND "recipientId" IS NOT NULL
+        `),
+        client.automationContact.count({ where: { workspaceId, emailRequestedBy: automationId, emailRequestedAt: { gte: since } } }),
+        client.automationContact.count({ where: { workspaceId, emailCapturedBy: automationId, emailCapturedAt: { gte: since } } }),
+      ]);
+      return { messaged: messaged[0]?.count ?? 0, asked, captured };
     },
 
     async listCapturedContacts(workspaceId, limit): Promise<CapturedContactSummary[]> {
@@ -2883,6 +2926,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         latestInboundAt: Date | null;
         preview: string | null;
         unread: boolean;
+        lastMessageDirection: string | null;
       };
       const rows = await client.$queryRaw<RawRow[]>(Prisma.sql`
         SELECT c.*,
@@ -2895,11 +2939,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         LIMIT ${query.limit + 1}
       `);
       const hasMore = rows.length > query.limit;
-      const visible = rows.slice(0, query.limit).map((row) => ({
+      const visible = rows.slice(0, query.limit).map((row): InboxContactRow => ({
         record: mapContact(row),
         preview: row.preview ?? "No messages yet",
         ...(row.latestInboundAt ? { latestInboundAt: row.latestInboundAt.toISOString() } : {}),
         unread: row.unread,
+        // Kept by database triggers (20261012130000_contact_last_message_direction).
+        ...(row.lastMessageDirection === "INBOUND" || row.lastMessageDirection === "OUTBOUND"
+          ? { lastMessageDirection: row.lastMessageDirection }
+          : {}),
       }));
       const last = visible.at(-1);
       return {
@@ -3095,7 +3143,11 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return client.$executeRaw(Prisma.sql`
         UPDATE "AutomationContact" c
         SET "lastInboundAt" = e."receivedAt",
-            "lastInboundPreview" = public.linkar_inbound_preview(e."payload", e."eventType")
+            "lastInboundPreview" = public.linkar_inbound_preview(e."payload", e."eventType"),
+            "lastMessageDirection" = CASE
+              WHEN c."lastOutboundAt" IS NOT NULL AND c."lastOutboundAt" > e."receivedAt" THEN 'OUTBOUND'
+              ELSE 'INBOUND'
+            END
         FROM (
           SELECT DISTINCT ON (w."workspaceId", w."accountId", w."recipientId")
             w."workspaceId", w."accountId", w."recipientId", w."receivedAt", w."payload", w."eventType"

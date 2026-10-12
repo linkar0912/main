@@ -120,6 +120,112 @@ describe("captureContactEmail", () => {
 
     expect(sqlText(transaction.$queryRaw.mock.calls[0]?.[0])).toContain("FOR UPDATE");
     expect(update.mock.calls[0]?.[0]?.data).toMatchObject({ email: "lead@example.com", score: 30, tags: { push: "email_captured" } });
+    // No automation named (a manual edit): no analytics attribution.
+    expect(update.mock.calls[0]?.[0]?.data).not.toHaveProperty("emailCapturedBy");
+  });
+
+  function captureClient(row: ReturnType<typeof contactRow>) {
+    const update = vi.fn().mockImplementation(async ({ data }) => ({ ...row, ...data, tags: ["email_captured"] }));
+    const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: row.id }]),
+      automationContact: { findUniqueOrThrow: vi.fn().mockResolvedValue(row), update },
+    };
+    const client = {
+      $transaction: vi.fn(async (callback: (tx: typeof transaction) => unknown) => callback(transaction)),
+    } as unknown as typeof prisma;
+    return { client, update };
+  }
+
+  it("attributes the capture to the automation, keeping the time it asked", async () => {
+    const askedAt = new Date("2026-10-10T09:00:00.000Z");
+    const { client, update } = captureClient(contactRow({ state: "AWAITING_EMAIL", emailRequestedBy: "automation_1", emailRequestedAt: askedAt }));
+
+    const record = await createPrismaRepository(client).captureContactEmail("workspace_1", "ig_1", "person_1", "lead@example.com", "2026-10-10T10:01:00.000Z", "automation_1");
+
+    const data = update.mock.calls[0]?.[0]?.data;
+    expect(data).toMatchObject({ emailCapturedBy: "automation_1", emailCapturedAt: new Date("2026-10-10T10:01:00.000Z") });
+    expect(data).not.toHaveProperty("emailRequestedAt");
+    expect(record.emailCapturedBy).toBe("automation_1");
+    expect(record.emailRequestedAt).toBe(askedAt.toISOString());
+  });
+
+  it("counts an address sent before being asked as asked and answered at once", async () => {
+    const { client, update } = captureClient(contactRow({ state: "NONE", emailRequestedBy: "automation_other", emailRequestedAt: new Date("2026-09-01T00:00:00.000Z") }));
+
+    await createPrismaRepository(client).captureContactEmail("workspace_1", "ig_1", "person_1", "lead@example.com", "2026-10-10T10:01:00.000Z", "automation_1");
+
+    expect(update.mock.calls[0]?.[0]?.data).toMatchObject({
+      emailRequestedBy: "automation_1",
+      emailRequestedAt: new Date("2026-10-10T10:01:00.000Z"),
+      emailCapturedBy: "automation_1",
+    });
+  });
+});
+
+describe("setContactAwaitingEmail", () => {
+  it("records which automation asked, kept after the wait ends", async () => {
+    const update = vi.fn().mockImplementation(async ({ data }) => ({ ...contactRow(), ...data }));
+    const client = { automationContact: { update } } as unknown as typeof prisma;
+
+    await createPrismaRepository(client).setContactAwaitingEmail("workspace_1", "ig_1", "person_1", "automation_1", "2026-10-10T10:00:00.000Z");
+
+    expect(update.mock.calls[0]?.[0]?.data).toMatchObject({
+      awaitingAutomationId: "automation_1",
+      emailRequestedBy: "automation_1",
+      emailRequestedAt: new Date("2026-10-10T10:00:00.000Z"),
+    });
+  });
+});
+
+describe("countEmailCaptureFunnel", () => {
+  it("counts distinct people messaged, then people asked and captured by this automation since the window start", async () => {
+    const $queryRaw = vi.fn().mockResolvedValue([{ count: 9 }]);
+    const count = vi.fn().mockResolvedValueOnce(7).mockResolvedValueOnce(3);
+    const client = { $queryRaw, automationContact: { count } } as unknown as typeof prisma;
+
+    const result = await createPrismaRepository(client).countEmailCaptureFunnel("workspace_1", "automation_1", "2026-10-01T00:00:00.000Z");
+
+    expect(result).toEqual({ messaged: 9, asked: 7, captured: 3 });
+    const sql = sqlText($queryRaw.mock.calls[0]?.[0]);
+    expect(sql).toContain('COUNT(DISTINCT "recipientId")');
+    expect(sql).toContain(`"kind" = 'CLASSIC_ACTION'`);
+    expect(sql).toContain(`"state" = 'SENT'`);
+    expect(($queryRaw.mock.calls[0]?.[0] as Prisma.Sql).values).toEqual(["workspace_1", new Date("2026-10-01T00:00:00.000Z"), "automation_1"]);
+    const since = new Date("2026-10-01T00:00:00.000Z");
+    expect(count).toHaveBeenNthCalledWith(1, { where: { workspaceId: "workspace_1", emailRequestedBy: "automation_1", emailRequestedAt: { gte: since } } });
+    expect(count).toHaveBeenNthCalledWith(2, { where: { workspaceId: "workspace_1", emailCapturedBy: "automation_1", emailCapturedAt: { gte: since } } });
+  });
+});
+
+describe("listInboxContacts", () => {
+  it("passes on who spoke last from the trigger-maintained column", async () => {
+    const at = new Date("2026-10-10T10:00:00.000Z");
+    const rows = [
+      { ...contactRow({ id: "contact_in" }), latestInboundAt: at, preview: "Hi", unread: false, lastMessageDirection: "INBOUND" },
+      { ...contactRow({ id: "contact_out" }), latestInboundAt: at, preview: "Hi", unread: false, lastMessageDirection: "OUTBOUND" },
+      { ...contactRow({ id: "contact_unknown" }), latestInboundAt: at, preview: "Hi", unread: true, lastMessageDirection: null },
+    ];
+    const client = { $queryRaw: vi.fn().mockResolvedValue(rows) } as unknown as typeof prisma;
+
+    const page = await createPrismaRepository(client).listInboxContacts("workspace_1", { limit: 10, sort: "newest", now: at.toISOString() });
+
+    expect(page.rows.map((row) => [row.record.id, row.lastMessageDirection])).toEqual([
+      ["contact_in", "INBOUND"],
+      ["contact_out", "OUTBOUND"],
+      ["contact_unknown", undefined],
+    ]);
+  });
+});
+
+describe("reconcileContactLastInbound", () => {
+  it("re-derives who spoke last along with the latest inbound message", async () => {
+    const $executeRaw = vi.fn().mockResolvedValue(2);
+    const client = { $executeRaw } as unknown as typeof prisma;
+
+    await createPrismaRepository(client).reconcileContactLastInbound("2026-10-10T00:00:00.000Z");
+
+    const sql = sqlText($executeRaw.mock.calls[0]?.[0]);
+    expect(sql).toContain('"lastMessageDirection" = CASE WHEN c."lastOutboundAt" IS NOT NULL AND c."lastOutboundAt" > e."receivedAt" THEN \'OUTBOUND\' ELSE \'INBOUND\' END');
   });
 });
 
