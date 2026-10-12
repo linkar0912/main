@@ -45,8 +45,8 @@ const CATEGORY_ICONS: Record<TemplateTriggerType, typeof MessageCircle> = {
 // Order categories the way a person thinks about them, not alphabetically.
 const CATEGORY_ORDER: TemplateTriggerType[] = ["comment", "message", "story_reply", "story_mention", "first_contact", "referral", "optin"];
 
-// Short names for the category list, so no label ever wraps. The full name
-// (triggerLabel) still heads the results and labels each card.
+// Short names for the category list and each card's type label, so no label
+// ever wraps. The full name (triggerLabel) still heads the results.
 const CATEGORY_SHORT_LABELS: Record<TemplateTriggerType, string> = {
   comment: "Comments",
   message: "Messages",
@@ -108,7 +108,7 @@ function Tile({ item, provider, onSelect }: { item: PickerItem; provider: Provid
         </span>
       )}
       <span className="template-picker-tile-foot">
-        <span>{item.featured ? "Quick automation" : categoryLabel(item.category, provider)}</span>
+        <span>{item.featured ? "Quick automation" : shortCategoryLabel(item.category, provider)}</span>
         {item.recommended
           ? <span className="template-picker-badge">Recommended for you</span>
           : item.popular && <span className="template-picker-badge">Popular</span>}

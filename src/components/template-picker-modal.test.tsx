@@ -60,6 +60,9 @@ describe("TemplatePickerModal", () => {
 
     expect(await screen.findByText("Reply when a comment includes chosen words")).toBeTruthy();
     expect(screen.queryByText(/Answer common questions/)).toBeNull();
+    // Facebook's comment cards say "Page comments", like the category list.
+    const fbCard = screen.getByText("Reply when a comment includes chosen words").closest(".template-picker-tile") as HTMLElement;
+    expect(fbCard.querySelector(".template-picker-tile-foot > span:first-child")?.textContent).toBe("Page comments");
     fireEvent.click(screen.getByText("Reply when a comment includes chosen words"));
 
     await waitFor(() => expect(push).toHaveBeenCalledWith(
@@ -175,6 +178,17 @@ describe("TemplatePickerModal", () => {
     expect(all.getAttribute("aria-pressed")).toBe("false");
     // The full category name heads the results.
     expect(screen.getByRole("heading", { name: "Instagram messages" })).toBeTruthy();
+  });
+
+  it("labels each card's type with the same short names as the category list", () => {
+    render(<TemplatePickerModal onClose={() => {}} />);
+    const short = new Set(["Quick automation", "Comments", "Messages", "Story replies", "Story mentions", "First message", "From ads", "Button taps"]);
+    const types = [...document.querySelectorAll(".template-picker-tile-foot > span:first-child")].map((label) => label.textContent ?? "");
+
+    expect(types.length).toBeGreaterThan(1);
+    for (const type of types) expect(short.has(type), type).toBe(true);
+    expect(types).toContain("Comments");
+    expect(types).not.toContain("Post & Reel comments");
   });
 
   it("puts popular templates first in one grid, each card with at most three numbered steps", () => {
