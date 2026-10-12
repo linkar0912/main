@@ -751,6 +751,23 @@
   gap: 16px;
 }
 
+/* The device body holds the side buttons, which sit outside the screen. */
+.phoneBody {
+  position: relative;
+}
+
+.phoneButton {
+  position: absolute;
+  inline-size: 4px;
+  background: linear-gradient(90deg, #3a3a3e, #1a1a1d);
+  border-radius: 2px;
+}
+
+.phoneSilent { inset-inline-start: -3px; inset-block-start: 15%; block-size: 26px; }
+.phoneVolumeUp { inset-inline-start: -3px; inset-block-start: 22%; block-size: 48px; }
+.phoneVolumeDown { inset-inline-start: -3px; inset-block-start: 31%; block-size: 48px; }
+.phonePower { inset-inline-end: -3px; inset-block-start: 25%; block-size: 76px; }
+
 /* An iPhone 15 (393:852 screen) showing Instagram's light DM screen. */
 .phone {
   position: relative;
@@ -1119,87 +1136,162 @@
   transform: scale(1);
 }
 
-/* Daily load: a stream of comments at their pace, inside a phone card so
-   the fade runs into white. */
-.stream {
-  position: relative;
-  display: grid;
-  inline-size: 284px;
-  block-size: min(470px, calc(100svh - 150px));
-  overflow: hidden;
+/* Daily load: Instagram's comments sheet over the post, scrolling at their
+   pace (speed set through playbackRate in onboarding-stage.tsx). */
+.phoneComments {
   background: #ffffff;
-  border: 10px solid #17181d;
-  border-radius: 44px;
-  box-shadow: 0 30px 60px rgb(23 24 29 / 18%);
 }
 
-.streamWindow {
+.igPostBehind {
+  flex: 0 0 64px;
+  background:
+    linear-gradient(rgb(0 0 0 / 45%), rgb(0 0 0 / 45%)),
+    linear-gradient(135deg, #f9a65a 0%, #e8577e 50%, #7b4fd6 100%);
+}
+
+.igSheet {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+  margin-block-start: -14px;
+  background: #ffffff;
+  border-radius: 14px 14px 0 0;
+}
+
+.igGrab {
+  align-self: center;
+  inline-size: 36px;
+  block-size: 4px;
+  margin-block: 8px 6px;
+  background: #c7c7cc;
+  border-radius: 999px;
+}
+
+.igSheetTitle {
+  margin: 0;
+  padding-block: 4px 10px;
+  font-size: .9375rem;
+  font-weight: 700;
+  text-align: center;
+  border-block-end: 1px solid #efefef;
+}
+
+.igCommentsWindow {
+  position: relative;
+  flex: 1;
+  min-block-size: 0;
   overflow: hidden;
-  padding: 0 14px;
-  mask-image: linear-gradient(to bottom, transparent, #000 16%, #000 70%, transparent 88%);
+  mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
 }
 
-.streamTrack {
+.igCommentsTrack {
   display: grid;
-  gap: 10px;
-  inline-size: 100%;
-  animation: stream-up var(--stream-seconds, 16s) linear infinite;
-}
-
-.streamTrack[data-moving="false"] {
-  animation-duration: 24s;
+  gap: 16px;
+  padding: 12px 12px 12px 14px;
+  animation: stream-up 16s linear infinite;
 }
 
 @keyframes stream-up {
   to { transform: translateY(-50%); }
 }
 
-.streamItem {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  gap: 8px;
-  padding: 7px 13px 7px 7px;
-  color: #17181d;
-  font-size: .875rem;
-  font-weight: 650;
-  background: #ffffff;
-  border: 1px solid #e3e3e8;
-  border-radius: 999px;
+.igComment {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
 }
 
-.streamItem[data-side="right"] {
-  justify-self: end;
-}
-
-.streamAvatar {
-  flex: 0 0 22px;
-  block-size: 22px;
-  background: var(--ob-accent);
+.igCommentAvatar {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  color: #ffffff;
+  font-size: .8125rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #f58529, #dd2a7b);
   border-radius: 50%;
 }
 
-.streamAvatar[data-tone="1"] {
-  background: #17181d;
+.igCommentAvatar[data-tone="1"] { background: linear-gradient(135deg, #4facfe, #3a5bd9); }
+.igCommentAvatar[data-tone="2"] { background: linear-gradient(135deg, #43e97b, #189a6a); }
+.igCommentAvatar[data-tone="3"] { background: linear-gradient(135deg, #a18cd1, #7b4fd6); }
+.igCommentAvatar[data-tone="4"] { background: linear-gradient(135deg, #f6d365, #e0892f); }
+.igCommentAvatar[data-tone="me"] { background: #262626; }
+
+.igCommentBody {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
 }
 
-.streamAvatar[data-tone="2"] {
-  background: #ffffff;
-  border: 2px solid #17181d;
+.igCommentHead {
+  overflow: hidden;
+  margin: 0;
+  font-size: .8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.streamTag {
-  position: absolute;
-  inset-inline: 14px;
-  inset-block-end: 14px;
-  padding: 10px 14px;
-  color: #ffffff;
+.igCommentHead strong {
+  font-weight: 650;
+}
+
+.igCommentHead span {
+  color: #737373;
+}
+
+.igCommentText {
+  margin: 0;
   font-size: .875rem;
-  font-weight: 700;
-  text-align: center;
-  background: #17181d;
+  line-height: 1.3;
+}
+
+.igCommentReply {
+  color: #737373;
+  font-size: .8125rem;
+  font-weight: 650;
+}
+
+.igCommentLike {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding-block-start: 6px;
+  color: #737373;
+  font-size: .8125rem;
+}
+
+.igReactions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  padding: 8px 16px 6px;
+  font-size: 1.25rem;
+  line-height: 1;
+  border-block-start: 1px solid #efefef;
+}
+
+.igAddComment {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 6px;
+}
+
+.igAddPlaceholder {
+  flex: 1;
+  overflow: hidden;
+  padding: 8px 14px;
+  color: #737373;
+  font-size: .8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #dbdbdb;
   border-radius: 999px;
-  animation: pop-in-badge var(--dur-2) var(--ease-emph) both;
 }
 
 /* Connect: Instagram linked to Linkar. */
@@ -1575,6 +1667,10 @@
     border-radius: 22px;
   }
 
+  .phoneButton {
+    display: none;
+  }
+
   /* The phone becomes just its latest exchange on a white strip. */
   .phone {
     inline-size: min(340px, 100%);
@@ -1652,25 +1748,23 @@
     block-size: 18px;
   }
 
-  /* A small white screen on the strip, so the fade runs into white. */
-  .stream {
-    inline-size: min(320px, calc(100% - 28px));
-    block-size: 114px;
-    border-width: 2px;
-    border-radius: 18px;
-    box-shadow: none;
+  /* On the strip, the comments sheet shows just its rolling list. */
+  .phoneComments .igStatus,
+  .phoneComments .igPostBehind,
+  .phoneComments .igGrab,
+  .phoneComments .igSheetTitle,
+  .phoneComments .igReactions,
+  .phoneComments .igAddComment,
+  .phoneComments .igHomeBar {
+    display: none;
   }
 
-  .streamWindow {
-    padding-inline: 10px;
-    mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 55%, transparent 72%);
+  .phoneComments {
+    block-size: 118px;
   }
 
-  .streamTag {
-    inset-inline: 8px;
-    inset-block-end: 8px;
-    padding: 6px 12px;
-    font-size: .8125rem;
+  .phoneComments .igSheet {
+    margin: 0;
   }
 
   .connectArt {
@@ -1780,8 +1874,7 @@
   .rowThem,
   .rowYou,
   .phoneCaptionTag,
-  .streamTrack,
-  .streamTag,
+  .igCommentsTrack,
   .connectDone,
   .connectLine path,
   .reveal,

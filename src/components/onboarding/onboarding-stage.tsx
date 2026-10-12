@@ -1,13 +1,14 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { BatteryFull, Camera, Check, ChevronLeft, Image as ImageIcon, Mic, Phone as PhoneIcon, Signal, Sticker, Video, Wifi } from "lucide-react";
+import { useEffect, useRef, type CSSProperties } from "react";
+import { BatteryFull, Camera, Check, ChevronLeft, Heart, Image as ImageIcon, Mic, Phone as PhoneIcon, Signal, Sticker, Video, Wifi } from "lucide-react";
 import { InstagramGlyph } from "../instagram-glyph";
 import { FacebookGlyph } from "../facebook-glyph";
 import { LinkarMark } from "../linkar-mark";
 import {
   ACCOUNT_TYPE_LABELS,
   AUDIENCE_LABELS,
+  DAILY_VOLUME_LABELS,
   NICHE_LABELS,
   type AccountType,
   type AudienceSize,
@@ -77,6 +78,19 @@ const STREAM_SECONDS: Record<DailyVolume, number> = { under_10: 18, "10_50": 13,
 /** The follower writing in. Fixed so the thread reads like a real DM. */
 const FOLLOWER = { name: "Ananya", handle: "ananya.styles", initials: "A" };
 
+/** The phone's side buttons, outside the screen's clipping. */
+function PhoneBody({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div className={styles.phoneBody}>
+      <span className={`${styles.phoneButton} ${styles.phoneSilent}`} />
+      <span className={`${styles.phoneButton} ${styles.phoneVolumeUp}`} />
+      <span className={`${styles.phoneButton} ${styles.phoneVolumeDown}`} />
+      <span className={`${styles.phoneButton} ${styles.phonePower}`} />
+      <div className={className ? `${styles.phone} ${className}` : styles.phone}>{children}</div>
+    </div>
+  );
+}
+
 function StatusBar() {
   return (
     <div className={styles.igStatus}>
@@ -106,7 +120,7 @@ function Phone({ name, caption, bubbles }: {
   const lastYou = [...bubbles].reverse().find((bubble) => bubble.from === "you")?.id;
   return (
     <div className={styles.phoneWrap}>
-      <div className={styles.phone}>
+      <PhoneBody>
         <StatusBar />
         <div className={styles.igHead}>
           <ChevronLeft size={24} strokeWidth={2.2} className={styles.igBack} />
@@ -132,7 +146,10 @@ function Phone({ name, caption, bubbles }: {
           <p className={styles.phoneStamp}>Today 10:24</p>
           {bubbles.map((bubble, index) => (
             <div
-              key={bubble.id}
+              // The follower's message stays put while answers change; only
+              // the reply re-enters, like a new message arriving - so a click
+              // never makes the whole thread replay.
+              key={bubble.from === "them" ? `them-${index}` : bubble.id}
               className={bubble.from === "you" ? styles.rowYou : styles.rowThem}
               style={{ "--bubble-delay": `${Math.min(index, 5) * 60}ms` } as CSSProperties}
             >
@@ -150,7 +167,7 @@ function Phone({ name, caption, bubbles }: {
           <Sticker size={20} strokeWidth={2} />
         </div>
         <span className={styles.igHomeBar} />
-      </div>
+      </PhoneBody>
       {caption && caption.length > 0 ? (
         <p className={styles.phoneCaption} key={caption.join("|")}>
           <span>Replying as {name || "you"}</span>
@@ -190,24 +207,84 @@ function Crowd({ audience, channels }: { audience?: AudienceSize; channels: stri
   );
 }
 
-function Stream({ volume, replyMode }: { volume?: DailyVolume; replyMode?: OnboardingAnswers["replyMode"] }) {
-  const seconds = volume ? STREAM_SECONDS[volume] : 16;
-  const lines = [...STREAM_LINES, ...STREAM_LINES];
+/** People commenting, for the comments sheet. */
+const COMMENTERS = [
+  { handle: "riya.kapoor", tone: 0, time: "1m", likes: 2 },
+  { handle: "the.sneha", tone: 1, time: "2m", likes: 0 },
+  { handle: "arjun_mehta", tone: 2, time: "4m", likes: 5 },
+  { handle: "kavya.designs", tone: 3, time: "6m", likes: 1 },
+  { handle: "rahul.fits", tone: 4, time: "9m", likes: 0 },
+  { handle: "meera_iyer", tone: 0, time: "12m", likes: 3 },
+  { handle: "aditi.joshi_", tone: 1, time: "15m", likes: 0 },
+  { handle: "dev.rao", tone: 2, time: "18m", likes: 7 },
+  { handle: "nisha.styles", tone: 3, time: "21m", likes: 0 },
+  { handle: "kabir.m", tone: 4, time: "25m", likes: 1 },
+  { handle: "pooja_23", tone: 0, time: "28m", likes: 0 },
+  { handle: "ishaan.k", tone: 1, time: "31m", likes: 4 },
+];
+
+const REACTIONS = ["❤️", "🙌", "🔥", "👏", "😢", "😍", "😮", "😂"];
+
+/** Seconds for one full pass of the comment list at "no answer yet". */
+const STREAM_BASE_SECONDS = 16;
+
+/**
+ * Instagram's comments sheet, scrolling at the pace the person picked. The
+ * speed changes through the running animation's playbackRate, so picking a
+ * different answer speeds the list up or slows it down where it is instead of
+ * restarting it (changing animation-duration would jump it back).
+ */
+function Stream({ volume, replyMode, handle }: { volume?: DailyVolume; replyMode?: OnboardingAnswers["replyMode"]; handle: string }) {
+  const seconds = volume ? STREAM_SECONDS[volume] : 24;
+  const track = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const animation = track.current?.getAnimations?.()[0];
+    if (animation) animation.playbackRate = STREAM_BASE_SECONDS / seconds;
+  }, [seconds]);
+  const rows = [...STREAM_LINES, ...STREAM_LINES];
   return (
-    <div className={styles.stream}>
-      <div className={styles.streamWindow}>
-        <div className={styles.streamTrack} style={{ "--stream-seconds": `${seconds}s` } as CSSProperties} data-moving={volume ? "true" : "false"}>
-          {lines.map((line, index) => (
-            <span key={index} className={styles.streamItem} data-side={index % 2 ? "right" : "left"}>
-              <span className={styles.streamAvatar} data-tone={index % 3} />
-              {line}
-            </span>
-          ))}
+    <div className={styles.phoneWrap}>
+      <PhoneBody className={styles.phoneComments}>
+        <StatusBar />
+        <div className={styles.igPostBehind} />
+        <div className={styles.igSheet}>
+          <span className={styles.igGrab} />
+          <p className={styles.igSheetTitle}>Comments</p>
+          <div className={styles.igCommentsWindow}>
+            <div ref={track} className={styles.igCommentsTrack}>
+              {rows.map((line, index) => {
+                const who = COMMENTERS[index % COMMENTERS.length];
+                return (
+                  <div key={index} className={styles.igComment}>
+                    <span className={styles.igCommentAvatar} data-tone={who.tone}>{who.handle.charAt(0).toUpperCase()}</span>
+                    <div className={styles.igCommentBody}>
+                      <p className={styles.igCommentHead}><strong>{who.handle}</strong> <span>{who.time}</span></p>
+                      <p className={styles.igCommentText}>{line}</p>
+                      <span className={styles.igCommentReply}>Reply</span>
+                    </div>
+                    <span className={styles.igCommentLike}>
+                      <Heart size={13} strokeWidth={2} />
+                      {who.likes > 0 ? <span>{who.likes}</span> : null}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className={styles.igReactions}>
+            {REACTIONS.map((emoji) => <span key={emoji}>{emoji}</span>)}
+          </div>
+          <div className={styles.igAddComment}>
+            <span className={styles.igCommentAvatar} data-tone="me">{handle.charAt(0).toUpperCase()}</span>
+            <span className={styles.igAddPlaceholder}>Add a comment for {handle}...</span>
+          </div>
+          <span className={styles.igHomeBar} />
         </div>
-      </div>
-      {replyMode ? (
-        <span key={replyMode} className={styles.streamTag}>{STREAM_TAGS[replyMode]}</span>
-      ) : null}
+      </PhoneBody>
+      <p className={styles.phoneCaption}>
+        {volume ? <span className={styles.phoneCaptionTag}>{DAILY_VOLUME_LABELS[volume]} a day</span> : <span>Pick how many you get</span>}
+        {replyMode ? <span key={replyMode} className={styles.phoneCaptionTag}>{STREAM_TAGS[replyMode]}</span> : null}
+      </p>
     </div>
   );
 }
@@ -295,7 +372,7 @@ export function OnboardingStage({ step, flow, answers, name, connected }: {
     ]);
     art = <Phone name={shownName} bubbles={bubbles.length > 0 ? bubbles : [{ id: "g-empty", from: "them", text: "Hi! I have a question" }]} />;
   } else if (step === 6) {
-    art = <Stream volume={answers.dailyVolume} replyMode={answers.replyMode} />;
+    art = <Stream volume={answers.dailyVolume} replyMode={answers.replyMode} handle={(shownName === "You" ? "your.account" : shownName.toLowerCase().replace(/\s+/g, "."))} />;
   } else {
     art = <ConnectArt connected={connected} />;
   }
