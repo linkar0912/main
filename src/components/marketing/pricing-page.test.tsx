@@ -65,6 +65,33 @@ describe("PricingPage", () => {
     }
   });
 
+  it("lets phones compare one plan at a time instead of scrolling the table sideways", () => {
+    render(<PricingPage />);
+    const comparison = screen.getByRole("region", { name: "Compare plans and pricing info" });
+    const planSwitch = within(comparison).getByRole("group", { name: "Plan to compare" });
+    const radios = within(planSwitch).getAllByRole("radio") as HTMLInputElement[];
+
+    expect(radios.map((radio) => radio.labels?.[0]?.textContent)).toEqual(["Free", "Creator", "Growth", "Agency"]);
+    expect(radios.filter((radio) => radio.checked).map((radio) => radio.value)).toEqual(["free"]);
+    fireEvent.click(within(planSwitch).getByRole("radio", { name: "Growth" }));
+    expect((within(planSwitch).getByRole("radio", { name: "Growth" }) as HTMLInputElement).checked).toBe(true);
+
+    // Every plan column is tagged, so the phone CSS can show the chosen one.
+    const table = within(comparison).getByRole("table");
+    for (const row of within(table).getAllByRole("row")) {
+      const planCells = Array.from(row.querySelectorAll("[data-plan]")).map((cell) => cell.getAttribute("data-plan"));
+      expect(planCells).toEqual(["free", "creator", "growth", "agency"]);
+    }
+
+    const css = readFileSync(path.join(process.cwd(), "src/components/marketing/pricing-page.module.css"), "utf8");
+    const phone = css.slice(css.indexOf("@supports selector(:has(*))"));
+    expect(phone).toMatch(/@media \(max-width: 767px\)/);
+    expect(phone).toMatch(/\.comparison table \{\s*min-inline-size: 0;/);
+    for (const plan of ["free", "creator", "growth", "agency"]) {
+      expect(phone).toContain(`.comparison:has(input[value="${plan}"]:checked) [data-plan]:not([data-plan="${plan}"])`);
+    }
+  });
+
   it("switches to annual pricing and explains the saving", () => {
     render(<PricingPage />);
     fireEvent.click(screen.getAllByRole("radio", { name: "Annual" })[0]);

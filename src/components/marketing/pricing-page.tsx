@@ -331,13 +331,27 @@ export function PricingPage() {
                   <h2 id="comparison-title">Compare plans and pricing info</h2>
                   <BillingPeriod name="comparison-billing-period" />
                 </Reveal>
+                {/* Phones compare one plan at a time instead of scrolling a
+                    640px table sideways. Plain radios drive it from CSS
+                    (:has), so the table stays a server-rendered table and
+                    desktop never sees the switch. */}
+                <fieldset className={styles.planSwitch}>
+                  <legend className={styles.planSwitchLegend}>Plan to compare</legend>
+                  <span className={styles.planSwitchThumb} aria-hidden="true" />
+                  {plans.map((plan) => (
+                    <label key={plan.key}>
+                      <input type="radio" name="comparison-plan" value={plan.key} defaultChecked={plan.key === "free"} />
+                      {plan.name}
+                    </label>
+                  ))}
+                </fieldset>
                 <Reveal className={styles.comparisonScroller} tabIndex={0} aria-label="Scrollable plan comparison">
                   <table>
                     <thead>
                       <tr className={styles.chooseRow}>
                         <th scope="col"><span className={styles.chooseLead}>Choose your plan</span></th>
                         {plans.map((plan) => (
-                          <th scope="col" key={plan.key}>
+                          <th scope="col" key={plan.key} data-plan={plan.key}>
                             <span className={styles.chooseName}>{plan.name}</span>
                             <ComparisonPrice plan={priced(plan)} />
                             <PlanSignupLink plan={plan.key} className={styles.chooseAction}>
@@ -357,7 +371,7 @@ export function PricingPage() {
                               {row.label}
                             </span>
                           </th>
-                          {row.values.map((value, index) => <td key={plans[index].key}>{value}</td>)}
+                          {row.values.map((value, index) => <td key={plans[index].key} data-plan={plans[index].key}>{value}</td>)}
                         </tr>
                       ))}
                     </tbody>

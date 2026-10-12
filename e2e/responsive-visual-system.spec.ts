@@ -455,6 +455,45 @@ test.describe("public marketing route", () => {
     expect(menu!.width).toBeGreaterThanOrEqual(44);
     expect(menu!.height).toBeGreaterThanOrEqual(44);
   });
+
+  // Phones compare one plan at a time (Free / Creator / Growth / Agency)
+  // instead of scrolling a 640px table sideways.
+  for (const width of [360, 390]) {
+    test(`pricing comparison switches plans without sideways scroll at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/pricing");
+      const comparison = page.getByRole("region", { name: "Compare plans and pricing info" });
+      const planSwitch = comparison.getByRole("group", { name: "Plan to compare" });
+      const table = comparison.getByRole("table");
+      await planSwitch.scrollIntoViewIfNeeded();
+      await expect(planSwitch).toBeVisible();
+
+      await expect(table.getByRole("columnheader", { name: /^Free/ })).toBeVisible();
+      await expect(table.getByRole("columnheader", { name: /^Growth/ })).toHaveCount(0);
+      await planSwitch.locator("label", { hasText: "Growth" }).click();
+      await expect(table.getByRole("columnheader", { name: /^Growth/ })).toBeVisible();
+      await expect(table.getByRole("columnheader", { name: /^Free/ })).toHaveCount(0);
+      await expect(table.getByRole("row", { name: /Monthly deliveries/ }).getByRole("cell", { name: "25,000" })).toBeVisible();
+
+      const widths = await comparison.locator("[aria-label='Scrollable plan comparison']").evaluate((element) => ({
+        client: element.clientWidth,
+        scroll: element.scrollWidth,
+        document: document.documentElement.scrollWidth,
+      }));
+      expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+      expect(widths.document).toBeLessThanOrEqual(width);
+    });
+  }
+
+  test("pricing comparison stays one table on desktop", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/pricing");
+    const comparison = page.getByRole("region", { name: "Compare plans and pricing info" });
+    await expect(comparison.getByRole("group", { name: "Plan to compare" })).toHaveCount(0);
+    for (const plan of ["Free", "Creator", "Growth", "Agency"]) {
+      await expect(comparison.getByRole("columnheader", { name: new RegExp(`^${plan}`) })).toHaveCount(1);
+    }
+  });
 });
 
 /** The mocked analytics the beforeEach serves, for pages in an owner's own context. */
