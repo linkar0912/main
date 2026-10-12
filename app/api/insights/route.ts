@@ -52,7 +52,66 @@ async function planUsage(repository: AutomationRepository, workspaceId: string) 
     return { deliveriesThisMonth: usage.deliveriesReserved, monthlyDeliveryLimit };
 }
 
-// GET /api/insights?automationId=<optional>&include=usage|overview&days=7|14|30
+type FunnelCounts = Awaited<ReturnType<AutomationRepository["countParticipantFunnel"]>>;
+
+function minusFunnel(wide: FunnelCounts, recent: FunnelCounts): FunnelCounts {
+    return {
+        commented: Math.max(0, wide.commented - recent.commented),
+        openingSent: Math.max(0, wide.openingSent - recent.openingSent),
+        optedIn: Math.max(0, wide.optedIn - recent.optedIn),
+        followed: Math.max(0, wide.followed - recent.followed),
+        linkSent: Math.max(0, wide.linkSent - recent.linkSent),
+    };
+}
+
+/**
+ * include=automation: the series, this automation's send outcomes, its
+ * comment-to-link funnel and per-post numbers - all for people and sends
+ * inside the window - and the same totals for the window before. Each
+ * "previous" figure is (twice the window) minus (the window), so one extra
+ * query per measure answers both.
+ */
+async function automationAnalytics(repository: AutomationRepository, workspaceId: string, automationId: string, days: number) {
+    const since = windowStart(days);
+    const sinceBefore = windowStart(days * 2);
+    const [participantsSeries, sentSeries, outcomesNow, outcomesWide, funnelNow, funnelWide, mediaNow, mediaWide] = await Promise.all([
+        repository.countParticipantsPerDay(workspaceId, days * 2, automationId),
+        repository.countExecutionsSentPerDay(workspaceId, days * 2, automationId),
+        repository.countExecutionsByStatusPerAutomation(workspaceId, since),
+        repository.countExecutionsByStatusPerAutomation(workspaceId, sinceBefore),
+        repository.countParticipantFunnel(workspaceId, automationId, since),
+        repository.countParticipantFunnel(workspaceId, automationId, sinceBefore),
+        repository.countParticipantsByMedia(workspaceId, automationId, since),
+        repository.countParticipantsByMedia(workspaceId, automationId, sinceBefore),
+    ]);
+    const participants = splitWindow(participantsSeries, days);
+    const sent = splitWindow(sentSeries, days);
+    const empty = { sent: 0, failed: 0, skipped: 0 };
+    const pick = (rows: typeof outcomesNow) => {
+        const row = rows.find((candidate) => candidate.automationId === automationId);
+        return row ? { sent: row.sent, failed: row.failed, skipped: row.skipped } : empty;
+    };
+    const outcome = pick(outcomesNow);
+    const outcomeWide = pick(outcomesWide);
+    const clicks = mediaNow.reduce((total, row) => total + row.clicked, 0);
+    const clicksWide = mediaWide.reduce((total, row) => total + row.clicked, 0);
+    return {
+        timeseries: { days, participantsPerDay: participants.current, sentPerDay: sent.current },
+        outcome,
+        journey: funnelNow,
+        clicks,
+        mediaPerformance: mediaNow.sort((a, b) => b.matched - a.matched).slice(0, 5),
+        previous: {
+            sent: sent.previousTotal,
+            reached: participants.previousTotal,
+            failed: Math.max(0, outcomeWide.failed - outcome.failed),
+            clicks: Math.max(0, clicksWide - clicks),
+            journey: minusFunnel(funnelWide, funnelNow),
+        },
+    };
+}
+
+// GET /api/insights?automationId=<optional>&include=usage|overview|automation&days=7|14|30
 // Funnel counts over the participant lifecycle, a daily time series (14 days
 // unless `days` asks for 7 or 30) with the previous window's totals, per-post
 // performance for link analytics, and per-automation send outcomes.
@@ -63,6 +122,9 @@ async function planUsage(repository: AutomationRepository, workspaceId: string) 
 //   overview - the series, previous-window totals and captured/opted-out totals
 //              (Home). Skips the funnel, per-post performance, per-automation
 //              outcomes and the usage count, none of which the dashboard displays.
+//   automation - one automation's analytics (requires automationId): series,
+//              outcomes, funnel, clicks and top posts inside the window, with
+//              the previous window's totals. No workspace-wide contact totals.
 //   (absent) - everything, for the full insights surface.
 export async function GET(request: Request) {
     const session = await getValidatedSession(request);
@@ -87,6 +149,14 @@ export async function GET(request: Request) {
     const contactTotalsScope = "workspace" as const;
     const requestedDays = Number(params.get("days"));
     const days = ALLOWED_DAYS.has(requestedDays) ? requestedDays : TIMESERIES_DAYS;
+
+    if (include === "automation") {
+        // One automation's analytics view (its Overview tab). Everything is
+        // inside the chosen window, plus the window before it for the
+        // "up 18% on the previous 7 days" lines.
+        if (!automationId) return NextResponse.json({ error: "automationId is required" }, { status: 400 });
+        return NextResponse.json(await automationAnalytics(repository, session.workspaceId, automationId, days));
+    }
 
     if (include === "overview") {
         const [participantsSeries, sentSeries, capturedEmails, optedOut] = await Promise.all([

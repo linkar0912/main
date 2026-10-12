@@ -153,6 +153,99 @@ describe("GET /api/insights", () => {
     expect(mocks.countExecutionsByStatusPerAutomation).not.toHaveBeenCalled();
   });
 
+  it.each([7, 30])("include=overview follows a %i-day window for Home's range switch", async (days) => {
+    const series = Array.from({ length: days * 2 }, (_, index) => ({ day: `d${String(index).padStart(2, "0")}`, count: index < days ? 1 : 2 }));
+    mocks.countExecutionsSentPerDay.mockResolvedValue(series);
+    mocks.countParticipantsPerDay.mockResolvedValue(series);
+
+    const body = await (await GET(new Request(`http://localhost/api/insights?include=overview&days=${days}`))).json();
+
+    expect(mocks.countExecutionsSentPerDay).toHaveBeenCalledWith("workspace_1", days * 2, undefined);
+    expect(mocks.countParticipantsPerDay).toHaveBeenCalledWith("workspace_1", days * 2, undefined);
+    expect(body.timeseries.days).toBe(days);
+    expect(body.timeseries.sentPerDay).toHaveLength(days);
+    expect(body.previous).toEqual({ sent: days, reached: days });
+  });
+
+  it("include=overview falls back to 14 days for a window Home doesn't offer", async () => {
+    const body = await (await GET(new Request("http://localhost/api/insights?include=overview&days=90"))).json();
+    expect(mocks.countExecutionsSentPerDay).toHaveBeenCalledWith("workspace_1", 28, undefined);
+    expect(body.timeseries.days).toBe(14);
+  });
+
+  describe("include=automation", () => {
+    function sinceFor(days: number): string {
+      const since = new Date();
+      since.setUTCHours(0, 0, 0, 0);
+      since.setUTCDate(since.getUTCDate() - (days - 1));
+      return since.toISOString();
+    }
+
+    it("needs an automation", async () => {
+      const response = await GET(new Request("http://localhost/api/insights?include=automation&days=7"));
+      expect(response.status).toBe(400);
+      expect(mocks.countParticipantFunnel).not.toHaveBeenCalled();
+    });
+
+    it("404s a foreign automation before any analytics query", async () => {
+      mocks.getAutomation.mockResolvedValue(null);
+      const response = await GET(new Request("http://localhost/api/insights?include=automation&automationId=foreign&days=7"));
+      expect(response.status).toBe(404);
+      expect(mocks.getAutomation).toHaveBeenCalledWith("workspace_1", "foreign");
+      expect(mocks.countParticipantFunnel).not.toHaveBeenCalled();
+      expect(mocks.countExecutionsByStatusPerAutomation).not.toHaveBeenCalled();
+    });
+
+    it("windows every measure and derives the previous window from twice the window", async () => {
+      const series = (counts: number[]) => counts.map((count, index) => ({ day: `2026-09-${String(index + 1).padStart(2, "0")}`, count }));
+      mocks.countExecutionsSentPerDay.mockResolvedValue(series([1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3]));
+      mocks.countParticipantsPerDay.mockResolvedValue(series([0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2]));
+      mocks.countExecutionsByStatusPerAutomation.mockImplementation(async (_workspace: string, since: string) => since === sinceFor(7)
+        ? [{ automationId: "automation_1", sent: 21, failed: 2, skipped: 1 }, { automationId: "other", sent: 99, failed: 9, skipped: 0 }]
+        : [{ automationId: "automation_1", sent: 28, failed: 5, skipped: 1 }]);
+      mocks.countParticipantFunnel.mockImplementation(async (_workspace: string, _automation: string, since: string) => since === sinceFor(7)
+        ? { commented: 10, openingSent: 9, optedIn: 6, followed: 5, linkSent: 5 }
+        : { commented: 16, openingSent: 14, optedIn: 9, followed: 7, linkSent: 7 });
+      mocks.countParticipantsByMedia.mockImplementation(async (_workspace: string, _automation: string, since: string) => since === sinceFor(7)
+        ? [{ mediaId: "small", matched: 2, delivered: 1, clicked: 1 }, { mediaId: "big", matched: 8, delivered: 4, clicked: 3 }]
+        : [{ mediaId: "big", matched: 13, delivered: 6, clicked: 6 }]);
+
+      const response = await GET(new Request("http://localhost/api/insights?include=automation&automationId=automation_1&days=7"));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+
+      expect(mocks.countParticipantFunnel).toHaveBeenCalledWith("workspace_1", "automation_1", sinceFor(7));
+      expect(mocks.countParticipantFunnel).toHaveBeenCalledWith("workspace_1", "automation_1", sinceFor(14));
+      expect(mocks.countParticipantsByMedia).toHaveBeenCalledWith("workspace_1", "automation_1", sinceFor(7));
+      expect(mocks.countExecutionsSentPerDay).toHaveBeenCalledWith("workspace_1", 14, "automation_1");
+      expect(body.timeseries.days).toBe(7);
+      expect(body.timeseries.sentPerDay).toHaveLength(7);
+      expect(body.outcome).toEqual({ sent: 21, failed: 2, skipped: 1 });
+      expect(body.journey).toEqual({ commented: 10, openingSent: 9, optedIn: 6, followed: 5, linkSent: 5 });
+      expect(body.clicks).toBe(4);
+      expect(body.mediaPerformance.map((row: { mediaId: string }) => row.mediaId)).toEqual(["big", "small"]);
+      expect(body.previous).toEqual({
+        sent: 7,
+        reached: 0,
+        failed: 3,
+        clicks: 2,
+        journey: { commented: 6, openingSent: 5, optedIn: 3, followed: 2, linkSent: 2 },
+      });
+      // Workspace-wide contact totals and plan usage are not this view's business.
+      expect(body.capturedEmails).toBeUndefined();
+      expect(mocks.countCapturedContacts).not.toHaveBeenCalled();
+      expect(mocks.getWorkspaceUsage).not.toHaveBeenCalled();
+    });
+
+    it("reads zero outcomes for an automation that sent nothing", async () => {
+      const body = await (await GET(new Request("http://localhost/api/insights?include=automation&automationId=automation_1&days=30"))).json();
+      expect(body.timeseries.days).toBe(30);
+      expect(body.outcome).toEqual({ sent: 0, failed: 0, skipped: 0 });
+      expect(body.previous.failed).toBe(0);
+      expect(mocks.countParticipantFunnel).toHaveBeenCalledWith("workspace_1", "automation_1", sinceFor(30));
+    });
+  });
+
   it("returns 404 before analytics queries for a foreign automation", async () => {
     mocks.getAutomation.mockResolvedValue(null);
     const response = await GET(new Request("http://localhost/api/insights?automationId=foreign"));

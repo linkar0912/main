@@ -839,9 +839,14 @@ export interface AutomationRepository {
     sinceIso: string,
   ): Promise<{ automationId: string; sent: number; failed: number; skipped: number }[]>;
   countExecutionsSentPerDay(workspaceId: string, days: number, automationId?: string): Promise<DailyCount[]>;
-  countParticipantsByMedia(workspaceId: string, automationId?: string): Promise<MediaPerformance[]>;
-  /** Cumulative funnel for one automation, or the whole workspace when automationId is omitted. */
-  countParticipantFunnel(workspaceId: string, automationId?: string): Promise<ParticipantFunnelCounts>;
+  /** Per-post numbers; `sinceIso` keeps only people who commented from then on. */
+  countParticipantsByMedia(workspaceId: string, automationId?: string, sinceIso?: string): Promise<MediaPerformance[]>;
+  /**
+   * Cumulative funnel for one automation, or the whole workspace when
+   * automationId is omitted. `sinceIso` keeps only people who commented from
+   * then on (an automation's analytics window); omitted = all time.
+   */
+  countParticipantFunnel(workspaceId: string, automationId?: string, sinceIso?: string): Promise<ParticipantFunnelCounts>;
   // Click tracking for delivered links.
   getParticipantById(id: string): Promise<AutomationParticipantRecord | null>;
   markDeliveryClicked(id: string, atIso: string): Promise<boolean>;

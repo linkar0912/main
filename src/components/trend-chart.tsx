@@ -4,6 +4,7 @@ import { useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import { formatMonthDay } from "@/src/lib/format-date";
 import type { DayPoint } from "@/src/lib/insights-summary";
+import { chartLabelCount } from "@/src/lib/analytics-range";
 
 export type TrendSeries = {
   key: string;
@@ -83,6 +84,40 @@ export function labelIndexes(count: number, maxLabels: number): number[] {
   const indexes: number[] = [];
   for (let index = count - 1; index >= 0; index -= step) indexes.unshift(index);
   return indexes;
+}
+
+/**
+ * Replies sent (primary) and people reached (secondary) for one 7 / 14 /
+ * 30-day window - Home's and an automation's chart. The first window draws in
+ * once; choosing another window cross-fades the plot and draws the new line
+ * once; a background refresh of the same window never redraws. Reduced
+ * motion turns both off in CSS.
+ */
+export function WindowTrendChart({ days, sentPerDay, reachedPerDay, reachedLabel = "people reached" }: {
+  days: number;
+  sentPerDay: DayPoint[];
+  reachedPerDay: DayPoint[];
+  /** Plural noun for the second line, e.g. "comments answered" on a Facebook Page automation. */
+  reachedLabel?: string;
+}) {
+  const [drawnDays, setDrawnDays] = useState<number | null>(null);
+  const [firstDays] = useState(days);
+  return (
+    <div className="perf-chart" onAnimationEnd={(event) => { if ((event.target as Element).classList.contains("trend-svg")) setDrawnDays(days); }}>
+      <TrendChart
+        // A new window remounts the plot so it cross-fades and draws in once.
+        key={days}
+        className={days !== firstDays ? "is-switching" : ""}
+        label={`Daily replies sent and ${reachedLabel} for the last ${days} days`}
+        animate={drawnDays !== days}
+        maxLabels={chartLabelCount(days)}
+        series={[
+          { key: "sent", label: "replies sent", points: sentPerDay, tone: "primary" },
+          { key: "reached", label: reachedLabel, points: reachedPerDay, tone: "secondary" },
+        ]}
+      />
+    </div>
+  );
 }
 
 /**

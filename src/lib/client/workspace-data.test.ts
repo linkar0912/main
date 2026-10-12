@@ -7,6 +7,8 @@ import {
   getInstagramConnections,
   getInsightsOverview,
   getTeamOverview,
+  insightsOverviewUrl,
+  peekInsightsOverview,
   getWorkspaceBootstrap,
   invalidateWorkspaceResource,
   notifyWorkspaceChanged,
@@ -54,6 +56,42 @@ describe("workspace client data cache", () => {
     expect(await getInsightsOverview()).toMatchObject({ capturedEmails: 7 });
     expect(await getInstagramConnections()).toEqual([]);
     expect(await getFacebookPages()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps one overview per window, with the plain URL for 14 days", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const days = new URL(String(input), "http://x").searchParams.get("days") ?? "14";
+      return { ok: true, json: async () => ({ timeseries: { days: Number(days) } }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await getInsightsOverview()).toMatchObject({ timeseries: { days: 14 } });
+    expect(await getInsightsOverview({ days: 7 })).toMatchObject({ timeseries: { days: 7 } });
+    expect(await getInsightsOverview({ days: 30 })).toMatchObject({ timeseries: { days: 30 } });
+    // Switching back is answered from memory.
+    expect(await getInsightsOverview({ days: 7 })).toMatchObject({ timeseries: { days: 7 } });
+    expect(peekInsightsOverview(30)).toMatchObject({ timeseries: { days: 30 } });
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "/api/insights?include=overview",
+      "/api/insights?include=overview&days=7",
+      "/api/insights?include=overview&days=30",
+    ]);
+    expect(insightsOverviewUrl(14)).toBe("/api/insights?include=overview");
+
+    invalidateWorkspaceResource("insights-overview");
+    expect(peekInsightsOverview(7)).toBeUndefined();
+    await getInsightsOverview({ days: 7 });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("seeds a server-rendered overview under the window it describes", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    seedWorkspaceData({ insightsOverview: { timeseries: { days: 7 }, capturedEmails: 3 } });
+
+    expect(await getInsightsOverview({ days: 7 })).toMatchObject({ capturedEmails: 3 });
+    expect(peekInsightsOverview(14)).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

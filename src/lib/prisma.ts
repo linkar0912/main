@@ -1089,22 +1089,27 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return mergeDayCounts(rows, days);
     },
 
-    async countParticipantsByMedia(workspaceId, automationId) {
+    async countParticipantsByMedia(workspaceId, automationId, sinceIso) {
+      const scope = {
+        workspaceId,
+        ...(automationId ? { automationId } : {}),
+        ...(sinceIso ? { createdAt: { gte: new Date(sinceIso) } } : {}),
+      };
       // Three filtered group-bys are clearer and more portable than one raw query.
       const [matchedRows, deliveredRows, clickedRows] = await Promise.all([
         client.automationParticipant.groupBy({
           by: ["sourceMediaId"],
-          where: { workspaceId, ...(automationId ? { automationId } : {}) },
+          where: scope,
           _count: { _all: true },
         }),
         client.automationParticipant.groupBy({
           by: ["sourceMediaId"],
-          where: { workspaceId, ...(automationId ? { automationId } : {}), state: "LINK_SENT" },
+          where: { ...scope, state: "LINK_SENT" },
           _count: { _all: true },
         }).catch(() => [] as { sourceMediaId: string; _count: { _all: number } }[]),
         client.automationParticipant.groupBy({
           by: ["sourceMediaId"],
-          where: { workspaceId, ...(automationId ? { automationId } : {}), NOT: { deliveryClickedAt: null } },
+          where: { ...scope, NOT: { deliveryClickedAt: null } },
           _count: { _all: true },
         }).catch(() => [] as { sourceMediaId: string; _count: { _all: number } }[]),
       ]);
@@ -1118,10 +1123,14 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       }));
     },
 
-    async countParticipantFunnel(workspaceId, automationId) {
+    async countParticipantFunnel(workspaceId, automationId, sinceIso) {
       const rows = await client.automationParticipant.groupBy({
         by: ["state", "openingStatus", "followStatus", "finalDeliveryStatus"],
-        where: { workspaceId, ...(automationId ? { automationId } : {}) },
+        where: {
+          workspaceId,
+          ...(automationId ? { automationId } : {}),
+          ...(sinceIso ? { createdAt: { gte: new Date(sinceIso) } } : {}),
+        },
         _count: { _all: true },
       });
       const result = { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 };

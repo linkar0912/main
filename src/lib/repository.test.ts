@@ -732,6 +732,30 @@ describe("memory repository", () => {
     });
   });
 
+  it("narrows the funnel and media performance to people who commented inside a window", async () => {
+    vi.useFakeTimers();
+    try {
+      const repository = createMemoryRepository();
+      vi.setSystemTime(new Date("2026-09-01T09:00:00.000Z"));
+      await repository.createParticipant({ ...participantInput, sourceCommentId: "old", sourceMediaId: "media_old", state: "LINK_SENT", openingStatus: "SENT", finalDeliveryStatus: "SENT", deliveryClickedAt: "2026-09-01T10:00:00.000Z" });
+      vi.setSystemTime(new Date("2026-09-10T09:00:00.000Z"));
+      await repository.createParticipant({ ...participantInput, sourceCommentId: "new", sourceMediaId: "media_new", state: "OPENING_SENT", openingStatus: "SENT" });
+
+      const since = "2026-09-05T00:00:00.000Z";
+      expect(await repository.countParticipantFunnel("workspace_a", "automation_1", since)).toEqual({
+        commented: 1, openingSent: 1, optedIn: 0, followed: 0, linkSent: 0,
+      });
+      expect(await repository.countParticipantsByMedia("workspace_a", "automation_1", since)).toEqual([
+        { mediaId: "media_new", matched: 1, delivered: 0, clicked: 0 },
+      ]);
+      // No window = all time, as before.
+      expect((await repository.countParticipantFunnel("workspace_a", "automation_1")).commented).toBe(2);
+      expect(await repository.countParticipantsByMedia("workspace_a", "automation_1")).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("binds exactly one post published after next-media activation", async () => {
     const repository = createMemoryRepository();
     const automation = await repository.createAutomation("workspace_a", { name: "Next Reel", definition: campaignDefinition });

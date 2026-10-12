@@ -14,13 +14,14 @@ import { PerformanceFigure, PeriodChangeNote } from "./performance-figures";
 import { InsightsContentSkeleton } from "./skeleton";
 import { TrackedLinksPanel } from "./tracked-links-panel";
 import { TrendChart } from "./trend-chart";
-import { LocalIdChip, LocalStatusBadge, lifecycleStatus } from "./workspace-primitives";
-import type { AutomationRecord } from "@/src/lib/repository";
+import { TopPosts, usePostMedia } from "./top-posts";
+import { LocalStatusBadge, lifecycleStatus } from "./workspace-primitives";
+import { chartLabelCount } from "@/src/lib/analytics-range";
+import type { MediaPerformance } from "@/src/lib/automation-analytics";
 import {
   biggestDrop,
   journeySteps,
   periodChange,
-  plural,
   repliesHeadline,
   repliesSupport,
   sumPoints,
@@ -28,7 +29,6 @@ import {
   type JourneyCounts,
 } from "@/src/lib/insights-summary";
 
-type MediaPerformance = { mediaId: string; matched: number; delivered: number; clicked: number };
 type AutomationOutcome = { automationId: string; sent: number; failed: number; skipped: number };
 type InsightsPayload = {
   journey: JourneyCounts;
@@ -39,8 +39,6 @@ type InsightsPayload = {
   capturedEmails: number;
   optedOut: number;
 };
-
-type MediaInfo = { caption?: string; permalink?: string; thumbnailUrl?: string; productType?: string };
 
 export const RANGE_OPTIONS = [7, 14, 30] as const;
 type Range = (typeof RANGE_OPTIONS)[number];
@@ -84,18 +82,6 @@ function insightsUrl(range: Range, automationId: string): string {
 
 function enterStyle(delay: number): CSSProperties {
   return { "--enter-delay": `${delay}ms` } as CSSProperties;
-}
-
-/** Captions and covers for the posts in "Top posts": automation snapshots first, then the account's media list. */
-function snapshotMedia(automations: AutomationRecord[]): Map<string, MediaInfo> {
-  const media = new Map<string, MediaInfo>();
-  for (const automation of automations) {
-    const trigger = automation.definition.trigger as { mediaSnapshots?: Array<{ id: string; caption?: string; permalink?: string; mediaProductType?: string }> };
-    for (const snapshot of trigger.mediaSnapshots ?? []) {
-      media.set(snapshot.id, { caption: snapshot.caption, permalink: snapshot.permalink, productType: snapshot.mediaProductType });
-    }
-  }
-  return media;
 }
 
 type SortKey = "name" | "sent" | "failed" | "rate";
@@ -212,41 +198,6 @@ function Journey({ journey }: { journey: JourneyCounts }) {
   );
 }
 
-function TopPosts({ posts, media }: { posts: MediaPerformance[]; media: Map<string, MediaInfo> }) {
-  if (posts.length === 0) return <p className="ins-empty-copy">Posts show up here once an automation matches a comment on them.</p>;
-  return (
-    <ol className="ins-posts">
-      {posts.slice(0, 5).map((post) => {
-        const info = media.get(post.mediaId);
-        const caption = info?.caption?.trim();
-        const rate = post.delivered ? Math.round((post.clicked / post.delivered) * 100) : null;
-        const title = caption || (info?.productType === "REELS" ? "Instagram reel" : "Instagram post");
-        return (
-          <li key={post.mediaId} className="ins-post">
-            <span className="ins-post-cover" aria-hidden>
-              {/* Meta CDN covers; next/image would need every CDN host configured. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {info?.thumbnailUrl ? <img src={info.thumbnailUrl} alt="" loading="lazy" /> : null}
-            </span>
-            <span className="ins-post-copy">
-              {info?.permalink ? (
-                <a href={info.permalink} target="_blank" rel="noreferrer" className="ins-post-title" title={caption}>{title}</a>
-              ) : (
-                <span className="ins-post-title" title={caption}>{title}</span>
-              )}
-              <small>
-                {plural(post.matched, "comment", "comments")} matched, {plural(post.clicked, "click", "clicks")}
-                {rate !== null ? `, ${rate}% clicked` : ""}
-              </small>
-              {caption ? null : <LocalIdChip id={post.mediaId} label="post ID" />}
-            </span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
 export function InsightsScreen() {
   const [range, setRange] = useState<Range>(14);
   const [automationId, setAutomationId] = useState("");
@@ -256,7 +207,6 @@ export function InsightsScreen() {
   const [shownKey, setShownKey] = useState<string | null>(() => readCache(cacheKey(14, "")) ? cacheKey(14, "") : null);
   const [error, setError] = useState("");
   const [drawn, setDrawn] = useState(false);
-  const [media, setMedia] = useState<Map<string, MediaInfo>>(() => new Map());
   const { automations } = useAutomations();
 
   const load = useCallback(async (nextRange: Range, nextAutomation: string, signal?: AbortSignal) => {
@@ -310,29 +260,7 @@ export function InsightsScreen() {
   // Captions and covers for the top posts: free from automation snapshots,
   // then one best-effort look at the account's recent media.
   const hasPosts = (data?.mediaPerformance.length ?? 0) > 0;
-  useEffect(() => {
-    if (!hasPosts) return;
-    let active = true;
-    fetch("/api/meta/media")
-      .then(async (response) => {
-        const payload = (await response.json().catch(() => ({}))) as { data?: Array<{ id: string; caption?: string; permalink?: string; thumbnailUrl?: string; mediaUrl?: string; mediaType?: string; mediaProductType?: string }> };
-        if (!active || !response.ok || !payload.data) return;
-        setMedia(new Map(payload.data.map((item) => [item.id, {
-          caption: item.caption,
-          permalink: item.permalink,
-          thumbnailUrl: item.thumbnailUrl ?? (item.mediaType === "IMAGE" ? item.mediaUrl : undefined),
-          productType: item.mediaProductType,
-        }])));
-      })
-      .catch(() => undefined);
-    return () => { active = false; };
-  }, [hasPosts]);
-
-  const mediaInfo = useMemo(() => {
-    const merged = snapshotMedia(automations);
-    for (const [id, info] of media) merged.set(id, { ...merged.get(id), ...info, caption: info.caption ?? merged.get(id)?.caption });
-    return merged;
-  }, [automations, media]);
+  const mediaInfo = usePostMedia(automations, hasPosts);
 
   const loading = data === null && !error;
   const refreshing = data !== null && shownKey !== key;
@@ -449,7 +377,7 @@ export function InsightsScreen() {
                   <TrendChart
                     label={`Daily replies sent and people reached for the last ${days} days`}
                     animate={!drawn}
-                    maxLabels={days > 14 ? 6 : 7}
+                    maxLabels={chartLabelCount(days)}
                     series={[
                       { key: "sent", label: "replies sent", points: data.timeseries.sentPerDay, tone: "primary" },
                       { key: "reached", label: "people reached", points: data.timeseries.participantsPerDay, tone: "secondary" },

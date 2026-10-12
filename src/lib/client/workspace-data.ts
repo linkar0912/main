@@ -1,6 +1,7 @@
 import type { ConnectionStatus, MemberRole } from "../repository";
 import type { BillingCatalogPlan } from "../billing/types";
 import type { OnboardingSummary } from "../onboarding/status";
+import { DEFAULT_RANGE, parseRange, type AnalyticsRange } from "../analytics-range";
 
 export type WorkspaceBootstrap = {
   email: string;
@@ -133,7 +134,17 @@ const facebookPagesCache: ClientCache<FacebookPageSummary[]> = {};
 const teamOverviewCache: ClientCache<TeamOverview> = {};
 const messagingSettingsCache: ClientCache<MessagingSettings> = {};
 const billingCache: ClientCache<BillingView> = {};
-const insightsOverviewCache: ClientCache<InsightsOverview> = {};
+/** One cache per window, so switching Home between 7 / 14 / 30 days back and forth is instant. */
+const insightsOverviewCaches = new Map<AnalyticsRange, ClientCache<InsightsOverview>>();
+
+function insightsOverviewCache(days: AnalyticsRange): ClientCache<InsightsOverview> {
+  let cache = insightsOverviewCaches.get(days);
+  if (!cache) {
+    cache = {};
+    insightsOverviewCaches.set(days, cache);
+  }
+  return cache;
+}
 
 async function requestJson<T>(url: string, select: (payload: unknown) => T): Promise<T> {
   const response = await fetch(url);
@@ -220,10 +231,14 @@ export function seedWorkspaceData(seed: {
   facebookPages?: FacebookPageSummary[];
 }): void {
   const now = Date.now();
-  if (seed.insightsOverview !== undefined && insightsOverviewCache.value === undefined) {
-    insightsOverviewCache.value = seed.insightsOverview;
-    insightsOverviewCache.fetchedAt = now;
-    insightsOverviewCache.fetcher = fetch;
+  if (seed.insightsOverview !== undefined) {
+    // Seeded under the window it describes (14 days unless it says otherwise).
+    const cache = insightsOverviewCache(parseRange(seed.insightsOverview.timeseries?.days) ?? DEFAULT_RANGE);
+    if (cache.value === undefined) {
+      cache.value = seed.insightsOverview;
+      cache.fetchedAt = now;
+      cache.fetcher = fetch;
+    }
   }
   if (seed.instagramConnections !== undefined && connectionsCache.value === undefined) {
     connectionsCache.value = seed.instagramConnections;
@@ -268,13 +283,24 @@ export function getBillingView(signal?: AbortSignal): Promise<BillingView> {
   return cachedRequest(billingCache, "/api/billing", signal);
 }
 
-export function getInsightsOverview(signal?: AbortSignal): Promise<InsightsOverview> {
+/** Home's request for one window. 14 days keeps the plain URL older clients and tests know. */
+export function insightsOverviewUrl(days: AnalyticsRange = DEFAULT_RANGE): string {
+  return days === DEFAULT_RANGE ? "/api/insights?include=overview" : `/api/insights?include=overview&days=${days}`;
+}
+
+export function getInsightsOverview({ days = DEFAULT_RANGE, signal }: { days?: AnalyticsRange; signal?: AbortSignal } = {}): Promise<InsightsOverview> {
   return forCaller(sharedRequest(
-    insightsOverviewCache,
-    "/api/insights?include=overview",
+    insightsOverviewCache(days),
+    insightsOverviewUrl(days),
     (payload) => payload as InsightsOverview,
     false,
   ), signal);
+}
+
+/** A window's overview when it is already confirmed in memory, without a request. */
+export function peekInsightsOverview(days: AnalyticsRange): InsightsOverview | undefined {
+  const cache = insightsOverviewCaches.get(days);
+  return cache && cache.fetcher === fetch ? cache.value : undefined;
 }
 
 function resetCache(cache: ClientCache<unknown>): void {
@@ -285,7 +311,11 @@ function resetCache(cache: ClientCache<unknown>): void {
 }
 
 export function invalidateWorkspaceResource(key: WorkspaceResourceKey): void {
-  const caches: Record<WorkspaceResourceKey, ClientCache<unknown>> = {
+  if (key === "insights-overview") {
+    for (const cache of insightsOverviewCaches.values()) resetCache(cache);
+    return;
+  }
+  const caches: Record<Exclude<WorkspaceResourceKey, "insights-overview">, ClientCache<unknown>> = {
     bootstrap: bootstrapCache,
     "account-profile": accountProfileCache,
     "instagram-connections": connectionsCache,
@@ -293,7 +323,6 @@ export function invalidateWorkspaceResource(key: WorkspaceResourceKey): void {
     "team-overview": teamOverviewCache,
     "messaging-settings": messagingSettingsCache,
     billing: billingCache,
-    "insights-overview": insightsOverviewCache,
   };
   resetCache(caches[key]);
 }

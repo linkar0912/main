@@ -411,10 +411,11 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return bucketCountsByDay(timestamps, days);
     },
 
-    async countParticipantsByMedia(workspaceId, automationId) {
+    async countParticipantsByMedia(workspaceId, automationId, sinceIso) {
       const byMedia = new Map<string, { matched: number; delivered: number; clicked: number }>();
       for (const participant of participants.values()) {
         if (participant.workspaceId !== workspaceId || (automationId && participant.automationId !== automationId)) continue;
+        if (sinceIso && Date.parse(participant.createdAt) < Date.parse(sinceIso)) continue;
         const entry = byMedia.get(participant.sourceMediaId) ?? { matched: 0, delivered: 0, clicked: 0 };
         entry.matched += 1;
         if (participant.state === "LINK_SENT") entry.delivered += 1;
@@ -424,12 +425,13 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return [...byMedia.entries()].map(([mediaId, counts]) => ({ mediaId, ...counts }));
     },
 
-    async countParticipantFunnel(workspaceId, automationId) {
+    async countParticipantFunnel(workspaceId, automationId, sinceIso) {
       const result = { commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 };
       const optedInStates = new Set(["OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED", "LINK_SENT"]);
       const followedStates = new Set(["FOLLOW_VERIFIED", "LINK_SENT"]);
       for (const participant of participants.values()) {
         if (participant.workspaceId !== workspaceId || (automationId && participant.automationId !== automationId)) continue;
+        if (sinceIso && Date.parse(participant.createdAt) < Date.parse(sinceIso)) continue;
         result.commented += 1;
         if (participant.openingStatus === "SENT") result.openingSent += 1;
         if (optedInStates.has(participant.state)) result.optedIn += 1;
