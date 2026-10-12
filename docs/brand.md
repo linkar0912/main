@@ -390,16 +390,19 @@ grid, keeping the entry flow focused and professional.
 `/onboarding` (`src/components/onboarding/`, styles in
 `onboarding.module.css`) is the one product screen that speaks the
 marketing site's language, because it is the bridge from the site: big
-Bricolage questions (800, tight tracking) on white, a **volt stage** beside
-each question with a live illustration that reacts to the answer, and the
-deep magenta (`#c200bf`, AA with white) for the Continue pill, progress and
-chosen marks. The volt stage, the volt "time back" block on the plan step and
-on Home's "Your plan" card are the only volt surfaces outside the plan
-sticker. Choices use the brand selection tint; no grey fills, no uppercase or
-mono labels, nothing under 13px. Every number on the plan states its
-assumption ("about 30 a day, about 5 in 10 about what you picked, 30 to 45
-seconds per reply"); nothing is shown that is not computed from the answers
-or read from the connected account.
+Bricolage questions (800, tight tracking) on white, and beside each question a
+white stage (1px hairline, no yellow - owner feedback) holding a live
+illustration that reacts to the answer. The phone there is a faithful
+Instagram light-mode DM screen: status bar and Dynamic Island, the follower in
+the header with call and video icons, grey incoming bubbles with a small
+avatar, Instagram's purple-to-blue outgoing bubbles with "Seen", and the
+"Message..." composer with the blue camera button - Instagram's own colours
+appear only inside that phone. The Continue pill, progress and chosen answers
+are ink, like selection in the app; no grey fills, no uppercase or mono
+labels, nothing under 13px. Every number on the plan states its assumption
+("about 30 a day, about 5 in 10 about what you picked, 30 to 45 seconds per
+reply"); nothing is shown that is not computed from the answers or read from
+the connected account.
 
 ## Voice
 

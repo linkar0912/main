@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { Check } from "lucide-react";
+import { BatteryFull, Camera, Check, ChevronLeft, Image as ImageIcon, Mic, Phone as PhoneIcon, Signal, Sticker, Video, Wifi } from "lucide-react";
 import { InstagramGlyph } from "../instagram-glyph";
 import { FacebookGlyph } from "../facebook-glyph";
 import { LinkarMark } from "../linkar-mark";
@@ -74,42 +74,91 @@ const STREAM_TAGS: Record<NonNullable<OnboardingAnswers["replyMode"]>, string> =
 const CROWD_SIZE:Record<AudienceSize, number> = { under_1k: 4, "1k_10k": 9, "10k_50k": 15, "50k_200k": 22, "200k_plus": 30 };
 const STREAM_SECONDS: Record<DailyVolume, number> = { under_10: 18, "10_50": 13, "50_200": 9, "200_1000": 6, "1000_plus": 4 };
 
-function Phone({ name, badge, tags, bubbles, footer }: {
-  name: string;
-  badge?: string;
-  tags?: string[];
-  bubbles: Bubble[];
-  footer?: React.ReactNode;
-}) {
-  const initial = name.trim().charAt(0).toUpperCase() || "Y";
+/** The follower writing in. Fixed so the thread reads like a real DM. */
+const FOLLOWER = { name: "Ananya", handle: "ananya.styles", initials: "A" };
+
+function StatusBar() {
   return (
-    <div className={styles.phone}>
-      <div className={styles.phoneNotch} />
-      <div className={styles.phoneHead}>
-        <span className={styles.phoneAvatar}>{initial}</span>
-        <span className={styles.phoneWho}>
-          <strong>{name || "You"}</strong>
-          {badge ? <span key={badge} className={styles.phoneBadge}>{badge}</span> : <span className={styles.phoneMeta}>Active now</span>}
-        </span>
-      </div>
-      {tags && tags.length > 0 ? (
-        <div className={styles.phoneTags}>
-          {tags.map((tag) => <span key={tag} className={styles.phoneTag}>{tag}</span>)}
+    <div className={styles.igStatus}>
+      <span className={styles.igTime}>9:41</span>
+      <span className={styles.igIsland} />
+      <span className={styles.igSignals}>
+        <Signal size={13} strokeWidth={2.4} />
+        <Wifi size={13} strokeWidth={2.4} />
+        <BatteryFull size={18} strokeWidth={2} />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * An Instagram DM thread as the business sees it: the follower in the
+ * header, their messages on the left in grey, the business's automatic
+ * replies on the right in Instagram's purple-to-blue, "Seen" under the last
+ * one, and the "Message..." composer. The person's answers shape the
+ * messages; the captions under the phone name what they picked.
+ */
+function Phone({ name, caption, bubbles }: {
+  name: string;
+  caption?: string[];
+  bubbles: Bubble[];
+}) {
+  const lastYou = [...bubbles].reverse().find((bubble) => bubble.from === "you")?.id;
+  return (
+    <div className={styles.phoneWrap}>
+      <div className={styles.phone}>
+        <StatusBar />
+        <div className={styles.igHead}>
+          <ChevronLeft size={24} strokeWidth={2.2} className={styles.igBack} />
+          <span className={styles.igAvatar}>{FOLLOWER.initials}</span>
+          <span className={styles.igWho}>
+            <strong>{FOLLOWER.name}</strong>
+            <span>{FOLLOWER.handle}</span>
+          </span>
+          <span className={styles.igActions}>
+            <PhoneIcon size={21} strokeWidth={2} />
+            <Video size={23} strokeWidth={2} />
+          </span>
         </div>
-      ) : null}
-      <div className={styles.phoneThread}>
-        <p className={styles.phoneStamp}>Today</p>
-        {bubbles.map((bubble, index) => (
-          <p
-            key={bubble.id}
-            className={bubble.from === "you" ? styles.bubbleYou : styles.bubbleThem}
-            style={{ "--bubble-delay": `${Math.min(index, 5) * 60}ms` } as CSSProperties}
-          >
-            {bubble.text}
-          </p>
-        ))}
+        <div className={styles.phoneThread}>
+          {/* A new thread opens on the follower's profile; once a few
+              messages are in, it has scrolled away, as on Instagram. */}
+          {bubbles.length <= 2 ? <div className={styles.igIntro}>
+            <span className={styles.igIntroAvatar}>{FOLLOWER.initials}</span>
+            <strong>{FOLLOWER.name}</strong>
+            <span>{FOLLOWER.handle} · Instagram</span>
+            <span className={styles.igIntroButton}>View profile</span>
+          </div> : null}
+          <p className={styles.phoneStamp}>Today 10:24</p>
+          {bubbles.map((bubble, index) => (
+            <div
+              key={bubble.id}
+              className={bubble.from === "you" ? styles.rowYou : styles.rowThem}
+              style={{ "--bubble-delay": `${Math.min(index, 5) * 60}ms` } as CSSProperties}
+            >
+              {bubble.from === "them" ? <span className={styles.igMiniAvatar}>{FOLLOWER.initials}</span> : null}
+              <p className={bubble.from === "you" ? styles.bubbleYou : styles.bubbleThem}>{bubble.text}</p>
+              {bubble.id === lastYou ? <span className={styles.igSeen}>Seen</span> : null}
+            </div>
+          ))}
+        </div>
+        <div className={styles.igComposer}>
+          <span className={styles.igCamera}><Camera size={17} strokeWidth={2.2} /></span>
+          <span className={styles.igPlaceholder}>Message...</span>
+          <Mic size={20} strokeWidth={2} />
+          <ImageIcon size={20} strokeWidth={2} />
+          <Sticker size={20} strokeWidth={2} />
+        </div>
+        <span className={styles.igHomeBar} />
       </div>
-      {footer}
+      {caption && caption.length > 0 ? (
+        <p className={styles.phoneCaption} key={caption.join("|")}>
+          <span>Replying as {name || "you"}</span>
+          {caption.map((item) => <span key={item} className={styles.phoneCaptionTag}>{item}</span>)}
+        </p>
+      ) : (
+        <p className={styles.phoneCaption}><span>Replying as {name || "you"}</span></p>
+      )}
     </div>
   );
 }
@@ -191,7 +240,7 @@ export function OnboardingStage({ step, flow, answers, name, connected }: {
     art = (
       <Phone
         name={shownName}
-        badge="Team"
+        caption={["Team"]}
         bubbles={[
           { id: "m1", from: "them", text: "Hi! Can someone help me with my order?" },
           { id: "m2", from: "you", text: `Hi, ${shownName} here. Happy to help.` },
@@ -213,7 +262,7 @@ export function OnboardingStage({ step, flow, answers, name, connected }: {
     art = (
       <Phone
         name={shownName}
-        badge={answers.accountType ? ACCOUNT_TYPE_LABELS[answers.accountType] : undefined}
+        caption={answers.accountType ? [ACCOUNT_TYPE_LABELS[answers.accountType]] : undefined}
         bubbles={[
           { id: `t-${type}-1`, from: "them", text: TYPE_SAMPLES[type][0] },
           { id: `t-${type}-2`, from: "you", text: TYPE_SAMPLES[type][1] },
@@ -226,8 +275,10 @@ export function OnboardingStage({ step, flow, answers, name, connected }: {
     art = (
       <Phone
         name={shownName}
-        badge={answers.accountType ? ACCOUNT_TYPE_LABELS[answers.accountType] : undefined}
-        tags={niches.slice(0, 4).map((niche) => niche === "other" && answers.nicheOther ? answers.nicheOther : NICHE_LABELS[niche])}
+        caption={[
+          ...(answers.accountType ? [ACCOUNT_TYPE_LABELS[answers.accountType]] : []),
+          ...niches.slice(0, 3).map((niche) => niche === "other" && answers.nicheOther ? answers.nicheOther : NICHE_LABELS[niche]),
+        ]}
         bubbles={lead ? [
           { id: `n-${lead}-1`, from: "them", text: NICHE_SAMPLES[lead] },
           { id: `n-${lead}-2`, from: "you", text: "Good question. Here are the details." },

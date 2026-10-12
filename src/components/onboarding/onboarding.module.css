@@ -1,18 +1,22 @@
 /* First-time onboarding (docs: .claude/specs/ONBOARDING_SPEC.md).
    The marketing site's language inside the product: big Bricolage
-   questions on white, a volt stage that answers back, magenta for what is
-   chosen. No grey fills, no uppercase or mono labels, nothing under 13px.
+   questions on white, a white stage with a real Instagram DM that answers
+   back, and ink for what is chosen (the app's selection colour). No yellow
+   panels, no grey fills, no uppercase or mono labels, nothing under 13px.
    Motion uses the shared tokens (--dur-*, --ease-*) and only opacity and
    transform (plus one SVG stroke). */
 
 .shell {
-  --ob-volt: #fff100;
-  --ob-on-volt: #101116;
-  --ob-magenta: #fa0cf7;
-  /* White text on the brand #fa0cf7 is about 3.2:1; this deeper magenta keeps
-     the hue and clears AA (about 5.2:1), as on the marketing hero button. */
-  --ob-magenta-deep: #c200bf;
-  --ob-magenta-press: #a300a0;
+  /* Ink for buttons, progress, chosen answers and marks - the app's
+     selection colour - with panel-coloured text on it; both swap in dark. */
+  --ob-accent: var(--ink);
+  --ob-accent-press: color-mix(in srgb, var(--ink) 82%, var(--panel));
+  --ob-on-accent: var(--panel);
+  --ob-spark: #fa0cf7;
+  /* Instagram's own colours, only inside the phone. */
+  --ig-blue: #3797f0;
+  --ig-out: linear-gradient(160deg, #a334fa 0%, #7a4cf5 45%, #3797f0 100%);
+  --ig-in: #efefef;
   --ob-gutter: clamp(24px, 3.8vw, 56px);
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
@@ -105,7 +109,7 @@
 .progressFill {
   position: absolute;
   inset: 0;
-  background: var(--ob-magenta-deep);
+  background: var(--ob-accent);
   border-radius: inherit;
   transform-origin: left center;
   transition: transform var(--dur-4) var(--ease-emph);
@@ -287,8 +291,8 @@
 
 .input:focus {
   outline: none;
-  border-color: var(--ob-magenta-deep);
-  box-shadow: 0 0 0 4px var(--accent-soft);
+  border-color: var(--ob-accent);
+  box-shadow: inset 0 0 0 1px var(--ob-accent);
 }
 
 /* ── Choice cards and chips ────────────────────────────────────────────── */
@@ -345,8 +349,9 @@
 }
 
 .card[aria-pressed="true"] {
-  background: var(--select-tile-bg, var(--accent-soft));
-  border-color: var(--select-line, var(--accent-hover));
+  background: var(--panel);
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 
 .card:focus-visible,
@@ -357,7 +362,7 @@
 .back:focus-visible,
 .textButton:focus-visible,
 .planCardAction:focus-visible {
-  outline: 2px solid var(--ob-magenta-deep);
+  outline: 2px solid var(--ob-accent);
   outline-offset: 3px;
 }
 
@@ -373,8 +378,9 @@
 }
 
 .card[aria-pressed="true"] .cardIcon {
-  color: var(--select-icon, var(--accent-hover));
-  border-color: var(--accent-line);
+  color: var(--ob-on-accent);
+  background: var(--ob-accent);
+  border-color: var(--ob-accent);
 }
 
 .cardLabel {
@@ -406,8 +412,9 @@
 }
 
 .card[aria-pressed="true"] .cardMark {
-  background: var(--ob-magenta-deep);
-  border-color: var(--ob-magenta-deep);
+  color: var(--ob-on-accent);
+  background: var(--ob-accent);
+  border-color: var(--ob-accent);
   animation: mark-in var(--dur-2) var(--ease-emph) both;
 }
 
@@ -476,14 +483,14 @@
 }
 
 .chip[aria-pressed="true"] {
-  color: var(--select-thumb-text, var(--accent-text));
-  background: var(--select-tile-bg, var(--accent-soft));
-  border-color: var(--select-line, var(--accent-hover));
+  color: var(--ob-on-accent);
+  background: var(--ob-accent);
+  border-color: var(--ob-accent);
 }
 
 .chip[aria-pressed="true"] .keyHint {
   color: inherit;
-  border-color: var(--accent-line);
+  border-color: color-mix(in srgb, var(--ob-on-accent) 45%, transparent);
 }
 
 /* ── Footer: the one Continue button ───────────────────────────────────── */
@@ -531,12 +538,12 @@
   min-block-size: 56px;
   min-inline-size: 168px;
   padding: 0 30px;
-  color: #ffffff;
+  color: var(--ob-on-accent);
   font: inherit;
   font-size: 1rem;
   font-weight: 700;
   text-decoration: none;
-  background: var(--ob-magenta-deep);
+  background: var(--ob-accent);
   border: 0;
   border-radius: 999px;
   cursor: pointer;
@@ -544,7 +551,7 @@
 }
 
 .primary:hover {
-  background: var(--ob-magenta-press);
+  background: var(--ob-accent-press);
 }
 
 .primary:active {
@@ -577,8 +584,8 @@
 }
 
 .secondary:hover {
-  color: var(--accent-text);
-  border-color: var(--ob-magenta-deep);
+  color: var(--ink);
+  border-color: var(--ob-accent);
 }
 
 .secondary:active {
@@ -593,7 +600,7 @@
 .textButton {
   min-block-size: 44px;
   padding: 0 4px;
-  color: var(--accent-text);
+  color: var(--ink);
   font: inherit;
   font-size: .9375rem;
   font-weight: 700;
@@ -706,7 +713,7 @@
   margin-block-end: 18px;
 }
 
-/* ── The stage: a volt panel with one live illustration ───────────────── */
+/* ── The stage: a white panel with one live illustration ──────────────── */
 
 .stageSlot {
   grid-area: stage;
@@ -722,8 +729,9 @@
   place-items: center;
   block-size: 100%;
   overflow: hidden;
-  color: var(--ob-on-volt);
-  background: var(--ob-volt);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 32px;
 }
 
@@ -737,103 +745,119 @@
   from { opacity: 0; transform: translateY(14px) scale(.97); }
 }
 
+.phoneWrap {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+
+/* An iPhone 15 (393:852 screen) showing Instagram's light DM screen. */
 .phone {
   position: relative;
   display: flex;
   flex-direction: column;
-  inline-size: 284px;
-  block-size: min(470px, calc(100svh - 150px));
+  inline-size: min(300px, calc((100svh - 200px) * 393 / 852 + 20px));
+  aspect-ratio: 413 / 872;
   overflow: hidden;
-  color: #17181d;
+  color: #000000;
   background: #ffffff;
-  border: 10px solid #17181d;
-  border-radius: 44px;
-  box-shadow: 0 30px 60px rgb(23 24 29 / 18%);
+  border: 10px solid #121214;
+  border-radius: 50px;
+  box-shadow: 0 0 0 1px #2a2a2e, 0 30px 60px rgb(23 24 29 / 16%);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", var(--font-sans), sans-serif;
 }
 
-.phoneNotch {
-  align-self: center;
-  inline-size: 86px;
-  block-size: 22px;
-  margin-block-start: 8px;
-  background: #17181d;
-  border-radius: 999px;
-}
-
-.phoneHead {
+.igStatus {
+  position: relative;
   display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  block-size: 44px;
+  padding: 6px 20px 0 26px;
+}
+
+.igTime {
+  font-size: .9375rem;
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+
+.igIsland {
+  position: absolute;
+  inset-block-start: 9px;
+  inset-inline-start: 50%;
+  inline-size: 92px;
+  block-size: 26px;
+  background: #000000;
+  border-radius: 999px;
+  transform: translateX(-50%);
+}
+
+.igSignals {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.igHead {
+  display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 10px;
-  padding: 14px 14px 12px;
-  border-block-end: 1px solid #ececf0;
+  padding: 6px 14px 10px 8px;
+  border-block-end: 1px solid #dbdbdb;
 }
 
-.phoneAvatar {
+.igBack {
+  flex: 0 0 auto;
+}
+
+.igAvatar,
+.igIntroAvatar,
+.igMiniAvatar {
   display: inline-grid;
   place-items: center;
-  flex: 0 0 38px;
-  block-size: 38px;
+  flex: 0 0 auto;
   color: #ffffff;
-  font-weight: 800;
-  background: var(--ob-magenta-deep);
+  font-weight: 700;
+  background: linear-gradient(135deg, #f58529 0%, #dd2a7b 55%, #8134af 100%);
   border-radius: 50%;
 }
 
-.phoneWho {
-  display: grid;
-  gap: 3px;
-  min-inline-size: 0;
+.igAvatar {
+  inline-size: 34px;
+  block-size: 34px;
+  font-size: .875rem;
 }
 
-.phoneWho strong {
+.igWho {
+  display: grid;
+  flex: 1;
+  min-inline-size: 0;
+  line-height: 1.2;
+}
+
+.igWho strong {
   overflow: hidden;
   font-size: .9375rem;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.phoneMeta {
-  color: #5b5c66;
+.igWho span {
+  overflow: hidden;
+  color: #737373;
   font-size: .8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.phoneBadge {
-  justify-self: start;
-  padding: 1px 9px;
-  color: #9c079a;
-  font-size: .8125rem;
-  font-weight: 700;
-  background: #fce7fb;
-  border-radius: 999px;
-  animation: pop-in-badge var(--dur-2) var(--ease-emph) both;
-}
-
-@keyframes pop-in-badge {
-  from { opacity: 0; transform: scale(.85); }
-}
-
-.phoneTags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px 14px 0;
-}
-
-.phoneTag {
-  padding: 3px 10px;
-  font-size: .8125rem;
-  font-weight: 700;
-  border: 1px solid #17181d;
-  border-radius: 999px;
-  animation: pop-in-badge var(--dur-2) var(--ease-emph) both;
-}
-
-.phoneStamp {
-  align-self: center;
-  margin: 0 0 4px;
-  color: #5b5c66;
-  font-size: .8125rem;
-  font-weight: 600;
+.igActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
 }
 
 .phoneThread {
@@ -841,38 +865,175 @@
   flex: 1;
   flex-direction: column;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 14px 12px 18px;
+  gap: 6px;
+  min-block-size: 0;
+  overflow: hidden;
+  padding: 10px 12px 8px;
+}
+
+.igIntro {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  margin-block-end: auto;
+  padding-block: 8px 4px;
+  text-align: center;
+}
+
+.igIntroAvatar {
+  inline-size: 64px;
+  block-size: 64px;
+  margin-block-end: 6px;
+  font-size: 1.5rem;
+}
+
+.igIntro strong {
+  font-size: .9375rem;
+  font-weight: 650;
+}
+
+.igIntro > span:not(.igIntroAvatar):not(.igIntroButton) {
+  color: #737373;
+  font-size: .8125rem;
+}
+
+.igIntroButton {
+  margin-block-start: 8px;
+  padding: 6px 14px;
+  font-size: .8125rem;
+  font-weight: 650;
+  background: var(--ig-in);
+  border-radius: 8px;
+}
+
+.phoneStamp {
+  align-self: center;
+  margin: 6px 0 2px;
+  color: #737373;
+  font-size: .8125rem;
+  font-weight: 500;
+}
+
+.rowThem,
+.rowYou {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  animation: bubble-in var(--dur-3) var(--ease-emph) var(--bubble-delay, 0ms) both;
+}
+
+.rowThem {
+  align-self: flex-start;
+  max-inline-size: 86%;
+}
+
+.rowYou {
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: flex-end;
+  gap: 3px;
+  max-inline-size: 80%;
+}
+
+.igMiniAvatar {
+  inline-size: 24px;
+  block-size: 24px;
+  font-size: .75rem;
 }
 
 .bubbleThem,
 .bubbleYou {
-  max-inline-size: 84%;
   margin: 0;
-  padding: 10px 13px;
+  padding: 8px 12px;
   font-size: .875rem;
-  font-weight: 600;
-  line-height: 1.32;
-  border-radius: 18px;
-  animation: bubble-in var(--dur-3) var(--ease-emph) var(--bubble-delay, 0ms) both;
+  font-weight: 400;
+  line-height: 1.3;
+  border-radius: 20px;
 }
 
 .bubbleThem {
-  align-self: flex-start;
-  background: #ffffff;
-  border: 1px solid #e3e3e8;
-  border-end-start-radius: 6px;
+  color: #000000;
+  background: var(--ig-in);
 }
 
 .bubbleYou {
-  align-self: flex-end;
   color: #ffffff;
-  background: var(--ob-magenta-deep);
-  border-end-end-radius: 6px;
+  background: var(--ig-out);
+}
+
+.igSeen {
+  padding-inline-end: 4px;
+  color: #737373;
+  font-size: .75rem;
 }
 
 @keyframes bubble-in {
   from { opacity: 0; transform: translateY(10px) scale(.96); }
+}
+
+.igComposer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 10px 6px;
+  padding: 5px 14px 5px 5px;
+  color: #000000;
+  border: 1px solid #dbdbdb;
+  border-radius: 999px;
+}
+
+.igCamera {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  color: #ffffff;
+  background: var(--ig-blue);
+  border-radius: 50%;
+}
+
+.igPlaceholder {
+  flex: 1;
+  color: #737373;
+  font-size: .875rem;
+}
+
+.igHomeBar {
+  flex: 0 0 auto;
+  align-self: center;
+  inline-size: 120px;
+  block-size: 5px;
+  margin-block: 4px 8px;
+  background: #000000;
+  border-radius: 999px;
+}
+
+/* What they picked, under the phone (Instagram itself shows none of it). */
+.phoneCaption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px 8px;
+  max-inline-size: 320px;
+  margin: 0;
+  color: var(--muted);
+  font-size: .875rem;
+  font-weight: 600;
+}
+
+.phoneCaptionTag {
+  padding: 3px 10px;
+  color: var(--ink);
+  font-weight: 700;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  animation: pop-in-badge var(--dur-2) var(--ease-emph) both;
+}
+
+@keyframes pop-in-badge {
+  from { opacity: 0; transform: scale(.85); }
 }
 
 /* Audience: a crowd that grows with the answer. */
@@ -911,7 +1072,7 @@
 .crowdDot {
   inline-size: 46px;
   block-size: 46px;
-  background: var(--ob-magenta-deep);
+  background: var(--ob-accent);
   border: 3px solid #ffffff;
   border-radius: 50%;
   opacity: 0;
@@ -959,7 +1120,7 @@
 }
 
 /* Daily load: a stream of comments at their pace, inside a phone card so
-   the fade runs into white, never into the volt. */
+   the fade runs into white. */
 .stream {
   position: relative;
   display: grid;
@@ -1014,7 +1175,7 @@
 .streamAvatar {
   flex: 0 0 22px;
   block-size: 22px;
-  background: var(--ob-magenta-deep);
+  background: var(--ob-accent);
   border-radius: 50%;
 }
 
@@ -1078,7 +1239,7 @@
 }
 
 .connectLine path[data-connected="true"] {
-  stroke: var(--ob-magenta-deep);
+  stroke: var(--ob-accent);
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
   stroke-width: 4;
@@ -1128,8 +1289,9 @@
   align-items: end;
   gap: 16px 40px;
   padding: 24px 32px;
-  color: var(--ob-on-volt);
-  background: var(--ob-volt);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
   border-radius: 28px;
 }
 
@@ -1177,7 +1339,7 @@
 
 .planPosts svg {
   flex: none;
-  color: var(--accent-text);
+  color: var(--ink);
 }
 
 .planPicks {
@@ -1236,7 +1398,7 @@
   min-block-size: 44px;
   margin-inline-start: -4px;
   padding: 0 4px;
-  color: var(--accent-text);
+  color: var(--ink);
   font: inherit;
   font-size: .9375rem;
   font-weight: 700;
@@ -1290,7 +1452,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: var(--ob-volt);
+  border: 2px solid var(--line-strong);
   border-radius: 50%;
   animation: done-pop var(--dur-4) var(--ease-emph) both;
 }
@@ -1300,9 +1462,9 @@
   place-items: center;
   inline-size: 104px;
   block-size: 104px;
-  color: #ffffff;
+  color: var(--ob-on-accent);
   position: relative;
-  background: var(--ob-magenta-deep);
+  background: var(--ob-accent);
   border-radius: 50%;
   animation: done-pop var(--dur-4) var(--ease-emph) 80ms both;
 }
@@ -1322,15 +1484,14 @@
   inline-size: 12px;
   block-size: 12px;
   margin: -6px 0 0 -6px;
-  background: var(--ob-magenta);
+  background: var(--ob-spark);
   border-radius: 3px;
   opacity: 0;
   animation: spark-out 1100ms var(--ease-out) var(--spark-delay, 0ms) both;
 }
 
 .spark[data-tone="1"] {
-  background: var(--ob-volt);
-  box-shadow: 0 0 0 1px rgb(23 24 29 / 25%);
+  background: var(--ig-blue);
 }
 
 .spark[data-tone="2"] {
@@ -1354,14 +1515,12 @@
 /* ── Dark mode ─────────────────────────────────────────────────────────── */
 
 :global([data-theme="dark"]) .shell {
-  /* The volt stage stays volt: it is the brand's signature, as on the site. */
-  --ob-magenta-deep: #d21ccf;
-  --ob-magenta-press: #e840e5;
+  /* Ink and panel swap on their own; the phone stays Instagram's light theme. */
 }
 
 :global([data-theme="dark"]) .phone {
   border-color: #000000;
-  box-shadow: 0 30px 60px rgb(0 0 0 / 35%);
+  box-shadow: 0 0 0 1px #3a3a40, 0 30px 60px rgb(0 0 0 / 35%);
 }
 
 /* ── Tablets and phones ────────────────────────────────────────────────── */
@@ -1416,9 +1575,10 @@
     border-radius: 22px;
   }
 
-  /* The phone becomes just its latest exchange on a volt strip. */
+  /* The phone becomes just its latest exchange on a white strip. */
   .phone {
     inline-size: min(340px, 100%);
+    aspect-ratio: auto;
     block-size: auto;
     background: transparent;
     border: 0;
@@ -1426,9 +1586,14 @@
     box-shadow: none;
   }
 
-  .phoneNotch,
-  .phoneHead,
-  .phoneTags {
+  .igStatus,
+  .igHead,
+  .igIntro,
+  .phoneStamp,
+  .igComposer,
+  .igHomeBar,
+  .igSeen,
+  .phoneCaption {
     display: none;
   }
 
@@ -1612,10 +1777,9 @@
 @media (prefers-reduced-motion: reduce) {
   .step,
   .stageArt,
-  .bubbleThem,
-  .bubbleYou,
-  .phoneBadge,
-  .phoneTag,
+  .rowThem,
+  .rowYou,
+  .phoneCaptionTag,
   .streamTrack,
   .streamTag,
   .connectDone,

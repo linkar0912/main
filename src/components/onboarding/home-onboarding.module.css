@@ -1,5 +1,5 @@
 /* Home cards that carry onboarding forward: the one-time invitation and the
-   "Your plan" card. Same calm Home surfaces, with the onboarding volt as the
+   "Your plan" card. Same calm Home surfaces, with ink as the
    single accent. */
 
 .invite {
@@ -20,8 +20,8 @@
   place-items: center;
   inline-size: 44px;
   block-size: 44px;
-  color: #101116;
-  background: var(--volt);
+  color: var(--panel);
+  background: var(--ink);
   border-radius: 50%;
 }
 
@@ -84,8 +84,9 @@
   align-content: start;
   gap: 4px;
   padding: 20px;
-  color: #101116;
-  background: var(--volt);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
   border-radius: 16px;
 }
 
