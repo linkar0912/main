@@ -39,8 +39,11 @@ test("Inbox paginates conversations and supports operational state", async ({ pa
   await expect.poll(() => patches).toContainEqual({ action: "mark_read" });
   await page.getByRole("button", { name: "Load earlier messages" }).click();
   await expect(page.getByText("Oldest message")).toBeVisible();
-  await page.getByRole("button", { name: "Add to favourites" }).click();
-  await page.getByRole("button", { name: "Close conversation" }).click();
+  // On a phone the conversation actions fold behind one options button.
+  await page.getByRole("button", { name: "Conversation options" }).click();
+  const actions = page.getByRole("toolbar", { name: "Conversation actions" });
+  await actions.getByRole("button", { name: "Add to favourites" }).click();
+  await actions.getByRole("button", { name: "Close conversation" }).click();
   await expect.poll(() => patches).toContainEqual({ action: "set_favorite", favorite: true });
   await expect.poll(() => patches).toContainEqual({ action: "set_status", status: "CLOSED" });
   await expect(page.getByLabel(/attach|image|note/i)).toHaveCount(0);

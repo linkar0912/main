@@ -25,7 +25,7 @@ test("workspace navigation only loads visible data and reuses warm resources", a
 
   const count = (path: string) => requests.filter((request) => request === path).length;
   await page.goto("/settings");
-  await expect(page.getByRole("region", { name: "Connected channels" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Connections", exact: true })).toBeVisible();
   expect(count("/api/team/invitations")).toBe(0);
   expect(count("/api/workspace/messaging")).toBe(0);
   expect(count("/api/billing")).toBe(0);
@@ -38,7 +38,7 @@ test("workspace navigation only loads visible data and reuses warm resources", a
 
   const healthRequests = count("/api/meta/connection/health") + count("/api/facebook/connection/health");
   await page.getByRole("button", { name: /Team/ }).click();
-  await expect(page.getByLabel("Invite by email")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Invite a teammate" }).getByLabel("Email address")).toBeVisible();
   expect(count("/api/team/invitations")).toBe(1);
   expect(count("/api/meta/connection/health") + count("/api/facebook/connection/health")).toBe(healthRequests);
 
@@ -50,10 +50,13 @@ test("workspace navigation only loads visible data and reuses warm resources", a
   await expect(page.getByRole("heading", { name: "Plan and usage" })).toBeVisible();
   expect(count("/api/billing")).toBe(1);
 
-  await page.getByRole("link", { name: "My Profile" }).click();
-  await expect(page.getByRole("heading", { name: "My Profile" })).toBeVisible();
-  await page.getByRole("link", { name: "Home" }).click();
-  await expect(page.getByRole("heading", { name: /Hello,/ })).toBeVisible();
+  // My profile now lives in the account menu (avatar button in the top bar).
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("link", { name: "My profile" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "My profile" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Workspace sections" }).getByRole("link", { name: "Home" }).click();
+  // Home greets by first name when it can derive one, otherwise "Welcome back".
+  await expect(page.getByRole("heading", { level: 1, name: /^(Hello,|Welcome back)/ })).toBeVisible();
   expect(count("/api/meta/connection")).toBe(1);
   expect(count("/api/facebook/connection")).toBe(1);
   expect(count("/api/insights?include=overview")).toBe(1);

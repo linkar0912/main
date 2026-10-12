@@ -1,11 +1,33 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Owner } from "./fixtures";
+
+/** A real comment-triggered Instagram automation in the owner's own workspace. */
+async function createCampaign(owner: Owner, name: string): Promise<string> {
+  const account = await owner.connectInstagram();
+  const response = await owner.page.request.post("/api/automations", {
+    data: {
+      provider: "INSTAGRAM",
+      instagramAccountId: account.igUserId,
+      name,
+      definition: {
+        version: 1,
+        trigger: { type: "comment", match: "keyword", keywords: ["location"], mediaIds: [] },
+        conditions: [],
+        actions: [{ type: "private_reply", text: "Here is the location." }],
+      },
+    },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  return ((await response.json()) as { data: { id: string } }).data.id;
+}
 
 // Regression: long reel captions (white-space: nowrap) used to blow the
 // activity list's implicit grid track out to max-content, stretching the
-// funnel, campaign banner, and every row under the sticky insights sidebar.
-// The list column must stay pinned to the main column's width.
-test("campaign activity keeps the main column constrained with long captions", async ({ page }) => {
-  await page.route("**/api/automations/automation_1/activity", (route) => route.fulfill({
+// funnel and every row under the insights sidebar. The funnel must stay in
+// its column beside the sidebar, and nothing may widen the page.
+test("campaign activity keeps the main column constrained with long captions", async ({ owner }) => {
+  const { page } = owner;
+  const automationId = await createCampaign(owner, "Ramen location campaign");
+  await page.route(`**/api/automations/${automationId}/activity`, (route) => route.fulfill({
     json: {
       data: Array.from({ length: 6 }, (_, index) => ({
         id: `p_${index}`,
@@ -27,42 +49,47 @@ test("campaign activity keeps the main column constrained with long captions", a
       summary: { commented: 49, openingSent: 49, optedIn: 34, followed: 33, linkSent: 33 },
     },
   }));
-  await page.route("**/api/automations/automation_1", (route) => route.fulfill({
-    json: { data: { id: "automation_1", name: "Ramen location campaign", status: "ACTIVE", version: 2 } },
-  }));
   await page.route("**/api/insights?**", (route) => route.fulfill({
-    json: { timeseries: { days: 14, participantsPerDay: [], sentPerDay: [] }, mediaPerformance: [], usage: { participantsThisMonth: 49, monthlyLimit: null } },
+    json: { timeseries: { days: 14, participantsPerDay: [], sentPerDay: [] }, mediaPerformance: [], usage: { deliveriesThisMonth: 33, monthlyDeliveryLimit: null } },
   }));
 
-  await page.goto("/automations/automation_1/activity");
-  await expect(page.getByRole("heading", { name: "Campaign activity" })).toBeVisible();
-  await expect(page.getByText("Ramen location campaign")).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/automations/${automationId}/activity`);
+  await expect(page.getByRole("heading", { level: 1, name: "Ramen location campaign" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Automation views" }).getByRole("link", { name: "Activity" })).toHaveAttribute("aria-current", "page");
+  const funnel = page.getByLabel("Campaign funnel");
+  const aside = page.getByRole("complementary", { name: "Campaign insights" });
+  await expect(funnel).toBeVisible();
+  await expect(aside).toBeVisible();
+  await expect(page.locator(".activity-caption").first()).toBeVisible();
 
   const layout = await page.evaluate(() => {
-    const rect = (selector: string) => {
-      const element = document.querySelector(selector);
-      return element ? element.getBoundingClientRect() : null;
-    };
-    const main = rect(".activity-main");
-    const side = rect(".activity-side");
-    const funnel = rect(".funnel-strip");
-    const banner = rect(".campaign-strip");
+    const rect = (selector: string) => document.querySelector(selector)?.getBoundingClientRect() ?? null;
+    const funnelBox = rect(".campaign-funnel");
+    const sideBox = rect(".campaign-aside");
+    const participants = rect(".campaign-participants");
+    const captions = Array.from(document.querySelectorAll(".activity-caption")).map((element) => element.getBoundingClientRect().right);
     return {
-      mainWidth: main ? Math.round(main.width) : null,
-      sideX: side ? Math.round(side.x) : null,
-      funnelRight: funnel ? Math.round(funnel.right) : null,
-      bannerRight: banner ? Math.round(banner.right) : null,
+      viewport: window.innerWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      funnelRight: funnelBox ? Math.round(funnelBox.right) : null,
+      sideX: sideBox ? Math.round(sideBox.x) : null,
+      sideRight: sideBox ? Math.round(sideBox.right) : null,
+      participantsRight: participants ? Math.round(participants.right) : null,
+      widestCaption: Math.max(...captions),
     };
   });
 
   // Nothing in the main column may cross into the sidebar's column.
-  expect(layout.mainWidth).toBeLessThan(layout.sideX! - 24);
   expect(layout.funnelRight).toBeLessThan(layout.sideX!);
-  expect(layout.bannerRight).toBeLessThan(layout.sideX!);
+  expect(layout.participantsRight).toBeLessThanOrEqual(layout.sideRight! + 1);
+  expect(layout.widestCaption).toBeLessThanOrEqual(layout.participantsRight!);
+  expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewport);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Campaign activity" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Ramen location campaign" })).toBeVisible();
+  await expect(page.locator(".activity-caption").first()).toBeVisible();
 
   const mobile = await page.evaluate(() => ({
     viewport: window.innerWidth,
