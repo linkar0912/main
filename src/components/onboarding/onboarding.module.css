@@ -1082,35 +1082,39 @@
 
 .crowdCluster {
   display: grid;
-  grid-template-columns: repeat(6, 46px);
-  gap: 10px;
+  grid-template-columns: repeat(6, 40px);
+  gap: 12px 14px;
 }
 
-.crowdDot {
-  inline-size: 46px;
+.person {
+  inline-size: 40px;
   block-size: 46px;
-  background: var(--ob-accent);
-  border: 3px solid #ffffff;
-  border-radius: 50%;
-  opacity: 0;
-  transform: scale(.3);
+  fill: var(--line-strong);
+  transform: scale(.9);
+  transform-origin: 50% 100%;
   transition:
-    opacity var(--dur-3) var(--ease-emph) var(--dot-delay),
+    fill var(--dur-2) var(--ease-out) var(--dot-delay),
     transform var(--dur-3) var(--ease-emph) var(--dot-delay);
 }
 
-.crowdDot[data-tone="1"] {
-  background: #17181d;
-}
-
-.crowdDot[data-tone="2"] {
-  background: #ffffff;
-  border-color: #17181d;
-}
-
-.crowdDot[data-on="true"] {
-  opacity: 1;
+.person[data-on="true"] {
+  fill: var(--ink);
   transform: scale(1);
+  animation: person-pop var(--dur-3) var(--ease-emph) var(--dot-delay) both;
+}
+
+.person[data-on="true"][data-tone="1"] {
+  fill: color-mix(in srgb, var(--ink) 78%, var(--panel));
+}
+
+.person[data-on="true"][data-tone="2"] {
+  fill: color-mix(in srgb, var(--ink) 60%, var(--panel));
+}
+
+@keyframes person-pop {
+  0% { transform: scale(.9) translateY(0); }
+  45% { transform: scale(1.08) translateY(-3px); }
+  100% { transform: scale(1) translateY(0); }
 }
 
 .crowdChannels {
@@ -1671,6 +1675,26 @@
     display: none;
   }
 
+  /* The device body and wrapper take the strip's width, so the phone's
+     contents (DMs, the comments list) use it instead of shrinking. */
+  .phoneWrap,
+  .phoneBody {
+    inline-size: min(340px, 100%);
+  }
+
+  .phoneWrap {
+    justify-self: center;
+  }
+
+  .stageArt {
+    justify-items: center;
+    inline-size: 100%;
+  }
+
+  .phoneBody .phone {
+    inline-size: 100%;
+  }
+
   /* The phone becomes just its latest exchange on a white strip. */
   .phone {
     inline-size: min(340px, 100%);
@@ -1709,12 +1733,14 @@
   .crowd {
     grid-template-columns: auto auto;
     align-items: center;
-    gap: 8px 22px;
+    gap: 8px 18px;
+    padding-inline: 16px;
   }
 
   .crowdCaption {
     grid-row: span 2;
-    font-size: 1.75rem;
+    max-inline-size: 7.5em;
+    font-size: 1.5rem;
     text-align: start;
   }
 
@@ -1723,14 +1749,13 @@
   }
 
   .crowdCluster {
-    grid-template-columns: repeat(10, 14px);
-    gap: 4px;
+    grid-template-columns: repeat(8, 14px);
+    gap: 3px 4px;
   }
 
-  .crowdDot {
+  .person {
     inline-size: 14px;
-    block-size: 14px;
-    border-width: 1.5px;
+    block-size: 16px;
   }
 
   .crowdChannels {
@@ -1881,12 +1906,13 @@
   .doneCircle,
   .doneMark::before,
   .crowdCaption,
+  .person,
   .card[aria-pressed="true"] .cardMark {
     animation: none !important;
   }
 
   .progressFill,
-  .crowdDot,
+  .person,
   .crowdChannel,
   .card,
   .chip,

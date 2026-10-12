@@ -189,14 +189,21 @@ function Crowd({ audience, channels }: { audience?: AudienceSize; channels: stri
         <small>{audience ? "followers" : "Pick a size"}</small>
       </p>
       <div className={styles.crowdCluster}>
+        {/* Thirty people; the audience size fills in more of them, in
+            reading order, each popping in a beat after the last. */}
         {Array.from({ length: 30 }, (_, index) => (
-          <span
+          <svg
             key={index}
-            className={styles.crowdDot}
+            className={styles.person}
+            viewBox="0 0 24 28"
             data-on={index < visible ? "true" : "false"}
-            data-tone={index % 3}
-            style={{ "--dot-delay": `${(index % 10) * 28}ms` } as CSSProperties}
-          />
+            data-tone={(index * 7 + Math.floor(index / 6)) % 3}
+            style={{ "--dot-delay": `${Math.max(0, index - (visible > index ? 0 : visible)) % 12 * 24}ms` } as CSSProperties}
+            focusable="false"
+          >
+            <circle cx="12" cy="7.5" r="5.5" />
+            <path d="M1.5 27.5c0-6.6 4.7-11.5 10.5-11.5s10.5 4.9 10.5 11.5z" />
+          </svg>
         ))}
       </div>
       <div className={styles.crowdChannels}>
