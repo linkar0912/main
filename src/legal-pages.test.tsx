@@ -97,7 +97,7 @@ describe("public legal and support pages", () => {
     render(<PrivacyPage />);
     const text = article().textContent ?? "";
 
-    for (const fact of [/sign in with Google/, /sign in with Facebook/, /Razorpay/, /one-way hash of their IP address/, /user agent/, /country/, /Resend/, /only after you accept analytics cookies/, /DPDP Act/, /Data Protection Board of India/, /grievance officer/]) {
+    for (const fact of [/sign in with Google/, /sign in with Facebook/, /Razorpay/, /one-way hash of their IP address/, /user agent/, /country/, /Resend/, /stay off until you accept them/, /_ga_\*/, /14 months/, /opt-out browser add-on/, /DPDP Act/, /Data Protection Board of India/, /grievance officer/]) {
       expect(text).toMatch(fact);
     }
   });
@@ -129,8 +129,8 @@ describe("public legal and support pages", () => {
     expect(document.cookie).toContain(`${ANALYTICS_CONSENT_COOKIE}=granted`);
     expect(controls.textContent).toMatch(/You have accepted/);
 
-    fireEvent.click(within(controls).getByRole("button", { name: "Reject analytics" }));
+    fireEvent.click(within(controls).getByRole("button", { name: "Decline analytics" }));
     expect(document.cookie).toContain(`${ANALYTICS_CONSENT_COOKIE}=denied`);
-    expect(within(controls).getByRole("button", { name: "Reject analytics" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(controls).getByRole("button", { name: "Decline analytics" }).getAttribute("aria-pressed")).toBe("true");
   });
 });

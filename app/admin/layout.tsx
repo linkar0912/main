@@ -1,3 +1,4 @@
+import "../globals.css";
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/src/components/admin/admin-shell";

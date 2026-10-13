@@ -14,7 +14,7 @@ import { ConversationHeaderActions, type InboxOperation } from "./conversation-h
 import { InboxFilters } from "./inbox-filters";
 import { groupConversations, lastSpeaker, type ConversationGroupKey } from "./conversation-groups";
 import type { InboxContact, InboxFiltersValue, InboxMember, InboxMessage } from "./types";
-import { toReadableApiError } from "@/src/lib/validation-error";
+import { toReadableApiError } from "@/src/lib/api-error-message";
 
 const DEFAULT_FILTERS: InboxFiltersValue = {
   query: "",

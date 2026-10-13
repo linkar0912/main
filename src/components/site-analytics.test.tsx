@@ -1,146 +1,188 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ANALYTICS_CONSENT_COOKIE } from "@/src/lib/analytics-consent";
-import { GoogleAnalyticsTag, SiteAnalytics, resetSiteAnalyticsConfigForTests } from "./site-analytics";
+import { SiteAnalytics, resetSiteAnalyticsForTests, resolveMeasurementId } from "./site-analytics";
+
+const navigation = vi.hoisted(() => ({ pathname: "/" }));
+const zone = vi.hoisted(() => ({ timeZone: "Asia/Kolkata" as string | undefined }));
+
+vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
+
+vi.mock("@/src/lib/analytics-consent", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/src/lib/analytics-consent")>()),
+  visitorTimeZone: () => zone.timeZone,
+}));
 
 vi.mock("./site-analytics-routes", () => ({
-  SiteAnalyticsRoutes: () => null,
+  SiteAnalyticsRoutes: ({ enabled }: { enabled: boolean }) => <span data-page-views={String(enabled)} />,
 }));
 
 vi.mock("next/script", () => ({
-  default: ({ src, id, children }: { src?: string; id?: string; children?: string }) => (
-    <script data-src={src} data-id={id} data-inline={children} />
-  ),
+  default: ({ src, id }: { src?: string; id?: string }) => <script data-src={src} data-id={id} />,
 }));
+
+const ID = "G-TEST1234";
 
 function clearConsentCookie() {
   document.cookie = `${ANALYTICS_CONSENT_COOKIE}=; Path=/; Max-Age=0`;
 }
 
-function stubConfig(gaMeasurementId: string) {
-  const fetchMock = vi.fn(async () => new Response(JSON.stringify({ gaMeasurementId }), { status: 200 }));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
+/** The gtag commands queued so far, as plain arrays. */
+function commands(): unknown[][] {
+  return (window.dataLayer ?? []).map((entry) => Array.from(entry as ArrayLike<unknown>));
 }
 
-describe("GoogleAnalyticsTag", () => {
-  afterEach(cleanup);
+function loaderScripts(container: HTMLElement) {
+  return container.querySelectorAll('script[data-id="google-analytics"]');
+}
 
-  it("renders nothing when no measurement ID is configured", () => {
-    const { container } = render(<GoogleAnalyticsTag measurementId="" />);
-    expect(container.querySelectorAll("script")).toHaveLength(0);
-  });
+beforeEach(() => {
+  resetSiteAnalyticsForTests();
+  clearConsentCookie();
+  navigation.pathname = "/";
+  zone.timeZone = "Asia/Kolkata";
+  window.history.replaceState(null, "", "/");
+  delete window.dataLayer;
+  delete window.gtag;
+  delete window[`ga-disable-${ID}`];
+});
 
-  it("loads gtag with Consent Mode v2 defaults denied before configuring the property", () => {
-    const { container } = render(<GoogleAnalyticsTag measurementId="G-CLMXQ4YFD1" />);
-    const scripts = [...container.querySelectorAll("script")];
+afterEach(() => {
+  cleanup();
+  clearConsentCookie();
+});
 
-    expect(scripts).toHaveLength(2);
-    expect(scripts[0].getAttribute("data-src"))
-      .toBe("https://www.googletagmanager.com/gtag/js?id=G-CLMXQ4YFD1");
-    const inline = scripts[1].getAttribute("data-inline") ?? "";
-    expect(inline).toContain("gtag('config', \"G-CLMXQ4YFD1\", { send_page_view: false })");
-    const defaults = inline.indexOf("gtag('consent', 'default'");
-    expect(defaults).toBeGreaterThanOrEqual(0);
-    expect(inline.slice(defaults)).toMatch(/ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied'/);
-    expect(defaults).toBeLessThan(inline.indexOf("gtag('config'"));
-    // Advertising purposes are never granted.
-    expect(inline).toContain("gtag('consent', 'update', { analytics_storage: 'granted' })");
-    expect(inline).not.toMatch(/ad_storage: 'granted'/);
-  });
-
-  it("JSON-encodes the ID into the inline script instead of interpolating it raw", () => {
-    const { container } = render(<GoogleAnalyticsTag measurementId={'G-1";alert(1);//'} />);
-    const inline = container.querySelectorAll("script")[1].getAttribute("data-inline") ?? "";
-
-    // The quote that would close the string literal is escaped, so the call
-    // stays a single argument rather than becoming a second statement.
-    expect(inline).toContain('gtag(\'config\', "G-1\\";alert(1);//", { send_page_view: false })');
+describe("resolveMeasurementId", () => {
+  it("accepts a GA4 ID and rejects anything else", () => {
+    expect(resolveMeasurementId(" G-CLMXQ4YFD1 ")).toBe("G-CLMXQ4YFD1");
+    expect(resolveMeasurementId(undefined)).toBe("");
+    expect(resolveMeasurementId("")).toBe("");
+    expect(resolveMeasurementId('G-1";alert(1)')).toBe("");
+    expect(resolveMeasurementId("UA-12345-1")).toBe("");
   });
 });
 
 describe("SiteAnalytics", () => {
-  beforeEach(() => {
-    resetSiteAnalyticsConfigForTests();
-    clearConsentCookie();
+  it("renders nothing, and queues nothing, without a measurement ID", () => {
+    const { container } = render(<SiteAnalytics measurementId="" />);
+    expect(container.innerHTML).toBe("");
+    expect(window.dataLayer).toBeUndefined();
   });
 
-  afterEach(() => {
-    cleanup();
-    clearConsentCookie();
-    vi.unstubAllGlobals();
-  });
+  it("loads the tag once on a public page with Consent Mode v2 defaults ahead of config", () => {
+    const { container, rerender } = render(<SiteAnalytics measurementId={ID} />);
+    rerender(<SiteAnalytics measurementId={ID} />);
 
-  it("shows no banner and loads nothing when analytics is not configured", async () => {
-    const fetchMock = stubConfig("");
-    const { container } = render(<SiteAnalytics />);
+    const scripts = loaderScripts(container);
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0].getAttribute("data-src")).toBe(`https://www.googletagmanager.com/gtag/js?id=${ID}`);
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/site-config", expect.anything()));
+    const queued = commands();
+    const names = queued.map((command) => `${command[0]}:${command[0] === "consent" ? command[1] : ""}`);
+    expect(names.indexOf("consent:default")).toBeLessThan(names.indexOf("config:"));
+    // Outside the opt-in regions analytics starts granted; advertising never is.
+    expect(queued).toContainEqual(["consent", "default", { ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied", analytics_storage: "granted" }]);
+    expect(queued).toContainEqual([
+      "consent",
+      "default",
+      expect.objectContaining({ analytics_storage: "denied", ad_storage: "denied", region: expect.arrayContaining(["DE", "FR", "GB", "IE", "NO", "CH"]) }),
+    ]);
+    expect(queued).toContainEqual(["config", ID, expect.objectContaining({ send_page_view: false, allow_google_signals: false })]);
+    expect(queued.filter((command) => command[0] === "config")).toHaveLength(1);
+    expect(JSON.stringify(queued)).not.toMatch(/"ad_storage":"granted"/);
     expect(screen.queryByRole("region", { name: "Analytics cookies" })).toBeNull();
-    expect(container.querySelectorAll("script")).toHaveLength(0);
   });
 
-  it("asks first and loads Google Analytics only after Accept", async () => {
-    stubConfig("G-TEST1234");
-    const { container } = render(<SiteAnalytics />);
+  it("starts denied and asks a visitor in Europe, then grants on Accept", () => {
+    zone.timeZone = "Europe/Berlin";
+    render(<SiteAnalytics measurementId={ID} />);
 
-    const banner = await screen.findByRole("region", { name: "Analytics cookies" });
-    expect(container.querySelectorAll("script")).toHaveLength(0);
+    expect(commands()).toContainEqual(["consent", "default", expect.objectContaining({ analytics_storage: "denied" })]);
+    expect(commands().some((command) => command[0] === "consent" && command[1] === "default" && (command[2] as Record<string, unknown>).analytics_storage === "granted")).toBe(false);
 
+    const banner = screen.getByRole("region", { name: "Analytics cookies" });
+    expect(banner.textContent).toMatch(/stay off unless you accept/);
     act(() => { fireEvent.click(screen.getByRole("button", { name: "Accept" })); });
 
     expect(screen.queryByRole("region", { name: "Analytics cookies" })).toBeNull();
-    expect(banner.isConnected).toBe(false);
     expect(document.cookie).toContain(`${ANALYTICS_CONSENT_COOKIE}=granted`);
-    expect(container.querySelector("script")?.getAttribute("data-src")).toContain("id=G-TEST1234");
+    expect(commands()).toContainEqual(["consent", "update", { analytics_storage: "granted" }]);
+    expect(window[`ga-disable-${ID}`]).toBe(false);
   });
 
-  it("reserves room for the banner at the end of the page until a choice is made", async () => {
-    stubConfig("G-TEST1234");
-    render(<SiteAnalytics />);
+  it("reserves room for the notice at the end of the page until a choice is made", () => {
+    zone.timeZone = "Europe/London";
+    render(<SiteAnalytics measurementId={ID} />);
 
-    await screen.findByRole("region", { name: "Analytics cookies" });
     const root = document.documentElement;
     expect(root.dataset.consentBanner).toBe("open");
-    expect(root.style.getPropertyValue("--consent-banner-space")).toMatch(/px$/);
-
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Reject" })); });
-
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Decline" })); });
     expect(root.dataset.consentBanner).toBeUndefined();
     expect(root.style.getPropertyValue("--consent-banner-space")).toBe("");
   });
 
-  it("never loads Google Analytics after Reject, and remembers the choice", async () => {
-    stubConfig("G-TEST1234");
-    const first = render(<SiteAnalytics />);
-
-    await screen.findByRole("region", { name: "Analytics cookies" });
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Reject" })); });
+  it("stops sending at once on Decline, and never loads the tag again", () => {
+    zone.timeZone = "Europe/Paris";
+    const first = render(<SiteAnalytics measurementId={ID} />);
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Decline" })); });
 
     expect(document.cookie).toContain(`${ANALYTICS_CONSENT_COOKIE}=denied`);
-    expect(first.container.querySelectorAll("script")).toHaveLength(0);
+    expect(window[`ga-disable-${ID}`]).toBe(true);
+    expect(commands()).toContainEqual(["consent", "update", { analytics_storage: "denied" }]);
+    expect(loaderScripts(first.container)).toHaveLength(0);
     first.unmount();
 
-    // A later page load reads the stored choice and does not ask again.
-    resetSiteAnalyticsConfigForTests();
-    const second = render(<SiteAnalytics />);
-    await waitFor(() => expect(second.container.querySelectorAll("script")).toHaveLength(0));
+    // A later page load reads the stored choice: no tag, no notice.
+    resetSiteAnalyticsForTests();
+    delete window.dataLayer;
+    const second = render(<SiteAnalytics measurementId={ID} />);
+    expect(loaderScripts(second.container)).toHaveLength(0);
+    expect(window.dataLayer).toBeUndefined();
     expect(screen.queryByRole("region", { name: "Analytics cookies" })).toBeNull();
   });
 
-  it("switches an already-loaded tag to denied when consent is withdrawn", async () => {
-    stubConfig("G-TEST1234");
-    const gtag = vi.fn();
-    vi.stubGlobal("gtag", gtag);
+  it("applies a stored acceptance before the first hit", () => {
+    zone.timeZone = "Europe/Madrid";
     document.cookie = `${ANALYTICS_CONSENT_COOKIE}=granted; Path=/`;
-    render(<SiteAnalytics />);
-    await waitFor(() => expect(gtag).toHaveBeenCalledWith("consent", "update", { analytics_storage: "granted" }));
+    render(<SiteAnalytics measurementId={ID} />);
 
-    const { writeAnalyticsConsent } = await import("@/src/lib/analytics-consent");
-    act(() => writeAnalyticsConsent("denied"));
+    const queued = commands();
+    const update = queued.findIndex((command) => command[0] === "consent" && command[1] === "update");
+    expect(update).toBeGreaterThan(-1);
+    expect(update).toBeLessThan(queued.findIndex((command) => command[0] === "config"));
+    expect(screen.queryByRole("region", { name: "Analytics cookies" })).toBeNull();
+  });
 
-    expect(gtag).toHaveBeenLastCalledWith("consent", "update", { analytics_storage: "denied" });
-    expect((window as unknown as Record<string, unknown>)["ga-disable-G-TEST1234"]).toBe(true);
+  it("never loads in a document that started in the signed-in app", () => {
+    window.history.replaceState(null, "", "/dashboard");
+    navigation.pathname = "/dashboard";
+    const { container, rerender } = render(<SiteAnalytics measurementId={ID} />);
+    expect(container.innerHTML).toBe("");
+
+    // Not even after a client-side navigation to a public page.
+    navigation.pathname = "/pricing";
+    rerender(<SiteAnalytics measurementId={ID} />);
+    expect(loaderScripts(container)).toHaveLength(0);
+    expect(window.dataLayer).toBeUndefined();
+  });
+
+  it("switches GA off when the visitor moves on into the app", () => {
+    const { container, rerender } = render(<SiteAnalytics measurementId={ID} />);
+    expect(window[`ga-disable-${ID}`]).toBe(false);
+    expect(container.querySelector("[data-page-views]")?.getAttribute("data-page-views")).toBe("true");
+
+    navigation.pathname = "/dashboard";
+    rerender(<SiteAnalytics measurementId={ID} />);
+    expect(window[`ga-disable-${ID}`]).toBe(true);
+    expect(container.querySelector("[data-page-views]")?.getAttribute("data-page-views")).toBe("false");
+  });
+
+  it("stays off pages with a secret in the address", () => {
+    window.history.replaceState(null, "", "/reset-password");
+    navigation.pathname = "/reset-password";
+    zone.timeZone = "Europe/Dublin";
+    const { container } = render(<SiteAnalytics measurementId={ID} />);
+    expect(container.innerHTML).toBe("");
   });
 });

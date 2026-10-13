@@ -56,19 +56,29 @@ export class LoginRateLimitStore {
   private readonly fallback;
   private readonly redis?: Redis;
 
+  /**
+   * `namespace` keeps limiters with the same key shape apart in Redis. Login,
+   * signup and forgot-password all key by email+network, so without it a few
+   * reset requests would use up the same visitor's sign-in attempts.
+   */
   constructor(
     redisUrl: string | undefined,
     private readonly maxAttempts = 5,
     private readonly windowMs = 15 * 60 * 1_000,
+    private readonly namespace = "login",
   ) {
     this.fallback = createLoginAttemptLimiter(maxAttempts, windowMs);
     this.redis = redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000 }) : undefined;
   }
 
+  private redisKey(key: string): string {
+    return `linkar:${this.namespace}:${key}`;
+  }
+
   async isAllowed(key: string): Promise<boolean> {
     if (!this.redis) return this.fallback.isAllowed(key);
     try {
-      const count = Number(await this.redis.get(`linkar:login:${key}`) ?? "0");
+      const count = Number(await this.redis.get(this.redisKey(key)) ?? "0");
       return count < this.maxAttempts;
     } catch (error) {
       logger.warn("Rate limiter Redis read failed; using in-process fallback", {
@@ -86,7 +96,7 @@ export class LoginRateLimitStore {
   async consume(key: string): Promise<boolean> {
     if (!this.redis) return this.fallback.consume(key);
     try {
-      const count = Number(await this.redis.eval(CONSUME_SCRIPT, 1, `linkar:login:${key}`, String(this.windowMs)));
+      const count = Number(await this.redis.eval(CONSUME_SCRIPT, 1, this.redisKey(key), String(this.windowMs)));
       return count <= this.maxAttempts;
     } catch (error) {
       logger.warn("Rate limiter Redis write failed; using in-process fallback", {
@@ -99,7 +109,7 @@ export class LoginRateLimitStore {
   async recordFailure(key: string): Promise<void> {
     if (!this.redis) return this.fallback.recordFailure(key);
     try {
-      await this.redis.eval(CONSUME_SCRIPT, 1, `linkar:login:${key}`, String(this.windowMs));
+      await this.redis.eval(CONSUME_SCRIPT, 1, this.redisKey(key), String(this.windowMs));
     } catch (error) {
       logger.warn("Rate limiter Redis write failed; using in-process fallback", {
         error: error instanceof Error ? error.message : String(error),
@@ -111,7 +121,7 @@ export class LoginRateLimitStore {
   async reset(key: string): Promise<void> {
     if (!this.redis) return this.fallback.reset(key);
     try {
-      await this.redis.del(`linkar:login:${key}`);
+      await this.redis.del(this.redisKey(key));
     } catch (error) {
       logger.warn("Rate limiter Redis reset failed; using in-process fallback", {
         error: error instanceof Error ? error.message : String(error),

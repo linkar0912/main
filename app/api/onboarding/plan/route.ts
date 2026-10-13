@@ -4,7 +4,7 @@ import { getServerEnv } from "@/src/lib/env";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { MetaClient } from "@/src/lib/meta/client";
 import { buildOnboardingPlan } from "@/src/lib/onboarding/build-plan";
-import { readStoredAnswers } from "@/src/lib/onboarding/answers";
+import { readStoredAnswers } from "@/src/lib/onboarding/answers-schema";
 import type { PostSample } from "@/src/lib/onboarding/plan";
 import { getRepository } from "@/src/lib/repository-provider";
 import { unsealSecret } from "@/src/lib/security/secrets";

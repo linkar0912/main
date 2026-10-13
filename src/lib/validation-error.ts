@@ -44,8 +44,7 @@ export class ValidationError extends Error {
 /**
  * True for errors caused by the request's content (respond 400) rather than by
  * the server (respond 500). Channel-definition errors are matched by their
- * code so this module stays free of the automation schema (it ships to the
- * browser through toReadableApiError).
+ * code so this module stays free of the automation schema.
  */
 export function isValidationError(error: unknown): boolean {
   return error instanceof z.ZodError
@@ -53,20 +52,6 @@ export function isValidationError(error: unknown): boolean {
     || (error instanceof Error && (error as { code?: unknown }).code === "invalid_channel_definition");
 }
 
-const API_ERROR_MESSAGES: Record<string, string> = {
-  invalid_channel_target: "Choose a connected Instagram account or Facebook Page.",
-  invalid_channel_definition: "This automation has settings that are not supported by the selected channel.",
-  forbidden: "Only workspace owners and admins can do this. Ask one of them to make the change.",
-  limit_reached: "Your plan's limit for this has been reached. Upgrade or wait for the next billing month.",
-};
-
-export function toReadableApiError(error: unknown, fallback: string): string {
-  if (typeof error !== "string" || !error.trim()) return fallback;
-  const normalized = error.trim();
-  if (API_ERROR_MESSAGES[normalized]) return API_ERROR_MESSAGES[normalized];
-  if (/^[a-z0-9_]+$/.test(normalized)) {
-    const readable = normalized.replaceAll("_", " ");
-    return `${readable.charAt(0).toUpperCase()}${readable.slice(1)}.`;
-  }
-  return normalized;
-}
+// Client components import toReadableApiError from ./api-error-message
+// directly; this module imports zod, which must stay out of the browser bundle.
+export { toReadableApiError } from "./api-error-message";

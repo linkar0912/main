@@ -8,8 +8,8 @@ import {
   NICHE_LABELS,
   OWNER_STEP_COUNT,
   REPLY_MODE_LABELS,
-  readStoredAnswers,
 } from "./answers";
+import { readStoredAnswers } from "./answers-schema";
 
 /** The owner console's read-only "About this workspace" block. */
 export type WorkspaceAbout = {

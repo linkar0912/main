@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MemberOnboardingRecord, WorkspaceOnboardingRecord } from "@/src/lib/repository";
-import { OnboardingAnswersSchema, readStoredAnswers } from "./answers";
+import { OnboardingAnswersSchema, readStoredAnswers } from "./answers-schema";
 import { deriveOnboardingSummary } from "./status";
 
 const stamp = "2026-10-12T00:00:00.000Z";

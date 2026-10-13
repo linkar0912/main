@@ -30,6 +30,11 @@ RUN pnpm install --frozen-lockfile
 FROM dependencies AS build
 
 COPY . ./
+# Public, non-secret build-time setting: Next.js inlines NEXT_PUBLIC_* values
+# into the static pages and client bundle, so it must be present here, not at
+# runtime. Empty (the default) builds without Google Analytics.
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID=
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}
 # scripts/ ships in the runtime image (release-step migrations, preflights,
 # the container healthcheck); its tests do not.
 RUN pnpm build \
@@ -63,6 +68,11 @@ COPY --from=build --chown=linkar:linkar /app/prisma/migrations ./prisma/migratio
 # this exact image - see "Database migrations" in ops/DOKPLOY_DEPLOYMENT.md.
 COPY --from=build --chown=linkar:linkar /app/scripts ./scripts
 COPY --from=build --chown=linkar:linkar /app/next.config.ts ./
+# `next start` loads next.config.ts, which imports the security header policy.
+# Every file it imports must be copied here (src/lib/security/headers.test.ts
+# checks this list).
+COPY --from=build --chown=linkar:linkar /app/src/lib/security/headers.ts ./src/lib/security/headers.ts
+COPY --from=build --chown=linkar:linkar /app/src/lib/analytics-path.ts ./src/lib/analytics-path.ts
 COPY --from=build --chown=linkar:linkar /app/tsconfig.json ./
 
 USER linkar

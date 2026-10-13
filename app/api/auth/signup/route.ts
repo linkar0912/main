@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { safeNextPath } from "@/src/lib/auth/session";
-import { LoginRateLimitStore, loginRateLimitKey } from "@/src/lib/auth/rate-limit";
+import { LoginRateLimitStore, loginRateLimitKey, networkRateLimitKey } from "@/src/lib/auth/rate-limit";
 import { clientAddress } from "@/src/lib/auth/client-address";
 import { authPageUrl, sanitizeInvite } from "@/src/lib/auth/auth-redirect";
 import { getServerEnv } from "@/src/lib/env";
@@ -13,8 +13,12 @@ import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 export const runtime = "nodejs";
 
 // Signup attempts per identity (email+IP) per 15 minutes. consume() counts
-// each attempt atomically and reports whether it is within the cap.
+// each attempt atomically and reports whether it is within the cap. The
+// per-network cap stops one address from creating accounts (and sending
+// confirmation emails) for an unbounded list of emails.
 let signupLimiter: LoginRateLimitStore | undefined;
+let networkLimiter: LoginRateLimitStore | undefined;
+const NETWORK_SIGNUPS_PER_HOUR = 20;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 12;
@@ -25,7 +29,8 @@ export async function POST(request: Request) {
 
     const env = getServerEnv();
     const repository = getRepository();
-    signupLimiter ??= new LoginRateLimitStore(env.redisUrl);
+    signupLimiter ??= new LoginRateLimitStore(env.redisUrl, 5, 15 * 60 * 1_000, "signup");
+    networkLimiter ??= new LoginRateLimitStore(env.redisUrl, NETWORK_SIGNUPS_PER_HOUR, 60 * 60 * 1_000, "signup");
     const address = clientAddress(request, env.trustedProxyHops);
     const form = await request.formData();
     const email = String(form.get("email") ?? "").trim().toLowerCase();
@@ -38,6 +43,8 @@ export async function POST(request: Request) {
     if (!EMAIL_PATTERN.test(email)) return page("/signup", { error: "email" });
     if (password.length < MIN_PASSWORD_LENGTH || password.length > 200) return page("/signup", { error: "password", email });
 
+    const networkKey = networkRateLimitKey(env.authSessionSecret, "signup", address);
+    if (networkKey && !(await networkLimiter.consume(networkKey))) return page("/signup", { error: "locked" });
     const limitKey = loginRateLimitKey(env.authSessionSecret, email || "-", address);
     if (!(await signupLimiter.consume(limitKey))) return page("/signup", { error: "locked" });
 

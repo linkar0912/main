@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { redactAnalyticsPath } from "./analytics-path";
+import { isAnalyticsPage, redactAnalyticsPath } from "./analytics-path";
 
 describe("redactAnalyticsPath", () => {
   it("leaves static marketing and app routes alone", () => {
@@ -33,5 +33,34 @@ describe("redactAnalyticsPath", () => {
   it("drops the query string and hash, which can carry tokens of their own", () => {
     expect(redactAnalyticsPath("/reset-password?token=secret")).toBe("/reset-password");
     expect(redactAnalyticsPath("/login#access_token=secret")).toBe("/login");
+  });
+});
+
+describe("isAnalyticsPage", () => {
+  it("covers the public website, sign-in and sign-up", () => {
+    for (const path of ["/", "/pricing", "/login", "/signup", "/cookies", "/privacy", "/support", "/data-deletion", "/pricing/", "/login?next=/dashboard"]) {
+      expect(isAnalyticsPage(path)).toBe(true);
+    }
+  });
+
+  it("never covers the app, the owner console, or pages with a secret in the address", () => {
+    for (const path of [
+      "/dashboard",
+      "/automations/auto_1",
+      "/settings",
+      "/help",
+      "/onboarding",
+      "/admin",
+      "/admin/users/u_1",
+      "/reset-password",
+      "/auth/confirm",
+      "/data-deletion/status/abc123",
+      "/dev-preview/workspace/dashboard",
+      "/pricing/extra",
+      "",
+      null,
+    ]) {
+      expect(isAnalyticsPage(path)).toBe(false);
+    }
   });
 });

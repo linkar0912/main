@@ -62,6 +62,21 @@ drifted apart.
    background. Never block render on a refetch; never bypass the cache with a
    raw `fetch` from a screen.
 
+## Keeping the bundles lean
+
+- **Stylesheets.** Public pages (marketing, legal, auth) load `app/public.css`,
+  the subset of `app/globals.css` they can use; the app, owner console and
+  onboarding layouts load the full `globals.css`. After editing `globals.css`,
+  run `pnpm css:public` - a unit test fails while `public.css` is stale.
+- **Server-only packages.** zod, Prisma, ioredis and BullMQ must never reach a
+  client component (`src/lib/client-bundle.test.ts` enforces it). Keep shared
+  constants and labels in a zod-free module and the schemas next to the route
+  that validates.
+- **On-demand UI.** Anything rendered only after a click (command palette,
+  template picker) is imported with `next/dynamic`.
+- Measure First Load JS per route from `.next/diagnostics/route-bundle-stats.json`
+  after `pnpm build`; Next 16 no longer prints sizes in the build output.
+
 ## Finding a genuinely slow query
 
 The schema already indexes the hot paths (workspaceId composites on

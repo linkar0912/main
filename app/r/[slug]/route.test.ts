@@ -89,6 +89,27 @@ describe("GET /r/[slug]", () => {
     expect(recordClick).toHaveBeenCalledTimes(1);
   });
 
+  it("stops counting clicks from one visitor past the per-minute cap but still redirects", async () => {
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
+    try {
+      await repository.createTrackedLink("workspace_1", {
+        slug: "flood",
+        destination: "https://example.com/",
+        conversionUrl: "https://hooks.example.com/conversion",
+      });
+      const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
+      const click = () => GET(new Request("http://localhost/r/flood", { headers: { "cf-connecting-ip": "198.51.100.50" } }), context("flood"));
+
+      for (let i = 0; i < 31; i++) expect((await click()).status).toBe(302);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(recordClick).toHaveBeenCalledTimes(30);
+      expect(mocks.postJson).toHaveBeenCalledTimes(30);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("410s an expired link before touching the destination", async () => {
     await repository.createTrackedLink("workspace_1", {
       slug: "old",

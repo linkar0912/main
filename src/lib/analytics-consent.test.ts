@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ANALYTICS_CONSENT_COOKIE, analyticsConsentCookieDomain, parseAnalyticsConsent } from "./analytics-consent";
+import { ANALYTICS_CONSENT_COOKIE, CONSENT_REQUIRED_REGIONS, analyticsConsentCookieDomain, parseAnalyticsConsent, timeZoneRequiresConsent } from "./analytics-consent";
 
 describe("parseAnalyticsConsent", () => {
   it("reads only the two valid choices from a cookie header", () => {
@@ -17,5 +17,27 @@ describe("analyticsConsentCookieDomain", () => {
     expect(analyticsConsentCookieDomain("app.linkar.in")).toBe("linkar.in");
     expect(analyticsConsentCookieDomain("localhost")).toBeUndefined();
     expect(analyticsConsentCookieDomain("notlinkar.in")).toBeUndefined();
+  });
+});
+
+describe("timeZoneRequiresConsent", () => {
+  it("asks visitors in European time zones, and errs towards asking when unknown", () => {
+    for (const zone of ["Europe/London", "Europe/Berlin", "Europe/Dublin", "Atlantic/Reykjavik", "Atlantic/Canary", undefined]) {
+      expect(timeZoneRequiresConsent(zone)).toBe(true);
+    }
+  });
+
+  it("does not ask everyone else", () => {
+    for (const zone of ["Asia/Kolkata", "Asia/Calcutta", "America/New_York", "Asia/Dubai", "Asia/Singapore"]) {
+      expect(timeZoneRequiresConsent(zone)).toBe(false);
+    }
+  });
+});
+
+describe("CONSENT_REQUIRED_REGIONS", () => {
+  it("covers the EU, the rest of the EEA, the UK and Switzerland, and not India", () => {
+    expect(CONSENT_REQUIRED_REGIONS).toHaveLength(32);
+    expect(CONSENT_REQUIRED_REGIONS).toEqual(expect.arrayContaining(["DE", "FR", "IE", "IS", "LI", "NO", "GB", "CH"]));
+    expect(CONSENT_REQUIRED_REGIONS).not.toContain("IN");
   });
 });

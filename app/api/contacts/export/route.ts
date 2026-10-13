@@ -6,6 +6,7 @@ import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 import { getServerEnv } from "@/src/lib/env";
 import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 import { csvCell } from "@/src/lib/format/csv";
+import { PRIVATE_DOWNLOAD_CACHE_CONTROL, consumeWorkspaceExport, exportRateLimitedResponse } from "@/src/lib/security/export-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
   const guard = await requireManager(request);
   if (!guard.ok) return guard.error;
   const { session } = guard;
+  if (!(await consumeWorkspaceExport(session.workspaceId))) return exportRateLimitedResponse();
 
   try {
     await getEntitlementService().assertEntitled(session.workspaceId, "exports", 0);
@@ -71,6 +73,7 @@ export async function GET(request: Request) {
     status: 200,
     headers: {
       "content-type": "text/csv; charset=utf-8",
+      "cache-control": PRIVATE_DOWNLOAD_CACHE_CONTROL,
       "content-disposition": `attachment; filename="linkar-contacts-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
   });

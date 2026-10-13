@@ -44,6 +44,19 @@ describe("LoginRateLimitStore.consume", () => {
     expect(results.filter(Boolean).length).toBeGreaterThan(5);
   });
 
+  it("keeps separately namespaced limiters apart in Redis", async () => {
+    // Login, signup and forgot-password share a key shape (email + network);
+    // spending the reset budget must not lock the same visitor out of sign-in.
+    store.clear();
+    const forgot = new LoginRateLimitStore("redis://limiter.test:6379", 2, 60_000, "forgot-password");
+    const login = new LoginRateLimitStore("redis://limiter.test:6379", 2);
+    await forgot.consume("visitor");
+    await forgot.consume("visitor");
+    expect(await forgot.consume("visitor")).toBe(false);
+    expect(await login.consume("visitor")).toBe(true);
+    expect([...store.keys()].sort()).toEqual(["linkar:forgot-password:visitor", "linkar:login:visitor"]);
+  });
+
   it("admits exactly the limit with the in-process fallback", async () => {
     const limiter = new LoginRateLimitStore(undefined, 3);
     const results = await Promise.all(Array.from({ length: 10 }, () => limiter.consume("someone")));

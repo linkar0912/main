@@ -1,3 +1,4 @@
+import "../../globals.css";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MEMBER_STEP_COUNT, OWNER_STEP_COUNT } from "@/src/lib/onboarding/answers";

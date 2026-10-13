@@ -276,3 +276,40 @@ missing, when any checklist value is still a `replace-with-…`/`change-me`
 placeholder, or when `AUTH_SESSION_SECRET` or a configured channel's webhook
 verify token is shorter than 32 characters. `DEMO_MODE=1` is the only way to
 run a production build without infrastructure, and never on a public host.
+
+### Google Analytics (public website)
+
+GA4 (`G-CLMXQ4YFD1`) runs on the public website only: the pages listed in
+`ANALYTICS_PAGE_PATHS` (`src/lib/analytics-path.ts`) - home, pricing, legal,
+support, contact, sign-in and sign-up. The signed-in app, the owner console,
+`/reset-password` and `/data-deletion/status/*` never load it, and the Content
+Security Policy allows Google's hosts on those pages only.
+
+The ID is a build-time value, `NEXT_PUBLIC_GA_MEASUREMENT_ID`, passed as a
+Docker build arg by `.github/workflows/container.yml`. Setting it in Dokploy
+does nothing; edit the workflow to point at another property. Builds without
+it (local, CI, e2e) render no tag and no cookie notice.
+
+Consent Mode v2: advertising storage is always denied. Analytics storage
+starts denied in the EEA, the UK and Switzerland (Google matches the IP
+address) and for visitors in a European time zone, who also see the cookie
+notice; everywhere else it starts granted. Visitors change their choice on
+`/cookies`, which Google Analytics then respects on every later visit.
+
+Verify after a release:
+
+1. Install the Google Analytics Debugger extension (or open
+   `https://linkar.in/?gtm_debug=x`), browse a few pages, and watch GA4
+   Admin -> DebugView: one `page_view` per page, `page_location` with no query
+   string.
+2. In DevTools -> Network, filter `gtag/js`: exactly one load per page, and
+   no Content Security Policy errors in the console.
+3. Once, in GA4 Admin -> Data streams -> Enhanced measurement -> Page views,
+   turn **off** "Page changes based on browser history events". The site sends
+   its own `page_view` on every client-side navigation with the query string
+   removed; a history-based one would count some pages twice and with the
+   previous page's address.
+4. Cloudflare Web Analytics is allowed on the same public pages only. To stop
+   its beacon being blocked (and logged) inside the app, limit the Web
+   Analytics site to `linkar.in`, or turn off automatic setup for
+   `app.linkar.in` and `admin.linkar.in`, in the Cloudflare dashboard.

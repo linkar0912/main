@@ -102,8 +102,9 @@ describe("AppShell", () => {
     await screen.findByRole("button", { name: "Account menu" });
 
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
-    expect(screen.getByRole("dialog", { name: "Search Linkar" })).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByRole("combobox"));
+    // The palette is loaded on demand (next/dynamic), so the first open waits for it.
+    expect(await screen.findByRole("dialog", { name: "Search Linkar" })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("combobox")));
     fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Search Linkar" })).toBeNull());
 

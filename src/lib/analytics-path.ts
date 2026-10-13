@@ -33,3 +33,40 @@ export function redactAnalyticsPath(pathname: string): string {
 
   return path;
 }
+
+/**
+ * The public website pages that load Google Analytics: the marketing, legal
+ * and public help pages plus sign-in and sign-up. Nothing else does. The
+ * signed-in app and the owner console show private workspace data and have
+ * analytics of their own, and pages such as /reset-password or
+ * /data-deletion/status/<code> carry a secret in the address.
+ *
+ * Exact paths only, so a new route stays out until someone adds it here. The
+ * same list scopes the Google Analytics allowances in the Content Security
+ * Policy (next.config.ts), so the tag cannot load anywhere else.
+ */
+export const ANALYTICS_PAGE_PATHS = [
+  "/",
+  "/pricing",
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/contact",
+  "/support",
+  "/privacy",
+  "/terms",
+  "/acceptable-use",
+  "/cookies",
+  "/data-processing",
+  "/service-providers",
+  "/refund-policy",
+  "/data-deletion",
+] as const;
+
+const analyticsPages = new Set<string>(ANALYTICS_PAGE_PATHS);
+
+export function isAnalyticsPage(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  const path = pathname.split(/[?#]/)[0];
+  return analyticsPages.has(path.length > 1 ? path.replace(/\/+$/, "") : path);
+}

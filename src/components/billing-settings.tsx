@@ -271,7 +271,8 @@ export function BillingSettings({ usage, back }: {
         : code === "premium_access_already_active" ? "This workspace already has invite access"
           : code === "invite_code_expired" || code === "invite_code_revoked" ? "This invite is no longer active"
             : code === "invite_code_invalid" ? "We couldn’t find that invite. Check the code and try again"
-              : "We couldn’t apply the invite. Try again.";
+              : code === "rate_limited" ? "Too many attempts. Try again in an hour"
+                : "We couldn’t apply the invite. Try again.";
       setInviteNotice({ tone: "error", message });
     } finally {
       setRedeemingInvite(false);

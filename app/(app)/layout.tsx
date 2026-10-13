@@ -1,3 +1,6 @@
+// The full global stylesheet; the root layout loads only the public subset
+// (app/public.css, see scripts/build-public-css.mjs).
+import "../globals.css";
 import { AppShell } from "@/src/components/app-shell";
 
 // Shared shell for every authenticated workspace screen. Before this layout

@@ -4,7 +4,7 @@ import { useMemo, useRef } from "react";
 import { OnboardingFlow } from "@/src/components/onboarding/onboarding-flow";
 import type { OnboardingClient } from "@/src/components/onboarding/onboarding-client";
 import { buildOnboardingPlan } from "@/src/lib/onboarding/build-plan";
-import { readStoredAnswers } from "@/src/lib/onboarding/answers";
+import { readStoredAnswers } from "@/src/lib/onboarding/answers-schema";
 import type { OnboardingView } from "@/src/lib/onboarding/view";
 import { PREVIEW_MEDIA, previewView, type PreviewVariant } from "./fixtures";
 

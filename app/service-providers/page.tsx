@@ -38,7 +38,7 @@ export default function ServiceProvidersPage() {
       <h2>Payments</h2>
       <p><strong>Razorpay.</strong> Subscriptions, checkout, and invoicing. Receives your billing contact details and payment instrument, and returns subscription status. {PRODUCT_NAME} never receives or stores card numbers.</p>
       <h2>Identity and analytics</h2>
-      <p><strong>Google.</strong> Two separate uses. Google sign-in receives your email address and name when you choose to sign in with Google. Google Analytics, which loads only after you accept analytics cookies, receives shortened page addresses, device and browser details, and an approximate location, as described in the <a href="/cookies">cookies statement</a>. Analytics data is not linked to your account.</p>
+      <p><strong>Google.</strong> Two separate uses. Google sign-in receives your email address and name when you choose to sign in with Google. Google Analytics, which runs on our public website only (after you accept analytics cookies if you are in the UK, the EEA or Switzerland), receives shortened page addresses, device and browser details, and an approximate location, as described in the <a href="/cookies">cookies statement</a>. Analytics data is not linked to your account.</p>
       <h2>Where processing happens</h2>
       <p>These providers operate globally and may process data outside India or the country you are in. Where personal data moves across borders, it moves under the transfer terms in each provider&#8217;s own agreement with us.</p>
       <h2>Changes to this list</h2>

@@ -37,7 +37,7 @@ import { PrefsGroupHead, PrefsRow, PrefsSectionHead } from "./settings/prefs";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { formatDate } from "@/src/lib/format-date";
-import { toReadableApiError } from "@/src/lib/validation-error";
+import { toReadableApiError } from "@/src/lib/api-error-message";
 import { Skeleton } from "./skeleton";
 import { PageHeader } from "./page-header";
 import {

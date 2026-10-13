@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { LoginRateLimitStore } from "@/src/lib/auth/rate-limit";
 import { requireBillingOwner } from "@/src/lib/billing/authorization";
 import { getPremiumInviteService } from "@/src/lib/billing/premium-invite";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { getServerEnv } from "@/src/lib/env";
 
 const Input = z.object({ code: z.string().trim().min(6).max(80) }).strict();
 const conflicts = new Set(["invite_code_used", "premium_access_already_active"]);
 const invalid = new Set(["invite_code_invalid", "invite_code_expired", "invite_code_revoked"]);
+
+// Ten redemption attempts per workspace per hour: plenty for typos, and it
+// keeps the code space (and the serializable redeem transaction) out of reach
+// of a guessing loop.
+let redeemLimiter: LoginRateLimitStore | undefined;
 
 export async function POST(request: Request) {
   const guard = await requireBillingOwner(request);
@@ -16,6 +23,10 @@ export async function POST(request: Request) {
   if (body === undefined) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   const parsed = Input.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "invite_code_invalid" }, { status: 422 });
+  redeemLimiter ??= new LoginRateLimitStore(getServerEnv().redisUrl, 10, 60 * 60 * 1_000, "invite-code");
+  if (!(await redeemLimiter.consume(guard.session.workspaceId))) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
   try {
     const data = await getPremiumInviteService().redeem({
       code: parsed.data.code,
