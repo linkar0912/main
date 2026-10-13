@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { createId } from "./id";
+import { workerDatabaseUrl } from "./worker-database-url";
 import { tallyVariantPerformance } from "./insights/variant-performance";
 import type {
   AutomationRecord,
@@ -171,7 +172,17 @@ function mapInvitation(record: {
 }
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+// The worker uses the session pooler (see worker-database-url.ts). The role
+// is read as a literal `process.env.LINKAR_PROCESS_ROLE` so the worker
+// bundle's build-time define applies.
+const workerUrl = workerDatabaseUrl({
+  role: process.env.LINKAR_PROCESS_ROLE,
+  mode: process.env.WORKER_DATABASE_MODE,
+  directUrl: process.env.DIRECT_URL,
+  workerUrl: process.env.WORKER_DATABASE_URL,
+  connections: process.env.WORKER_DATABASE_CONNECTIONS,
+});
+export const prisma = globalForPrisma.prisma ?? new PrismaClient(workerUrl ? { datasourceUrl: workerUrl } : undefined);
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 function mapAutomation(record: {
