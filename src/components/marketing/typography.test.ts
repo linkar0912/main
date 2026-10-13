@@ -25,16 +25,9 @@ function rules(css: string): Array<[string, string]> {
 describe("marketing labels speak in sentence case", () => {
   // Owner feedback (round 9): the site's nav, eyebrows, tags and button labels
   // were uppercase monospace. They are sentence-case Manrope now, like the app.
-  // The one deliberate exception: the hero's trust row copies the look of a
-  // partner-logo row (stacked caps, a mono figure), at the owner's request.
-  const trustLockup = /^\.(stackedText|figureText|figureText strong|figureText span)$/;
-
   it("never uppercases a label", () => {
     for (const [file, css] of marketingModules) {
-      for (const [selector, body] of rules(css)) {
-        if (file === "hero-section.module.css" && trustLockup.test(selector)) continue;
-        expect(`${file} ${selector} ${body}`).not.toMatch(/text-transform:\s*uppercase/);
-      }
+      expect(css, file).not.toMatch(/text-transform:\s*uppercase/);
     }
   });
 
@@ -42,7 +35,6 @@ describe("marketing labels speak in sentence case", () => {
     for (const [file, css] of marketingModules) {
       for (const [selector, body] of rules(css)) {
         if (!body.includes("--font-mono")) continue;
-        if (file === "hero-section.module.css" && trustLockup.test(selector)) continue;
         expect(`${file} ${selector}`).toMatch(/\.linkSlug$/);
       }
     }

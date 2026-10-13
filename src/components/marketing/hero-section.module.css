@@ -57,7 +57,7 @@
   inset-block-end: 40px;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
   margin: 0;
   padding: 0;
   color: #ffffff;
@@ -68,84 +68,25 @@
 .trustStrip li {
   display: flex;
   align-items: center;
+  gap: 8px;
   block-size: 28px;
 }
 
-/* 1. Two-line wordmark, like "Meta Business / Partners". */
-.lockupWordmark {
-  flex-direction: column;
-  align-items: flex-start !important;
-  justify-content: center;
-  font-family: var(--font-sans, ui-sans-serif, sans-serif);
-  font-size: 15px;
-  font-weight: 400;
-  line-height: 13.5px;
-  letter-spacing: -.35px;
-}
-
-.wordmarkTop {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  white-space: nowrap;
-}
-
-.wordmarkTop svg {
-  inline-size: 19px;
-  block-size: 19px;
-}
-
-.wordmarkBottom {
-  padding-inline-start: 22px;
-}
-
-/* 2. Icon + three stacked caps lines, like "TIKTOK / MARKETING / PARTNER". */
+/* Each lockup: an icon and two short lines, left-aligned, in the sans face. */
 .lockupIcon {
   flex: 0 0 auto;
   inline-size: 26px;
   block-size: 26px;
 }
 
-.lockupStacked {
-  gap: 5px;
-}
-
-.stackedText {
+.lockupText {
   display: grid;
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 8.6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 14px;
   letter-spacing: -.1px;
-  text-transform: uppercase;
-}
-
-/* 3. Icon + mono figure over a caps label, like "4.6/5 / STARS RATING". */
-.lockupFigure {
-  gap: 9px;
-}
-
-.figureText {
-  display: grid;
-  justify-items: center;
-  gap: 3px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  text-transform: uppercase;
-}
-
-.figureText strong {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .6px;
-  line-height: 1;
-}
-
-.figureText span {
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 1.1px;
-  line-height: 1;
-  opacity: .92;
+  white-space: nowrap;
 }
 
 @media (max-width: 720px) {
@@ -163,36 +104,14 @@
     block-size: 24px;
   }
 
-  .lockupWordmark {
-    font-size: 13px;
-    line-height: 12px;
-  }
-
-  .wordmarkTop svg {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-
-  .wordmarkBottom {
-    padding-inline-start: 19px;
-  }
-
   .lockupIcon {
     inline-size: 22px;
     block-size: 22px;
   }
 
-  .stackedText {
-    font-size: 8px;
-    line-height: 7.6px;
-  }
-
-  .figureText strong {
-    font-size: 10px;
-  }
-
-  .figureText span {
-    font-size: 9px;
+  .lockupText {
+    font-size: 12px;
+    line-height: 13px;
   }
 }
 
