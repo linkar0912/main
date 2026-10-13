@@ -734,6 +734,8 @@ model AutomationContact {
   @@index([lastInboundAt])
   @@index([workspaceId, assigneeUserId], map: "AutomationContact_assigneeUserId_idx")
   @@index([workspaceId, leadStatus], map: "AutomationContact_leadStatus_idx")
+  // Contacts stage tabs: one lead status, newest first, cursor on (lastSeenAt, id).
+  @@index([workspaceId, leadStatus, lastSeenAt(sort: Desc), id], map: "AutomationContact_leadStatus_lastSeenAt_idx")
   @@index([workspaceId, emailRequestedBy, emailRequestedAt], map: "AutomationContact_emailRequestedBy_idx")
   @@index([workspaceId, emailCapturedBy, emailCapturedAt], map: "AutomationContact_emailCapturedBy_idx")
 }
@@ -854,6 +856,8 @@ model OutboundDelivery {
   @@index([broadcastId, state])
   @@index([providerMessageId])
   @@index([updatedAt, id], map: "OutboundDelivery_updatedAt_id_idx")
+  // Delivery problems list: FAILED/UNKNOWN rows for one workspace, newest first.
+  @@index([workspaceId, state, updatedAt])
 }
 
 model AutomationDailySendCounter {
