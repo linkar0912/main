@@ -396,6 +396,30 @@ describe("memory repository", () => {
     });
   });
 
+  it("claims only a brand-new action when asked for onlyIfNew", async () => {
+    const repository = createMemoryRepository();
+    const claim = {
+      workspaceId: "workspace_a",
+      automationId: "automation_1",
+      externalEventId: "comment_1",
+      dedupeKey: "campaign:participant_1:final_delivery",
+      dispatchOwner: "owner_first",
+      dispatchStartedAt: "2026-08-21T10:00:00.000Z",
+      dispatchLeaseExpiresAt: "2026-08-21T10:00:30.000Z",
+    };
+    await repository.recordExecution({ ...claim, status: "PROCESSING" });
+
+    // A row already exists (even a claimable one): leave it for the caller to inspect.
+    expect(await repository.claimExecutionDispatch(claim, { onlyIfNew: true })).toBe(false);
+    expect(await repository.claimExecutionDispatch({
+      ...claim,
+      dedupeKey: "campaign:participant_2:final_delivery",
+      dispatchOwner: "owner_second",
+    }, { onlyIfNew: true })).toBe(true);
+    expect(await repository.getExecution("workspace_a", "campaign:participant_2:final_delivery"))
+      .toMatchObject({ status: "PROCESSING", dispatchStatus: "DISPATCHING", dispatchOwner: "owner_second" });
+  });
+
   it("rejects reuse of a dispatch owner token across executions", async () => {
     const repository = createMemoryRepository();
     const claim = {
