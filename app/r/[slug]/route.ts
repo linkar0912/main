@@ -5,6 +5,7 @@ import { logger } from "@/src/lib/logger";
 import { afterResponse } from "@/src/lib/after-response";
 import { getServerEnv } from "@/src/lib/env";
 import { clientAddress } from "@/src/lib/auth/client-address";
+import { LoginRateLimitStore } from "@/src/lib/auth/rate-limit";
 import { isSafeOutboundUrl, postJsonToSafeOutboundTarget } from "@/src/lib/security/outbound-url";
 
 export const runtime = "nodejs";
@@ -65,6 +66,13 @@ function appendUtm(destination: string, link: { utmSource?: string; utmMedium?: 
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
+// Clicks counted per link per visitor per minute. Past the cap the visitor is
+// still redirected, but nothing is written and no conversion callback fires,
+// so a refresh loop can neither inflate the stats nor turn the link into a
+// request flood against the customer's conversion endpoint.
+const CLICKS_PER_VISITOR_PER_MINUTE = 30;
+let clickLimiter: LoginRateLimitStore | undefined;
+
 // GET /r/[slug] - public redirect. Records a click (with keyed IP hash) then
 // 302s the visitor to the destination with UTM params appended. Disabled links
 // and links of a non-ACTIVE workspace resolve as not found.
@@ -98,7 +106,12 @@ export async function GET(request: Request, context: RouteContext) {
   // Only a link that actually forwards counts as a click. Recording (and the
   // conversion callback) runs after the redirect is sent and is best-effort:
   // a failure must never block or delay the visitor.
+  clickLimiter ??= new LoginRateLimitStore(env.redisUrl, CLICKS_PER_VISITOR_PER_MINUTE, 60_000, "link-click");
+  const limiter = clickLimiter;
   afterResponse("Tracked-link click recording", async () => {
+    // Visitors without a known address ("anon") share nothing to key on and
+    // are not limited here.
+    if (ipHash !== "anon" && !(await limiter.consume(`${link.id}:${ipHash}`))) return;
     await repository.recordTrackedLinkClick(link.id, {
       workspaceId: link.workspaceId,
       ipHash,

@@ -25,8 +25,8 @@ export async function POST(request: Request) {
     if (crossSite) return crossSite;
 
     const env = getServerEnv();
-    resendLimiter ??= new LoginRateLimitStore(env.redisUrl, 3, 60 * 60 * 1_000);
-    networkLimiter ??= new LoginRateLimitStore(env.redisUrl, 20, 60 * 60 * 1_000);
+    resendLimiter ??= new LoginRateLimitStore(env.redisUrl, 3, 60 * 60 * 1_000, "resend-confirmation");
+    networkLimiter ??= new LoginRateLimitStore(env.redisUrl, 20, 60 * 60 * 1_000, "resend-confirmation");
     const address = clientAddress(request, env.trustedProxyHops);
     const form = await request.formData();
     const email = String(form.get("email") ?? "").trim().toLowerCase();

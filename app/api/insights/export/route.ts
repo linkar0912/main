@@ -3,6 +3,7 @@ import { getRepository } from "@/src/lib/repository-provider";
 import { getServerEnv } from "@/src/lib/env";
 import { instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
 import { csvCell } from "@/src/lib/format/csv";
+import { PRIVATE_DOWNLOAD_CACHE_CONTROL, consumeWorkspaceExport, exportRateLimitedResponse } from "@/src/lib/security/export-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
     const guard = await requireManager(request);
     if (!guard.ok) return guard.error;
     const { session } = guard;
+    if (!(await consumeWorkspaceExport(session.workspaceId))) return exportRateLimitedResponse();
 
     const repository = getRepository();
     const automationId = new URL(request.url).searchParams.get("automationId") || undefined;
@@ -59,8 +61,8 @@ export async function GET(request: Request) {
     return new Response(`${lines.join("\n")}\n`, {
         headers: {
             "content-type": "text/csv; charset=utf-8",
+            "cache-control": PRIVATE_DOWNLOAD_CACHE_CONTROL,
             "content-disposition": `attachment; filename="linkar-participants-${new Date().toISOString().slice(0, 10)}.csv"`,
-            "cache-control": "no-store",
         },
     });
 }

@@ -35,6 +35,21 @@ describe("GET /api/contacts/export", () => {
     expect(mocks.listContactsByLeadStatus).not.toHaveBeenCalled();
   });
 
+  it("marks the CSV private and caps exports per workspace", async () => {
+    mocks.getValidatedSession.mockResolvedValue({ userId: "u_cap", workspaceId: "w_cap" });
+    mocks.listContactsByLeadStatus.mockResolvedValue([]);
+
+    const first = await GET(new Request("https://app.linkar.in/api/contacts/export"));
+    expect(first.status).toBe(200);
+    expect(first.headers.get("cache-control")).toBe("private, no-store");
+
+    for (let i = 1; i < 20; i++) await GET(new Request("https://app.linkar.in/api/contacts/export"));
+    mocks.listContactsByLeadStatus.mockClear();
+    const limited = await GET(new Request("https://app.linkar.in/api/contacts/export"));
+    expect(limited.status).toBe(429);
+    expect(mocks.listContactsByLeadStatus).not.toHaveBeenCalled();
+  });
+
   it("neutralizes spreadsheet formulas in attacker-controlled fields", async () => {
     mocks.listContactsByLeadStatus.mockResolvedValue([{
       id: "contact_1",

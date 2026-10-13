@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   findInvitationByTokenHash: vi.fn(),
   ensureWorkspace: vi.fn(),
   acceptInvitation: vi.fn(),
+  trustedProxyHops: 0,
 }));
 
 vi.mock("@/src/lib/env", () => ({
@@ -12,7 +13,7 @@ vi.mock("@/src/lib/env", () => ({
     appUrl: "http://localhost:3000",
     redisUrl: undefined,
     authSessionSecret: "test-secret-at-least-32-characters",
-    trustedProxyHops: 0,
+    trustedProxyHops: mocks.trustedProxyHops,
   }),
 }));
 vi.mock("@/src/lib/supabase/server", () => ({
@@ -167,5 +168,24 @@ describe("POST /api/auth/signup", () => {
     }
     const response = await POST(signupRequest({ email, password: "long-enough-password" }, ip));
     expect(location(response)).toContain("/signup?error=locked");
+  });
+
+  it("caps signups per network across different emails", async () => {
+    // Behind a trusted proxy the client address is known, so one network
+    // cannot create accounts for an unbounded list of addresses.
+    mocks.trustedProxyHops = 1;
+    try {
+      const ip = "198.51.100.77";
+      for (let i = 0; i < 20; i++) {
+        const response = await POST(signupRequest({ email: `spray-${i}@example.com`, password: "long-enough-password" }, ip));
+        expect(location(response)).not.toContain("error=locked");
+      }
+      mocks.signUp.mockClear();
+      const response = await POST(signupRequest({ email: "spray-final@example.com", password: "long-enough-password" }, ip));
+      expect(location(response)).toContain("/signup?error=locked");
+      expect(mocks.signUp).not.toHaveBeenCalled();
+    } finally {
+      mocks.trustedProxyHops = 0;
+    }
   });
 });
