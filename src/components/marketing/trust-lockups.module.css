@@ -10,11 +10,6 @@
   list-style: none;
 }
 
-.list[data-tone="ink"] {
-  --lockup-cutout: var(--marketing-canvas, var(--canvas, #ffffff));
-  color: var(--marketing-text, var(--ink, #17181d));
-}
-
 /* Zero specificity, so the hero's and footer's own margins win whichever
    stylesheet loads last. */
 :where(.list) {
