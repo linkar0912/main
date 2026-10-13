@@ -9,7 +9,7 @@ vi.mock("next/font/google", () => {
   const font = () => ({ variable: "font" });
   return { Bricolage_Grotesque: font, JetBrains_Mono: font, Manrope: font };
 });
-vi.mock("./globals.css", () => ({}));
+vi.mock("./public.css", () => ({}));
 
 const { default: robots } = await import("./robots");
 const { default: sitemap } = await import("./sitemap");

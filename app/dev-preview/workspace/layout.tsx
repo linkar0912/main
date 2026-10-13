@@ -1,3 +1,4 @@
+import "../../globals.css";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/src/components/app-shell";

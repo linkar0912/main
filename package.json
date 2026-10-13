@@ -12,6 +12,7 @@
     "check:branding": "node scripts/check-branding.mjs",
     "check:copy": "node scripts/check-customer-copy.mjs",
     "check:deployment-hygiene": "node scripts/check-deployment-hygiene.mjs",
+    "css:public": "node scripts/build-public-css.mjs",
     "preflight:billing": "node scripts/verify-billing-config.mjs",
     "preflight:instagram-ownership": "node scripts/preflight-instagram-ownership.mjs",
     "monitor:production": "node scripts/check-production-health.mjs",
