@@ -5,6 +5,8 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   readAnalyticsConsent,
   subscribeAnalyticsConsent,
+  timeZoneRequiresConsent,
+  visitorTimeZone,
   writeAnalyticsConsent,
   type AnalyticsConsent,
 } from "@/src/lib/analytics-consent";
@@ -17,9 +19,20 @@ export function useAnalyticsConsent(): AnalyticsConsent {
   return useSyncExternalStore(subscribeAnalyticsConsent, readAnalyticsConsent, serverSnapshot);
 }
 
+const noopSubscribe = () => () => {};
+const readConsentRequired = () => timeZoneRequiresConsent(visitorTimeZone());
+
 /**
- * Asked once, before any analytics cookie exists. Accept and Reject carry the
- * same weight so refusing is as easy as agreeing.
+ * Whether this visitor is asked before analytics cookies are set (see
+ * timeZoneRequiresConsent). True during server rendering, the cautious answer.
+ */
+export function useConsentRequired(): boolean {
+  return useSyncExternalStore(noopSubscribe, readConsentRequired, () => true);
+}
+
+/**
+ * Asked once, before any analytics cookie exists, of visitors who must opt in.
+ * Accept and Decline carry the same weight so refusing is as easy as agreeing.
  */
 export function AnalyticsConsentBanner() {
   const bannerRef = useRef<HTMLElement>(null);
@@ -46,12 +59,12 @@ export function AnalyticsConsentBanner() {
   return (
     <section ref={bannerRef} className={styles.banner} aria-label="Analytics cookies">
       <p>
-        We use Google Analytics cookies to see which pages are useful. They stay off unless you accept.{" "}
+        We&#8217;d like to use Google Analytics cookies to see which pages are useful. They stay off unless you accept.{" "}
         <Link href="/cookies">Cookies statement</Link>
       </p>
       <div className={styles.actions}>
         <button type="button" className={styles.button} onClick={() => writeAnalyticsConsent("denied")}>
-          Reject
+          Decline
         </button>
         <button type="button" className={styles.button} onClick={() => writeAnalyticsConsent("granted")}>
           Accept
@@ -61,19 +74,21 @@ export function AnalyticsConsentBanner() {
   );
 }
 
-const consentLabels: Record<"granted" | "denied" | "unset", string> = {
+const consentLabels: Record<"granted" | "denied" | "unsetAsked" | "unsetDefault", string> = {
   granted: "You have accepted analytics cookies.",
-  denied: "You have rejected analytics cookies.",
-  unset: "You have not made a choice yet, so analytics cookies are off.",
+  denied: "You have declined analytics cookies.",
+  unsetAsked: "You have not made a choice yet, so analytics cookies are off.",
+  unsetDefault: "You have not made a choice, so analytics cookies are on. You can decline them here.",
 };
 
 /** Lets a visitor review and change their choice from the cookies statement. */
 export function AnalyticsConsentControls() {
   const consent = useAnalyticsConsent();
+  const askFirst = useConsentRequired();
 
   return (
     <div className={styles.controls} role="group" aria-label="Analytics cookie choice">
-      <p aria-live="polite">{consentLabels[consent ?? "unset"]}</p>
+      <p aria-live="polite">{consentLabels[consent ?? (askFirst ? "unsetAsked" : "unsetDefault")]}</p>
       <div className={styles.actions}>
         <button
           type="button"
@@ -81,7 +96,7 @@ export function AnalyticsConsentControls() {
           aria-pressed={consent === "denied"}
           onClick={() => writeAnalyticsConsent("denied")}
         >
-          Reject analytics
+          Decline analytics
         </button>
         <button
           type="button"

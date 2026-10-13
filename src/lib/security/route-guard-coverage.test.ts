@@ -68,7 +68,6 @@ const PUBLIC_ROUTES: Record<string, string> = {
   "app/r/[slug]/route.ts": "public tracked-link redirect",
   "app/api/t/[id]/route.ts": "public click redirect; the unguessable participant id is the capability",
   "app/api/health/route.ts": "liveness probe for the container and monitor",
-  "app/api/site-config/route.ts": "non-secret public client config",
 };
 
 function listRouteFiles(root: string): string[] {

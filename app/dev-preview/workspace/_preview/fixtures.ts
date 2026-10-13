@@ -1083,7 +1083,6 @@ export function answer(method: string, url: URL, requested: PreviewScenario, raw
 
   if (verb === "GET") {
     switch (path) {
-      case "/api/site-config": return json({ gaMeasurementId: "" });
       case "/api/workspace/bootstrap": return json(bootstrap(scenario));
       case "/api/account": return json(account(scenario));
       case "/api/meta/connection": return json(instagramConnections(scenario));

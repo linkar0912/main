@@ -1,114 +1,155 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect, useState } from "react";
-import { AnalyticsConsentBanner, useAnalyticsConsent } from "./analytics-consent";
+import { usePathname } from "next/navigation";
+import { useEffect, useSyncExternalStore } from "react";
+import { CONSENT_REQUIRED_REGIONS, type AnalyticsConsent } from "@/src/lib/analytics-consent";
+import { isAnalyticsPage } from "@/src/lib/analytics-path";
+import { ADMIN_HOST } from "@/src/lib/site-routing";
+import { AnalyticsConsentBanner, useAnalyticsConsent, useConsentRequired } from "./analytics-consent";
 import { SiteAnalyticsRoutes } from "./site-analytics-routes";
 
 declare global {
   interface Window {
+    dataLayer?: unknown[];
     [gaDisable: `ga-disable-${string}`]: boolean | undefined;
   }
 }
 
-/** Public runtime config, served by app/api/site-config. */
-export const SITE_CONFIG_PATH = "/api/site-config";
+const MEASUREMENT_ID_PATTERN = /^G-[A-Z0-9]{4,20}$/;
 
-let measurementIdRequest: Promise<string> | null = null;
-
-/**
- * GA_MEASUREMENT_ID is a runtime setting, but the marketing pages are
- * prerendered at image build time when it is not set. Reading it from a tiny
- * runtime endpoint keeps those pages static and still lets one image point at
- * any property. One request per page load, shared by every caller.
- */
-function loadMeasurementId(): Promise<string> {
-  measurementIdRequest ??= fetch(SITE_CONFIG_PATH, { credentials: "omit" })
-    .then((response) => (response.ok ? response.json() : null))
-    .then((config: { gaMeasurementId?: unknown } | null) =>
-      typeof config?.gaMeasurementId === "string" ? config.gaMeasurementId.trim() : "")
-    .catch(() => {
-      measurementIdRequest = null;
-      return "";
-    });
-  return measurementIdRequest;
-}
-
-/** Test seam: forget the cached config request. */
-export function resetSiteAnalyticsConfigForTests(): void {
-  measurementIdRequest = null;
+/** A GA4 measurement ID, or "" for anything else (unset, blank, or malformed). */
+export function resolveMeasurementId(value: string | undefined): string {
+  const id = (value ?? "").trim();
+  return MEASUREMENT_ID_PATTERN.test(id) ? id : "";
 }
 
 /**
- * Google Analytics 4 behind a consent banner.
- *
- * Nothing from Google loads until the visitor accepts. When they do, the tag
- * starts with Consent Mode v2 defaults of "denied" for every purpose and then
- * grants analytics_storage only; advertising purposes stay denied. Rejecting
- * later (from the cookies statement) flips analytics_storage back to denied and
- * sets GA's own disable flag, so no further hits are sent from the open page.
- *
- * Without a measurement ID (local development, previews) there is no banner
- * and no tag. googletagmanager.com and google-analytics.com are allow-listed in
- * the CSP in next.config.ts.
+ * NEXT_PUBLIC_GA_MEASUREMENT_ID is inlined at build time, so the static
+ * marketing pages carry it with no runtime lookup. Production images are
+ * built with the property ID (see .github/workflows/container.yml); local
+ * development, previews, tests and e2e builds leave it unset and render
+ * nothing at all.
  */
-export function SiteAnalytics() {
+const BUILD_MEASUREMENT_ID = resolveMeasurementId(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID);
+
+const noopSubscribe = () => () => {};
+
+// Undefined until first read in the browser; then the path this document was
+// loaded at, or null on the owner-console host.
+let documentPath: string | null | undefined;
+
+/**
+ * Whether this document may load Google Analytics at all. Decided once, from
+ * the URL the document was loaded at, because that is the URL whose Content
+ * Security Policy the browser enforces for the document's whole life: only
+ * the pages in ANALYTICS_PAGE_PATHS allow googletagmanager.com. A visitor who
+ * lands in the app and navigates client-side to /pricing therefore gets no
+ * tag, rather than a blocked script and a CSP error.
+ */
+function documentAllowsAnalytics(): boolean {
+  if (documentPath === undefined) {
+    documentPath = window.location.hostname.toLowerCase() === ADMIN_HOST ? null : window.location.pathname;
+  }
+  return isAnalyticsPage(documentPath);
+}
+
+let initializedFor: string | null = null;
+
+/** Test seam: forget which document and property this module has seen. */
+export function resetSiteAnalyticsForTests(): void {
+  documentPath = undefined;
+  initializedFor = null;
+}
+
+/**
+ * The gtag bootstrap from the GA console, with Google Consent Mode v2
+ * defaults ahead of the config call:
+ *
+ * - Advertising purposes are denied everywhere, always.
+ * - analytics_storage starts denied in CONSENT_REQUIRED_REGIONS (Google
+ *   matches the visitor's IP), and for any visitor shown the cookie notice.
+ *   Everyone else starts granted.
+ * - A stored "granted" choice is applied straight away. A stored "denied"
+ *   never gets here: the tag does not load at all.
+ *
+ * send_page_view is off so SiteAnalyticsRoutes can send each page_view with
+ * the query string and fragment stripped (sign-up links carry invite codes).
+ */
+function initializeGoogleTag(measurementId: string, consent: AnalyticsConsent, askFirst: boolean): void {
+  if (initializedFor === measurementId) return;
+  initializedFor = measurementId;
+  const dataLayer = (window.dataLayer = window.dataLayer ?? []);
+  window.gtag = function gtag() {
+    // gtag.js only acts on Arguments objects in the dataLayer, not arrays.
+    dataLayer.push(arguments);
+  };
+  const advertising = { ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" };
+  window.gtag("consent", "default", { ...advertising, analytics_storage: askFirst ? "denied" : "granted" });
+  window.gtag("consent", "default", { ...advertising, analytics_storage: "denied", region: [...CONSENT_REQUIRED_REGIONS] });
+  if (consent === "granted") window.gtag("consent", "update", { analytics_storage: "granted" });
+  window.gtag("set", "ads_data_redaction", true);
+  window.gtag("js", new Date());
+  window.gtag("config", measurementId, {
+    send_page_view: false,
+    allow_google_signals: false,
+    allow_ad_personalization_signals: false,
+  });
+}
+
+/** Runs the bootstrap in an effect that, as an earlier sibling, precedes the loader's. */
+function GoogleTagBootstrap({ measurementId, consent, askFirst }: { measurementId: string; consent: AnalyticsConsent; askFirst: boolean }) {
+  useEffect(() => {
+    initializeGoogleTag(measurementId, consent, askFirst);
+  }, [measurementId, consent, askFirst]);
+  return null;
+}
+
+/**
+ * Google Analytics 4 for the public website only (ANALYTICS_PAGE_PATHS), with
+ * a cookie notice for visitors who must opt in. Mounted once in the root
+ * layout; renders nothing in the signed-in app, the owner console, or any
+ * build without a measurement ID.
+ */
+export function SiteAnalytics({ measurementId = BUILD_MEASUREMENT_ID }: { measurementId?: string }) {
+  if (!measurementId) return null;
+  return <PublicSiteAnalytics measurementId={measurementId} />;
+}
+
+function PublicSiteAnalytics({ measurementId }: { measurementId: string }) {
+  const pathname = usePathname();
   const consent = useAnalyticsConsent();
-  const [measurementId, setMeasurementId] = useState<string | null>(null);
+  const askFirst = useConsentRequired();
+  const documentAllows = useSyncExternalStore(noopSubscribe, documentAllowsAnalytics, () => false);
+  const pageAllowed = documentAllows && isAnalyticsPage(pathname);
+  const load = documentAllows && consent !== "denied";
 
+  // Follows the visitor's choice and the page after the tag has loaded:
+  // leaving the public pages (into the app after signing in) or withdrawing
+  // consent sets GA's own kill switch, so not even enhanced-measurement
+  // events are sent from there.
   useEffect(() => {
-    let active = true;
-    void loadMeasurementId().then((id) => {
-      if (active) setMeasurementId(id);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!measurementId || consent === null) return;
-    window[`ga-disable-${measurementId}`] = consent !== "granted";
-    // Only matters when the tag already loaded earlier in this page's life:
-    // a first load applies its own consent state in the init snippet.
-    if (typeof window.gtag === "function") {
+    if (initializedFor !== measurementId) return;
+    window[`ga-disable-${measurementId}`] = !pageAllowed || consent === "denied";
+    if (consent && typeof window.gtag === "function") {
       window.gtag("consent", "update", { analytics_storage: consent });
     }
-  }, [consent, measurementId]);
-
-  if (!measurementId) return null;
-  if (consent === null) return <AnalyticsConsentBanner />;
-  if (consent !== "granted") return null;
-  return <GoogleAnalyticsTag measurementId={measurementId} />;
-}
-
-/**
- * The gtag snippet the GA console hands out, with Consent Mode v2 defaults
- * ahead of the config call. Rendered only after the visitor has accepted.
- *
- * send_page_view is off because this layout wraps the signed-in app as well as
- * the marketing pages, and several app routes carry an identifier in the URL -
- * /data-deletion/status/[code] most of all. SiteAnalyticsRoutes sends the
- * page_view instead, after redactAnalyticsPath has stripped the identifiers.
- */
-export function GoogleAnalyticsTag({ measurementId }: { measurementId: string }) {
-  if (!measurementId) return null;
+  }, [consent, pageAllowed, measurementId]);
 
   return (
     <>
-      <Script
-        src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`}
-        strategy="afterInteractive"
-      />
-      <Script id="ga-init" strategy="afterInteractive">
-        {`window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
-gtag('consent', 'default', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied' });
-gtag('consent', 'update', { analytics_storage: 'granted' });
-gtag('js', new Date());
-gtag('config', ${JSON.stringify(measurementId)}, { send_page_view: false });`}
-      </Script>
-      <SiteAnalyticsRoutes enabled />
+      {load ? (
+        <>
+          <GoogleTagBootstrap measurementId={measurementId} consent={consent} askFirst={askFirst} />
+          <Script
+            id="google-analytics"
+            src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`}
+            strategy="afterInteractive"
+          />
+          <SiteAnalyticsRoutes enabled={pageAllowed} />
+        </>
+      ) : null}
+      {pageAllowed && consent === null && askFirst ? <AnalyticsConsentBanner /> : null}
     </>
   );
 }
