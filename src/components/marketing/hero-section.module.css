@@ -78,7 +78,7 @@
   justify-content: center;
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 13.5px;
   letter-spacing: -.35px;
 }
@@ -91,12 +91,12 @@
 }
 
 .wordmarkTop svg {
-  inline-size: 16px;
-  block-size: 16px;
+  inline-size: 19px;
+  block-size: 19px;
 }
 
 .wordmarkBottom {
-  padding-inline-start: 19px;
+  padding-inline-start: 22px;
 }
 
 /* 2. Icon + three stacked caps lines, like "TIKTOK / MARKETING / PARTNER". */
@@ -169,12 +169,12 @@
   }
 
   .wordmarkTop svg {
-    inline-size: 14px;
-    block-size: 14px;
+    inline-size: 16px;
+    block-size: 16px;
   }
 
   .wordmarkBottom {
-    padding-inline-start: 17px;
+    padding-inline-start: 19px;
   }
 
   .lockupIcon {
