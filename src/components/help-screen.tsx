@@ -565,8 +565,9 @@ const TOPICS: Topic[] = [
           <>
             Check that the automatic reply is On, the account says Connected in{" "}
             <Link href="/settings">Settings</Link>, and the words someone wrote match the words you
-            chose. Then check that the right post is selected, the daily limit has not been reached,
-            and quiet hours are not delaying the reply. <Link href="/activity">Inbox</Link> shows
+            chose. Then check that the right post is selected and the daily or monthly limit has not
+            been reached (quiet hours only hold sequences and broadcasts, never immediate replies to
+            comments and messages). <Link href="/activity">Inbox</Link> shows
             what happened each time Linkar tried to reply.
           </>
         ),
