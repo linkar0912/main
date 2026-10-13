@@ -169,7 +169,8 @@ const DAILY_LIMIT_ERROR = "daily_send_limit_reached";
  * replay can all surface a comment far older than that.
  */
 const PRIVATE_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
-const PRIVATE_REPLY_EXPIRED_ERROR = "private_reply_window_expired";
+// Stored as the execution reason, which owners read in Activity.
+const PRIVATE_REPLY_EXPIRED_ERROR = "Instagram only allows a private reply within 7 days of the comment";
 
 class DailySendLimitError extends Error {
   constructor() {
@@ -304,6 +305,15 @@ function requireSentDelivery(
     throw new MetaApiError(result.error, 503, true);
   }
   throw new Error(result.error);
+}
+
+/** A DM flow with no keyword: the account's default reply / fallback. */
+function isDefaultReplyFlow(automation: AutomationRecord): boolean {
+  const definition = automation.definition;
+  return definition.version === 1
+    && definition.trigger.type === "message"
+    && definition.trigger.match === "any"
+    && definition.conditions.length === 0;
 }
 
 /** Inbound events that represent a person reaching out on the DM side of the account. */
@@ -1131,12 +1141,33 @@ export async function processNormalizedEvent(
     // winnerSelected. Without this, two flows whose keywords both match one
     // comment each sent their own private reply to the same person.
     let commentWinnerSelected = false;
+    // A "reply to any message" flow is the default reply: it answers only
+    // messages no other automation matched, so it is evaluated last.
+    let answeredByAnotherFlow = false;
+    const ordered = [
+      ...automations.filter((automation) => !isDefaultReplyFlow(automation)),
+      ...automations.filter(isDefaultReplyFlow),
+    ];
 
-    for (const automation of automations) {
+    for (const automation of ordered) {
       if (automation.definition.version !== 1) continue;
 
       const dedupeKey = `${automation.id}:${event.id}`;
       const evaluation = evaluateFlow(automation.definition, event, evaluationContext);
+      if (evaluation.status === "matched" && isDefaultReplyFlow(automation) && answeredByAnotherFlow) {
+        skippedExecutions.push({
+          workspaceId: mapping.workspaceId,
+          automationId: automation.id,
+          externalEventId: event.id,
+          dedupeKey,
+          status: "SKIPPED",
+          reason: "another automation answered this message",
+        });
+        continue;
+      }
+      // Matched counts even when the claim is lost below (a retry of an event
+      // that flow already answered), so the default reply never doubles up.
+      if (evaluation.status === "matched" && !isDefaultReplyFlow(automation)) answeredByAnotherFlow = true;
       if (evaluation.status === "skipped") {
         skippedExecutions.push({
           workspaceId: mapping.workspaceId,

@@ -166,7 +166,14 @@ export function matchesTrigger(
     if (!CONVERSATION_EVENT_TYPES.includes(event.type)) return false;
   } else {
     const messageTrigger = trigger as MessageTrigger;
-    if (event.type !== "message.received" && event.type !== "postback.received") return false;
+    // A tapped quick-reply chip arrives as quick_reply.received carrying the
+    // chip's text; it has to reach keyword flows just like typed text, or the
+    // chips a "quick replies" action sends lead nowhere.
+    if (
+      event.type !== "message.received"
+      && event.type !== "quick_reply.received"
+      && event.type !== "postback.received"
+    ) return false;
     // A story-reply flow owns replies to Stories; plain DM flows stay quiet so
     // the person doesn't get two answers to one message.
     if (event.storyId && context.storyReplyClaimed) return false;
