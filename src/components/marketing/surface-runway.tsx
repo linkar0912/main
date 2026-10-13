@@ -163,7 +163,7 @@ export function SurfaceRunway() {
   return (
     <section id="surfaces" className={styles.section} aria-labelledby="surfaces-title">
       <header className={styles.header}>
-        <h2 id="surfaces-title">Choose where Linkar should reply.</h2>
+        <h2 id="surfaces-title">Auto-reply to comments, DMs and Story mentions.</h2>
         <p>Start with a comment, message, or Story mention and decide exactly what happens next.</p>
       </header>
       <div className={styles.viewport}>

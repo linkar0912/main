@@ -40,6 +40,8 @@ const ADMIN_AAL1_ROUTES: Record<string, string> = {
 
 /** Routes that are public by design. Every entry needs a reason. */
 const PUBLIC_ROUTES: Record<string, string> = {
+  // Public site content.
+  "app/llms.txt/route.ts": "static Markdown summary of the public marketing site for AI search; no data",
   // Authentication itself - each one is rate limited and/or proof-bound.
   "app/api/auth/login/route.ts": "sign-in form; per-identity and per-network rate limits",
   "app/api/auth/signup/route.ts": "sign-up form; rate limited",

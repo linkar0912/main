@@ -100,7 +100,7 @@ describe("MarketingPage", () => {
   it("names both supported Meta channels without overstating Facebook capabilities", () => {
     render(<MarketingPage />);
 
-    const channels = screen.getByRole("region", { name: "Everywhere your audience is" });
+    const channels = screen.getByRole("region", { name: "Instagram and Facebook automation" });
     expect(within(channels).getByRole("heading", { name: "Instagram" })).toBeTruthy();
     expect(within(channels).getByText(/private replies, direct messages, and follow-gated/i)).toBeTruthy();
     expect(within(channels).getByRole("heading", { name: "Facebook Pages" })).toBeTruthy();

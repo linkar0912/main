@@ -15,7 +15,7 @@ describe("SetupSteps", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<SetupSteps />);
 
-    const section = screen.getByRole("region", { name: "Start replying in three simple steps." });
+    const section = screen.getByRole("region", { name: "Set up Instagram auto-replies in three steps." });
     expect(section.id).toBe("setup");
     expect(within(section).getByText("Linkar guides you from connecting an account to turning on your first automatic reply.")).toBeTruthy();
 
@@ -64,7 +64,7 @@ describe("SetupSteps", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<SetupSteps />);
 
-    const section = screen.getByRole("region", { name: "Start replying in three simple steps." });
+    const section = screen.getByRole("region", { name: "Set up Instagram auto-replies in three steps." });
     expect(section.getAttribute("data-reduced-motion-state")).toBe("visible");
     expect(within(section).getAllByRole("figure")).toHaveLength(3);
   });

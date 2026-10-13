@@ -13,7 +13,7 @@ describe("InsightsShowcase", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<InsightsShowcase />);
 
-    const section = screen.getByRole("region", { name: "Every reply, accounted for." });
+    const section = screen.getByRole("region", { name: "Every automated reply, accounted for." });
     expect(section.id).toBe("insights");
 
     expect(Array.from(section.querySelectorAll("h3"), (h) => h.textContent)).toEqual([
@@ -49,7 +49,7 @@ describe("InsightsShowcase", () => {
   it("labels the lifecycle counts and attributes the tracked link to its automation", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<InsightsShowcase />);
-    const section = screen.getByRole("region", { name: "Every reply, accounted for." });
+    const section = screen.getByRole("region", { name: "Every automated reply, accounted for." });
 
     expect(Array.from(section.querySelectorAll("dt"), (t) => t.textContent)).toEqual([
       "Matched", "Replied", "Answered", "Handed over",
@@ -65,7 +65,7 @@ describe("InsightsShowcase", () => {
   it("makes no performance claim and offers no call to action", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<InsightsShowcase />);
-    const section = screen.getByRole("region", { name: "Every reply, accounted for." });
+    const section = screen.getByRole("region", { name: "Every automated reply, accounted for." });
 
     // Sample product data is fine; a stated result would not be.
     const copy = (section.textContent ?? "").toLowerCase();

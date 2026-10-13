@@ -15,7 +15,7 @@ describe("ProofRail", () => {
     expect(rail.getAttribute("data-strip")).toBe("creator-marquee");
     expect(within(rail).getByRole("heading", {
       level: 2,
-      name: "Made for creators, marketers & brands.",
+      name: "Instagram automation for creators, marketers & brands.",
     })).toBeTruthy();
 
     const examples = within(rail).getAllByRole("article");

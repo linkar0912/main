@@ -34,7 +34,7 @@ export function BeforeAfterSection() {
       data-reduced-motion-state="visible"
     >
       <header>
-        <h2 id="comparison-title">Less inbox chasing. More conversations worth joining.</h2>
+        <h2 id="comparison-title">Less Instagram inbox chasing. More conversations worth joining.</h2>
       </header>
       <div className={styles.comparison}>
         <article className={styles.manual} aria-labelledby="manual-title">

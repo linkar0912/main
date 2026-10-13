@@ -14,7 +14,7 @@ export function FaqSection() {
   return (
     <section id="faq" className={styles.section} aria-labelledby="faq-title" data-reduced-motion-state="immediate">
       <div className={styles.frame}>
-        <h2 id="faq-title">Good questions before you switch anything on.</h2>
+        <h2 id="faq-title">Questions about Instagram DM automation</h2>
         <div className={styles.questions}>
           {faqItems.map((item, index) => {
             const itemNumber = index + 1;

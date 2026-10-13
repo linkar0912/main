@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { BILLING_PLANS } from "@/src/lib/billing/catalog";
 import { ButtonRoll } from "./button-roll";
 import styles from "./hero-section.module.css";
 
@@ -9,7 +10,7 @@ export function HeroSection() {
         <Image
           className={styles.image}
           src="/marketing/linkar-hero-indian-relaxed.webp"
-          alt=""
+          alt="A creator relaxing at his desk while Linkar answers his Instagram comments and DMs"
           fill
           priority
           sizes="100vw"
@@ -20,6 +21,8 @@ export function HeroSection() {
       <div className={styles.grid}>
         <div className={styles.copy}>
           <h1 id="hero-title" className={styles.title}>
+            {/* The searchable name of the product, set small above the display lines. */}
+            <span className={styles.titleKicker}>Instagram comment and DM automation </span>
             <span className={styles.titleLine}>Reply to every opportunity. </span>
             <span className={styles.titleLine}>Even when you are away.</span>
           </h1>
@@ -38,7 +41,7 @@ export function HeroSection() {
               <ButtonRoll label="Create your first reply" />
             </a>
           </div>
-          <p className={styles.proof}>Easy to set up. Always in your voice.</p>
+          <p className={styles.proof}>Free to start. Paid plans from ₹{BILLING_PLANS.creator.monthlyPaise / 100} a month.</p>
         </div>
 
         <figure

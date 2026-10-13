@@ -1,3 +1,5 @@
+import { BILLING_PLANS, FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
+
 export type StoryChapter = {
   id: string;
   eyebrow: string;
@@ -121,18 +123,49 @@ export const workflowItems: WorkflowItem[] = [
   },
 ];
 
+const rupees = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN")}`;
+const { creator, growth, agency } = BILLING_PLANS;
+
+/**
+ * The homepage FAQ, also published as FAQPage structured data. The first
+ * questions answer what people search for; keep every answer literally true.
+ */
 export const faqItems: FaqItem[] = [
+  {
+    id: "comment-to-dm",
+    question: "How do I auto-reply to Instagram comments with a DM?",
+    answer:
+      "Create an automation on a post or reel, choose the words that should start it, and write the message. When someone comments, Linkar sends them that DM as a private reply.",
+  },
+  {
+    id: "allowed",
+    question: "Is Instagram DM automation allowed?",
+    answer:
+      "Yes, when it runs through Meta’s official Instagram API. Linkar passed Meta App Review, uses only that API, and replies within Meta’s messaging rules.",
+  },
+  {
+    id: "price",
+    question: "How much does Linkar cost?",
+    answer:
+      `You can start free with ${FREE_BILLING_PLAN.automationLimit} automations and ${FREE_BILLING_PLAN.monthlyDeliveryLimit.toLocaleString("en-IN")} messages a month. Paid plans are ${rupees(creator.monthlyPaise)}, ${rupees(growth.monthlyPaise)} and ${rupees(agency.monthlyPaise)} a month, or ${rupees(creator.annualPaise)}, ${rupees(growth.annualPaise)} and ${rupees(agency.annualPaise)} a year, billed in rupees.`,
+  },
+  {
+    id: "accounts",
+    question: "Which Instagram accounts can I connect?",
+    answer:
+      "Professional accounts, either Business or Creator. Meta’s API does not support personal accounts, so switch to a professional account in the Instagram app first. It is free.",
+  },
+  {
+    id: "followers-only",
+    question: "Can I send a link only to people who follow me?",
+    answer:
+      "Yes. A follow-gated campaign asks permission, checks that the person follows you, and then sends the promised link.",
+  },
   {
     id: "account-safety",
     question: "How does Linkar protect my account?",
     answer:
       "Linkar uses the connection you authorize, encrypts stored access tokens, verifies incoming requests, and keeps each workspace’s data scoped to that workspace.",
-  },
-  {
-    id: "official-api",
-    question: "Does Linkar use the official API?",
-    answer:
-      "Yes. Linkar sends and receives supported messaging events through the platform’s official API and honors the active messaging window.",
   },
   {
     id: "no-code",

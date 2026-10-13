@@ -184,7 +184,7 @@ export function SetupSteps() {
   return (
     <section id="setup" className={styles.section} aria-labelledby="setup-title" data-reduced-motion-state="visible">
       <header className={styles.header}>
-        <h2 id="setup-title">Start replying in three simple steps.</h2>
+        <h2 id="setup-title">Set up Instagram <span style={{ whiteSpace: "nowrap" }}>auto-replies</span> in three steps.</h2>
         <p>Linkar guides you from connecting an account to turning on your first automatic reply.</p>
       </header>
       <ol className={styles.steps}>

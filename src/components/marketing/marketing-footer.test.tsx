@@ -19,10 +19,12 @@ describe("MarketingFooter", () => {
     expect(within(footer).getByText(
       "Linkar keeps repeatable conversations moving and makes human attention count.",
     )).toBeTruthy();
-    expect(within(footer).getByRole("heading", { name: "Product", level: 2 })).toBeTruthy();
-    expect(within(footer).getByRole("heading", { name: "Resources", level: 2 })).toBeTruthy();
-    expect(within(footer).getByRole("heading", { name: "Company", level: 2 })).toBeTruthy();
-    expect(within(footer).getByRole("heading", { name: "Legal", level: 2 })).toBeTruthy();
+    // Column titles are plain labels, not headings, so the page outline stays
+    // the homepage's own sections.
+    expect(within(footer).queryAllByRole("heading")).toHaveLength(0);
+    for (const title of ["Product", "Resources", "Company", "Legal"]) {
+      expect(within(footer).getByText(title, { selector: "p" })).toBeTruthy();
+    }
 
     const expected = new Map([
       ["Product", "/#product"],

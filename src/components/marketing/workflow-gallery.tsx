@@ -171,7 +171,7 @@ export function WorkflowGallery() {
       data-reduced-motion-state="visible"
     >
       <header className={styles.header}>
-        <h2 id="gallery-title">See what Linkar can handle for you.</h2>
+        <h2 id="gallery-title">Ready-made Instagram DM automation workflows.</h2>
         <p>Start with a real customer moment, then choose what Linkar should ask, send, remember, or pass to your team.</p>
       </header>
 
@@ -248,7 +248,7 @@ export function WorkflowGallery() {
                   onClick={() => selectWorkflow(workflow.id)}
                 >
                   <span>{workflow.label}</span>
-                  <span aria-hidden="true" className={styles.accordionMark}>+</span>
+                  <span aria-hidden="true" className={styles.accordionMark} />
                 </button>
               </h3>
               <div id={contentId} className={styles.accordionPanel} aria-labelledby={triggerId} hidden={!isActive}>

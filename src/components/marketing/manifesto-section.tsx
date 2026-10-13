@@ -15,7 +15,7 @@ export function ManifestoSection() {
           The best conversations should keep working after you log off.
         </h2>
         <p className={styles.body}>
-          Linkar carries the useful next step forward, then makes room for you when judgment matters.
+          Linkar auto-replies to Instagram comments and DMs, carries the useful next step forward, then makes room for you when judgment matters.
         </p>
       </div>
     </Reveal>

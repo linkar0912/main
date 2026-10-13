@@ -14,7 +14,7 @@ afterEach(() => {
 describe("SurfaceRunway", () => {
   it("renders four informational surface cards with their exact copy and labelled local previews", () => {
     render(<SurfaceRunway />);
-    const section = screen.getByRole("region", { name: "Choose where Linkar should reply." });
+    const section = screen.getByRole("region", { name: "Auto-reply to comments, DMs and Story mentions." });
 
     expect(section.id).toBe("surfaces");
     expect(within(section).getByText("Start with a comment, message, or Story mention and decide exactly what happens next.")).toBeTruthy();
@@ -37,7 +37,7 @@ describe("SurfaceRunway", () => {
 
   it("numbers the cards in order so the first one is identifiable", () => {
     render(<SurfaceRunway />);
-    const section = screen.getByRole("region", { name: "Choose where Linkar should reply." });
+    const section = screen.getByRole("region", { name: "Auto-reply to comments, DMs and Story mentions." });
 
     expect(within(section).getAllByRole("article").map((card) => card.firstElementChild?.textContent))
       .toEqual(["01", "02", "03", "04"]);
@@ -53,7 +53,7 @@ describe("SurfaceRunway", () => {
     vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
 
     const view = render(<SurfaceRunway />);
-    const section = screen.getByRole("region", { name: "Choose where Linkar should reply." });
+    const section = screen.getByRole("region", { name: "Auto-reply to comments, DMs and Story mentions." });
 
     expect(addEventListener).not.toHaveBeenCalledWith("scroll", expect.any(Function), expect.anything());
     expect(addEventListener).not.toHaveBeenCalledWith("resize", expect.any(Function), expect.anything());

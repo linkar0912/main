@@ -57,8 +57,8 @@ export function InsightsShowcase() {
   return (
     <section id="insights" className={styles.section} aria-labelledby="insights-title">
       <header className={styles.header}>
-        <p className={styles.kicker}>Insights</p>
-        <h2 id="insights-title">Every reply, accounted for.</h2>
+        <p className={styles.kicker}>Automation analytics</p>
+        <h2 id="insights-title">Every automated reply, accounted for.</h2>
         <p>
           Activity shows each comment, message, and mention as it arrives. Insights show what came
           of it.

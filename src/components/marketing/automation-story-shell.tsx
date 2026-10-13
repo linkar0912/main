@@ -113,7 +113,7 @@ export function AutomationStoryShell({ chapters, sceneSummaries, desktopScenes, 
       style={{ "--story-progress": 0, "--story-index": safeActiveIndex } as React.CSSProperties}
     >
       <header className={styles.header}>
-        <h2 id="story-title">From the first comment to the right next step.</h2>
+        <h2 id="story-title">From an Instagram comment to the right next step.</h2>
         <p>Linkar replies, remembers useful answers, follows up, and brings in your team when needed.</p>
       </header>
 

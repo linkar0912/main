@@ -13,7 +13,7 @@ describe("ChannelShowcase", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     render(<ChannelShowcase />);
 
-    const section = screen.getByRole("region", { name: "Everywhere your audience is" });
+    const section = screen.getByRole("region", { name: "Instagram and Facebook automation" });
     expect(within(section).getByRole("heading", { name: "Instagram" })).toBeTruthy();
     expect(within(section).getByRole("heading", { name: "Facebook Pages" })).toBeTruthy();
     expect(within(section).queryAllByText(/^0[12]$/)).toHaveLength(0);

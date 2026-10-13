@@ -93,7 +93,7 @@ export function MarketingFooter({ compact = false, siteOrigin }: MarketingFooter
           <nav className={styles.navigation} aria-label="Footer">
             {columns.map((column) => (
               <div className={styles.column} key={column.title}>
-                <h2>{column.title}</h2>
+                <p className={styles.columnTitle}>{column.title}</p>
                 <ul>
                   {column.links.map(([label, href]) => (
                     <li key={label}>

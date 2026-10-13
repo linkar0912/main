@@ -13,7 +13,7 @@ test.describe("plain-language journey", () => {
     })).toBeVisible();
     await expect(page.getByText(/write the reply once/i)).toBeVisible();
     await expect(page.getByRole("link", { name: "Create your first reply" })).toHaveAttribute("href", "/signup");
-    await expect(page.getByRole("region", { name: "Start replying in three simple steps." })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Set up Instagram auto-replies in three steps." })).toBeVisible();
 
     await context.close();
   });

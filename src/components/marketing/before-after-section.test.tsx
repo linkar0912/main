@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { BeforeAfterSection } from "./before-after-section";
 
-const title = "Less inbox chasing. More conversations worth joining.";
+const title = "Less Instagram inbox chasing. More conversations worth joining.";
 
 describe("BeforeAfterSection", () => {
   afterEach(cleanup);

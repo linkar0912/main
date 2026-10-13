@@ -98,7 +98,7 @@ function proofRailMarkup() {
     <section id="proof" class="proof-section" aria-label="Creator conversation examples">
       <div class="proof-inner">
         <div class="proof-statement">
-          <h2>Made for creators, marketers &amp; brands.</h2>
+          <h2>Instagram automation for creators, marketers &amp; brands.</h2>
         </div>
         <div class="proof-ticker" data-ticker="continuous" data-pause-on-hover="true" data-pause-on-focus="true">
           <div class="proof-track">
@@ -122,7 +122,7 @@ function manifestoMarkup() {
     <section id="product" class="manifesto-section manifesto-section--enhanced" data-enhanced="true" data-reduced-motion-state="visible">
       <div class="manifesto-frame">
         <h2 class="manifesto-title">The best conversations should keep working after you log off.</h2>
-        <p class="manifesto-body">Linkar carries the useful next step forward, then makes room for you when judgment matters.</p>
+        <p class="manifesto-body">Linkar auto-replies to Instagram comments and DMs, carries the useful next step forward, then makes room for you when judgment matters.</p>
       </div>
     </section>
   `;

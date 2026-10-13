@@ -14,7 +14,7 @@ describe("WorkflowGallery", () => {
   it("renders the exact ordered Linkar workflow examples with the first tab selected", () => {
     render(<WorkflowGallery />);
 
-    const section = screen.getByRole("region", { name: "See what Linkar can handle for you." });
+    const section = screen.getByRole("region", { name: "Ready-made Instagram DM automation workflows." });
     expect(section.id).toBe("workflows");
     expect(within(section).getByText("Start with a real customer moment, then choose what Linkar should ask, send, remember, or pass to your team.")).toBeTruthy();
 
@@ -125,7 +125,7 @@ describe("WorkflowGallery", () => {
     })));
     render(<WorkflowGallery />);
 
-    const section = screen.getByRole("region", { name: "See what Linkar can handle for you." });
+    const section = screen.getByRole("region", { name: "Ready-made Instagram DM automation workflows." });
     expect(section.getAttribute("data-reduced-motion-state")).toBe("visible");
     fireEvent.click(screen.getByRole("tab", { name: "Ask what someone needs" }));
     expect(screen.getByRole("tabpanel").textContent).toContain("Save the answer");

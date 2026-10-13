@@ -84,7 +84,7 @@ describe("AutomationStory", () => {
   it("server-renders exact ordered Linkar chapters and one semantic scene summary", () => {
     const markup = renderToStaticMarkup(<AutomationStory />);
     render(<AutomationStory />);
-    const section = screen.getByRole("region", { name: "From the first comment to the right next step." });
+    const section = screen.getByRole("region", { name: "From an Instagram comment to the right next step." });
     expect(section.id).toBe("how-it-works");
     expect(section.getAttribute("data-active-scene")).toBe("comment");
     expect(section.getAttribute("data-active-index")).toBe("0");
@@ -133,7 +133,7 @@ describe("AutomationStory", () => {
   it("maps exact progress bands using the 45% viewport activation line", () => {
     const frames = installAnimationFrame();
     render(<AutomationStory />);
-    const section = screen.getByRole("region", { name: "From the first comment to the right next step." });
+    const section = screen.getByRole("region", { name: "From an Instagram comment to the right next step." });
     const storyBody = section.querySelector<HTMLElement>("[data-story-body]");
     expect(storyBody).not.toBeNull();
     const cases: Array<[number, string, string]> = [
@@ -200,7 +200,7 @@ describe("AutomationStory", () => {
     const addEventListener = vi.spyOn(window, "addEventListener");
     const frames = installAnimationFrame();
     render(<AutomationStory />);
-    const section = screen.getByRole("region", { name: "From the first comment to the right next step." });
+    const section = screen.getByRole("region", { name: "From an Instagram comment to the right next step." });
     expect(section.getAttribute("data-motion")).toBe("reduced");
     expect(section.querySelectorAll("[data-flow-scene]")).toHaveLength(4);
     expect(within(section).getAllByRole("heading", { level: 3 })).toHaveLength(4);

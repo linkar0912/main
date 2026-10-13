@@ -292,13 +292,13 @@ test.describe("public marketing route", () => {
 
     const headingNames = [
       "The best conversations should keep working after you log off.",
-      "From the first comment to the right next step.",
-      "Choose where Linkar should reply.",
-      "Less inbox chasing. More conversations worth joining.",
-      "See what Linkar can handle for you.",
-      "Every reply, accounted for.",
-      "Start replying in three simple steps.",
-      "Good questions before you switch anything on.",
+      "From an Instagram comment to the right next step.",
+      "Auto-reply to comments, DMs and Story mentions.",
+      "Less Instagram inbox chasing. More conversations worth joining.",
+      "Ready-made Instagram DM automation workflows.",
+      "Every automated reply, accounted for.",
+      "Set up Instagram auto-replies in three steps.",
+      "Questions about Instagram DM automation",
     ];
 
     for (const name of headingNames) {

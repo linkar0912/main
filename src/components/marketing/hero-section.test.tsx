@@ -13,12 +13,12 @@ describe("HeroSection", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", {
       level: 1,
-      name: "Reply to every opportunity. Even when you are away.",
+      name: "Instagram comment and DM automation Reply to every opportunity. Even when you are away.",
     })).toBeTruthy();
     expect(screen.getByText(
       "Choose what someone says or does, write the reply once, and let Linkar answer comments and messages for you.",
     )).toBeTruthy();
-    expect(screen.getByText("Easy to set up. Always in your voice.")).toBeTruthy();
+    expect(screen.getByText("Free to start. Paid plans from ₹199 a month.")).toBeTruthy();
   });
 
   it("offers only the direct signup action from the copy subtree", () => {
@@ -65,7 +65,7 @@ describe("HeroSection", () => {
   it("exposes an always-visible primary label and an independently staged secondary roll", () => {
     render(<HeroSection />);
 
-    const hero = screen.getByRole("region", { name: "Reply to every opportunity. Even when you are away." });
+    const hero = screen.getByRole("region", { name: "Instagram comment and DM automation Reply to every opportunity. Even when you are away." });
     const action = screen.getByRole("link", { name: "Create your first reply" });
 
     expect(hero.getAttribute("data-motion")).toBe("staged");
@@ -78,10 +78,10 @@ describe("HeroSection", () => {
     expect(action.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
   });
 
-  it("uses the approved local hero asset as a decorative, prioritized background", () => {
+  it("uses the approved local hero asset as a described, prioritized background", () => {
     render(<HeroSection />);
 
-    const image = screen.getByAltText("") as HTMLImageElement;
+    const image = screen.getByAltText(/creator relaxing at his desk/i, { exact: false }) as HTMLImageElement;
     expect(image.getAttribute("src")).toContain("%2Fmarketing%2Flinkar-hero-indian-relaxed.webp");
     expect(image.getAttribute("sizes")).toBe("100vw");
     expect(image.getAttribute("data-nimg")).toBe("fill");

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
+import { faqItems } from "@/src/components/marketing/marketing-content";
 import { MarketingPage } from "@/src/components/marketing/marketing-page";
 import { BILLING_PLANS, FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { LEGAL_ENTITY } from "@/src/lib/legal-entity";
 import { OPEN_GRAPH_DEFAULTS, publicSiteOrigin } from "@/src/lib/site-url";
 
-const TITLE = `${PRODUCT_NAME} · Instagram and Facebook automation`;
-const DESCRIPTION = "Build Instagram conversation flows and Facebook Page public comment replies with clear rules, useful responses, and human handoffs.";
+// Lead with what people search for; the brand goes last.
+const TITLE = `Instagram DM automation & comment auto-reply · ${PRODUCT_NAME}`;
+const DESCRIPTION = `Auto-reply to Instagram comments, DMs and Story mentions, and to Facebook Page comments. Send links and hand off to your team. Free to start, from ₹${BILLING_PLANS.creator.monthlyPaise / 100} a month.`;
 
 export function generateMetadata(): Metadata {
   return {
@@ -18,7 +20,7 @@ export function generateMetadata(): Metadata {
   };
 }
 
-/** Organization and SoftwareApplication structured data, priced from the billing catalog. */
+/** Organization, WebSite, SoftwareApplication and FAQPage structured data, priced from the billing catalog. */
 function structuredData() {
   const origin = publicSiteOrigin();
   const plans = [FREE_BILLING_PLAN, ...Object.values(BILLING_PLANS)];
@@ -41,6 +43,15 @@ function structuredData() {
     },
     {
       "@context": "https://schema.org",
+      "@type": "WebSite",
+      "@id": `${origin}/#website`,
+      name: PRODUCT_NAME,
+      url: origin,
+      inLanguage: "en-IN",
+      publisher: { "@id": `${origin}/#organization` },
+    },
+    {
+      "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       name: PRODUCT_NAME,
       url: origin,
@@ -54,6 +65,15 @@ function structuredData() {
         price: (plan.monthlyPaise / 100).toFixed(2),
         priceCurrency: "INR",
         url: `${origin}/pricing`,
+      })),
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: faqItems.map((item) => ({
+        "@type": "Question",
+        name: item.question,
+        acceptedAnswer: { "@type": "Answer", text: item.answer },
       })),
     },
   ];

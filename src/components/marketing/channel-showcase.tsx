@@ -34,8 +34,8 @@ export function ChannelShowcase() {
       <div className={styles.frame}>
         <header className={styles.header}>
           <p>Supported channels</p>
-          <h2 id="channels-title">Everywhere your audience is</h2>
-          <span>One workspace, with each channel handled on its own terms.</span>
+          <h2 id="channels-title">Instagram and Facebook automation</h2>
+          <span>Each channel is handled on its own terms.</span>
         </header>
         <div className={styles.cards}>
           {channels.map((channel) => (

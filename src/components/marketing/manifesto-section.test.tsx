@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ManifestoSection } from "./manifesto-section";
 
 const title = "The best conversations should keep working after you log off.";
-const supportingLine = "Linkar carries the useful next step forward, then makes room for you when judgment matters.";
+const supportingLine = "Linkar auto-replies to Instagram comments and DMs, carries the useful next step forward, then makes room for you when judgment matters.";
 
 describe("ManifestoSection", () => {
   afterEach(cleanup);

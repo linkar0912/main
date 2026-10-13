@@ -53,7 +53,7 @@ function CreatorCard({
       </div>
       <div className={styles.body}>
         <div className={styles.identity}>
-          <h3 className={styles.name}>{creator.name}</h3>
+          <p className={styles.name}>{creator.name}</p>
           <p className={styles.meta}>{creator.role} · {creator.location}</p>
         </div>
         <blockquote>“{creator.quote}”</blockquote>
@@ -91,7 +91,7 @@ export function ProofRail() {
     >
       <div className={styles.inner}>
         <div className={styles.statement} data-proof-statement>
-          <h2>Made for creators, marketers &amp; brands.</h2>
+          <h2>Instagram automation for creators, marketers &amp; brands.</h2>
         </div>
 
         <ProofTicker>

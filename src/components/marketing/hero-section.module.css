@@ -137,8 +137,22 @@
   animation: title-rise 700ms cubic-bezier(.22, .61, .21, 1) both;
 }
 
-.titleLine:nth-child(2) {
+.titleLine:nth-child(3) {
   animation-delay: 80ms;
+}
+
+/* The product category, small and plain above the display lines. */
+.titleKicker {
+  display: block;
+  margin-block-end: 18px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-shadow: none;
+  opacity: .9;
+  animation: title-rise 700ms cubic-bezier(.22, .61, .21, 1) both;
 }
 
 .body {
@@ -582,6 +596,11 @@
     line-height: .94;
   }
 
+  .titleKicker {
+    margin-block-end: 12px;
+    font-size: .875rem;
+  }
+
   .body {
     max-inline-size: 34ch;
     margin-block-start: 24px;
@@ -608,6 +627,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .image,
+  .titleKicker,
   .titleLine,
   .body,
   .actions,

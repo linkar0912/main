@@ -64,3 +64,17 @@ describe("root metadata", () => {
     expect(rootMetadata.twitter).toMatchObject({ card: "summary_large_image" });
   });
 });
+
+describe("llms.txt", () => {
+  it("summarises the site in Markdown with catalog prices and the homepage FAQ", async () => {
+    const { GET } = await import("./llms.txt/route");
+    const response = GET();
+    const body = await response.text();
+
+    expect(response.headers.get("content-type")).toContain("text/markdown");
+    expect(body.startsWith("# Linkar\n")).toBe(true);
+    expect(body).toContain("https://linkar.in/pricing");
+    expect(body).toContain("Creator: ₹199 a month");
+    expect(body).toContain("### Is Instagram DM automation allowed?");
+  });
+});

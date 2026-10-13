@@ -387,6 +387,8 @@
     cursor: pointer;
   }
   .accordionMark { font-size: 1.45rem; font-weight: 400; line-height: 1; }
+  /* Drawn by CSS so the "+" stays out of the heading text. */
+  .accordionMark::before { content: "+"; }
   .accordionTrigger[aria-expanded="true"] .accordionMark { transform: rotate(45deg); }
   .accordionPanel { padding: 0 0 32px; }
   .accordionPanel > p { margin: 0 0 24px; font-weight: 600; line-height: 1.5; }
