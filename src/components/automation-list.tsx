@@ -17,7 +17,7 @@ import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
 import type { FacebookPageSummary, InstagramConnectionSummary } from "@/src/lib/client/workspace-data";
 import { isFacebookAutomation, type AutomationAttention } from "@/src/lib/automation-attention";
 import { groupAutomations, type AutomationGroupKey, type AutomationView } from "@/src/lib/automation-groups";
-import { toReadableApiError } from "@/src/lib/validation-error";
+import { toReadableApiError } from "@/src/lib/api-error-message";
 
 async function requestAutomations(signal?: AbortSignal): Promise<AutomationRecord[]> {
   const response = await fetch("/api/automations", { signal });

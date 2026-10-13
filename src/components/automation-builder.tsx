@@ -50,7 +50,7 @@ import {
   appendToken,
 } from "./automation-builder/wizard";
 import { ActionNotice } from "./action-notice";
-import { toReadableApiError } from "@/src/lib/validation-error";
+import { toReadableApiError } from "@/src/lib/api-error-message";
 import { formatDateTime } from "@/src/lib/format-date";
 import { renderTemplate } from "@/src/lib/automation/send-limits";
 import { useFocusTrap } from "./use-focus-trap";

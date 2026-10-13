@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Megaphone } from "lucide-react";
 import { InlineContentSkeleton } from "./skeleton";
 import { LocalStatusBadge, type StatusTone } from "./workspace-primitives";
-import { toReadableApiError } from "@/src/lib/validation-error";
+import { toReadableApiError } from "@/src/lib/api-error-message";
 
 type BroadcastRow = {
   id: string;

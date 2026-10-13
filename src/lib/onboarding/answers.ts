@@ -1,12 +1,13 @@
-import { z } from "zod";
+import type { z } from "zod";
+import type { MemberAnswersSchema, OnboardingAnswersSchema } from "./answers-schema";
 
 /**
  * First-time onboarding answers (docs: .claude/specs/ONBOARDING_SPEC.md).
  *
  * Every choice is an enum so the server never stores free-form values it
- * cannot reason about; the two free-text fields are trimmed and capped. The
- * same schema runs in the browser (to keep the flow honest) and in
- * /api/onboarding (the source of truth).
+ * cannot reason about; the two free-text fields are trimmed and capped by
+ * the schemas in ./answers-schema, which /api/onboarding (the source of
+ * truth) runs.
  */
 
 export const ACCOUNT_TYPES = ["creator", "brand", "agency", "coach", "other"] as const;
@@ -37,51 +38,11 @@ export const OWNER_STEP_COUNT = 9;
 /** Member flow: 1 welcome + name, 2 focus, 3 done. */
 export const MEMBER_STEP_COUNT = 3;
 
-const cleanText = (max: number) => z.string().transform((value) => value.replace(/\s+/g, " ").trim()).pipe(z.string().max(max));
-
-/** One de-duplicated list of enum values, at most the enum's size. */
-function enumList<const T extends readonly [string, ...string[]]>(values: T) {
-  return z.array(z.enum(values)).max(values.length).transform((list) => Array.from(new Set(list)));
-}
-
-export const OnboardingAnswersSchema = z.object({
-  name: cleanText(NAME_MAX).optional(),
-  accountType: z.enum(ACCOUNT_TYPES).optional(),
-  niches: enumList(NICHES).optional(),
-  nicheOther: cleanText(NICHE_OTHER_MAX).optional(),
-  audience: z.enum(AUDIENCE_SIZES).optional(),
-  channels: enumList(CHANNELS).optional(),
-  goals: enumList(GOALS).optional(),
-  dailyVolume: z.enum(DAILY_VOLUMES).optional(),
-  replyMode: z.enum(REPLY_MODES).optional(),
-}).strict();
-
+// The zod schemas and readStoredAnswers live in ./answers-schema so this
+// module - imported by Home, the template picker and the onboarding flow in
+// the browser - does not pull zod (~60 KB gzipped) into the client bundle.
 export type OnboardingAnswers = z.infer<typeof OnboardingAnswersSchema>;
-
-export const MemberAnswersSchema = z.object({
-  name: cleanText(NAME_MAX).optional(),
-  focus: z.enum(MEMBER_FOCUSES).optional(),
-}).strict();
-
 export type MemberAnswers = z.infer<typeof MemberAnswersSchema>;
-
-/**
- * Reads stored answers defensively: a row written by an older build (or a
- * hand-edited one) never breaks the flow - unknown or invalid fields are
- * simply dropped, valid ones survive.
- */
-export function readStoredAnswers(value: unknown): OnboardingAnswers {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const answers: Record<string, unknown> = {};
-  const shape = OnboardingAnswersSchema.shape;
-  for (const [key, field] of Object.entries(shape)) {
-    const raw = (value as Record<string, unknown>)[key];
-    if (raw === undefined) continue;
-    const parsed = (field as z.ZodType).safeParse(raw);
-    if (parsed.success && parsed.data !== undefined) answers[key] = parsed.data;
-  }
-  return answers as OnboardingAnswers;
-}
 
 /** Plain-language labels, shared by the flow, Home and the owner console. */
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {

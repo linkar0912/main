@@ -15,7 +15,7 @@ import { StatusBadge, type StatusTone } from "./ui/status-badge";
 import { slidingThumbRef } from "./ui/use-sliding-thumb";
 import type { AutomationRecord, AutomationStatus } from "@/src/lib/repository";
 import { isFacebookAutomation } from "@/src/lib/automation-attention";
-import { toReadableApiError } from "@/src/lib/validation-error";
+import { toReadableApiError } from "@/src/lib/api-error-message";
 
 export type AutomationDetailTab = "overview" | "activity" | "edit";
 

@@ -8,13 +8,11 @@ import type { MemberRole } from "@/src/lib/repository";
 import {
   MEMBER_FOCUSES,
   MEMBER_STEP_COUNT,
-  MemberAnswersSchema,
   OWNER_STEP_COUNT,
-  OnboardingAnswersSchema,
-  readStoredAnswers,
   type MemberFocus,
   type OnboardingAnswers,
 } from "@/src/lib/onboarding/answers";
+import { MemberAnswersSchema, OnboardingAnswersSchema, readStoredAnswers } from "@/src/lib/onboarding/answers-schema";
 import { ONBOARDING_ACTIONS, type OnboardingView } from "@/src/lib/onboarding/view";
 
 export const runtime = "nodejs";

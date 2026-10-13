@@ -1,5 +1,6 @@
 import type { MemberOnboardingRecord, MemberRole, WorkspaceOnboardingRecord } from "@/src/lib/repository";
-import { readStoredAnswers, type Goal } from "./answers";
+import type { Goal } from "./answers";
+import { readStoredAnswers } from "./answers-schema";
 
 export type OnboardingFlow = "owner" | "member";
 

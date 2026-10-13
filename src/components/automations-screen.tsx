@@ -20,7 +20,7 @@ import {
   type AutomationSort,
   type AutomationView,
 } from "@/src/lib/automation-groups";
-import { toReadableApiError } from "@/src/lib/validation-error";
+import { toReadableApiError } from "@/src/lib/api-error-message";
 
 type ChannelFilter = "all" | "instagram" | "facebook";
 const RANGES = [7, 14, 30] as const;

@@ -26,7 +26,6 @@ import { LinkarMark } from "@/src/components/linkar-mark";
 import { getWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT, type WorkspaceBootstrap } from "@/src/lib/client/workspace-data";
 import { shouldRedirectToOnboarding } from "@/src/lib/onboarding/redirect";
 import type { OnboardingSummary } from "@/src/lib/onboarding/status";
-import { CommandPalette } from "./command-palette";
 import { WORKSPACE_RECENT_KEY, workspaceActions, workspacePages } from "./command-palette-items";
 import { workspaceSources } from "./command-palette-sources";
 import { SidebarAccountsSection } from "./sidebar-accounts";
@@ -36,6 +35,9 @@ import { slidingThumbRef } from "./ui/use-sliding-thumb";
 import { ThemeMenuSwitch } from "./theme-toggle";
 
 const TemplatePickerModal = dynamic(() => import("./template-picker-modal").then((module) => module.TemplatePickerModal));
+// Only rendered once someone opens search (button or the keyboard shortcut),
+// so it stays out of every screen's first load.
+const CommandPalette = dynamic(() => import("./command-palette").then((module) => module.CommandPalette));
 
 /** Workspace destinations in the sidebar, grouped by job. */
 const workspaceNavigation = [
@@ -145,6 +147,18 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const paletteActions = useMemo(() => workspaceActions(), []);
   const paletteSearch = useMemo(() => workspaceSources(), []);
   usePaletteHotkey(paletteOpen, setPaletteOpen);
+
+  // Fetch the palette's code once the screen is idle, so the first ⌘K opens
+  // it instantly without it weighing on any screen's first load.
+  useEffect(() => {
+    const warm = () => void import("./command-palette");
+    if (typeof window.requestIdleCallback !== "function") {
+      const timer = window.setTimeout(warm, 2_000);
+      return () => window.clearTimeout(timer);
+    }
+    const handle = window.requestIdleCallback(warm, { timeout: 5_000 });
+    return () => window.cancelIdleCallback(handle);
+  }, []);
 
   const closePalette = () => {
     setPaletteOpen(false);
