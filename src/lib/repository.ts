@@ -709,6 +709,21 @@ export function isAbandonedExecutionClaim(
     ? Date.parse(record.dispatchLeaseExpiresAt) <= nowMs
     : Date.parse(record.createdAt) <= nowMs - EXECUTION_CLAIM_LEASE_MS;
 }
+/**
+ * A PROCESSING execution whose claim lease ended at or before `cutoffMs`
+ * (claims without a lease count from createdAt). Mirrors the Prisma filter in
+ * listStaleExecutionClaims / failStaleExecutionClaim.
+ */
+export function isStaleExecutionClaim(
+  record: Pick<ExecutionRecord, "status" | "dispatchLeaseExpiresAt" | "createdAt">,
+  cutoffMs: number,
+): boolean {
+  if (record.status !== "PROCESSING" || !Number.isFinite(cutoffMs)) return false;
+  return record.dispatchLeaseExpiresAt
+    ? Date.parse(record.dispatchLeaseExpiresAt) <= cutoffMs
+    : Date.parse(record.createdAt) <= cutoffMs;
+}
+
 export type ClaimExecutionDispatchInput = ClaimExecutionInput & Required<Pick<
   ExecutionRecord,
   "dispatchOwner" | "dispatchStartedAt" | "dispatchLeaseExpiresAt"
@@ -986,6 +1001,14 @@ export interface AutomationRepository {
   completeExecution(workspaceId: string, dedupeKey: string, result: CompleteExecutionResult): Promise<void>;
   completeOwnedExecution(workspaceId: string, dedupeKey: string, dispatchOwner: string, result: CompleteExecutionResult): Promise<boolean>;
   failAbandonedExecution(workspaceId: string, dedupeKey: string, observedAt: string, reason: string): Promise<boolean>;
+  /**
+   * PROCESSING executions (any dispatch status) whose claim lease ended at or
+   * before `cutoffIso` - claims written without a lease count from createdAt.
+   * Oldest first, across workspaces.
+   */
+  listStaleExecutionClaims(cutoffIso: string, limit: number): Promise<ExecutionRecord[]>;
+  /** Fails one stale claim, only if it is still PROCESSING and still stale at `cutoffIso`. */
+  failStaleExecutionClaim(id: string, cutoffIso: string, reason: string): Promise<boolean>;
   releaseExecutionClaim(workspaceId: string, dedupeKey: string): Promise<void>;
   releaseOwnedExecutionClaim(workspaceId: string, dedupeKey: string, dispatchOwner: string): Promise<boolean>;
   hasExecution(workspaceId: string, dedupeKey: string): Promise<boolean>;

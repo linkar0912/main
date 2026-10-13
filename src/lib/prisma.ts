@@ -1892,6 +1892,39 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return failed.count === 1;
     },
 
+    async listStaleExecutionClaims(cutoffIso, limit) {
+      const cutoff = new Date(cutoffIso);
+      // Served by the partial index on PROCESSING rows (20261013150000).
+      const records = await client.automationExecution.findMany({
+        where: {
+          status: "PROCESSING",
+          OR: [
+            { dispatchLeaseExpiresAt: { lte: cutoff } },
+            { dispatchLeaseExpiresAt: null, createdAt: { lte: cutoff } },
+          ],
+        },
+        orderBy: { createdAt: "asc" },
+        take: Math.max(0, limit),
+      });
+      return records.map(mapExecution);
+    },
+
+    async failStaleExecutionClaim(id, cutoffIso, reason) {
+      const cutoff = new Date(cutoffIso);
+      const failed = await client.automationExecution.updateMany({
+        where: {
+          id,
+          status: "PROCESSING",
+          OR: [
+            { dispatchLeaseExpiresAt: { lte: cutoff } },
+            { dispatchLeaseExpiresAt: null, createdAt: { lte: cutoff } },
+          ],
+        },
+        data: { status: "FAILED", reason },
+      });
+      return failed.count === 1;
+    },
+
     async releaseExecutionClaim(workspaceId, dedupeKey) {
       await client.automationExecution.deleteMany({
         where: { workspaceId, dedupeKey, status: "PROCESSING" },

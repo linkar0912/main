@@ -55,7 +55,7 @@ import type {
   InboxContactRow,
 } from "./repository";
 import { broadcastSegmentCutoff, InstagramAccountOwnershipError, FacebookPageOwnershipError, AUTOMATIC_CONTACT_TAGS, LEAD_STATUS_SCORE_DELTA, resolveSnapshotProvider } from "./repository";
-import { EXECUTION_CLAIM_LEASE_MS, isAbandonedExecutionClaim } from "./repository";
+import { EXECUTION_CLAIM_LEASE_MS, isAbandonedExecutionClaim, isStaleExecutionClaim } from "./repository";
 import { contactMatchesSearch } from "./repository";
 import type { EmailCaptureField } from "./automation/types";
 import { MESSAGING_WINDOW_MS } from "./messaging-window";
@@ -1175,6 +1175,22 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       });
       if (!entry) return false;
       executions.set(entry[0], { ...entry[1], status: "FAILED", reason });
+      return true;
+    },
+
+    async listStaleExecutionClaims(cutoffIso, limit) {
+      const cutoffMs = Date.parse(cutoffIso);
+      return [...executions.values()]
+        .filter((record) => isStaleExecutionClaim(record, cutoffMs))
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+        .slice(0, Math.max(0, limit))
+        .map(copy);
+    },
+
+    async failStaleExecutionClaim(id, cutoffIso, reason) {
+      const record = executions.get(id);
+      if (!record || !isStaleExecutionClaim(record, Date.parse(cutoffIso))) return false;
+      executions.set(id, { ...record, status: "FAILED", reason });
       return true;
     },
 

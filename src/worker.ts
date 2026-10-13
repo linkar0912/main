@@ -17,6 +17,7 @@ import { processDueSequences, SEQUENCE_BATCH_SIZE } from "./lib/automation/seque
 import { processBroadcastSend, type BroadcastRunnerOptions } from "./lib/automation/broadcast-runner";
 import type { BroadcastSendJob, LeadDeliveryJob } from "./lib/queue";
 import { reconcileExpiredDeliveryClaims } from "./lib/automation/delivery-reconciliation";
+import { reconcileStaleExecutions } from "./lib/automation/execution-reconciliation";
 import { processLeadDelivery } from "./lib/automation/lead-delivery";
 import { processFlowFollowUp, type FlowFollowUpRunnerOptions } from "./lib/automation/followup-runner";
 import type { FlowFollowUpJob } from "./lib/queue";
@@ -304,6 +305,15 @@ if (!env.redisUrl) {
     );
     if (result.unknown > 0) {
       logger.warn("Expired outbound delivery claims marked unknown", result);
+    }
+  });
+
+  // Executions a crashed or restarted worker claimed and never finished; the
+  // event's own retry skips a live claim, so nothing else would settle them.
+  background.every("Execution reconciliation", DELIVERY_RECONCILIATION_INTERVAL_MS, async () => {
+    const result = await reconcileStaleExecutions(getRepository(), new Date().toISOString(), 100);
+    if (result.failed > 0) {
+      logger.warn("Interrupted automation executions settled", result);
     }
   });
 
