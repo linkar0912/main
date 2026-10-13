@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { ButtonRoll } from "./button-roll";
-import { MetaApprovedBadge } from "./meta-approved-badge";
+import { InstagramGlyph } from "../instagram-glyph";
 import styles from "./hero-section.module.css";
 
 export function HeroSection() {
@@ -20,7 +20,6 @@ export function HeroSection() {
 
       <div className={styles.grid}>
         <div className={styles.copy}>
-          <MetaApprovedBadge tone="glass" className={styles.trust} />
           <h1 id="hero-title" className={styles.title}>
             <span className={styles.titleLine}>Reply to every opportunity. </span>
             <span className={styles.titleLine}>Even when you are away.</span>
@@ -41,6 +40,7 @@ export function HeroSection() {
             </a>
           </div>
           <p className={styles.proof}>Easy to set up. Always in your voice.</p>
+          <HeroTrustStrip />
         </div>
 
         <figure
@@ -103,5 +103,41 @@ export function HeroSection() {
         </figure>
       </div>
     </section>
+  );
+}
+
+/**
+ * The row of marks along the bottom of the hero. Every mark is literally
+ * true for Linkar: Meta App Review approval, the official Instagram API,
+ * real usage, and Razorpay payments. No partner programme logos or ratings
+ * Linkar has not earned (Meta's logo and badges belong to Meta's programmes).
+ * Update the reply count from production as it grows; keep it a lower bound.
+ */
+function HeroTrustStrip() {
+  return (
+    <ul className={styles.trustStrip} aria-label="Why people trust Linkar">
+      <li className={styles.trustItem}>
+        <svg className={styles.trustIcon} viewBox="0 0 24 24" width="30" height="30" aria-hidden="true" focusable="false">
+          <path d="M12 2.5 4.5 5.4v5.9c0 4.6 3.1 8.7 7.5 10.2 4.4-1.5 7.5-5.6 7.5-10.2V5.4L12 2.5Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+          <path d="m8.6 12.1 2.3 2.3 4.6-4.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <span className={styles.trustText}><strong>Approved by Meta</strong><span>App Review</span></span>
+      </li>
+      <li className={styles.trustItem}>
+        <span className={styles.trustIcon}><InstagramGlyph size={28} /></span>
+        <span className={styles.trustText}><strong>Official</strong><span>Instagram API</span></span>
+      </li>
+      <li className={styles.trustItem}>
+        <span className={styles.trustFigure}>14,000+</span>
+        <span className={styles.trustText}><strong>Replies</strong><span>sent so far</span></span>
+      </li>
+      <li className={styles.trustItem}>
+        <svg className={styles.trustIcon} viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" focusable="false">
+          <rect x="5" y="10.5" width="14" height="10" rx="2.2" fill="none" stroke="currentColor" strokeWidth="1.7" />
+          <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+        <span className={styles.trustText}><strong>Secure payments</strong><span>by Razorpay</span></span>
+      </li>
+    </ul>
   );
 }
