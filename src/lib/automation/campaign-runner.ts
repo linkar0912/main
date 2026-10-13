@@ -19,7 +19,7 @@ import { unsealSecret } from "../security/secrets";
 import { releaseDailySendSlots, renderTemplate, reserveDailySendSlots } from "./send-limits";
 import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
 import { checkSendRateLimit, type SendRateLimitBucket } from "./send-rate-limiter";
-import { isQuietNow, MESSAGING_WINDOW_MS, msUntilQuietEnd } from "../messaging-window";
+import { MESSAGING_WINDOW_MS } from "../messaging-window";
 import { SendDeferredError } from "./send-deferral";
 import type { DeliveryTimingObserver } from "./delivery-timing";
 
@@ -561,12 +561,12 @@ async function guardedDelivery(
   const { repository } = ctx;
   const deliveryKey = deliveryKeys.campaignAction(participant.id, spec.action);
   for (; ;) {
-    // The ledger and quiet-hours reads don't depend on the dispatch claim, so
-    // they ride along with it instead of adding two serial round trips before
-    // the Meta call. A ledger row only ever moves forward (to SENT/FAILED/
-    // UNKNOWN), so reading it slightly early can at worst make us reserve a
-    // slot that executeOutboundDelivery - which stays authoritative - hands back.
-    const [prepared, ledgerBefore, messagingWindow] = await Promise.all([
+    // The ledger read doesn't depend on the dispatch claim, so it rides along
+    // with it instead of adding a serial round trip before the Meta call. A
+    // ledger row only ever moves forward (to SENT/FAILED/UNKNOWN), so reading
+    // it slightly early can at worst make us reserve a slot that
+    // executeOutboundDelivery - which stays authoritative - hands back.
+    const [prepared, ledgerBefore] = await Promise.all([
       prepareDeliveryAction(
         participant,
         repository,
@@ -575,7 +575,6 @@ async function guardedDelivery(
         ctx.dispatchLeaseMs,
       ),
       repository.getOutboundDelivery(deliveryKey),
-      repository.getMessagingWindow(participant.workspaceId),
     ]);
 
     if (prepared.kind === "in_flight") return currentParticipant(participant, repository);
@@ -642,23 +641,12 @@ async function guardedDelivery(
     };
 
     try {
-      // Per-account send ceiling and quiet hours, checked only when Meta is
-      // actually about to be called.
+      // Per-account send ceiling, checked only when Meta is actually about to
+      // be called. Quiet hours deliberately do not apply: every campaign send
+      // answers something the person just did (a comment, a button tap), and
+      // quiet hours only hold sends nobody is waiting for - sequences,
+      // broadcasts and follow-ups.
       if (needsProviderAttempt) {
-        // Quiet hours are a workspace-level courtesy window; defer the send
-        // (same contract as the per-account rate limit below) rather than
-        // messaging inside the owner's configured night window. The worker
-        // parks the job until the window ends without spending an attempt.
-        const now = new Date();
-        if (messagingWindow && isQuietNow(now, messagingWindow)) {
-          await releaseSlots();
-          await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
-          if (spec.onRetryablePending) {
-            await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
-          }
-          throw new SendDeferredError("Quiet hours are active for this workspace", msUntilQuietEnd(now, messagingWindow));
-        }
-
         // Distinct from the daily send limit above, which is a product
         // setting: this one exists to keep the connected account under Meta's own
         // throttling. A reserved slot is given back and the dispatch lease
@@ -718,7 +706,12 @@ async function guardedDelivery(
         throw new MetaApiError(delivery.error, 503, true);
       }
       if (delivery.status === "FAILED" || delivery.status === "UNKNOWN") {
-        const reason = delivery.status === "UNKNOWN" ? spec.ambiguousReason : spec.failureReason;
+        // A known outcome keeps its own reason - the plan's monthly limit, or
+        // Meta's rejection in plain English - instead of blaming Meta for a
+        // send that was never attempted.
+        const reason = delivery.status === "UNKNOWN"
+          ? spec.ambiguousReason
+          : delivery.error.trim() || spec.failureReason;
         await completeOwnedAction(
           participant,
           repository,

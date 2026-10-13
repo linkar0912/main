@@ -192,6 +192,15 @@ export async function executeOutboundDelivery<
   }
   if (preparation.status === "BUSY") return { status: "BUSY" };
   if (preparation.status === "QUOTA_REJECTED") {
+    // Home shows this too; the email reaches an owner who isn't looking.
+    // Deduped per workspace and month, and a no-op until email is configured.
+    const periodStart = currentPeriodStart(new Date());
+    void notifyWorkspaceManagers(
+      request.workspaceId,
+      `plan-limit:${request.workspaceId}:${periodStart}`,
+      "Your monthly message limit was reached",
+      "Linkar has sent every message your plan includes this month, so automated replies are paused until the limit resets next month. Upgrade your plan in Settings → Billing to resume them now.",
+    ).catch(() => undefined);
     return { status: "FAILED", retryable: false, error: "Monthly delivery limit reached", reason: "QUOTA_REJECTED" };
   }
 

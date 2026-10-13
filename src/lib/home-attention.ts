@@ -32,10 +32,35 @@ export type AttentionInput = {
   automations: Array<{ id: string; name: string; status: string }>;
   /** False while the automation list is loading or failed. */
   automationsKnown: boolean;
-  failures: Array<{ updatedAt: string }> | null;
+  failures: Array<{ updatedAt: string; lastError?: string; resultCode?: string }> | null;
   usage: { deliveriesThisMonth: number; monthlyDeliveryLimit: number | null } | null;
   now?: number;
 };
+
+/** What the outbound ledger records when the plan's monthly allowance blocks a send. */
+export const MONTHLY_LIMIT_ERROR = "Monthly delivery limit reached";
+
+/** A send the plan's monthly allowance stopped - not something Meta rejected. */
+export function isMonthlyLimitBlock(failure: { lastError?: string; resultCode?: string }): boolean {
+  return failure.lastError === MONTHLY_LIMIT_ERROR && (failure.resultCode === undefined || failure.resultCode === "SUPPRESSED");
+}
+
+/** First day of the next UTC month - when the delivery allowance resets. */
+export function monthlyLimitResetsAt(now: number): Date {
+  const current = new Date(now);
+  return new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 1, 1));
+}
+
+function resetDateLabel(now: number): string {
+  return monthlyLimitResetsAt(now).toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "UTC" });
+}
+
+function inCurrentPeriod(updatedAt: string, now: number): boolean {
+  const time = Date.parse(updatedAt);
+  if (!Number.isFinite(time)) return false;
+  const current = new Date(now);
+  return time >= Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1) && time <= now + 60_000;
+}
 
 /** Failures older than this are history, not something to act on today. */
 export const RECENT_FAILURE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -79,29 +104,34 @@ export function deriveAttentionItems({ connections, automations, automationsKnow
     });
   }
 
+  // A send already stopped by the plan this month means replies are paused,
+  // even when the usage count has not caught up (or failed to load).
+  const limitBlocked = (failures ?? []).some((failure) =>
+    isMonthlyLimitBlock(failure) && inCurrentPeriod(failure.updatedAt, now));
   const limit = usage?.monthlyDeliveryLimit ?? null;
-  if (usage && limit && limit > 0) {
-    const ratio = usage.deliveriesThisMonth / limit;
-    if (ratio >= 1) {
-      items.push({
-        key: "usage",
-        tone: "danger",
-        chip: "Limit reached",
-        text: `You've used all ${count(limit)} messages in this month's plan. Replies wait until next month or a bigger plan.`,
-        action: { kind: "link", label: "See plans", href: "/settings?section=billing" },
-      });
-    } else if (ratio >= USAGE_WARNING_RATIO) {
-      items.push({
-        key: "usage",
-        tone: "warning",
-        chip: "Limit near",
-        text: `${count(usage.deliveriesThisMonth)} of ${count(limit)} messages used this month (${Math.floor(ratio * 100)}%).`,
-        action: { kind: "link", label: "See plans", href: "/settings?section=billing" },
-      });
-    }
+  const ratio = usage && limit && limit > 0 ? usage.deliveriesThisMonth / limit : 0;
+  if (limitBlocked || ratio >= 1) {
+    items.push({
+      key: "usage",
+      tone: "danger",
+      chip: "Limit reached",
+      text: `Monthly limit reached - replies are paused until ${resetDateLabel(now)} or you upgrade.`,
+      action: { kind: "link", label: "Upgrade", href: "/settings?section=billing" },
+    });
+  } else if (usage && limit && ratio >= USAGE_WARNING_RATIO) {
+    items.push({
+      key: "usage",
+      tone: "warning",
+      chip: "Limit near",
+      text: `${count(usage.deliveriesThisMonth)} of ${count(limit)} messages used this month (${Math.floor(ratio * 100)}%).`,
+      action: { kind: "link", label: "See plans", href: "/settings?section=billing" },
+    });
   }
 
+  // Plan-limit blocks are covered by the item above; counting them here too
+  // read as hundreds of Meta failures.
   const recentFailures = (failures ?? []).filter((failure) => {
+    if (isMonthlyLimitBlock(failure)) return false;
     const time = Date.parse(failure.updatedAt);
     return Number.isFinite(time) && now - time <= RECENT_FAILURE_WINDOW_MS;
   });

@@ -47,6 +47,33 @@ describe("deriveAttentionItems", () => {
     expect(deriveAttentionItems(input({ usage: { deliveriesThisMonth: 9_999, monthlyDeliveryLimit: null } }))).toEqual([]);
   });
 
+  it("says replies are paused until the reset date, with Upgrade, once the plan limit is hit", () => {
+    const [item] = deriveAttentionItems(input({ usage: { deliveriesThisMonth: 1_000, monthlyDeliveryLimit: 1_000 } }));
+    expect(item).toMatchObject({
+      tone: "danger",
+      chip: "Limit reached",
+      text: "Monthly limit reached - replies are paused until 1 November or you upgrade.",
+      action: { kind: "link", label: "Upgrade", href: "/settings?section=billing" },
+    });
+  });
+
+  it("flags the limit as soon as a send this month was blocked by it, and doesn't count those as failures", () => {
+    const blocked = { updatedAt: new Date(NOW - 60_000).toISOString(), lastError: "Monthly delivery limit reached", resultCode: "SUPPRESSED" };
+    const items = deriveAttentionItems(input({
+      // Usage has not caught up (or did not load) - the blocked sends still prove it.
+      usage: null,
+      failures: [blocked, blocked, blocked],
+    }));
+    expect(items).toEqual([expect.objectContaining({ key: "usage", chip: "Limit reached", action: expect.objectContaining({ label: "Upgrade" }) })]);
+  });
+
+  it("does not flag the limit for blocks from a previous month", () => {
+    const items = deriveAttentionItems(input({
+      failures: [{ updatedAt: "2026-09-30T23:00:00.000Z", lastError: "Monthly delivery limit reached", resultCode: "SUPPRESSED" }],
+    }));
+    expect(items).toEqual([]);
+  });
+
   it("counts only failures from the last 7 days", () => {
     const items = deriveAttentionItems(input({
       failures: [
