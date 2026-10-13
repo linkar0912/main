@@ -1,4 +1,6 @@
 import type { MetaConnection, MetaMedia, MetaMediaPage, MetaMessage, MetaPrivateReply, MetaSendResult } from "./types";
+import { describeMetaError } from "./errors";
+import { logger } from "../logger";
 
 type MetaClientOptions = {
   apiVersion: string;
@@ -13,13 +15,20 @@ export class MetaApiError extends Error {
   readonly responseReceived: boolean;
   /** Graph error code when Meta returned one (e.g. 190 = invalid access token, 4/17/32/613 = throttled). */
   readonly code?: number;
+  readonly subcode?: number;
 
+  /**
+   * For Graph errors `message` is the stable English reason from
+   * describeMetaError - it is stored and shown, so never Meta's own
+   * (localized) wording.
+   */
   constructor(
     message: string,
     status: number,
     responseReceived = status > 0,
     retryable = status === 0 || status === 408 || status === 429 || status >= 500,
     code?: number,
+    subcode?: number,
   ) {
     super(message);
     this.name = "MetaApiError";
@@ -27,6 +36,7 @@ export class MetaApiError extends Error {
     this.responseReceived = responseReceived;
     this.retryable = retryable;
     this.code = code;
+    this.subcode = subcode;
   }
 }
 
@@ -334,6 +344,8 @@ export class MetaClient {
   }
 
   private async request(url: URL, accessToken: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+    // Graph error messages follow the account's language unless asked otherwise.
+    url.searchParams.set("locale", "en_US");
     let response: Response;
     try {
       response = await this.fetcher(url, {
@@ -357,12 +369,25 @@ export class MetaClient {
     }
     if (!response.ok) {
       const error = typeof data.error === "object" && data.error !== null ? data.error as Record<string, unknown> : {};
+      const code = typeof error.code === "number" ? error.code : undefined;
+      const subcode = typeof error.error_subcode === "number" ? error.error_subcode : undefined;
+      const providerMessage = typeof error.message === "string" ? error.message.slice(0, 500) : undefined;
+      // Meta's own wording stays in the logs for support; what is stored and
+      // shown is the stable English reason.
+      logger.warn("Meta API request rejected", {
+        status: response.status,
+        ...(code !== undefined ? { code } : {}),
+        ...(subcode !== undefined ? { subcode } : {}),
+        ...(providerMessage ? { providerMessage } : {}),
+        ...(typeof error.fbtrace_id === "string" ? { fbtraceId: error.fbtrace_id } : {}),
+      });
       throw new MetaApiError(
-        typeof error.message === "string" ? error.message : `Meta request failed (${response.status})`,
+        describeMetaError({ status: response.status, code, subcode, message: providerMessage }),
         response.status,
         true,
         isTransientMetaError(error, response.status),
-        typeof error.code === "number" ? error.code : undefined,
+        code,
+        subcode,
       );
     }
     return data;

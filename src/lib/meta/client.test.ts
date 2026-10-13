@@ -146,6 +146,38 @@ describe("Meta message payloads", () => {
     )).rejects.toMatchObject({ status: 400, responseReceived: true });
   });
 
+  it("asks Meta for English errors on every call", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ recipient_id: "p", message_id: "m" }), { status: 200 }));
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+    await client.sendPrivateReply({ igUserId: "ig_1", accessToken: "secret" }, "comment_1", "Hello");
+    await client.getUserFollowStatus({ igUserId: "ig_1", accessToken: "secret" }, "igsid_1").catch(() => undefined);
+    for (const [url] of fetcher.mock.calls) {
+      expect(new URL(String(url)).searchParams.get("locale")).toBe("en_US");
+    }
+  });
+
+  it.each([
+    [{ message: "Не удается найти запрошенного пользователя.", code: 100, error_subcode: 2534014 }, /couldn't find this person/],
+    [{ message: "Der gesuchte Nutzer wurde nicht gefunden.", code: 100, error_subcode: 2018001 }, /couldn't find this person/],
+    [{ message: "Diese Person ist gerade nicht verfügbar.", code: 551, error_subcode: 1545041 }, /can't receive messages/],
+    [{ message: "(#10) Diese Nachricht wird außerhalb des zulässigen Zeitfensters gesendet.", code: 10, error_subcode: 2534022 }, /more than 24 hours/],
+    [{ message: "Unsupported post request. Object does not exist", code: 100, error_subcode: 33 }, /no longer exists/],
+    [{ message: "(#200) Требуется разрешение", code: 200 }, /missing an Instagram permission/],
+    [{ message: "Application request limit reached", code: 4 }, /limiting how fast/],
+    [{ message: "Error validating access token: Session has expired", code: 190, error_subcode: 463 }, /expired\. Reconnect/],
+  ])("stores a stable English reason for Meta error %#, never the localized text", async (error, expected) => {
+    const client = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({ error }), { status: 400 }),
+    });
+    const rejection = await client.sendDirectMessage({ igUserId: "ig_1", accessToken: "secret" }, "igsid_1", { type: "text", text: "Hi" })
+      .catch((caught: unknown) => caught as MetaApiError);
+    expect(rejection).toBeInstanceOf(MetaApiError);
+    expect((rejection as MetaApiError).message).toMatch(expected);
+    expect((rejection as MetaApiError).message).not.toContain(error.message);
+    expect((rejection as MetaApiError).code).toBe(error.code);
+  });
+
   it("aborts provider requests at the configured deadline", async () => {
     const fetcher = vi.fn<typeof fetch>((_url, init) => new Promise((_resolve, reject) => {
       init?.signal?.addEventListener("abort", () => {
@@ -208,7 +240,7 @@ describe("Meta message payloads", () => {
     await expect(client.subscribeToWebhooks({ igUserId: "ig_1", accessToken: "secret" })).resolves.toEqual({
       fields: [],
       requested: ["comments", "messages", "messaging_postbacks", "messaging_optins", "messaging_referral"],
-      error: expect.stringContaining("(#100)"),
+      error: expect.stringContaining("error 100"),
     });
   });
 

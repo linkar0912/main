@@ -7,6 +7,10 @@ describe("humanizeProviderError", () => {
     ["(#4) Application request limit reached", /limiting how fast/],
     ["(#551) This person isn't available right now.", /can't receive messages right now/],
     ["Webhook responded with HTTP 502 Bad Gateway", /lead webhook didn't accept/],
+    // Rows stored before Meta errors were requested in English.
+    ["Der gesuchte Nutzer wurde nicht gefunden.", /couldn't find that Instagram user/],
+    // The plan limit is not a Meta failure and points at Billing.
+    ["Monthly delivery limit reached", /monthly message limit was reached.*Billing/],
   ])("explains %s in plain words and keeps the raw text", (raw, expected) => {
     const result = humanizeProviderError(raw);
     expect(result.text).toMatch(expected);

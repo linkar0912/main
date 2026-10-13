@@ -56,7 +56,7 @@ describe("FacebookClient", () => {
     );
     expect(result.id).toBe("fb_reply_99");
     const [urlArg, initArg] = fetchMock.mock.calls[0] as [URL, RequestInit];
-    expect(urlArg.toString()).toBe("https://graph.facebook.com/v25.0/comment_42/comments");
+    expect(urlArg.toString()).toBe("https://graph.facebook.com/v25.0/comment_42/comments?locale=en_US");
     const body = JSON.parse(String(initArg?.body));
     expect(body).toEqual({ message: "Thanks for commenting!" });
   });

@@ -75,6 +75,8 @@ export class FacebookClient {
     accessToken: string,
     init: RequestInit = {},
   ): Promise<Record<string, unknown>> {
+    // Graph error messages follow the Page's language unless asked otherwise.
+    url.searchParams.set("locale", "en_US");
     // Signed here rather than per call site so any endpoint added later is
     // covered automatically.
     withAppSecretProof(url, accessToken, this.appSecret);

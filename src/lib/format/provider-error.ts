@@ -10,7 +10,12 @@
 
 const KNOWN_PATTERNS: Array<{ match: RegExp; text: string }> = [
   {
-    match: /не удается найти запрошенного пользователя/i,
+    // Not a Meta error: the plan's allowance ran out, so nothing was sent.
+    match: /^monthly delivery limit reached$/i,
+    text: "Your plan's monthly message limit was reached, so this wasn't sent. Upgrade in Billing or wait for next month.",
+  },
+  {
+    match: /не удается найти запрошенного пользователя|der gesuchte nutzer wurde nicht gefunden/i,
     text: "Meta couldn't find that Instagram user - they may have blocked the account, deleted it, or the ID has expired.",
   },
   {
