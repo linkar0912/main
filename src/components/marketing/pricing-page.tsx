@@ -1,3 +1,4 @@
+import { MetaApprovedBadge } from "./meta-approved-badge";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, Check } from "lucide-react";
@@ -275,6 +276,7 @@ export function PricingPage() {
           <section className={styles.pricing} aria-labelledby="pricing-title">
             <div className={styles.frame}>
               <header className={styles.intro}>
+                <MetaApprovedBadge className={styles.trust} />
                 <h1 id="pricing-title">Plans that grow with you.</h1>
                 <p>
                   <span>Start free, then add capacity when the conversations arrive.</span>{" "}

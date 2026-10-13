@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MarketingHeader } from "@/src/components/marketing/marketing-header";
 import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
+import { MetaApprovedBadge } from "@/src/components/marketing/meta-approved-badge";
 import { OAuthButtons } from "@/src/components/auth/oauth-buttons";
 import { AuthLegalNotice } from "@/src/components/auth/legal-notice";
 import { SubmitButton } from "@/src/components/auth/submit-button";
@@ -34,6 +35,7 @@ export function LoginScreen({ nextPath, invite, error, notice, resend }: LoginSc
       <MarketingHeader siteOrigin={publicSiteUrl} />
       <main className="auth-page-section" data-login-layout="conversation-desk" data-auth-tone="editorial">
         <div className="auth-page-frame">
+          <MetaApprovedBadge className="auth-trust-badge" />
           <h1>Keep the right conversations moving.</h1>
           <p className="auth-page-lede">
             Pick up where your flows left off, with every useful next step close at hand.

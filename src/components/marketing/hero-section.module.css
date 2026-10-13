@@ -47,6 +47,11 @@
   margin-block-end: clamp(28px, 3vw, 44px);
 }
 
+.trust {
+  margin-block-end: 18px;
+  animation: fade-up 700ms cubic-bezier(.22, .61, .21, 1) both;
+}
+
 .status,
 .proof {
   font-family: var(--font-sans, ui-sans-serif, sans-serif);

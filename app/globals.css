@@ -1918,6 +1918,7 @@ a.section-nav-link.is-active:hover { color: var(--ink); }
   justify-items: center;
   margin-inline: auto;
 }
+.auth-page-frame .auth-trust-badge { margin-bottom: 4px; }
 .auth-page-frame h1 {
   font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif;
   font-size: var(--type-page-title);

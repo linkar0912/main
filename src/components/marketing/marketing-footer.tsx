@@ -1,3 +1,4 @@
+import { MetaApprovedBadge } from "./meta-approved-badge";
 import Link from "next/link";
 import { LEGAL_ENTITY, legalCopyrightHolder } from "@/src/lib/legal-entity";
 import { isMarketingPath, marketingHref } from "@/src/lib/site-routing";
@@ -110,6 +111,7 @@ export function MarketingFooter({ compact = false, siteOrigin }: MarketingFooter
         </div>
 
         <div className={styles.legalLine}>
+          <MetaApprovedBadge />
           <p>© {year} {copyrightLine()}</p>
           <p>Linkar uses Meta’s supported Instagram and Facebook interfaces. Availability and limits depend on the connected account, Page, and platform policies.</p>
         </div>

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { ButtonRoll } from "./button-roll";
+import { MetaApprovedBadge } from "./meta-approved-badge";
 import styles from "./hero-section.module.css";
 
 export function HeroSection() {
@@ -19,6 +20,7 @@ export function HeroSection() {
 
       <div className={styles.grid}>
         <div className={styles.copy}>
+          <MetaApprovedBadge tone="glass" className={styles.trust} />
           <h1 id="hero-title" className={styles.title}>
             <span className={styles.titleLine}>Reply to every opportunity. </span>
             <span className={styles.titleLine}>Even when you are away.</span>
