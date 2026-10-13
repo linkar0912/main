@@ -273,7 +273,9 @@ describe("getHealth worker heartbeat", () => {
     stubConfigured();
     const stale = await getHealth({
       ...healthyDependencies,
-      workerHeartbeat: async () => ({ at: Date.now() - WORKER_HEARTBEAT_STALE_MS - 1, release: "old" }),
+      // A clear margin past the cut-off: getHealth reads "now" before it calls
+      // this reader, so a 1 ms margin raced on busy CI runners.
+      workerHeartbeat: async () => ({ at: Date.now() - WORKER_HEARTBEAT_STALE_MS - 5_000, release: "old" }),
     });
     expect(stale.status).toBe("degraded");
     expect(stale.worker).toEqual({ heartbeat: "stale", release: "old" });
