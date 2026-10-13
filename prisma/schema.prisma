@@ -1,5 +1,8 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // native for local development; the production image is Debian 12 with
+  // OpenSSL 3 (see Dockerfile).
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

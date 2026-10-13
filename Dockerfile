@@ -12,6 +12,13 @@ ENV PATH="$PNPM_HOME:$PATH"
 ENV NEXT_TELEMETRY_DISABLED=1
 
 WORKDIR /app
+# Prisma's query engine links against OpenSSL. bookworm-slim ships without it,
+# so Prisma had to guess the engine ("failed to detect the libssl/openssl
+# version"). Installing it here lets both the build (prisma generate) and the
+# runtime image use the matching debian-openssl-3.0.x engine.
+RUN apt-get update \
+  && apt-get install --yes --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 RUN npm install --global "pnpm@${PNPM_VERSION}" \
   && test "$(pnpm --version)" = "${PNPM_VERSION}"
 
