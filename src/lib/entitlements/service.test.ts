@@ -46,6 +46,48 @@ describe("EntitlementService", () => {
     });
   });
 
+  it("shares one database read between callers that arrive while it is in flight", async () => {
+    const repository = createMemoryEntitlementRepository({ plan: { monthlyDeliveryLimit: 500 } });
+    const read = vi.spyOn(repository, "getWorkspaceEntitlement");
+    const service = createEntitlementService(repository);
+
+    // The worker warms this while an event's other reads run; the send path
+    // then asks again before the first read has answered.
+    const [warm, send] = await Promise.all([
+      service.getMonthlyDeliveryLimit("w1"),
+      service.getMonthlyDeliveryLimit("w1"),
+    ]);
+    expect([warm, send]).toEqual([500, 500]);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("never caches a read that was in flight when the plan changed", async () => {
+    let monthlyDeliveryLimit = 100;
+    const inner = createMemoryEntitlementRepository({ plan: { monthlyDeliveryLimit: 100 } });
+    let releaseRead: () => void = () => undefined;
+    const repository = {
+      ...inner,
+      async getWorkspaceEntitlement(workspaceId: string) {
+        const limit = monthlyDeliveryLimit;
+        await new Promise<void>((resolve) => { releaseRead = resolve; });
+        const config = await inner.getWorkspaceEntitlement(workspaceId);
+        return config && { ...config, plan: { ...config.plan, monthlyDeliveryLimit: limit } };
+      },
+    };
+    const service = createEntitlementService(repository);
+
+    const stale = service.getMonthlyDeliveryLimit("w1");
+    monthlyDeliveryLimit = 5_000; // the owner upgrades mid-read
+    service.invalidateWorkspace("w1");
+    releaseRead();
+    await expect(stale).resolves.toBe(100);
+
+    const fresh = service.getMonthlyDeliveryLimit("w1");
+    await Promise.resolve();
+    releaseRead();
+    await expect(fresh).resolves.toBe(5_000);
+  });
+
   it("rejects unknown override keys instead of silently widening access", async () => {
     const repository = createMemoryEntitlementRepository({ overrides: { secretFeature: true } as never });
 

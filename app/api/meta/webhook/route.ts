@@ -33,6 +33,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Start of the reply-latency clock (see the worker's timing log).
+  const receivedAt = Date.now();
   const env = getServerEnv();
   if (!env.metaAppSecret) return new Response("Meta app secret is not configured", { status: 503 });
 
@@ -59,7 +61,7 @@ export async function POST(request: Request) {
   const events = normalizeWebhook(payload);
   const echoes = normalizeManualReplyEchoes(payload);
   const [enqueued, echoesEnqueued] = await Promise.all([
-    enqueueWebhookEvents(events),
+    enqueueWebhookEvents(events, undefined, { receivedAt }),
     enqueueManualReplyEchoes(echoes),
   ]);
   if (echoes.length > 0 && echoesEnqueued === 0) {
@@ -92,6 +94,7 @@ export async function POST(request: Request) {
           interactionSecret: env.metaAppSecret,
           campaignsEnabled: env.followGatedCampaignsEnabled,
           dispatchLeaseMs: env.dispatchLeaseMs,
+          receivedAt,
         });
       } catch (error) {
         logger.error("Inline webhook event processing failed", {

@@ -88,9 +88,10 @@ describe("POST /api/facebook/webhook", () => {
     const response = await POST(new Request("http://localhost/api/facebook/webhook", { method: "POST", body: "{}" }));
 
     expect(response.status).toBe(200);
+    // The arrival time travels with the job so the worker can time the whole reply.
     expect(mocks.enqueueFacebookEvents).toHaveBeenCalledWith([
       expect.objectContaining({ id: "evt_1", pageId: "page_1" }),
-    ]);
+    ], undefined, { receivedAt: expect.any(Number) });
     expect(mocks.findWorkspaceByFacebookPage).not.toHaveBeenCalled();
     expect(mocks.getWorkspaceStatus).not.toHaveBeenCalled();
     expect(mocks.processNormalizedFacebookEvent).not.toHaveBeenCalled();

@@ -61,9 +61,10 @@ describe("POST /api/meta/webhook", () => {
     const response = await POST(new Request("http://localhost/api/meta/webhook", { method: "POST", body: "{}" }));
 
     expect(response.status).toBe(200);
+    // The arrival time travels with the job so the worker can time the whole reply.
     expect(mocks.enqueueWebhookEvents).toHaveBeenCalledWith([
       expect.objectContaining({ id: "event_1", accountId: "ig_1" }),
-    ]);
+    ], undefined, { receivedAt: expect.any(Number) });
     expect(mocks.findWorkspaceByInstagramAccount).not.toHaveBeenCalled();
     expect(mocks.getWorkspaceStatus).not.toHaveBeenCalled();
     expect(mocks.processNormalizedEvent).not.toHaveBeenCalled();

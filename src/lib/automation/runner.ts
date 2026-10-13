@@ -3,10 +3,13 @@ import type { EvaluationContext, ExecutionAction, NormalizedEvent } from "./type
 import { unsealSecret } from "../security/secrets";
 import type {
   AutomationContactRecord,
+  AutomationParticipantRecord,
   AutomationRecord,
   AutomationRepository,
   InstagramConnectionRecord,
+  OutboundDeliveryRecord,
   RecordExecutionInput,
+  WorkspaceStatus,
 } from "../repository";
 import { MetaApiError } from "../meta/client";
 import type { MetaConnection, MetaMessage } from "../meta/types";
@@ -33,16 +36,19 @@ import {
 import {
   deliveryKeys,
   executeOutboundDelivery,
+  prefetchDeliveryEntitlements,
   type DeliveryExecutionResult,
 } from "./outbound-delivery";
 import { processLeadDelivery } from "./lead-delivery";
 import { contactAutomationsPaused } from "./manual-reply";
-import type { DeliveryTimingObserver } from "./delivery-timing";
+import { underlyingRepository, type DeliveryTimingObserver } from "./delivery-timing";
 
 export type AutomationRunnerClient = CampaignRunnerClient;
 
 export type RunnerOptions = CampaignRunnerOptions & {
   campaignsEnabled?: boolean;
+  /** When the webhook reached Linkar (epoch ms); recorded on the activity row. */
+  receivedAt?: number;
 };
 
 export type RunnerResult = {
@@ -194,11 +200,15 @@ async function executeActionDelivery(
     timingObserver?: DeliveryTimingObserver;
     /** Timestamp of the event that triggered this action; gates private replies. */
     sourceEventTimestamp?: number;
+    /** The ledger row, when the caller already started reading it. */
+    existingDelivery?: Promise<Settled<OutboundDeliveryRecord | null>>;
   },
   client: AutomationRunnerClient,
   connection: MetaConnection,
 ): Promise<DeliveryExecutionResult> {
-  const existing = await repository.getOutboundDelivery(request.deliveryKey);
+  const existing = request.existingDelivery
+    ? unwrap(await request.existingDelivery)
+    : await repository.getOutboundDelivery(request.deliveryKey);
   const needsProviderAttempt = !existing
     || existing.state === "PENDING"
     || (existing.state === "FAILED" && existing.retryable);
@@ -965,27 +975,141 @@ async function processFieldAnswer(
   }
 }
 
+/**
+ * Which workspace each Instagram account belonged to when last seen, per
+ * repository (database). Only a hint for reading ahead (see processEvent):
+ * every value it steers is still read fresh, and a stale hint just costs a
+ * re-read.
+ */
+const workspaceHintsByRepository = new WeakMap<AutomationRepository, Map<string, string>>();
+const WORKSPACE_HINT_LIMIT = 10_000;
+
+function workspaceHintsFor(repository: AutomationRepository): Map<string, string> {
+  const base = underlyingRepository(repository);
+  let hints = workspaceHintsByRepository.get(base);
+  if (!hints) {
+    hints = new Map();
+    workspaceHintsByRepository.set(base, hints);
+  }
+  return hints;
+}
+
+function rememberWorkspaceHint(workspaceHints: Map<string, string>, accountId: string, workspaceId: string): void {
+  if (workspaceHints.get(accountId) === workspaceId) return;
+  workspaceHints.delete(accountId);
+  if (workspaceHints.size >= WORKSPACE_HINT_LIMIT) {
+    const oldest = workspaceHints.keys().next().value;
+    if (oldest !== undefined) workspaceHints.delete(oldest);
+  }
+  workspaceHints.set(accountId, workspaceId);
+}
+
+type EventGatekeeping = {
+  workspaceStatus: WorkspaceStatus | null;
+  automations: AutomationRecord[];
+  contact: AutomationContactRecord | null;
+  isPaused: boolean;
+  /** Campaign participant already created for this comment (comment events with campaigns on). */
+  sourceParticipant?: AutomationParticipantRecord | null;
+};
+
+/**
+ * Everything the gatekeeping below needs is a read keyed only by the workspace
+ * and the sender, so it is fetched in one parallel round - this sits directly
+ * in front of the first Meta send.
+ */
+async function readEventGatekeeping(
+  repository: AutomationRepository,
+  workspaceId: string,
+  event: NormalizedEvent,
+  readSourceParticipant: boolean,
+): Promise<EventGatekeeping> {
+  const [workspaceStatus, automations, contact, isPaused, sourceParticipant] = await Promise.all([
+    repository.getWorkspaceStatus(workspaceId),
+    repository.listActiveAutomationsForInstagramAccount(workspaceId, event.accountId),
+    event.recipientId
+      ? repository.getContact(workspaceId, event.accountId, event.recipientId)
+      : Promise.resolve(null),
+    event.recipientId
+      ? repository.hasPausedParticipant(workspaceId, event.accountId, event.recipientId)
+      : Promise.resolve(false),
+    readSourceParticipant && event.commentId
+      ? repository.findParticipantBySource(workspaceId, event.accountId, event.commentId)
+      : Promise.resolve(undefined),
+  ]);
+  return {
+    workspaceStatus,
+    automations,
+    contact,
+    isPaused,
+    ...(readSourceParticipant ? { sourceParticipant } : {}),
+  };
+}
+
+type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+
+function settle<T>(promise: Promise<T>): Promise<Settled<T>> {
+  return promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+}
+
+function unwrap<T>(settled: Settled<T>): T {
+  if (!settled.ok) throw settled.error;
+  return settled.value;
+}
+
+/** Writes the runner started early and only needs settled before the job ends. */
+type DeferredWrites = { contactTouch?: Promise<Settled<unknown>> };
+
 export async function processNormalizedEvent(
   event: NormalizedEvent,
   repository: AutomationRepository,
   options: RunnerOptions = {},
 ): Promise<RunnerResult | CampaignRunnerResult> {
-  const mapping = await repository.findWorkspaceByInstagramAccount(event.accountId);
-  if (!mapping) return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  const deferred: DeferredWrites = {};
+  let result: RunnerResult | CampaignRunnerResult;
+  try {
+    result = await processEvent(event, repository, options, deferred);
+  } catch (error) {
+    await deferred.contactTouch;
+    throw error;
+  }
+  // A contact touch that ran alongside the send still has to land: a failure
+  // fails the job, and the retry is idempotent (claims and the ledger stop a
+  // second send) while the touch runs again.
+  if (deferred.contactTouch) unwrap(await deferred.contactTouch);
+  return result;
+}
 
-  // Everything the gatekeeping below needs is a read keyed only by the mapping
-  // and the sender, so fetch it in one parallel round instead of four serial
-  // ones - this sits directly in front of the first Meta send.
-  const [workspaceStatus, automations, contact, isPaused] = await Promise.all([
-    repository.getWorkspaceStatus(mapping.workspaceId),
-    repository.listActiveAutomationsForInstagramAccount(mapping.workspaceId, event.accountId),
-    event.recipientId
-      ? repository.getContact(mapping.workspaceId, event.accountId, event.recipientId)
-      : Promise.resolve(null),
-    event.recipientId
-      ? repository.hasPausedParticipant(mapping.workspaceId, event.accountId, event.recipientId)
-      : Promise.resolve(false),
+async function processEvent(
+  event: NormalizedEvent,
+  repository: AutomationRepository,
+  options: RunnerOptions,
+  deferred: DeferredWrites,
+): Promise<RunnerResult | CampaignRunnerResult> {
+  // The workspace lookup and the gatekeeping reads used to be two serial
+  // rounds. The account's workspace almost never changes, so the reads start
+  // alongside the lookup using the last workspace seen for this account; they
+  // are only used when the fresh lookup confirms it (otherwise discarded and
+  // read again), so nothing below ever acts on stale data.
+  const readSourceParticipant = options.campaignsEnabled === true
+    && event.type === "comment.created"
+    && Boolean(event.commentId);
+  const workspaceHints = workspaceHintsFor(repository);
+  const hint = workspaceHints.get(event.accountId);
+  if (hint) void prefetchDeliveryEntitlements(hint);
+  const [mapping, speculative] = await Promise.all([
+    repository.findWorkspaceByInstagramAccount(event.accountId),
+    hint ? settle(readEventGatekeeping(repository, hint, event, readSourceParticipant)) : undefined,
   ]);
+  if (!mapping) {
+    workspaceHints.delete(event.accountId);
+    return { matched: 0, sent: 0, skipped: 0, failed: 0 };
+  }
+  rememberWorkspaceHint(workspaceHints, event.accountId, mapping.workspaceId);
+  if (hint !== mapping.workspaceId) void prefetchDeliveryEntitlements(mapping.workspaceId);
+  const { workspaceStatus, automations, contact, isPaused, sourceParticipant } = speculative && hint === mapping.workspaceId
+    ? unwrap(speculative)
+    : await readEventGatekeeping(repository, mapping.workspaceId, event, readSourceParticipant);
   if (workspaceStatus !== "ACTIVE") {
     return { matched: 0, sent: 0, skipped: 0, failed: 0 };
   }
@@ -995,7 +1119,7 @@ export async function processNormalizedEvent(
   void repository.recordWebhookEvent(mapping.workspaceId, {
       providerEventId: event.id,
       eventType: event.type,
-      receivedAt: new Date().toISOString(),
+      receivedAt: new Date(options.receivedAt ?? Date.now()).toISOString(),
       payload: {
         accountId: event.accountId,
         ...(event.storyId ? { storyId: event.storyId } : {}),
@@ -1040,18 +1164,24 @@ export async function processNormalizedEvent(
   if (event.recipientId && CONTACT_TOUCH_EVENT_TYPES.includes(event.type)) {
     // `contact` was read in the parallel round above, so the touch is a single
     // write instead of a read-then-write in front of every send.
-    const touch = await repository.touchContact(
+    const touching = repository.touchContact(
       mapping.workspaceId,
       event.accountId,
       event.recipientId,
       new Date(event.timestamp).toISOString(),
       contact,
     );
-    // A contact's createdAt is the timestamp of the earliest event seen from
-    // them, so this event is their first contact exactly when nothing earlier
-    // exists. Unlike `touch.created`, that still holds when the job is retried
-    // after the first attempt already created the row.
-    if (needsContactTracking) {
+    if (!needsContactTracking) {
+      // Nothing below reads the touch's result, so it runs alongside the
+      // reply instead of in front of it; processNormalizedEvent waits for it
+      // before the job finishes.
+      deferred.contactTouch = settle(touching);
+    } else {
+      const touch = await touching;
+      // A contact's createdAt is the timestamp of the earliest event seen from
+      // them, so this event is their first contact exactly when nothing earlier
+      // exists. Unlike `touch.created`, that still holds when the job is retried
+      // after the first attempt already created the row.
       evaluationContext = {
         isNewContact: touch.created || Date.parse(touch.record.createdAt) >= event.timestamp,
       };
@@ -1103,11 +1233,14 @@ export async function processNormalizedEvent(
     if (interaction.handled) return interaction.result;
 
     if (event.type === "comment.created" && event.commentId) {
-      const participant = await repository.findParticipantBySource(
-        mapping.workspaceId,
-        event.accountId,
-        event.commentId,
-      );
+      // Read in the gatekeeping round above.
+      const participant = sourceParticipant !== undefined
+        ? sourceParticipant
+        : await repository.findParticipantBySource(
+          mapping.workspaceId,
+          event.accountId,
+          event.commentId,
+        );
       if (participant) {
         return processExistingCampaignParticipant(participant, mapping, repository, campaignOptions);
       }
@@ -1192,6 +1325,13 @@ export async function processNormalizedEvent(
         continue;
       }
 
+      // The first action's ledger row is read alongside the claim instead of
+      // after it. A ledger row only ever moves forward, so reading it early can
+      // at worst reserve a daily slot that executeOutboundDelivery - which
+      // stays authoritative - hands back.
+      const firstDelivery = options.client && options.tokenEncryptionKey
+        ? settle(repository.getOutboundDelivery(deliveryKeys.classicAction(automation.id, event.id, 0)))
+        : undefined;
       const claimed = await repository.claimExecution({
         workspaceId: mapping.workspaceId,
         automationId: automation.id,
@@ -1315,6 +1455,7 @@ export async function processNormalizedEvent(
           dailySendLimit: automation.definition.dailySendLimit,
           timingObserver: options.timingObserver,
           sourceEventTimestamp: event.timestamp,
+          ...(index === 0 && firstDelivery ? { existingDelivery: firstDelivery } : {}),
         }, options.client, connection);
         providerMessageId = requireSentDelivery(delivery, options.finalAttempt) ?? providerMessageId;
       }

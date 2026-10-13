@@ -17,8 +17,14 @@ export const QUEUE_PRIORITY = {
   MAINTENANCE: 20,
 } as const;
 
-export type QueuedInstagramEvent = NormalizedEvent & { linkarIngestedAt: number };
-export type QueuedFacebookEvent = FacebookNormalizedEvent & { linkarIngestedAt: number };
+/**
+ * linkarIngestedAt is when the job was enqueued; linkarReceivedAt (when set) is
+ * when the webhook request reached Linkar. The worker's timing log measures
+ * from the latter, so a reply's latency covers the whole pipeline.
+ */
+export type QueuedInstagramEvent = NormalizedEvent & { linkarIngestedAt: number; linkarReceivedAt?: number };
+export type QueuedFacebookEvent = FacebookNormalizedEvent & { linkarIngestedAt: number; linkarReceivedAt?: number };
+export type EnqueueTiming = { receivedAt?: number };
 
 export type WebhookQueueCounts = {
   state: "ok" | "not_configured" | "error";
@@ -65,9 +71,13 @@ export function createFacebookWebhookJobId(event: FacebookNormalizedEvent): stri
   return createHash("sha256").update(`${event.pageId}\0${event.id}`).digest("base64url");
 }
 
-export function createInstagramEventJobOptions(event: NormalizedEvent, ingestedAt = Date.now()) {
+export function createInstagramEventJobOptions(event: NormalizedEvent, ingestedAt = Date.now(), receivedAt?: number) {
   return {
-    data: { ...event, linkarIngestedAt: ingestedAt } satisfies QueuedInstagramEvent,
+    data: {
+      ...event,
+      linkarIngestedAt: ingestedAt,
+      ...(receivedAt !== undefined ? { linkarReceivedAt: receivedAt } : {}),
+    } satisfies QueuedInstagramEvent,
     options: {
       jobId: createWebhookJobId(event),
       priority: QUEUE_PRIORITY.REALTIME,
@@ -79,9 +89,13 @@ export function createInstagramEventJobOptions(event: NormalizedEvent, ingestedA
   };
 }
 
-export function createFacebookEventJobOptions(event: FacebookNormalizedEvent, ingestedAt = Date.now()) {
+export function createFacebookEventJobOptions(event: FacebookNormalizedEvent, ingestedAt = Date.now(), receivedAt?: number) {
   return {
-    data: { ...event, linkarIngestedAt: ingestedAt } satisfies QueuedFacebookEvent,
+    data: {
+      ...event,
+      linkarIngestedAt: ingestedAt,
+      ...(receivedAt !== undefined ? { linkarReceivedAt: receivedAt } : {}),
+    } satisfies QueuedFacebookEvent,
     options: {
       jobId: createFacebookWebhookJobId(event),
       priority: QUEUE_PRIORITY.REALTIME,
@@ -316,13 +330,17 @@ export async function deleteQueuedInstagramEvents(igUserId: string): Promise<voi
   }
 }
 
-export async function enqueueWebhookEvents(events: NormalizedEvent[], retryId?: string): Promise<number> {
+export async function enqueueWebhookEvents(
+  events: NormalizedEvent[],
+  retryId?: string,
+  timing: EnqueueTiming = {},
+): Promise<number> {
   const queue = getWebhookQueue();
   if (!queue) return 0;
 
   await Promise.all(
     events.map((event) => {
-      const job = createInstagramEventJobOptions(event);
+      const job = createInstagramEventJobOptions(event, Date.now(), timing.receivedAt);
       if (retryId) job.options.jobId = createHash("sha256").update(`${job.options.jobId}\0admin\0${retryId}`).digest("base64url");
       return queue.add("instagram-event", job.data, job.options);
     }),
@@ -369,12 +387,16 @@ export async function enqueueManualReplyEchoes(echoes: ManualReplyEcho[]): Promi
  * up a second Redis connection and lets the same concurrency setting cover
  * both channels.
  */
-export async function enqueueFacebookEvents(events: FacebookNormalizedEvent[], retryId?: string): Promise<number> {
+export async function enqueueFacebookEvents(
+  events: FacebookNormalizedEvent[],
+  retryId?: string,
+  timing: EnqueueTiming = {},
+): Promise<number> {
   const queue = getWebhookQueue();
   if (!queue) return 0;
   await Promise.all(
     events.map((event) => {
-      const job = createFacebookEventJobOptions(event);
+      const job = createFacebookEventJobOptions(event, Date.now(), timing.receivedAt);
       if (retryId) job.options.jobId = createHash("sha256").update(`${job.options.jobId}\0admin\0${retryId}`).digest("base64url");
       return queue.add("facebook-event", job.data, job.options);
     }),

@@ -42,6 +42,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Start of the reply-latency clock (see the worker's timing log).
+  const receivedAt = Date.now();
   const env = getServerEnv();
   if (!env.facebookAppSecret) {
     return new Response("Facebook app secret is not configured", { status: 503 });
@@ -69,7 +71,7 @@ export async function POST(request: Request) {
   }
 
   const events = normalizeFacebookWebhook(payload);
-  const enqueued = await enqueueFacebookEvents(events);
+  const enqueued = await enqueueFacebookEvents(events, undefined, { receivedAt });
   let retryableFailure = false;
   if (events.length > 0 && enqueued === 0) {
     // No Redis queue: fall back to inline processing. Sequential keeps the

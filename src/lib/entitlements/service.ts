@@ -45,19 +45,44 @@ export function createEntitlementService(
   cacheTtlMs = 30_000,
 ) {
   const entitlementCache = new Map<string, { expiresAt: number; value: EffectiveEntitlements }>();
+  // Lookups already on their way to the database. A caller arriving meanwhile
+  // (the worker warms this while an event's other reads run) shares the same
+  // answer instead of paying for a second one.
+  const inFlight = new Map<string, Promise<EffectiveEntitlements>>();
+  // Bumped by invalidateWorkspace so a read that was already out when the
+  // plan changed never caches its (possibly old) answer.
+  const generations = new Map<string, number>();
 
   async function getEffectiveEntitlements(workspaceId: string): Promise<EffectiveEntitlements> {
     const cached = entitlementCache.get(workspaceId);
     const timestamp = now().getTime();
     if (cached && cached.expiresAt > timestamp) return cached.value;
 
+    const pending = inFlight.get(workspaceId);
+    if (pending) return pending;
+    const lookup = loadEffectiveEntitlements(workspaceId, timestamp, generations.get(workspaceId) ?? 0);
+    inFlight.set(workspaceId, lookup);
+    try {
+      return await lookup;
+    } finally {
+      if (inFlight.get(workspaceId) === lookup) inFlight.delete(workspaceId);
+    }
+  }
+
+  async function loadEffectiveEntitlements(
+    workspaceId: string,
+    timestamp: number,
+    generation: number,
+  ): Promise<EffectiveEntitlements> {
     const config = await repository.getWorkspaceEntitlement(workspaceId);
     if (!config) throw new Error("workspace_entitlement_missing");
     const parsed = EntitlementOverridesSchema.safeParse(config.overrides);
     if (!parsed.success) throw new Error("invalid_entitlement_overrides");
     const { key, name, ...defaults } = config.plan;
     const value = { planKey: key, planName: name, ...defaults, ...parsed.data };
-    entitlementCache.set(workspaceId, { expiresAt: timestamp + cacheTtlMs, value });
+    if ((generations.get(workspaceId) ?? 0) === generation) {
+      entitlementCache.set(workspaceId, { expiresAt: timestamp + cacheTtlMs, value });
+    }
     return value;
   }
 
@@ -102,6 +127,8 @@ export function createEntitlementService(
    */
   function invalidateWorkspace(workspaceId: string): void {
     entitlementCache.delete(workspaceId);
+    inFlight.delete(workspaceId);
+    generations.set(workspaceId, (generations.get(workspaceId) ?? 0) + 1);
   }
 
   return {

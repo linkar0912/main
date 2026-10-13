@@ -914,3 +914,109 @@ describe("automation runner", () => {
     expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("automation runner read-ahead", () => {
+  function automationIn(workspaceId: string, id: string, text: string) {
+    return {
+      id,
+      workspaceId,
+      name: id,
+      status: "ACTIVE" as const,
+      version: 1,
+      priority: 0,
+      definition: { ...flow, actions: [{ type: "private_reply" as const, text }] } as FlowDefinition,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(1).toISOString(),
+    };
+  }
+
+  async function connect(repository: ReturnType<typeof createMemoryRepository>, workspaceId: string, key: string) {
+    await repository.ensureWorkspace(workspaceId, `owner@${workspaceId}.test`, `user-${workspaceId}`);
+    await repository.upsertConnection({
+      workspaceId,
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", key),
+      status: "CONNECTED",
+    });
+  }
+
+  it("re-reads everything when the account has moved to another workspace since it was last seen", async () => {
+    const key = randomBytes(32).toString("hex");
+    const repository = createMemoryRepository([
+      automationIn("workspace_old", "automation_old", "Old workspace reply"),
+      automationIn("workspace_new", "automation_new", "New workspace reply"),
+    ]);
+    await connect(repository, "workspace_old", key);
+    const client = createRunnerClient();
+    await processNormalizedEvent(event, repository, { client, tokenEncryptionKey: key });
+    expect(vi.mocked(client.sendPrivateReply).mock.calls[0]?.[2]).toBe("Old workspace reply");
+
+    await repository.deleteConnectionByInstagramAccount("ig_1");
+    await connect(repository, "workspace_new", key);
+    const statusRead = vi.spyOn(repository, "getWorkspaceStatus");
+    await processNormalizedEvent({ ...event, id: "comment_2", commentId: "comment_2", recipientId: "person_2" }, repository, {
+      client,
+      tokenEncryptionKey: key,
+    });
+
+    // The read-ahead used the old workspace; its answers were thrown away.
+    expect(statusRead.mock.calls.map(([workspaceId]) => workspaceId)).toEqual(["workspace_old", "workspace_new"]);
+    expect(vi.mocked(client.sendPrivateReply).mock.calls[1]?.[2]).toBe("New workspace reply");
+    expect(await repository.listAutomationExecutions("workspace_old", "automation_old", 10)).toHaveLength(1);
+  });
+
+  it("reads gatekeeping state fresh on every event, so a suspension stops the very next reply", async () => {
+    const key = randomBytes(32).toString("hex");
+    const repository = createMemoryRepository([automationIn("workspace_a", "automation_a", "Hello")]);
+    await connect(repository, "workspace_a", key);
+    const client = createRunnerClient();
+    await processNormalizedEvent(event, repository, { client, tokenEncryptionKey: key });
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+
+    await repository.setWorkspaceLifecycle("workspace_a", {
+      status: "SUSPENDED",
+      reason: "abuse review",
+      actorUserId: "platform-owner",
+      at: "2026-08-31T10:00:00.000Z",
+    });
+    await expect(processNormalizedEvent({ ...event, id: "comment_2", commentId: "comment_2" }, repository, {
+      client,
+      tokenEncryptionKey: key,
+    })).resolves.toEqual({ matched: 0, sent: 0, skipped: 0, failed: 0 });
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails the job when the contact touch that ran alongside the reply fails, and the retry does not reply twice", async () => {
+    const key = randomBytes(32).toString("hex");
+    const repository = createMemoryRepository([{
+      ...automationIn("workspace_a", "automation_dm", "unused"),
+      definition: {
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: ["price"] },
+        conditions: [],
+        actions: [{ type: "send_text", text: "Prices start at 499" }],
+      } as FlowDefinition,
+    }]);
+    await connect(repository, "workspace_a", key);
+    const touch = vi.spyOn(repository, "touchContact").mockRejectedValueOnce(new Error("database unavailable"));
+    const client = createRunnerClient();
+    const message: NormalizedEvent = {
+      id: "mid_1",
+      accountId: "ig_1",
+      type: "message.received",
+      text: "price?",
+      recipientId: "person_1",
+      timestamp: RECENT_COMMENT_AT,
+    };
+
+    await expect(processNormalizedEvent(message, repository, { client, tokenEncryptionKey: key }))
+      .rejects.toThrow("database unavailable");
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
+
+    await processNormalizedEvent(message, repository, { client, tokenEncryptionKey: key });
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect(touch).toHaveBeenCalledTimes(2);
+    expect(await repository.getContact("workspace_a", "ig_1", "person_1")).toMatchObject({ igScopedUserId: "person_1" });
+  });
+});
