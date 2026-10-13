@@ -1,0 +1,31 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// --- conformance preamble: only Meta, Redis and BullMQ are faked -----------
+vi.mock("server-only", () => ({}));
+vi.mock("bullmq", async () => (await import("./fakes")).bullmqModule);
+vi.mock("ioredis", async () => (await import("./fakes")).ioredisModule);
+vi.mock("@/src/lib/env", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/src/lib/env")>();
+  const { conformanceEnv } = await import("./fakes");
+  return { ...actual, getServerEnv: () => conformanceEnv(actual.getServerEnv()) };
+});
+vi.mock("@/src/lib/worker-health", () => ({
+  createWorkerHealthServer: () => ({ listen() {}, unref() {}, close() {} }),
+  workerHealthPort: () => 0,
+}));
+vi.mock("@/src/lib/automation/background-tasks", async () => (await import("./fakes")).backgroundTasksModule);
+vi.mock("@/src/lib/entitlements/service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/src/lib/entitlements/service")>();
+  const { planStore } = await import("./fakes");
+  const { createMemoryEntitlementRepository } = await import("@/src/lib/entitlements/memory-repository");
+  return {
+    ...actual,
+    getEntitlementService: () => actual.createEntitlementService(createMemoryEntitlementRepository({
+      plan: { monthlyDeliveryLimit: planStore.monthlyDeliveryLimit, sequencesEnabled: true, broadcastsEnabled: true, sequenceLimit: null, monthlyBroadcastLimit: null },
+    }), undefined, 0),
+  };
+});
+vi.mock("@/src/lib/auth/session", async () => ({
+  getValidatedSession: async () => (await import("./fakes")).sessionStore.session,
+}));
+// ---------------------------------------------------------------------------
