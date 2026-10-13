@@ -222,19 +222,6 @@
   cursor: pointer;
 }
 
-.solutionsCaret {
-  inline-size: 6px;
-  block-size: 6px;
-  border-inline-end: 1px solid currentColor;
-  border-block-end: 1px solid currentColor;
-  transform: translateY(-2px) rotate(45deg);
-  transition: transform 220ms cubic-bezier(.43, .195, .02, 1);
-}
-
-.solutionsButton[aria-expanded="true"] .solutionsCaret {
-  transform: translateY(2px) rotate(225deg);
-}
-
 .primaryNavigation > ul > li > a,
 .solutionsButton,
 .login {
@@ -667,6 +654,5 @@
     animation: none;
   }
 
-  .solutionsCaret,
   .linkArrow { transition: none; }
 }

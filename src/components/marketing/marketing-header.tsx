@@ -289,7 +289,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                 onClick={() => togglePanel("solutions")}
                 onPointerEnter={(event) => openOnHover("solutions", event.pointerType)}
               >
-                Solutions <span className={styles.solutionsCaret} aria-hidden="true" />
+                Solutions
               </button>
               {/* Rendered right after its trigger so keyboard and screen-reader
                   order runs straight from the button into the panel. */}
@@ -336,7 +336,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                 onClick={() => togglePanel("resources")}
                 onPointerEnter={(event) => openOnHover("resources", event.pointerType)}
               >
-                Resources <span className={styles.solutionsCaret} aria-hidden="true" />
+                Resources
               </button>
               {activePanel === "resources" ? (
                 <nav id="marketing-resources" className={`${styles.solutionsPanel} ${styles.resourcesPanel}`} aria-label="Resources">
