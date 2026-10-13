@@ -112,7 +112,8 @@ describe("workspace palette contract", () => {
   });
 
   it("uses the brand palette by semantic role", () => {
-    expect(css).toMatch(/\.quickstart-badge\s*{[^}]*background:\s*var\(--volt\)[^}]*color:\s*var\(--on-volt\)/);
+    // Home's "Popular" label is quiet; volt belongs to the plan sticker alone.
+    expect(css).toMatch(/\.start-recipe-title \.quickstart-badge\s*{[^}]*color:\s*var\(--slate\)/);
     expect(css).toMatch(/\.bar-participants,\s*\.swatch-participants\s*{[^}]*background:\s*var\(--slate\)/);
     expect(css).toMatch(/\.bar-sent,\s*\.swatch-sent\s*{[^}]*background:\s*var\(--accent\)/);
     expect(css).toMatch(/\.condition-marker,\s*\.guard-marker\s*{[^}]*background:\s*var\(--surface-sunk\)[^}]*color:\s*var\(--slate\)/);
