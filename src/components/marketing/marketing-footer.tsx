@@ -87,6 +87,7 @@ export function MarketingFooter({ compact = false, siteOrigin }: MarketingFooter
               <span>Linkar</span>
             </Link>
             <p>Linkar keeps repeatable conversations moving and makes human attention count.</p>
+            <MetaApprovedBadge className={styles.trust} />
           </div>
 
           <nav className={styles.navigation} aria-label="Footer">
@@ -111,7 +112,6 @@ export function MarketingFooter({ compact = false, siteOrigin }: MarketingFooter
         </div>
 
         <div className={styles.legalLine}>
-          <MetaApprovedBadge />
           <p>© {year} {copyrightLine()}</p>
           <p>Linkar uses Meta’s supported Instagram and Facebook interfaces. Availability and limits depend on the connected account, Page, and platform policies.</p>
         </div>

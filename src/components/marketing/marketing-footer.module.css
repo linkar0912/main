@@ -61,3 +61,7 @@
     transform: none;
   }
 }
+
+.trust {
+  margin-block-start: 20px;
+}
