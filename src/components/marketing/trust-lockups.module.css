@@ -1,0 +1,61 @@
+/* Each lockup: an icon and two short lines, left-aligned, in the sans face.
+   Set --lockup-cutout to the surface behind the row; the icons' inner
+   details are drawn in it (default: the footer's ink). */
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  color: #ffffff;
+  list-style: none;
+}
+
+/* Zero specificity, so the hero's and footer's own margins win whichever
+   stylesheet loads last. */
+:where(.list) {
+  margin: 0;
+  padding: 0;
+}
+
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  block-size: 28px;
+}
+
+.icon {
+  flex: 0 0 auto;
+  inline-size: 26px;
+  block-size: 26px;
+}
+
+.text {
+  display: grid;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: -.1px;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .list {
+    gap: 16px;
+  }
+
+  .list li {
+    block-size: 24px;
+  }
+
+  .icon {
+    inline-size: 22px;
+    block-size: 22px;
+  }
+
+  .text {
+    font-size: 12px;
+    line-height: 13px;
+  }
+}

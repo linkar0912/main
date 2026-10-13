@@ -51,42 +51,12 @@
    partner row (28px-tall logos, ~20px apart, ~40px above the photo's edge).
    The text inside reads as part of each small logo, so it is logo-sized. */
 .trustStrip {
+  --lockup-cutout: #1d1410;
   position: absolute;
   z-index: 2;
   inset-inline-start: clamp(32px, 4.45vw, 72px);
   inset-block-end: 40px;
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  margin: 0;
-  padding: 0;
-  color: #ffffff;
-  list-style: none;
   animation: fade-up 700ms cubic-bezier(.22, .61, .21, 1) 420ms both;
-}
-
-.trustStrip li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  block-size: 28px;
-}
-
-/* Each lockup: an icon and two short lines, left-aligned, in the sans face. */
-.lockupIcon {
-  flex: 0 0 auto;
-  inline-size: 26px;
-  block-size: 26px;
-}
-
-.lockupText {
-  display: grid;
-  font-family: var(--font-sans, ui-sans-serif, sans-serif);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 14px;
-  letter-spacing: -.1px;
-  white-space: nowrap;
 }
 
 @media (max-width: 720px) {
@@ -96,22 +66,7 @@
     position: relative;
     inset: auto;
     justify-self: start;
-    gap: 16px;
     margin: 0 20px 28px;
-  }
-
-  .trustStrip li {
-    block-size: 24px;
-  }
-
-  .lockupIcon {
-    inline-size: 22px;
-    block-size: 22px;
-  }
-
-  .lockupText {
-    font-size: 12px;
-    line-height: 13px;
   }
 }
 

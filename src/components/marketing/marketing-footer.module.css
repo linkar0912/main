@@ -63,5 +63,15 @@
 }
 
 .trust {
-  margin-block-start: 20px;
+  --lockup-cutout: var(--marketing-inverse, #101116);
+  margin-block-start: 28px;
+}
+
+/* One row on wider screens: the row may run past the brand column's
+   34ch text measure, which only exists for the paragraph above it. */
+@media (min-width: 768px) {
+  .trust {
+    flex-wrap: nowrap;
+    inline-size: max-content;
+  }
 }

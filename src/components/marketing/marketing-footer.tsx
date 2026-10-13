@@ -1,9 +1,9 @@
-import { MetaApprovedBadge } from "./meta-approved-badge";
 import Link from "next/link";
 import { LEGAL_ENTITY, legalCopyrightHolder } from "@/src/lib/legal-entity";
 import { isMarketingPath, marketingHref } from "@/src/lib/site-routing";
 import { LinkarMark } from "../linkar-mark";
 import styles from "./marketing-footer.module.css";
+import { TrustLockups } from "./trust-lockups";
 
 const columns = [
   {
@@ -87,7 +87,7 @@ export function MarketingFooter({ compact = false, siteOrigin }: MarketingFooter
               <span>Linkar</span>
             </Link>
             <p>Linkar keeps repeatable conversations moving and makes human attention count.</p>
-            <MetaApprovedBadge className={styles.trust} />
+            <TrustLockups className={styles.trust} />
           </div>
 
           <nav className={styles.navigation} aria-label="Footer">
