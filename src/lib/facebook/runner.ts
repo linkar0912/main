@@ -168,8 +168,10 @@ async function deliverPublicReply(
   const providerStartedAt = performance.now();
   timingObserver?.providerStarted();
   let sendResult: { id?: string };
+  let posted = false;
   try {
     sendResult = await post(text);
+    posted = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof FacebookApiError && error.responseReceived && error.status > 0) {
@@ -186,7 +188,7 @@ async function deliverPublicReply(
     await repository.markOutboundDeliveryUnknown(request.deliveryKey, owner, message).catch(() => false);
     return { status: "UNKNOWN" };
   } finally {
-    timingObserver?.providerFinished(performance.now() - providerStartedAt);
+    timingObserver?.providerFinished(performance.now() - providerStartedAt, posted);
   }
   const completed = await repository.completeOutboundDelivery(
     request.deliveryKey,

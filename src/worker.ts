@@ -25,7 +25,7 @@ import { createWorkerHealthServer, workerHealthPort } from "./lib/worker-health"
 import { reconcileUsageReservations } from "./lib/admin/system/usage-reconciliation";
 import { sweepLapsedBillingEntitlements } from "./lib/billing/expiry-sweep";
 import { processAdminDeletion } from "./lib/admin/deletion/processor";
-import { createDeliveryTiming } from "./lib/automation/delivery-timing";
+import { createDeliveryTiming, instrumentRepository } from "./lib/automation/delivery-timing";
 import { createSystemMonitor } from "./lib/admin/system/monitor";
 import { reportDatabaseLatency } from "./lib/database-latency";
 import { runWithSendDeferral } from "./lib/automation/job-deferral";
@@ -41,29 +41,39 @@ const SEQUENCE_MAX_ROUNDS_PER_TICK = 20;
 /** How long shutdown waits for a running sweep before closing connections anyway. */
 const SHUTDOWN_DRAIN_TIMEOUT_MS = 25_000;
 
+/**
+ * Runs one realtime event and logs a single line with where its time went:
+ * webhook -> enqueue -> queue wait -> database rounds -> Meta, plus
+ * firstReplyMs (webhook arrival to Meta accepting the first message). Only
+ * durations, counts and the event type - never ids, text or tokens.
+ * scripts/reply-latency.mjs turns these lines into p50/p90.
+ */
 async function processTimedRealtimeJob<T>(
-  jobId: string | undefined,
+  job: { id?: string; eventType: string; ingestedAt: number; receivedAt?: number },
   channel: "instagram" | "facebook",
-  ingestedAt: number,
-  operation: (timing: ReturnType<typeof createDeliveryTiming>) => Promise<T>,
+  operation: (
+    timing: ReturnType<typeof createDeliveryTiming>,
+    repository: ReturnType<typeof getRepository>,
+  ) => Promise<T>,
 ): Promise<T> {
-  const timing = createDeliveryTiming(ingestedAt);
+  const timing = createDeliveryTiming(job.ingestedAt, undefined, job.receivedAt);
   timing.workerStarted();
   let outcome: "completed" | "failed" = "completed";
   let errorCode: string | undefined;
   try {
-    return await operation(timing);
+    return await operation(timing, instrumentRepository(getRepository(), timing));
   } catch (error) {
     outcome = "failed";
     errorCode = error instanceof Error ? error.name : "UnknownError";
     throw error;
   } finally {
     logger.info("Realtime automation timing", {
-      jobId: jobId ?? "unknown",
+      jobId: job.id ?? "unknown",
       channel,
+      eventType: job.eventType,
       outcome,
       ...(errorCode ? { errorCode } : {}),
-      ...timing.snapshot(),
+      ...timing.realtimeSnapshot(),
     });
   }
 }
@@ -129,14 +139,15 @@ if (!env.redisUrl) {
       }
 
       if (job.name === "facebook-event") {
-        const { linkarIngestedAt, ...event } = job.data as QueuedFacebookEvent;
+        const { linkarIngestedAt, linkarReceivedAt, ...event } = job.data as QueuedFacebookEvent;
         const client = env.facebookAppId ? new FacebookClient({
           apiVersion: env.facebookApiVersion,
           requestTimeoutMs: env.providerRequestTimeoutMs,
           appSecret: env.facebookAppSecret,
         }) : undefined;
-        return processTimedRealtimeJob(job.id, "facebook", linkarIngestedAt, (timing) =>
-          processNormalizedFacebookEvent(event, getRepository(), {
+        const timed = { id: job.id, eventType: "comment.created", ingestedAt: linkarIngestedAt, receivedAt: linkarReceivedAt };
+        return processTimedRealtimeJob(timed, "facebook", (timing, repository) =>
+          processNormalizedFacebookEvent(event, repository, {
             client,
             tokenEncryptionKey: env.facebookTokenEncryptionKey ?? env.metaTokenEncryptionKey,
             timingObserver: timing,
@@ -158,13 +169,14 @@ if (!env.redisUrl) {
       }
 
       if (job.name === "instagram-event") {
-        const { linkarIngestedAt, ...event } = job.data as QueuedInstagramEvent;
+        const { linkarIngestedAt, linkarReceivedAt, ...event } = job.data as QueuedInstagramEvent;
         const client = env.metaAppId ? new MetaClient({
           apiVersion: env.metaApiVersion,
           requestTimeoutMs: env.providerRequestTimeoutMs,
         }) : undefined;
-        return processTimedRealtimeJob(job.id, "instagram", linkarIngestedAt, (timing) =>
-          processNormalizedEvent(event, getRepository(), {
+        const timed = { id: job.id, eventType: event.type, ingestedAt: linkarIngestedAt, receivedAt: linkarReceivedAt };
+        return processTimedRealtimeJob(timed, "instagram", (timing, repository) =>
+          processNormalizedEvent(event, repository, {
             client,
             tokenEncryptionKey: env.metaTokenEncryptionKey,
             interactionSecret: env.metaAppSecret,
@@ -172,6 +184,7 @@ if (!env.redisUrl) {
             finalAttempt: job.attemptsMade + 1 >= Number(job.opts.attempts ?? 1),
             dispatchLeaseMs: env.dispatchLeaseMs,
             timingObserver: timing,
+            receivedAt: linkarReceivedAt ?? linkarIngestedAt,
           }));
       }
 

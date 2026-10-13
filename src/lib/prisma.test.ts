@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 import { createPrismaRepository, prisma } from "./prisma";
 import type { FlowDefinition } from "./automation/types";
 
@@ -6,7 +7,7 @@ import type { FlowDefinition } from "./automation/types";
 // clearable participant diagnostic/error fields, without touching a real database. They
 // inject a mock Prisma client into createPrismaRepository (the same injection seam the
 // repository already exposes) and assert on the exact `data` payload the repository would
-// send to Prisma's `automationParticipant.updateMany`.
+// send to Prisma's `automationParticipant.updateManyAndReturn`.
 //
 // Why this matters: campaign-runner.ts clears a stale diagnostic field (e.g. after a retried
 // action finally succeeds) by including the field in a transitionParticipant patch with value
@@ -51,10 +52,11 @@ function fakeParticipantRecord(overrides: Record<string, unknown> = {}) {
 }
 
 function createMockPrismaClient() {
-  const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+  // transitionParticipant writes and reads back in one UPDATE ... RETURNING.
+  const updateMany = vi.fn().mockResolvedValue([fakeParticipantRecord()]);
   const findUnique = vi.fn().mockResolvedValue(fakeParticipantRecord());
   const client = {
-    automationParticipant: { updateMany, findUnique },
+    automationParticipant: { updateManyAndReturn: updateMany, findUnique },
   } as unknown as typeof prisma;
   return { client, updateMany, findUnique };
 }
@@ -89,6 +91,22 @@ describe("mapParticipantPatch (via transitionParticipant)", () => {
     const data = updateMany.mock.calls[0]?.[0]?.data as Record<string, unknown>;
     expect(Object.prototype.hasOwnProperty.call(data, "publicReplyError")).toBe(false);
     expect(data.state).toBe("OPTED_IN");
+  });
+
+  it("transitions in one statement, without a second round trip to re-read the row", async () => {
+    const { client, updateMany, findUnique } = createMockPrismaClient();
+    const repository = createPrismaRepository(client);
+
+    await expect(repository.transitionParticipant("participant_1", ["OPENING_SENT"], { state: "OPTED_IN" }))
+      .resolves.toMatchObject({ id: "participant_1" });
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "participant_1", state: { in: ["OPENING_SENT"] } },
+    }));
+    expect(findUnique).not.toHaveBeenCalled();
+
+    updateMany.mockResolvedValueOnce([]);
+    await expect(repository.transitionParticipant("participant_1", ["OPENING_SENT"], { state: "OPTED_IN" }))
+      .resolves.toBeNull();
   });
 
   it("passes through a real error message unchanged (does not null out a live diagnostic)", async () => {
@@ -380,6 +398,183 @@ describe("Prisma outbound delivery ledger", () => {
       3,
     )).rejects.toThrow("utcDate must use YYYY-MM-DD");
     expect(queryRaw).not.toHaveBeenCalled();
+  });
+});
+
+// Every statement is a network round trip to a database on another continent,
+// and these sit between Meta's webhook and the reply - so the number of
+// statements each one sends is part of its contract.
+describe("realtime send path statement counts", () => {
+  const prepareInput = {
+    deliveryKey: "automation:automation_1:event:comment_1:action:0",
+    workspaceId: "workspace_1",
+    kind: "CLASSIC_ACTION" as const,
+    recipientId: "person_1",
+    instagramAccountId: "ig_1",
+    automationId: "automation_1",
+    payload: { type: "private_reply", text: "Hi" },
+    owner: "worker_a",
+    leaseUntil: "2026-08-23T10:05:00.000Z",
+    periodStart: "2026-08-01",
+    monthlyLimit: 100,
+  };
+
+  function uniqueViolation(target: string[]) {
+    return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+      code: "P2002",
+      clientVersion: "6.19.3",
+      meta: { target },
+    });
+  }
+
+  it("claims a fresh delivery and reserves its usage slot in one statement", async () => {
+    const queryRaw = vi.fn().mockResolvedValue([{
+      source: "claimed",
+      ...fakeOutboundDeliveryRecord({ state: "CLAIMED", claimOwner: "worker_a", attemptCount: 1 }),
+      alreadyReserved: false,
+      counted: true,
+    }]);
+    const repository = createPrismaRepository({ $queryRaw: queryRaw } as unknown as typeof prisma);
+
+    await expect(repository.prepareOutboundDelivery(prepareInput)).resolves.toMatchObject({
+      status: "CLAIMED",
+      record: { state: "CLAIMED", claimOwner: "worker_a", attemptCount: 1 },
+    });
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const sql = (queryRaw.mock.calls[0]?.[0] as Prisma.Sql).sql;
+    // The claim only takes PENDING or retryable FAILED rows, and usage is
+    // counted only for the row this statement claimed.
+    expect(sql).toContain(`WHERE "OutboundDelivery"."state" = 'PENDING'`);
+    expect(sql).toContain(`OR ("OutboundDelivery"."state" = 'FAILED' AND "OutboundDelivery"."retryable")`);
+    expect(sql).toMatch(/counted AS \(\s+INSERT INTO "WorkspaceUsagePeriod"[\s\S]+FROM claimed/);
+  });
+
+  it("reports a terminal delivery from the same statement, without a second read", async () => {
+    const queryRaw = vi.fn().mockResolvedValue([{
+      source: "current",
+      ...fakeOutboundDeliveryRecord({ state: "SENT", providerMessageId: "mid_1" }),
+      alreadyReserved: false,
+      counted: false,
+    }]);
+    const findUniqueOrThrow = vi.fn();
+    const repository = createPrismaRepository({
+      $queryRaw: queryRaw,
+      outboundDelivery: { findUniqueOrThrow },
+    } as unknown as typeof prisma);
+
+    await expect(repository.prepareOutboundDelivery(prepareInput))
+      .resolves.toMatchObject({ status: "TERMINAL", record: { state: "SENT" } });
+    expect(findUniqueOrThrow).not.toHaveBeenCalled();
+  });
+
+  it("re-reads the row when another caller claimed it during the statement", async () => {
+    // The snapshot still shows PENDING, but the claim lost: someone else holds it now.
+    const queryRaw = vi.fn().mockResolvedValue([{
+      source: "current",
+      ...fakeOutboundDeliveryRecord({ state: "PENDING" }),
+      alreadyReserved: false,
+      counted: false,
+    }]);
+    const findUniqueOrThrow = vi.fn().mockResolvedValue(fakeOutboundDeliveryRecord({ state: "CLAIMED", claimOwner: "worker_b" }));
+    const repository = createPrismaRepository({
+      $queryRaw: queryRaw,
+      outboundDelivery: { findUniqueOrThrow },
+    } as unknown as typeof prisma);
+
+    await expect(repository.prepareOutboundDelivery(prepareInput))
+      .resolves.toMatchObject({ status: "BUSY", record: { claimOwner: "worker_b" } });
+  });
+
+  it("marks the claimed delivery suppressed when the monthly limit is reached", async () => {
+    const queryRaw = vi.fn().mockResolvedValue([{
+      source: "claimed",
+      ...fakeOutboundDeliveryRecord({ state: "CLAIMED", claimOwner: "worker_a" }),
+      alreadyReserved: false,
+      counted: false,
+    }]);
+    const update = vi.fn().mockResolvedValue(fakeOutboundDeliveryRecord({ state: "FAILED", resultCode: "SUPPRESSED" }));
+    const repository = createPrismaRepository({
+      $queryRaw: queryRaw,
+      outboundDelivery: { update },
+    } as unknown as typeof prisma);
+
+    await expect(repository.prepareOutboundDelivery(prepareInput)).resolves.toMatchObject({ status: "QUOTA_REJECTED" });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ state: "FAILED", resultCode: "SUPPRESSED", lastError: "Monthly delivery limit reached" }),
+    }));
+  });
+
+  it("completes a sent delivery with one UPDATE that only its claim owner can apply", async () => {
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const repository = createPrismaRepository({ $executeRaw: executeRaw } as unknown as typeof prisma);
+
+    await expect(repository.completeOutboundDelivery("key_1", "worker_a", "mid_1", "2026-08-23T10:01:00.000Z")).resolves.toBe(true);
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    const statement = executeRaw.mock.calls[0]?.[0] as Prisma.Sql;
+    expect(statement.sql).toContain(`AND "state" = 'CLAIMED'`);
+    expect(statement.text).toContain(`AND "claimOwner" = $`);
+    expect(statement.values).toEqual(expect.arrayContaining(["key_1", "worker_a", "mid_1", "2026-08-23T10:01:00.000Z"]));
+
+    executeRaw.mockResolvedValueOnce(0);
+    await expect(repository.completeOutboundDelivery("key_1", "worker_b", "mid_1", "2026-08-23T10:01:00.000Z")).resolves.toBe(false);
+  });
+
+  describe("claimExecutionDispatch", () => {
+    const claim = {
+      workspaceId: "workspace_1",
+      automationId: "automation_1",
+      externalEventId: "comment_1",
+      dedupeKey: "campaign:participant_1:opening_reply",
+      dispatchOwner: "owner_1",
+      dispatchStartedAt: "2026-08-21T10:00:00.000Z",
+      dispatchLeaseExpiresAt: "2026-08-21T10:00:30.000Z",
+    };
+
+    function executionClient() {
+      const create = vi.fn().mockResolvedValue({});
+      const findFirst = vi.fn().mockResolvedValue(null);
+      const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+      const client = { automationExecution: { create, findFirst, updateMany } } as unknown as typeof prisma;
+      return { client, create, findFirst, updateMany };
+    }
+
+    it("claims a new action with a single insert", async () => {
+      const { client, create, findFirst, updateMany } = executionClient();
+      await expect(createPrismaRepository(client).claimExecutionDispatch(claim)).resolves.toBe(true);
+      expect(create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ status: "PROCESSING", dispatchStatus: "DISPATCHING", dispatchOwner: "owner_1", dedupeKey: claim.dedupeKey }),
+      });
+      expect(findFirst).not.toHaveBeenCalled();
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it("refuses an owner token the unique index says is already used", async () => {
+      const { client, create, updateMany } = executionClient();
+      create.mockRejectedValue(uniqueViolation(["dispatchOwner"]));
+      await expect(createPrismaRepository(client).claimExecutionDispatch(claim)).resolves.toBe(false);
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it("with onlyIfNew, leaves an existing row for the caller to inspect", async () => {
+      const { client, create, findFirst, updateMany } = executionClient();
+      create.mockRejectedValue(uniqueViolation(["workspaceId", "dedupeKey"]));
+      await expect(createPrismaRepository(client).claimExecutionDispatch(claim, { onlyIfNew: true })).resolves.toBe(false);
+      expect(findFirst).not.toHaveBeenCalled();
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it("takes over an existing claimable row with the compare-and-set update", async () => {
+      const { client, create, findFirst, updateMany } = executionClient();
+      create.mockRejectedValue(uniqueViolation(["workspaceId", "dedupeKey"]));
+      await expect(createPrismaRepository(client).claimExecutionDispatch(claim)).resolves.toBe(true);
+      expect(findFirst).toHaveBeenCalledWith({ where: { dispatchOwner: "owner_1" }, select: { id: true } });
+      expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ dedupeKey: claim.dedupeKey, status: "PROCESSING" }),
+      }));
+
+      findFirst.mockResolvedValueOnce({ id: "execution_other" });
+      await expect(createPrismaRepository(client).claimExecutionDispatch(claim)).resolves.toBe(false);
+    });
   });
 });
 

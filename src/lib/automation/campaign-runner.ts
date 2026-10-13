@@ -276,6 +276,24 @@ async function prepareDeliveryAction(
   externalEventId: string,
   dispatchLeaseMs: number,
 ): Promise<PreparedDeliveryAction> {
+  // Fast path: nothing is recorded for this action yet (a fresh participant's
+  // first attempt), so claim it with a single insert. Any existing row - sent,
+  // failed, in flight or historical - makes the insert refuse, and the loop
+  // below inspects it exactly as before.
+  const firstOwner = randomUUID();
+  const firstStartedAt = Date.now();
+  if (await repository.claimExecutionDispatch({
+    workspaceId: participant.workspaceId,
+    automationId: participant.automationId,
+    externalEventId,
+    dedupeKey: actionDedupeKey(participant.id, action),
+    dispatchOwner: firstOwner,
+    dispatchStartedAt: new Date(firstStartedAt).toISOString(),
+    dispatchLeaseExpiresAt: new Date(firstStartedAt + dispatchLeaseMs).toISOString(),
+  }, { onlyIfNew: true })) {
+    return { kind: "send", dispatchOwner: firstOwner };
+  }
+
   // Loop instead of recursing on contention so pathological claim races cannot
   // build up unbounded call stacks; each iteration re-reads current state.
   for (; ;) {

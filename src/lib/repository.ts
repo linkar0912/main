@@ -995,7 +995,13 @@ export interface AutomationRepository {
   /** Inserts execution outcomes in one duplicate-safe batch. */
   recordExecutions(inputs: RecordExecutionInput[]): Promise<number>;
   claimExecution(input: ClaimExecutionInput): Promise<boolean>;
-  claimExecutionDispatch(input: ClaimExecutionDispatchInput): Promise<boolean>;
+  /**
+   * Advances (or creates) the execution row to DISPATCHING under a one-shot
+   * owner token. `onlyIfNew` claims only when nothing is recorded for the key
+   * yet - one statement on the realtime path - and otherwise returns false so
+   * the caller can inspect the existing row.
+   */
+  claimExecutionDispatch(input: ClaimExecutionDispatchInput, options?: { onlyIfNew?: boolean }): Promise<boolean>;
   getExecution(workspaceId: string, dedupeKey: string): Promise<ExecutionRecord | null>;
   listAutomationExecutions(workspaceId: string, automationId: string, limit: number): Promise<ExecutionRecord[]>;
   completeExecution(workspaceId: string, dedupeKey: string, result: CompleteExecutionResult): Promise<void>;

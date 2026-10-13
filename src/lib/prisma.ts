@@ -708,23 +708,54 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     return transaction.automationContact.findUniqueOrThrow({ where: { id: locked.id } });
   }
 
-  async function claimExecutionDispatch(input: Parameters<AutomationRepository["claimExecutionDispatch"]>[0]): Promise<boolean> {
+  async function claimExecutionDispatch(
+    input: Parameters<AutomationRepository["claimExecutionDispatch"]>[0],
+    options: Parameters<AutomationRepository["claimExecutionDispatch"]>[1] = {},
+  ): Promise<boolean> {
     // Two callers share a dedupeKey: `recordExecution` first writes a
     // PROCESSING/CLAIMED row, then `claimExecutionDispatch` advances it
     // to DISPATCHING.
     //
     // dispatchOwner must be unique across all rows (the worker that
-    // generates it treats it as a one-shot lease token). Reject reuse
-    // before attempting to claim so a token recycled by mistake cannot
-    // clobber an in-flight dispatch.
+    // generates it treats it as a one-shot lease token). The unique index
+    // on "dispatchOwner" enforces that in the database itself, so a reused
+    // token surfaces as a P2002 on that column and the claim is refused -
+    // two rows can never share an owner, even under a race.
+    const dispatchStartedAt = new Date(input.dispatchStartedAt);
+    const dispatchLeaseExpiresAt = new Date(input.dispatchLeaseExpiresAt);
+    const ownerCollision = (error: unknown) =>
+      error instanceof Prisma.PrismaClientKnownRequestError
+      && error.code === "P2002"
+      && JSON.stringify(error.meta?.target ?? "").includes("dispatchOwner");
+
+    // Most claims are for an action nothing has recorded yet, so try the
+    // insert first: one statement on the realtime path instead of a read,
+    // an update that matches nothing, and then the insert.
+    try {
+      await client.automationExecution.create({
+        data: {
+          id: createId("execution"),
+          status: "PROCESSING",
+          dispatchStatus: "DISPATCHING",
+          ...input,
+          dispatchStartedAt,
+          dispatchLeaseExpiresAt,
+        },
+      });
+      return true;
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      if (ownerCollision(error) || options.onlyIfNew) return false;
+    }
+
+    // The key already exists. A token that was ever used is refused, even on
+    // this same row, exactly as before the insert-first fast path.
     const ownerTaken = await client.automationExecution.findFirst({
       where: { dispatchOwner: input.dispatchOwner },
       select: { id: true },
     });
     if (ownerTaken) return false;
 
-    const dispatchStartedAt = new Date(input.dispatchStartedAt);
-    const dispatchLeaseExpiresAt = new Date(input.dispatchLeaseExpiresAt);
     // The WHERE clause below encodes the entire claimability rule - a
     // separate read-then-upsert (the previous approach) leaves a window
     // between the read and the write where two concurrent callers can
@@ -737,60 +768,31 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     // one caller's statement can ever match and flip the row - mirrors
     // the same compare-and-set pattern already used by
     // completeOwnedExecution/failAbandonedExecution below.
-    const claimable = {
-      workspaceId: input.workspaceId,
-      dedupeKey: input.dedupeKey,
-      status: "PROCESSING" as const,
-      OR: [
-        { dispatchStatus: { not: "DISPATCHING" as const } },
-        { dispatchOwner: null },
-        { dispatchOwner: input.dispatchOwner },
-      ],
-    };
-    const claim = {
-      dispatchStatus: "DISPATCHING" as const,
-      dispatchOwner: input.dispatchOwner,
-      dispatchStartedAt,
-      dispatchLeaseExpiresAt,
-    };
-    // Post-claim re-check: a raced create/update can leave two rows owned by
-    // the same token (ownerTaken ran before either write). Revert our row so
-    // both racers return false and the work stays claimable - eventual
-    // consistency without needing a transaction around the claim itself.
-    const confirmSoleOwner = async (): Promise<boolean> => {
-      const owned = await client.automationExecution.count({ where: { dispatchOwner: input.dispatchOwner } });
-      if (owned <= 1) return true;
-      await client.automationExecution.updateMany({
-        where: { workspaceId: input.workspaceId, dedupeKey: input.dedupeKey, dispatchOwner: input.dispatchOwner },
-        data: { dispatchOwner: null },
-      });
-      return false;
-    };
-    const claimed = await client.automationExecution.updateMany({ where: claimable, data: claim });
-    if (claimed.count === 1) return confirmSoleOwner();
-
-    // No row matched: either recordExecution has not run yet for this key
-    // (first claim), or one exists but is not currently claimable (e.g.
-    // actively dispatched by a different owner - correctly leave it
-    // alone). Try to create; a collision means the row already existed,
-    // so re-run the same atomic conditional update to find out whether it
-    // was ours to take.
     try {
-      await client.automationExecution.create({
-        data: {
-          id: createId("execution"),
+      const claimed = await client.automationExecution.updateMany({
+        where: {
+          workspaceId: input.workspaceId,
+          dedupeKey: input.dedupeKey,
           status: "PROCESSING",
+          OR: [
+            { dispatchStatus: { not: "DISPATCHING" } },
+            { dispatchOwner: null },
+            { dispatchOwner: input.dispatchOwner },
+          ],
+        },
+        data: {
           dispatchStatus: "DISPATCHING",
-          ...input,
+          dispatchOwner: input.dispatchOwner,
           dispatchStartedAt,
           dispatchLeaseExpiresAt,
         },
       });
-      return confirmSoleOwner();
+      return claimed.count === 1;
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-      const retried = await client.automationExecution.updateMany({ where: claimable, data: claim });
-      return retried.count === 1 ? confirmSoleOwner() : false;
+      // A concurrent caller took this owner token between the check and the
+      // update; the unique index refused ours.
+      if (ownerCollision(error)) return false;
+      throw error;
     }
   }
 
@@ -1834,8 +1836,8 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return taken.count === 1;
     },
 
-    async claimExecutionDispatch(input) {
-      return claimExecutionDispatch(input);
+    async claimExecutionDispatch(input, options) {
+      return claimExecutionDispatch(input, options);
     },
 
     async getExecution(workspaceId, dedupeKey) {
@@ -2027,110 +2029,97 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async prepareOutboundDelivery(input) {
       const { owner, leaseUntil, periodStart, monthlyLimit, ...deliveryInput } = input;
       const periodStartDate = new Date(`${periodStart}T00:00:00.000Z`);
-      const claim = await client.$transaction(async (transaction) => {
-        const existing = await transaction.outboundDelivery.upsert({
-          where: { deliveryKey: input.deliveryKey },
-          create: {
-            id: createId("delivery"),
-            ...deliveryInput,
-            payload: deliveryInput.payload as Prisma.InputJsonValue,
-          },
-          update: {},
-        });
-
-        if (
-          existing.state === "SENT"
-          || existing.state === "UNKNOWN"
-          || (existing.state === "FAILED" && !existing.retryable)
-        ) {
-          return { result: { status: "TERMINAL" as const, record: mapOutboundDelivery(existing) } };
-        }
-        if (existing.state === "CLAIMED") {
-          return { result: { status: "BUSY" as const, record: mapOutboundDelivery(existing) } };
-        }
-
-        const [claimed] = await transaction.outboundDelivery.updateManyAndReturn({
-          where: {
-            deliveryKey: input.deliveryKey,
-            OR: [{ state: "PENDING" }, { state: "FAILED", retryable: true }],
-          },
-          data: {
-            state: "CLAIMED",
-            retryable: false,
-            resultCode: null,
-            claimOwner: owner,
-            claimExpiresAt: new Date(leaseUntil),
-            attemptCount: { increment: 1 },
-            lastError: null,
-          },
-        });
-        if (!claimed) {
-          const winner = await transaction.outboundDelivery.findUniqueOrThrow({
-            where: { deliveryKey: input.deliveryKey },
-          });
-          return {
-            result: {
-              status: winner.state === "CLAIMED" ? "BUSY" as const : "TERMINAL" as const,
-              record: mapOutboundDelivery(winner),
-            },
-          };
-        }
-        return { claimed };
-      });
-      if (!claim.claimed) return claim.result;
-      const { claimed } = claim;
-
-      // The monthly counter is one row per workspace that every send updates,
-      // so it is reserved in a single autocommit statement after the claim
-      // commits: the row lock is then held for that statement alone rather than
-      // across the transaction's remaining network round trips. The claim makes
-      // this delivery key exclusive to this caller, so the reservation check
-      // cannot race another caller for the same key.
-      let usage: { alreadyReserved: boolean; counted: boolean };
-      try {
-        const withinLimit = monthlyLimit === null
-          ? Prisma.sql`TRUE`
-          : Prisma.sql`"WorkspaceUsagePeriod"."deliveriesReserved" < ${monthlyLimit}`;
-        const firstFits = monthlyLimit === null ? Prisma.sql`TRUE` : Prisma.sql`${monthlyLimit} > 0`;
-        const [row] = await client.$queryRaw<Array<{ alreadyReserved: boolean; counted: boolean }>>(Prisma.sql`
-          WITH existing AS (
-            SELECT 1 FROM "WorkspaceUsageReservation" WHERE "deliveryKey" = ${input.deliveryKey}
-          ), counted AS (
-            INSERT INTO "WorkspaceUsagePeriod" ("workspaceId", "periodStart", "deliveriesReserved", "updatedAt")
-            SELECT ${claimed.workspaceId}, ${periodStartDate}::date, 1, NOW()
-            WHERE NOT EXISTS (SELECT 1 FROM existing) AND ${firstFits}
-            ON CONFLICT ("workspaceId", "periodStart") DO UPDATE
-              SET "deliveriesReserved" = "WorkspaceUsagePeriod"."deliveriesReserved" + 1,
-                  "updatedAt" = NOW()
-              WHERE ${withinLimit}
-            RETURNING 1
-          ), reserved AS (
-            INSERT INTO "WorkspaceUsageReservation" ("deliveryKey", "workspaceId", "periodStart")
-            SELECT ${input.deliveryKey}, ${claimed.workspaceId}, ${periodStartDate}::date FROM counted
-            ON CONFLICT ("deliveryKey") DO NOTHING
-            RETURNING 1
+      const nowIso = new Date().toISOString();
+      const withinLimit = monthlyLimit === null
+        ? Prisma.sql`TRUE`
+        : Prisma.sql`"WorkspaceUsagePeriod"."deliveriesReserved" < ${monthlyLimit}`;
+      const firstFits = monthlyLimit === null ? Prisma.sql`TRUE` : Prisma.sql`${monthlyLimit} > 0`;
+      // One autocommit statement - create-or-claim the ledger row, then reserve
+      // this month's usage slot for it - because every statement is a network
+      // round trip to the database and this one sits right in front of the
+      // Meta send. The claim stays exclusive (ON CONFLICT ... WHERE re-checks
+      // the latest committed row under its lock) and the usage CTEs only run
+      // for the row this statement claimed, exactly as when they were separate
+      // statements. Locks on the ledger row and the shared monthly counter last
+      // for this statement alone, and a failure rolls the claim back together
+      // with the reservation. Only the rare outcomes (already claimed or
+      // terminal, over the monthly limit, a lost race) need a second statement.
+      type PreparedRow = Parameters<typeof mapOutboundDelivery>[0] & {
+        source: "claimed" | "current";
+        alreadyReserved: boolean;
+        counted: boolean;
+      };
+      const rows = await client.$queryRaw<PreparedRow[]>(Prisma.sql`
+        WITH claimed AS (
+          INSERT INTO "OutboundDelivery" (
+            "id", "deliveryKey", "workspaceId", "kind", "recipientId", "instagramAccountId",
+            "automationId", "participantId", "sequenceEnrollmentId", "broadcastId", "payload",
+            "state", "retryable", "claimOwner", "claimExpiresAt", "attemptCount", "createdAt", "updatedAt"
+          ) VALUES (
+            ${createId("delivery")}, ${deliveryInput.deliveryKey}, ${deliveryInput.workspaceId}, ${deliveryInput.kind},
+            ${deliveryInput.recipientId ?? null}, ${deliveryInput.instagramAccountId ?? null},
+            ${deliveryInput.automationId ?? null}, ${deliveryInput.participantId ?? null},
+            ${deliveryInput.sequenceEnrollmentId ?? null}, ${deliveryInput.broadcastId ?? null},
+            ${JSON.stringify(deliveryInput.payload)}::jsonb,
+            'CLAIMED', FALSE, ${owner}, (${leaseUntil}::timestamptz AT TIME ZONE 'UTC'), 1,
+            (${nowIso}::timestamptz AT TIME ZONE 'UTC'), (${nowIso}::timestamptz AT TIME ZONE 'UTC')
           )
-          SELECT EXISTS (SELECT 1 FROM existing) AS "alreadyReserved",
-                 EXISTS (SELECT 1 FROM counted) AS "counted"
-        `);
-        usage = row!;
-      } catch (error) {
-        // An expired claim is reconciled as UNKNOWN (possibly sent) and never
-        // retried, so hand the delivery back as retryable before failing.
-        await client.outboundDelivery.updateMany({
-          where: { deliveryKey: input.deliveryKey, state: "CLAIMED", claimOwner: owner },
-          data: {
-            state: "FAILED",
-            retryable: true,
-            claimOwner: null,
-            claimExpiresAt: null,
-            lastError: "Usage reservation failed",
-          },
-        }).catch(() => undefined);
-        throw error;
+          ON CONFLICT ("deliveryKey") DO UPDATE
+            SET "state" = 'CLAIMED',
+                "retryable" = FALSE,
+                "resultCode" = NULL,
+                "claimOwner" = EXCLUDED."claimOwner",
+                "claimExpiresAt" = EXCLUDED."claimExpiresAt",
+                "attemptCount" = "OutboundDelivery"."attemptCount" + 1,
+                "lastError" = NULL,
+                "updatedAt" = EXCLUDED."updatedAt"
+            WHERE "OutboundDelivery"."state" = 'PENDING'
+               OR ("OutboundDelivery"."state" = 'FAILED' AND "OutboundDelivery"."retryable")
+          RETURNING *
+        ), existing AS (
+          SELECT 1 FROM "WorkspaceUsageReservation" WHERE "deliveryKey" = ${input.deliveryKey}
+        ), counted AS (
+          INSERT INTO "WorkspaceUsagePeriod" ("workspaceId", "periodStart", "deliveriesReserved", "updatedAt")
+          SELECT claimed."workspaceId", ${periodStartDate}::date, 1, NOW() FROM claimed
+          WHERE NOT EXISTS (SELECT 1 FROM existing) AND ${firstFits}
+          ON CONFLICT ("workspaceId", "periodStart") DO UPDATE
+            SET "deliveriesReserved" = "WorkspaceUsagePeriod"."deliveriesReserved" + 1,
+                "updatedAt" = NOW()
+            WHERE ${withinLimit}
+          RETURNING 1
+        ), reserved AS (
+          INSERT INTO "WorkspaceUsageReservation" ("deliveryKey", "workspaceId", "periodStart")
+          SELECT ${input.deliveryKey}, claimed."workspaceId", ${periodStartDate}::date FROM claimed
+          WHERE EXISTS (SELECT 1 FROM counted)
+          ON CONFLICT ("deliveryKey") DO NOTHING
+          RETURNING 1
+        )
+        SELECT 'claimed' AS "source", claimed.*,
+               EXISTS (SELECT 1 FROM existing) AS "alreadyReserved",
+               EXISTS (SELECT 1 FROM counted) AS "counted"
+        FROM claimed
+        UNION ALL
+        SELECT 'current' AS "source", current_row.*, FALSE, FALSE
+        FROM "OutboundDelivery" current_row
+        WHERE current_row."deliveryKey" = ${input.deliveryKey}
+          AND NOT EXISTS (SELECT 1 FROM claimed)
+      `);
+      const claimedRow = rows.find((row) => row.source === "claimed");
+      if (!claimedRow) {
+        // Not claimed by this call: report what is there. The `current` row is
+        // this statement's snapshot, so one that still looks claimable (or is
+        // absent) means another caller claimed it concurrently - read it fresh.
+        let current: Parameters<typeof mapOutboundDelivery>[0] | undefined = rows.find((row) => row.source === "current");
+        if (!current || current.state === "PENDING" || (current.state === "FAILED" && current.retryable)) {
+          current = await client.outboundDelivery.findUniqueOrThrow({ where: { deliveryKey: input.deliveryKey } });
+        }
+        return {
+          status: current.state === "CLAIMED" ? "BUSY" as const : "TERMINAL" as const,
+          record: mapOutboundDelivery(current),
+        };
       }
-      if (usage.alreadyReserved || usage.counted) {
-        return { status: "CLAIMED" as const, record: mapOutboundDelivery(claimed) };
+      if (claimedRow.alreadyReserved || claimedRow.counted) {
+        return { status: "CLAIMED" as const, record: mapOutboundDelivery(claimedRow) };
       }
 
       const rejected = await client.outboundDelivery.update({
@@ -2189,21 +2178,25 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async completeOutboundDelivery(deliveryKey, owner, providerMessageId, sentAt) {
-      const updated = await client.outboundDelivery.updateMany({
-        where: { deliveryKey, state: "CLAIMED", claimOwner: owner },
-        data: {
-          state: "SENT",
-          version: { increment: 1 },
-          retryable: false,
-          resultCode: "DELIVERED",
-          claimOwner: null,
-          claimExpiresAt: null,
-          providerMessageId: providerMessageId ?? null,
-          lastError: null,
-          sentAt: new Date(sentAt),
-        },
-      });
-      return updated.count === 1;
+      // Raw on purpose: Prisma wraps updateMany in BEGIN/COMMIT, three round
+      // trips for one statement, and a flow's next message waits on this one.
+      const updated = await client.$executeRaw(Prisma.sql`
+        UPDATE "OutboundDelivery"
+        SET "state" = 'SENT',
+            "version" = "version" + 1,
+            "retryable" = FALSE,
+            "resultCode" = 'DELIVERED',
+            "claimOwner" = NULL,
+            "claimExpiresAt" = NULL,
+            "providerMessageId" = ${providerMessageId ?? null},
+            "lastError" = NULL,
+            "sentAt" = (${new Date(sentAt).toISOString()}::timestamptz AT TIME ZONE 'UTC'),
+            "updatedAt" = (${new Date().toISOString()}::timestamptz AT TIME ZONE 'UTC')
+        WHERE "deliveryKey" = ${deliveryKey}
+          AND "state" = 'CLAIMED'
+          AND "claimOwner" = ${owner}
+      `);
+      return updated === 1;
     },
 
     async failOutboundDelivery(deliveryKey, owner, error, retryable, resultCode) {
@@ -2337,12 +2330,12 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async transitionParticipant(id, expectedStates, patch) {
-      const result = await client.automationParticipant.updateMany({
+      // One UPDATE ... RETURNING instead of an update and a re-read: the
+      // campaign path transitions a participant between Meta sends.
+      const [record] = await client.automationParticipant.updateManyAndReturn({
         where: { id, state: { in: expectedStates } },
         data: mapParticipantPatch(patch),
       });
-      if (result.count === 0) return null;
-      const record = await client.automationParticipant.findUnique({ where: { id } });
       return record ? mapParticipant(record) : null;
     },
 

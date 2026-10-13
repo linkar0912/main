@@ -1062,7 +1062,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       return true;
     },
 
-    async claimExecutionDispatch(input) {
+    async claimExecutionDispatch(input, options) {
       // The same dedupeKey is first written by recordExecution (PROCESSING/CLAIMED)
       // and then advanced to DISPATCHING here. Look for the prior row by
       // (workspaceId, dedupeKey) and only succeed if it is still in a
@@ -1079,6 +1079,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           record.workspaceId === input.workspaceId
           && record.dedupeKey === input.dedupeKey,
       );
+      if (existing && options?.onlyIfNew) return false;
       if (!existing) {
         // No prior recordExecution for this key - create one (rare; happens
         // for the first time a brand-new action is claimed).

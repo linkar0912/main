@@ -211,7 +211,7 @@ describe("outbound delivery coordinator", () => {
     );
 
     expect(timingObserver.providerStarted).toHaveBeenCalledOnce();
-    expect(timingObserver.providerFinished).toHaveBeenCalledWith(expect.any(Number));
+    expect(timingObserver.providerFinished).toHaveBeenCalledWith(expect.any(Number), true);
     expect(timingObserver.providerFinished.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(0);
     expect(JSON.stringify(timingObserver.providerFinished.mock.calls)).not.toContain("Original message");
   });

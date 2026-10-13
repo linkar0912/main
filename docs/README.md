@@ -5,6 +5,7 @@ Current operational guidance:
 - [Admin console](admin-console-operations.md)
 - [Permanent deletion](admin-console-deletion-runbook.md)
 - [Performance](performance-runbook.md)
+- [Reply latency](reply-latency-runbook.md)
 - [Meta App Review](meta-app-review.md)
 - [Brand assets and UI conventions](brand.md)
 - [Production deployment](../ops/DOKPLOY_DEPLOYMENT.md)

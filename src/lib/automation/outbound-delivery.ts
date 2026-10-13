@@ -154,6 +154,21 @@ function existingResult(record: OutboundDeliveryRecord): DeliveryExecutionResult
   return null;
 }
 
+/**
+ * Warms the plan lookup executeOutboundDelivery makes before every send, so a
+ * cold cache is read while the event's other reads run instead of in front of
+ * the Meta call. Read-only, and a failure is ignored here - the send path
+ * reads it again and handles the error itself.
+ */
+export async function prefetchDeliveryEntitlements(workspaceId: string): Promise<void> {
+  try {
+    const { getEntitlementService } = await import("../entitlements/service");
+    await getEntitlementService().getMonthlyDeliveryLimit(workspaceId);
+  } catch {
+    // The send path's own read reports it.
+  }
+}
+
 export async function executeOutboundDelivery<
   TPayload extends Record<string, unknown>,
 >(
@@ -205,10 +220,12 @@ export async function executeOutboundDelivery<
   }
 
   let providerResult: { id?: string; message_id?: string };
+  let providerAccepted = false;
   const providerStartedAt = performance.now();
   timingObserver?.providerStarted();
   try {
     providerResult = await send(preparation.record.payload as TPayload);
+    providerAccepted = true;
   } catch (error) {
     const message = errorMessage(error);
     const classification = classifyProviderFailure(error, networkFailuresAreRetryable);
@@ -231,7 +248,7 @@ export async function executeOutboundDelivery<
     ).catch(() => false);
     return { status: "FAILED", retryable, error: message };
   } finally {
-    timingObserver?.providerFinished(performance.now() - providerStartedAt);
+    timingObserver?.providerFinished(performance.now() - providerStartedAt, providerAccepted);
   }
 
   const providerMessageId = providerResult.id ?? providerResult.message_id;
