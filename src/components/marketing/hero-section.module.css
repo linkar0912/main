@@ -47,126 +47,152 @@
   margin-block-end: clamp(28px, 3vw, 44px);
 }
 
-/* Lockups along the bottom of the hero, after ManyChat's partner row:
-   white, logo-sized, three styles side by side. */
+/* Lockups pinned to the hero's bottom-left corner, sized like ManyChat's
+   partner row (28px-tall logos, ~20px apart, ~40px above the photo's edge).
+   The text inside reads as part of each small logo, so it is logo-sized. */
 .trustStrip {
+  position: absolute;
+  z-index: 2;
+  inset-inline-start: clamp(32px, 4.45vw, 72px);
+  inset-block-end: 40px;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 20px 44px;
-  margin: clamp(44px, 7vh, 84px) 0 0;
+  gap: 20px;
+  margin: 0;
   padding: 0;
   color: #ffffff;
   list-style: none;
-  filter: drop-shadow(0 2px 14px rgb(34 18 10 / 45%));
   animation: fade-up 700ms cubic-bezier(.22, .61, .21, 1) 420ms both;
 }
 
 .trustStrip li {
   display: flex;
   align-items: center;
+  block-size: 28px;
 }
 
 /* 1. Two-line wordmark, like "Meta Business / Partners". */
 .lockupWordmark {
   flex-direction: column;
   align-items: flex-start !important;
+  justify-content: center;
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
-  font-size: 1.75rem;
-  font-weight: 600;
-  line-height: .98;
-  letter-spacing: -.035em;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 13.5px;
+  letter-spacing: -.35px;
 }
 
 .wordmarkTop {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   white-space: nowrap;
 }
 
 .wordmarkTop svg {
-  inline-size: 1.15em;
-  block-size: 1.15em;
+  inline-size: 16px;
+  block-size: 16px;
 }
 
 .wordmarkBottom {
-  padding-inline-start: calc(1.15em + 6px);
+  padding-inline-start: 19px;
 }
 
 /* 2. Icon + three stacked caps lines, like "TIKTOK / MARKETING / PARTNER". */
 .lockupIcon {
   flex: 0 0 auto;
-  inline-size: 52px;
-  block-size: 52px;
+  inline-size: 26px;
+  block-size: 26px;
 }
 
 .lockupStacked {
-  gap: 10px;
+  gap: 5px;
 }
 
 .stackedText {
   display: grid;
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
-  font-size: 1.0625rem;
+  font-size: 9px;
   font-weight: 800;
-  line-height: .98;
-  letter-spacing: -.01em;
+  line-height: 8.6px;
+  letter-spacing: -.1px;
   text-transform: uppercase;
 }
 
 /* 3. Icon + mono figure over a caps label, like "4.6/5 / STARS RATING". */
 .lockupFigure {
-  gap: 16px;
+  gap: 9px;
 }
 
 .figureText {
   display: grid;
   justify-items: center;
-  gap: 4px;
+  gap: 3px;
   font-family: var(--font-mono, ui-monospace, monospace);
   text-transform: uppercase;
 }
 
 .figureText strong {
-  font-size: 1.375rem;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: .02em;
+  letter-spacing: .6px;
   line-height: 1;
 }
 
 .figureText span {
-  font-size: 1.125rem;
-  font-weight: 500;
-  letter-spacing: .08em;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1.1px;
   line-height: 1;
+  opacity: .92;
 }
 
 @media (max-width: 720px) {
+  /* Phones: the chat scene fills the bottom of the photo, so the row sits
+     in the flow under it instead of pinned over it. */
   .trustStrip {
-    gap: 18px 24px;
-    margin-block-start: 32px;
+    position: relative;
+    inset: auto;
+    justify-self: start;
+    gap: 16px;
+    margin: 0 20px 28px;
+  }
+
+  .trustStrip li {
+    block-size: 24px;
   }
 
   .lockupWordmark {
-    font-size: 1.25rem;
+    font-size: 13px;
+    line-height: 12px;
+  }
+
+  .wordmarkTop svg {
+    inline-size: 14px;
+    block-size: 14px;
+  }
+
+  .wordmarkBottom {
+    padding-inline-start: 17px;
   }
 
   .lockupIcon {
-    inline-size: 38px;
-    block-size: 38px;
+    inline-size: 22px;
+    block-size: 22px;
   }
 
   .stackedText {
-    font-size: .8125rem;
+    font-size: 8px;
+    line-height: 7.6px;
   }
 
   .figureText strong {
-    font-size: 1.0625rem;
+    font-size: 10px;
   }
 
   .figureText span {
-    font-size: .8125rem;
+    font-size: 9px;
   }
 }
 

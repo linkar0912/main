@@ -39,7 +39,6 @@ export function HeroSection() {
             </a>
           </div>
           <p className={styles.proof}>Easy to set up. Always in your voice.</p>
-          <HeroTrustStrip />
         </div>
 
         <figure
@@ -101,6 +100,7 @@ export function HeroSection() {
           </figcaption>
         </figure>
       </div>
+      <HeroTrustStrip />
     </section>
   );
 }
