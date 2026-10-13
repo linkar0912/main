@@ -1,6 +1,7 @@
 import type { ConnectionStatus, MemberRole } from "../repository";
 import type { BillingCatalogPlan } from "../billing/types";
 import type { OnboardingSummary } from "../onboarding/status";
+import type { PlanIntent } from "../billing/plan-intent";
 import { DEFAULT_RANGE, parseRange, type AnalyticsRange } from "../analytics-range";
 
 export type WorkspaceBootstrap = {
@@ -28,6 +29,8 @@ export type WorkspaceBootstrap = {
    * be read (never redirect on an error); absent from older payloads.
    */
   onboarding?: OnboardingSummary | null;
+  /** A paid plan picked on /pricing that is still waiting for checkout (owners only). */
+  planIntent?: PlanIntent | null;
 };
 
 /**

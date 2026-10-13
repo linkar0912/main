@@ -6,6 +6,7 @@ import { getServerEnv } from "@/src/lib/env";
 import { ADMIN_HOST, isAdminRoutePath, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
 import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
 import { isCrossSiteRequest } from "@/src/lib/security/same-origin";
+import { rememberPlanIntent } from "@/src/lib/billing/plan-intent-cookie";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -63,7 +64,8 @@ export async function proxy(request: NextRequest) {
   // Public marketing, legal, and authentication routes should not be sent
   // through the session gate. Their host canonicalization above is separate
   // from authorization so the same app build can serve both domains safely.
-  if (!isProtectedAppPath(request.nextUrl.pathname)) return NextResponse.next();
+  // /signup and /login also remember a plan picked on /pricing (plan-intent-cookie.ts).
+  if (!isProtectedAppPath(request.nextUrl.pathname)) return rememberPlanIntent(request, NextResponse.next(), env);
 
   const response = NextResponse.next();
   const isAdminRoute = isAdminRoutePath(request.nextUrl.pathname);

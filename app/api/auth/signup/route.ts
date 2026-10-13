@@ -9,6 +9,8 @@ import { PENDING_INVITE_METADATA_KEY, resolveInvitation } from "@/src/lib/auth/i
 import { provisionWorkspace } from "@/src/lib/auth/provision-workspace";
 import { rejectCrossSiteRequest } from "@/src/lib/security/same-origin";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import { planIntentFromRequest } from "@/src/lib/billing/plan-intent-cookie";
+import { withPlanIntentParams } from "@/src/lib/billing/plan-intent";
 
 export const runtime = "nodejs";
 
@@ -60,6 +62,9 @@ export async function POST(request: Request) {
     confirmUrl.searchParams.set("type", "signup");
     confirmUrl.searchParams.set("next", nextPath);
     if (inviteRaw) confirmUrl.searchParams.set("invite", inviteRaw);
+    // The link may be opened in another browser, so the plan picked on
+    // /pricing rides along and /api/auth/confirm remembers it there too.
+    withPlanIntentParams(confirmUrl, inviteRaw ? null : planIntentFromRequest(request));
     const { data, error } = await supabase.auth.signUp({
         email,
         password,

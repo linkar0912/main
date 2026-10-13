@@ -41,4 +41,19 @@ describe("workspace bootstrap plan", () => { beforeEach(() => { mocks.session.mo
     expect(response.status).toBe(200);
     expect(payload.data.onboarding).toBeNull();
   });
+
+  it("carries the owner's plan picked on /pricing, so the shell can hand over to checkout", async () => {
+    const issued = Math.floor(Date.now() / 1000);
+    const request = () => new Request("https://app.linkar.in/api/workspace/bootstrap", { headers: { cookie: `linkar_plan_intent=growth.annual.${issued}` } });
+    expect((await (await GET(request())).json()).data.planIntent).toEqual({ plan: "growth", interval: "ANNUAL" });
+
+    mocks.role.mockResolvedValue("ADMIN");
+    expect((await (await GET(request())).json()).data.planIntent).toBeNull();
+  });
+
+  it("has no plan intent without a valid, unexpired cookie", async () => {
+    expect((await (await GET(new Request("https://app.linkar.in/api/workspace/bootstrap"))).json()).data.planIntent).toBeNull();
+    const stale = new Request("https://app.linkar.in/api/workspace/bootstrap", { headers: { cookie: `linkar_plan_intent=growth.annual.${Math.floor(Date.now() / 1000) - 25 * 3600}` } });
+    expect((await (await GET(stale)).json()).data.planIntent).toBeNull();
+  });
 });

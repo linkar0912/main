@@ -7,6 +7,7 @@ import { getRepository } from "@/src/lib/repository-provider";
 import { getEntitlementService } from "@/src/lib/entitlements/service";
 import { measureServerOperation } from "@/src/lib/server-timing";
 import { deriveOnboardingSummary } from "@/src/lib/onboarding/status";
+import { planIntentFromRequest } from "@/src/lib/billing/plan-intent-cookie";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,9 @@ export async function GET(request: Request) {
             mode: getRuntimeMode(),
             // null when it could not be read: the shell then never redirects.
             onboarding,
+            // The paid plan picked on /pricing before signing in or up, while
+            // it is still waiting for checkout. Only the owner can pay.
+            planIntent: role === "OWNER" ? planIntentFromRequest(request) : null,
         },
     });
 }

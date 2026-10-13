@@ -11,6 +11,8 @@ import { createRecoveryProof, RECOVERY_PROOF_COOKIE, recoveryProofCookieOptions 
 import { rejectCrossSiteRequest } from "@/src/lib/security/same-origin";
 import { applicationOriginForPath } from "@/src/lib/site-routing";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import { parsePlanIntent } from "@/src/lib/billing/plan-intent";
+import { clearPlanIntentCookie, planIntentFromRequest, setPlanIntentCookie } from "@/src/lib/billing/plan-intent-cookie";
 
 export const runtime = "nodejs";
 
@@ -72,5 +74,10 @@ export async function POST(request: Request) {
             });
         }
     }
-    return NextResponse.redirect(new URL(next, applicationOriginForPath(next, env)), 303);
+    const response = NextResponse.redirect(new URL(next, applicationOriginForPath(next, env)), 303);
+    // A signup link carries the plan picked on /pricing (it may be opened in
+    // another browser); joining someone else's workspace is never a purchase.
+    if (invite || pendingInviteFromUser(data.user)) return planIntentFromRequest(request) ? clearPlanIntentCookie(response, env) : response;
+    const planIntent = type === "signup" ? parsePlanIntent(form.get("plan"), form.get("interval")) : null;
+    return planIntent ? setPlanIntentCookie(response, planIntent, env) : response;
 }

@@ -6,6 +6,8 @@ import { clientAddress } from "@/src/lib/auth/client-address";
 import { LoginRateLimitStore, loginRateLimitKey, networkRateLimitKey } from "@/src/lib/auth/rate-limit";
 import { rejectCrossSiteRequest } from "@/src/lib/security/same-origin";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import { planIntentFromRequest } from "@/src/lib/billing/plan-intent-cookie";
+import { withPlanIntentParams } from "@/src/lib/billing/plan-intent";
 
 export const runtime = "nodejs";
 
@@ -51,6 +53,7 @@ export async function POST(request: Request) {
     confirmUrl.searchParams.set("type", "signup");
     confirmUrl.searchParams.set("next", next);
     if (invite) confirmUrl.searchParams.set("invite", invite);
+    withPlanIntentParams(confirmUrl, invite ? null : planIntentFromRequest(request));
     const supabase = await createSupabaseServerClient();
     // Errors (unknown or already-confirmed address, provider throttling) are
     // swallowed: the response is identical either way.

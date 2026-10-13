@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({ verifyOtp: vi.fn() }));
 let repository = createMemoryRepository();
 
 vi.mock("@/src/lib/env", () => ({
-  getServerEnv: () => ({ appUrl: "http://localhost:3000", adminUrl: "http://localhost:3000", authSessionSecret: SECRET }),
+  getServerEnv: () => ({ appUrl: "http://localhost:3000", adminUrl: "http://localhost:3000", publicSiteUrl: "http://localhost:3000", authSessionSecret: SECRET }),
 }));
 vi.mock("@/src/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth: { verifyOtp: mocks.verifyOtp } }),
@@ -90,5 +90,36 @@ describe("POST /api/auth/confirm", () => {
     const response = await POST(confirmRequest({ token_hash: "hash", type: "bogus" }));
     expect(response.headers.get("location")).toContain("/login?verify=invalid");
     expect(mocks.verifyOtp).not.toHaveBeenCalled();
+  });
+
+  it("remembers the plan picked on /pricing when the signup link is opened in another browser", async () => {
+    const response = await POST(confirmRequest({ token_hash: "hash", type: "signup", next: "/automations", plan: "growth", interval: "annual" }));
+    expect(response.headers.get("location")).toBe("http://localhost:3000/automations");
+    const cookie = response.headers.get("set-cookie") ?? "";
+    expect(cookie).toMatch(/linkar_plan_intent=growth\.annual\.\d+/);
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/SameSite=lax/i);
+    expect(cookie).toMatch(/Max-Age=86400/i);
+  });
+
+  it("ignores an invalid plan and any plan on a non-signup link", async () => {
+    const invalid = await POST(confirmRequest({ token_hash: "hash", type: "signup", plan: "free", interval: "monthly" }));
+    expect(invalid.headers.get("set-cookie")).toBeNull();
+    const emailChange = await POST(confirmRequest({ token_hash: "hash", type: "email_change", plan: "growth" }));
+    expect(emailChange.headers.get("set-cookie") ?? "").not.toContain("linkar_plan_intent");
+  });
+
+  it("drops a remembered plan when the signup joins a workspace by invitation", async () => {
+    mocks.verifyOtp.mockResolvedValue({
+      data: { user: { id: "user_1", email: "new@example.com", user_metadata: { pending_invite: "raw-invite" } } },
+      error: null,
+    });
+    const response = await POST(confirmRequest(
+      { token_hash: "hash", type: "signup", plan: "growth", interval: "annual" },
+      { cookie: `linkar_plan_intent=growth.annual.${Math.floor(Date.now() / 1000)}` },
+    ));
+    const cookie = response.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain("linkar_plan_intent=;");
+    expect(cookie).toMatch(/Max-Age=0/i);
   });
 });

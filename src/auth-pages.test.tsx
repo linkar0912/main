@@ -11,7 +11,15 @@ vi.mock("@/src/lib/supabase/server", () => ({
   }),
 }));
 
-afterEach(cleanup);
+const cookieJar = vi.hoisted(() => new Map<string, string>());
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (name: string) => (cookieJar.has(name) ? { name, value: cookieJar.get(name) } : undefined) }),
+}));
+
+afterEach(() => {
+  cleanup();
+  cookieJar.clear();
+});
 
 describe("auth pages", () => {
   it("starts signup directly with its page heading", async () => {
@@ -22,8 +30,17 @@ describe("auth pages", () => {
   });
 
   it("acknowledges a paid plan picked on the pricing page instead of dropping it", async () => {
-    render(await SignupPage({ searchParams: Promise.resolve({ plan: "growth", interval: "monthly" } as never) }));
-    expect(screen.getByRole("status").textContent).toContain("You picked the Growth plan");
+    render(await SignupPage({ searchParams: Promise.resolve({ plan: "growth", interval: "monthly" }) }));
+    expect(screen.getByRole("status").textContent).toBe("You picked the Growth plan, billed monthly. After a quick setup, we will take you to checkout.");
+    expect(screen.queryByText(/in Settings, under Billing/)).toBeNull();
+
+    cleanup();
+    render(await SignupPage({ searchParams: Promise.resolve({ plan: "agency", interval: "annual" }) }));
+    expect(screen.getByRole("status").textContent).toContain("You picked the Agency plan, billed yearly.");
+
+    cleanup();
+    render(await SignupPage({ searchParams: Promise.resolve({ plan: "growth", interval: "weekly" }) }));
+    expect(screen.queryByRole("status")).toBeNull();
 
     cleanup();
     render(await SignupPage({ searchParams: Promise.resolve({ plan: "toString" }) }));
@@ -31,6 +48,21 @@ describe("auth pages", () => {
 
     cleanup();
     render(await SignupPage({ searchParams: Promise.resolve({ plan: "growth", invite: "abc123" }) }));
+    expect(screen.queryByText(/You picked the/)).toBeNull();
+  });
+
+  it("keeps the plan note from the remembered intent when an error drops the query", async () => {
+    cookieJar.set("linkar_plan_intent", `creator.annual.${Math.floor(Date.now() / 1000)}`);
+    render(await SignupPage({ searchParams: Promise.resolve({ error: "password" }) }));
+    expect(screen.getByRole("status").textContent).toContain("You picked the Creator plan, billed yearly.");
+
+    cleanup();
+    render(await SignupPage({ searchParams: Promise.resolve({ invite: "abc123" }) }));
+    expect(screen.queryByText(/You picked the/)).toBeNull();
+
+    cleanup();
+    cookieJar.set("linkar_plan_intent", `creator.annual.${Math.floor(Date.now() / 1000) - 25 * 3600}`);
+    render(await SignupPage({ searchParams: Promise.resolve({}) }));
     expect(screen.queryByText(/You picked the/)).toBeNull();
   });
 

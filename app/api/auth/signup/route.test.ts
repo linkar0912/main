@@ -127,6 +127,29 @@ describe("POST /api/auth/signup", () => {
     );
   });
 
+  it("carries a remembered plan onto the confirmation link, but never for an invitation", async () => {
+    mocks.signUp.mockResolvedValue({ data: { user: { id: "user-signup", identities: [{ id: "identity_1" }] }, session: null }, error: null });
+    const intentCookie = `linkar_plan_intent=agency.annual.${Math.floor(Date.now() / 1000)}`;
+    const withCookie = (request: Request) => {
+      request.headers.set("cookie", intentCookie);
+      return request;
+    };
+
+    await POST(withCookie(signupRequest({ email: "buyer@example.com", password: "long-enough-password" }, "203.0.113.21")));
+    const confirmUrl = new URL(mocks.signUp.mock.calls[0]?.[0]?.options.emailRedirectTo);
+    expect(confirmUrl.searchParams.get("plan")).toBe("agency");
+    expect(confirmUrl.searchParams.get("interval")).toBe("annual");
+
+    mocks.findInvitationByTokenHash.mockResolvedValue({
+      id: "inv_1", workspaceId: "ws_invited", email: "invited@example.com", role: "MEMBER",
+      tokenHash: "hash", invitedByUserId: "u_1",
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(), createdAt: new Date().toISOString(),
+    });
+    await POST(withCookie(signupRequest({ email: "invited@example.com", password: "long-enough-password", invite: "raw-token" }, "203.0.113.22")));
+    const invitedUrl = new URL(mocks.signUp.mock.calls[1]?.[0]?.options.emailRedirectTo);
+    expect(invitedUrl.searchParams.has("plan")).toBe(false);
+  });
+
   it("keeps the invite on an invite-mismatch error so the person can retry", async () => {
     mocks.findInvitationByTokenHash.mockResolvedValue(null);
     const response = await POST(signupRequest({

@@ -8,6 +8,7 @@ import { parseEmailOtpType } from "@/src/lib/auth/email-otp";
 import { safeNextPath } from "@/src/lib/auth/session";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { getServerEnv } from "@/src/lib/env";
+import { parsePlanIntent } from "@/src/lib/billing/plan-intent";
 
 // Reads the deployment's publicSiteUrl at request time; see /login.
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 type ConfirmPageProps = {
-  searchParams: Promise<{ token_hash?: string; type?: string; next?: string; invite?: string }>;
+  searchParams: Promise<{ token_hash?: string; type?: string; next?: string; invite?: string; plan?: string; interval?: string }>;
 };
 
 /**
@@ -40,6 +41,8 @@ export default async function ConfirmPage({ searchParams }: ConfirmPageProps) {
   const next = safeNextPath(params.next);
   const invite = sanitizeInvite(params.invite);
   const recovery = type === "recovery";
+  // The plan picked on /pricing, for a link opened in another browser.
+  const planIntent = type === "signup" && !invite ? parsePlanIntent(params.plan, params.interval) : null;
 
   return (
     <div data-header-tone="light">
@@ -59,6 +62,12 @@ export default async function ConfirmPage({ searchParams }: ConfirmPageProps) {
                 <input type="hidden" name="type" value={type} />
                 <input type="hidden" name="next" value={next} />
                 {invite && <input type="hidden" name="invite" value={invite} />}
+                {planIntent && (
+                  <>
+                    <input type="hidden" name="plan" value={planIntent.plan} />
+                    <input type="hidden" name="interval" value={planIntent.interval.toLowerCase()} />
+                  </>
+                )}
                 <SubmitButton pendingLabel="Checking link...">Continue</SubmitButton>
               </form>
             </>

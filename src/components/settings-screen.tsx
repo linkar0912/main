@@ -36,6 +36,7 @@ import { StatusSummary } from "./ui/status-summary";
 import { PrefsGroupHead, PrefsRow, PrefsSectionHead } from "./settings/prefs";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { parsePlanIntent } from "@/src/lib/billing/plan-intent";
 import { formatDate } from "@/src/lib/format-date";
 import { toReadableApiError } from "@/src/lib/api-error-message";
 import { Skeleton } from "./skeleton";
@@ -177,6 +178,8 @@ export function SettingsScreen() {
   // ?account=<connection id> (the sidebar's Accounts list) outlines that row
   // in Connections and scrolls it into view.
   const focusedAccountId = searchParams.get("account") ?? "";
+  // ?plan=&interval= (a plan picked on /pricing) pre-selects it in Billing.
+  const billingPreselect = parsePlanIntent(searchParams.get("plan"), searchParams.get("interval"));
   const [facebookPages, setFacebookPages] = useState<FacebookPageSummary[]>([]);
   const [facebookHealth, setFacebookHealth] = useState<FacebookHealth[]>([]);
   const [facebookBusyId, setFacebookBusyId] = useState("");
@@ -1146,6 +1149,7 @@ export function SettingsScreen() {
             <section className="prefs-section settings-billing" aria-label="Billing">
               <BillingSettings
                 back={back}
+                preselect={billingPreselect}
                 usage={connectionsLoading || connectionsLoadError ? undefined : {
                   instagram: connections.length,
                   facebook: facebookPages.length,

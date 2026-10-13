@@ -28,4 +28,9 @@ describe("shouldRedirectToOnboarding", () => {
     expect(shouldRedirectToOnboarding(needed, "/settings", "?section=billing")).toBe(false);
     expect(shouldRedirectToOnboarding(needed, "/settings", "?section=team")).toBe(true);
   });
+
+  it("puts onboarding before the checkout of a plan picked on /pricing", () => {
+    expect(shouldRedirectToOnboarding(needed, "/settings", "?section=billing&plan=growth&interval=annual")).toBe(true);
+    expect(shouldRedirectToOnboarding({ ...needed, required: false }, "/settings", "?section=billing&plan=growth&interval=annual")).toBe(false);
+  });
 });

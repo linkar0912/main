@@ -15,7 +15,10 @@ export function shouldRedirectToOnboarding(summary: OnboardingSummary | null | u
   if (pathname.startsWith("/api/") || pathname.startsWith("/auth/") || pathname.startsWith("/dev-preview")) return false;
   if (pathname === "/settings" || pathname.startsWith("/settings/")) {
     const query = new URLSearchParams(search);
-    if (query.has("meta") || query.has("facebook") || query.get("section") === "billing") return false;
+    if (query.has("meta") || query.has("facebook")) return false;
+    // Billing with a plan from /pricing pre-selected opens its checkout, and
+    // that comes after onboarding, never instead of it.
+    if (query.get("section") === "billing" && !query.has("plan")) return false;
   }
   return true;
 }

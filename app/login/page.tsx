@@ -4,6 +4,7 @@ import { LoginScreen } from "@/src/components/auth/login-screen";
 import { sanitizeInvite } from "@/src/lib/auth/auth-redirect";
 import { getRequestSession, safeNextPath } from "@/src/lib/auth/session";
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { describePlanIntent, parsePlanIntent } from "@/src/lib/billing/plan-intent";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,8 @@ type LoginPageProps = {
     email?: string;
     notice?: string;
     loggedOut?: string;
+    plan?: string;
+    interval?: string;
   }>;
 };
 
@@ -50,13 +53,18 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const error = verifyInvalid
     ? "That confirmation link is invalid or has expired. Send yourself a new one below."
     : ERRORS[params.error ?? ""] ?? "";
+  // A paid plan picked on /pricing (remembered by the proxy): checkout opens
+  // right after signing in. Invitations never carry one.
+  const planIntent = invite ? null : parsePlanIntent(params.plan, params.interval);
   const notice = params.reset === "1"
     ? "Your password has been reset. Sign in with your new password."
     : params.notice === "resent"
       ? "If that address still needs confirming, a new link is on its way."
       : params.loggedOut === "all"
         ? "You have been signed out on every device."
-        : "";
+        : planIntent
+          ? `You picked the ${describePlanIntent(planIntent)}. Sign in and we will take you to checkout.`
+          : "";
   const unconfirmedEmail = params.error === "unconfirmed" && typeof params.email === "string" && params.email.length <= 320
     ? params.email
     : undefined;

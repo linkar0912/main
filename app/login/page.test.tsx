@@ -19,6 +19,8 @@ vi.mock("next/navigation", () => ({
   // The marketing header marks the current page.
   usePathname: () => "/login",
 }));
+// No remembered plan intent unless a test sets the pricing query itself.
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 vi.mock("@/src/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth: { verifyOtp: mocks.verifyOtp } }),
 }));
@@ -111,5 +113,33 @@ describe("auth pages", () => {
     expect(form?.getAttribute("action")).toBe("/api/auth/confirm");
     expect(form?.querySelector<HTMLInputElement>('input[name="token_hash"]')?.value).toBe("hash");
     expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
+  });
+
+  it("tells a returning customer that checkout follows sign-in, unless they were invited", async () => {
+    render(await LoginPage({ searchParams: Promise.resolve({ plan: "growth", interval: "annual" }) }));
+    expect(screen.getByRole("status").textContent).toBe("You picked the Growth plan, billed yearly. Sign in and we will take you to checkout.");
+
+    cleanup();
+    render(await LoginPage({ searchParams: Promise.resolve({ plan: "growth", interval: "annual", invite: "raw-token" }) }));
+    expect(screen.queryByText(/You picked the/)).toBeNull();
+
+    cleanup();
+    render(await LoginPage({ searchParams: Promise.resolve({ plan: "free" }) }));
+    expect(screen.queryByText(/You picked the/)).toBeNull();
+  });
+
+  it("carries the picked plan through a signup confirmation link opened in another browser", async () => {
+    render(await ConfirmPage({ searchParams: Promise.resolve({ token_hash: "hash", type: "signup", next: "/automations", plan: "agency", interval: "annual" }) }));
+    const form = document.querySelector("form");
+    expect(form?.querySelector<HTMLInputElement>('input[name="plan"]')?.value).toBe("agency");
+    expect(form?.querySelector<HTMLInputElement>('input[name="interval"]')?.value).toBe("annual");
+
+    cleanup();
+    render(await ConfirmPage({ searchParams: Promise.resolve({ token_hash: "hash", type: "signup", plan: "agency", interval: "annual", invite: "raw-token" }) }));
+    expect(document.querySelector('input[name="plan"]')).toBeNull();
+
+    cleanup();
+    render(await ConfirmPage({ searchParams: Promise.resolve({ token_hash: "hash", type: "recovery", plan: "agency" }) }));
+    expect(document.querySelector('input[name="plan"]')).toBeNull();
   });
 });

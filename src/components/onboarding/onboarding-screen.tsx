@@ -5,23 +5,31 @@ import { useRouter } from "next/navigation";
 import { LinkarMark } from "../linkar-mark";
 import { invalidateWorkspaceResource } from "@/src/lib/client/workspace-data";
 import type { OnboardingView } from "@/src/lib/onboarding/view";
+import { onboardingExitPath, type PlanIntent } from "@/src/lib/billing/plan-intent";
 import { createOnboardingClient } from "./onboarding-client";
 import { OnboardingFlow, type ConnectReturn } from "./onboarding-flow";
 import styles from "./onboarding-screen.module.css";
 
-/** /onboarding: loads where the person left off, then runs the flow. */
-export function OnboardingScreen({ connectReturn }: { connectReturn?: ConnectReturn }) {
+/**
+ * /onboarding: loads where the person left off, then runs the flow. With a
+ * paid plan picked on /pricing (`planIntent`), the owner leaves for that
+ * plan's checkout in Billing wherever the flow would go Home.
+ */
+export function OnboardingScreen({ connectReturn, planIntent }: { connectReturn?: ConnectReturn; planIntent?: PlanIntent | null }) {
   const router = useRouter();
   const [view, setView] = useState<OnboardingView | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Only the owner can pay, so only the owner flow honours the intent. The
+  // view is set once, before the flow mounts, so its client stays stable.
+  const exitIntent = view?.flow === "owner" ? planIntent ?? null : null;
 
   const navigate = useCallback((href: string) => {
     // The shell decides whether to send people here from the cached
     // bootstrap; drop it so a finished or skipped onboarding is seen at once.
     invalidateWorkspaceResource("bootstrap");
-    router.push(href);
-  }, [router]);
+    router.push(onboardingExitPath(href, exitIntent));
+  }, [router, exitIntent]);
   const client = useMemo(() => createOnboardingClient(navigate), [navigate]);
 
   useEffect(() => {

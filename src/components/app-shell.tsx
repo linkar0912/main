@@ -25,6 +25,7 @@ import { friendlyFirstName } from "@/src/lib/display-name";
 import { LinkarMark } from "@/src/components/linkar-mark";
 import { getWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT, type WorkspaceBootstrap } from "@/src/lib/client/workspace-data";
 import { shouldRedirectToOnboarding } from "@/src/lib/onboarding/redirect";
+import { planIntentRedirectPath } from "@/src/lib/billing/plan-intent";
 import type { OnboardingSummary } from "@/src/lib/onboarding/status";
 import { WORKSPACE_RECENT_KEY, workspaceActions, workspacePages } from "./command-palette-items";
 import { workspaceSources } from "./command-palette-sources";
@@ -187,6 +188,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [pathname]);
 
+  const planIntentHandedOver = useRef(false);
   // A new owner (or invited member) who has not finished or skipped
   // onboarding is sent there before the app. The flag rides the bootstrap
   // payload, so this costs no extra request.
@@ -195,6 +197,14 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     if (shouldRedirectToOnboarding(data.onboarding, window.location.pathname, window.location.search)) {
       setToOnboarding(true);
       router.replace("/onboarding");
+      return;
+    }
+    // A plan picked on /pricing: after sign-in (and onboarding) Home hands
+    // over to that plan's checkout in Billing, once per page load.
+    const billing = planIntentHandedOver.current ? null : planIntentRedirectPath(data.planIntent, data.onboarding, window.location.pathname);
+    if (billing) {
+      planIntentHandedOver.current = true;
+      router.replace(billing);
     }
   });
 

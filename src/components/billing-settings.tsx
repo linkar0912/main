@@ -3,10 +3,12 @@
 import { Presence } from "@/src/components/ui/use-presence";
 import { slidingThumbRef } from "@/src/components/ui/use-sliding-thumb";
 import { Check } from "lucide-react";
-import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
 import { openRazorpaySubscriptionCheckout } from "@/src/lib/client/razorpay-checkout";
-import { getBillingView, invalidateWorkspaceResource, notifyWorkspaceChanged, type BillingView } from "@/src/lib/client/workspace-data";
+import { getBillingView, getWorkspaceBootstrap, invalidateWorkspaceResource, notifyWorkspaceChanged, type BillingView } from "@/src/lib/client/workspace-data";
+import { clearPlanIntent } from "@/src/lib/client/plan-intent";
+import { planIntentCheckoutAction, samePlanIntent, type PlanIntent } from "@/src/lib/billing/plan-intent";
 import { FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
 import type { BillingInterval, BillingPlanKey } from "@/src/lib/billing/types";
 import { ActionNotice } from "./action-notice";
@@ -66,14 +68,20 @@ const SUBSCRIPTION_EXISTS_MESSAGE = "This workspace already has a subscription, 
 /** What the workspace uses against its plan, when Settings already knows it. */
 export type BillingUsage = { instagram: number; facebook: number; seats?: number };
 
-export function BillingSettings({ usage, back }: {
+export function BillingSettings({ usage, back, preselect }: {
   /** Connected accounts and team seats in use; their meters are left out without it. */
   usage?: BillingUsage;
   /** The phone-only "Settings" back link of the drill-in layout. */
   back?: ReactNode;
+  /**
+   * A plan picked on /pricing (?plan=&interval= on the Settings URL). Its
+   * billing period is pre-selected; when it is also the signed-in owner's
+   * saved intent, its checkout opens by itself, once.
+   */
+  preselect?: PlanIntent | null;
 } = {}) {
   const [view, setView] = useState<BillingView | null>(null);
-  const [interval, setInterval] = useState<BillingInterval>("MONTHLY");
+  const [interval, setInterval] = useState<BillingInterval>(preselect?.interval ?? "MONTHLY");
   const [busyPlan, setBusyPlan] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -138,11 +146,32 @@ export function BillingSettings({ usage, back }: {
     return () => window.clearTimeout(timer);
   }, [inviteNotice]);
 
+  // A plan picked on /pricing opens its checkout here, through the same
+  // choosePlan as the plan buttons. The URL alone never opens a checkout: it
+  // must match the owner's saved intent (an HttpOnly cookie, surfaced on the
+  // shell payload), and onboarding must be out of the way. The intent is used
+  // up either way, so a dismissed checkout never reopens by itself; a
+  // workspace that already has the plan or a subscription just sees Billing.
+  const intentHandled = useRef(false);
+  const openPlanIntent = useEffectEvent(async (current: BillingView, wanted: PlanIntent) => {
+    const shell = await getWorkspaceBootstrap().catch(() => null);
+    if (!shell || !samePlanIntent(shell.planIntent, wanted) || shell.onboarding?.required) return;
+    void clearPlanIntent();
+    if (planIntentCheckoutAction(current, wanted) === "checkout") await choosePlan(wanted.plan, wanted.interval);
+  });
+  const preselectPlan = preselect?.plan;
+  const preselectInterval = preselect?.interval;
+  useEffect(() => {
+    if (!view || !preselectPlan || !preselectInterval || intentHandled.current) return;
+    intentHandled.current = true;
+    void openPlanIntent(view, { plan: preselectPlan, interval: preselectInterval });
+  }, [view, preselectPlan, preselectInterval]);
+
   // Razorpay applies plan changes at the end of the current cycle
   // (schedule_change_at: cycle_end): nothing is prorated or charged today.
   // Asking first: the confirmation appears in the plan card, and nothing is
   // sent until the owner confirms it there.
-  function requestPlanChange(current: BillingView, plan: BillingPlanKey): void {
+  function requestPlanChange(current: BillingView, plan: BillingPlanKey, nextInterval: BillingInterval = interval): void {
     const subscription = current.subscription;
     if (!subscription) return;
     const currentName = planNameFor(current, subscription.planId);
@@ -153,10 +182,10 @@ export function BillingSettings({ usage, back }: {
     setConfirmingCancel(false);
     setPendingChange({
       plan,
-      interval,
+      interval: nextInterval,
       nextName,
       effective,
-      message: `Switch from ${currentName} (${intervalLabel(subscription.interval)}) to ${nextName} (${intervalLabel(interval)})? `
+      message: `Switch from ${currentName} (${intervalLabel(subscription.interval)}) to ${nextName} (${intervalLabel(nextInterval)})? `
         + `The change takes effect ${effective}. You keep ${currentName} until then. Nothing is charged today; the new price applies from that date.`,
     });
   }
@@ -183,25 +212,25 @@ export function BillingSettings({ usage, back }: {
     }
   }
 
-  async function choosePlan(plan: BillingPlanKey) {
+  async function choosePlan(plan: BillingPlanKey, chosenInterval: BillingInterval = interval) {
     if (!view?.canManage || busyPlan) return;
     setBusyPlan(plan);
     setError("");
     setMessage("");
     try {
       if (view.subscription?.status === "ACTIVE") {
-        requestPlanChange(view, plan);
+        requestPlanChange(view, plan, chosenInterval);
         return;
       }
       const response = await fetch("/api/billing/checkout", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan, interval }),
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan, interval: chosenInterval }),
       });
       const checkout = await response.json() as { status?: string; keyId?: string; subscriptionId?: string; error?: string };
       if (checkout.error === "subscription_exists") {
         // The cached view was stale: the workspace already pays, so switch
         // plans on that subscription rather than opening a second checkout.
         const latest = await refreshAfterChange();
-        if (latest.subscription?.status === "ACTIVE") requestPlanChange(latest, plan);
+        if (latest.subscription?.status === "ACTIVE") requestPlanChange(latest, plan, chosenInterval);
         else setError(SUBSCRIPTION_EXISTS_MESSAGE);
         return;
       }

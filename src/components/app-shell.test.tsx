@@ -9,7 +9,7 @@ const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname, useRouter: () => router }));
 
 const { AppShell } = await import("./app-shell");
-const { notifyWorkspaceChanged } = await import("@/src/lib/client/workspace-data");
+const { invalidateWorkspaceResource, notifyWorkspaceChanged } = await import("@/src/lib/client/workspace-data");
 
 function stubShellFetch(role = "MEMBER", igAvatarUrl: string | null = null, platformOwner = false) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -398,5 +398,58 @@ describe("AppShell", () => {
     await screen.findByRole("button", { name: "Account menu" });
     expect(router.replace).not.toHaveBeenCalled();
     expect(screen.getByText("Home content")).toBeTruthy();
+  });
+
+  describe("with a plan picked on /pricing", () => {
+    const finished = { required: false, flow: "owner", invite: false, planCard: true, goals: [], displayName: null };
+
+    function stubIntent(onboarding: unknown) {
+      vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/workspace/bootstrap")) {
+          return { ok: true, json: async () => ({ data: { email: "buyer@example.com", role: "OWNER", plan: "free", onboarding, planIntent: { plan: "growth", interval: "ANNUAL" } } }) } as Response;
+        }
+        return { ok: true, json: async () => ({ data: [] }) } as Response;
+      }));
+    }
+
+    beforeEach(() => {
+      router.replace.mockClear();
+      invalidateWorkspaceResource("bootstrap");
+    });
+    afterEach(() => {
+      window.history.replaceState(null, "", "/");
+      invalidateWorkspaceResource("bootstrap");
+    });
+
+    it("hands Home over to that plan's checkout in Billing once signed in", async () => {
+      window.history.replaceState(null, "", "/dashboard");
+      stubIntent(finished);
+      render(<AppShell><p>Home content</p></AppShell>);
+      await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/settings?section=billing&plan=growth&interval=annual"));
+      expect(router.replace).toHaveBeenCalledTimes(1);
+
+      // A later refresh of the shell payload never redirects a second time.
+      await act(async () => { notifyWorkspaceChanged(); });
+      expect(router.replace).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends a new owner through onboarding first", async () => {
+      window.history.replaceState(null, "", "/automations");
+      stubIntent({ ...finished, required: true });
+      render(<AppShell><p>Home content</p></AppShell>);
+      await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
+      expect(router.replace).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves a deep link alone", async () => {
+      window.history.replaceState(null, "", "/contacts");
+      navigation.pathname = "/contacts";
+      stubIntent(finished);
+      render(<AppShell><p>Contacts content</p></AppShell>);
+      await screen.findByRole("button", { name: "Account menu" });
+      await act(async () => { await Promise.resolve(); });
+      expect(router.replace).not.toHaveBeenCalled();
+    });
   });
 });

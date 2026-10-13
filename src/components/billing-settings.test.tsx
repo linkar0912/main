@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invalidateWorkspaceResource } from "@/src/lib/client/workspace-data";
 import { usageTone } from "./settings/prefs";
 
@@ -340,6 +340,122 @@ describe("BillingSettings usage meters", () => {
     await act(async () => { render(<BillingSettings />); });
     await screen.findByText(/Only the workspace owner can change billing/);
     expect(screen.queryByRole("region", { name: "Danger zone" })).toBeNull();
+  });
+});
+
+describe("BillingSettings with a plan picked on /pricing", () => {
+  type Shell = { planIntent?: { plan: string; interval: string } | null; onboarding?: { required: boolean } | null };
+  const done = { required: false };
+
+  function routes(view: ReturnType<typeof billingView>, shell: Shell) {
+    return vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/billing") return { ok: true, json: async () => view };
+      if (url === "/api/workspace/bootstrap") return { ok: true, json: async () => ({ data: { email: "owner@acme.test", role: "OWNER", plan: "free", ...shell } }) };
+      if (url === "/api/billing/plan-intent" && init?.method === "DELETE") return { ok: true, json: async () => ({ data: { cleared: true } }) };
+      if (url === "/api/billing/checkout") return { ok: true, json: async () => ({ status: "ready", keyId: "rzp_test_public", subscriptionId: "sub_intent" }) };
+      if (url === "/api/billing/checkout/verify") return { ok: true, json: async () => ({ data: { verified: true } }) };
+      throw new Error(`unexpected fetch ${url}`);
+    });
+  }
+
+  function calls(fetchMock: ReturnType<typeof routes>, url: string) {
+    return fetchMock.mock.calls.filter(([called]) => called === url);
+  }
+
+  beforeEach(() => {
+    invalidateWorkspaceResource("billing");
+    invalidateWorkspaceResource("bootstrap");
+  });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); checkout.mockReset(); });
+
+  it("opens the existing checkout for the saved plan and period, then forgets the intent", async () => {
+    const fetchMock = routes(billingView(), { planIntent: { plan: "growth", interval: "ANNUAL" }, onboarding: done });
+    vi.stubGlobal("fetch", fetchMock);
+    checkout.mockResolvedValue({ razorpay_payment_id: "pay_1", razorpay_subscription_id: "sub_intent", razorpay_signature: "a".repeat(64) });
+
+    await act(async () => { render(<BillingSettings preselect={{ plan: "growth", interval: "ANNUAL" }} />); });
+
+    await waitFor(() => expect(checkout).toHaveBeenCalledWith({ key: "rzp_test_public", subscriptionId: "sub_intent" }));
+    expect(JSON.parse(String(calls(fetchMock, "/api/billing/checkout")[0]?.[1]?.body))).toEqual({ plan: "growth", interval: "ANNUAL" });
+    expect(calls(fetchMock, "/api/billing/plan-intent")).toHaveLength(1);
+    expect((screen.getByRole("radio", { name: /Annual/ }) as HTMLInputElement).checked).toBe(true);
+    await waitFor(() => expect(calls(fetchMock, "/api/billing/checkout/verify")).toHaveLength(1));
+    expect(await screen.findByText("Payment received. We’re activating your plan now.")).toBeTruthy();
+  });
+
+  it("does not reopen a dismissed checkout when Billing remounts", async () => {
+    const fetchMock = routes(billingView(), { planIntent: { plan: "creator", interval: "MONTHLY" }, onboarding: done });
+    vi.stubGlobal("fetch", fetchMock);
+    checkout.mockResolvedValue({ dismissed: true });
+
+    const first = render(<BillingSettings preselect={{ plan: "creator", interval: "MONTHLY" }} />);
+    await waitFor(() => expect(checkout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Choose Creator" })).toBeTruthy());
+    expect(calls(fetchMock, "/api/billing/plan-intent")).toHaveLength(1);
+    expect(calls(fetchMock, "/api/billing/checkout/verify")).toHaveLength(0);
+    first.unmount();
+
+    // The cleared cookie no longer rides the shell payload.
+    vi.stubGlobal("fetch", routes(billingView(), { planIntent: null, onboarding: done }));
+    render(<BillingSettings preselect={{ plan: "creator", interval: "MONTHLY" }} />);
+    await screen.findByRole("button", { name: "Choose Creator" });
+    await act(async () => { await Promise.resolve(); });
+    expect(checkout).toHaveBeenCalledTimes(1);
+  });
+
+  it("only pre-selects the period when the URL plan is not the saved intent", async () => {
+    const fetchMock = routes(billingView(), { planIntent: null, onboarding: done });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<BillingSettings preselect={{ plan: "agency", interval: "ANNUAL" }} />); });
+    await screen.findByRole("button", { name: "Choose Agency" });
+    await waitFor(() => expect(calls(fetchMock, "/api/workspace/bootstrap")).toHaveLength(1));
+    await act(async () => { await Promise.resolve(); });
+
+    expect((screen.getByRole("radio", { name: /Annual/ }) as HTMLInputElement).checked).toBe(true);
+    expect(checkout).not.toHaveBeenCalled();
+    expect(calls(fetchMock, "/api/billing/checkout")).toHaveLength(0);
+    expect(calls(fetchMock, "/api/billing/plan-intent")).toHaveLength(0);
+  });
+
+  it("waits for onboarding before opening checkout", async () => {
+    const fetchMock = routes(billingView(), { planIntent: { plan: "growth", interval: "MONTHLY" }, onboarding: { required: true } });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<BillingSettings preselect={{ plan: "growth", interval: "MONTHLY" }} />); });
+    await waitFor(() => expect(calls(fetchMock, "/api/workspace/bootstrap")).toHaveLength(1));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(checkout).not.toHaveBeenCalled();
+    expect(calls(fetchMock, "/api/billing/plan-intent")).toHaveLength(0);
+  });
+
+  it("shows the normal Billing view when the workspace already has the plan or a subscription", async () => {
+    for (const view of [
+      billingView({ entitlementPlanKey: "growth" }),
+      billingView({ entitlementPlanKey: "creator", subscription: { status: "ACTIVE", planId: "plan_creator", interval: "MONTHLY" } }),
+    ]) {
+      invalidateWorkspaceResource("billing");
+      invalidateWorkspaceResource("bootstrap");
+      const fetchMock = routes(view, { planIntent: { plan: "growth", interval: "MONTHLY" }, onboarding: done });
+      vi.stubGlobal("fetch", fetchMock);
+      const rendered = render(<BillingSettings preselect={{ plan: "growth", interval: "MONTHLY" }} />);
+      await screen.findByRole("heading", { name: "Plan and usage" });
+      await waitFor(() => expect(calls(fetchMock, "/api/billing/plan-intent")).toHaveLength(1));
+
+      expect(checkout).not.toHaveBeenCalled();
+      expect(calls(fetchMock, "/api/billing/checkout")).toHaveLength(0);
+      expect(calls(fetchMock, "/api/billing/change-plan")).toHaveLength(0);
+      expect(screen.queryByRole("button", { name: /Switch to/ })).toBeNull();
+      rendered.unmount();
+    }
+  });
+
+  it("never opens checkout for a member, and still uses the intent up", async () => {
+    const fetchMock = routes(billingView({ canManage: false }), { planIntent: { plan: "growth", interval: "MONTHLY" }, onboarding: done });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<BillingSettings preselect={{ plan: "growth", interval: "MONTHLY" }} />); });
+    await waitFor(() => expect(calls(fetchMock, "/api/billing/plan-intent")).toHaveLength(1));
+    expect(checkout).not.toHaveBeenCalled();
+    expect(calls(fetchMock, "/api/billing/checkout")).toHaveLength(0);
   });
 });
 
