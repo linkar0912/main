@@ -1,4 +1,3 @@
-import { MetaApprovedBadge } from "@/src/components/marketing/meta-approved-badge";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
@@ -103,7 +102,6 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             <MarketingHeader siteOrigin={publicSiteUrl} />
             <main className="auth-page-section" data-auth-tone="editorial">
                 <div className="auth-page-frame">
-                    <MetaApprovedBadge className="auth-trust-badge" />
                     <h1>{invite ? "Almost there." : "Create your account."}</h1>
                     <p className="auth-page-lede">
                         {invite

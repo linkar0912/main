@@ -8,9 +8,14 @@ import styles from "./trust-lockups.module.css";
  * partner-programme badges or ratings Linkar has not earned.
  * Keep the reply count a lower bound of the production figure.
  */
-export function TrustLockups({ className }: { className?: string }) {
+/**
+ * tone "light" draws white lockups for dark surfaces (the hero photo, the
+ * footer); "ink" draws them in the text colour for light pages (sign-up,
+ * sign-in, pricing), with the icons' details cut in the page colour.
+ */
+export function TrustLockups({ className, tone = "light" }: { className?: string; tone?: "light" | "ink" }) {
   return (
-    <ul className={className ? `${styles.list} ${className}` : styles.list} aria-label="Why people trust Linkar">
+    <ul className={className ? `${styles.list} ${className}` : styles.list} data-tone={tone} aria-label="Why people trust Linkar">
       <li>
         {/* Meta's mark, at the owner's request (decided 13 Oct 2026 with the
             brand-policy risk explained); the words stay literally true. */}

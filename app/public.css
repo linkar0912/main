@@ -701,7 +701,6 @@ a.setup-row:hover .setup-cta, button.setup-row:hover .setup-cta { color: var(--i
   justify-items: center;
   margin-inline: auto;
 }
-.auth-page-frame .auth-trust-badge { margin-bottom: 4px; }
 .auth-page-frame h1 {
   font-family: var(--font-display, "Bricolage Grotesque"), var(--font-sans, "Manrope"), sans-serif;
   font-size: var(--type-page-title);
