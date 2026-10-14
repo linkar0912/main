@@ -1,0 +1,70 @@
+/* Previous / next within the collection: a compact strip under the related section. Canvas surface. */
+
+.pager {
+  padding: clamp(32px, 3.5vw, 48px) var(--seo-gutter, clamp(32px, 4.45vw, 72px)) clamp(48px, 5vw, 72px);
+  color: var(--marketing-text);
+  background: var(--marketing-canvas);
+  border-block-start: 1px solid var(--marketing-border);
+}
+.frame { display: grid; gap: 16px; max-inline-size: 1360px; margin-inline: auto; }
+
+.count, .dir, .topic {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.count { margin: 0; color: color-mix(in srgb, var(--marketing-text) 72%, transparent); }
+
+.links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(12px, 1.6vw, 20px); margin: 0; padding: 0; list-style: none; }
+.item { display: flex; min-inline-size: 0; }
+
+.link {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 10px;
+  min-inline-size: 0;
+  padding: clamp(20px, 2vw, 26px) clamp(20px, 2.2vw, 28px);
+  color: inherit;
+  background: var(--marketing-raised);
+  border: 1px solid var(--marketing-border);
+  border-radius: 20px;
+  text-decoration: none;
+  transition: background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+.link[data-dir="next"] { justify-items: end; text-align: end; }
+.link:hover { border-color: var(--seo-accent, #5f2ce0); transform: translateY(-3px); }
+
+.dir { display: inline-flex; align-items: center; gap: 8px; color: color-mix(in srgb, var(--marketing-text) 72%, transparent); }
+.dir svg { transition: transform 180ms ease; }
+.link[data-dir="previous"]:hover .dir svg { transform: translateX(-4px); }
+.link[data-dir="next"]:hover .dir svg { transform: translateX(4px); }
+
+.label {
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(1.125rem, 1.5vw, 1.4375rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -.035em;
+  text-wrap: balance;
+}
+.topic { display: inline-flex; align-items: center; gap: 9px; color: color-mix(in srgb, var(--marketing-text) 72%, transparent); }
+.dot { flex: 0 0 auto; inline-size: 8px; block-size: 8px; border-radius: 50%; }
+:global([data-theme="dark"]) .dot { box-shadow: 0 0 0 1.5px rgb(255 255 255 / 45%); }
+
+.link:focus-visible { outline: 3px solid var(--marketing-text); outline-offset: 3px; }
+
+/* Phones: the two cards stack, both reading left to right. */
+@media (max-width: 767px) {
+  .pager { --seo-gutter: 20px; }
+  .links { grid-template-columns: minmax(0, 1fr); }
+  .link[data-dir="next"] { justify-items: start; text-align: start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link, .dir svg { transition: none; }
+  .link:hover, .link:hover .dir svg { transform: none; }
+}

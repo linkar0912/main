@@ -1,0 +1,2 @@
+/* The recipe download keeps its icon beside the label. */
+.download { display: inline-flex; align-items: center; gap: 10px; }

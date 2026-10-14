@@ -1,0 +1,88 @@
+/* Alternating photo rows. The photo sits in a tilted colour frame; the outcome floats on its inner corner. */
+.rows { display: grid; gap: clamp(104px, 10vw, 168px); margin: 0; padding: 0; list-style: none; }
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr);
+  grid-template-areas: "media text";
+  align-items: center;
+  gap: clamp(56px, 7vw, 128px);
+}
+.row[data-photo="end"] { grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr); grid-template-areas: "text media"; }
+
+.media { position: relative; grid-area: media; isolation: isolate; }
+.photo { position: relative; z-index: 1; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 28px; }
+
+.frameBack {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--seo-accent, #5f2ce0);
+  border-radius: 30px;
+  transform: translate(-16px, 16px) rotate(-3deg);
+}
+.row[data-photo="end"] .frameBack { transform: translate(16px, 16px) rotate(3deg); }
+.row[data-frame="yellow"] .frameBack { background: #fff100; }
+.row[data-frame="lilac"] .frameBack { background: #e4d4ff; }
+
+/* The outcome overlaps the photo's inner bottom corner, toward the text. */
+.float { position: absolute; inset: auto -40px -44px auto; z-index: 2; }
+.row[data-photo="end"] .float { inset: auto auto -44px -40px; }
+.stage { inline-size: 300px; zoom: .92; }
+
+.text { grid-area: text; min-inline-size: 0; }
+.count { display: flex; align-items: baseline; gap: 8px; margin: 0 0 28px; font-family: var(--font-mono, ui-monospace, monospace); font-size: .8125rem; font-weight: 600; letter-spacing: .08em; }
+.count b { display: inline-grid; place-items: center; min-inline-size: 44px; block-size: 44px; padding-inline: 10px; color: var(--seo-on-accent, #ffffff); background: var(--seo-accent, #5f2ce0); border-radius: 999px; font-size: .9375rem; font-weight: 700; }
+.count span { color: color-mix(in srgb, currentColor 60%, transparent); }
+.title {
+  max-inline-size: 560px;
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(2rem, 3.4vw, 3.25rem);
+  font-weight: 800;
+  line-height: .98;
+  letter-spacing: -.055em;
+  text-wrap: balance;
+}
+.body {
+  max-inline-size: 46ch;
+  margin: 22px 0 0;
+  color: color-mix(in srgb, currentColor 80%, transparent);
+  font-size: clamp(1rem, 1.15vw, 1.125rem);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* Tablets: still two columns, tighter. The outcome hangs below the photo's
+   inner corner, so rows keep a wide gap for it (the tallest clears the next
+   row by about 60px). A translate takes no layout space, so the list also
+   keeps room under the last row for its overhang and shadow. */
+@media (min-width: 768px) and (max-width: 899px) {
+  .rows { gap: 144px; padding-block-end: 64px; }
+  .row, .row[data-photo="end"] { gap: 40px; }
+  .float { inset: auto 12px 0 auto; translate: 0 40%; }
+  .row[data-photo="end"] .float { inset: auto auto 0 12px; }
+  .stage { inline-size: 260px; }
+}
+
+/* Small tablets and phones: photo first, then the text; the outcome hangs off the photo's bottom edge. */
+/* Half the outcome hangs below the photo, so it covers no more than about a quarter of it. */
+@media (max-width: 767px) {
+  .rows { gap: 96px; }
+  .row, .row[data-photo="end"] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "media" "text"; gap: 136px; }
+  .frameBack, .row[data-photo="end"] .frameBack { transform: translate(10px, 12px) rotate(2deg); }
+  .float, .row[data-photo="end"] .float { inset: auto 16px 0 auto; translate: 0 52%; }
+}
+
+/* Phones: the outcome sits in the flow under the photo and overlaps its bottom
+   edge by a fixed 96px, so a tall outcome pushes the text down instead of
+   running into it. The frame stays the photo's size. */
+@media (max-width: 599px) {
+  .row, .row[data-photo="end"] { gap: 36px; }
+  .frameBack, .row[data-photo="end"] .frameBack { inset: 0 0 auto; aspect-ratio: 4 / 3; transform: translate(6px, 10px) rotate(2deg); border-radius: 24px; }
+  .photo { border-radius: 24px; }
+  .float, .row[data-photo="end"] .float { position: relative; inset: auto; translate: none; inline-size: fit-content; margin: -96px 8px 0 auto; }
+  /* Narrower, not smaller: the widget's 12px text stays at 11px or more. */
+  .stage { inline-size: 260px; zoom: .92; }
+  .count { margin-block-end: 20px; }
+}

@@ -28,9 +28,24 @@
 .navigation { grid-column: 6 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 36px; }
 .columnTitle { margin: 0 0 20px; color: rgb(255 255 255 / 60%); font-family: var(--font-sans, ui-sans-serif, sans-serif); font-size: .875rem; font-weight: 700; line-height: 1.2; }
 .column ul { display: grid; gap: 2px; padding: 0; margin: 0; list-style: none; }
-.column a { display: inline-flex; min-block-size: 44px; min-inline-size: 44px; align-items: center; color: rgb(255 255 255 / 88%); font-family: var(--font-sans, ui-sans-serif, sans-serif); font-size: .9rem; font-weight: 600; transition: color 220ms ease; }
+/* The block padding only shows when a label wraps (a large default text size):
+   a one-line link is still exactly the 44px minimum with its text where it was,
+   while a two-line link gets 6px above and below so it cannot run into its
+   neighbour. The line height stays inherited so one-line links do not move. */
+.column a { display: inline-flex; min-block-size: 44px; min-inline-size: 44px; padding-block: 6px; align-items: center; color: rgb(255 255 255 / 88%); font-family: var(--font-sans, ui-sans-serif, sans-serif); font-size: .9rem; font-weight: 600; transition: color 220ms ease; }
 .column a:hover { color: #fff100; }
 .column a[href="/signup"] { color: #fa0cf7; }
+
+/* From 1024px to about 1180px the four equal columns are 105-125px wide, less
+   than the longest labels ("Help and support", "Service providers"), which
+   wrapped. Each column is now at least as wide as its longest label and the
+   shorter columns give up the difference. Wherever the equal quarters are
+   already wide enough (1440 included) this resolves to the same equal columns.
+   The 64em condition switches it off when a larger default text size would
+   push the columns past the footer edge, so labels wrap there instead. */
+@media (min-width: 1024px) and (min-width: 64em) {
+  .navigation { grid-template-columns: repeat(4, minmax(max-content, 1fr)); }
+}
 
 .legalLine { display: flex; gap: 36px; margin-block-start: 120px; padding-block-start: 24px; border-block-start: 1px solid rgb(255 255 255 / 18%); color: rgb(255 255 255 / 58%); font-family: var(--font-sans, ui-sans-serif, sans-serif); font-size: .8125rem; line-height: 1.5; }
 .legalLine p { margin: 0; }

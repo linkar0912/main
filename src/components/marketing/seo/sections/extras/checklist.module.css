@@ -1,0 +1,113 @@
+/* What you need to start: copy on the left, a setup checklist card on a fanned stack on the right. */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(48px, 7vw, 120px);
+}
+
+.copy { min-inline-size: 0; }
+.copy > .title { max-inline-size: 560px; }
+
+/* Two tinted cards fan out behind the checklist. Decorative. */
+.stack { position: relative; min-inline-size: 0; padding: 18px 10px 18px 0; }
+.stack::before,
+.stack::after {
+  position: absolute;
+  inset: 34px 22px 2px 26px;
+  content: "";
+  border-radius: 28px;
+}
+.stack::before { background: #fff100; transform: rotate(-4.5deg); }
+.stack::after { background: #e4d4ff; transform: rotate(2.5deg); }
+
+.card {
+  position: relative;
+  z-index: 1;
+  padding: clamp(24px, 2.6vw, 36px);
+  color: #101116;
+  background: #ffffff;
+  border-radius: 28px;
+  box-shadow: 0 28px 70px rgb(16 17 22 / 14%);
+}
+:global([data-theme="dark"]) .card { box-shadow: 0 28px 70px rgb(0 0 0 / 40%); }
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 6px;
+  padding-block-end: 18px;
+  border-block-end: 1px solid rgb(16 17 22 / 10%);
+}
+.mark {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  inline-size: 34px;
+  block-size: 34px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 10px;
+}
+.cardTitle {
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: 1.375rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -.035em;
+}
+.channel {
+  margin-inline-start: auto;
+  padding: 6px 11px;
+  background: #f1f1f4;
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.items { display: grid; margin: 0; padding: 0; list-style: none; counter-reset: item; }
+.items li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 16px;
+  padding: 18px 0;
+}
+.items li + li { border-block-start: 1px solid rgb(16 17 22 / 8%); }
+.items li:last-child { padding-block-end: 4px; }
+
+.box {
+  display: grid;
+  grid-row: span 2;
+  place-items: center;
+  inline-size: 28px;
+  block-size: 28px;
+  margin-block-start: 1px;
+  color: #ffffff;
+  background: var(--seo-accent, #5f2ce0);
+  border-radius: 8px;
+}
+.itemTitle { margin: 0; font-size: 1.0625rem; font-weight: 700; line-height: 1.4; text-wrap: balance; }
+.itemBody { margin: 0; color: rgb(16 17 22 / 72%); font-size: .9375rem; line-height: 1.55; text-wrap: pretty; }
+
+@media (max-width: 899px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+  .stack { padding: 14px 6px 14px 0; }
+}
+
+@media (max-width: 599px) {
+  .stack::before { transform: rotate(-3deg); }
+  .stack::after { transform: rotate(2deg); }
+  /* The channel tag drops under the title instead of floating alone on the right. */
+  .cardHead { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; }
+  .mark { grid-row: span 2; }
+  .channel { justify-self: start; margin-inline-start: 0; }
+  .items li { gap: 4px 14px; padding-block: 16px; }
+}

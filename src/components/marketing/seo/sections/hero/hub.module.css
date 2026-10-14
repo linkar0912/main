@@ -1,0 +1,114 @@
+/* Hub hero: one viewport on the collection accent. Copy left; right, the hub
+   photo with a fanned stack of the collection's first three guides over its
+   left edge, each a link. */
+
+.hero { position: relative; isolation: isolate; overflow: clip; }
+
+/* Same content frame as the filter bar and every section below (1360px plus the gutters). */
+.inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .9fr);
+  align-items: center;
+  --hub-gap: clamp(48px, 6vw, 96px);
+  gap: var(--hub-gap);
+  box-sizing: border-box;
+  max-inline-size: calc(1360px + 2 * var(--seo-gutter, clamp(32px, 4.45vw, 72px)));
+  min-block-size: min(100svh, 900px);
+  margin-inline: auto;
+  padding: 124px var(--seo-gutter, clamp(32px, 4.45vw, 72px)) 72px;
+}
+.copy { min-inline-size: 0; max-inline-size: 680px; }
+.title { max-inline-size: 700px; font-size: clamp(3rem, 5.6vw, 6rem); }
+
+.stage {
+  position: relative;
+  justify-self: end;
+  inline-size: min(100%, clamp(360px, calc((100svh - 230px) * .8), 540px));
+  margin-inline-end: clamp(0px, 2vw, 32px);
+}
+.photo {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  background: rgb(255 255 255 / 12%);
+  border-radius: 28px;
+  box-shadow: 0 40px 80px rgb(10 8 24 / 26%);
+}
+.photo img { object-fit: cover; object-position: 84% 40%; animation: photo-settle 900ms cubic-bezier(.22, .61, .21, 1) both; }
+
+/* The fan: three compact guide cards, tilted like a hand of cards. */
+.fan {
+  position: absolute;
+  /* Over the photo's left edge and into the column gap, never into the copy. */
+  inset: auto auto 7% calc(16px - var(--hub-gap, 64px));
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  inline-size: min(330px, 76%);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fan li { animation: fan-in 620ms cubic-bezier(.22, .61, .21, 1) both; }
+.fan li:nth-child(1) { rotate: -3deg; animation-delay: 220ms; }
+.fan li:nth-child(2) { rotate: 1.6deg; translate: 30px 0; animation-delay: 340ms; }
+.fan li:nth-child(3) { rotate: -1.2deg; translate: 8px 0; animation-delay: 460ms; }
+
+.card {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 8px 8px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgb(10 8 24 / 22%);
+  text-decoration: none;
+  transition: translate 200ms ease, box-shadow 200ms ease;
+}
+.card:hover { translate: 0 -4px; box-shadow: 0 24px 48px rgb(10 8 24 / 28%); }
+.thumb { position: relative; inline-size: 84px; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 12px; }
+/* The card is light UI in both themes: the slot uses the light surface, and its caption hides below 220px. */
+.thumb[data-image-slot] > svg { inline-size: 22px; }
+.cardText { display: grid; gap: 3px; min-inline-size: 0; }
+.cardTopic {
+  color: #5c5d66;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.cardTitle { font-size: .9375rem; font-weight: 700; line-height: 1.25; letter-spacing: -.01em; text-wrap: balance; }
+.card > svg { color: #5f2ce0; transition: transform 200ms ease; }
+.card:hover > svg { transform: translateX(3px); }
+
+@keyframes photo-settle { from { transform: scale(1.04); } }
+@keyframes fan-in { from { opacity: 0; transform: translateY(16px); } }
+
+@media (max-width: 899px) {
+  .inner { grid-template-columns: minmax(0, 1fr); gap: 56px; min-block-size: 0; padding-block: 120px 72px; }
+  .copy { max-inline-size: none; }
+  .title { font-size: clamp(2.75rem, 8vw, 4.5rem); }
+  .stage { justify-self: stretch; inline-size: 100%; margin: 0; }
+  .photo { aspect-ratio: 4 / 3.2; }
+  .fan { position: relative; inset: auto; inline-size: min(100% - 12px, 420px); margin: -72px 6px 0 auto; }
+  .fan li:nth-child(1) { rotate: -1.6deg; }
+  .fan li:nth-child(2) { rotate: 1deg; translate: -10px 0; }
+  .fan li:nth-child(3) { rotate: -.6deg; translate: 0 0; }
+}
+
+@media (max-width: 599px) {
+  .title { font-size: clamp(2.625rem, 11.4vw, 3.125rem); }
+  .card { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; padding: 7px 12px 7px 7px; }
+  .thumb { inline-size: 64px; border-radius: 10px; }
+  .cardTitle { font-size: .875rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo img, .fan li { animation: none; }
+  .card, .card > svg { transition: none; }
+  .card:hover { translate: none; }
+}

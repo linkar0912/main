@@ -1,0 +1,163 @@
+/* Closing photo (Manychat usecase-09): the page's cta slot edge to edge, a centred headline, glass plan cards. */
+
+section.section {
+  --seo-focus: #fff100;
+  --seo-sub-mix: 100%;
+  display: grid;
+  place-items: center;
+  min-block-size: min(100svh, 880px);
+  padding-block: clamp(120px, 11vw, 168px);
+  overflow: clip;
+  isolation: isolate;
+  color: #ffffff;
+  background-color: #101116;
+  text-align: center;
+}
+section.section[data-tone="magenta"] { --cta-tone: #fa0cf7; }
+section.section[data-tone="yellow"] { --cta-tone: #fff100; }
+
+.media { position: absolute; inset: 0; z-index: -2; }
+
+/* Lighter at the top so the photo reads, a calm middle for the headline, and a dark foot that runs into the footer. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 52% 46% at 50% 52%, rgb(16 17 22 / 44%) 0%, rgb(16 17 22 / 14%) 72%, rgb(16 17 22 / 0%) 100%),
+    linear-gradient(to bottom, rgb(16 17 22 / 26%) 0%, rgb(16 17 22 / 0%) 26%, rgb(16 17 22 / 0%) 58%, rgb(16 17 22 / 78%) 100%);
+  pointer-events: none;
+}
+
+.content { display: grid; justify-items: center; inline-size: 100%; }
+
+.content > .eyebrow {
+  color: #ffffff;
+  background: rgb(16 17 22 / 30%);
+  border-color: rgb(255 255 255 / 45%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.title {
+  max-inline-size: 1100px;
+  margin: 0;
+  color: #ffffff;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(2.75rem, 4.6vw, 5.25rem);
+  font-weight: 800;
+  line-height: .96;
+  letter-spacing: -.06em;
+  text-shadow: 0 2px 40px rgb(16 17 22 / 32%);
+  text-wrap: balance;
+}
+.line { display: block; }
+.mark {
+  display: inline-block;
+  padding: .02em .16em .07em;
+  color: #101116;
+  background: var(--cta-tone);
+  border-radius: .2em;
+  text-shadow: none;
+  transform: rotate(-3deg);
+  transform-origin: 30% 60%;
+}
+
+.sub {
+  max-inline-size: 54ch;
+  margin: 24px auto 0;
+  color: #ffffff;
+  font-size: clamp(1.0625rem, 1.25vw, 1.1875rem);
+  font-weight: 500;
+  line-height: 1.55;
+  text-shadow: 0 1px 18px rgb(16 17 22 / 40%);
+  text-wrap: pretty;
+}
+
+.content > .actions { justify-content: center; }
+.outline { background: rgb(16 17 22 / 18%); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+
+/* Glass cards. Plan facts are real text: they float around the headline on wide screens and sit under the actions below that. */
+/* Smoky glass, so white type holds on whatever photo lands in the slot. */
+.glass {
+  color: #ffffff;
+  background: rgb(20 21 28 / 38%);
+  border: 1px solid rgb(255 255 255 / 26%);
+  border-radius: 20px;
+  box-shadow: 0 22px 50px rgb(16 17 22 / 26%), inset 0 1px 0 rgb(255 255 255 / 14%);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  text-align: start;
+}
+
+.plans {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  inline-size: 100%;
+  margin: 40px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan { display: grid; align-content: start; gap: 12px; inline-size: min(100%, 320px); padding: 16px 18px 18px; }
+.planHead { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: .9375rem; font-weight: 600; }
+.planHead strong { font-family: var(--font-display, ui-sans-serif, sans-serif); font-size: 1.375rem; font-weight: 800; letter-spacing: -.04em; }
+.planHead span { margin-inline-start: auto; font-family: var(--font-display, ui-sans-serif, sans-serif); font-size: 1.375rem; font-weight: 800; letter-spacing: -.04em; }
+.planHead small { font-size: .8125rem; font-weight: 600; }
+
+.checks { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.checks li { display: flex; align-items: center; gap: 10px; font-size: .875rem; font-weight: 600; line-height: 1.35; }
+.checkIcon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 20px;
+  block-size: 20px;
+  color: #101116;
+  background: var(--cta-tone);
+  border-radius: 50%;
+}
+
+/* Decorative: the page you are reading, as the automation you would start with. */
+/* The floating cards keep to the 1360px frame on very wide screens; 5% of the band is the floor below about 1510px. */
+.start {
+  position: absolute;
+  inset: 13% max(5%, calc((100% - 1360px) / 2)) auto auto;
+  z-index: 1;
+  display: none;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 12px;
+  max-inline-size: 300px;
+  padding: 12px 18px 12px 12px;
+  transform: rotate(2deg);
+}
+.startMark {
+  display: grid;
+  grid-row: span 2;
+  place-items: center;
+  inline-size: 38px;
+  block-size: 38px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 12px;
+}
+.startLabel { font-family: var(--font-mono, ui-monospace, monospace); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.startName { font-size: .9375rem; font-weight: 700; line-height: 1.3; }
+
+@media (min-width: 1240px) {
+  .start { display: grid; }
+  .plans { margin: 0; }
+  .plan { position: absolute; z-index: 1; inline-size: 332px; }
+  /* Straight, like the plan cards elsewhere: slanted baselines read badly. */
+  .plan:nth-child(1) { inset: 12% auto auto max(5%, calc((100% - 1360px) / 2)); }
+  .plan:nth-child(2) { inset: auto max(5%, calc((100% - 1360px) / 2)) 10% auto; }
+}
+
+@media (max-width: 767px) {
+  section.section { min-block-size: 0; padding-block: 96px 88px; }
+  .plans { flex-direction: column; align-items: center; margin-block-start: 32px; }
+  .plan { inline-size: min(100%, 340px); }
+}

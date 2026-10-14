@@ -1,0 +1,141 @@
+/* Before and after: a grey card tucked behind the accent card (Manychat's before/after pair). */
+
+.title span { display: block; }
+.title .second { margin-block-start: .22em; color: var(--seo-accent, #5f2ce0); }
+/* Dark theme: the accent's soft text tone (team and insights set one, since their mix turns grey), else a light mix. */
+:global([data-theme="dark"]) .title .second { color: var(--seo-accent-soft, color-mix(in srgb, var(--seo-accent, #5f2ce0) 42%, #ffffff)); }
+
+.pair {
+  --pad: clamp(32px, 3.6vw, 56px);
+  --tuck: clamp(48px, 5vw, 72px);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  align-items: center;
+  max-inline-size: 1180px;
+  margin-inline: auto;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  padding: var(--pad);
+  border-radius: 28px;
+}
+
+/* The grey card runs under the accent card; its padding keeps every row clear of the overlap. */
+.before {
+  z-index: 0;
+  margin-inline-end: calc(var(--tuck) * -1);
+  padding-inline-end: calc(var(--pad) + var(--tuck));
+  color: var(--marketing-text, #050505);
+  background: #f1f1f4;
+}
+:global([data-theme="dark"]) .before { background: #1c1d24; }
+
+.after {
+  z-index: 1;
+  padding-block: calc(var(--pad) + 8px);
+  box-shadow: 0 34px 80px rgb(16 17 22 / 22%);
+}
+:global([data-theme="dark"]) .after { box-shadow: 0 34px 80px rgb(0 0 0 / 45%); }
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 22px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.labelIcon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  inline-size: 28px;
+  block-size: 28px;
+  border-radius: 999px;
+}
+.before .labelIcon { background: color-mix(in srgb, currentColor 10%, transparent); }
+.after .labelIcon { color: #101116; background: #ffffff; }
+
+.cardTitle {
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(2rem, 3.3vw, 3.125rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.055em;
+  text-wrap: balance;
+}
+.before .cardTitle { color: color-mix(in srgb, currentColor 78%, transparent); }
+
+/* A hand-drawn yellow stroke under the last word. */
+.mark { position: relative; white-space: nowrap; }
+.mark::after {
+  position: absolute;
+  inset: auto -6% -.2em -4%;
+  block-size: .34em;
+  content: "";
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 24' preserveAspectRatio='none'%3E%3Cpath d='M4 15C52 6 120 4 196 9' fill='none' stroke='%23fff100' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M26 21C78 15 134 15 176 18' fill='none' stroke='%23fff100' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+  pointer-events: none;
+}
+
+.rows { display: grid; margin: clamp(30px, 3vw, 44px) 0 0; padding: 0; list-style: none; }
+.rows li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 17px 0;
+  border-block-start: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .8125rem;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  text-wrap: pretty;
+}
+.rows li:last-child { border-block-end: 1px solid color-mix(in srgb, currentColor 16%, transparent); }
+.after .rows li { border-color: rgb(255 255 255 / 24%); }
+.before .rows li > span { color: color-mix(in srgb, currentColor 82%, transparent); }
+
+.tick {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: 7px;
+}
+.before .tick { color: color-mix(in srgb, currentColor 55%, transparent); border: 1.5px solid color-mix(in srgb, currentColor 28%, transparent); }
+.after .tick { color: var(--seo-accent, #5f2ce0); background: #ffffff; }
+
+.cta { margin-block-start: auto; padding-block-start: clamp(30px, 3vw, 40px); }
+.cta > a { inline-size: 100%; }
+
+@media (max-width: 899px) {
+  .pair { grid-template-columns: minmax(0, 1fr); }
+  /* Stacked: the accent card overlaps the foot of the grey card, which sits a little inset. */
+  .before {
+    margin-inline: 14px;
+    padding-inline-end: var(--pad);
+    padding-block-end: calc(var(--pad) + 40px);
+  }
+  .after { margin-block-start: -40px; padding-block: var(--pad); }
+}
+
+@media (max-width: 599px) {
+  .pair { --pad: 26px; }
+  .before { margin-inline: 10px; }
+  /* The cards are 210 to 230px wide inside at 320: the title steps down so its longest word
+     ("acknowledgement,") stays inside the card. 25.6px at 320, 28.8px at 360, 32px from 400. */
+  .cardTitle { font-size: clamp(1.5rem, 8vw, 2rem); }
+  .rows li { gap: 14px; padding-block: 15px; font-size: .78rem; }
+}

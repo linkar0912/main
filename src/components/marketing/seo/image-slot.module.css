@@ -1,0 +1,79 @@
+/* Low specificity on purpose: the caller's className sizes and places the box. */
+:where(.slot) {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: var(--slot-ratio, 4 / 3);
+}
+
+/* Placeholder: a tint of the page accent with the grid texture and a soft image icon. */
+.placeholder {
+  --slot-line: rgb(16 17 22 / 7%);
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 55%, #ffffff);
+  background-color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 11%, var(--marketing-raised, #ffffff));
+  background-image:
+    linear-gradient(to right, var(--slot-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--slot-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--seo-accent, #5f2ce0) 16%, transparent);
+}
+:global([data-theme="dark"]) .placeholder {
+  --slot-line: rgb(255 255 255 / 6%);
+  color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 45%, #ffffff);
+  background-color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 22%, var(--marketing-raised, #1c1d24));
+}
+
+/* Inside light mock UI or on a light colour panel the placeholder stays light in both themes. */
+.placeholder.light,
+:global([data-theme="dark"]) .placeholder.light {
+  --slot-line: rgb(16 17 22 / 7%);
+  color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 55%, #ffffff);
+  background-color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 11%, #ffffff);
+}
+
+/* Full-bleed slots carry white headlines, so their placeholder is dark in both themes. */
+.placeholder:is([data-key="statement"], [data-key="cta"]) {
+  --slot-line: rgb(255 255 255 / 7%);
+  color: rgb(255 255 255 / 42%);
+  background-color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 34%, #101116);
+  background-size: 96px 96px;
+}
+
+/* A centred headline sits on these, so the icon moves to the corner. */
+.placeholder:is([data-key="statement"], [data-key="cta"]) .slotIcon { position: absolute; inset: 24px 24px auto auto; }
+
+.placeholder { container-type: inline-size; }
+.slotIcon { inline-size: clamp(28px, 8cqi, 56px); block-size: auto; opacity: .9; }
+
+.caption {
+  position: absolute;
+  inset: auto auto 10px 10px;
+  display: grid;
+  gap: 2px;
+  max-inline-size: calc(100% - 20px);
+  padding: 6px 9px;
+  color: #101116;
+  background: rgb(255 255 255 / 86%);
+  border-radius: 8px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .6875rem;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: .02em;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.caption strong { font-weight: 700; letter-spacing: .06em; }
+
+/* Small slots keep the key and size; the path only fits in larger ones. */
+@container (max-width: 340px) {
+  .caption > span { display: none; }
+}
+
+/* Thumbnails have no room for a caption at all: the slot's title attribute carries it instead. */
+@container (max-width: 219px) {
+  .caption { display: none; }
+}

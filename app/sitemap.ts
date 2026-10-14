@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { publicSiteOrigin } from "@/src/lib/site-url";
+import { SEO_CONTENT_UPDATED, seoCollections, seoPages, seoPagePath } from "@/src/content/seo";
 
 /**
  * Every public, indexable page on the marketing host. Auth, app, and status
@@ -22,9 +23,21 @@ const PUBLIC_PAGES: Array<{ path: string; changeFrequency: "weekly" | "monthly" 
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const origin = publicSiteOrigin();
-  return PUBLIC_PAGES.map(({ path, changeFrequency, priority }) => ({
+  return [...PUBLIC_PAGES.map(({ path, changeFrequency, priority }) => ({
     url: path === "/" ? origin : `${origin}${path}`,
     changeFrequency,
     priority,
-  }));
+  })),
+  ...Object.keys(seoCollections).map((collection) => ({
+    url: `${origin}/${collection}`,
+    lastModified: SEO_CONTENT_UPDATED,
+    changeFrequency: "monthly" as const,
+    priority: 0.8,
+  })),
+  ...seoPages.map((page) => ({
+    url: `${origin}${seoPagePath(page)}`,
+    lastModified: SEO_CONTENT_UPDATED,
+    changeFrequency: "monthly" as const,
+    priority: page.collection === "features" ? 0.8 : 0.7,
+  }))];
 }

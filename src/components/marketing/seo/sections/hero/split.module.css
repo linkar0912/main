@@ -1,0 +1,75 @@
+/* Split hero (Manychat solution-01): copy left on the accent grid, the page
+   photo right in a rounded card with example UI over its edges. */
+
+.hero { position: relative; isolation: isolate; overflow: clip; }
+
+/* Same content frame as the page nav and every section below (1360px plus the gutters). */
+.inner {
+  /* The first widget hangs this far past the photo's left edge, and the photo
+     keeps this much room on its right. Both come out of the column gap. */
+  --split-gap: 56px;
+  --split-overhang: clamp(16px, 3.4vw, 56px);
+  --split-end: clamp(0px, 1.6vw, 28px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(0, .94fr);
+  align-items: center;
+  gap: var(--split-gap);
+  box-sizing: border-box;
+  max-inline-size: calc(1360px + 2 * var(--seo-gutter, clamp(32px, 4.45vw, 72px)));
+  min-block-size: min(100svh, 940px);
+  margin-inline: auto;
+  padding: 132px var(--seo-gutter, clamp(32px, 4.45vw, 72px)) 112px;
+}
+
+.copy { min-inline-size: 0; max-inline-size: 660px; }
+.title { max-inline-size: 680px; font-size: clamp(3rem, 5.2vw, 5.5rem); }
+.title[data-long] { font-size: clamp(2.75rem, 4.5vw, 4.875rem); }
+
+/* The middle term only bites when the photo would fill its column (laptops
+   about 1120 to 1330px wide on tall screens): it trims the photo so the first
+   widget always stays 12px clear of the copy column, and a full-width H1 line
+   never runs under it. Wider screens leave slack in the column and keep the
+   height-based size. */
+.media {
+  position: relative;
+  justify-self: end;
+  inline-size: min(100%, 100% + var(--split-gap) - 12px - var(--split-overhang) - var(--split-end), clamp(380px, calc((100svh - 230px) * .8), 540px));
+  margin-inline-end: var(--split-end);
+}
+.photo {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  background: rgb(255 255 255 / 12%);
+  border-radius: 28px;
+  box-shadow: 0 40px 80px rgb(10 8 24 / 26%);
+}
+.photo img { object-fit: cover; object-position: 72% 40%; animation: photo-settle 900ms cubic-bezier(.22, .61, .21, 1) both; }
+
+/* Two classes, so these beat the shared widget rules whatever the load order. */
+.media .first { inset: 8% auto auto calc(-1 * var(--split-overhang)); inline-size: min(310px, 68%); }
+.media .second { inset: auto calc(-1 * clamp(0px, var(--seo-gutter, 64px) - 28px, 36px)) -48px auto; inline-size: min(300px, 64%); }
+
+@keyframes photo-settle { from { transform: scale(1.04); } }
+
+@media (max-width: 899px) {
+  .inner { grid-template-columns: minmax(0, 1fr); gap: 64px; min-block-size: 0; padding-block: 120px 132px; }
+  .copy { max-inline-size: none; }
+  .title, .title[data-long] { font-size: clamp(2.75rem, 7.6vw, 4.25rem); }
+  .media { justify-self: center; inline-size: min(100%, 560px); margin-inline: 0; }
+  .photo { aspect-ratio: 4 / 4.2; }
+  .media .first { inset: -24px auto auto -8px; inline-size: min(270px, 62%); }
+  .media .second { inset: auto -8px -76px auto; inline-size: min(270px, 62%); }
+}
+
+/* Phones keep one widget, on the photo's bottom edge inside the gutter. */
+@media (max-width: 599px) {
+  .inner { padding-block-end: 72px; }
+  .title { font-size: clamp(2.5rem, 11vw, 3rem); }
+  .title[data-long] { font-size: clamp(2.25rem, 9.6vw, 2.75rem); }
+  .photo img { object-position: 72% 30%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo img { animation: none; }
+}

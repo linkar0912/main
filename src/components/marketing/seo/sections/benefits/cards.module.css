@@ -1,0 +1,64 @@
+/* Benefit cards: a colour panel holding one outcome, then the benefit. Rows share tracks so every title and body line up. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: auto;
+  column-gap: clamp(20px, 2vw, 28px);
+  row-gap: 0;
+}
+.grid[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); max-inline-size: 1180px; margin-inline: auto; }
+
+.card {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  align-content: start;
+  min-inline-size: 0;
+}
+
+/* No overflow clip: a panel grows taller rather than cut a tall outcome. It
+   never grows wider than its card, so it cannot run into the next one. */
+.panel {
+  container: benefit / inline-size;
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-inline-size: 0;
+  aspect-ratio: 4 / 3;
+  padding: clamp(20px, 2.4vw, 32px);
+  isolation: isolate;
+}
+.grid[data-count="2"] .panel { aspect-ratio: 16 / 11; }
+
+/* The outcome is drawn at one size and zoomed to the panel, so it never squeezes.
+   Narrow panels draw it narrower, not smaller: its 12px text stays at 11px or more. */
+.stage { inline-size: 320px; }
+@container benefit (min-width: 520px) { .stage { inline-size: 340px; zoom: 1.24; } }
+@container benefit (min-width: 420px) and (max-width: 519px) { .stage { zoom: 1.06; } }
+@container benefit (max-width: 339px) { .stage { inline-size: 300px; zoom: .92; } }
+@container benefit (max-width: 299px) { .stage { inline-size: 260px; zoom: .92; } }
+
+.card .title { margin-block-start: clamp(22px, 2.2vw, 28px); }
+.card .text { max-inline-size: 46ch; }
+.grid[data-count="2"] .text { max-inline-size: 54ch; }
+
+/* Tablets: each card is a row, panel beside its text. Three cards wait for
+   1024px to sit side by side, so every panel has room for its outcome. */
+@media (max-width: 1023px) {
+  .grid, .grid[data-count="2"] { grid-template-columns: minmax(0, 1fr); row-gap: 48px; max-inline-size: 760px; margin-inline: auto; }
+  .card { grid-row: auto; grid-template-rows: none; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-areas: "panel title" "panel text"; align-content: center; column-gap: 32px; }
+  .panel { grid-area: panel; align-self: center; }
+  .grid[data-count="2"] .panel { aspect-ratio: 4 / 3; }
+  .card .title { grid-area: title; align-self: end; margin-block-start: 0; }
+  .card .text { grid-area: text; align-self: start; }
+}
+
+/* Phones: stacked. The outcome reflows to the panel's width at full size
+   instead of being zoomed down, and the panel takes whatever height it needs. */
+@media (max-width: 599px) {
+  .grid, .grid[data-count="2"] { row-gap: 52px; }
+  .card { grid-template-columns: minmax(0, 1fr); grid-template-areas: "panel" "title" "text"; }
+  .panel, .grid[data-count="2"] .panel { aspect-ratio: auto; min-block-size: 220px; padding: 16px; }
+  .stage { inline-size: 100%; max-inline-size: 320px; zoom: 1; }
+  .card .title { margin-block-start: 22px; }
+}

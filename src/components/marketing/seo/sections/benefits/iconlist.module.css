@@ -1,0 +1,53 @@
+/* A 4:5 photo slot beside an icon list. The first outcome floats on the photo's inner edge. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  grid-template-areas: "media content";
+  align-items: center;
+  gap: clamp(56px, 7vw, 128px);
+}
+.layout[data-photo="end"] { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); grid-template-areas: "content media"; }
+
+.media { position: relative; grid-area: media; justify-self: center; inline-size: 100%; max-inline-size: 560px; }
+.photo { position: relative; aspect-ratio: 4 / 5; overflow: hidden; border-radius: 28px; }
+
+.float { position: absolute; inset: auto -48px 40px auto; z-index: 1; }
+.layout[data-photo="end"] .float { inset: auto auto 40px -48px; }
+.stage { inline-size: 300px; zoom: .92; }
+
+.content { grid-area: content; min-inline-size: 0; }
+.title { max-inline-size: 640px; }
+
+.list { display: grid; gap: 0; margin: 40px 0 0; padding: 0; list-style: none; }
+.item { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; gap: 20px; padding-block: 24px; border-top: 1px solid var(--marketing-border, rgb(16 17 22 / 12%)); }
+.item:last-child { border-bottom: 1px solid var(--marketing-border, rgb(16 17 22 / 12%)); }
+.icon { display: grid; place-items: center; inline-size: 52px; block-size: 52px; border-radius: 16px; }
+.itemTitle {
+  margin: 4px 0 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(1.375rem, 1.7vw, 1.625rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -.04em;
+  text-wrap: balance;
+}
+.itemBody { max-inline-size: 54ch; margin-block-start: 8px; }
+
+@media (max-width: 899px) {
+  .layout, .layout[data-photo="end"] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "content" "media"; gap: 72px; }
+  .media { max-inline-size: 520px; }
+  .photo { aspect-ratio: 4 / 4.4; }
+  .float, .layout[data-photo="end"] .float { inset: auto 12px -40px auto; }
+}
+
+@media (max-width: 599px) {
+  .list { margin-block-start: 32px; }
+  .item { grid-template-columns: 44px minmax(0, 1fr); gap: 16px; padding-block: 20px; }
+  .icon { inline-size: 44px; block-size: 44px; border-radius: 14px; }
+  .photo { border-radius: 24px; }
+  /* In the flow under the photo, overlapping its bottom edge by a fixed 112px:
+     a tall outcome pushes the section down instead of covering the photo. */
+  .float, .layout[data-photo="end"] .float { position: relative; inset: auto; inline-size: fit-content; margin: -112px 8px 0 auto; }
+  /* Narrower, not smaller: the widget's 12px text stays at 11px or more. */
+  .stage { inline-size: 260px; zoom: .92; }
+}

@@ -1,0 +1,36 @@
+/* Related guides as cards: a split header with the browse link, then page-card's grid. */
+
+.section { color: var(--marketing-text); }
+
+.head { align-items: end; }
+.aside { display: grid; justify-items: start; gap: 24px; }
+.aside > p { margin: 0; }
+
+.browse {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-block-size: 54px;
+  padding: 0 26px;
+  color: var(--marketing-text);
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  font-size: .9375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+.browse svg { transition: transform 180ms ease; }
+.browse:hover { color: var(--marketing-canvas); background: var(--marketing-text); border-color: var(--marketing-text); transform: translateY(-2px); }
+.browse:hover svg { transform: translateX(3px); }
+
+@media (max-width: 899px) {
+  .aside { gap: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browse, .browse svg { transition: none; }
+  .browse:hover, .browse:hover svg { transform: none; }
+}

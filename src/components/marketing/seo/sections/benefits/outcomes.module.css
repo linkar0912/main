@@ -1,0 +1,222 @@
+/* Outcome pictures: the apps' light UI, fixed white and ink in both site themes. Drawn for a 320px stage. */
+.outcome {
+  --o-ink: #101116;
+  --o-muted: #6b6c75;
+  --o-line: rgb(16 17 22 / 9%);
+  --o-shadow: 0 14px 34px rgb(16 17 22 / 14%);
+  position: relative;
+  display: grid;
+  justify-items: center;
+  inline-size: 100%;
+  color: var(--o-ink);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+
+.card {
+  display: grid;
+  gap: 10px;
+  inline-size: 100%;
+  padding: 14px;
+  color: var(--o-ink);
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: var(--o-shadow);
+}
+
+.head { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .8125rem; font-weight: 700; line-height: 1.3; }
+.headIcon { display: inline-grid; place-items: center; inline-size: 24px; block-size: 24px; color: #ffffff; background: var(--o-ink); border-radius: 8px; }
+
+/* Shared stage list (pipeline, schedule): dots on a thin rail. */
+.stages { position: relative; display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.stages::before { position: absolute; inset: 12px auto 12px 11px; inline-size: 2px; content: ""; background: var(--o-line); border-radius: 2px; }
+.stages li { position: relative; display: flex; align-items: flex-start; gap: 11px; }
+.stageDot { display: inline-grid; place-items: center; flex: 0 0 auto; inline-size: 24px; block-size: 24px; color: #0e5c41; background: #c8f0dc; border-radius: 50%; box-shadow: 0 0 0 3px #ffffff; }
+.stages li[data-done="false"] .stageDot { color: var(--o-muted); background: #f1f1f4; }
+.stageText { display: grid; gap: 1px; min-inline-size: 0; padding-block-start: 2px; }
+.stageText b { font-size: .8125rem; font-weight: 700; line-height: 1.3; }
+.stageText small { color: var(--o-muted); font-size: .75rem; font-weight: 500; line-height: 1.35; }
+.stages li[data-done="false"] .stageText b { color: var(--o-muted); }
+
+/* 1. Lock screen with a notification stack. */
+.lock {
+  display: grid;
+  justify-items: center;
+  inline-size: 100%;
+  padding: 18px 14px 22px;
+  color: #ffffff;
+  background:
+    radial-gradient(120% 80% at 20% 0%, color-mix(in srgb, var(--seo-accent, #5f2ce0) 70%, transparent), transparent 70%),
+    linear-gradient(170deg, color-mix(in srgb, var(--seo-accent, #5f2ce0) 45%, #101116) 0%, #101116 90%);
+  border-radius: 24px;
+  box-shadow: var(--o-shadow);
+}
+.lockTime { margin: 0; font-family: var(--font-display, ui-sans-serif, sans-serif); font-size: 2.75rem; font-weight: 700; line-height: 1; letter-spacing: -.03em; }
+.lockDate { margin: 4px 0 18px; color: rgb(255 255 255 / 82%); font-size: .75rem; font-weight: 600; line-height: 1.3; }
+.stack { position: relative; display: grid; inline-size: 100%; padding-block-end: 12px; }
+.stack > :first-child { position: relative; z-index: 2; inline-size: 100%; background: rgb(255 255 255 / 16%); border-color: rgb(255 255 255 / 22%); }
+.stackLayer { position: absolute; inset: auto 6% 6px; z-index: 1; block-size: 20px; background: rgb(255 255 255 / 12%); border-radius: 0 0 16px 16px; }
+.stackLayer + .stackLayer { inset: auto 12% 0; z-index: 0; background: rgb(255 255 255 / 7%); }
+
+/* 2. Rich link preview with a drawn page for its thumbnail. */
+.previewWrap { position: relative; inline-size: min(100%, 300px); }
+.previewWrap .preview { inline-size: 100%; box-shadow: var(--o-shadow); }
+.sketch { display: grid; grid-template-columns: 1fr 1.1fr; gap: 10px; padding: 12px; background: color-mix(in srgb, var(--seo-accent, #5f2ce0) 12%, #ffffff); }
+.sketchHero { display: grid; place-items: center; color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 70%, #ffffff); background: color-mix(in srgb, var(--seo-accent, #5f2ce0) 24%, #ffffff); border-radius: 10px; }
+.sketchLines { display: grid; align-content: center; gap: 7px; }
+.sketchLines i { display: block; block-size: 7px; background: rgb(16 17 22 / 16%); border-radius: 4px; }
+.sketchLines i:first-child { inline-size: 88%; block-size: 10px; background: rgb(16 17 22 / 30%); }
+.sketchLines i:nth-child(3) { inline-size: 64%; }
+.sketchLines b { display: block; inline-size: 54%; block-size: 16px; margin-block-start: 3px; background: var(--seo-accent, #5f2ce0); border-radius: 999px; }
+.cursor, .floatTag { position: absolute; z-index: 1; box-shadow: 0 10px 22px rgb(16 17 22 / 20%); }
+.cursor { inset: auto -10px 34px auto; display: grid; place-items: center; inline-size: 30px; block-size: 30px; color: #ffffff; background: var(--o-ink); border-radius: 50%; rotate: -35deg; }
+.floatTag { inset: -12px -8px auto auto; padding: 6px 11px; color: var(--o-ink); background: #fff100; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; rotate: 3deg; }
+
+/* 3. Caption promise, dotted connector, then the one link it promised. */
+.caption { display: grid; justify-items: center; inline-size: min(100%, 300px); }
+.captionCard { grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px; }
+.captionCard p { margin: 0; font-size: .8125rem; font-weight: 500; line-height: 1.45; text-wrap: pretty; }
+.captionCard strong { font-weight: 700; }
+.captionWord { padding: 1px 6px; color: #ffffff; background: var(--o-ink); border-radius: 6px; font-weight: 800; letter-spacing: .02em; }
+.connector {
+  position: relative;
+  display: grid;
+  place-items: end center;
+  inline-size: 24px;
+  block-size: 44px;
+  color: var(--o-ink);
+  background: linear-gradient(var(--o-ink) 50%, transparent 0) center top / 2px 7px repeat-y;
+}
+.connector > svg { rotate: 90deg; translate: 0 6px; }
+.caption .captionButton { margin-block-start: 6px; box-shadow: var(--o-shadow); border-color: transparent; }
+.pagePill { display: inline-flex; align-items: center; gap: 8px; margin-block-start: 6px; padding: 8px 14px 8px 8px; color: var(--o-ink); background: #ffffff; border-radius: 999px; box-shadow: var(--o-shadow); font-size: .8125rem; font-weight: 700; line-height: 1.25; }
+
+/* 4. Routes: each campaign with its own destination. */
+.routes { gap: 0; padding-block: 6px; }
+.route { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 12px; padding-block: 10px; }
+.route + .route { border-top: 1px solid var(--o-line); }
+.thumb { display: grid; place-items: center; inline-size: 36px; block-size: 36px; color: var(--o-ink); background: #e4d4ff; border-radius: 10px; }
+.route + .route .thumb { background: #cfe8ff; }
+.route + .route + .route .thumb { background: #ffd6fb; }
+.routeBody { display: grid; gap: 5px; min-inline-size: 0; }
+.routeBody small { color: var(--o-muted); font-size: .75rem; font-weight: 600; line-height: 1.2; }
+.routeLine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.word { padding: 3px 8px; color: #ffffff; background: var(--o-ink); border-radius: 6px; font-family: var(--font-mono, ui-monospace, monospace); font-size: .75rem; font-weight: 600; line-height: 1.2; letter-spacing: .04em; white-space: nowrap; }
+.routeTo { display: inline-flex; align-items: center; gap: 8px; }
+.routeArrow { color: var(--o-muted); }
+.routeDestination { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; background: #f4f4f6; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.routeDestination > svg { color: var(--seo-accent, #5f2ce0); }
+
+/* 5. Boundary: one row answered, one row left alone. */
+.boundary { gap: 8px; }
+.boundaryRow { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; background: #f4f4f6; border-radius: 12px; }
+.boundaryRow[data-on="true"] { background: #effaf4; box-shadow: inset 0 0 0 1px rgb(14 122 85 / 22%); }
+.boundaryDot { display: inline-grid; place-items: center; inline-size: 24px; block-size: 24px; color: #ffffff; background: #0e7a55; border-radius: 50%; }
+.boundaryRow[data-on="false"] .boundaryDot { background: #d4d4da; }
+.boundaryDot i { inline-size: 10px; block-size: 2px; background: #ffffff; border-radius: 2px; }
+.boundaryLabel { font-size: .8125rem; font-weight: 600; line-height: 1.35; text-wrap: pretty; }
+.boundaryState { padding: 4px 9px; color: #0e5c41; background: #c8f0dc; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.boundaryRow[data-on="false"] .boundaryState { color: var(--o-muted); background: #ffffff; box-shadow: inset 0 0 0 1px var(--o-line); }
+
+/* 6. Link menu. */
+.menu { gap: 8px; }
+.menu .head { margin-block-end: 2px; }
+
+/* 7. Contact card with fields and tags. */
+.contact { gap: 12px; padding: 16px; }
+.contactHead { display: flex; align-items: center; gap: 12px; }
+.contactHead p { display: grid; gap: 1px; min-inline-size: 0; margin: 0; line-height: 1.3; }
+.contactHead strong { overflow-wrap: anywhere; font-size: .9375rem; font-weight: 800; letter-spacing: -.01em; }
+.contactHead p span { color: var(--o-muted); font-size: .75rem; font-weight: 600; }
+.fields { display: grid; gap: 0; margin: 0; background: #f6f6f8; border-radius: 12px; }
+.fields > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; padding: 9px 12px; }
+.fields > div + div { border-top: 1px solid var(--o-line); }
+.fields dt { color: var(--o-muted); font-size: .75rem; font-weight: 600; line-height: 1.35; }
+.fields dd { margin: 0; font-size: .8125rem; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.saved { display: inline-flex; align-items: center; gap: 4px; color: #0e5c41; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.tags span { padding: 5px 10px; background: #e4d4ff; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; }
+.tags span + span { background: #c8f0dc; }
+
+/* 8. Contact search. */
+.search { gap: 12px; }
+.searchBar { display: flex; align-items: center; gap: 9px; margin: 0; padding: 10px 12px; background: #f4f4f6; border-radius: 12px; font-size: .8125rem; font-weight: 600; line-height: 1.3; }
+.searchIcon { flex: 0 0 auto; color: var(--o-muted); }
+.searchBar span { overflow-wrap: anywhere; }
+.searchBar span::after { display: inline-block; inline-size: 1.5px; block-size: 1em; margin-inline-start: 2px; content: ""; background: var(--seo-accent, #5f2ce0); vertical-align: -.15em; }
+.results { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.results li { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; column-gap: 10px; row-gap: 5px; padding: 8px 4px; }
+.results li + li { border-top: 1px solid var(--o-line); }
+.resultName { font-size: .8125rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.resultChips { display: flex; flex-wrap: wrap; grid-column: 2; gap: 5px; }
+.resultChips i { padding: 3px 8px; background: #cfe8ff; border-radius: 999px; font-size: .75rem; font-style: normal; font-weight: 700; line-height: 1.2; }
+.resultChips i + i { background: #c8f0dc; }
+
+/* 9. Team inbox row with the paused chip, and a composer for the person. */
+.inbox { gap: 0; padding: 0; overflow: hidden; }
+.inboxHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--o-line); font-size: .8125rem; font-weight: 800; line-height: 1.3; }
+.inboxFilter { padding: 4px 9px; color: var(--o-muted); background: #f4f4f6; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.inboxRow { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; column-gap: 11px; row-gap: 8px; padding: 14px; background: #f7f4ff; box-shadow: inset 3px 0 0 var(--seo-accent, #5f2ce0); }
+.inboxText { display: grid; gap: 1px; min-inline-size: 0; }
+.inboxText strong { font-size: .8125rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.inboxText small { color: var(--o-muted); font-size: .75rem; font-weight: 500; line-height: 1.3; }
+.paused { display: inline-flex; grid-column: 2; align-items: center; justify-self: start; gap: 6px; padding: 5px 10px; color: var(--o-ink); background: #ffd6fb; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.pauseIcon { display: inline-flex; gap: 2px; }
+.pauseIcon i { inline-size: 3px; block-size: 10px; background: currentColor; border-radius: 1px; }
+.composer { display: flex; align-items: center; gap: 9px; margin: 0; padding: 12px 14px; color: var(--o-muted); border-top: 1px solid var(--o-line); font-size: .8125rem; font-weight: 600; line-height: 1.3; }
+.composerText { flex: 1; }
+.composer svg { color: var(--seo-accent, #5f2ce0); }
+
+/* 10. Pipeline for one person. */
+.pipeline { gap: 14px; padding: 16px; }
+.pipeHead { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .8125rem; line-height: 1.3; }
+.pipeHead strong { font-weight: 700; overflow-wrap: anywhere; }
+.pipeTag { margin-inline-start: auto; padding: 3px 8px; color: var(--o-muted); background: #f4f4f6; border-radius: 6px; font-family: var(--font-mono, ui-monospace, monospace); font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+
+/* 11. Activity list (the kit's MockActivity). */
+.outcome .activity { inline-size: 100%; }
+
+/* 12. Facebook public thread, collapsed to show the Page's reply. */
+.public { gap: 10px; padding: 14px 14px 16px; }
+.publicHead { display: flex; align-items: center; gap: 4px; margin: 0; color: #65676b; font-size: .75rem; font-weight: 700; line-height: 1.3; }
+.collapsed { display: flex; align-items: center; gap: 7px; margin: -2px 0 0 18px; font-size: .8125rem; line-height: 1.3; }
+.collapsed strong { font-weight: 700; }
+.collapsed > span:last-child { color: #65676b; font-weight: 600; }
+.elbow { inline-size: 16px; block-size: 14px; margin-block-start: -12px; border: 2px solid #d9d9de; border-block-start: 0; border-inline-end: 0; border-end-start-radius: 10px; }
+.visible { justify-self: start; padding: 5px 10px; color: #1f4fd1; background: #e7eefc; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; }
+
+/* 13. Follower check. */
+.gate { gap: 10px; }
+.gateRow { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; background: #f6f6f8; border-radius: 12px; }
+.gateName { display: grid; gap: 1px; min-inline-size: 0; font-size: .8125rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.gateName small { color: var(--o-muted); font-size: .75rem; font-weight: 500; }
+.okChip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; color: #0e5c41; background: #c8f0dc; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; }
+.recheck { padding: 7px 11px; color: #ffffff; background: var(--o-ink); border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+/* Phones draw the card at the stage's own width instead of zooming it. Rows
+   narrower than 254px (the card's content box) leave the name under 95px beside
+   its chip or button, so the chip drops under the name and every handle stays
+   whole. Tablet and desktop stages are zoomed, never reflowed, and keep one line. */
+@media (max-width: 599px) {
+  .gate { container: gate / inline-size; }
+  @container gate (max-width: 253px) {
+    .gateRow { grid-template-columns: 26px minmax(0, 1fr); row-gap: 8px; }
+    .gateRow > .okChip, .gateRow > .recheck { grid-column: 2; justify-self: start; }
+  }
+}
+
+/* 14. Schedule. */
+.schedule { gap: 14px; padding: 16px; }
+.windowChip { justify-self: start; padding: 5px 10px; background: #fff100; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; }
+
+/* 15. Opt-out. */
+.optout { gap: 10px; }
+.optout > :nth-child(2) { min-inline-size: 0; padding: 10px 12px; background: #f6f6f8; border-radius: 12px; box-shadow: none; }
+.optoutNote { margin: 0; color: var(--o-muted); font-size: .75rem; font-weight: 600; line-height: 1.35; text-align: center; }
+
+/* 16. Retry. */
+.retry { gap: 8px; padding: 16px; }
+.field { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 10px 12px; background: #ffffff; border: 1.5px solid #d4d4da; border-radius: 12px; font-size: .8125rem; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.field[data-state="error"] { border-color: #b8235a; }
+.field[data-state="ok"] { border-color: #0e7a55; }
+.field[data-state="ok"] > svg { color: #0e7a55; }
+.hint { margin: -2px 0 4px; color: #b8235a; font-size: .75rem; font-weight: 600; line-height: 1.35; }

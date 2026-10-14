@@ -64,14 +64,16 @@ describe("MarketingPage", () => {
     expect(destinations).toEqual(expect.arrayContaining([
       "/login",
       "/pricing",
-      "/#product",
+      "/features",
+      "/solutions",
+      "/templates",
       "/#how-it-works",
       "/#faq",
     ]));
 
     const navigation = screen.getByRole("navigation", { name: "Primary" });
     expect(within(navigation).getByRole("link", { name: "Product" }).getAttribute("href"))
-      .toBe("/#product");
+      .toBe("/features");
     expect(within(navigation).getByRole("link", { name: "Pricing" }).getAttribute("href"))
       .toBe("/pricing");
   });
@@ -81,11 +83,13 @@ describe("MarketingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resources" }));
     const resources = within(screen.getByRole("navigation", { name: "Resources" }));
 
-    for (const label of ["How it works", "Automation workflows", "Frequently asked questions"]) {
+    for (const label of ["How it works", "Frequently asked questions"]) {
       const href = resources.getByRole("link", { name: label }).getAttribute("href");
       expect(href?.startsWith("/#")).toBe(true);
       expect(container.querySelector(href?.slice(1) ?? "missing-anchor")).toBeTruthy();
     }
+    expect(resources.getByRole("link", { name: "Automation workflows" }).getAttribute("href")).toBe("/templates");
+    expect(resources.getByRole("link", { name: "All solutions" }).getAttribute("href")).toBe("/solutions");
   });
 
   it("renders only Linkar-owned public copy", () => {

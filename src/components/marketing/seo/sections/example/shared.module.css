@@ -1,0 +1,91 @@
+/* Shared by every example variant: the caption under the figure, the brand avatar, app tiles. */
+
+.caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px 12px;
+  max-inline-size: 66ch;
+  margin: clamp(28px, 3vw, 40px) auto 0;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .9375rem;
+  line-height: 1.55;
+  text-align: center;
+}
+.text { color: color-mix(in srgb, currentColor 82%, transparent); text-wrap: balance; }
+.text strong { color: currentColor; font-weight: 700; }
+.tag {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  translate: 0 -1px;
+}
+/* On the dark site theme a neutral surface turns dark, so the tag flips to white. */
+:global([data-theme="dark"]) .caption[data-tone="neutral"] .tag { color: #101116; background: #ffffff; }
+
+/* Instagram's Story ring around your own avatar. */
+.ring { display: inline-grid; flex: 0 0 auto; padding: 2px; background: conic-gradient(from 200deg, #fa0cf7, #ff7a00, #fff100, #fa0cf7); border-radius: 50%; }
+.ring > span { box-shadow: 0 0 0 2px #ffffff; }
+
+.app {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 22px;
+  block-size: 22px;
+  color: #ffffff;
+  border-radius: 7px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .9375rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.app[data-app="instagram"] { background: linear-gradient(140deg, #6d28f5 0%, #d6249f 55%, #fd8f3a 100%); }
+.app[data-app="facebook"] { background: #1f4fd1; padding-block-start: 3px; }
+.app[data-app="linkar"] { background: #101116; }
+
+/* A reply test's versions: a mono tag over each sent bubble. */
+.versions { display: grid; gap: 10px; inline-size: 100%; }
+.version { display: grid; justify-items: end; gap: 5px; }
+.versionTag { color: #3b1fa3; font-family: var(--font-mono, ui-monospace, monospace); font-size: .75rem; font-weight: 600; line-height: 1.2; letter-spacing: .06em; text-transform: uppercase; }
+
+/* A step for you after the reply, outside the chat: Linkar's mark, a mono tag, the text. Light in both themes. */
+.workspace {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin: 0;
+  padding: 8px 14px 8px 8px;
+  color: #101116;
+  background: #ffffff;
+  border: 1px dashed rgb(16 17 22 / 28%);
+  border-radius: 16px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: start;
+}
+.workspaceMark { display: inline-grid; place-items: center; flex: 0 0 auto; inline-size: 24px; block-size: 24px; color: #ffffff; background: #101116; border-radius: 8px; }
+.workspaceTag {
+  flex: 0 0 auto;
+  color: #3d3e46;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.workspaceText { min-inline-size: 0; text-wrap: pretty; }

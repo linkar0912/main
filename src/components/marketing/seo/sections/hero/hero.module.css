@@ -1,0 +1,288 @@
+/* Shared hero pieces: breadcrumb, headline, copy, actions, trust row, and the
+   example UI families. Each variant's own module places them. All text on the
+   hero surfaces is solid white: translucent white fails contrast on the
+   lighter accents. */
+
+/* Breadcrumb. The trailing slash stays with the crumbs when the pill wraps. */
+.breadcrumb ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 8px;
+  margin: 0 0 28px;
+  padding: 0;
+  color: #ffffff;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: .08em;
+  list-style: none;
+  text-transform: uppercase;
+}
+.breadcrumb li { display: inline-flex; align-items: center; gap: 8px; min-inline-size: 0; }
+.breadcrumb li:not(:last-child)::after { content: "/"; content: "/" / ""; opacity: .6; }
+/* A hit area at least 44px each way without moving the line. With the 8px gap,
+   neighbouring hit areas still do not overlap. */
+.breadcrumb a { display: inline-block; min-inline-size: 44px; margin: -14px -6px; padding: 14px 6px; color: inherit; text-align: center; text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+/* The current page as the label pill. A darker wash raises the white text's contrast. */
+.crumbPill, .label {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 9px;
+  max-inline-size: 100%;
+  padding: 7px 12px 7px 11px;
+  background: rgb(16 17 22 / 16%);
+  border: 1px solid rgb(255 255 255 / 34%);
+  border-radius: 14px;
+  text-align: start;
+  text-wrap: balance;
+}
+.crumbPill::before, .label::before {
+  content: "";
+  flex: 0 0 auto;
+  inline-size: 7px;
+  block-size: 7px;
+  margin-block-start: .3em;
+  background: #fff100;
+  border-radius: 50%;
+}
+.label { margin-block: 0 26px; color: #ffffff; }
+
+/* Headline: px caps and balance, never ch caps (they force one-word lines). */
+.title {
+  margin: 0;
+  color: #ffffff;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-weight: 800;
+  line-height: .96;
+  letter-spacing: -.055em;
+  word-spacing: .05em;
+  text-wrap: balance;
+  /* Last resort only: a word wider than the column breaks instead of running
+     out of it. `anywhere` (unlike `break-word`) also lowers the min-content
+     width, so a long word can never widen a grid track or a shrink-to-fit box. */
+  overflow-wrap: anywhere;
+}
+.sentence { display: block; text-wrap: balance; }
+.nowrap { white-space: nowrap; }
+
+.description {
+  max-inline-size: 560px;
+  margin: 26px 0 0;
+  color: #ffffff;
+  font-size: 1.125rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.actions { margin-block-start: 34px; }
+.proof { margin: 18px 0 0; color: #ffffff; font-size: .875rem; font-weight: 600; line-height: 1.4; text-wrap: balance; }
+
+/* The icon cut-outs show the surface behind them. */
+.trust { --lockup-cutout: var(--seo-accent, #5f2ce0); margin-block-start: 40px; }
+
+/* Example UI */
+.widgets { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.first, .second {
+  position: absolute;
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  animation: widget-in 620ms cubic-bezier(.22, .61, .21, 1) 160ms both;
+}
+.second { animation-delay: 400ms; }
+.first > .widget, .second > .widget { inline-size: 100%; min-inline-size: 0; }
+.first > .status { margin-inline-start: 34px; }
+
+/* A Story event or request: a notification row, never a quoted bubble. */
+.widgets .event { display: flex; align-items: center; gap: 11px; padding: 12px 14px; }
+.event p { flex: 1; min-inline-size: 0; margin: 0; color: #101116; font-size: .875rem; font-weight: 500; line-height: 1.35; }
+.event strong { font-weight: 700; }
+.eventTime { align-self: start; color: #6b6c75; font-size: .75rem; font-weight: 500; }
+
+.widgets .fbCard { display: grid; gap: 10px; padding: 14px; }
+
+.dmHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  margin: 0 0 2px;
+  color: #6b6c75;
+  font-size: .75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.dmHead strong { overflow: hidden; color: #101116; font-size: .8125rem; font-weight: 700; text-overflow: ellipsis; }
+
+/* Bare bubbles on a photo: white and violet with the kit's shadow. */
+.bubbleRow { display: flex; align-items: flex-end; gap: 8px; }
+.widgets .floatBubble { color: #101116; background: #ffffff; box-shadow: 0 14px 34px rgb(16 17 22 / 22%); }
+.floatReply { display: grid; justify-items: end; gap: 8px; }
+.floatReply > * { box-shadow: 0 14px 34px rgb(16 17 22 / 22%); }
+.floatReply > :is(p, span, div):not(:first-child):not(.laterPill) { inline-size: min(100%, 280px); }
+.laterPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 5px 11px 5px 9px;
+  color: #ffffff;
+  background: rgb(16 17 22 / 70%);
+  border-radius: 999px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* Solutions flow: When / Reply / Then, joined by a dashed line. */
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-inline-start: auto;
+  padding: 3px 9px 3px 7px;
+  color: #0b5c3f;
+  background: #dcf3e7;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.live::before { content: ""; inline-size: 7px; block-size: 7px; background: #0e7a55; border-radius: 50%; }
+.flowRows { position: relative; display: grid; margin: 0; padding: 0; list-style: none; }
+.flowRows li { position: relative; display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: start; gap: 10px; padding-block: 7px; }
+.flowRows li + li::before {
+  content: "";
+  position: absolute;
+  inset: -5px auto auto 22px;
+  block-size: 12px;
+  border-inline-start: 1.5px dashed #b9bac2;
+}
+.flowTag {
+  justify-self: start;
+  padding: 3px 7px;
+  color: #101116;
+  background: #fff100;
+  border-radius: 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.flowTag[data-tone="lilac"] { background: #e4d4ff; }
+.flowTag[data-tone="mint"] { background: #c8f0dc; }
+.flowText { min-inline-size: 0; color: #101116; font-size: .8125rem; font-weight: 600; line-height: 1.38; text-wrap: pretty; }
+.flowText em { display: block; margin-block-start: 2px; color: #6b6c75; font-style: normal; font-weight: 500; }
+.flowKeyword {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 2px 8px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 999px;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: .75rem;
+  font-weight: 800;
+  line-height: 1.2;
+  vertical-align: 1px;
+}
+.flowQuote { display: block; padding: 7px 10px; color: #3a3b44; background: #f4f4f6; border-radius: 10px; font-weight: 500; }
+.flowLink { display: inline-flex; align-items: flex-start; gap: 6px; color: #101116; }
+.flowLink > svg { margin-block-start: 2px; color: #5f2ce0; }
+
+/* Templates recipe: the steps as a checklist. */
+.recipeCount {
+  margin-inline-start: auto;
+  padding: 3px 8px;
+  color: #3b1fa3;
+  background: #f0e9ff;
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.recipeSteps { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.recipeSteps li { display: flex; align-items: flex-start; gap: 10px; color: #101116; font-size: .8125rem; font-weight: 600; line-height: 1.38; }
+.recipeCheck { display: inline-grid; place-items: center; flex: 0 0 auto; inline-size: 20px; block-size: 20px; margin-block-start: -1px; color: #101116; background: #c8f0dc; border-radius: 50%; }
+.recipeFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding-block-start: 10px;
+  color: #5f2ce0;
+  border-block-start: 1px dashed rgb(16 17 22 / 14%);
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* Numbered captions for the centred hero's two-step story. */
+.caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 6px 14px 6px 6px;
+  color: #ffffff;
+  background: rgb(16 17 22 / 72%);
+  border-radius: 999px;
+  box-shadow: 0 10px 26px rgb(16 17 22 / 18%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.caption b {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 22px;
+  block-size: 22px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 50%;
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+@keyframes widget-in { from { opacity: 0; transform: translateY(18px) scale(.97); } }
+@keyframes photo-settle { from { transform: scale(1.04); } }
+
+/* Phones: one widget, in the flow under the photo and overlapping its bottom
+   edge by a fixed amount, so a tall card spills below instead of covering the
+   photo. Three-part selectors beat each variant's own placement. At 88% the
+   recipe header ("Workflow recipe", "3 steps") stays on one line at 320 and
+   the flow card's reply keeps a readable measure. */
+@media (max-width: 599px) {
+  .widgets[data-keep="second"] .first, .widgets[data-keep="first"] .second { display: none; }
+  .widgets[data-keep] { position: relative; inset: auto; display: grid; justify-items: end; margin-block-start: -88px; }
+  .widgets[data-keep] > .first, .widgets[data-keep] > .second { position: relative; inset: auto; inline-size: min(280px, 88%); }
+  .caption { display: none; }
+  /* A headline word of 14 or more letters ("acknowledgement") is wider than a
+     phone column at the variant sizes, so those headlines step down until the
+     word fits whole. Never larger than any variant's own phone size; the
+     doubled class outranks each variant's .title and .title[data-long]. */
+  .title.title[data-longword] { font-size: clamp(2rem, 10vw, 2.5rem); }
+  .title.title[data-longword][data-long] { font-size: clamp(2rem, 9.2vw, 2.375rem); }
+  .description { font-size: 1.0625rem; }
+  .trust { margin-block-start: 34px; }
+  .crumbPill, .label { padding: 6px 10px 6px 9px; letter-spacing: .05em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .first, .second { animation: none; }
+}

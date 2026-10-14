@@ -7,8 +7,12 @@ import styles from "./trust-lockups.module.css";
  * business verification, the official Instagram API, real usage). No
  * partner-programme badges or ratings Linkar has not earned.
  * Keep the reply count a lower bound of the production figure.
+ *
+ * `channel="facebook"` is for Facebook Page guides: the Instagram API lockup
+ * says nothing about a Facebook Page, so it is left out. The homepage and the
+ * footer keep the default, all three.
  */
-export function TrustLockups({ className }: { className?: string }) {
+export function TrustLockups({ className, channel = "instagram" }: { className?: string; channel?: "instagram" | "facebook" }) {
   return (
     <ul className={className ? `${styles.list} ${className}` : styles.list} aria-label="Why people trust Linkar">
       <li>
@@ -19,14 +23,16 @@ export function TrustLockups({ className }: { className?: string }) {
         </svg>
         <span className={styles.text}><span>Meta Verified</span><span>Business</span></span>
       </li>
-      <li>
-        <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <rect x="2" y="2" width="20" height="20" rx="6" fill="currentColor" />
-          <circle cx="12" cy="12" r="4.6" fill="none" stroke="var(--lockup-cutout, #101116)" strokeWidth="2" />
-          <circle cx="17.4" cy="6.6" r="1.35" fill="var(--lockup-cutout, #101116)" />
-        </svg>
-        <span className={styles.text}><span>Official</span><span>Instagram API</span></span>
-      </li>
+      {channel === "instagram" ? (
+        <li>
+          <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="2" y="2" width="20" height="20" rx="6" fill="currentColor" />
+            <circle cx="12" cy="12" r="4.6" fill="none" stroke="var(--lockup-cutout, #101116)" strokeWidth="2" />
+            <circle cx="17.4" cy="6.6" r="1.35" fill="var(--lockup-cutout, #101116)" />
+          </svg>
+          <span className={styles.text}><span>Official</span><span>Instagram API</span></span>
+        </li>
+      ) : null}
       <li>
         <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M12 2.5c5.5 0 9.5 3.9 9.5 8.7 0 4.8-4 8.7-9.5 8.7-1.1 0-2.1-.1-3.1-.4L4 21.5l1.3-4.2C3.5 15.8 2.5 13.6 2.5 11.2 2.5 6.4 6.5 2.5 12 2.5Z" fill="currentColor" />

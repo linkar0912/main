@@ -1,0 +1,214 @@
+/* Example as a journey: three app screens on the lilac block, joined by ink arrows.
+   The screens depict the apps, so they stay white with dark ink in both themes. */
+/* The floor keeps the two-line "Linkar replies" label clear of both screens on narrow
+   three-screen rows; from about 1333px up the gap is 5.4vw, as before. */
+.section { --flow-gap: clamp(72px, 5.4vw, 84px); }
+
+.head h2 { max-inline-size: 760px; }
+
+.figure { margin: 0; }
+
+/* Titles share a row and screens share a row, so a two-line title never pushes its screen down.
+   The row gap leaves room for the trigger sticker, which rises above the first screen, under a two-line title. */
+.track {
+  display: grid;
+  grid-template-columns: repeat(var(--flow-count, 3), minmax(0, 1fr));
+  grid-template-rows: auto 1fr;
+  gap: 26px var(--flow-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Two screens when a Facebook note sits under the public reply: narrower, so the screens keep their proportions. */
+.track[data-count="2"] { --flow-count: 2; max-inline-size: 980px; margin-inline: auto; }
+
+.stage { display: grid; grid-row: span 2; grid-template-rows: subgrid; gap: 26px; min-inline-size: 0; }
+
+.meta { display: flex; align-items: center; gap: 12px; min-block-size: 44px; }
+.num {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 36px;
+  block-size: 36px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 50%;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.title {
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(1.25rem, 1.6vw, 1.5rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -.035em;
+  text-wrap: balance;
+}
+
+/* One app screen: a bar naming the app and place, then the moment itself. */
+.screen {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-block-size: 248px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 24px 50px rgb(59 31 163 / 14%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 16px;
+  border-block-end: 1px solid rgb(16 17 22 / 8%);
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.bar > span:nth-child(2) { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
+.barDots { display: flex; gap: 3px; }
+.barDots i { inline-size: 4px; block-size: 4px; background: #101116; border-radius: 50%; }
+
+.body { display: grid; align-content: center; gap: 12px; min-inline-size: 0; padding: 22px 18px 26px; }
+
+/* Request screen. */
+.captionRow { display: flex; align-items: flex-start; gap: 10px; padding-block-end: 14px; border-block-end: 1px solid rgb(16 17 22 / 8%); }
+.captionRow p { margin: 2px 0 0; font-size: .8125rem; font-weight: 500; line-height: 1.45; }
+.captionRow strong { margin-inline-end: 3px; font-weight: 700; }
+.flatComment.flatComment { inline-size: 100%; padding: 12px 14px; background: #f4f0ff; border-radius: 14px; box-shadow: inset 0 0 0 1px rgb(95 44 224 / 22%); }
+.fresh.fresh { padding: 10px; background: #eef3fd; border-radius: 16px; }
+/* An event is a centred status line in muted ink, like Instagram's own activity lines: no bubble. */
+.event.event { padding: 4px 6px; color: #4a4b53; font-size: .8125rem; }
+
+.storyRow { display: flex; align-items: center; gap: 14px; }
+.miniStory {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 92px;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  background: linear-gradient(165deg, color-mix(in srgb, var(--seo-accent, #b8235a) 82%, #ffffff) 0%, #ffb36b 100%);
+  border-radius: 14px;
+}
+.miniBars { position: absolute; inset: 7px 7px auto; display: flex; gap: 3px; }
+.miniBars i { flex: 1; block-size: 2px; background: rgb(255 255 255 / 70%); border-radius: 2px; }
+.miniSticker { padding: 4px 6px; color: #c200bf; background: #ffffff; border-radius: 6px; font-size: .75rem; font-weight: 800; line-height: 1.2; white-space: nowrap; rotate: -5deg; }
+.miniOwner { position: absolute; inset: 15px auto auto 7px; inline-size: 16px; block-size: 16px; background: #fff100; border: 2px solid #ffffff; border-radius: 50%; }
+.storyText { display: grid; justify-items: start; gap: 8px; min-inline-size: 0; }
+.muted { margin: 0; color: #6b6c75; font-size: .75rem; font-weight: 600; line-height: 1.3; }
+.inRow { display: flex; align-items: flex-end; gap: 8px; min-inline-size: 0; }
+
+/* Reply screen. */
+.out { display: grid; justify-items: end; gap: 8px; min-inline-size: 0; }
+.out > * { max-inline-size: min(100%, 300px); }
+.pageReply.pageReply { margin-inline-start: 0; }
+.body .note { align-self: stretch; }
+
+/* Next screen: the button with a tap on it, a later message, or a step for you. */
+.tapStage { position: relative; display: grid; padding-block: 6px 14px; }
+.tap {
+  position: absolute;
+  inset: 50% 16% auto auto;
+  inline-size: 30px;
+  block-size: 30px;
+  background: rgb(95 44 224 / 22%);
+  border: 2px solid rgb(95 44 224 / 55%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 9px rgb(95 44 224 / 10%);
+}
+
+/* The trigger, stuck on the first screen's corner. */
+.sticker {
+  position: absolute;
+  inset: -15px 52px auto auto;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-inline-size: calc(100% - 68px);
+  padding: 7px 12px 7px 10px;
+  color: #101116;
+  background: #fff100;
+  border-radius: 999px;
+  box-shadow: 0 10px 22px rgb(16 17 22 / 16%);
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  rotate: 3deg;
+}
+
+/* Narrow three-screen rows: the longest triggers would wrap and cover the bar's title,
+   so the sticker moves to the corner and covers the decorative dots instead. */
+@media (min-width: 1024px) and (max-width: 1119px) {
+  .track:not([data-count="2"]) .sticker { inset-inline-end: 12px; max-inline-size: calc(100% - 24px); }
+}
+
+/* The arrow between two screens sits in the gap, centred on the screens. */
+.link {
+  position: absolute;
+  inset: 50% auto auto 100%;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  inline-size: var(--flow-gap);
+  translate: 0 -50%;
+  pointer-events: none;
+}
+.linkLabel {
+  color: #101116;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: .06em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.arrow {
+  display: grid;
+  place-items: center;
+  inline-size: 48px;
+  block-size: 48px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 50%;
+  box-shadow: 0 12px 26px rgb(16 17 22 / 22%);
+}
+
+/* Stacked: one screen per row, the arrow pointing down through the gap. */
+@media (max-width: 1023px) {
+  .section { --flow-gap: 96px; }
+  .track, .track[data-count="2"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; row-gap: var(--flow-gap); max-inline-size: 520px; margin-inline: auto; }
+  .stage { grid-row: auto; grid-template-rows: auto auto; }
+  .screen { min-block-size: 0; }
+  .link {
+    inset: 100% auto auto 50%;
+    grid-auto-flow: column;
+    align-items: center;
+    align-content: center;
+    gap: 12px;
+    inline-size: max-content;
+    block-size: var(--flow-gap);
+    translate: -50% 0;
+  }
+  .linkLabel { order: 2; }
+  .arrow { rotate: 90deg; }
+}
+
+@media (max-width: 520px) {
+  .section { --flow-gap: 88px; }
+  .body { padding: 18px 14px 22px; }
+  .miniStory { inline-size: 88px; }
+}

@@ -22,6 +22,9 @@ export function GET() {
 
 - [Home](${origin}/): what ${PRODUCT_NAME} does and how it works
 - [Pricing](${origin}/pricing): plans in Indian rupees
+- [Features](${origin}/features): Instagram workflows and Facebook Page public comment replies
+- [Solutions](${origin}/solutions): practical workflows for creators and businesses
+- [Workflow recipes](${origin}/templates): sample messages, setup steps, and downloadable campaign plans
 - [Support](${origin}/support): help and contact
 - [Privacy policy](${origin}/privacy)
 - [Terms of service](${origin}/terms)

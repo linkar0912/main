@@ -43,7 +43,7 @@ describe("LoginScreen host routing", () => {
 
     const navigation = screen.getByRole("navigation", { name: "Primary" });
     expect(within(navigation).getByRole("link", { name: "Product" }).getAttribute("href"))
-      .toBe("https://linkar.in/#product");
+      .toBe("https://linkar.in/features");
 
     for (const [name, href] of [
       ["Privacy", "https://linkar.in/privacy"],

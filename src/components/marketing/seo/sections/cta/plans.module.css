@@ -1,0 +1,147 @@
+/* Closing block with plan cards (Manychat landing-07): hot magenta or yellow in both themes, ink type throughout. */
+
+.block { overflow: clip; }
+.block[data-tone="magenta"] { --cta-tone: #fa0cf7; }
+.block[data-tone="yellow"] { --cta-tone: #fff100; }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
+  align-items: center;
+  gap: clamp(48px, 5vw, 96px);
+}
+.copy { min-inline-size: 0; }
+
+.title {
+  margin: 0;
+  color: #101116;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(3rem, 4.9vw, 5.5rem);
+  font-weight: 800;
+  line-height: .94;
+  letter-spacing: -.06em;
+}
+/* Each sentence starts its own line; the long one wraps after "conversation" on desktop. */
+.line { display: block; }
+/* The sticker is cut from the block colour: ink pill, tone letters. */
+.mark {
+  display: inline-block;
+  padding: .02em .16em .07em;
+  color: var(--cta-tone);
+  background: #101116;
+  border-radius: .2em;
+  transform: rotate(-3deg);
+  transform-origin: 30% 60%;
+}
+
+.sub {
+  max-inline-size: 50ch;
+  margin: 28px 0 0;
+  color: #101116;
+  font-size: clamp(1.0625rem, 1.25vw, 1.1875rem);
+  font-weight: 500;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* Two straight cards, dealt apart like a cascade. Only the small tags tilt. */
+.plans { display: grid; gap: 20px; margin: 0; padding: 0; list-style: none; }
+.plan {
+  inline-size: min(100%, 440px);
+  padding: 26px 28px 28px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 28px;
+  box-shadow: 0 24px 60px rgb(16 17 22 / 16%);
+}
+.plan:nth-child(1) { justify-self: start; }
+.plan:nth-child(2) { justify-self: end; }
+
+.planHead { display: flex; align-items: center; gap: 10px; }
+.planMark {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 28px;
+  block-size: 28px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 9px;
+}
+.planName {
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+.planTag {
+  margin-inline-start: auto;
+  padding: 7px 11px;
+  color: #101116;
+  background: #fff100;
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: rotate(-4deg);
+}
+.plan[data-plan="creator"] .planTag { background: #e4d4ff; transform: rotate(3deg); }
+
+.price { display: flex; align-items: baseline; gap: 8px; margin: 22px 0 20px; color: #3f4049; font-size: .9375rem; font-weight: 600; }
+.price strong {
+  color: #101116;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(2.5rem, 3.4vw, 3.25rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.05em;
+}
+
+.checks {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 20px 0 0;
+  border-block-start: 1px solid rgb(16 17 22 / 10%);
+  list-style: none;
+}
+.checks li { display: flex; align-items: center; gap: 11px; font-size: .9375rem; font-weight: 600; line-height: 1.35; }
+.checkIcon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 22px;
+  block-size: 22px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 50%;
+}
+
+.extras { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0 0; padding: 0; list-style: none; }
+.extras li {
+  padding: 7px 12px;
+  color: #101116;
+  background: #f1f1f4;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+/* Stacked layout: the cards sit side by side while there is room, then stack. */
+@media (max-width: 899px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .plans { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
+  .plan:nth-child(n) { inline-size: 100%; justify-self: stretch; }
+}
+
+@media (max-width: 520px) {
+  .plan { padding: 22px 22px 24px; }
+  .plans { gap: 16px; }
+}

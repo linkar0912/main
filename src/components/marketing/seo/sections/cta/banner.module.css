@@ -1,0 +1,116 @@
+/* Closing accent band: a giant two-line headline, then the sub, plan facts and actions over a rule. */
+
+.band { overflow: clip; }
+.band[data-tone="magenta"] { --cta-tone: #fa0cf7; }
+.band[data-tone="yellow"] { --cta-tone: #fff100; }
+
+.frame { position: relative; }
+
+.frame > .eyebrow { margin-block-end: 0; }
+
+.title {
+  margin: clamp(28px, 3vw, 40px) 0 0;
+  color: #ffffff;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  /* Sized so "Keep the conversation moving." holds one line from 768px up. */
+  font-size: clamp(2.75rem, 6.4vw, 6.125rem);
+  font-weight: 800;
+  line-height: .92;
+  letter-spacing: -.06em;
+}
+.line { display: block; }
+.mark {
+  display: inline-block;
+  padding: .02em .16em .07em;
+  color: #101116;
+  background: var(--cta-tone);
+  border-radius: .2em;
+  transform: rotate(-3deg);
+  transform-origin: 30% 60%;
+}
+
+/* A round sticker beside the short first line. Decorative: the sub says the same thing. */
+.badge {
+  position: absolute;
+  inset: -12px 0 auto auto;
+  display: grid;
+  place-items: center;
+  inline-size: clamp(104px, 9vw, 132px);
+  aspect-ratio: 1;
+  padding: 14px;
+  color: #101116;
+  background: var(--cta-tone);
+  border-radius: 50%;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: .08em;
+  text-align: center;
+  text-transform: uppercase;
+  transform: rotate(9deg);
+}
+.badge svg { display: block; margin: 0 auto 6px; }
+
+.foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 32px clamp(40px, 6vw, 96px);
+  margin-block-start: clamp(44px, 5vw, 72px);
+  padding-block-start: clamp(28px, 3vw, 40px);
+  border-block-start: 1px solid rgb(255 255 255 / 34%);
+}
+
+.sub {
+  max-inline-size: 54ch;
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(1.0625rem, 1.25vw, 1.1875rem);
+  font-weight: 500;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* Plan facts as a mono line, one item per plan. */
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.facts li { display: flex; align-items: baseline; gap: 10px; }
+.facts li::before {
+  content: "";
+  flex: 0 0 auto;
+  inline-size: 8px;
+  block-size: 8px;
+  background: var(--cta-tone);
+  border-radius: 50%;
+  transform: translateY(-1px);
+}
+.facts strong { font-weight: 800; }
+/* Each phrase, with its trailing separator, holds together; lines wrap only between phrases. */
+.seg { white-space: nowrap; }
+
+.foot .actions { justify-content: flex-end; margin-block-start: 0; }
+
+/* Below 1100px a copy column beside the buttons wraps the mono plan lines, so the buttons go underneath. */
+@media (max-width: 1099px) {
+  .badge { inset-block-start: -20px; }
+  .foot { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .foot .actions { justify-content: flex-start; }
+}
+
+/* The short first line no longer leaves room for the sticker. */
+@media (max-width: 639px) {
+  .badge { display: none; }
+}

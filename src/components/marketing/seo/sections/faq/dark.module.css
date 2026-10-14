@@ -1,0 +1,118 @@
+/*
+ * Ink in light theme, #1c1d24 in dark theme (the shell's .ink), so it never
+ * melts into the dark canvas. The hairlines keep it apart from an ink or navy
+ * block next to it.
+ */
+.faq { box-shadow: inset 0 1px 0 rgb(255 255 255 / 9%), inset 0 -1px 0 rgb(255 255 255 / 9%); }
+
+.head { margin-block-end: clamp(48px, 4.5vw, 64px); }
+.sticker { display: block; margin-block-end: 28px; transform: rotate(-8deg); }
+
+.list { max-inline-size: 800px; margin-inline: auto; border-block-start: 1px solid rgb(255 255 255 / 16%); }
+.item { border-block-end: 1px solid rgb(255 255 255 / 16%); }
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-block: 24px;
+  color: #ffffff;
+  border-radius: 12px;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: start;
+}
+.summary::-webkit-details-marker { display: none; }
+.summary::marker { content: ""; }
+.question { min-inline-size: 0; text-wrap: pretty; transition: color 180ms ease; }
+.summary:hover .question { color: #fff100; }
+
+.toggle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 36px;
+  block-size: 36px;
+  color: #ffffff;
+  border: 1px solid rgb(255 255 255 / 28%);
+  border-radius: 50%;
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease;
+}
+.toggle svg { stroke-width: 2.2; transition: transform 240ms cubic-bezier(.43, .195, .02, 1); }
+.summary:hover .toggle { border-color: rgb(255 255 255 / 56%); }
+.item[open] .toggle { color: #101116; background: #fff100; border-color: #fff100; }
+.item[open] .toggle svg { transform: rotate(180deg); }
+
+/* Answers sit one step below the questions and still pass 13:1 on ink. */
+.answer p {
+  max-inline-size: 68ch;
+  margin: 0;
+  padding: 0 60px 30px 0;
+  color: rgb(255 255 255 / 86%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: 1rem;
+  line-height: 1.7;
+  text-wrap: pretty;
+}
+.answer a {
+  color: #ffffff;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: rgb(255 241 0 / 80%);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  transition: color 180ms ease;
+}
+.answer a:hover { color: #fff100; }
+
+/* Where supported, the answer slides open instead of snapping. */
+@supports (interpolate-size: allow-keywords) {
+  .item { interpolate-size: allow-keywords; }
+  .item::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition: block-size 320ms cubic-bezier(.43, .195, .02, 1), content-visibility 320ms allow-discrete;
+  }
+  .item[open]::details-content { block-size: auto; }
+}
+
+/* The way out when the answers are not enough. */
+.help {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 28px;
+  max-inline-size: 800px;
+  margin: clamp(36px, 3.6vw, 48px) auto 0;
+}
+.helpLead {
+  margin: 0;
+  color: #ffffff;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.helpLinks { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 24px; margin: 0; padding: 0; list-style: none; }
+.helpLink { margin-inline: -6px; padding-inline: 6px; color: #ffffff; border-radius: 8px; }
+.helpLink:hover { color: #fff100; }
+
+@media (max-width: 767px) {
+  .sticker { inline-size: 56px; block-size: auto; margin-block-end: 22px; }
+  .summary { gap: 16px; padding-block: 20px; font-size: 1rem; }
+  .toggle { inline-size: 32px; block-size: 32px; }
+  .answer p { padding: 0 0 24px; font-size: .9375rem; }
+  .help { flex-direction: column; gap: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question, .toggle, .toggle svg, .answer a { transition: none; }
+  .item::details-content { transition: none; }
+}

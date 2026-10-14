@@ -39,6 +39,9 @@ const PROTECTED_APP_ROUTE_PREFIXES = [
 ] as const;
 
 const MARKETING_ROUTE_PREFIXES = [
+  "/features",
+  "/solutions",
+  "/templates",
   "/pricing",
   "/privacy",
   "/terms",
