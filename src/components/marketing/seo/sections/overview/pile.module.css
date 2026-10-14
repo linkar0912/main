@@ -1,0 +1,68 @@
+/* Overview pile: the same request arriving from three people on a colour grid panel, the problem beside it. */
+.section { color: var(--marketing-text); }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(40px, 6vw, 104px);
+}
+
+.stage {
+  container: overview-pile / inline-size;
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-block-size: clamp(420px, 34vw, 520px);
+  padding: 56px 28px;
+  overflow: hidden;
+}
+
+/* The pile is drawn at one size and zoomed with the panel, like a close-up of a phone. */
+.scene { position: relative; z-index: 1; display: grid; justify-items: center; inline-size: min(100%, 360px); }
+/* Container sizes are the panel's content box. */
+@container overview-pile (min-width: 460px) { .scene { zoom: 1.2; } }
+@container overview-pile (min-width: 540px) { .scene { zoom: 1.38; } }
+
+/* Older requests sit above the newest: each shows only its header row, the
+   newer card covers the rest, so no line of text is ever sliced. */
+.pile { display: grid; justify-items: center; inline-size: 100%; }
+.pile > * { position: relative; box-sizing: border-box; max-inline-size: none; }
+.pile > .back { z-index: 1; inline-size: 84%; margin-block-end: -14px; background: #e4e4ea; }
+.pile > .middle { z-index: 2; inline-size: 92%; margin-block-end: -14px; background: #f1f1f4; }
+.pile > .front { z-index: 3; inline-size: 100%; padding-block-end: 24px; box-shadow: 0 22px 44px rgb(16 17 22 / 18%); }
+/* The one status pill hangs off the newest card's bottom edge, clear of its text. */
+.scene .status { position: relative; z-index: 4; margin-block-start: -16px; rotate: -3deg; }
+
+.copy { min-inline-size: 0; }
+.title { max-inline-size: 640px; word-spacing: .05em; }
+.lead {
+  max-inline-size: 34em;
+  margin: 28px 0 0;
+  font-size: clamp(1.1875rem, 1.45vw, 1.375rem);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -.01em;
+  text-wrap: pretty;
+}
+/* One sentence per line, like a list of things everyone has said. */
+.line {
+  max-inline-size: 56ch;
+  margin: 14px 0 0;
+  color: color-mix(in srgb, currentColor 84%, transparent);
+  font-size: clamp(1rem, 1.1vw, 1.0625rem);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* Stacked: the heading comes first, then the pile. */
+@media (max-width: 899px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 44px; }
+  .copy { order: -1; }
+  .stage { min-block-size: 400px; }
+}
+
+@media (max-width: 520px) {
+  .stage { min-block-size: 340px; padding: 48px 20px; }
+  .lead { margin-block-start: 22px; }
+}

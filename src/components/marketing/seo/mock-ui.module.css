@@ -1,0 +1,342 @@
+/* Instagram's and Facebook's light UI: fixed white and ink in both site themes. */
+.icon { flex: 0 0 auto; display: block; }
+
+.surface {
+  --mock-ink: #101116;
+  --mock-muted: #6b6c75;
+  color: var(--mock-ink);
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 14px 34px rgb(16 17 22 / 14%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: var(--avatar-size, 32px);
+  block-size: var(--avatar-size, 32px);
+  color: #101116;
+  background: #fff100;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(16 17 22 / 10%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: calc(var(--avatar-size, 32px) * .36);
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+.avatar[data-tone="lilac"] { background: #e4d4ff; } .avatar[data-tone="pink"] { background: #ffd6fb; } .avatar[data-tone="mint"] { background: #c8f0dc; }
+.pageAvatar { color: #ffffff; background: #1f4fd1; box-shadow: none; }
+
+.comment { display: flex; align-items: start; gap: 11px; inline-size: min(100%, 340px); padding: 14px 16px; }
+.commentBody { flex: 1; min-inline-size: 0; }
+.commentMeta { display: flex; align-items: baseline; gap: 7px; margin: 1px 0 0; font-size: .8125rem; line-height: 1.3; }
+.commentMeta strong { overflow: hidden; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.commentMeta span, .commentReply { color: var(--mock-muted); font-size: .75rem; font-weight: 500; }
+.commentText { margin: 3px 0 0; font-size: .875rem; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.commentReply { display: block; margin-block-start: 5px; font-weight: 600; }
+.commentHeart { margin-block-start: 9px; color: var(--mock-muted); }
+
+/* Facebook comment row: avatar, grey bubble, then the Like / Reply line. */
+.fbComment { display: flex; align-items: start; gap: 8px; color: #101116; font-family: var(--font-sans, ui-sans-serif, sans-serif); text-align: start; }
+.fbComment[data-author="true"] { margin-inline-start: 36px; }
+.fbBody { min-inline-size: 0; }
+.fbBubble { padding: 8px 12px 9px; background: #f0f2f5; border-radius: 18px; }
+.fbName { display: flex; align-items: center; gap: 6px; margin: 0; font-size: .8125rem; font-weight: 700; line-height: 1.3; }
+.author { padding: 2px 7px; color: #1f4fd1; background: #e7eefc; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; }
+.fbText { margin: 2px 0 0; font-size: .875rem; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.fbMeta { margin: 4px 0 0 12px; color: #65676b; font-size: .75rem; font-weight: 600; line-height: 1.3; }
+.fbComment[data-quiet="true"] .fbText { color: #3a3b42; }
+
+.bubble {
+  inline-size: fit-content;
+  max-inline-size: min(100%, 260px);
+  margin: 0;
+  padding: 10px 14px;
+  color: #101116;
+  background: #efeff2;
+  border-radius: 20px 20px 20px 6px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .875rem;
+  font-weight: 500;
+  line-height: 1.42;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.bubble[data-side="you"] { margin-inline-start: auto; color: #ffffff; background: #5f2ce0; border-radius: 20px 20px 6px 20px; }
+
+/* Left aligned with the icon on the first line, so a wrapped label still reads as one button. */
+.linkButton {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 40px;
+  padding: 10px 14px 10px 12px;
+  color: #101116;
+  background: #ffffff;
+  border: 1px solid rgb(16 17 22 / 12%);
+  border-radius: 12px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: start;
+  text-wrap: pretty;
+}
+.linkButton > .icon { margin-block-start: 1px; color: #5f2ce0; }
+.linkButton > span { min-inline-size: 0; }
+
+.keyword {
+  display: inline-block;
+  padding: 8px 16px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgb(16 17 22 / 22%);
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+  transform: rotate(-4deg);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px 8px 11px;
+  color: #101116;
+  background: #fff100;
+  border-radius: 999px;
+  box-shadow: 0 14px 34px rgb(16 17 22 / 14%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.status[data-tone="ink"] { color: #ffffff; background: #101116; }
+.status[data-tone="ink"] .icon { color: #fff100; }
+.status[data-tone="white"] { background: #ffffff; }
+
+/* Thread furniture: system lines, automation notes, next-step notes, test versions. */
+.system {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  color: #6b6c75;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  text-wrap: balance;
+}
+.action, .nextNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: start;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.action { color: #3b1fa3; background: #f4f0ff; border: 1px dashed rgb(95 44 224 / 40%); }
+.action > .icon { margin-block-start: 2px; }
+.nextNote { flex-wrap: wrap; align-items: baseline; row-gap: 6px; color: #101116; background: #f4f4f6; border-radius: 12px; }
+/* The text stays beside the tag while it gets 9rem (wider than "acknowledgement"), or its whole
+   line if shorter; otherwise it drops under the tag and takes the full width of the tint. */
+.nextNote > span:last-child { flex: 1 1 9rem; min-inline-size: 0; max-inline-size: max-content; }
+.nextTag {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+/* What the public reply shows, not a task: Facebook's blue on a pale tint instead of the black task tag. */
+.nextNote[data-public="true"] { background: #eef3fd; }
+.nextNote[data-public="true"] .nextTag { color: #1f4fd1; background: #ffffff; box-shadow: inset 0 0 0 1px rgb(31 79 209 / 24%); }
+.variants, .later { display: grid; gap: 10px; }
+.variant { display: grid; justify-items: end; gap: 5px; }
+.variantTag { color: #6b6c75; font-family: var(--font-mono, ui-monospace, monospace); font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+
+.toggleRow, .option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #101116;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: start;
+}
+.toggleRow { justify-content: space-between; min-inline-size: 200px; padding: 12px 14px; background: #ffffff; border-radius: 14px; box-shadow: 0 14px 34px rgb(16 17 22 / 14%); }
+.switch { position: relative; flex: 0 0 auto; inline-size: 38px; block-size: 22px; background: #d4d4da; border-radius: 999px; }
+.switch i { position: absolute; inset: 2px auto auto 2px; inline-size: 18px; block-size: 18px; background: #ffffff; border-radius: 50%; box-shadow: 0 1px 3px rgb(16 17 22 / 25%); }
+.switch[data-on="true"] { background: #0e7a55; }
+.switch[data-on="true"] i { inset-inline-start: 18px; }
+
+.option { padding: 9px 10px; border: 1px solid rgb(16 17 22 / 10%); border-radius: 10px; }
+.option[data-selected="true"] { background: #f4f0ff; border-color: #5f2ce0; }
+.radio { flex: 0 0 auto; inline-size: 16px; block-size: 16px; border: 1.5px solid #b9bac2; border-radius: 50%; }
+.option[data-selected="true"] .radio { border: 5px solid #5f2ce0; }
+
+.panel { inline-size: min(100%, 290px); padding: 14px; border-radius: 18px; }
+.panelHead { display: flex; align-items: center; gap: 9px; margin: 0; font-size: .8125rem; font-weight: 700; line-height: 1.3; }
+.panelMark { display: inline-grid; place-items: center; flex: 0 0 auto; inline-size: 22px; block-size: 22px; color: #ffffff; background: #101116; border-radius: 7px; }
+.panelBody { display: grid; gap: 8px; margin-block-start: 12px; padding-block-start: 12px; border-top: 1px solid rgb(16 17 22 / 8%); }
+.panelBody > .toggleRow { min-inline-size: 0; padding: 4px 0; border-radius: 0; box-shadow: none; }
+.panelBody > .keyword { justify-self: center; margin-block: 6px; }
+
+.card { display: grid; gap: 8px; padding: 12px; border-radius: 18px; }
+
+/* Builder node: badge + type chip, then the body. Ports are the connector dots on its edges. */
+.node { position: relative; display: grid; gap: 12px; inline-size: min(100%, 300px); padding: 14px; border-radius: 18px; }
+.nodeHead { display: flex; align-items: center; gap: 8px; margin: 0; }
+.nodeStep {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 26px;
+  block-size: 26px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 50%;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: .875rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.nodeType {
+  padding: 4px 9px;
+  color: #101116;
+  background: #fff100;
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.nodeType[data-tone="lilac"] { background: #e4d4ff; } .nodeType[data-tone="pink"] { background: #ffd6fb; }
+.nodeType[data-tone="mint"] { background: #c8f0dc; } .nodeType[data-tone="sky"] { background: #cfe8ff; }
+.nodeBody { display: grid; gap: 8px; }
+.nodeBody > :is(.panel, .comment, .card, .toggleRow, .preview, .activity) { inline-size: 100%; min-inline-size: 0; box-shadow: none; border: 1px solid rgb(16 17 22 / 10%); }
+.nodeBody > :is(.status, .keyword) { justify-self: start; box-shadow: none; }
+.node[data-ports="in"]::before, .node[data-ports="both"]::before,
+.node[data-ports="out"]::after, .node[data-ports="both"]::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inline-size: 12px;
+  block-size: 12px;
+  background: #ffffff;
+  border: 2.5px solid #5f2ce0;
+  border-radius: 50%;
+  translate: 0 -50%;
+}
+.node[data-ports="in"]::before, .node[data-ports="both"]::before { inset-inline-start: -6px; }
+.node[data-ports="out"]::after, .node[data-ports="both"]::after { inset-inline-end: -6px; }
+
+/* Lock-screen notification: dark glass with white text. */
+.notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  inline-size: min(100%, 340px);
+  padding: 12px 14px;
+  color: #ffffff;
+  background: rgb(28 28 34 / 72%);
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 22px;
+  box-shadow: 0 18px 40px rgb(16 17 22 / 24%);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+.appIcon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 34px;
+  block-size: 34px;
+  color: #ffffff;
+  background: linear-gradient(140deg, #6d28f5 0%, #d6249f 55%, #fd8f3a 100%);
+  border-radius: 9px;
+}
+.appIcon[data-tone="facebook"] { background: #1f4fd1; }
+.appIcon[data-tone="linkar"] { background: #101116; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 18%); }
+.notificationBody { flex: 1; min-inline-size: 0; }
+.notificationMeta { display: flex; justify-content: space-between; gap: 10px; margin: 0; color: rgb(255 255 255 / 78%); font-size: .75rem; font-weight: 600; line-height: 1.3; }
+.notificationMeta span:first-child { text-transform: uppercase; letter-spacing: .04em; }
+.notificationTitle { margin: 3px 0 0; font-size: .875rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.notificationText { margin: 2px 0 0; color: rgb(255 255 255 / 88%); font-size: .8125rem; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+
+/* Rich link preview: thumbnail on top, title and domain below. */
+.preview { display: grid; inline-size: min(100%, 300px); overflow: hidden; border-radius: 16px; }
+.previewThumb { position: relative; display: grid; place-items: center; aspect-ratio: 1.91 / 1; overflow: hidden; color: #5f2ce0; background: #f4f0ff; }
+.previewThumb > * { inline-size: 100%; block-size: 100%; }
+.previewThumb > .icon { inline-size: auto; block-size: auto; }
+.previewText { padding: 11px 13px 13px; background: #f6f6f8; }
+.previewTitle { margin: 0; font-size: .875rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.previewSub { margin: 3px 0 0; color: #6b6c75; font-size: .75rem; font-weight: 500; line-height: 1.35; }
+
+/* Activity list: avatar, label, status pill. Every use gives the card a definite width,
+   so it can be a size container: a narrow card never grows to fit its pills. */
+.activity { container: mock-activity / inline-size; display: grid; gap: 12px; inline-size: min(100%, 330px); padding: 14px; border-radius: 18px; }
+.activityRows { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.activityRows li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid rgb(16 17 22 / 8%); }
+.activityLabel { flex: 1; min-inline-size: 0; font-size: .8125rem; font-weight: 600; line-height: 1.3; }
+.activityStatus { flex: 0 0 auto; padding: 4px 9px; color: #101116; background: #c8f0dc; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.activityStatus[data-tone="sky"] { background: #cfe8ff; } .activityStatus[data-tone="pink"] { background: #ffd6fb; }
+.activityStatus[data-tone="yellow"] { background: #fff100; } .activityStatus[data-tone="lilac"] { background: #e4d4ff; }
+/* Too narrow for label and pill side by side: the pill drops under the label. */
+@container mock-activity (max-width: 210px) {
+  .activityRows li { display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 10px; row-gap: 6px; }
+  .activityStatus { grid-column: 2; justify-self: start; }
+}
+
+/* Stacked builder (phones and tablets): ports move to the top and bottom edges. */
+@media (max-width: 899px) {
+  .node[data-ports="in"]::before, .node[data-ports="both"]::before { inset: -6px auto auto 50%; translate: -50% 0; }
+  .node[data-ports="out"]::after, .node[data-ports="both"]::after { inset: auto auto -6px 50%; translate: -50% 0; }
+}
+
+/* Narrow automation notes on phones and tablets: a long word breaks with a hyphen. Laptops wrap at
+   spaces only. Next notes never need it (their text gets at least 9rem or drops under the tag), and
+   browsers hyphenate eagerly at line ends ("atten-tion"), so they wrap at spaces at every width. */
+@media (max-width: 1023px) {
+  .action { hyphens: auto; }
+}
+
+@media (max-width: 520px) {
+  .comment { padding: 12px 13px; }
+  .commentText, .fbText { font-size: .8125rem; }
+  .bubble { font-size: .8125rem; }
+  .keyword { padding: 7px 14px; font-size: .875rem; }
+  .status { font-size: .75rem; }
+}

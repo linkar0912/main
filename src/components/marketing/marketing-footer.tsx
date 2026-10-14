@@ -9,11 +9,11 @@ const columns = [
   {
     title: "Product",
     links: [
-      ["Product", "/#product"],
+      ["Product", "/features"],
       ["Pricing", "/pricing"],
       ["Channels", "/#channels"],
       ["How it works", "/#how-it-works"],
-      ["Workflows", "/#workflows"],
+      ["Workflows", "/templates"],
       ["Get started", "/signup"],
     ],
   },
@@ -21,6 +21,7 @@ const columns = [
     title: "Resources",
     links: [
       ["Help and support", "/support"],
+      ["Solutions", "/solutions"],
       ["Contact", "/contact"],
       ["Sign in", "/login"],
       ["Dashboard", "/dashboard"],

@@ -1,0 +1,373 @@
+/* Example conversation: where the request starts (left), the reply on a phone (right).
+   The mock UI depicts the apps, so it keeps white surfaces and dark ink in both themes. */
+.section { color: var(--marketing-text); }
+
+.figure { margin: 0; }
+
+.stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.panel { position: relative; min-inline-size: 0; overflow: hidden; isolation: isolate; }
+
+.label {
+  position: absolute;
+  inset: 22px auto auto 22px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 5px 14px 5px 5px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgb(16 17 22 / 8%);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.label span {
+  display: grid;
+  place-items: center;
+  inline-size: 22px;
+  block-size: 22px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 50%;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+/* Left: the context card, centred in the mint panel. */
+.contextPanel { display: grid; place-items: center; padding: 88px clamp(24px, 4vw, 64px) 56px; }
+.contextBody { display: grid; justify-items: center; inline-size: 100%; }
+
+/* The card leaves room on its right for the request that floats over the photo's edge. */
+.postStage { inline-size: min(100%, 384px); padding-inline-end: 44px; }
+
+.card {
+  inline-size: 100%;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 22px;
+  box-shadow: 0 14px 34px rgb(16 17 22 / 14%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+
+.postHead { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+.postHead p { display: grid; flex: 1; min-inline-size: 0; margin: 0; line-height: 1.25; }
+.postHead strong { font-size: .8125rem; font-weight: 700; }
+.postHead p span { color: #6b6c75; font-size: .75rem; font-weight: 500; }
+.dots { display: flex; gap: 3px; padding-inline: 4px; }
+.dots i { inline-size: 4px; block-size: 4px; background: #101116; border-radius: 50%; }
+
+.media { position: relative; }
+/* Photos sit inside light app UI, so an empty slot keeps its light tint in the dark theme too. */
+.mediaFrame { position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: #e8e6ef; }
+.fbMedia .mediaFrame { aspect-ratio: 1 / 1; }
+.reelBadge {
+  position: absolute;
+  inset: 12px 12px auto auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px 5px 7px;
+  color: #ffffff;
+  background: rgb(16 17 22 / 62%);
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* The request, floating over the photo and past the card's right edge. */
+.media .float { position: absolute; inset: auto -44px 22px auto; z-index: 2; inline-size: min(86%, 292px); box-shadow: 0 18px 40px rgb(16 17 22 / 20%); }
+.eventFloat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 16px;
+  font-size: .8125rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.eventFloat strong { font-weight: 700; }
+.media .fbFloat { inline-size: auto; max-inline-size: min(86%, 292px); padding: 12px 16px 12px 12px; background: #ffffff; border-radius: 18px; }
+
+.postActions { display: flex; gap: 16px; padding: 12px 14px 4px; color: #101116; }
+.caption { margin: 0; padding: 4px 14px 14px; font-size: .8125rem; font-weight: 500; line-height: 1.45; }
+.caption strong { margin-inline-end: 3px; font-weight: 700; }
+
+/* Facebook Page post: text above the photo, then Like / Comment / Share. */
+.fbCaption { margin: 0; padding: 0 14px 12px; font-size: .875rem; font-weight: 500; line-height: 1.45; }
+.fbActions { display: flex; justify-content: space-around; padding: 12px 10px 14px; color: #65676b; font-size: .8125rem; font-weight: 700; line-height: 1.2; }
+.fbActions span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Story: the frame, with the reply or mention landing beside it. */
+.storyStage { position: relative; display: grid; inline-size: min(100%, 500px); }
+.story {
+  position: relative;
+  inline-size: min(60%, 296px);
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  color: #ffffff;
+  background: #2a2b33;
+  border-radius: 22px;
+  box-shadow: 0 24px 48px rgb(16 17 22 / 22%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+}
+.storyPhoto { position: absolute; inset: 0; }
+/* A real photo gets a scrim under the white Story chrome. The light placeholder gets none: the chrome turns ink instead. */
+.story:has(img)::after { position: absolute; inset: 0; content: ""; background: linear-gradient(rgb(0 0 0 / 38%), transparent 24%, transparent 68%, rgb(0 0 0 / 46%)); pointer-events: none; }
+.story:has([data-image-slot]) { color: #101116; }
+.story:has([data-image-slot]) .storyBars i { background: rgb(16 17 22 / 22%); }
+.story:has([data-image-slot]) .storyBars i:first-child { background: #101116; }
+.story:has([data-image-slot]) .storyReply { background: rgb(255 255 255 / 72%); border-color: rgb(16 17 22 / 24%); }
+.storyBars { position: absolute; inset: 10px 10px auto; z-index: 1; display: flex; gap: 4px; }
+.storyBars i { flex: 1; block-size: 2.5px; background: rgb(255 255 255 / 45%); border-radius: 2px; }
+.storyBars i:first-child { background: #ffffff; }
+.storyHead { position: absolute; inset: 22px 12px auto; z-index: 1; display: flex; align-items: center; gap: 8px; margin: 0; font-size: .75rem; line-height: 1.2; }
+.storyHead strong { font-weight: 700; }
+.storyHead > span:last-child { opacity: .8; }
+.mention, .storySticker {
+  position: absolute;
+  z-index: 2;
+  color: #101116;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgb(16 17 22 / 22%);
+  font-weight: 800;
+  line-height: 1.25;
+}
+.mention { inset: 44% auto auto 50%; padding: 7px 12px; color: #c200bf; border-radius: 8px; font-size: .875rem; translate: -50% 0; rotate: -6deg; }
+.storySticker { inset: 38% 14px auto; padding: 9px 12px; border-radius: 10px; font-size: .8125rem; text-align: center; text-wrap: balance; rotate: -3deg; }
+.storyReply {
+  position: absolute;
+  inset: auto 12px 14px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px 9px 14px;
+  border: 1px solid rgb(255 255 255 / 62%);
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.storyCard {
+  position: absolute;
+  inset: auto 0 18% auto;
+  z-index: 3;
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  inline-size: min(60%, 264px);
+  padding: 14px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 14px 34px rgb(16 17 22 / 16%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  rotate: 2deg;
+}
+.storyNote { display: grid; gap: 8px; min-inline-size: 0; margin: 0; font-size: .8125rem; line-height: 1.4; }
+.storyNote p { margin: 0; }
+.storyNote strong { font-weight: 700; }
+
+/* DM inbox list. */
+.inbox { inline-size: min(100%, 420px); padding-block-end: 8px; overflow: hidden; }
+.inboxTop { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 12px; }
+.inboxTop strong { display: inline-flex; align-items: center; gap: 4px; font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
+.search { margin: 0 14px; padding: 9px 14px; color: #6b6c75; background: #efeff2; border-radius: 12px; font-size: .8125rem; font-weight: 500; }
+.notes { display: flex; gap: 14px; padding: 16px 16px 4px; overflow: hidden; }
+.notes > span { display: grid; flex: 0 0 auto; justify-items: center; gap: 6px; }
+.notes small { color: #6b6c75; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.tabs { display: flex; gap: 20px; padding: 16px 16px 6px; color: #6b6c75; font-size: .8125rem; font-weight: 700; }
+.tabs [data-active] { color: #101116; }
+.rows { display: grid; gap: 2px; margin: 0; padding: 4px 6px; list-style: none; }
+.row { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 14px; }
+.row p { display: grid; flex: 1; min-inline-size: 0; margin: 0; font-size: .8125rem; line-height: 1.35; }
+.row strong { font-weight: 600; }
+.row p span { color: #6b6c75; font-weight: 500; }
+.row[data-unread] { background: #f4f0ff; }
+.row[data-unread] strong, .row[data-unread] p span { color: #101116; font-weight: 700; }
+.rowMeta { display: grid; justify-items: end; gap: 6px; color: #6b6c75; font-size: .75rem; font-weight: 600; }
+.rowMeta i { inline-size: 9px; block-size: 9px; background: #5f2ce0; border-radius: 50%; }
+.rowIcon { color: #9a9ba3; }
+
+/* Connector across the gap between the panels. */
+.connector {
+  position: absolute;
+  inset: 50% auto auto 52%;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px 12px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 999px;
+  box-shadow: 0 16px 34px rgb(16 17 22 / 26%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  translate: -50% -50%;
+  rotate: -4deg;
+}
+.connector svg:first-child { color: #fff100; }
+
+/* Right: the whole phone, ending on its composer. */
+.replyPanel { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 88px clamp(20px, 3vw, 40px) 48px; }
+
+.phone {
+  display: flex;
+  inline-size: min(100%, 340px);
+  padding: 9px;
+  background: #101116;
+  border-radius: 46px;
+  box-shadow: 0 30px 60px rgb(16 17 22 / 24%), inset 0 0 0 1.5px rgb(255 255 255 / 14%);
+}
+.screen {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 540px;
+  overflow: hidden;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 38px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+.chrome { position: relative; padding-block-start: 46px; border-block-end: 1px solid rgb(16 17 22 / 8%); }
+.island { position: absolute; inset: 12px auto auto 50%; inline-size: 86px; block-size: 25px; background: #101116; border-radius: 999px; translate: -50% 0; }
+.appBar { display: flex; align-items: center; gap: 10px; padding: 2px 16px 12px 12px; }
+.appBar p { display: grid; flex: 1; min-inline-size: 0; margin: 0; line-height: 1.25; }
+.appBar strong { font-size: .8125rem; font-weight: 700; }
+.appBar p span { color: #6b6c75; font-size: .75rem; font-weight: 500; }
+.appBarActions { display: flex; align-items: center; gap: 14px; color: #101116; }
+
+/* Messages sit on the composer, the way a fresh thread reads. */
+.thread { display: flex; flex: 1; flex-direction: column; justify-content: flex-end; gap: 10px; padding: 18px 14px 14px; }
+/* The conversation's start: the person's avatar and profile link, then space down to the messages. */
+.profile { display: grid; justify-items: center; gap: 10px; margin-block-end: auto; padding-block: 6px 18px; }
+.profileButton { padding: 7px 14px; color: #101116; background: #efeff2; border-radius: 10px; font-size: .75rem; font-weight: 700; line-height: 1.2; }
+.thread .day { margin-block-end: 2px; }
+.thread .event { align-self: center; max-inline-size: 260px; padding: 8px 12px; color: #3d3e46; background: #f4f4f6; border-radius: 12px; }
+
+.in { display: flex; align-items: end; gap: 8px; max-inline-size: 262px; }
+.inBody { display: grid; justify-items: start; gap: 5px; min-inline-size: 0; }
+.inLabel { margin: 0 0 0 4px; color: #6b6c75; font-size: .75rem; font-weight: 600; line-height: 1.3; }
+.shared { display: grid; inline-size: 176px; overflow: hidden; background: #ffffff; border-radius: 16px; box-shadow: inset 0 0 0 1px #e2e2e8; }
+.sharedHead { display: flex; align-items: center; gap: 7px; margin: 0; padding: 8px 10px; font-size: .75rem; line-height: 1.2; }
+.sharedHead strong { font-weight: 700; }
+.sharedPhoto { position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: #e8e6ef; }
+.storyPreview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: 104px;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  background: linear-gradient(165deg, color-mix(in srgb, var(--seo-accent, #b8235a) 82%, #ffffff) 0%, #ffb36b 100%);
+  border-radius: 14px;
+}
+.storyPreviewBars { position: absolute; inset: 7px 7px auto; display: flex; gap: 3px; }
+.storyPreviewBars i { flex: 1; block-size: 2px; background: rgb(255 255 255 / 70%); border-radius: 2px; }
+.storyPreviewSticker { padding: 4px 7px; background: #ffffff; border-radius: 6px; font-size: .75rem; font-weight: 800; line-height: 1.2; white-space: nowrap; rotate: -5deg; }
+.storyPreviewSticker { color: #c200bf; }
+.storyPreviewOwner { position: absolute; inset: 16px auto auto 8px; inline-size: 18px; block-size: 18px; background: #fff100; border: 2px solid #ffffff; border-radius: 50%; }
+.in .commentBubble { background: #ffffff; box-shadow: inset 0 0 0 1.5px #e2e2e8; font-weight: 600; }
+
+.out { display: grid; justify-items: end; gap: 6px; inline-size: min(100%, 250px); margin-inline-start: auto; }
+.out > * { max-inline-size: 100%; }
+.out .linkButton { inline-size: 100%; }
+.later, .nextNote { margin-block-start: 2px; }
+/* A step for you, under the phone. */
+.workspace { position: relative; z-index: 1; margin-block-start: 22px; }
+.seen { align-self: end; margin: -4px 2px 0; color: #6b6c75; font-size: .75rem; font-weight: 600; }
+
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-block-size: 44px;
+  margin: 0 12px 16px;
+  padding: 6px 14px 6px 6px;
+  color: #101116;
+  background: #efeff2;
+  border-radius: 999px;
+}
+.camera { display: grid; place-items: center; flex: 0 0 auto; inline-size: 32px; block-size: 32px; color: #ffffff; background: #5f2ce0; border-radius: 50%; }
+.composerField { flex: 1; min-inline-size: 0; padding-inline-start: 4px; color: #6b6c75; font-size: .8125rem; font-weight: 500; line-height: 1.2; }
+
+/* Facebook comments screen. */
+.fbPostRef { display: flex; align-items: center; gap: 10px; padding: 10px; background: #f6f6f8; border-radius: 14px; }
+.fbPostRef p { display: grid; min-inline-size: 0; margin: 0; font-size: .75rem; line-height: 1.35; }
+.fbPostRef strong { font-size: .8125rem; font-weight: 700; }
+.fbPostRef p span { color: #6b6c75; font-weight: 500; }
+.sort { display: flex; align-items: center; gap: 4px; margin: 4px 0 0; color: #101116; font-size: .75rem; font-weight: 700; }
+.pageReply { position: relative; }
+.pageReply::before {
+  position: absolute;
+  inset: -40px auto auto 13px;
+  inline-size: 18px;
+  block-size: 54px;
+  content: "";
+  border: 2px solid #dfe1e6;
+  border-block-start: 0;
+  border-inline-end: 0;
+  border-end-start-radius: 12px;
+}
+
+/* Tablets: the panels stay side by side (the phone renders near 300px wide at 768), with tighter
+   padding, instead of stacking into two full-width fields with a small mock in each. */
+@media (min-width: 768px) and (max-width: 899px) {
+  .stage { gap: 16px; }
+  .contextPanel, .replyPanel { padding: 72px 16px 32px; }
+}
+
+@media (max-width: 767px) {
+  .stage { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .connector { position: relative; inset: auto; justify-self: center; margin-block: -32px; translate: none; }
+  .contextPanel { padding: 80px 20px 48px; }
+  .replyPanel { padding: 80px 20px 40px; }
+  .screen { min-block-size: 500px; }
+}
+
+@media (max-width: 520px) {
+  .label { inset: 16px auto auto 16px; }
+  .contextPanel { padding: 70px 14px 36px; }
+  .replyPanel { padding: 70px 12px 28px; }
+  .postStage { padding-inline-end: 30px; }
+  .mediaFrame { aspect-ratio: 1 / 1; }
+  .media .float { inset: auto -30px 16px auto; inline-size: min(88%, 256px); }
+  .phone { inline-size: min(100%, 320px); }
+  .screen { min-block-size: 460px; }
+  .story { inline-size: 62%; }
+  .storyCard { inline-size: 66%; padding: 12px; }
+  .storySticker { inset-inline: 10px; font-size: .75rem; }
+}
+
+/* The narrowest phones: the inbox notes row shows three people, so none is cut at the card edge. */
+@media (max-width: 359px) {
+  .notes { gap: 10px; padding-inline: 12px; }
+  .notes > span:nth-child(4) { display: none; }
+}

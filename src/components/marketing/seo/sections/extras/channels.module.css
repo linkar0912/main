@@ -1,0 +1,110 @@
+/* Where this works: two flat white platform cards on the yellow grid (Manychat's platform block). */
+
+header > .title { font-size: clamp(3rem, 6.2vw, 6rem); line-height: .94; }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  max-inline-size: 1120px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  padding: clamp(28px, 3vw, 40px) clamp(28px, 3vw, 40px) clamp(18px, 2vw, 24px);
+  color: #101116;
+  background: #ffffff;
+  border-radius: 24px;
+}
+
+.name { display: flex; align-items: center; gap: 14px; margin: 0; padding-inline-end: 132px; }
+.nameText {
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(1.75rem, 2.4vw, 2.25rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.05em;
+}
+
+/* Plain glyph tiles in each app's colour family, drawn here rather than shipped as logos. */
+.glyph {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  inline-size: 48px;
+  block-size: 48px;
+  color: #ffffff;
+  border-radius: 14px;
+}
+.glyph[data-channel="instagram"] { background: linear-gradient(45deg, #f9b233 0%, #ef4a3a 34%, #d4257d 62%, #7b3fd0 100%); }
+.glyph[data-channel="facebook"] { background: #1f4fd1; }
+
+.account { margin: 22px 0 0; font-size: 1.0625rem; font-weight: 600; line-height: 1.5; text-wrap: pretty; }
+.detail { margin: 8px 0 0; color: rgb(16 17 22 / 72%); font-size: .9375rem; line-height: 1.6; text-wrap: pretty; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0 0; padding: 0; list-style: none; }
+.chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-block-size: 34px;
+  padding: 6px 13px;
+  border: 1px solid rgb(16 17 22 / 14%);
+  border-radius: 999px;
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.chips li svg { color: #0e7a55; }
+
+/* Footer row, Manychat style: mono "Learn more" with an arrow. */
+.more {
+  margin-block-start: auto;
+  padding-block-start: 28px;
+}
+.link {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.link:hover { text-decoration: underline; text-decoration-thickness: 1.5px; }
+
+/* "This guide" tag on the card for the page's own channel. Only tags may tilt. */
+.here {
+  position: absolute;
+  inset: clamp(24px, 2.6vw, 34px) clamp(24px, 2.6vw, 34px) auto auto;
+  padding: 7px 12px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transform: rotate(4deg);
+}
+
+/* Narrower cards: the tag hangs off the card's top edge, so it never crowds a wrapped name. */
+@media (max-width: 1179px) {
+  .name { padding-inline-end: 0; }
+  .here { inset: -13px 22px auto auto; transform: rotate(3deg); }
+}
+
+@media (max-width: 759px) {
+  .cards { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+}
+
+@media (max-width: 599px) {
+  header > .title { font-size: clamp(2.5rem, 12vw, 3.5rem); }
+  .glyph { inline-size: 42px; block-size: 42px; border-radius: 12px; }
+}

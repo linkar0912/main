@@ -1,0 +1,162 @@
+/* Light FAQ on the canvas: sticky header left, numbered accordion cards right,
+   the help links under the cards. Stacked, the order is title, questions, help. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-areas: "head list" "head help";
+  align-items: start;
+  gap: 40px clamp(48px, 6vw, 112px);
+}
+
+/* Sticks below the floating header and the on-page nav, over the full height of both rows. */
+.head {
+  grid-area: head;
+  position: sticky;
+  inset-block-start: calc(var(--seo-header-bottom, 92px) + var(--seo-nav-height, 64px) + 32px);
+  min-inline-size: 0;
+}
+.sticker { display: block; inline-size: 60px; block-size: auto; margin-block-end: 28px; transform: rotate(-8deg); }
+.title { max-inline-size: 520px; }
+
+.help {
+  grid-area: help;
+  min-inline-size: 0;
+  padding-block-start: 24px;
+  border-block-start: 1px solid var(--marketing-border);
+}
+.helpLead {
+  margin: 0 0 6px;
+  color: color-mix(in srgb, var(--marketing-text) 72%, transparent);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.helpLinks { display: flex; flex-wrap: wrap; gap: 0 28px; margin: 0; padding: 0; list-style: none; }
+.helpLink { margin-inline: -6px; padding-inline: 6px; border-radius: 8px; }
+
+.list { display: grid; grid-area: list; gap: 12px; min-inline-size: 0; }
+
+/* Closed: a soft grey card. Open: lifted onto white with a border, so the answer being read stands out. */
+.item {
+  background: #f5f5f7;
+  border: 1px solid transparent;
+  border-radius: 22px;
+  transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+.item:hover { border-color: var(--marketing-border); }
+.item[open] { background: var(--marketing-raised, #ffffff); border-color: var(--marketing-border); box-shadow: 0 18px 44px rgb(16 17 22 / 8%); }
+:global([data-theme="dark"]) .item { background: #1c1d24; }
+:global([data-theme="dark"]) .item[open] { background: #25262e; box-shadow: none; }
+
+.summary {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 22px 22px 26px;
+  color: var(--marketing-text);
+  border-radius: 22px;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: start;
+}
+.summary::-webkit-details-marker { display: none; }
+.summary::marker { content: ""; }
+.index {
+  color: color-mix(in srgb, var(--marketing-text) 60%, transparent);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+}
+.question { min-inline-size: 0; text-wrap: pretty; }
+
+/* A plus that turns into a minus; filled with the page accent when open. */
+.toggle {
+  position: relative;
+  inline-size: 40px;
+  block-size: 40px;
+  color: var(--marketing-text);
+  border: 1.5px solid color-mix(in srgb, var(--marketing-text) 22%, transparent);
+  border-radius: 50%;
+  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease;
+}
+.toggle::before, .toggle::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: 14px;
+  block-size: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  translate: -50% -50%;
+  transition: rotate 240ms cubic-bezier(.43, .195, .02, 1);
+}
+.toggle::after { rotate: 90deg; }
+.summary:hover .toggle { border-color: color-mix(in srgb, var(--marketing-text) 48%, transparent); }
+.item[open] .toggle { color: #ffffff; background: var(--seo-accent, #5f2ce0); border-color: var(--seo-accent, #5f2ce0); }
+.item[open] .toggle::after { rotate: 0deg; }
+:global([data-theme="dark"]) .item[open] .toggle { color: #101116; background: #fff100; border-color: #fff100; }
+
+.answer p {
+  max-inline-size: 64ch;
+  margin: 0;
+  padding: 0 78px 26px 74px;
+  color: color-mix(in srgb, var(--marketing-text) 84%, transparent);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: 1rem;
+  line-height: 1.7;
+  text-wrap: pretty;
+}
+.answer a {
+  color: var(--marketing-text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--seo-accent, #5f2ce0);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.answer a:hover { text-decoration-thickness: 3px; }
+:global([data-theme="dark"]) .answer a { text-decoration-color: rgb(255 241 0 / 80%); }
+
+/* Where supported, the answer slides open instead of snapping. */
+@supports (interpolate-size: allow-keywords) {
+  .item { interpolate-size: allow-keywords; }
+  .item::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition: block-size 320ms cubic-bezier(.43, .195, .02, 1), content-visibility 320ms allow-discrete;
+  }
+  .item[open]::details-content { block-size: auto; }
+}
+
+@media (max-width: 899px) {
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "list" "help"; }
+  .head { position: static; }
+}
+
+@media (max-width: 767px) {
+  .sticker { inline-size: 52px; margin-block-end: 22px; }
+  .layout { row-gap: 32px; }
+  .list { gap: 10px; }
+  .item { border-radius: 20px; }
+  .summary { grid-template-columns: 24px minmax(0, 1fr) 36px; gap: 12px; padding: 18px 16px 18px 18px; font-size: 1rem; border-radius: 20px; }
+  .toggle { inline-size: 36px; block-size: 36px; }
+  .answer p { padding: 0 18px 22px 54px; font-size: .9375rem; }
+}
+
+@media (max-width: 420px) {
+  .answer p { padding-inline-start: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item, .toggle, .toggle::before, .toggle::after { transition: none; }
+  .item::details-content { transition: none; }
+}

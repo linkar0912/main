@@ -1,0 +1,223 @@
+/* Page-level pieces owned by the composition: skip link, anchor offsets, hub filter bar, hub intro, hub guidance. */
+.skip { position: fixed; z-index: 200; inset: 12px auto auto 16px; padding: 12px 20px; color: #ffffff; background: #101116; border-radius: 12px; transform: translateY(-160%); }
+.skip:focus { transform: none; }
+.skip:focus-visible { outline: 3px solid #fff100; outline-offset: 3px; }
+
+/*
+ * Sticky stack and scroll offsets.
+ *
+ * The floating header ends at 92px (60px on phones); the on-page nav or hub
+ * filter sticks right under it:
+ *   detail pages  nav 65px (64 + 1 border), phones 57px
+ *   hubs          bar 64px, tablets and phones 56px
+ * html scroll-padding covers only the header. A larger padding would reach over
+ * the strip, and the browser would then scroll the page every time a strip link
+ * takes focus, trying to pull it out from under its own padding.
+ * The strip is added per element instead: section anchors land flush under it,
+ * and anything else that takes keyboard focus is scrolled 12px clearer, so its
+ * ring is never hidden. The strip's own links keep no margin (see their rules).
+ */
+.detailMain, .hubMain { --seo-header-bottom: 92px; }
+.detailMain { --seo-nav-height: 64px; --seo-strip: calc(var(--seo-nav-height) + 1px); }
+.hubMain { --seo-bar-height: 64px; --seo-strip: var(--seo-bar-height); }
+:global(html):has(.detailMain), :global(html):has(.hubMain) { scroll-padding-top: 92px; }
+.detailMain :is(a[href], button, summary, input, select, textarea, [tabindex]),
+.hubMain :is(a[href], button, summary, input, select, textarea, [tabindex]) { scroll-margin-block-start: calc(var(--seo-strip) + 12px); }
+.detailMain section[id], .hubMain section[id] { scroll-margin-block-start: var(--seo-strip); }
+/* Past <main> the strip has scrolled away; footer links only need their ring clear of the header. */
+:global(html):has(.detailMain, .hubMain) :global(footer) :is(a[href], button) { scroll-margin-block-start: 12px; }
+
+/* A jump focuses its target section (see hash-link.tsx); the section itself shows no ring. */
+.detailMain [data-hash-target][tabindex="-1"]:focus,
+.hubMain [data-hash-target][tabindex="-1"]:focus,
+main.detailMain[data-hash-target][tabindex="-1"]:focus,
+main.hubMain[data-hash-target][tabindex="-1"]:focus { outline: none; }
+
+/* Hubs: collection tabs and topic anchors in a solid strip under the floating header. */
+.hubBody { position: relative; }
+.filterDock {
+  position: sticky;
+  inset-block-start: var(--seo-header-bottom);
+  z-index: 20;
+  margin-block-start: 0;
+  color: var(--marketing-text);
+  background: var(--marketing-canvas);
+  border-block: 1px solid var(--marketing-border);
+}
+/* Stuck under the floating header: solid canvas around the header too (data-stuck comes from seo-page-nav.tsx). */
+.filterDock[data-stuck]::before,
+.topics[data-stuck]::before {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: calc(100% + 1px);
+  block-size: var(--seo-header-bottom);
+  content: "";
+  background: var(--marketing-canvas);
+}
+.filterInner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  max-inline-size: calc(1360px + 2 * var(--seo-gutter, clamp(32px, 4.45vw, 72px)));
+  min-block-size: calc(var(--seo-bar-height) - 2px);
+  margin-inline: auto;
+  padding-inline: var(--seo-gutter, clamp(32px, 4.45vw, 72px));
+}
+.tabs { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; }
+.filterDivider { flex: 0 0 auto; inline-size: 1px; block-size: 24px; margin-inline: 8px; background: var(--marketing-border); }
+.topics { flex: 1 1 auto; min-inline-size: 0; }
+.topicList {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.topicList::-webkit-scrollbar { display: none; }
+.topicList li { flex: 0 0 auto; }
+.tab, .topic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-block-size: 44px;
+  padding: 0 16px;
+  color: inherit;
+  border-radius: 999px;
+  font-size: .875rem;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.tab { font-weight: 750; }
+.tabShort { display: none; }
+.tab:hover, .topic:hover { background: color-mix(in srgb, var(--marketing-text) 7%, transparent); }
+/* The current collection, and the topic group being read (scrollspy). */
+.tab[aria-current="page"], .topic[aria-current="location"] { color: var(--marketing-canvas); background: var(--marketing-text); }
+.topicDot { flex: 0 0 auto; inline-size: 8px; block-size: 8px; border-radius: 50%; }
+/* Navy and deep teal dots vanish on the dark bar (and on the filled pill) without a ring. */
+:global([data-theme="dark"]) .topicDot { box-shadow: 0 0 0 1.5px rgb(255 255 255 / 45%); }
+.topic[aria-current="location"] .topicDot { box-shadow: 0 0 0 1.5px var(--marketing-canvas); }
+/* The ring is drawn inside the pill: the scrolling topic row clips anything outside it.
+   The transparent outline shows up in forced-colours mode, where shadows are dropped. */
+/* Strip links stay where they are when focused (see the scroll offsets above). */
+.filterDock .filterInner :is(.tab, .topic) { scroll-margin-block-start: 0; }
+.filterDock .filterInner :is(.tab, .topic):focus-visible {
+  outline: 3px solid transparent;
+  outline-offset: -3px;
+  box-shadow: inset 0 0 0 3px var(--seo-focus, var(--marketing-text));
+}
+.filterDock .filterInner :is(.tab[aria-current="page"], .topic[aria-current="location"]):focus-visible {
+  box-shadow: inset 0 0 0 2px var(--marketing-text), inset 0 0 0 5px var(--marketing-canvas);
+}
+
+/* Hub intro (#browse): eyebrow and H2 left, the intro right. */
+.browse { padding: clamp(56px, 5vw, 80px) var(--seo-gutter, clamp(32px, 4.45vw, 72px)) 8px; }
+.browseHead {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  align-items: end;
+  gap: 24px clamp(40px, 5vw, 80px);
+  max-inline-size: 1360px;
+  margin-inline: auto;
+}
+.browseIntro { max-inline-size: 62ch; }
+.browseIntro p { margin: 16px 0 0; color: color-mix(in srgb, var(--marketing-text) 82%, transparent); font-size: 1rem; line-height: 1.6; text-wrap: pretty; }
+.browseIntro .browseLead { margin-block-start: 0; color: var(--marketing-text); font-size: clamp(1.0625rem, 1.25vw, 1.1875rem); font-weight: 600; line-height: 1.5; }
+
+/* Hub guidance: planning notes on the page canvas, header sticky beside the timeline. */
+.guidance { --seo-timeline-bg: var(--marketing-canvas, #ffffff); background-color: var(--marketing-canvas, #ffffff); }
+.guidanceLayout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: start; gap: clamp(48px, 6vw, 96px); }
+.guidanceHead { position: sticky; inset-block-start: calc(var(--seo-header-bottom) + 40px); }
+.guidanceStack { display: grid; justify-items: center; gap: 12px; inline-size: min(100%, 280px); }
+.guidanceStack > * { inline-size: 100%; }
+.guidanceStack > .check { justify-self: start; inline-size: auto; }
+.guidanceStack > .guidanceStatus { inline-size: auto; }
+.check { display: inline-flex; align-items: center; gap: 8px; color: #101116; font-size: .8125rem; font-weight: 700; line-height: 1.3; }
+.checkIcon { display: inline-grid; place-items: center; inline-size: 20px; block-size: 20px; color: #ffffff; background: #0e7a55; border-radius: 50%; }
+
+/* The topic row can outgrow the strip on small laptops: fade both ends. */
+@media (min-width: 1024px) and (max-width: 1365px) {
+  .topicList {
+    padding-inline: 8px 32px;
+    mask-image: linear-gradient(to right, transparent, #000 8px, #000 calc(100% - 32px), transparent);
+  }
+}
+
+/*
+ * Tablets and phones: the dock stops being a box. The collection tabs become a
+ * pill switch that scrolls away, and the topic row sticks on its own at
+ * full width, so every topic gets the room instead of sharing it with the tabs.
+ */
+@media (max-width: 1023px) {
+  .browseHead { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .hubMain { --seo-bar-height: 56px; }
+  .filterDock { display: contents; }
+  .filterInner { display: contents; }
+  .filterDivider { display: none; }
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    max-inline-size: 480px;
+    margin: 28px var(--seo-gutter, 20px) 0;
+    padding: 4px;
+    background: var(--marketing-raised);
+    border: 1px solid var(--marketing-border);
+    border-radius: 999px;
+  }
+  .tab { min-inline-size: 0; padding-inline: 8px; font-size: .8125rem; }
+  .topics {
+    position: sticky;
+    inset-block-start: var(--seo-header-bottom);
+    z-index: 20;
+    margin-block-start: 16px;
+    padding-block: 5px;
+    background: var(--marketing-canvas);
+    border-block: 1px solid var(--marketing-border);
+  }
+  .topicList {
+    padding-inline: var(--seo-gutter, 20px);
+    scroll-padding-inline: var(--seo-gutter, 20px);
+    scroll-snap-type: x proximity;
+    mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+  }
+  .topicList li { scroll-snap-align: start; }
+  /*
+   * "Browse all" lands on #browse. Pull it down far enough that the collection
+   * switch above it sits fully below the header: 16px gap, 54px switch, 16px,
+   * then the topic row.
+   */
+  .hubMain section:global(#browse) { scroll-margin-block-start: calc(var(--seo-bar-height) + 86px); }
+}
+
+@media (max-width: 899px) {
+  .guidanceLayout { grid-template-columns: minmax(0, 1fr); }
+  .guidanceHead { position: static; }
+}
+
+@media (max-width: 767px) {
+  .detailMain, .hubMain { --seo-header-bottom: 60px; }
+  .detailMain { --seo-nav-height: 56px; }
+  :global(html):has(.detailMain), :global(html):has(.hubMain) { scroll-padding-top: 60px; }
+  .topic { padding-inline: 13px; font-size: .8125rem; }
+  .browse { padding-block-start: 48px; }
+}
+
+/* Phones keep the short tab labels so no tab wraps. */
+@media (max-width: 599px) {
+  .tabs { max-inline-size: none; }
+  .tabFull { display: none; }
+  .tabShort { display: inline; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab, .topic { transition: none; }
+}

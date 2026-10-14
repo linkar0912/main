@@ -67,7 +67,7 @@ describe("MarketingHeader", () => {
     // There is no language switcher, so the header does not pretend to have one.
     expect(screen.queryByLabelText(/Language/)).toBeNull();
     expect(header().textContent).not.toMatch(/\bEN\b/);
-    expect(primaryNavigation.getByRole("link", { name: "Product" }).getAttribute("href")).toBe("/#product");
+    expect(primaryNavigation.getByRole("link", { name: "Product" }).getAttribute("href")).toBe("/features");
     const solutions = primaryNavigation.getByRole("button", { name: "Solutions" });
     expect(solutions.getAttribute("aria-expanded")).toBe("false");
     expect(solutions.getAttribute("aria-controls")).toBe("marketing-solutions");
@@ -105,10 +105,15 @@ describe("MarketingHeader", () => {
     expect(solutions.getAttribute("aria-expanded")).toBe("true");
     const panel = screen.getByRole("navigation", { name: "Solutions" });
     expect(panel.getAttribute("id")).toBe("marketing-solutions");
-    expect(within(panel).getByRole("link", { name: "Instagram" }).getAttribute("href")).toBe("/#channels");
-    expect(within(panel).getByRole("link", { name: "Facebook Pages" }).getAttribute("href")).toBe("/#channels");
+    expect(within(panel).getByRole("link", { name: "Instagram" }).getAttribute("href")).toBe("/features/instagram-dm-automation");
+    expect(within(panel).getByRole("link", { name: "Facebook Pages" }).getAttribute("href")).toBe("/features/facebook-comment-auto-reply");
     expect(within(panel).getByText("Private replies and DMs")).toBeTruthy();
     expect(within(panel).getByText("Public comment replies")).toBeTruthy();
+    expect(within(panel).getByRole("link", { name: /Keyword replies/ }).getAttribute("href")).toBe("/features/instagram-keyword-replies");
+    expect(within(panel).getByRole("link", { name: /Solutions by audience/ }).getAttribute("href")).toBe("/solutions");
+    // Every entry leads somewhere different.
+    const hrefs = within(panel).getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(new Set(hrefs).size).toBe(hrefs.length);
     expect(document.querySelector("[data-solutions-backdrop]")).toBeTruthy();
   });
 
@@ -123,13 +128,83 @@ describe("MarketingHeader", () => {
     const panel = screen.getByRole("navigation", { name: "Resources" });
     expect(panel.getAttribute("id")).toBe("marketing-resources");
     expect(within(panel).getByRole("link", { name: "How it works" }).getAttribute("href")).toBe("/#how-it-works");
-    expect(within(panel).getByRole("link", { name: "Automation workflows" }).getAttribute("href")).toBe("/#workflows");
+    expect(within(panel).getByRole("link", { name: "Automation workflows" }).getAttribute("href")).toBe("/templates");
+    expect(within(panel).getByRole("link", { name: "All solutions" }).getAttribute("href")).toBe("/solutions");
     expect(within(panel).getByRole("link", { name: "Frequently asked questions" }).getAttribute("href")).toBe("/#faq");
     expect(within(panel).getByRole("link", { name: "Help center" }).getAttribute("href")).toBe("/support");
     expect(within(panel).getByRole("link", { name: "Privacy policy" }).getAttribute("href")).toBe("/privacy");
     expect(within(panel).getByRole("link", { name: "Terms of service" }).getAttribute("href")).toBe("/terms");
     expect(within(panel).getByRole("link", { name: "Data deletion" }).getAttribute("href")).toBe("/data-deletion");
-    expect(within(panel).getByRole("link", { name: "Support" }).getAttribute("href")).toBe("/support");
+    expect(within(panel).getByRole("link", { name: "Contact" }).getAttribute("href")).toBe("/contact");
+    const hrefs = within(panel).getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  it("closes a panel when keyboard focus moves past it, but not on a blur with nowhere to go", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+
+    const solutions = screen.getByRole("button", { name: "Solutions" });
+    fireEvent.click(solutions);
+    const panel = screen.getByRole("navigation", { name: "Solutions" });
+    const links = within(panel).getAllByRole("link");
+    // Moving within the trigger's zone keeps it open.
+    fireEvent.focusOut(solutions, { relatedTarget: links[0] });
+    expect(screen.getByRole("navigation", { name: "Solutions" })).toBeTruthy();
+    // A click on blank panel space blurs with no new focus target.
+    fireEvent.focusOut(links[0], { relatedTarget: null });
+    expect(screen.getByRole("navigation", { name: "Solutions" })).toBeTruthy();
+    // Tab past the last link lands on Pricing: the panel closes.
+    const pricing = within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Pricing" });
+    fireEvent.focusOut(links.at(-1) as HTMLElement, { relatedTarget: pricing });
+    expect(screen.queryByRole("navigation", { name: "Solutions" })).toBeNull();
+    expect(solutions.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("marks the section the current page belongs to", () => {
+    installBrowserControls();
+    const primary = () => within(screen.getByRole("navigation", { name: "Primary" }));
+    try {
+      pathname.current = "/features";
+      const view = render(<MarketingHeader />);
+      expect(primary().getByRole("link", { name: "Product" }).getAttribute("aria-current")).toBe("page");
+      view.unmount();
+
+      pathname.current = "/features/instagram-dm-automation";
+      const detail = render(<MarketingHeader />);
+      expect(primary().getByRole("link", { name: "Product" }).getAttribute("aria-current")).toBe("true");
+      expect(primary().getByRole("button", { name: "Solutions" }).getAttribute("aria-current")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+      const menu = within(screen.getByRole("dialog", { name: "Menu" }));
+      expect(menu.getByRole("link", { name: "Product" }).getAttribute("aria-current")).toBe("true");
+      expect(menu.getByRole("link", { name: "Instagram" }).getAttribute("aria-current")).toBe("page");
+      expect(menu.getByRole("link", { name: "Pricing" }).getAttribute("aria-current")).toBeNull();
+      detail.unmount();
+
+      pathname.current = "/solutions/podcasters";
+      const solution = render(<MarketingHeader />);
+      expect(primary().getByRole("button", { name: "Solutions" }).getAttribute("aria-current")).toBe("true");
+      expect(primary().getByRole("link", { name: "Product" }).getAttribute("aria-current")).toBeNull();
+      solution.unmount();
+
+      pathname.current = "/templates/booking-link";
+      render(<MarketingHeader />);
+      expect(primary().getByRole("button", { name: "Resources" }).getAttribute("aria-current")).toBe("true");
+    } finally {
+      pathname.current = "/";
+    }
+  });
+
+  it("marks nothing on the app host, where the header is not on a marketing page", () => {
+    installBrowserControls();
+    pathname.current = "/features";
+    try {
+      render(<MarketingHeader siteOrigin="https://linkar.in" />);
+      const primary = within(screen.getByRole("navigation", { name: "Primary" }));
+      expect(primary.getByRole("link", { name: "Product" }).getAttribute("aria-current")).toBeNull();
+    } finally {
+      pathname.current = "/";
+    }
   });
 
   it("keeps only one desktop mega menu open", () => {
@@ -323,6 +398,10 @@ describe("MarketingHeader", () => {
     expect(menu.getByRole("link", { name: "Product" }).getAttribute("aria-current")).toBeNull();
     const labels = menu.getAllByRole("link").map((link) => link.textContent);
     expect(labels.slice(-2)).toEqual(["Sign in", "Get started"]);
+    // No Resources panel on phones: its two most useful entries stand on their own.
+    expect(menu.getByRole("link", { name: "Questions" }).getAttribute("href")).toBe("/#faq");
+    expect(menu.getByRole("link", { name: "Help center" }).getAttribute("href")).toBe("/support");
+    expect(menu.queryByRole("link", { name: "Resources" })).toBeNull();
     pathname.current = "/";
   });
 
@@ -379,7 +458,8 @@ describe("MarketingHeader", () => {
     const view = render(<MarketingHeader />);
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
 
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Mobile primary" })).getByRole("link", { name: "Product" }));
+    // A same-page link, so jsdom (which cannot navigate) only changes the hash.
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Mobile primary" })).getByRole("link", { name: "How it works" }));
     expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
     expect(document.body.style.overflow).toBe("");
 

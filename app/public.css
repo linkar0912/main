@@ -375,6 +375,7 @@ img.avatar.is-photo { background: transparent; object-fit: cover; }
 .page-header > div { min-width: 0; }
 .page-lede { color: var(--muted); font-size: var(--type-lede); margin-bottom: 0; max-width: 590px; }
 .eyebrow { color: var(--subtle); font-size: var(--type-meta); font-weight: 800; letter-spacing: .15em; margin-bottom: 9px; text-transform: uppercase; }
+.muted { color: var(--muted); }
 .header-actions { display: flex; flex-shrink: 0; gap: 10px; }
 .home-greeting { align-items: center; margin-bottom: var(--space-7); }
 .home-greeting h1 { font-size: var(--type-page-title); letter-spacing: -.04em; margin-bottom: 8px; }

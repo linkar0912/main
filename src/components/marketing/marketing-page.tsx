@@ -6,6 +6,7 @@ import { HeroSection } from "./hero-section";
 import { InsightsShowcase } from "./insights-showcase";
 import { ManifestoSection } from "./manifesto-section";
 import { MarketingFooter } from "./marketing-footer";
+import { MarketingHashScroll } from "./marketing-hash-scroll";
 import { MarketingHeader } from "./marketing-header";
 import { ProofRail } from "./proof-rail";
 import { SetupSteps } from "./setup-steps";
@@ -17,6 +18,8 @@ import styles from "./marketing-page.module.css";
 export function MarketingPage() {
   return (
     <div className={`${styles.root} marketing-page-root`}>
+      {/* Header and footer links from other pages (/#how-it-works, /#faq) land on their section. */}
+      <MarketingHashScroll />
       <MarketingHeader />
       <main id="main-content" className={styles.page}>
         <HeroSection />

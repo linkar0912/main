@@ -27,13 +27,14 @@ describe("MarketingFooter", () => {
     }
 
     const expected = new Map([
-      ["Product", "/#product"],
+      ["Product", "/features"],
       ["Pricing", "/pricing"],
       ["Channels", "/#channels"],
       ["How it works", "/#how-it-works"],
-      ["Workflows", "/#workflows"],
+      ["Workflows", "/templates"],
       ["Get started", "/signup"],
       ["Help and support", "/support"],
+      ["Solutions", "/solutions"],
       ["Contact", "/contact"],
       ["Sign in", "/login"],
       ["Dashboard", "/dashboard"],

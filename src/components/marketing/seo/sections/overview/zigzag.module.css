@@ -1,0 +1,72 @@
+/* Overview zigzag: a square photo on a tilted accent block with the request floating over its edge,
+   the overview copy beside it. The side swaps by seed (data-flip). */
+.section { color: var(--marketing-text); }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(64px, 8vw, 128px);
+}
+
+.media {
+  position: relative;
+  justify-self: start;
+  inline-size: min(100%, 600px);
+  aspect-ratio: 1;
+}
+.section[data-flip] .media { order: 2; justify-self: end; }
+
+/* The accent block peeks out round the photo, tilted away from the copy. */
+.backdrop { position: absolute; inset: 0; border-radius: 32px; rotate: -4deg; }
+.section[data-flip] .backdrop { rotate: 4deg; }
+
+.photo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 28px;
+  box-shadow: 0 30px 60px rgb(16 17 22 / 16%);
+}
+
+/* The request overlaps the photo's inner edge, reaching toward the copy. */
+.float {
+  position: absolute;
+  z-index: 2;
+  inset: auto -40px 11% auto;
+  inline-size: min(330px, 66%);
+  rotate: -2deg;
+}
+.section[data-flip] .float { inset: auto auto 11% -40px; rotate: 2deg; }
+.media .float > * { box-sizing: border-box; inline-size: 100%; max-inline-size: none; box-shadow: 0 24px 48px rgb(16 17 22 / 22%); }
+
+.copy { min-inline-size: 0; }
+.title { max-inline-size: 620px; word-spacing: .05em; }
+.lead {
+  max-inline-size: 600px;
+  margin: 28px 0 0;
+  font-size: clamp(1.1875rem, 1.45vw, 1.375rem);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -.01em;
+  text-wrap: pretty;
+}
+.body {
+  max-inline-size: 600px;
+  margin: 16px 0 0;
+  color: color-mix(in srgb, currentColor 84%, transparent);
+  font-size: clamp(1rem, 1.1vw, 1.0625rem);
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+/* Stacked: heading and copy first, then the photo with the request over its bottom edge. */
+@media (max-width: 899px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 56px; }
+  .copy { order: -1; }
+  .media, .section[data-flip] .media { order: 0; justify-self: center; inline-size: min(100%, 540px); margin-block-end: 36px; }
+  .backdrop { rotate: -3deg; }
+  .section[data-flip] .backdrop { rotate: 3deg; }
+  .float { inset: auto 16px -36px auto; inline-size: min(320px, calc(100% - 32px)); rotate: -2deg; }
+  .section[data-flip] .float { inset: auto auto -36px 16px; rotate: 2deg; }
+}

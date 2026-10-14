@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FacebookGlyph } from "../facebook-glyph";
@@ -12,26 +12,32 @@ import { marketingHref } from "@/src/lib/site-routing";
 import styles from "./marketing-header.module.css";
 
 const navigationItems = [
-  { label: "Product", href: "/#product" },
+  { label: "Product", href: "/features" },
   { label: "Pricing", href: "/pricing" },
   { label: "How it works", href: "/#how-it-works" },
   { label: "Resources", href: "/#resources" },
 ] as const;
 
+// The sheet has no Resources panel, so its two most useful entries stand on their own
+// instead of one link to the homepage footer.
 const mobileNavigationItems = [
   navigationItems[0],
   navigationItems[1],
-  { label: "Instagram", href: "/#channels" },
-  { label: "Facebook Pages", href: "/#channels" },
-  { label: "Workflows", href: "/#workflows" },
-  ...navigationItems.slice(2),
+  { label: "Instagram", href: "/features/instagram-dm-automation" },
+  { label: "Facebook Pages", href: "/features/facebook-comment-auto-reply" },
+  { label: "Workflows", href: "/templates" },
+  { label: "All solutions", href: "/solutions" },
+  navigationItems[2],
+  { label: "Questions", href: "/#faq" },
+  { label: "Help center", href: "/support" },
 ] as const;
 
 const useCaseItems = [
-  { label: "Comment automation", detail: "Instagram private replies and Facebook public replies", href: "/#surfaces" },
-  { label: "Direct messages", detail: "Instagram conversations triggered by incoming messages", href: "/#surfaces" },
-  { label: "Follow-gated campaigns", detail: "Instagram delivery after an official follow check", href: "/#workflows" },
-  { label: "Human handoff", detail: "Pause the flow when a person should take over", href: "/#workflows" },
+  { label: "Comment automation", detail: "Instagram private replies from comments", href: "/features/instagram-comment-to-dm" },
+  { label: "Keyword replies", detail: "Instagram answers matched to the words people send", href: "/features/instagram-keyword-replies" },
+  { label: "Follow-gated campaigns", detail: "Instagram delivery after an official follow check", href: "/features/instagram-follow-gate" },
+  { label: "Human handoff", detail: "Pause the flow when a person should take over", href: "/features/instagram-human-handoff" },
+  { label: "Solutions by audience", detail: "Workflows for creators, coaches, brands and local businesses", href: "/solutions" },
 ] as const;
 
 const resourceGroups = [
@@ -39,7 +45,8 @@ const resourceGroups = [
     label: "Learn",
     items: [
       { label: "How it works", href: "/#how-it-works" },
-      { label: "Automation workflows", href: "/#workflows" },
+      { label: "Automation workflows", href: "/templates" },
+      { label: "All solutions", href: "/solutions" },
       { label: "Frequently asked questions", href: "/#faq" },
       { label: "Help center", href: "/support" },
     ],
@@ -50,7 +57,7 @@ const resourceGroups = [
       { label: "Privacy policy", href: "/privacy" },
       { label: "Terms of service", href: "/terms" },
       { label: "Data deletion", href: "/data-deletion" },
-      { label: "Support", href: "/support" },
+      { label: "Contact", href: "/contact" },
     ],
   },
 ] as const;
@@ -73,6 +80,24 @@ type MarketingHeaderProps = {
 };
 
 type DesktopPanel = "solutions" | "resources" | null;
+type HeaderSection = "product" | "solutions" | "pricing" | "resources" | null;
+
+/** Which top-level item the current page belongs to. The SEO collections live under Product, Solutions and Resources. */
+function headerSection(pathname: string): HeaderSection {
+  const within = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
+  if (within("/features")) return "product";
+  if (within("/solutions")) return "solutions";
+  if (within("/templates")) return "resources";
+  if (pathname === "/pricing") return "pricing";
+  return null;
+}
+
+/** aria-current for a link: "page" on the page itself, "true" on pages inside its section. */
+function currentFor(pathname: string, href: string): "page" | "true" | undefined {
+  if (href.includes("#")) return undefined;
+  if (pathname === href) return "page";
+  return href !== "/" && pathname.startsWith(`${href}/`) ? "true" : undefined;
+}
 
 const PANEL_LEAVE_DELAY_MS = 240;
 const HOVER_CLICK_GRACE_MS = 400;
@@ -92,6 +117,10 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
   const [activePanel, setActivePanel] = useState<DesktopPanel>(null);
   const panelLeaveTimer = useRef<number | null>(null);
   const panelHoverOpenedAt = useRef(0);
+  // The header on the app host (siteOrigin set) is not on a marketing page, so it marks nothing.
+  // usePathname is null outside the app router (tests, isolated renders): treat it as no page.
+  const currentPath = pathname ?? "";
+  const section = siteOrigin ? null : headerSection(currentPath);
 
   useEffect(() => {
     menuOpenRef.current = menuOpen;
@@ -205,7 +234,14 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
 
   // The trigger and its panel form one hover zone. Leaving it closes the panel
   // after a short delay, so the pointer can cross the gap between bar and panel.
+  // Keyboard focus moving out of the zone (Tab past the last link) closes it at
+  // once. A blur with no new focus (a click on blank panel space, another window)
+  // leaves it open; the backdrop and Escape still close it.
   const panelHoverZone = {
+    onBlur: (event: FocusEvent<HTMLLIElement>) => {
+      const next = event.relatedTarget;
+      if (next instanceof Node && !event.currentTarget.contains(next)) setActivePanel(null);
+    },
     onPointerEnter: cancelPanelLeave,
     onPointerLeave: (event: PointerEvent<HTMLLIElement>) => {
       if (event.pointerType === "touch") return;
@@ -278,7 +314,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
 
         <nav className={styles.primaryNavigation} aria-label="Primary">
           <ul>
-            <li><Link href={marketingHref(navigationItems[0].href, siteOrigin)}>{navigationItems[0].label}</Link></li>
+            <li><Link href={marketingHref(navigationItems[0].href, siteOrigin)} aria-current={section === "product" ? currentFor(currentPath, navigationItems[0].href) : undefined}>{navigationItems[0].label}</Link></li>
             <li className={styles.solutionsTrigger} {...panelHoverZone}>
               <button
                 ref={solutionsButtonRef}
@@ -286,6 +322,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                 type="button"
                 aria-expanded={activePanel === "solutions"}
                 aria-controls="marketing-solutions"
+                aria-current={section === "solutions" ? "true" : undefined}
                 onClick={() => togglePanel("solutions")}
                 onPointerEnter={(event) => openOnHover("solutions", event.pointerType)}
               >
@@ -297,12 +334,12 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                 <nav id="marketing-solutions" className={styles.solutionsPanel} aria-label="Solutions">
                   <section className={styles.solutionsColumn} aria-labelledby="solutions-channel-title">
                     <p id="solutions-channel-title" className={styles.solutionsEyebrow}>By channel</p>
-                    <Link className={styles.channelLink} href={marketingHref("/#channels", siteOrigin)} aria-label="Instagram" onClick={() => setActivePanel(null)}>
+                    <Link className={styles.channelLink} href={marketingHref("/features/instagram-dm-automation", siteOrigin)} aria-label="Instagram" onClick={() => setActivePanel(null)}>
                       <span className={styles.channelIcon} data-channel="instagram" aria-hidden="true"><InstagramGlyph size={27} brand /></span>
                       <span><strong>Instagram</strong><small>Private replies and DMs</small></span>
                       <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
                     </Link>
-                    <Link className={styles.channelLink} href={marketingHref("/#channels", siteOrigin)} aria-label="Facebook Pages" onClick={() => setActivePanel(null)}>
+                    <Link className={styles.channelLink} href={marketingHref("/features/facebook-comment-auto-reply", siteOrigin)} aria-label="Facebook Pages" onClick={() => setActivePanel(null)}>
                       <span className={styles.channelIcon} data-channel="facebook" aria-hidden="true"><FacebookGlyph size={27} brand /></span>
                       <span><strong>Facebook Pages</strong><small>Public comment replies</small></span>
                       <span className={styles.linkArrow} aria-hidden="true">&#8599;</span>
@@ -324,7 +361,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                 </nav>
               ) : null}
             </li>
-            <li><Link href={marketingHref(navigationItems[1].href, siteOrigin)} aria-current={!siteOrigin && pathname === navigationItems[1].href ? "page" : undefined}>{navigationItems[1].label}</Link></li>
+            <li><Link href={marketingHref(navigationItems[1].href, siteOrigin)} aria-current={section === "pricing" ? "page" : undefined}>{navigationItems[1].label}</Link></li>
             <li><Link href={marketingHref(navigationItems[2].href, siteOrigin)}>{navigationItems[2].label}</Link></li>
             <li className={styles.solutionsTrigger} {...panelHoverZone}>
               <button
@@ -333,6 +370,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                 type="button"
                 aria-expanded={activePanel === "resources"}
                 aria-controls="marketing-resources"
+                aria-current={section === "resources" ? "true" : undefined}
                 onClick={() => togglePanel("resources")}
                 onPointerEnter={(event) => openOnHover("resources", event.pointerType)}
               >
@@ -412,7 +450,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                     <li key={item.label}>
                       <Link
                         href={marketingHref(item.href, siteOrigin)}
-                        aria-current={!siteOrigin && item.href === pathname ? "page" : undefined}
+                        aria-current={siteOrigin ? undefined : currentFor(currentPath, item.href)}
                         onClick={() => closeMenu(false)}
                       >
                         {item.label}

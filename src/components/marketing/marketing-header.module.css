@@ -246,7 +246,8 @@
 .solutionsButton:hover::after,
 .solutionsButton:focus-visible::after,
 .solutionsButton[aria-expanded="true"]::after,
-.primaryNavigation > ul > li > a[aria-current="page"]::after,
+.solutionsButton[aria-current]::after,
+.primaryNavigation > ul > li > a[aria-current]::after,
 .login:hover::after,
 .login:focus-visible::after {
   transform: scaleX(1);
@@ -540,8 +541,12 @@
 .menuSheet li:nth-child(4) a { animation-delay: 120ms; }
 .menuSheet li:nth-child(5) a { animation-delay: 160ms; }
 .menuSheet li:nth-child(6) a { animation-delay: 200ms; }
+.menuSheet li:nth-child(7) a { animation-delay: 240ms; }
+.menuSheet li:nth-child(8) a { animation-delay: 280ms; }
+.menuSheet li:nth-child(n + 9) a { animation-delay: 320ms; }
 
-.menuSheet a[aria-current="page"] {
+/* The current page, or the section it belongs to (a guide under Product). */
+.menuSheet a[aria-current] {
   text-decoration: underline;
   text-decoration-color: var(--accent, #fa0cf7);
   text-decoration-thickness: 3px;

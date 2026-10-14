@@ -1,0 +1,93 @@
+/* Centred hero (Manychat landing-01/02, brands-01): centred copy on the accent
+   grid, then the page photo in a stack of tilted frames that straddles the
+   block's lower edge, with a two-step story told by numbered captions. */
+
+.hero { position: relative; isolation: isolate; overflow: clip; }
+
+/* Same content frame as the page nav and every section below (1360px plus the gutters). */
+.inner {
+  box-sizing: border-box;
+  max-inline-size: calc(1360px + 2 * var(--seo-gutter, clamp(32px, 4.45vw, 72px)));
+  margin-inline: auto;
+  padding: 140px var(--seo-gutter, clamp(32px, 4.45vw, 72px)) 0;
+}
+
+/* One track that never grows past the column, so no long word or pill can push
+   the centred copy off-centre or under the hero's clip. */
+.copy { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; max-inline-size: 1120px; margin-inline: auto; text-align: center; }
+.copy .crumbs ol { justify-content: center; }
+/* A label that wraps on a phone centres its lines like the headline below,
+   with the dot leading the first line. Inline layout (not the shared flex row)
+   keeps the dot beside the first word: vertical-align: top plus the shared
+   .3em top margin and a 9px end margin match the flex gap and dot position, so
+   a one-line label renders exactly as before. */
+.copy .crumbs [aria-current="page"] { display: inline-block; text-align: center; }
+.copy .crumbs [aria-current="page"]::before { display: inline-block; margin-inline-end: 9px; vertical-align: top; }
+.title { max-inline-size: 1100px; font-size: clamp(3.25rem, 6.2vw, 6.5rem); }
+.title[data-long] { font-size: clamp(3rem, 5.3vw, 5.5rem); }
+.copy .description { max-inline-size: 640px; margin-inline: auto; }
+.copy .actions { justify-content: center; }
+.copy .trust { justify-content: center; }
+
+/* The accent ends just past the photo's middle; the rest sits on the page canvas. */
+.stage {
+  position: relative;
+  max-inline-size: 1180px;
+  margin: clamp(64px, 6vw, 88px) auto 0;
+  padding-block-end: clamp(104px, 8.4vw, 136px);
+}
+.stage::before {
+  content: "";
+  position: absolute;
+  inset: 54% auto 0 50%;
+  z-index: -1;
+  inline-size: 100vw;
+  background: var(--marketing-canvas, #ffffff);
+  translate: -50% 0;
+}
+
+.frames { position: relative; aspect-ratio: 16 / 8.6; }
+.back { position: absolute; inset: 0; border-radius: 30px; }
+.backA { background: #fff100; transform: rotate(-2.4deg) translate(-10px, 14px); }
+.backB { background: #e4d4ff; transform: rotate(1.7deg) translate(12px, 22px); }
+.photo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #d9d6e4;
+  border-radius: 28px;
+  box-shadow: 0 40px 90px rgb(10 8 24 / 28%);
+}
+.photo img { object-fit: cover; object-position: 64% 42%; animation: photo-settle 1000ms cubic-bezier(.22, .61, .21, 1) both; }
+
+.box { position: relative; }
+.stage .first { inset: 9% auto auto -2.5%; inline-size: min(310px, 30%); }
+.stage .second { inset: auto -2.5% -60px auto; inline-size: min(320px, 31%); }
+
+@keyframes photo-settle { from { transform: scale(1.04); } }
+
+@media (max-width: 899px) {
+  .inner { padding-block-start: 120px; }
+  .title, .title[data-long] { font-size: clamp(2.75rem, 7.6vw, 4.25rem); }
+  .stage { margin-block-start: 64px; padding-block-end: 116px; }
+  .frames { aspect-ratio: 4 / 3.4; }
+  .backA { transform: rotate(-2deg) translate(-6px, 10px); }
+  .backB { transform: rotate(1.5deg) translate(8px, 16px); }
+  .stage .first { inset: -22px auto auto -8px; inline-size: min(280px, 56%); }
+  .stage .second { inset: auto -8px -76px auto; inline-size: min(290px, 58%); }
+}
+
+@media (max-width: 599px) {
+  .title { font-size: clamp(2.5rem, 11vw, 3rem); }
+  .title[data-long] { font-size: clamp(2.25rem, 9.6vw, 2.75rem); }
+  .copy .description { font-size: 1.0625rem; }
+  .stage { margin-block-start: 52px; padding-block-end: 64px; }
+  .frames { aspect-ratio: 4 / 4; }
+  .photo img { object-position: 70% 32%; }
+  .backA { transform: rotate(-2.2deg) translate(-4px, 8px); }
+  .backB { transform: rotate(1.8deg) translate(5px, 14px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo img { animation: none; }
+}

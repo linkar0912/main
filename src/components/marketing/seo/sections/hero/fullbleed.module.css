@@ -1,0 +1,150 @@
+/* Full-bleed hero (Manychat creators-01, usecase-03): the page photo fills the
+   block, a deep scrim tinted with the topic accent carries the white copy on
+   the left, and the example floats over the photo as bare bubbles. */
+
+.hero {
+  --fb-base: color-mix(in srgb, var(--seo-accent, #5f2ce0) 22%, #0b0b10);
+  --seo-focus: #fff100;
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  color: #ffffff;
+  background: var(--fb-base);
+}
+
+.media { position: absolute; inset: 0; z-index: -1; }
+.photo { position: absolute; inset: 0; overflow: hidden; }
+.photo img { object-fit: cover; object-position: 66% 40%; animation: photo-settle 1100ms cubic-bezier(.22, .61, .21, 1) both; }
+/* Top: the floating header's white ink. Left: the copy. Bottom: the trust row. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgb(8 8 12 / 58%) 0, rgb(8 8 12 / 0%) 190px),
+    linear-gradient(90deg, var(--fb-base) 0%, color-mix(in srgb, var(--fb-base) 90%, transparent) 28%, color-mix(in srgb, var(--fb-base) 46%, transparent) 50%, transparent 70%),
+    linear-gradient(0deg, color-mix(in srgb, var(--fb-base) 78%, transparent) 0, transparent 240px);
+}
+
+/* Past 1920 the 1536px source would be stretched soft and cropped to a thin
+   strip (heads under the header). The photo keeps the 1920 box on the right and
+   fades into the hero colour on the left, where the scrim is solid anyway. */
+@media (min-width: 1921px) {
+  .photo {
+    inset: 0 0 0 auto;
+    inline-size: 1920px;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 24%);
+    mask-image: linear-gradient(90deg, transparent, #000 24%);
+  }
+}
+
+/* Same content frame as the page nav and every section below (1360px plus the gutters). */
+.inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 640px) minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  box-sizing: border-box;
+  max-inline-size: calc(1360px + 2 * var(--seo-gutter, clamp(32px, 4.45vw, 72px)));
+  min-block-size: min(100svh, 920px);
+  margin-inline: auto;
+  padding: 140px var(--seo-gutter, clamp(32px, 4.45vw, 72px)) 40px;
+}
+.copy { align-self: center; min-inline-size: 0; }
+.title { max-inline-size: 640px; font-size: clamp(3rem, 5vw, 5.25rem); }
+.title[data-long] { font-size: clamp(2.75rem, 4.3vw, 4.625rem); }
+
+/* Trust lockups along the bottom edge, like Manychat's partner row. */
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 32px;
+  grid-column: 1 / -1;
+  margin-block-start: 56px;
+  padding-block-start: 22px;
+  border-block-start: 1px solid rgb(255 255 255 / 20%);
+}
+.foot .trust { --lockup-cutout: var(--fb-base); margin: 0; }
+.footNote {
+  margin: 0;
+  color: #ffffff;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+/* Bubbles over the photo's lower right, clear of the copy and the trust row. */
+/* Never left of the copy column's right edge. The second ends on the content
+   frame's right edge, like the trust row under it. */
+.media .first { inset: 31% auto auto max(53%, calc(var(--seo-gutter, 64px) + 688px)); inline-size: min(300px, 21vw); }
+.media .second { inset: auto max(var(--seo-gutter, 64px), calc((100% - 1360px) / 2)) 19% auto; inline-size: min(300px, 22vw); }
+
+@keyframes photo-settle { from { transform: scale(1.05); } }
+
+/* Small laptops: the copy takes most of the width, so only the kept widget floats, low on the right. */
+@media (min-width: 900px) and (max-width: 1365px) {
+  .inner { grid-template-columns: minmax(0, 580px) minmax(0, 1fr); }
+  .media .widgets[data-keep="second"] > .first, .media .widgets[data-keep="first"] > .second { display: none; }
+  .media .widgets > .first, .media .widgets > .second { inset: auto var(--seo-gutter, 48px) 18% auto; inline-size: min(300px, 28vw); }
+}
+
+/* Tablets and phones: the photo becomes a band under the header, one widget
+   overlaps its bottom edge (in the flow, so it never covers a face), then the copy.
+   The band and the H1 stay small enough that the H1 and the primary button land
+   inside Safari's visible area on an iPad in portrait (768x1024: the button ends
+   by about 950px on every page). The short band crops from the bottom, which the
+   widget and the scrim cover anyway, so heads stay clear of the header's buttons. */
+@media (max-width: 899px) {
+  .hero { display: flex; flex-direction: column; }
+  .media { position: relative; inset: auto; z-index: 0; }
+  .photo { position: relative; inset: auto; block-size: clamp(340px, 46vw, 420px); }
+  .photo img { object-position: 68% 8%; }
+  .scrim {
+    background:
+      linear-gradient(180deg, rgb(8 8 12 / 60%) 0, rgb(8 8 12 / 0%) 150px),
+      linear-gradient(0deg, var(--fb-base) 0, color-mix(in srgb, var(--fb-base) 72%, transparent) 16%, transparent 42%);
+  }
+  .media .widgets { position: relative; inset: auto; display: grid; justify-items: end; margin-block-start: -88px; padding-inline: var(--seo-gutter, 20px); }
+  .media .widgets[data-keep="second"] > .first, .media .widgets[data-keep="first"] > .second { display: none; }
+  .media .widgets > .first, .media .widgets > .second { position: relative; inset: auto; inline-size: min(320px, 56%); }
+  /* Full width: as a flex item with auto side margins it would shrink to its
+     content and float off-centre, away from the logo and the sections below. */
+  .inner { display: block; inline-size: 100%; min-block-size: 0; margin-block-start: 36px; padding-block: 0 72px; }
+  .title, .title[data-long] { font-size: clamp(2.75rem, 6.6vw, 3.75rem); }
+  .foot { margin-block-start: 44px; }
+  .footNote { display: none; }
+}
+
+/* Phones: the H1 and the primary button land inside the first screen, even at
+   320x740. The copy follows the photo band directly; the kept widget moves under
+   the copy (a recipe or flow card above the H1 would push the button off the
+   screen and cover most of the band). display: contents lifts the photo, the
+   copy, the widget and the trust row into the hero's column so they can be
+   reordered. The widget is aria-hidden, so reading and tab order are unchanged.
+   The .hero-prefixed selectors outrank the shared phone placement. */
+@media (max-width: 599px) {
+  .media, .inner { display: contents; }
+  .photo { order: 0; block-size: clamp(228px, 61.5vw, 272px); }
+  .photo img { object-position: 68% 30%; }
+  .scrim {
+    background:
+      linear-gradient(180deg, rgb(8 8 12 / 60%) 0, rgb(8 8 12 / 0%) 120px),
+      linear-gradient(0deg, var(--fb-base) 0, color-mix(in srgb, var(--fb-base) 72%, transparent) 14%, transparent 46%);
+  }
+  .copy { order: 1; align-self: stretch; margin-block-start: 18px; padding-inline: var(--seo-gutter, 20px); }
+  .hero .media .widgets[data-keep] { order: 2; margin-block-start: 32px; }
+  .hero .media .widgets[data-keep] > .first, .hero .media .widgets[data-keep] > .second { inline-size: min(310px, 100%); }
+  .copy > nav ol { margin-block-end: 16px; }
+  .title { font-size: clamp(2.375rem, 10.4vw, 2.875rem); }
+  .title[data-long] { font-size: clamp(2.125rem, 9.2vw, 2.625rem); }
+  .copy > h1 + p { margin-block-start: 18px; }
+  .copy > p + div { margin-block-start: 24px; }
+  .foot { order: 3; margin: 36px var(--seo-gutter, 20px) 0; padding-block-end: 64px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo img { animation: none; }
+}

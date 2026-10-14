@@ -1,0 +1,88 @@
+/*
+ * Hub topic groups: a header per topic, then its guide cards. The page sets each
+ * group's anchor offset. Most of the space between groups is margin, outside the
+ * anchor box, so a topic jump lands the heading just under the sticky bar.
+ */
+
+.group {
+  margin-block-start: clamp(72px, 6.6vw, 104px);
+  padding: 24px var(--seo-gutter, clamp(32px, 4.45vw, 72px)) 0;
+}
+/* The first group follows the hub intro, which already leaves room above it. */
+.group:not(.group + .group) { margin-block-start: clamp(32px, 3vw, 48px); }
+.group:last-of-type { padding-block-end: clamp(96px, 8.4vw, 128px); }
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px 32px;
+  margin-block-end: clamp(28px, 2.6vw, 40px);
+}
+.heading { min-inline-size: 0; }
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 14px;
+  padding: 6px 12px 6px 10px;
+  color: var(--marketing-text);
+  border: 1px solid var(--marketing-border);
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.dot { flex: 0 0 auto; inline-size: 9px; block-size: 9px; border-radius: 50%; }
+:global([data-theme="dark"]) .dot { box-shadow: 0 0 0 1.5px rgb(255 255 255 / 45%); }
+
+.title {
+  margin: 0;
+  color: var(--marketing-text);
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: clamp(2rem, 3.2vw, 3.25rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.05em;
+  text-wrap: balance;
+}
+
+/* What the topic does, as trigger and result chips joined by an arrow. */
+.flow { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin: 0; }
+.flowStep {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 38px;
+  padding: 0 14px 0 12px;
+  color: var(--marketing-text);
+  background: var(--marketing-raised);
+  border: 1px solid var(--marketing-border);
+  border-radius: 999px;
+  font-size: .8125rem;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.flowDone { color: #101116; background: #fff100; border-color: #fff100; }
+.flowArrow { display: inline-grid; flex: 0 0 auto; color: color-mix(in srgb, var(--marketing-text) 55%, transparent); }
+
+/*
+ * Phones: the chips stack and the arrow turns to point down between them, so it
+ * never starts a line on its own.
+ */
+@media (max-width: 680px) {
+  .group { margin-block-start: 72px; }
+  .group:not(.group + .group) { margin-block-start: 24px; }
+  .group:last-of-type { padding-block-end: 88px; }
+  .header { flex-direction: column; align-items: start; gap: 18px; margin-block-end: 24px; }
+  .count { margin-block-end: 12px; }
+  .flow { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .flowStep { min-block-size: 34px; padding-inline: 10px 12px; font-size: .75rem; white-space: normal; }
+  .flowArrow { margin-inline-start: 11px; rotate: 90deg; }
+}
