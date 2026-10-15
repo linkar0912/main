@@ -367,7 +367,9 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             row spacing, instead of floating in a block of its own. */}
         <nav ref={slidingThumbRef} className="sidebar-nav" aria-label="Account">
           {platformOwner ? (
-            <Link className="sidebar-link" href="/admin" onClick={closeDrawer}>
+            // No prefetch: /admin redirects to the admin host, and a
+            // cross-origin prefetch is blocked by connect-src.
+            <Link className="sidebar-link" href="/admin" prefetch={false} onClick={closeDrawer}>
               <ShieldCheck size={17} strokeWidth={1.9} />
               Admin
             </Link>

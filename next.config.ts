@@ -13,9 +13,10 @@ const nextConfig: NextConfig = {
   // (workspace chip, sign out) on every screen - move it out of the way.
   devIndicators: { position: "bottom-right" },
   images: {
-    // AVIF first, WebP as the fallback: Next serves the first format the
-    // browser's Accept header allows, and caches each format separately.
-    formats: ["image/avif", "image/webp"],
+    // WebP only (the default). AVIF was tried and taken out: encoding one
+    // 1920px hero took about 30 s of CPU on the production host against
+    // 1.6 s for WebP, and a crawl asking for many uncached sizes at once
+    // made the origin stop answering (502s, then a Cloudflare 1033).
     // 31 days instead of the 4-hour default. The optimised copy is keyed by
     // the source URL and cannot be purged, so give a replaced image in
     // public/ a new file name rather than overwriting the old one.
