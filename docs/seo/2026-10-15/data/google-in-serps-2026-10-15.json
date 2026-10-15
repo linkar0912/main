@@ -1,0 +1,109 @@
+{
+  "_meta": {
+    "captured": "2026-10-15, Claude Browser pane, signed-out Google, URL params gl=in&hl=en, page 1 only",
+    "method": "DOM extraction of #rso h3 titles + cite, [data-q] PAA, 'People also search for' block, AI Overview text, 'Sponsored' count",
+    "caveats": "One snapshot, one day, signed-out; IP location of the machine applies; no ads were rendered in any capture (sponsoredCount 0 everywhere), so ad-copy signals are unavailable",
+    "type_codes": "L=Landing (vendor product/feature page), H=Hybrid (product page with educational layer), C=Comparison (listicle/alternatives/vs), B=Blog/guide/help (informational), P=Product (app store listing), T=Tool/template, F=Forum/UGC (Reddit, Instagram reel)"
+  },
+  "instagram automation": {
+    "aio": true, "aio_sources": ["Manychat", "repli.in", "CreatorFlow", "Interakt", "LinkDM"],
+    "aio_notes": "Defines term via official Meta APIs; lists Manychat, Repli (from Rs 249 / $3), Interakt (Rs 999 + tax); 24-hour window; Business/Creator account required",
+    "organic": [
+      ["creatorflow.so", "L"], ["planable.io/blog/instagram-automation-tools", "C"], ["help.instagram.com (Automated chats on Instagram)", "B"],
+      ["tailortalk.ai/blogs (9 best tools)", "C"], ["manychat.com/product/instagram", "L"], ["linkdm.com", "L"],
+      ["superprofile.bio/blog/best-instagram-dm-automation (1 day ago)", "C"], ["wati.io/instagram-automation", "H"], ["heyy.io/blog/instagram-automation", "B"]
+    ],
+    "paa": ["How to get 20,000 followers on Instagram?", "What is the 5-3-1 rule on Instagram?", "Is Instagram automation free?", "Which DM automation is best?"],
+    "related": ["Instagram automation free", "Instagram automation software", "Instagram automation github", "Best Instagram automation tool", "Instagram automation tool India", "Automation tool for Instagram followers", "Manychat Instagram Automation", "Best free Instagram automation tool"]
+  },
+  "instagram automation tool": {
+    "aio": true, "aio_sources": ["Manychat", "LinkDM", "repli.in", "Reddit r/socialmedia", "CreatorFlow"],
+    "organic": [
+      ["manychat.com/product/instagram", "L"], ["creatorflow.so", "L"], ["tailortalk.ai/blogs", "C"], ["repli.in/free", "L"],
+      ["superprofile.bio/blog", "C"], ["planable.io/blog", "C"], ["reddit.com/r/socialmedia (130+ comments)", "F"], ["linkdm.com", "L"], ["setsmart.io/blog/instagram-automation-tools", "C"]
+    ],
+    "paa": ["What are Instagram automation tools?", "How to get 20,000 followers on Instagram?", "Can you automate an Instagram account?", "What is the best Instagram automation tool?"],
+    "related": ["Instagram automation tool free", "Automation tool for Instagram followers", "Instagram automation tool India", "Best Instagram automation tool", "Instagram DM automation free", "Automation tool for Instagram Reels", "Manychat Instagram Automation", "DM automation for Instagram"]
+  },
+  "instagram dm automation": {
+    "aio": true, "aio_sources": ["Manychat", "CreatorFlow"],
+    "organic": [
+      ["creatorflow.so", "L"], ["manychat.com/product/instagram", "L"], ["tailortalk.ai/blogs", "C"], ["help.instagram.com", "B"],
+      ["superprofile.bio/blog", "C"], ["linkdm.com", "L"], ["repli.in/free", "L"], ["bothelp.io/instagram", "L"], ["setsmart.io/blog", "C"]
+    ],
+    "paa": ["How much does Instagram DM automation cost?", "Which DM automation is best?", "How to set up automated DM replies on Instagram?", "How do I turn on auto DM?"],
+    "related": ["Instagram DM automation tool free", "Instagram automation free", "Best Instagram DM automation tool", "Instagram dm automation meta", "Comment to DM automation Instagram", "Instagram dm automation app", "Automation tool for Instagram followers", "Instagram DM automation India"]
+  },
+  "instagram auto reply": {
+    "aio": true, "aio_sources": ["CreatorFlow", "Instagram Help", "YouTube TechSimplify", "YouTube GODWIN TECH", "Instagram reel BPHQ"],
+    "aio_notes": "Step-by-step Meta Business Suite instant reply / away message instructions; Creator AI auto replies; video results embedded",
+    "video_block": true,
+    "organic": [
+      ["help.instagram.com (Turn on AI auto replies)", "B"], ["play.google.com AutoResponder for IG", "P"], ["linkdm.com", "L"],
+      ["make.com/templates/4925 auto-reply to new comments", "T"], ["linktr.ee/features/instagram-auto-reply", "L"],
+      ["jotform.com/ai/instagram-agent/auto-reply", "L"], ["stepper.io/blog/auto-reply-dm-instagram", "B"], ["instagram.com reel beautyprohq how-to", "F"]
+    ],
+    "paa": ["Can you set an automatic reply on Instagram?", "Is there a way to auto send a message on Instagram?", "How do I turn off auto reply on Instagram?", "How to set up auto reply?"],
+    "related": ["Instagram auto reply template", "Instagram auto reply generator", "Instagram auto reply personal account", "Instagram auto reply message for business", "Instagram auto reply message free", "Instagram auto reply bot", "Instagram auto reply bot free", "How to set automatic reply in Instagram DM"]
+  },
+  "instagram comment to dm": {
+    "aio": true, "aio_sources": ["LinkDM", "Inro", "dmgo.in", "CreatorFlow", "Manychat", "YouTube Joren Wouters (17:26, 32K views)"],
+    "video_block": true,
+    "organic": [
+      ["get.manychat.com/use-case/comment-to-dm", "L"], ["linkdm.com", "L"], ["replyrush.com", "L"], ["dealism.ai/feature/comment-to-dm", "L"],
+      ["creatorflow.so", "L"], ["dmgo.in/blog (complete 2026 guide)", "B"], ["inro.social/glossary/comment-to-dm", "B"]
+    ],
+    "paa": ["How to set up a comment to DM on Instagram?", "What to say in IG DM?", "How do I reply to a DM?", "Which DM automation is best?"],
+    "related": ["Instagram comment to dm example", "Instagram comment to dm automation", "Instagram comment to dm free", "Comment to-DM automation Instagram free", "Instagram comment to dm app", "Comment to DM automation free", "Instagram DM automation tool", "Instagram comment automation free"]
+  },
+  "manychat alternative": {
+    "aio": true, "aio_sources": ["Inro", "Manychat", "CreatorFlow", "Steps AI", "Reddit"],
+    "aio_notes": "Segments by use case; names Chatfuel, LinkDM, CreatorFlow, Respond.io, Meta Business Suite (free), open-source options",
+    "video_block": true,
+    "organic": [
+      ["kayako.com/tools (by use case)", "C"], ["manychat.com (Top 10 alternatives, 18 Jun 2026)", "C"], ["reddit.com/r/automation (80+ comments)", "F"],
+      ["setsmart.io/blog/manychat-alternative", "C"], ["zipchat.ai/alternatives", "C"], ["stepsai.co/blog", "C"],
+      ["linkdm.com/free-alternatives/manychat", "C"], ["blog.chatplace.io", "C"]
+    ],
+    "paa": ["Is there something better than ManyChat?", "Is there a free version of ManyChat?", "What are some free alternatives to ManyChat for Instagram?", "Which is better, ManyChat or Botcake?"],
+    "related": ["ManyChat alternative India", "Manychat alternative free", "Manychat alternative reddit", "ManyChat alternatives for Instagram", "ManyChat alternative for WhatsApp", "ManyChat alternative for Facebook", "ManyChat free alternative for Instagram", "ManyChat alternative for TikTok"]
+  },
+  "instagram automation india": {
+    "aio": false,
+    "organic": [
+      ["repli.in/instagram-automation-india (title: Rs 499/Month, UPI & GST)", "L"], ["wati.io/instagram-automation", "H"], ["superprofile.bio/blog", "C"],
+      ["dmgo.in/instagram-automation-india (1 day ago, INR pricing)", "L"], ["wacto.in/best-instagram-chatbot-for-business-in-india", "L"],
+      ["growcreation.in/blog (DM automation in India guide)", "B"], ["replykaro.com/instagram-automation-india (title: Rs 99/mo)", "L"],
+      ["ownchat.app/instagram-dm-automation", "L"], ["replymitra.in/blog (best tools for Indian creators)", "C"]
+    ],
+    "paa": ["Can I automate my Instagram account?", "How much does Instagram automation cost?", "How do I turn on Instagram automation?", "Is DM automation free?"],
+    "related": ["Instagram automation india free", "Instagram automation india login", "Instagram automation india app", "Instagram automation free", "Instagram automation tool", "Replit", "Manychat", "Wati"]
+  },
+  "_supporting": {
+    "manychat alternative india": {
+      "aio_notes": "Leads with UPI, flat pricing instead of contact-based dollar tiers; names ReplyKaro (Rs 99), FlowDM (Rs 299, UPI apps), Repli (Rs 499), SuperProfile, Meta Business Suite",
+      "organic": [["kayako.com", "C"], ["replykaro.com blog (16 Aug 2026)", "C"], ["withhimanshu.com", "C"], ["flowdm.in/blog/manychat-alternative-india (8 Aug 2026)", "C"], ["stepsai.co", "C"], ["instantdm.com (15 best alternatives, 2 Oct 2026)", "C"], ["repli.in/repli-vs-manychat (1 Oct 2026)", "C"], ["creatorlanehq.com (27 Jun 2026)", "C"], ["reddit r/automation", "F"]],
+      "paa": ["Is there a better app than ManyChat?", "Is there a free version of ManyChat?", "Which is better, ManyChat or Botcake?", "What are some free alternatives to ManyChat for Instagram?"]
+    },
+    "what is instagram automation": {
+      "organic": [["heyy.io/blog", "B"], ["quickconnect.biz/blog", "B"], ["sprinklr.com/blog", "B"], ["manychat.com guide", "B"], ["metricool.com", "B"], ["systemintegration.in/blog", "B"], ["shiprocket.in/blog", "B"]],
+      "overlap_with_head_term": "1 of 9 head-term URLs (heyy.io)"
+    },
+    "best instagram automation tool india": {
+      "aio_notes": "Leads with Meta Graph API compliance + local pricing (UPI); cites ReplyKaro (free 1,000 DMs, Rs 99, UPI, Razorpay)",
+      "organic": [["tailortalk.ai", "C"], ["reddit r/socialmedia", "F"], ["instantdm.com best tools", "C"], ["superprofile.bio", "C"], ["interakt.shop/instagram-automation", "L"], ["flowgent.ai", "C"], ["YouTube 5 best tools", "F"], ["manychat.com/product/instagram", "L"], ["replymitra.in", "C"]]
+    },
+    "instagram auto reply message for business": {
+      "organic": [["help.instagram.com", "B"], ["elpidan.com 40+ templates", "C"], ["reddit", "F"], ["leadresponse.co 25 examples", "C"], ["trengo.com 15 quick reply examples", "C"], ["blog.omnichat.ai", "B"], ["replyrush.com", "L"], ["stepper.io", "B"]],
+      "paa": ["How to set auto reply for Instagram business account?", "What is a good auto reply message for business?", "Can I have an auto reply message on Instagram?", "How to set auto send message in Instagram?"]
+    },
+    "site:linkar.in": "did not match any documents",
+    "linkar": {
+      "aio_notes": "AI Overview: 'Linkar most commonly refers to a social rewards mobile application' (Manchester, UK)",
+      "organic": ["Play Store Linkar (co.u...)", "linkar.co.uk Social Rewards App", "Play Store Linkar", "Linkar (60+ followers)", "linkar.ink", "linkar.cc SSH client", "@linkar.uk Instagram", "Play Store linkar (com...)", "linkar.co.uk/download"]
+    },
+    "linkar instagram automation": {
+      "organic": ["linkdm.com", "linktodm.com", "creatorflow.so", "help.manychat.com Quick Automation", "earnly.in/magiclink", "@linkdm_ Instagram", "superprofile.bio blog", "komently.com/instagram-automation"]
+    }
+  }
+}

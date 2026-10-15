@@ -1,0 +1,1716 @@
+{
+ "version": "1.9.0",
+ "seed_keyword": "instagram automation",
+ "created_at": "2026-10-15",
+ "market": "India first, global second",
+ "data_sources": {
+  "standard": "WebSearch tool, standard mode (US index); 41 snapshots from the earlier cluster run + 23 fresh on 15 Oct",
+  "extended": "WebSearch tool, extended mode (different index); 7 snapshots from the earlier SXO run + 25 fresh on 15 Oct",
+  "note": "Neither engine is Google India. No keyword volumes (DataForSEO not installed, Search Console has 0 impressions)."
+ },
+ "pillar": {
+  "id": "pillar",
+  "title": "Instagram automation: what it is, what Meta allows, and how to choose a tool",
+  "keyword": "instagram automation",
+  "secondary": [
+   "what is instagram automation",
+   "instagram automation tools",
+   "instagram automation kaise kare"
+  ],
+  "template": "ultimate-guide",
+  "wordCount": 3500,
+  "url": "/instagram-automation",
+  "status": "planned (gap)"
+ },
+ "clusters": [
+  {
+   "name": "Buying: India, free and tool choice",
+   "posts": [
+    {
+     "title": "Instagram automation tools in India compared (rupee prices, UPI, GST, free plans)",
+     "keyword": "instagram automation india",
+     "secondary": [
+      "instagram automation tool india",
+      "best instagram automation tool india",
+      "instagram dm automation india"
+     ],
+     "template": "best-of",
+     "wordCount": 1800,
+     "url": "/compare/instagram-automation-tools-india",
+     "status": "planned (gap)",
+     "id": "cluster-0-post-0"
+    },
+    {
+     "title": "Free Instagram automation tools compared",
+     "keyword": "instagram automation free",
+     "secondary": [
+      "free instagram automation tool",
+      "instagram dm automation free",
+      "comment to dm instagram free",
+      "auto dm instagram free"
+     ],
+     "template": "comparison",
+     "wordCount": 1600,
+     "url": "/compare/free-instagram-automation-tools",
+     "status": "planned (gap)",
+     "id": "cluster-0-post-1"
+    },
+    {
+     "title": "Homepage (tool, app and brand intent)",
+     "keyword": "instagram automation app",
+     "secondary": [
+      "instagram automation software",
+      "linkar"
+     ],
+     "template": "landing-page",
+     "wordCount": 1500,
+     "url": "/",
+     "status": "written (local; live is stale)",
+     "id": "cluster-0-post-2"
+    },
+    {
+     "title": "Pricing (Free plan and rupee plans)",
+     "keyword": "instagram automation pricing india",
+     "secondary": [
+      "instagram automation pricing inr"
+     ],
+     "template": "landing-page",
+     "wordCount": 800,
+     "url": "/pricing",
+     "status": "written",
+     "id": "cluster-0-post-3"
+    }
+   ]
+  },
+  {
+   "name": "Comment to DM and auto DM",
+   "posts": [
+    {
+     "title": "Instagram comment to DM automation",
+     "keyword": "instagram comment to dm automation",
+     "secondary": [
+      "instagram comment to dm",
+      "auto dm instagram",
+      "instagram auto dm from comment",
+      "send link when someone comments",
+      "comment par auto dm kaise bheje",
+      "auto dm instagram kya hota hai",
+      "instagram auto reply to comments"
+     ],
+     "template": "landing-page",
+     "wordCount": 1600,
+     "url": "/features/instagram-comment-to-dm",
+     "status": "written (local)",
+     "id": "cluster-1-post-0"
+    },
+    {
+     "title": "Instagram Reel comment automation",
+     "keyword": "instagram reel comment automation",
+     "secondary": [
+      "instagram reels comment auto reply"
+     ],
+     "template": "how-to",
+     "wordCount": 1400,
+     "url": "/features/instagram-reel-comment-automation",
+     "status": "written (local)",
+     "id": "cluster-1-post-1"
+    },
+    {
+     "title": "Instagram follow gated campaigns",
+     "keyword": "instagram follow to get link",
+     "secondary": [
+      "instagram follow gate"
+     ],
+     "template": "how-to",
+     "wordCount": 1400,
+     "url": "/features/instagram-follow-gate",
+     "status": "written (local)",
+     "id": "cluster-1-post-2"
+    },
+    {
+     "title": "Instagram comment to guide template",
+     "keyword": "comment to get link template",
+     "secondary": [],
+     "template": "listicle",
+     "wordCount": 1300,
+     "url": "/templates/comment-guide-delivery",
+     "status": "written (local)",
+     "id": "cluster-1-post-3"
+    }
+   ]
+  },
+  {
+   "name": "DMs, auto replies and welcome messages",
+   "posts": [
+    {
+     "title": "Instagram DM automation",
+     "keyword": "instagram dm automation",
+     "secondary": [
+      "how to automate instagram dms",
+      "how to send automated dms on instagram"
+     ],
+     "template": "how-to",
+     "wordCount": 1600,
+     "url": "/features/instagram-dm-automation",
+     "status": "written (local)",
+     "id": "cluster-2-post-0"
+    },
+    {
+     "title": "Instagram auto reply guide (DMs and comments, Hinglish section)",
+     "keyword": "instagram auto reply",
+     "secondary": [
+      "instagram par auto reply kaise kare",
+      "instagram auto reply message"
+     ],
+     "template": "how-to",
+     "wordCount": 1600,
+     "url": "/guides/instagram-auto-reply",
+     "status": "planned (gap)",
+     "id": "cluster-2-post-1"
+    },
+    {
+     "title": "Instagram keyword auto replies",
+     "keyword": "instagram keyword auto reply",
+     "secondary": [],
+     "template": "how-to",
+     "wordCount": 1400,
+     "url": "/features/instagram-keyword-replies",
+     "status": "written (local)",
+     "id": "cluster-2-post-2"
+    },
+    {
+     "title": "Instagram welcome message examples and template",
+     "keyword": "instagram welcome message examples",
+     "secondary": [
+      "instagram welcome message automation",
+      "instagram welcome message for business"
+     ],
+     "template": "listicle",
+     "wordCount": 1500,
+     "url": "/templates/first-message-welcome",
+     "status": "written (local); twin /features/instagram-first-message-welcome to merge",
+     "id": "cluster-2-post-3"
+    }
+   ]
+  },
+  {
+   "name": "Stories and leads",
+   "posts": [
+    {
+     "title": "Instagram Story reply automation",
+     "keyword": "instagram story reply automation",
+     "secondary": [],
+     "template": "how-to",
+     "wordCount": 1400,
+     "url": "/features/instagram-story-reply-automation",
+     "status": "written (local)",
+     "id": "cluster-3-post-0"
+    },
+    {
+     "title": "Instagram Story mention auto replies",
+     "keyword": "instagram story mention auto reply",
+     "secondary": [],
+     "template": "how-to",
+     "wordCount": 1400,
+     "url": "/features/instagram-story-mention-replies",
+     "status": "written (local)",
+     "id": "cluster-3-post-1"
+    },
+    {
+     "title": "Instagram email capture automation",
+     "keyword": "collect emails from instagram dms",
+     "secondary": [
+      "instagram email capture"
+     ],
+     "template": "how-to",
+     "wordCount": 1400,
+     "url": "/features/instagram-email-capture",
+     "status": "written (local)",
+     "id": "cluster-3-post-2"
+    },
+    {
+     "title": "Instagram lead generation with DM automation",
+     "keyword": "instagram lead generation automation",
+     "secondary": [
+      "instagram lead generation tool"
+     ],
+     "template": "ultimate-guide",
+     "wordCount": 1600,
+     "url": "/guides/instagram-lead-generation",
+     "status": "planned (gap)",
+     "id": "cluster-3-post-3"
+    }
+   ]
+  },
+  {
+   "name": "Rules and safety",
+   "posts": [
+    {
+     "title": "Is Instagram automation safe and allowed?",
+     "keyword": "is instagram automation safe",
+     "secondary": [
+      "is instagram automation allowed",
+      "is instagram automation legit",
+      "auto dm instagram meta verified"
+     ],
+     "template": "explainer",
+     "wordCount": 1500,
+     "url": "/guides/is-instagram-automation-safe",
+     "status": "planned (gap)",
+     "id": "cluster-4-post-0"
+    },
+    {
+     "title": "Instagram messaging rules explained (private replies, 7 days, 24-hour window)",
+     "keyword": "instagram 24 hour messaging window",
+     "secondary": [
+      "instagram private reply rules"
+     ],
+     "template": "explainer",
+     "wordCount": 1500,
+     "url": "/guides/instagram-messaging-rules",
+     "status": "planned (gap)",
+     "id": "cluster-4-post-1"
+    },
+    {
+     "title": "Instagram DM follow up automation",
+     "keyword": "instagram dm follow up automation",
+     "secondary": [],
+     "template": "how-to",
+     "wordCount": 1400,
+     "url": "/features/instagram-dm-follow-ups",
+     "status": "written (local)",
+     "id": "cluster-4-post-2"
+    }
+   ]
+  }
+ ],
+ "links": [
+  {
+   "from": "pillar",
+   "to": "cluster-0-post-0",
+   "from_url": "/instagram-automation",
+   "to_url": "/compare/instagram-automation-tools-india",
+   "type": "mandatory",
+   "anchor": "instagram automation india",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-0",
+   "to": "pillar",
+   "from_url": "/compare/instagram-automation-tools-india",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "instagram automation",
+   "exists_locally": null
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-0-post-1",
+   "from_url": "/instagram-automation",
+   "to_url": "/compare/free-instagram-automation-tools",
+   "type": "mandatory",
+   "anchor": "instagram automation free",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-1",
+   "to": "pillar",
+   "from_url": "/compare/free-instagram-automation-tools",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": null
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-0-post-2",
+   "from_url": "/instagram-automation",
+   "to_url": "/",
+   "type": "mandatory",
+   "anchor": "instagram automation app",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-2",
+   "to": "pillar",
+   "from_url": "/",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-0-post-3",
+   "from_url": "/instagram-automation",
+   "to_url": "/pricing",
+   "type": "mandatory",
+   "anchor": "instagram automation pricing india",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-3",
+   "to": "pillar",
+   "from_url": "/pricing",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-1-post-0",
+   "from_url": "/instagram-automation",
+   "to_url": "/features/instagram-comment-to-dm",
+   "type": "mandatory",
+   "anchor": "instagram comment to dm automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-1-post-0",
+   "to": "pillar",
+   "from_url": "/features/instagram-comment-to-dm",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "instagram automation",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-1-post-1",
+   "from_url": "/instagram-automation",
+   "to_url": "/features/instagram-reel-comment-automation",
+   "type": "mandatory",
+   "anchor": "instagram reel comment automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-1-post-1",
+   "to": "pillar",
+   "from_url": "/features/instagram-reel-comment-automation",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-1-post-2",
+   "from_url": "/instagram-automation",
+   "to_url": "/features/instagram-follow-gate",
+   "type": "mandatory",
+   "anchor": "instagram follow to get link",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-1-post-2",
+   "to": "pillar",
+   "from_url": "/features/instagram-follow-gate",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-1-post-3",
+   "from_url": "/instagram-automation",
+   "to_url": "/templates/comment-guide-delivery",
+   "type": "mandatory",
+   "anchor": "comment to get link template",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-1-post-3",
+   "to": "pillar",
+   "from_url": "/templates/comment-guide-delivery",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-2-post-0",
+   "from_url": "/instagram-automation",
+   "to_url": "/features/instagram-dm-automation",
+   "type": "mandatory",
+   "anchor": "instagram dm automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-2-post-0",
+   "to": "pillar",
+   "from_url": "/features/instagram-dm-automation",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "instagram automation",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-2-post-1",
+   "from_url": "/instagram-automation",
+   "to_url": "/guides/instagram-auto-reply",
+   "type": "mandatory",
+   "anchor": "instagram auto reply",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-2-post-1",
+   "to": "pillar",
+   "from_url": "/guides/instagram-auto-reply",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": null
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-2-post-2",
+   "from_url": "/instagram-automation",
+   "to_url": "/features/instagram-keyword-replies",
+   "type": "mandatory",
+   "anchor": "instagram keyword auto reply",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-2-post-2",
+   "to": "pillar",
+   "from_url": "/features/instagram-keyword-replies",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-2-post-3",
+   "from_url": "/instagram-automation",
+   "to_url": "/templates/first-message-welcome",
+   "type": "mandatory",
+   "anchor": "instagram welcome message examples",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-2-post-3",
+   "to": "pillar",
+   "from_url": "/templates/first-message-welcome",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-3-post-0",
+   "from_url": "/instagram-automation",
+   "to_url": "/features/instagram-story-reply-automation",
+   "type": "mandatory",
+   "anchor": "instagram story reply automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-3-post-0",
+   "to": "pillar",
+   "from_url": "/features/instagram-story-reply-automation",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "instagram automation",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-3-post-1",
+   "from_url": "/instagram-automation",
+   "to_url": "/features/instagram-story-mention-replies",
+   "type": "mandatory",
+   "anchor": "instagram story mention auto reply",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-3-post-1",
+   "to": "pillar",
+   "from_url": "/features/instagram-story-mention-replies",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-3-post-2",
+   "from_url": "/instagram-automation",
+   "to_url": "/features/instagram-email-capture",
+   "type": "mandatory",
+   "anchor": "collect emails from instagram dms",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-3-post-2",
+   "to": "pillar",
+   "from_url": "/features/instagram-email-capture",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-3-post-3",
+   "from_url": "/instagram-automation",
+   "to_url": "/guides/instagram-lead-generation",
+   "type": "mandatory",
+   "anchor": "instagram lead generation automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-3-post-3",
+   "to": "pillar",
+   "from_url": "/guides/instagram-lead-generation",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": null
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-4-post-0",
+   "from_url": "/instagram-automation",
+   "to_url": "/guides/is-instagram-automation-safe",
+   "type": "mandatory",
+   "anchor": "is instagram automation safe",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-4-post-0",
+   "to": "pillar",
+   "from_url": "/guides/is-instagram-automation-safe",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "instagram automation",
+   "exists_locally": null
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-4-post-1",
+   "from_url": "/instagram-automation",
+   "to_url": "/guides/instagram-messaging-rules",
+   "type": "mandatory",
+   "anchor": "instagram 24 hour messaging window",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-4-post-1",
+   "to": "pillar",
+   "from_url": "/guides/instagram-messaging-rules",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": null
+  },
+  {
+   "from": "pillar",
+   "to": "cluster-4-post-2",
+   "from_url": "/instagram-automation",
+   "to_url": "/features/instagram-dm-follow-ups",
+   "type": "mandatory",
+   "anchor": "instagram dm follow up automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-4-post-2",
+   "to": "pillar",
+   "from_url": "/features/instagram-dm-follow-ups",
+   "to_url": "/instagram-automation",
+   "type": "mandatory",
+   "anchor": "what Instagram automation is",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-0-post-0",
+   "to": "cluster-0-post-1",
+   "from_url": "/compare/instagram-automation-tools-india",
+   "to_url": "/compare/free-instagram-automation-tools",
+   "type": "recommended",
+   "anchor": "instagram automation free",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-0",
+   "to": "cluster-0-post-2",
+   "from_url": "/compare/instagram-automation-tools-india",
+   "to_url": "/",
+   "type": "recommended",
+   "anchor": "instagram automation app",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-0",
+   "to": "cluster-0-post-3",
+   "from_url": "/compare/instagram-automation-tools-india",
+   "to_url": "/pricing",
+   "type": "recommended",
+   "anchor": "instagram automation pricing india",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-1",
+   "to": "cluster-0-post-0",
+   "from_url": "/compare/free-instagram-automation-tools",
+   "to_url": "/compare/instagram-automation-tools-india",
+   "type": "recommended",
+   "anchor": "instagram automation india",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-1",
+   "to": "cluster-0-post-2",
+   "from_url": "/compare/free-instagram-automation-tools",
+   "to_url": "/",
+   "type": "recommended",
+   "anchor": "instagram automation app",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-1",
+   "to": "cluster-0-post-3",
+   "from_url": "/compare/free-instagram-automation-tools",
+   "to_url": "/pricing",
+   "type": "recommended",
+   "anchor": "instagram automation pricing india",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-2",
+   "to": "cluster-0-post-0",
+   "from_url": "/",
+   "to_url": "/compare/instagram-automation-tools-india",
+   "type": "recommended",
+   "anchor": "instagram automation india",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-0-post-2",
+   "to": "cluster-0-post-1",
+   "from_url": "/",
+   "to_url": "/compare/free-instagram-automation-tools",
+   "type": "recommended",
+   "anchor": "instagram automation free",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-0-post-2",
+   "to": "cluster-0-post-3",
+   "from_url": "/",
+   "to_url": "/pricing",
+   "type": "recommended",
+   "anchor": "instagram automation pricing india",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-0-post-3",
+   "to": "cluster-0-post-0",
+   "from_url": "/pricing",
+   "to_url": "/compare/instagram-automation-tools-india",
+   "type": "recommended",
+   "anchor": "instagram automation india",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-0-post-3",
+   "to": "cluster-0-post-1",
+   "from_url": "/pricing",
+   "to_url": "/compare/free-instagram-automation-tools",
+   "type": "recommended",
+   "anchor": "instagram automation free",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-0-post-3",
+   "to": "cluster-0-post-2",
+   "from_url": "/pricing",
+   "to_url": "/",
+   "type": "recommended",
+   "anchor": "instagram automation app",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-1-post-0",
+   "to": "cluster-1-post-1",
+   "from_url": "/features/instagram-comment-to-dm",
+   "to_url": "/features/instagram-reel-comment-automation",
+   "type": "recommended",
+   "anchor": "instagram reel comment automation",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-1-post-0",
+   "to": "cluster-1-post-2",
+   "from_url": "/features/instagram-comment-to-dm",
+   "to_url": "/features/instagram-follow-gate",
+   "type": "recommended",
+   "anchor": "instagram follow to get link",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-1-post-0",
+   "to": "cluster-1-post-3",
+   "from_url": "/features/instagram-comment-to-dm",
+   "to_url": "/templates/comment-guide-delivery",
+   "type": "recommended",
+   "anchor": "comment to get link template",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-1-post-1",
+   "to": "cluster-1-post-0",
+   "from_url": "/features/instagram-reel-comment-automation",
+   "to_url": "/features/instagram-comment-to-dm",
+   "type": "recommended",
+   "anchor": "instagram comment to dm automation",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-1-post-1",
+   "to": "cluster-1-post-2",
+   "from_url": "/features/instagram-reel-comment-automation",
+   "to_url": "/features/instagram-follow-gate",
+   "type": "recommended",
+   "anchor": "instagram follow to get link",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-1-post-1",
+   "to": "cluster-1-post-3",
+   "from_url": "/features/instagram-reel-comment-automation",
+   "to_url": "/templates/comment-guide-delivery",
+   "type": "recommended",
+   "anchor": "comment to get link template",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-1-post-2",
+   "to": "cluster-1-post-0",
+   "from_url": "/features/instagram-follow-gate",
+   "to_url": "/features/instagram-comment-to-dm",
+   "type": "recommended",
+   "anchor": "instagram comment to dm automation",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-1-post-2",
+   "to": "cluster-1-post-1",
+   "from_url": "/features/instagram-follow-gate",
+   "to_url": "/features/instagram-reel-comment-automation",
+   "type": "recommended",
+   "anchor": "instagram reel comment automation",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-1-post-2",
+   "to": "cluster-1-post-3",
+   "from_url": "/features/instagram-follow-gate",
+   "to_url": "/templates/comment-guide-delivery",
+   "type": "recommended",
+   "anchor": "comment to get link template",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-1-post-3",
+   "to": "cluster-1-post-0",
+   "from_url": "/templates/comment-guide-delivery",
+   "to_url": "/features/instagram-comment-to-dm",
+   "type": "recommended",
+   "anchor": "instagram comment to dm automation",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-1-post-3",
+   "to": "cluster-1-post-1",
+   "from_url": "/templates/comment-guide-delivery",
+   "to_url": "/features/instagram-reel-comment-automation",
+   "type": "recommended",
+   "anchor": "instagram reel comment automation",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-1-post-3",
+   "to": "cluster-1-post-2",
+   "from_url": "/templates/comment-guide-delivery",
+   "to_url": "/features/instagram-follow-gate",
+   "type": "recommended",
+   "anchor": "instagram follow to get link",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-2-post-0",
+   "to": "cluster-2-post-1",
+   "from_url": "/features/instagram-dm-automation",
+   "to_url": "/guides/instagram-auto-reply",
+   "type": "recommended",
+   "anchor": "instagram auto reply",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-2-post-0",
+   "to": "cluster-2-post-2",
+   "from_url": "/features/instagram-dm-automation",
+   "to_url": "/features/instagram-keyword-replies",
+   "type": "recommended",
+   "anchor": "instagram keyword auto reply",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-2-post-0",
+   "to": "cluster-2-post-3",
+   "from_url": "/features/instagram-dm-automation",
+   "to_url": "/templates/first-message-welcome",
+   "type": "recommended",
+   "anchor": "instagram welcome message examples",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-2-post-1",
+   "to": "cluster-2-post-0",
+   "from_url": "/guides/instagram-auto-reply",
+   "to_url": "/features/instagram-dm-automation",
+   "type": "recommended",
+   "anchor": "instagram dm automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-2-post-1",
+   "to": "cluster-2-post-2",
+   "from_url": "/guides/instagram-auto-reply",
+   "to_url": "/features/instagram-keyword-replies",
+   "type": "recommended",
+   "anchor": "instagram keyword auto reply",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-2-post-1",
+   "to": "cluster-2-post-3",
+   "from_url": "/guides/instagram-auto-reply",
+   "to_url": "/templates/first-message-welcome",
+   "type": "recommended",
+   "anchor": "instagram welcome message examples",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-2-post-2",
+   "to": "cluster-2-post-0",
+   "from_url": "/features/instagram-keyword-replies",
+   "to_url": "/features/instagram-dm-automation",
+   "type": "recommended",
+   "anchor": "instagram dm automation",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-2-post-2",
+   "to": "cluster-2-post-1",
+   "from_url": "/features/instagram-keyword-replies",
+   "to_url": "/guides/instagram-auto-reply",
+   "type": "recommended",
+   "anchor": "instagram auto reply",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-2-post-2",
+   "to": "cluster-2-post-3",
+   "from_url": "/features/instagram-keyword-replies",
+   "to_url": "/templates/first-message-welcome",
+   "type": "recommended",
+   "anchor": "instagram welcome message examples",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-2-post-3",
+   "to": "cluster-2-post-0",
+   "from_url": "/templates/first-message-welcome",
+   "to_url": "/features/instagram-dm-automation",
+   "type": "recommended",
+   "anchor": "instagram dm automation",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-2-post-3",
+   "to": "cluster-2-post-1",
+   "from_url": "/templates/first-message-welcome",
+   "to_url": "/guides/instagram-auto-reply",
+   "type": "recommended",
+   "anchor": "instagram auto reply",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-2-post-3",
+   "to": "cluster-2-post-2",
+   "from_url": "/templates/first-message-welcome",
+   "to_url": "/features/instagram-keyword-replies",
+   "type": "recommended",
+   "anchor": "instagram keyword auto reply",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-3-post-0",
+   "to": "cluster-3-post-1",
+   "from_url": "/features/instagram-story-reply-automation",
+   "to_url": "/features/instagram-story-mention-replies",
+   "type": "recommended",
+   "anchor": "instagram story mention auto reply",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-3-post-0",
+   "to": "cluster-3-post-2",
+   "from_url": "/features/instagram-story-reply-automation",
+   "to_url": "/features/instagram-email-capture",
+   "type": "recommended",
+   "anchor": "collect emails from instagram dms",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-3-post-0",
+   "to": "cluster-3-post-3",
+   "from_url": "/features/instagram-story-reply-automation",
+   "to_url": "/guides/instagram-lead-generation",
+   "type": "recommended",
+   "anchor": "instagram lead generation automation",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-3-post-1",
+   "to": "cluster-3-post-0",
+   "from_url": "/features/instagram-story-mention-replies",
+   "to_url": "/features/instagram-story-reply-automation",
+   "type": "recommended",
+   "anchor": "instagram story reply automation",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-3-post-1",
+   "to": "cluster-3-post-2",
+   "from_url": "/features/instagram-story-mention-replies",
+   "to_url": "/features/instagram-email-capture",
+   "type": "recommended",
+   "anchor": "collect emails from instagram dms",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-3-post-1",
+   "to": "cluster-3-post-3",
+   "from_url": "/features/instagram-story-mention-replies",
+   "to_url": "/guides/instagram-lead-generation",
+   "type": "recommended",
+   "anchor": "instagram lead generation automation",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-3-post-2",
+   "to": "cluster-3-post-0",
+   "from_url": "/features/instagram-email-capture",
+   "to_url": "/features/instagram-story-reply-automation",
+   "type": "recommended",
+   "anchor": "instagram story reply automation",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-3-post-2",
+   "to": "cluster-3-post-1",
+   "from_url": "/features/instagram-email-capture",
+   "to_url": "/features/instagram-story-mention-replies",
+   "type": "recommended",
+   "anchor": "instagram story mention auto reply",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-3-post-2",
+   "to": "cluster-3-post-3",
+   "from_url": "/features/instagram-email-capture",
+   "to_url": "/guides/instagram-lead-generation",
+   "type": "recommended",
+   "anchor": "instagram lead generation automation",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-3-post-3",
+   "to": "cluster-3-post-0",
+   "from_url": "/guides/instagram-lead-generation",
+   "to_url": "/features/instagram-story-reply-automation",
+   "type": "recommended",
+   "anchor": "instagram story reply automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-3-post-3",
+   "to": "cluster-3-post-1",
+   "from_url": "/guides/instagram-lead-generation",
+   "to_url": "/features/instagram-story-mention-replies",
+   "type": "recommended",
+   "anchor": "instagram story mention auto reply",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-3-post-3",
+   "to": "cluster-3-post-2",
+   "from_url": "/guides/instagram-lead-generation",
+   "to_url": "/features/instagram-email-capture",
+   "type": "recommended",
+   "anchor": "collect emails from instagram dms",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-4-post-0",
+   "to": "cluster-4-post-1",
+   "from_url": "/guides/is-instagram-automation-safe",
+   "to_url": "/guides/instagram-messaging-rules",
+   "type": "recommended",
+   "anchor": "instagram 24 hour messaging window",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-4-post-0",
+   "to": "cluster-4-post-2",
+   "from_url": "/guides/is-instagram-automation-safe",
+   "to_url": "/features/instagram-dm-follow-ups",
+   "type": "recommended",
+   "anchor": "instagram dm follow up automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-4-post-1",
+   "to": "cluster-4-post-0",
+   "from_url": "/guides/instagram-messaging-rules",
+   "to_url": "/guides/is-instagram-automation-safe",
+   "type": "recommended",
+   "anchor": "is instagram automation safe",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-4-post-1",
+   "to": "cluster-4-post-2",
+   "from_url": "/guides/instagram-messaging-rules",
+   "to_url": "/features/instagram-dm-follow-ups",
+   "type": "recommended",
+   "anchor": "instagram dm follow up automation",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-4-post-2",
+   "to": "cluster-4-post-0",
+   "from_url": "/features/instagram-dm-follow-ups",
+   "to_url": "/guides/is-instagram-automation-safe",
+   "type": "recommended",
+   "anchor": "is instagram automation safe",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-4-post-2",
+   "to": "cluster-4-post-1",
+   "from_url": "/features/instagram-dm-follow-ups",
+   "to_url": "/guides/instagram-messaging-rules",
+   "type": "recommended",
+   "anchor": "instagram 24 hour messaging window",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-1-post-0",
+   "to": "cluster-2-post-0",
+   "from_url": "/features/instagram-comment-to-dm",
+   "to_url": "/features/instagram-dm-automation",
+   "type": "optional (cross-cluster)",
+   "anchor": "instagram dm automation",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-2-post-0",
+   "to": "cluster-1-post-0",
+   "from_url": "/features/instagram-dm-automation",
+   "to_url": "/features/instagram-comment-to-dm",
+   "type": "optional (cross-cluster)",
+   "anchor": "comment to DM automation",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-1-post-0",
+   "to": "cluster-4-post-1",
+   "from_url": "/features/instagram-comment-to-dm",
+   "to_url": "/guides/instagram-messaging-rules",
+   "type": "optional (cross-cluster)",
+   "anchor": "Meta's private reply rules",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-2-post-1",
+   "to": "cluster-4-post-0",
+   "from_url": "/guides/instagram-auto-reply",
+   "to_url": "/guides/is-instagram-automation-safe",
+   "type": "optional (cross-cluster)",
+   "anchor": "is Instagram automation allowed",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-0",
+   "to": "cluster-4-post-0",
+   "from_url": "/compare/instagram-automation-tools-india",
+   "to_url": "/guides/is-instagram-automation-safe",
+   "type": "optional (cross-cluster)",
+   "anchor": "safe Instagram automation in India",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-0-post-1",
+   "to": "cluster-1-post-0",
+   "from_url": "/compare/free-instagram-automation-tools",
+   "to_url": "/features/instagram-comment-to-dm",
+   "type": "optional (cross-cluster)",
+   "anchor": "free comment to DM",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-3-post-3",
+   "to": "cluster-1-post-2",
+   "from_url": "/guides/instagram-lead-generation",
+   "to_url": "/features/instagram-follow-gate",
+   "type": "optional (cross-cluster)",
+   "anchor": "follow to get link",
+   "exists_locally": null
+  },
+  {
+   "from": "cluster-2-post-3",
+   "to": "cluster-3-post-0",
+   "from_url": "/templates/first-message-welcome",
+   "to_url": "/features/instagram-story-reply-automation",
+   "type": "optional (cross-cluster)",
+   "anchor": "Story reply automation",
+   "exists_locally": false
+  },
+  {
+   "from": "cluster-3-post-2",
+   "to": "cluster-1-post-2",
+   "from_url": "/features/instagram-email-capture",
+   "to_url": "/features/instagram-follow-gate",
+   "type": "optional (cross-cluster)",
+   "anchor": "grow followers with a follow gate",
+   "exists_locally": true
+  },
+  {
+   "from": "cluster-4-post-2",
+   "to": "cluster-2-post-0",
+   "from_url": "/features/instagram-dm-follow-ups",
+   "to_url": "/features/instagram-dm-automation",
+   "type": "optional (cross-cluster)",
+   "anchor": "DM automation",
+   "exists_locally": true
+  }
+ ],
+ "incoming_counts": {
+  "cluster-0-post-0": 4,
+  "cluster-0-post-1": 4,
+  "cluster-0-post-2": 4,
+  "cluster-0-post-3": 4,
+  "cluster-1-post-0": 6,
+  "cluster-1-post-1": 4,
+  "cluster-1-post-2": 6,
+  "cluster-1-post-3": 4,
+  "cluster-2-post-0": 6,
+  "cluster-2-post-1": 4,
+  "cluster-2-post-2": 4,
+  "cluster-2-post-3": 4,
+  "cluster-3-post-0": 5,
+  "cluster-3-post-1": 4,
+  "cluster-3-post-2": 4,
+  "cluster-3-post-3": 4,
+  "cluster-4-post-0": 5,
+  "cluster-4-post-1": 4,
+  "cluster-4-post-2": 3,
+  "pillar": 19
+ },
+ "secondary_pillars": [
+  {
+   "hub": "/compare",
+   "status": "planned (gap)",
+   "posts": [
+    "/compare/manychat-alternatives (India-first title)",
+    "/compare/manychat",
+    "/compare/superprofile (later)",
+    "/compare/linkdm (later)"
+   ],
+   "keywords": [
+    "manychat alternative india",
+    "manychat alternative",
+    "manychat pricing india",
+    "manychat vs superprofile",
+    "linkdm alternative"
+   ]
+  },
+  {
+   "hub": "/solutions",
+   "status": "written (local)",
+   "priority_posts": [
+    "/solutions/online-coaches",
+    "/solutions/fitness-coaches",
+    "/solutions/restaurants-cafes",
+    "/solutions/ecommerce-brands"
+   ],
+   "keywords": [
+    "instagram automation for coaches",
+    "instagram automation for restaurants",
+    "instagram automation for ecommerce"
+   ]
+  },
+  {
+   "hub": "/features (Facebook)",
+   "status": "written (local); merge trio",
+   "posts": [
+    "/features/facebook-comment-auto-reply"
+   ],
+   "keywords": [
+    "facebook page comment auto reply",
+    "facebook auto reply to comments keyword"
+   ]
+  },
+  {
+   "hub": "/features (team and insights)",
+   "status": "written (local)",
+   "posts": [
+    "/features/instagram-human-handoff",
+    "/features/instagram-link-tracking",
+    "/features/instagram-automation-analytics",
+    "/features/no-code-instagram-flow-builder"
+   ]
+  }
+ ],
+ "excluded": [
+  "instagram chatbot (AI chatbot builder SERP; Linkar has no AI replies)",
+  "manychat india (company-information SERP)",
+  "github / n8n / python bots",
+  "bot for followers / likes",
+  "story mention viewer / checker"
+ ],
+ "scorecard": {
+  "coverage": 0.68,
+  "pillarLinks": 0.0,
+  "orphanPages": 0,
+  "cannibalizationRisks": 4,
+  "contentGaps": 7
+ },
+ "serp_overlap_standard": [
+  [
+   "C:instagram automation",
+   "C:what is instagram automation",
+   3,
+   3
+  ],
+  [
+   "C:instagram automation",
+   "C:instagram automation kaise kare hindi",
+   3,
+   3
+  ],
+  [
+   "C:instagram automation tool india",
+   "C:instagram automation pricing inr per month india upi",
+   2,
+   2
+  ],
+  [
+   "C:instagram automation tool india",
+   "N:instagram automation india",
+   6,
+   6
+  ],
+  [
+   "C:instagram automation tool india",
+   "N:best instagram automation tool india",
+   4,
+   3
+  ],
+  [
+   "C:instagram automation tool india",
+   "N:instagram dm automation india",
+   3,
+   3
+  ],
+  [
+   "C:what is instagram automation",
+   "C:instagram automation kaise kare hindi",
+   3,
+   3
+  ],
+  [
+   "C:instagram automation tools",
+   "N:instagram automation tool",
+   6,
+   5
+  ],
+  [
+   "C:is instagram automation safe",
+   "N:is instagram automation allowed",
+   2,
+   3
+  ],
+  [
+   "C:how to automate instagram dms",
+   "C:instagram dm automation",
+   3,
+   4
+  ],
+  [
+   "C:how to automate instagram dms",
+   "N:auto dm instagram kya hota hai",
+   2,
+   2
+  ],
+  [
+   "C:instagram comment to dm automation",
+   "C:instagram comment par auto dm kaise bheje",
+   2,
+   4
+  ],
+  [
+   "C:instagram comment to dm automation",
+   "X:instagram comment to dm",
+   2,
+   2
+  ],
+  [
+   "C:instagram comment to dm automation",
+   "N:comment to dm instagram free",
+   2,
+   2
+  ],
+  [
+   "C:instagram comment to dm automation",
+   "N:instagram auto dm from comment",
+   3,
+   3
+  ],
+  [
+   "C:instagram comment to dm automation",
+   "N:send link in instagram dm automatically when someone comments",
+   3,
+   2
+  ],
+  [
+   "C:instagram auto reply",
+   "C:instagram keyword auto reply",
+   2,
+   2
+  ],
+  [
+   "C:instagram auto reply",
+   "C:instagram auto reply kaise kare",
+   3,
+   2
+  ],
+  [
+   "C:instagram auto reply",
+   "X:instagram auto reply",
+   3,
+   3
+  ],
+  [
+   "C:manychat alternative",
+   "N:manychat alternative india",
+   3,
+   3
+  ],
+  [
+   "C:free instagram automation tool",
+   "N:instagram automation free",
+   4,
+   4
+  ],
+  [
+   "C:how to auto reply to instagram comments with a dm",
+   "N:instagram auto dm from comment",
+   2,
+   3
+  ],
+  [
+   "C:instagram keyword auto reply",
+   "C:instagram auto reply kaise kare",
+   2,
+   2
+  ],
+  [
+   "C:instagram keyword auto reply",
+   "X:instagram auto reply",
+   2,
+   2
+  ],
+  [
+   "C:instagram story reply automation",
+   "C:instagram story mention auto reply",
+   2,
+   4
+  ],
+  [
+   "C:instagram dm automation analytics track link clicks",
+   "N:send link in instagram dm automatically when someone comments",
+   2,
+   3
+  ],
+  [
+   "C:instagram automation for small business",
+   "C:instagram automation kaise kare hindi",
+   2,
+   1
+  ],
+  [
+   "C:manychat alternatives india",
+   "N:manychat alternative india",
+   4,
+   4
+  ],
+  [
+   "C:instagram automation pricing inr per month india upi",
+   "N:instagram automation india",
+   2,
+   2
+  ],
+  [
+   "C:instagram automation pricing inr per month india upi",
+   "N:instagram dm automation india",
+   2,
+   3
+  ],
+  [
+   "C:instagram auto reply kaise kare",
+   "X:instagram auto reply",
+   2,
+   2
+  ],
+  [
+   "C:instagram comment par auto dm kaise bheje",
+   "N:auto dm instagram",
+   2,
+   2
+  ],
+  [
+   "C:instagram comment par auto dm kaise bheje",
+   "N:instagram auto dm from comment",
+   3,
+   3
+  ],
+  [
+   "X:manychat alternative",
+   "N:manychat alternative india",
+   2,
+   2
+  ],
+  [
+   "N:instagram automation india",
+   "N:best instagram automation tool india",
+   3,
+   3
+  ],
+  [
+   "N:instagram automation india",
+   "N:instagram dm automation india",
+   4,
+   4
+  ],
+  [
+   "N:auto dm instagram",
+   "N:instagram auto dm from comment",
+   2,
+   2
+  ],
+  [
+   "N:best instagram automation tool india",
+   "N:instagram dm automation india",
+   2,
+   2
+  ],
+  [
+   "N:comment to dm instagram free",
+   "N:instagram auto dm from comment",
+   2,
+   2
+  ],
+  [
+   "N:instagram auto dm from comment",
+   "N:send link in instagram dm automatically when someone comments",
+   2,
+   2
+  ]
+ ],
+ "serp_overlap_extended": [
+  [
+   "instagram automation india",
+   "instagram automation tool india",
+   5,
+   4
+  ],
+  [
+   "instagram automation india",
+   "best instagram automation tool india",
+   2,
+   2
+  ],
+  [
+   "what is instagram automation",
+   "instagram automation for small business",
+   2,
+   3
+  ],
+  [
+   "what is instagram automation",
+   "instagram automation",
+   4,
+   4
+  ],
+  [
+   "instagram automation tool india",
+   "best instagram automation tool india",
+   3,
+   3
+  ],
+  [
+   "instagram automation free",
+   "instagram automation app",
+   2,
+   4
+  ],
+  [
+   "instagram automation free",
+   "comment to dm instagram free",
+   2,
+   3
+  ],
+  [
+   "instagram comment to dm automation",
+   "auto dm instagram",
+   2,
+   2
+  ],
+  [
+   "instagram comment to dm automation",
+   "instagram auto reply to comments",
+   2,
+   2
+  ],
+  [
+   "instagram comment to dm automation",
+   "instagram story mention auto reply",
+   2,
+   2
+  ],
+  [
+   "instagram comment to dm automation",
+   "instagram automation for creators",
+   2,
+   3
+  ],
+  [
+   "instagram comment to dm automation",
+   "instagram dm automation",
+   3,
+   3
+  ],
+  [
+   "instagram comment to dm automation",
+   "instagram comment to dm",
+   3,
+   4
+  ],
+  [
+   "auto dm instagram",
+   "instagram auto reply to comments",
+   2,
+   2
+  ],
+  [
+   "auto dm instagram",
+   "auto dm instagram kya hota hai",
+   2,
+   2
+  ],
+  [
+   "instagram auto reply to comments",
+   "instagram story mention auto reply",
+   2,
+   3
+  ],
+  [
+   "instagram story reply automation",
+   "instagram story mention auto reply",
+   2,
+   4
+  ],
+  [
+   "instagram automation for small business",
+   "instagram automation tools",
+   2,
+   2
+  ],
+  [
+   "instagram automation for small business",
+   "instagram automation app",
+   3,
+   4
+  ],
+  [
+   "instagram automation for small business",
+   "instagram automation",
+   3,
+   3
+  ],
+  [
+   "instagram automation tools",
+   "instagram automation app",
+   3,
+   3
+  ],
+  [
+   "instagram automation tools",
+   "instagram automation for creators",
+   4,
+   4
+  ],
+  [
+   "instagram automation tools",
+   "instagram automation",
+   4,
+   5
+  ],
+  [
+   "instagram automation tools",
+   "instagram automation tool",
+   2,
+   2
+  ],
+  [
+   "instagram automation tools",
+   "instagram dm automation",
+   2,
+   2
+  ],
+  [
+   "instagram automation app",
+   "instagram automation for creators",
+   2,
+   2
+  ],
+  [
+   "instagram automation app",
+   "instagram automation",
+   4,
+   4
+  ],
+  [
+   "instagram automation for creators",
+   "instagram automation",
+   2,
+   3
+  ],
+  [
+   "instagram automation for creators",
+   "instagram automation tool",
+   2,
+   2
+  ]
+ ]
+}

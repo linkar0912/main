@@ -1,0 +1,100 @@
+{
+  "_note": "DRAFT JSON-LD for owner review. Generate the Linkar offers from src/lib/billing/catalog.ts at build time (as app/page.tsx already does) rather than hard-coding them. No AggregateRating anywhere: Linkar has no verified review data and competitors' ratings must not be marked up on our page. No Offer data for competitors: their prices are shown in the visible table with sources, not in our structured data. No FAQPage: the FAQ stays visible on the page for readers and AI answers, but it is not added for Google rich results on this commercial site. Keys starting with _ are comments; strip them.",
+  "linkarVsManychat": {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://linkar.in/compare/manychat#webpage",
+        "url": "https://linkar.in/compare/manychat",
+        "name": "Linkar vs Manychat (2026): INR Pricing, Features, Limits",
+        "description": "Linkar vs Manychat for Instagram automation in India: rupee vs dollar pricing, free plan limits, features, and where each one fits. Checked October 2026.",
+        "inLanguage": "en-IN",
+        "datePublished": "2026-10-15",
+        "dateModified": "2026-10-15",
+        "isPartOf": { "@id": "https://linkar.in/#website" },
+        "publisher": { "@id": "https://linkar.in/#organization" },
+        "breadcrumb": { "@id": "https://linkar.in/compare/manychat#breadcrumb" },
+        "about": { "@id": "https://linkar.in/#software" },
+        "mentions": [
+          {
+            "@type": "SoftwareApplication",
+            "name": "Manychat",
+            "url": "https://manychat.com/",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web"
+          }
+        ]
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://linkar.in/#software",
+        "_note": "Add this @id to the SoftwareApplication node in app/page.tsx so every page points at one entity.",
+        "name": "Linkar",
+        "url": "https://linkar.in/",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "publisher": { "@id": "https://linkar.in/#organization" },
+        "offers": [
+          { "@type": "Offer", "name": "Free plan", "price": "0.00", "priceCurrency": "INR", "url": "https://linkar.in/pricing" },
+          { "@type": "Offer", "name": "Creator plan", "price": "199.00", "priceCurrency": "INR", "url": "https://linkar.in/pricing" },
+          { "@type": "Offer", "name": "Growth plan", "price": "499.00", "priceCurrency": "INR", "url": "https://linkar.in/pricing" },
+          { "@type": "Offer", "name": "Agency plan", "price": "999.00", "priceCurrency": "INR", "url": "https://linkar.in/pricing" }
+        ]
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "https://linkar.in/compare/manychat#breadcrumb",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Linkar", "item": "https://linkar.in" },
+          { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://linkar.in/compare" },
+          { "@type": "ListItem", "position": 3, "name": "Linkar vs Manychat", "item": "https://linkar.in/compare/manychat" }
+        ]
+      }
+    ]
+  },
+  "manychatAlternatives": {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://linkar.in/compare/manychat-alternatives#webpage",
+        "url": "https://linkar.in/compare/manychat-alternatives",
+        "name": "5 Manychat Alternatives in India With INR Pricing (2026)",
+        "description": "Five Instagram automation tools with rupee pricing compared with Manychat: free plans, first paid plan, GST, features and limits. Prices checked October 2026.",
+        "inLanguage": "en-IN",
+        "datePublished": "2026-10-15",
+        "dateModified": "2026-10-15",
+        "isPartOf": { "@id": "https://linkar.in/#website" },
+        "publisher": { "@id": "https://linkar.in/#organization" },
+        "breadcrumb": { "@id": "https://linkar.in/compare/manychat-alternatives#breadcrumb" },
+        "about": { "@type": "SoftwareApplication", "name": "Manychat", "url": "https://manychat.com/" },
+        "mainEntity": { "@id": "https://linkar.in/compare/manychat-alternatives#list" }
+      },
+      {
+        "@type": "ItemList",
+        "@id": "https://linkar.in/compare/manychat-alternatives#list",
+        "name": "Manychat alternatives in India with INR pricing",
+        "_note": "Unordered: Linkar is listed first because it is ours (disclosed on the page), the rest alphabetically. Do not use ItemListOrderDescending, which would imply a ranking.",
+        "itemListOrder": "https://schema.org/ItemListUnordered",
+        "numberOfItems": 5,
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "item": { "@id": "https://linkar.in/#software", "name": "Linkar", "url": "https://linkar.in/" } },
+          { "@type": "ListItem", "position": 2, "item": { "@type": "SoftwareApplication", "name": "InstantDM", "url": "https://instantdm.com/", "applicationCategory": "BusinessApplication" } },
+          { "@type": "ListItem", "position": 3, "item": { "@type": "SoftwareApplication", "name": "Interakt", "url": "https://www.interakt.shop/", "applicationCategory": "BusinessApplication" } },
+          { "@type": "ListItem", "position": 4, "item": { "@type": "SoftwareApplication", "name": "SuperProfile", "url": "https://superprofile.bio/", "applicationCategory": "BusinessApplication" } },
+          { "@type": "ListItem", "position": 5, "item": { "@type": "SoftwareApplication", "name": "Zorcha", "url": "https://zorcha.com/", "applicationCategory": "BusinessApplication" } }
+        ]
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "https://linkar.in/compare/manychat-alternatives#breadcrumb",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Linkar", "item": "https://linkar.in" },
+          { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://linkar.in/compare" },
+          { "@type": "ListItem", "position": 3, "name": "Manychat alternatives", "item": "https://linkar.in/compare/manychat-alternatives" }
+        ]
+      }
+    ]
+  }
+}

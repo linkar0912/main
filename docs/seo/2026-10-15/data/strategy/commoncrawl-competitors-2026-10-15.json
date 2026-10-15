@@ -1,0 +1,77 @@
+{
+ "source": "commoncrawl_graph.py (claude-seo), checked 2026-10-15",
+ "rows": [
+  {
+   "domain": "linkar.in",
+   "in_crawl": false,
+   "pagerank_rank": null,
+   "harmonic_centrality_rank": null,
+   "n_hosts": null,
+   "release": "cc-main-2026-jan-feb-mar"
+  },
+  {
+   "domain": "manychat.com",
+   "in_crawl": true,
+   "pagerank_rank": 5823,
+   "harmonic_centrality_rank": 451545,
+   "n_hosts": 41,
+   "release": "cc-main-2026-jan-feb-mar"
+  },
+  {
+   "domain": "superprofile.bio",
+   "in_crawl": true,
+   "pagerank_rank": 169846,
+   "harmonic_centrality_rank": 2420710,
+   "n_hosts": 3,
+   "release": "cc-main-2026-jan-feb-mar"
+  },
+  {
+   "domain": "zorcha.com",
+   "in_crawl": false,
+   "pagerank_rank": null,
+   "harmonic_centrality_rank": null,
+   "n_hosts": null,
+   "release": "cc-main-2026-jan-feb-mar"
+  },
+  {
+   "domain": "instantdm.com",
+   "in_crawl": true,
+   "pagerank_rank": 567761,
+   "harmonic_centrality_rank": 304420,
+   "n_hosts": 5,
+   "release": "cc-main-2026-jan-feb-mar"
+  },
+  {
+   "domain": "linkdm.com",
+   "in_crawl": true,
+   "pagerank_rank": 1051158,
+   "harmonic_centrality_rank": 8335952,
+   "n_hosts": 3,
+   "release": "cc-main-2026-jan-feb-mar"
+  },
+  {
+   "domain": "creatorflow.so",
+   "in_crawl": true,
+   "pagerank_rank": 9188093,
+   "harmonic_centrality_rank": 11299359,
+   "n_hosts": 2,
+   "release": "cc-main-2026-jan-feb-mar"
+  },
+  {
+   "domain": "inro.social",
+   "in_crawl": true,
+   "pagerank_rank": 3737195,
+   "harmonic_centrality_rank": 8612624,
+   "n_hosts": 5,
+   "release": "cc-main-2026-jan-feb-mar"
+  },
+  {
+   "domain": "replykaro.com",
+   "in_crawl": false,
+   "pagerank_rank": null,
+   "harmonic_centrality_rank": null,
+   "n_hosts": null,
+   "release": "cc-main-2026-jan-feb-mar"
+  }
+ ]
+}

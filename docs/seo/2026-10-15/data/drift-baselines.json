@@ -1,0 +1,469 @@
+{
+ "exported_from": "/Users/tejastelkar/.cache/claude-seo/drift/baselines.db",
+ "baselines": [
+  {
+   "id": 2,
+   "url": "https://linkar.in/",
+   "url_hash": "62bdce4c54fc1255",
+   "timestamp": "2026-10-15T06:09:24.205714+00:00",
+   "title": "Linkar · Instagram and Facebook automation",
+   "meta_description": "Build Instagram conversation flows and Facebook Page public comment replies with clear rules, useful responses, and human handoffs.",
+   "canonical": "https://linkar.in",
+   "robots": null,
+   "h1": "Reply to every opportunity.Even when you are away.",
+   "h2_json": [
+    "Made for creators, marketers & brands.",
+    "The best conversations should keep working after you log off.",
+    "From the first comment to the right next step.",
+    "Choose where Linkar should reply.",
+    "Less inbox chasing. More conversations worth joining.",
+    "See what Linkar can handle for you.",
+    "Every reply, accounted for.",
+    "Everywhere your audience is",
+    "Start replying in three simple steps.",
+    "Good questions before you switch anything on.",
+    "Product",
+    "Resources",
+    "Company",
+    "Legal"
+   ],
+   "h3_json": [
+    "Aanya Mehta",
+    "Arjun Nair",
+    "Aanya Mehta",
+    "Arjun Nair",
+    "Reply right away",
+    "Ask one useful question",
+    "Follow up at the right time",
+    "Let your team take over",
+    "Reply when someone comments",
+    "Answer common messages",
+    "Thank people for Story mentions",
+    "Send links to followers",
+    "Without a system",
+    "With Linkar in the loop",
+    "Send a free guide+",
+    "Ask what someone needs+",
+    "Follow up later+",
+    "Let your team take over+",
+    "By day",
+    "By post",
+    "By link",
+    "Instagram",
+    "Facebook Pages",
+    "Connect Instagram or Facebook",
+    "Choose what starts the reply",
+    "Review it and turn it on",
+    "How does Linkar protect my account?",
+    "Does Linkar use the official API?",
+    "Do I need to write code?",
+    "What happens when a person should take over?"
+   ],
+   "schema_json": [
+    {
+     "@context": "https://schema.org",
+     "@type": "Organization",
+     "@id": "https://linkar.in/#organization",
+     "name": "Linkar",
+     "url": "https://linkar.in",
+     "logo": "https://linkar.in/icon.png",
+     "email": "support@linkar.in",
+     "contactPoint": {
+      "@type": "ContactPoint",
+      "contactType": "customer support",
+      "email": "support@linkar.in",
+      "areaServed": "IN",
+      "availableLanguage": "English"
+     }
+    },
+    {
+     "@context": "https://schema.org",
+     "@type": "SoftwareApplication",
+     "name": "Linkar",
+     "url": "https://linkar.in",
+     "applicationCategory": "BusinessApplication",
+     "operatingSystem": "Web",
+     "description": "Build Instagram conversation flows and Facebook Page public comment replies with clear rules, useful responses, and human handoffs.",
+     "publisher": {
+      "@id": "https://linkar.in/#organization"
+     },
+     "offers": [
+      {
+       "@type": "Offer",
+       "name": "Free plan",
+       "price": "0.00",
+       "priceCurrency": "INR",
+       "url": "https://linkar.in/pricing"
+      },
+      {
+       "@type": "Offer",
+       "name": "Creator plan",
+       "price": "199.00",
+       "priceCurrency": "INR",
+       "url": "https://linkar.in/pricing"
+      },
+      {
+       "@type": "Offer",
+       "name": "Growth plan",
+       "price": "499.00",
+       "priceCurrency": "INR",
+       "url": "https://linkar.in/pricing"
+      },
+      {
+       "@type": "Offer",
+       "name": "Agency plan",
+       "price": "999.00",
+       "priceCurrency": "INR",
+       "url": "https://linkar.in/pricing"
+      }
+     ]
+    }
+   ],
+   "og_json": {
+    "og:title": "Linkar · Instagram and Facebook automation",
+    "og:description": "Build Instagram conversation flows and Facebook Page public comment replies with clear rules, useful responses, and human handoffs.",
+    "og:url": "https://linkar.in",
+    "og:site_name": "Linkar",
+    "og:locale": "en_IN",
+    "og:image": "https://linkar.in/opengraph-image?c9789a0b7a757f8a",
+    "og:image:type": "image/png",
+    "og:image:width": "1200",
+    "og:image:height": "630",
+    "og:image:alt": "Linkar: Instagram and Facebook automation, made clear",
+    "og:type": "website"
+   },
+   "cwv_json": {
+    "performance_score": 92,
+    "lab_metrics": {
+     "first-contentful-paint": {
+      "value": 1728.0795288832355,
+      "display": "1.7 s",
+      "score": 0.91
+     },
+     "largest-contentful-paint": {
+      "value": 2927.022094534097,
+      "display": "2.9 s",
+      "score": 0.8
+     },
+     "total-blocking-time": {
+      "value": 145.4987374551938,
+      "display": "150 ms",
+      "score": 0.95
+     },
+     "cumulative-layout-shift": {
+      "value": 0.0018737936176976822,
+      "display": "0.002",
+      "score": 1
+     },
+     "speed-index": {
+      "value": 3462.054117472463,
+      "display": "3.5 s",
+      "score": 0.89
+     },
+     "interactive": {
+      "value": 5164.374114605787,
+      "display": "5.2 s",
+      "score": 0.75
+     }
+    },
+    "field_metrics": {}
+   },
+   "html_hash": "26af4c2638b491472e38aec39cd5a1758aa4346541a86b2c4d14df246cb70351",
+   "schema_hash": "2d4640cf1bdc78791309829ed7f3733bddba1f4b589475c8d832c1d95ed046b4",
+   "status_code": 200
+  },
+  {
+   "id": 3,
+   "url": "https://linkar.in/pricing",
+   "url_hash": "3b709cb2e79844d9",
+   "timestamp": "2026-10-15T06:09:55.148435+00:00",
+   "title": "Pricing · Linkar",
+   "meta_description": "Start free with Linkar, then grow with simple creator, growth, and agency plans. Every displayed price includes applicable GST.",
+   "canonical": "https://linkar.in/pricing",
+   "robots": null,
+   "h1": "Plans that grow with you.",
+   "h2_json": [
+    "Free",
+    "Creator",
+    "Growth",
+    "Agency",
+    "Pick your plan in 30 seconds",
+    "Compare plans and pricing info",
+    "What counts as a delivery",
+    "No surprises on the invoice",
+    "Before you pay for anything",
+    "Start on Free. Move up when the DMs do.",
+    "Product",
+    "Resources",
+    "Company",
+    "Legal"
+   ],
+   "h3_json": [
+    "Where do people find you?",
+    "What counts as one delivery?",
+    "What happens when I reach the monthly limit?",
+    "When does my usage reset?",
+    "Can I change plans in the middle of a cycle?",
+    "What happens if I cancel?",
+    "Do I need a card to start?"
+   ],
+   "schema_json": [],
+   "og_json": {
+    "og:title": "Pricing · Linkar",
+    "og:description": "Start free with Linkar, then grow with simple creator, growth, and agency plans. Every displayed price includes applicable GST.",
+    "og:url": "https://linkar.in/pricing",
+    "og:site_name": "Linkar",
+    "og:locale": "en_IN",
+    "og:type": "website"
+   },
+   "cwv_json": {
+    "performance_score": 78,
+    "lab_metrics": {
+     "first-contentful-paint": {
+      "value": 1707.641719088669,
+      "display": "1.7 s",
+      "score": 0.92
+     },
+     "largest-contentful-paint": {
+      "value": 5610.2785825758965,
+      "display": "5.6 s",
+      "score": 0.17
+     },
+     "total-blocking-time": {
+      "value": 68,
+      "display": "70 ms",
+      "score": 0.99
+     },
+     "cumulative-layout-shift": {
+      "value": 0,
+      "display": "0",
+      "score": 1
+     },
+     "speed-index": {
+      "value": 2462.8134077966447,
+      "display": "2.5 s",
+      "score": 0.98
+     },
+     "interactive": {
+      "value": 5610.2785825758965,
+      "display": "5.6 s",
+      "score": 0.69
+     }
+    },
+    "field_metrics": {}
+   },
+   "html_hash": "a27327352e395eb69b406dfe0416eae6291c96bdd2d80985000c111ac8306058",
+   "schema_hash": null,
+   "status_code": 200
+  },
+  {
+   "id": 4,
+   "url": "https://linkar.in/",
+   "url_hash": "62bdce4c54fc1255",
+   "timestamp": "2026-10-15T06:11:05.095102+00:00",
+   "title": "Linkar · Instagram and Facebook automation",
+   "meta_description": "Build Instagram conversation flows and Facebook Page public comment replies with clear rules, useful responses, and human handoffs.",
+   "canonical": "https://linkar.in",
+   "robots": null,
+   "h1": "Reply to every opportunity.Even when you are away.",
+   "h2_json": [
+    "Made for creators, marketers & brands.",
+    "The best conversations should keep working after you log off.",
+    "From the first comment to the right next step.",
+    "Choose where Linkar should reply.",
+    "Less inbox chasing. More conversations worth joining.",
+    "See what Linkar can handle for you.",
+    "Every reply, accounted for.",
+    "Everywhere your audience is",
+    "Start replying in three simple steps.",
+    "Good questions before you switch anything on.",
+    "Product",
+    "Resources",
+    "Company",
+    "Legal"
+   ],
+   "h3_json": [
+    "Aanya Mehta",
+    "Arjun Nair",
+    "Aanya Mehta",
+    "Arjun Nair",
+    "Reply right away",
+    "Ask one useful question",
+    "Follow up at the right time",
+    "Let your team take over",
+    "Reply when someone comments",
+    "Answer common messages",
+    "Thank people for Story mentions",
+    "Send links to followers",
+    "Without a system",
+    "With Linkar in the loop",
+    "Send a free guide+",
+    "Ask what someone needs+",
+    "Follow up later+",
+    "Let your team take over+",
+    "By day",
+    "By post",
+    "By link",
+    "Instagram",
+    "Facebook Pages",
+    "Connect Instagram or Facebook",
+    "Choose what starts the reply",
+    "Review it and turn it on",
+    "How does Linkar protect my account?",
+    "Does Linkar use the official API?",
+    "Do I need to write code?",
+    "What happens when a person should take over?"
+   ],
+   "schema_json": [
+    {
+     "@context": "https://schema.org",
+     "@type": "Organization",
+     "@id": "https://linkar.in/#organization",
+     "name": "Linkar",
+     "url": "https://linkar.in",
+     "logo": "https://linkar.in/icon.png",
+     "email": "support@linkar.in",
+     "contactPoint": {
+      "@type": "ContactPoint",
+      "contactType": "customer support",
+      "email": "support@linkar.in",
+      "areaServed": "IN",
+      "availableLanguage": "English"
+     }
+    },
+    {
+     "@context": "https://schema.org",
+     "@type": "SoftwareApplication",
+     "name": "Linkar",
+     "url": "https://linkar.in",
+     "applicationCategory": "BusinessApplication",
+     "operatingSystem": "Web",
+     "description": "Build Instagram conversation flows and Facebook Page public comment replies with clear rules, useful responses, and human handoffs.",
+     "publisher": {
+      "@id": "https://linkar.in/#organization"
+     },
+     "offers": [
+      {
+       "@type": "Offer",
+       "name": "Free plan",
+       "price": "0.00",
+       "priceCurrency": "INR",
+       "url": "https://linkar.in/pricing"
+      },
+      {
+       "@type": "Offer",
+       "name": "Creator plan",
+       "price": "199.00",
+       "priceCurrency": "INR",
+       "url": "https://linkar.in/pricing"
+      },
+      {
+       "@type": "Offer",
+       "name": "Growth plan",
+       "price": "499.00",
+       "priceCurrency": "INR",
+       "url": "https://linkar.in/pricing"
+      },
+      {
+       "@type": "Offer",
+       "name": "Agency plan",
+       "price": "999.00",
+       "priceCurrency": "INR",
+       "url": "https://linkar.in/pricing"
+      }
+     ]
+    }
+   ],
+   "og_json": {
+    "og:title": "Linkar · Instagram and Facebook automation",
+    "og:description": "Build Instagram conversation flows and Facebook Page public comment replies with clear rules, useful responses, and human handoffs.",
+    "og:url": "https://linkar.in",
+    "og:site_name": "Linkar",
+    "og:locale": "en_IN",
+    "og:image": "https://linkar.in/opengraph-image?c9789a0b7a757f8a",
+    "og:image:type": "image/png",
+    "og:image:width": "1200",
+    "og:image:height": "630",
+    "og:image:alt": "Linkar: Instagram and Facebook automation, made clear",
+    "og:type": "website"
+   },
+   "cwv_json": {
+    "performance_score": 77,
+    "lab_metrics": {
+     "first-contentful-paint": {
+      "value": 1733.7121292173829,
+      "display": "1.7 s",
+      "score": 0.91
+     },
+     "largest-contentful-paint": {
+      "value": 5101.072347858728,
+      "display": "5.1 s",
+      "score": 0.25
+     },
+     "total-blocking-time": {
+      "value": 206.9981449266993,
+      "display": "210 ms",
+      "score": 0.89
+     },
+     "cumulative-layout-shift": {
+      "value": 0.0011200118477938622,
+      "display": "0.001",
+      "score": 1
+     },
+     "speed-index": {
+      "value": 2688.460530648138,
+      "display": "2.7 s",
+      "score": 0.96
+     },
+     "interactive": {
+      "value": 5227.5725333660575,
+      "display": "5.2 s",
+      "score": 0.74
+     }
+    },
+    "field_metrics": {}
+   },
+   "html_hash": "26af4c2638b491472e38aec39cd5a1758aa4346541a86b2c4d14df246cb70351",
+   "schema_hash": "2d4640cf1bdc78791309829ed7f3733bddba1f4b589475c8d832c1d95ed046b4",
+   "status_code": 200
+  }
+ ],
+ "comparisons": [
+  {
+   "id": 3,
+   "url": "https://linkar.in/",
+   "baseline_id": 2,
+   "timestamp": "2026-10-15T06:10:37.789266+00:00",
+   "critical_count": 0,
+   "warning_count": 2,
+   "info_count": 0
+  },
+  {
+   "id": 4,
+   "url": "https://linkar.in/pricing",
+   "baseline_id": 3,
+   "timestamp": "2026-10-15T06:10:53.806985+00:00",
+   "critical_count": 0,
+   "warning_count": 0,
+   "info_count": 0
+  },
+  {
+   "id": 5,
+   "url": "https://linkar.in/",
+   "baseline_id": 4,
+   "timestamp": "2026-10-15T08:03:18.585053+00:00",
+   "critical_count": 0,
+   "warning_count": 1,
+   "info_count": 0
+  },
+  {
+   "id": 6,
+   "url": "https://linkar.in/pricing",
+   "baseline_id": 3,
+   "timestamp": "2026-10-15T08:03:36.604566+00:00",
+   "critical_count": 0,
+   "warning_count": 1,
+   "info_count": 0
+  }
+ ]
+}

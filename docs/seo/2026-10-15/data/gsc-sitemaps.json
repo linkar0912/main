@@ -1,0 +1,38 @@
+{
+  "property": "sc-domain:linkar.in",
+  "sitemaps": [
+    {
+      "path": "https://linkar.in/sitemap.xml",
+      "last_submitted": "2026-10-15T05:47:30.339Z",
+      "is_pending": false,
+      "is_index": false,
+      "type": "sitemap",
+      "warnings": "0",
+      "errors": "0",
+      "contents": [
+        {
+          "type": "web",
+          "submitted": "12",
+          "indexed": "0"
+        }
+      ]
+    },
+    {
+      "path": "https://www.linkar.in/sitemap.xml",
+      "last_submitted": "2019-09-25T15:56:23.061Z",
+      "is_pending": false,
+      "is_index": false,
+      "type": "sitemap",
+      "warnings": "6",
+      "errors": "0",
+      "contents": [
+        {
+          "type": "web",
+          "submitted": "6",
+          "indexed": "0"
+        }
+      ]
+    }
+  ],
+  "error": null
+}

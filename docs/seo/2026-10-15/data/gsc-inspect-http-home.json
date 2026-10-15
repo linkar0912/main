@@ -1,0 +1,31 @@
+{
+  "url": "http://linkar.in/",
+  "property": "sc-domain:linkar.in",
+  "index_status": {
+    "verdict": "NEUTRAL",
+    "coverage_state": "Crawled - currently not indexed",
+    "robots_txt_state": "ALLOWED",
+    "indexing_state": "INDEXING_ALLOWED",
+    "page_fetch_state": "SUCCESSFUL",
+    "last_crawl_time": "2026-10-15T07:37:42Z",
+    "crawled_as": "MOBILE",
+    "referring_urls": [
+      "http://www.rodrigoborges.info/blog/projetos",
+      "http://rodrigoborges.info/",
+      "http://rbmsoft.com.br/wstagf/protecaodafamilia/relatorio3.htm"
+    ]
+  },
+  "crawl_info": null,
+  "canonical": {
+    "google_canonical": "http://linkar.in/",
+    "user_canonical": "https://linkar.in/",
+    "match": false
+  },
+  "mobile_usability": {
+    "verdict": "VERDICT_UNSPECIFIED",
+    "issues": []
+  },
+  "rich_results": null,
+  "verdict": "NEUTRAL",
+  "error": null
+}

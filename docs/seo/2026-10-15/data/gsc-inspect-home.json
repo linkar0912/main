@@ -1,0 +1,30 @@
+{
+  "url": "https://linkar.in/",
+  "property": "sc-domain:linkar.in",
+  "index_status": {
+    "verdict": "NEUTRAL",
+    "coverage_state": "Crawled - currently not indexed",
+    "robots_txt_state": "ALLOWED",
+    "indexing_state": "INDEXING_ALLOWED",
+    "page_fetch_state": "SUCCESSFUL",
+    "last_crawl_time": "2026-09-24T22:41:17Z",
+    "crawled_as": "MOBILE",
+    "referring_urls": [
+      "https://linkar.in/terms",
+      "http://linkar.in/"
+    ]
+  },
+  "crawl_info": null,
+  "canonical": {
+    "google_canonical": "https://linkar.in/",
+    "user_canonical": null,
+    "match": null
+  },
+  "mobile_usability": {
+    "verdict": "VERDICT_UNSPECIFIED",
+    "issues": []
+  },
+  "rich_results": null,
+  "verdict": "NEUTRAL",
+  "error": null
+}

@@ -1,0 +1,1509 @@
+{
+ "release": "cc-main-2026-jul-aug-sep",
+ "referring_domains": {
+  "manychat.com": 10771,
+  "superprofile.bio": 593,
+  "zorcha.com": 19,
+  "instantdm.com": 76,
+  "linkdm.com": 45,
+  "inro.social": 176,
+  "creatorflow.so": 168,
+  "replykaro.com": 4,
+  "interakt.shop": 377,
+  "linkar.in": 0
+ },
+ "linking_to_superprofile_and_zorcha": [
+  "enally.in",
+  "reeldrop.io",
+  "replyrush.com"
+ ],
+ "linking_to_manychat_superprofile_zorcha": [
+  "enally.in",
+  "reeldrop.io",
+  "replyrush.com"
+ ],
+ "linking_to_2plus_instagram_dm_peers": [
+  {
+   "domain": "replyrush.com",
+   "n": 8,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com",
+    "interakt.shop",
+    "linkdm.com",
+    "manychat.com",
+    "replykaro.com",
+    "superprofile.bio",
+    "zorcha.com"
+   ]
+  },
+  {
+   "domain": "reeldrop.io",
+   "n": 6,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com",
+    "linkdm.com",
+    "manychat.com",
+    "superprofile.bio",
+    "zorcha.com"
+   ]
+  },
+  {
+   "domain": "upgrow.com",
+   "n": 5,
+   "targets": [
+    "creatorflow.so",
+    "instantdm.com",
+    "interakt.shop",
+    "linkdm.com",
+    "manychat.com",
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "replymagic.ai",
+   "n": 5,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com",
+    "interakt.shop",
+    "manychat.com",
+    "replykaro.com"
+   ]
+  },
+  {
+   "domain": "tryunlockdm.com",
+   "n": 4,
+   "targets": [
+    "creatorflow.so",
+    "linkdm.com",
+    "manychat.com",
+    "replykaro.com",
+    "zorcha.com"
+   ]
+  },
+  {
+   "domain": "superpower.social",
+   "n": 4,
+   "targets": [
+    "inro.social",
+    "instantdm.com",
+    "interakt.shop",
+    "manychat.com",
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "sumgenius.ai",
+   "n": 4,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "sozee.ai",
+   "n": 4,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com",
+    "manychat.com",
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "saashub.com",
+   "n": 4,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com",
+    "interakt.shop",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "rupa.pro",
+   "n": 4,
+   "targets": [
+    "inro.social",
+    "instantdm.com",
+    "interakt.shop",
+    "manychat.com",
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "enally.in",
+   "n": 4,
+   "targets": [
+    "creatorflow.so",
+    "linkdm.com",
+    "manychat.com",
+    "superprofile.bio",
+    "zorcha.com"
+   ]
+  },
+  {
+   "domain": "blotato.com",
+   "n": 4,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "wati.io",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com"
+   ]
+  },
+  {
+   "domain": "usereplier.com",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "themarketingheaven.com",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "instantdm.com",
+    "interakt.shop",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "socialmediamanager.it",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "socialbyidm.com",
+   "n": 3,
+   "targets": [
+    "inro.social",
+    "instantdm.com",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "sendpulse.com",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "interakt.shop",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "saastrac.com",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "instantdm.com",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "mental-momentum.ai",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "instantdm.com"
+   ]
+  },
+  {
+   "domain": "meetalto.ai",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "igdm.me",
+   "n": 3,
+   "targets": [
+    "inro.social",
+    "instantdm.com",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "dealism.ai",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "creatorlanehq.com",
+   "n": 3,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "manychat.com",
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "wavevision.io",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "viralarc.ai",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "instantdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "unfollowerstrackers.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "thisweekinsocialmedia.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "sparknherd.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "instantdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "socialcrow.co",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social"
+   ]
+  },
+  {
+   "domain": "shopify.com",
+   "n": 2,
+   "targets": [
+    "instantdm.com",
+    "interakt.shop",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "sendpulse.ua",
+   "n": 2,
+   "targets": [
+    "inro.social",
+    "interakt.shop",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "scoutforge.net",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "instantdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "pratiksinghrajput.com",
+   "n": 2,
+   "targets": [
+    "interakt.shop",
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "pixis.ai",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "navtools.ai",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "instantdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "musicsupremacy.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "memetik.ai",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "instantdm.com"
+   ]
+  },
+  {
+   "domain": "linktr.ee",
+   "n": 2,
+   "targets": [
+    "linkdm.com",
+    "manychat.com",
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "lalacommunications.com",
+   "n": 2,
+   "targets": [
+    "inro.social",
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "joyhealey.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social"
+   ]
+  },
+  {
+   "domain": "irelandpress.net",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "instantdm.com"
+   ]
+  },
+  {
+   "domain": "inspiretothrive.com",
+   "n": 2,
+   "targets": [
+    "instantdm.com",
+    "linkdm.com"
+   ]
+  },
+  {
+   "domain": "inflowave.io",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "interakt.shop",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "heydashi.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "google.com",
+   "n": 2,
+   "targets": [
+    "instantdm.com",
+    "interakt.shop",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "gaznil.com",
+   "n": 2,
+   "targets": [
+    "replykaro.com",
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "gainsty.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "dmchamp.com",
+   "n": 2,
+   "targets": [
+    "interakt.shop",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "coworkcity.co.kr",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social"
+   ]
+  },
+  {
+   "domain": "contentswire.com",
+   "n": 2,
+   "targets": [
+    "inro.social",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "buffer.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "beehiiv.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "inro.social",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "atajoy.com",
+   "n": 2,
+   "targets": [
+    "creatorflow.so",
+    "linkdm.com",
+    "manychat.com"
+   ]
+  }
+ ],
+ "india_tld_linking_to_peers": [
+  {
+   "domain": "enally.in",
+   "n": 5,
+   "targets": [
+    "creatorflow.so",
+    "linkdm.com",
+    "manychat.com",
+    "superprofile.bio",
+    "zorcha.com"
+   ]
+  },
+  {
+   "domain": "telecrm.in",
+   "n": 2,
+   "targets": [
+    "interakt.shop",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "pancake.in",
+   "n": 2,
+   "targets": [
+    "interakt.shop",
+    "manychat.com"
+   ]
+  },
+  {
+   "domain": "yorhelp.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "yogeshfitness.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "ycems.edu.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "whatsboost.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "wealthx.co.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "wchat.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "wamark.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "vitalinfo.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "uniquedigitaloutreach.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "tradingmonks.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "tradexguru.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "tipsengineerzone.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "thetreasurenotes.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "therozis.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "thequant.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "thehealingcafe.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "thefiveelements.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "techyupdate.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "stockocean.co.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "sscenglishbypradeepsir.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "socialsparrow.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "socialkraft.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "snugbub.co.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "smarttradingacademy.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "sleepingearners.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "sktmart.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "skillocean.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "sasitag.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "sajavatceilings.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "rojgarexpress.co.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "rkdgtalgraphic.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "retrolabz.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "rankofy.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "ranjanishetty.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "rajayogi.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "rajasthancurrentaffairs.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "rahulkagrawal.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "raalokdaiya.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "quicklend.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "pdfkit.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "onevideoaway.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "olympiadindia.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "nmpoultryfarm.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "niharikatechnologiestallysoftware.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "mytrendyshop.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "mypsychologist.co.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "msacademyedu.co.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "moneylelo.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "moneyhustle.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "mohamedarif.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "meducate.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "mbelectrical.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "mayankdigitallabs.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "marathiinvestor.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "manikarthik.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "litschool.in",
+   "n": 1,
+   "targets": [
+    "creatorflow.so"
+   ]
+  },
+  {
+   "domain": "letsfetch.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "learntohack.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "lawkoncept.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "kanity.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "kangleisannathong.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "jkjobsalert.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "ivfix.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "instantdigital.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "insiderpedia.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "inqrise.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "infobiofusion.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "iasoriented.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "haryanadcratejob.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "gurucharitra.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "graphyx.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "godrik.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "goblaze.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "funtech.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "freejobbuzz.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "fairfinance.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "ezedit.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "er4u.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "eprofile.co.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "emotionoflife.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "earnly.in",
+   "n": 1,
+   "targets": [
+    "creatorflow.so"
+   ]
+  },
+  {
+   "domain": "dtcclub.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "djwaala.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "directmbbsadmission.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digitalscouting.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digitalpiyush.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digitalmediaa.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digitalkalam.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digitalimpacts.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "digitaldawn.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "digitalarchana.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digital23.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digitac.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digistores.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digiskillz.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digipure.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digipulse.co.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digigoodstore.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "digibrood.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "dgmi.in",
+   "n": 1,
+   "targets": [
+    "creatorflow.so"
+   ]
+  },
+  {
+   "domain": "deninfratech.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "dascoaching.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "dailyepaper.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "creatorsonu.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "corcusstudio.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "contrainvesting.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "cholabronze.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "chicdigital.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "chartgeometry.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "carbonmedia.in",
+   "n": 1,
+   "targets": [
+    "zorcha.com"
+   ]
+  },
+  {
+   "domain": "buy24x7.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "businesspanorama.in",
+   "n": 1,
+   "targets": [
+    "zorcha.com"
+   ]
+  },
+  {
+   "domain": "businessindustries.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "brandveda.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "bookfather.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "blisscart.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "awesomekart.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "apnatube.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "angadyadav.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "anchors.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "ampliclicksacademy.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "alokdaiya.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "aipowersolutions.in",
+   "n": 1,
+   "targets": [
+    "interakt.shop"
+   ]
+  },
+  {
+   "domain": "aakashgarg.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "2xearn.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  },
+  {
+   "domain": "10xsuccess.in",
+   "n": 1,
+   "targets": [
+    "superprofile.bio"
+   ]
+  }
+ ],
+ "zorcha_referring_domains": [
+  "aiwithenoch.com",
+  "aryanage.com",
+  "business-tweet.com",
+  "businesspanorama.in",
+  "carbonmedia.in",
+  "creatorflow.so",
+  "enally.in",
+  "entrepreneursnewsroom.com",
+  "examveda.org",
+  "globalgrowthforum.com",
+  "inro.social",
+  "invadeai.com",
+  "mojopatrakar.com",
+  "pulsexpertech.com",
+  "reeldrop.io",
+  "replyrush.com",
+  "thetimesofbengal.com",
+  "tribuneindia.com",
+  "tryunlockdm.com"
+ ],
+ "superprofile_referring_domains_count": 593,
+ "competitors_linking_to_competitors": {
+  "superprofile.bio": [
+   "manychat.com"
+  ],
+  "instantdm.com": [
+   "creatorflow.so",
+   "inro.social",
+   "interakt.shop",
+   "linkdm.com",
+   "manychat.com",
+   "superprofile.bio"
+  ],
+  "creatorflow.so": [
+   "inro.social",
+   "instantdm.com",
+   "linkdm.com",
+   "manychat.com",
+   "superprofile.bio",
+   "zorcha.com"
+  ],
+  "inro.social": [
+   "creatorflow.so",
+   "instantdm.com",
+   "interakt.shop",
+   "linkdm.com",
+   "manychat.com",
+   "superprofile.bio",
+   "zorcha.com"
+  ]
+ }
+}
