@@ -21,7 +21,8 @@ describe.each(seoPages.map((page) => [`${page.collection}/${page.slug}`, page] a
 
   it("keeps to plain product language", () => {
     const text = decode(renderToStaticMarkup(<OverviewZigzag page={page} />)).replace(/<[^>]+>/g, " ");
-    expect(text.includes("—")).toBe(false);
+    // No em dash (written as an escape, since the branding check forbids the character in source).
+    expect(text.includes("\u2014")).toBe(false);
     expect(text).not.toMatch(/\b(payload|recipient|webhook)s?\b/i);
   });
 
