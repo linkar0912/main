@@ -179,6 +179,11 @@ export async function POST(request: Request, context: Context) {
   if (result.status === "FAILED" && result.reason === "QUOTA_REJECTED") {
     return entitlementErrorResponse(new EntitlementError("limit_reached", "deliveries"))!;
   }
+  if (result.status === "FAILED" && result.reason === "ACCOUNT_PAUSED") {
+    // Linkar held it without calling Instagram, because Meta has limited the
+    // account. The reason is Linkar's own sentence, with how long is left.
+    return NextResponse.json({ error: result.error }, { status: 409 });
+  }
   if (result.status === "FAILED" || result.status === "UNKNOWN") {
     // Provider text can be localized, carry ids, or describe our token setup;
     // keep it in the logs (and the delivery ledger) and give people a sentence.

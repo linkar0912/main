@@ -18,7 +18,12 @@ import type { ParticipantPatch } from "../repository";
 import { unsealSecret } from "../security/secrets";
 import { releaseDailySendSlots, renderTemplate, reserveDailySendSlots } from "./send-limits";
 import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
-import { checkSendRateLimit, type SendRateLimitBucket } from "./send-rate-limiter";
+import {
+  admitPublicReply,
+  checkSendRateLimit,
+  publicReplySkipMessage,
+  type SendRateLimitBucket,
+} from "./send-rate-limiter";
 import { MESSAGING_WINDOW_MS } from "../messaging-window";
 import { SendDeferredError } from "./send-deferral";
 import type { DeliveryTimingObserver } from "./delivery-timing";
@@ -27,6 +32,16 @@ const RECHECK_COOLDOWN_MS = 10_000;
 const MAX_RECHECKS = 10;
 
 const DEFAULT_DISPATCH_LEASE_MS = 30_000;
+
+/**
+ * Meta only accepts a private reply within 7 days of the comment it answers
+ * (docs: Instagram Platform > Private Replies), the same check the classic
+ * runner makes. A drained backlog, a long outage or a replay can surface
+ * older comments; sending those only adds rejected calls against the account.
+ */
+const PRIVATE_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
+// Stored as the opening reply's reason, which owners read in Activity.
+const PRIVATE_REPLY_EXPIRED_ERROR = "Instagram only allows a private reply within 7 days of the comment";
 
 const INTERACTION_EVENT_TYPES = new Set<NormalizedEvent["type"]>([
   "quick_reply.received",
@@ -41,9 +56,11 @@ const PUBLIC_REPLY_ACTION_STATES: ParticipantState[] = [
   "OPTED_IN",
   "FOLLOW_REQUIRED",
   "FOLLOW_VERIFIED",
-  // The concurrently dispatched opening reply can fail first. The public
+  // The concurrently dispatched opening reply can fail first, or be skipped
+  // because the comment is past Meta's 7-day private reply window. The public
   // reply still needs to persist its already-started provider outcome.
   "FAILED",
+  "EXPIRED",
 ];
 
 export type CampaignRunnerClient = Pick<
@@ -85,6 +102,12 @@ export type CampaignRunnerOptions = {
    * so processCampaignEvent can skip repeating that lookup for every campaign.
    */
   sourceParticipantChecked?: boolean;
+  /**
+   * When the source comment was made (epoch ms), used for Meta's 7-day private
+   * reply window. Without it the participant's creation time is used, which
+   * is never earlier than the comment itself.
+   */
+  sourceCommentTimestamp?: number;
 };
 
 type FollowStatusRead =
@@ -529,6 +552,7 @@ type DeliveryContext = {
   finalAttempt: boolean;
   dispatchLeaseMs: number;
   timingObserver?: DeliveryTimingObserver;
+  sourceCommentTimestamp?: number;
 };
 
 type GuardedDeliverySpec = {
@@ -548,6 +572,13 @@ type GuardedDeliverySpec = {
   /** Patch applied when the action terminally fails (recorded or fresh). */
   onFailure: (reason: string) => ParticipantPatch;
   onLimit?: (reason: string) => ParticipantPatch;
+  /**
+   * Epoch ms after which Meta rejects this send outright. Past it the action
+   * is not attempted and `onExpired` is applied instead.
+   */
+  sendDeadline?: number;
+  onExpired?: (reason: string) => ParticipantPatch;
+  expiredReason?: string;
   /** Patch applied before rethrowing a retryable error for BullMQ to redeliver. */
   onRetryablePending?: () => ParticipantPatch;
   /**
@@ -629,6 +660,35 @@ async function guardedDelivery(
     const needsProviderAttempt = !ledgerBefore
       || ledgerBefore.state === "PENDING"
       || (ledgerBefore.state === "FAILED" && ledgerBefore.retryable);
+    if (needsProviderAttempt && spec.sendDeadline !== undefined && Date.now() > spec.sendDeadline) {
+      // Terminal: the deadline only gets further past. Nothing was reserved yet.
+      await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+      const reason = spec.expiredReason ?? spec.failureReason;
+      const expired = await repository.transitionParticipant(
+        participant.id,
+        spec.allowedStates,
+        spec.onExpired?.(reason) ?? spec.onFailure(reason),
+      );
+      return expired ?? currentParticipant(participant, repository);
+    }
+    if (needsProviderAttempt && spec.action === "public_reply") {
+      // Public replies on a busy post are tapered and then skipped, never
+      // deferred: posting them an hour later would still add to the same
+      // burst of identical public activity Meta's spam rules target. Checked
+      // before the daily slot is reserved, so a skipped public reply never
+      // holds the slot the concurrent private reply needs.
+      const admission = await admitPublicReply(ctx.connection.igUserId, spec.externalEventId);
+      if (!admission.allowed) {
+        await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+        const reason = publicReplySkipMessage(admission.reason);
+        const skipped = await repository.transitionParticipant(
+          participant.id,
+          spec.allowedStates,
+          spec.onLimit?.(reason) ?? spec.onFailure(reason),
+        );
+        return skipped ?? currentParticipant(participant, repository);
+      }
+    }
     const reservation = needsProviderAttempt
       ? await reserveDailySendSlots({
         repository,
@@ -660,11 +720,12 @@ async function guardedDelivery(
 
     try {
       // Per-account send ceiling, checked only when Meta is actually about to
-      // be called. Quiet hours deliberately do not apply: every campaign send
+      // be called (public replies were admitted above, before the daily slot
+      // was reserved). Quiet hours deliberately do not apply: every campaign send
       // answers something the person just did (a comment, a button tap), and
       // quiet hours only hold sends nobody is waiting for - sequences,
       // broadcasts and follow-ups.
-      if (needsProviderAttempt) {
+      if (needsProviderAttempt && spec.action !== "public_reply") {
         // Distinct from the daily send limit above, which is a product
         // setting: this one exists to keep the connected account under Meta's own
         // throttling. A reserved slot is given back and the dispatch lease
@@ -844,6 +905,21 @@ async function deliverPublicReply(
   );
 }
 
+/**
+ * The earliest known time for the source comment: the comment event's own
+ * timestamp when the caller has it, otherwise the participant's creation
+ * time, which can only be later than the comment. Either way an old comment
+ * is never mistaken for a fresh one.
+ */
+function sourceCommentTime(
+  participant: AutomationParticipantRecord,
+  sourceCommentTimestamp: number | undefined,
+): number | undefined {
+  const known = [sourceCommentTimestamp, Date.parse(participant.createdAt)]
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return known.length > 0 ? Math.min(...known) : undefined;
+}
+
 async function deliverOpeningReply(
   participant: AutomationParticipantRecord,
   definition: FlowDefinitionV2,
@@ -864,6 +940,7 @@ async function deliverOpeningReply(
       ),
     }],
   };
+  const commentAt = sourceCommentTime(participant, ctx.sourceCommentTimestamp);
   return guardedDelivery(
     participant,
     {
@@ -872,6 +949,9 @@ async function deliverOpeningReply(
       payload: { commentId: participant.sourceCommentId, message: openingMessage },
       dailySendLimit: definition.dailySendLimit,
       allowedStates: ["COMMENT_MATCHED"],
+      ...(commentAt !== undefined ? { sendDeadline: commentAt + PRIVATE_REPLY_WINDOW_MS } : {}),
+      expiredReason: PRIVATE_REPLY_EXPIRED_ERROR,
+      onExpired: (reason) => ({ state: "EXPIRED", openingStatus: "SKIPPED", openingError: reason }),
       send: async (payload) => {
         const response = await ctx.client.sendPrivateReply(
           ctx.connection,
@@ -1242,6 +1322,7 @@ export async function processExistingCampaignParticipant(
     finalAttempt: options.finalAttempt === true,
     dispatchLeaseMs: options.dispatchLeaseMs ?? DEFAULT_DISPATCH_LEASE_MS,
     timingObserver: options.timingObserver,
+    sourceCommentTimestamp: options.sourceCommentTimestamp,
   };
 
   const deliveries: Promise<AutomationParticipantRecord>[] = [];
@@ -1268,6 +1349,9 @@ export async function processExistingCampaignParticipant(
   if (participant.state === "FAILED" || participant.openingStatus === "FAILED") {
     return handledResult(participant.id, { failed: 1 });
   }
+  if (participant.openingStatus === "SKIPPED") {
+    return handledResult(participant.id, { skipped: 1 });
+  }
   return handledResult(participant.id);
 }
 
@@ -1285,7 +1369,12 @@ export async function processCampaignEvent(
       event.commentId,
     );
     if (existing) {
-      return processExistingCampaignParticipant(existing, mapping, repository, options);
+      return processExistingCampaignParticipant(
+        existing,
+        mapping,
+        repository,
+        { ...options, sourceCommentTimestamp: event.timestamp },
+      );
     }
   }
   if (automation.definition.version !== 2) return emptyResult();
@@ -1387,7 +1476,13 @@ export async function processCampaignEvent(
     sourceMediaSnapshot: snapshot,
     ...(match.keyword ? { matchedKeyword: match.keyword } : {}),
   });
-  return processExistingCampaignParticipant(created.record, mapping, repository, options, campaign);
+  return processExistingCampaignParticipant(
+    created.record,
+    mapping,
+    repository,
+    { ...options, sourceCommentTimestamp: event.timestamp },
+    campaign,
+  );
 }
 
 async function failInteractionParticipant(

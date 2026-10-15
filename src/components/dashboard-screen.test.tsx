@@ -213,7 +213,8 @@ describe("DashboardScreen", () => {
     const startHere = await screen.findByRole("region", { name: "Start here" });
     await within(startHere).findByText("Connected to @studio.kavya.");
     expect(within(startHere).getAllByRole("link")).toHaveLength(3);
-    expect(within(startHere).getByText(/they get your link in a DM/)).toBeTruthy();
+    // The template sends a button first and the link after the tap; the card says so.
+    expect(within(startHere).getByText("Someone comments a keyword, they get a button in a DM, then your link when they tap it.")).toBeTruthy();
     expect(within(startHere).getByText("Popular").classList.contains("quickstart-badge")).toBe(true);
   });
 

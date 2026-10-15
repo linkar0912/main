@@ -7,6 +7,11 @@ import { facebookReplyDeliveryKey, processNormalizedFacebookEvent, RetryableFace
 import type { FacebookNormalizedEvent } from "./types";
 import type { CommentTrigger, FlowDefinitionV1 } from "../automation/types";
 import type { AutomationRepository } from "../repository";
+import {
+  checkSendRateLimit,
+  publicReplyCommentPosition,
+  resetSendRateLimitFallback,
+} from "../automation/send-rate-limiter";
 
 const TOKEN_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -76,6 +81,9 @@ describe("processNormalizedFacebookEvent", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-29T10:00:00.000Z"));
+    // Tests run without Redis, so public replies draw on the in-process
+    // fallback budget; start every test with it empty.
+    resetSendRateLimitFallback();
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -450,5 +458,166 @@ describe("isRetryableFacebookError", () => {
     expect(isRetryableFacebookError(new RetryableFacebookError("x"))).toBe(true);
     expect(isRetryableFacebookError(new Error("x"))).toBe(false);
     expect(isRetryableFacebookError("x")).toBe(false);
+  });
+});
+
+describe("Facebook public-reply guard", () => {
+  const originalRedisUrl = process.env.REDIS_URL;
+  const originalCommentLimit = process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-29T10:00:00.000Z"));
+    // No Redis: the Page's public replies use the in-process fallback, a
+    // quarter of the hourly budget. 40 an hour gives a fallback budget of 10.
+    delete process.env.REDIS_URL;
+    process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR = "40";
+    resetSendRateLimitFallback();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetSendRateLimitFallback();
+    if (originalRedisUrl === undefined) delete process.env.REDIS_URL;
+    else process.env.REDIS_URL = originalRedisUrl;
+    if (originalCommentLimit === undefined) delete process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR;
+    else process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR = originalCommentLimit;
+  });
+
+  async function usePageReplies(count: number): Promise<void> {
+    for (let i = 0; i < count; i += 1) {
+      expect((await checkSendRateLimit("page_1", "comment_reply")).allowed).toBe(true);
+    }
+  }
+
+  it("skips, rather than defers, once the Page's hourly public-reply budget is used", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Guide", { match: "keyword", keywords: ["guide"] });
+    const [automation] = await repository.listAutomations("workspace_a");
+    await usePageReplies(10);
+    const { client, postCommentReply } = fakeClient();
+
+    const result = await processNormalizedFacebookEvent(commentEvent(), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+    expect(result).toEqual({ matched: 1, sent: 0, skipped: 1, failed: 0 });
+    expect(postCommentReply).not.toHaveBeenCalled();
+    expect(await repository.getExecution("workspace_a", `${automation!.id}:evt_1`)).toMatchObject({
+      status: "SKIPPED",
+      reason: "public_reply_hourly_limit",
+    });
+  });
+
+  it("thins out replies past half the budget, deterministically by comment", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Guide", { match: "any", keywords: [] });
+    const [automation] = await repository.listAutomations("workspace_a");
+    // 9 of 10 used: only comments in the first 20% still get a public reply.
+    expect(publicReplyCommentPosition("comment_1")).toBeGreaterThanOrEqual(0.2);
+    expect(publicReplyCommentPosition("comment_a")).toBeLessThan(0.2);
+    await usePageReplies(9);
+    const { client, postCommentReply } = fakeClient();
+
+    const tapered = await processNormalizedFacebookEvent(
+      commentEvent({ id: "evt_1", commentId: "comment_1" }),
+      repository,
+      { client, tokenEncryptionKey: TOKEN_KEY },
+    );
+    const kept = await processNormalizedFacebookEvent(
+      commentEvent({ id: "evt_2", commentId: "comment_a" }),
+      repository,
+      { client, tokenEncryptionKey: TOKEN_KEY },
+    );
+
+    expect(tapered.skipped).toBe(1);
+    expect(kept.sent).toBe(1);
+    expect(postCommentReply).toHaveBeenCalledTimes(1);
+    expect(postCommentReply.mock.calls[0]?.[1]).toBe("comment_a");
+    expect(await repository.getExecution("workspace_a", `${automation!.id}:evt_1`)).toMatchObject({
+      status: "SKIPPED",
+      reason: "public_reply_tapered",
+    });
+  });
+
+  it("gives back the daily slot and the reply-once claim when a reply is skipped", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(
+      repository,
+      "Limited",
+      { match: "any", keywords: [] },
+      {
+        dailySendLimit: 1,
+        trigger: { type: "comment", match: "any", keywords: [], mediaIds: [], replyOncePerUser: true },
+      },
+    );
+    await usePageReplies(10);
+    const { client, postCommentReply } = fakeClient();
+
+    const skipped = await processNormalizedFacebookEvent(
+      commentEvent({ id: "evt_1", commentId: "comment_1" }),
+      repository,
+      { client, tokenEncryptionKey: TOKEN_KEY },
+    );
+    // A new hour: the same person's next comment still gets the one daily reply.
+    resetSendRateLimitFallback();
+    const next = await processNormalizedFacebookEvent(
+      commentEvent({ id: "evt_2", commentId: "comment_2" }),
+      repository,
+      { client, tokenEncryptionKey: TOKEN_KEY },
+    );
+
+    expect(skipped.skipped).toBe(1);
+    expect(next.sent).toBe(1);
+    expect(postCommentReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses a reply a crashed worker already posted, even when the budget is used up", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Guide", { match: "any", keywords: [] });
+    const [automation] = await repository.listAutomations("workspace_a");
+    const { client, postCommentReply } = fakeClient();
+    await repository.claimExecution({
+      workspaceId: "workspace_a",
+      automationId: automation!.id,
+      externalEventId: "evt_1",
+      dedupeKey: `${automation!.id}:evt_1`,
+    });
+    const deliveryKey = facebookReplyDeliveryKey(automation!.id, "evt_1");
+    await repository.ensureOutboundDelivery({
+      deliveryKey,
+      workspaceId: "workspace_a",
+      automationId: automation!.id,
+      kind: "CLASSIC_ACTION",
+      payload: { type: "facebook_comment_reply", commentId: "comment_1", text: "Hi" },
+    });
+    await repository.claimOutboundDelivery(deliveryKey, "worker_a", "2026-08-29T10:00:30.000Z");
+    await repository.completeOutboundDelivery(deliveryKey, "worker_a", "fb_comment_1", "2026-08-29T10:00:01.000Z");
+    vi.setSystemTime(new Date("2026-08-29T10:10:00.000Z"));
+    await usePageReplies(10);
+
+    const retry = await processNormalizedFacebookEvent(commentEvent(), repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+    expect(retry.sent).toBe(1);
+    expect(postCommentReply).not.toHaveBeenCalled();
+    expect(await repository.getExecution("workspace_a", `${automation!.id}:evt_1`)).toMatchObject({ status: "SENT" });
+  });
+
+  it("does not touch the budget in demo mode", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Guide", { match: "any", keywords: [] });
+    await usePageReplies(10);
+
+    const result = await processNormalizedFacebookEvent(commentEvent(), repository);
+
+    expect(result.skipped).toBe(1);
+    const [automation] = await repository.listAutomations("workspace_a");
+    expect(await repository.getExecution("workspace_a", `${automation!.id}:evt_1`)).toMatchObject({
+      status: "SKIPPED",
+      reason: "Facebook delivery is disabled in demo mode",
+    });
   });
 });

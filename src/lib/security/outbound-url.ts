@@ -143,6 +143,127 @@ export function isSafeOutboundUrl(value: string): boolean {
   return true;
 }
 
+/**
+ * Public link shorteners. A short link hides where a tap really goes, which is
+ * what spam filters (Meta's included) look for, and one abusive short link can
+ * get the whole shortener domain flagged for everyone using it. Automations
+ * must point at the real page instead.
+ *
+ * Brand shorteners that only ever open their owner's own site (amzn.to,
+ * youtu.be, wa.me) are deliberately absent: where they lead is never in doubt.
+ *
+ * This is checked only when an automation is saved (see `definition.ts`),
+ * never at send time, so automations saved earlier keep sending.
+ */
+const PUBLIC_URL_SHORTENER_HOSTS: readonly string[] = [
+  "bit.ly",
+  "bitly.com",
+  "j.mp",
+  "bit.do",
+  "tinyurl.com",
+  "tiny.cc",
+  "tiny.one",
+  "t.co",
+  "t.ly",
+  "goo.gl",
+  "ow.ly",
+  "is.gd",
+  "v.gd",
+  "buff.ly",
+  "cutt.ly",
+  "cutt.us",
+  "rebrand.ly",
+  "shorturl.at",
+  "rb.gy",
+  "short.gy",
+  "shorte.st",
+  "adf.ly",
+  "ouo.io",
+  "bc.vc",
+  "s.id",
+  "clck.ru",
+  "tr.im",
+  "soo.gd",
+];
+
+function shortenerForHostname(hostname: string): string | undefined {
+  const host = hostname.toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
+  return PUBLIC_URL_SHORTENER_HOSTS.find((candidate) => host === candidate || host.endsWith(`.${candidate}`));
+}
+
+/** The shortener domain an http(s) link points at ("bit.ly"), or undefined for a full link. */
+export function publicUrlShortenerHost(value: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+  return shortenerForHostname(url.hostname);
+}
+
+export function isPublicUrlShortener(value: string): boolean {
+  return publicUrlShortenerHost(value) !== undefined;
+}
+
+// A link written inside message text: either with a scheme, or a bare host
+// followed by a path ("bit.ly/abc"), which Instagram also makes tappable. A
+// bare host with no path ("is.gd") is ordinary prose and is left alone.
+const LINK_IN_TEXT = /(https?:\/\/)?((?:[\p{L}\p{N}-]+\.)+[\p{L}\p{N}-]+)(?::\d+)?([/?#][^\s<>"']*)?/giu;
+
+export type PublicUrlShortenerLink = { link: string; host: string };
+
+/**
+ * The first public short link in `text`, which may be a bare URL (a button
+ * destination) or a message with links written into it. Undefined when none.
+ */
+export function findPublicUrlShortenerLink(text: string): PublicUrlShortenerLink | undefined {
+  // A value that is one whole URL is judged by its real hostname, so
+  // "https://bit.ly@example.com" (host example.com) is not mistaken for one.
+  if (/^https?:\/\/\S+$/i.test(text.trim())) {
+    const host = publicUrlShortenerHost(text);
+    return host ? { link: text.trim(), host } : undefined;
+  }
+  for (const match of text.matchAll(LINK_IN_TEXT)) {
+    const [link, scheme, hostname, path] = match;
+    if (!scheme && !path) continue;
+    const host = shortenerForHostname(hostname ?? "");
+    if (host) return { link, host };
+  }
+  return undefined;
+}
+
+/**
+ * Every public short link anywhere in a JSON-like value, each with the path to
+ * the string that holds it (the same shape as a zod issue path). Keys listed in
+ * `skipKeys` are not searched, for text the customer did not write, such as a
+ * post's own caption.
+ */
+export function findPublicUrlShortenerLinks(
+  value: unknown,
+  options: { skipKeys?: ReadonlySet<string> } = {},
+  path: Array<string | number> = [],
+): Array<PublicUrlShortenerLink & { path: Array<string | number> }> {
+  if (typeof value === "string") {
+    const found = findPublicUrlShortenerLink(value);
+    return found ? [{ ...found, path }] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => findPublicUrlShortenerLinks(item, options, [...path, index]));
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value).flatMap(([key, item]) =>
+      options.skipKeys?.has(key) ? [] : findPublicUrlShortenerLinks(item, options, [...path, key]));
+  }
+  return [];
+}
+
+/** The plain sentence shown when a save is refused because of a short link. */
+export function publicUrlShortenerMessage(host: string): string {
+  return `Short links from ${host} are not allowed. Paste the full link instead, because short links can make messages look like spam.`;
+}
+
 export type OutboundLookup = (
   hostname: string,
 ) => Promise<Array<{ address: string; family: number }>>;

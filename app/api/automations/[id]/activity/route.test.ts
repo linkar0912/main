@@ -351,4 +351,46 @@ describe("GET /api/automations/[id]/activity", () => {
     expect(mocks.listAutomationExecutions).toHaveBeenCalledWith("workspace_a", "automation_1", 100);
     expect(mocks.listRecentWebhookEvents).toHaveBeenCalledWith("workspace_a", 500, "facebook.comment.created");
   });
+
+  it("exposes public replies skipped on a busy Page with their own reason, not as failures", async () => {
+    mocks.getAutomation.mockResolvedValue({
+      id: "automation_1",
+      workspaceId: "workspace_a",
+      provider: "FACEBOOK",
+      facebookPageId: "page_1",
+    });
+    mocks.listFacebookPages.mockResolvedValue([
+      { pageId: "page_1", pageName: "Acme Page", accessTokenEncrypted: "must-not-escape" },
+    ]);
+    mocks.listAutomationExecutions.mockResolvedValue([
+      {
+        id: "execution_hourly_limit",
+        workspaceId: "workspace_a",
+        automationId: "automation_1",
+        status: "SKIPPED",
+        reason: "public_reply_hourly_limit",
+        createdAt: "2026-09-01T01:00:00.000Z",
+      },
+      {
+        id: "execution_tapered",
+        workspaceId: "workspace_a",
+        automationId: "automation_1",
+        status: "SKIPPED",
+        reason: "public_reply_tapered",
+        createdAt: "2026-09-01T00:00:00.000Z",
+      },
+    ]);
+
+    const response = await call();
+    const body = await response.json();
+
+    expect(body.data.map((item: { id: string; result: string; safeErrorCode?: string }) => ({
+      id: item.id,
+      result: item.result,
+      safeErrorCode: item.safeErrorCode,
+    }))).toEqual([
+      { id: "execution_hourly_limit", result: "SKIPPED", safeErrorCode: "public_reply_hourly_limit" },
+      { id: "execution_tapered", result: "SKIPPED", safeErrorCode: "public_reply_tapered" },
+    ]);
+  });
 });

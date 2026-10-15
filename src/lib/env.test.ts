@@ -234,6 +234,51 @@ describe("provider request environment", () => {
   });
 });
 
+describe("send safety environment", () => {
+  function clearSendSafetyEnv() {
+    for (const name of [
+      "PRIVATE_REPLY_RATE_LIMIT_PER_HOUR",
+      "ACCOUNT_BLOCK_PAUSE_HOURS",
+      "ACCOUNT_RECOVERY_HOURS",
+      "ACCOUNT_RECOVERY_SEND_PERCENT",
+    ]) vi.stubEnv(name, "");
+  }
+
+  it("keeps private replies well under Meta's 750 an hour, and pauses a blocked account for a day", () => {
+    clearSendSafetyEnv();
+    expect(getServerEnv()).toMatchObject({
+      privateReplyRateLimitPerHour: 400,
+      accountBlockPauseHours: 24,
+      accountRecoveryHours: 24,
+      accountRecoverySendPercent: 25,
+    });
+  });
+
+  it("lets each setting be changed", () => {
+    vi.stubEnv("PRIVATE_REPLY_RATE_LIMIT_PER_HOUR", "300");
+    vi.stubEnv("ACCOUNT_BLOCK_PAUSE_HOURS", "72");
+    vi.stubEnv("ACCOUNT_RECOVERY_HOURS", "0");
+    vi.stubEnv("ACCOUNT_RECOVERY_SEND_PERCENT", "50");
+    expect(getServerEnv()).toMatchObject({
+      privateReplyRateLimitPerHour: 300,
+      accountBlockPauseHours: 72,
+      accountRecoveryHours: 0,
+      accountRecoverySendPercent: 50,
+    });
+  });
+
+  it("refuses a zero pause and a recovery share outside 1 to 100", () => {
+    clearSendSafetyEnv();
+    vi.stubEnv("ACCOUNT_BLOCK_PAUSE_HOURS", "0");
+    expect(() => getServerEnv()).toThrow("ACCOUNT_BLOCK_PAUSE_HOURS must be a positive integer");
+    vi.stubEnv("ACCOUNT_BLOCK_PAUSE_HOURS", "");
+    vi.stubEnv("ACCOUNT_RECOVERY_SEND_PERCENT", "0");
+    expect(() => getServerEnv()).toThrow("ACCOUNT_RECOVERY_SEND_PERCENT must be between 1 and 100");
+    vi.stubEnv("ACCOUNT_RECOVERY_SEND_PERCENT", "101");
+    expect(() => getServerEnv()).toThrow("ACCOUNT_RECOVERY_SEND_PERCENT must be between 1 and 100");
+  });
+});
+
 describe("Razorpay billing environment", () => {
   const completeBillingEnv = {
     RAZORPAY_KEY_ID: "rzp_test_public",

@@ -26,6 +26,13 @@ async function seedTenant(
     igScopedUserId,
     new Date().toISOString(),
   );
+  // The inbound DM that opens Meta's 24-hour window.
+  await repository.recordWebhookEvent(workspaceId, {
+    providerEventId: `inbound_${igScopedUserId}`,
+    eventType: "message.received",
+    receivedAt: new Date().toISOString(),
+    payload: { accountId: igUserId, recipientId: igScopedUserId, text: "hi" },
+  });
   const sequence = await repository.createSequence(workspaceId, {
     name: `${workspaceId} drip`,
     status: "ACTIVE",

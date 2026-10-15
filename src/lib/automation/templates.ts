@@ -1,12 +1,13 @@
-import type { FlowDefinitionV1 } from "./types";
+import type { FlowDefinition, FlowDefinitionV1 } from "./types";
 import { facebookPageAutomationTemplates } from "./templates/facebook-page";
 
 export type TemplateTriggerType = FlowDefinitionV1["trigger"]["type"];
 
 /**
  * A premade automation recipe shown in the template picker. Every recipe is runnable on
- * the current engine and carries a builder prefill (`setup`) that is always a version-1
- * definition so the classic builder can open it directly.
+ * the current engine and carries a builder prefill (`setup`). A version-1 definition opens
+ * the classic builder; a version-2 definition opens the step-by-step comment builder,
+ * which sends an opening message with a button first and the link only after the tap.
  */
 export type PremadeTemplate = {
   provider: "INSTAGRAM" | "FACEBOOK";
@@ -32,7 +33,7 @@ export type PremadeTemplate = {
   /** Surfaced first, under "Recommended", like a platform's own featured picks. */
   popular?: boolean;
   /** Prefill handed to the builder when the template is set up. */
-  setup: { name: string; definition: FlowDefinitionV1 };
+  setup: { name: string; definition: FlowDefinition };
 };
 
 type LegacyInstagramTemplate = Omit<PremadeTemplate, "provider" | "surface" | "requiredCapabilities" | "howItWorks">;
@@ -40,7 +41,7 @@ type LegacyInstagramTemplate = Omit<PremadeTemplate, "provider" | "surface" | "r
 const PLAIN_COPY_OVERRIDES: Record<string, { title?: string; description?: string }> = {
   "comment-link-dm": {
     title: "Send a link when someone comments",
-    description: "When someone comments with a word you choose, Linkar sends your link in a private reply.",
+    description: "When someone comments a word you choose, Linkar privately replies with a button, then sends your link after they tap it.",
   },
   "conversation-starters": {
     title: "Answer common questions",
@@ -72,7 +73,7 @@ const PLAIN_COPY_OVERRIDES: Record<string, { title?: string; description?: strin
   },
   "comment-catch-all": {
     title: "Reply when someone comments anything",
-    description: "When anyone comments on a selected post or Reel, Linkar sends your saved private reply.",
+    description: "Meant for smaller posts: when anyone comments on your post or Reel, Linkar sends your saved private reply.",
   },
   "referral-welcome": {
     title: "Welcome people from an ad",
@@ -88,7 +89,7 @@ const PLAIN_COPY_OVERRIDES: Record<string, { title?: string; description?: strin
   },
   "lead-magnet-comment": {
     title: "Send a free guide from comments",
-    description: "When someone comments GUIDE, PDF, or FREE, Linkar privately sends the resource link.",
+    description: "When someone comments GUIDE, PDF, or FREE, Linkar privately replies with a button, then sends the resource link after they tap it.",
   },
   "price-list-responder": {
     title: "Send prices when someone asks",
@@ -133,7 +134,17 @@ function conciseDescription(template: LegacyInstagramTemplate): string {
 }
 
 function naturalSteps(template: LegacyInstagramTemplate): string[] {
-  const trigger = template.setup.definition.trigger;
+  const definition = template.setup.definition;
+  if (definition.version === 2) {
+    return [
+      definition.trigger.match === "any" ? "Someone comments on your post or Reel." : "Someone comments using a word you choose.",
+      "Linkar privately replies with a short message and a button.",
+      definition.followGate.required
+        ? "After they tap it and follow you, Linkar sends your link."
+        : "When they tap the button, Linkar sends your link.",
+    ];
+  }
+  const trigger = definition.trigger;
   const first = trigger.type === "comment"
     ? trigger.match === "any" ? "Someone comments on your post or Reel." : "Someone comments using a word you choose."
     : trigger.type === "message"
@@ -144,7 +155,7 @@ function naturalSteps(template: LegacyInstagramTemplate): string[] {
         : trigger.type === "first_contact" ? "Someone starts their first conversation with you."
           : trigger.type === "referral" ? "Someone opens your chat from an ad or referral link."
             : "Someone agrees to receive your message.";
-  if (template.setup.definition.emailCapture) {
+  if (definition.emailCapture) {
     return [first, "Linkar asks for their email and any details you need.", "Linkar confirms their details and sends what you promised."];
   }
   return [first, "Linkar sends the reply you saved."];
@@ -154,16 +165,30 @@ const legacyInstagramTemplates: LegacyInstagramTemplate[] = [
   {
     id: "comment-link-dm",
     title: "Auto-DM links from comments",
-    description: "Someone comments your keyword on a post or Reel, and Linkar DMs them the link privately - no public reply, no manual copy-paste.",
+    description: "Someone comments your keyword on a post or Reel, Linkar privately replies with a button, and the link follows once they tap it - no manual copy-paste.",
     icon: "link",
     popular: true,
     setup: {
       name: "Auto-DM links from comments",
+      // Two steps, like the follow-gate flow but without the follow check: a raw
+      // link in the very first private reply is a common spam signal, so the
+      // opening reply carries only a button and the link is sent after the tap.
       definition: {
-        version: 1,
-        trigger: { type: "comment", match: "keyword", keywords: ["link", "shop"], mediaIds: [] },
-        conditions: [],
-        actions: [{ type: "private_reply", text: "Thanks for asking! Here’s the link: https://example.com/link" }],
+        version: 2,
+        trigger: { type: "comment", source: "specific_media", mediaIds: [], mediaSnapshots: [], match: "keyword", keywords: ["link", "shop"] },
+        // No public reply is prefilled: replies under every comment are what
+        // most often gets an account limited, so the recipe stays private.
+        publicReplies: [],
+        openingMessage: {
+          text: "Thanks for asking! Tap the button below and I’ll send you the link right here.",
+          optInButtonLabel: "Send me the link",
+        },
+        followGate: { required: false, notFollowingMessage: "", recheckButtonLabel: "" },
+        delivery: {
+          text: "Here’s the link you asked for.",
+          url: "https://example.com/link",
+          buttonLabel: "Open the link",
+        },
       },
     },
   },
@@ -346,7 +371,7 @@ const legacyInstagramTemplates: LegacyInstagramTemplate[] = [
   {
     id: "comment-catch-all",
     title: "Comment anything, get a reply",
-    description: "No keyword needed - anyone who comments anything at all on your posts and Reels gets an instant private reply. The catch-all for launches and high-volume moments when you can’t keep up manually.",
+    description: "No keyword needed - anyone who comments anything at all on your post or Reel gets an instant private reply. Meant for smaller posts: on a busy post, replying to every comment can look like spam, so use a keyword there instead.",
     icon: "megaphone",
     popular: true,
     setup: {
@@ -448,21 +473,28 @@ const legacyInstagramTemplates: LegacyInstagramTemplate[] = [
   {
     id: "lead-magnet-comment",
     title: "Lead magnet from comments",
-    description: "Viewers comment GUIDE on your post and instantly get the promised PDF, checklist, or resource link by private reply - zero manual sending.",
+    description: "Viewers comment GUIDE on your post, Linkar privately replies with a button, and the promised PDF, checklist, or resource link follows once they tap it.",
     icon: "gift",
     popular: true,
     setup: {
       name: "Lead magnet from comments",
+      // The same two steps as comment-link-dm: the opening private reply
+      // carries only a button, and the guide's link is sent after the tap, so
+      // no raw link goes out in the very first message.
       definition: {
-        version: 1,
-        trigger: { type: "comment", match: "keyword", keywords: ["guide", "pdf", "free"], mediaIds: [] },
-        conditions: [],
-        actions: [
-          {
-            type: "private_reply",
-            text: "Here’s your free guide 🎁 https://example.com/guide - enjoy, and ping me anytime with questions!",
-          },
-        ],
+        version: 2,
+        trigger: { type: "comment", source: "specific_media", mediaIds: [], mediaSnapshots: [], match: "keyword", keywords: ["guide", "pdf", "free"] },
+        publicReplies: [],
+        openingMessage: {
+          text: "Thanks for commenting! Tap the button below and I’ll send your free guide right here 🎁",
+          optInButtonLabel: "Send me the guide",
+        },
+        followGate: { required: false, notFollowingMessage: "", recheckButtonLabel: "" },
+        delivery: {
+          text: "Here’s your free guide. Enjoy, and message me anytime with questions!",
+          url: "https://example.com/guide",
+          buttonLabel: "Open the guide",
+        },
       },
     },
   },

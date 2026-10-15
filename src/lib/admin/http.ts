@@ -16,7 +16,12 @@ export function adminRouteError(error: unknown, fallback = "admin_operation_fail
     "status" in error && typeof error.status === "number" &&
     "code" in error && typeof error.code === "string"
   ) {
-    return adminJson({ error: error.code }, { status: error.status });
+    // Only a sentence written for the operator (AdminWorkspaceError's
+    // publicMessage) goes out; an error's own message stays private.
+    const message = "publicMessage" in error && typeof error.publicMessage === "string" && error.publicMessage.trim()
+      ? error.publicMessage.trim()
+      : undefined;
+    return adminJson(message ? { error: error.code, message } : { error: error.code }, { status: error.status });
   }
   if (error instanceof SyntaxError || error instanceof ZodError) {
     return adminJson({ error: "invalid_request" }, { status: 422 });

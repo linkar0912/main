@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AutomationBuilder } from "./automation-builder";
+import { getTemplateById } from "@/src/lib/automation/templates";
 import type { FlowDefinitionV1, FlowDefinitionV2 } from "@/src/lib/automation/types";
 
 type FetchOverrides = {
@@ -737,6 +738,122 @@ describe("AutomationBuilder", () => {
     const helper = screen.getByText(/takes turns/i);
     expect(helper.closest(".builder-add-row")).toBeTruthy();
     expect(helper.closest(".builder-add-row")?.querySelector("button")?.textContent).toMatch(/add another version/i);
+  });
+
+  it("suggests 3 to 5 public reply wordings while only one is written, and still saves with one", async () => {
+    const fetchMock = stubFetch({ media: { data: [reel], paging: {} } });
+    render(<AutomationBuilder />);
+
+    await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("checkbox"));
+    // Nothing written yet, so there is nothing to vary and no tip.
+    expect(screen.queryByText(/add 3 to 5 different wordings/i)).toBeNull();
+
+    await fillRequiredCampaignFields();
+    const hint = screen.getByText(/add 3 to 5 different wordings/i);
+    expect(hint.getAttribute("role")).toBe("note");
+    expect(hint.closest(".builder-add-row")).toBeNull();
+
+    goToReviewStep();
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/automations")).toBe(true));
+    const body = JSON.parse(String(findRequest(fetchMock, (url) => url === "/api/automations").body));
+    expect(body.definition.publicReplies).toEqual(["Check your messages."]);
+  });
+
+  it("sets up the comment link template through every step and saves it without a public reply", async () => {
+    const template = getTemplateById("comment-link-dm");
+    if (!template || template.setup.definition.version !== 2) throw new Error("comment-link-dm should prefill the campaign builder");
+    const fetchMock = stubFetch({ media: { data: [reel], paging: {} } });
+    render(
+      <AutomationBuilder
+        templateTitle={template.title}
+        initialName={template.setup.name}
+        initialDefinition={template.setup.definition}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("checkbox"));
+    // Step by step with Next, the way a person goes, leaving the public reply empty.
+    for (let i = 0; i < 5; i += 1) {
+      if (i === 1) {
+        expect(screen.getByRole("heading", { name: /which comments should it answer/i })).toBeTruthy();
+        expect(screen.getByText(/a reply under their comment is optional/i)).toBeTruthy();
+        expect((screen.getByLabelText(/^reply 1$/i) as HTMLTextAreaElement).value).toBe("");
+      }
+      fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      expect(screen.queryByRole("alert")).toBeNull();
+    }
+    expect(screen.getByText(/it doesn.t reply in the comments/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/automations", expect.anything()));
+    const body = JSON.parse(String(findRequest(fetchMock, (url) => url === "/api/automations").body));
+    expect(body.definition.publicReplies).toEqual([]);
+    expect(body.definition.followGate.required).toBe(false);
+    expect(body.definition.openingMessage).toMatchObject({ optInButtonLabel: template.setup.definition.openingMessage.optInButtonLabel });
+    expect(body.definition.delivery.url).toBe(template.setup.definition.delivery.url);
+  });
+
+  it("titles a new campaign by whether it checks for a follow", () => {
+    const template = getTemplateById("comment-link-dm");
+    if (!template || template.setup.definition.version !== 2) throw new Error("comment-link-dm should prefill the campaign builder");
+    stubFetch();
+    render(<AutomationBuilder initialDefinition={template.setup.definition} />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Send a link when someone comments" })).toBeTruthy();
+    expect(screen.getByText("Reply privately with a button, then send your link after they tap it.")).toBeTruthy();
+    expect(screen.queryByText(/check they follow you/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("switch", { name: /check whether they follow you/i }));
+    expect(screen.getByRole("heading", { level: 1, name: "Send a link after someone follows you" })).toBeTruthy();
+    expect(screen.getByText("Reply to a comment, check they follow you, then send your link in a DM.")).toBeTruthy();
+  });
+
+  it("keeps the follow-check title on a blank campaign, which checks for a follow by default", () => {
+    stubFetch();
+    render(<AutomationBuilder />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Send a link after someone follows you" })).toBeTruthy();
+  });
+
+  it("drops the wording tip once a second public reply is written", async () => {
+    stubFetch({ media: { data: [reel], paging: {} } });
+    render(<AutomationBuilder />);
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+
+    fireEvent.change(screen.getByLabelText(/^reply 1$/i), { target: { value: "Check your messages." } });
+    expect(screen.getByText(/add 3 to 5 different wordings/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /add another version/i }));
+    // An empty extra box is not a second wording yet.
+    expect(screen.getByText(/add 3 to 5 different wordings/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/^reply 2$/i), { target: { value: "Sent you a DM!" } });
+    expect(screen.queryByText(/add 3 to 5 different wordings/i)).toBeNull();
+  });
+
+  it("suggests more wordings for a Facebook Page public reply until a second version is written", async () => {
+    stubFetch({
+      facebookPages: { data: [
+        { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" },
+      ] },
+    });
+    const definition: FlowDefinitionV1 = {
+      version: 1,
+      trigger: { type: "comment", match: "keyword", keywords: ["price"], mediaIds: ["post_1"] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Thanks for asking." }],
+    };
+
+    render(<AutomationBuilder initialDefinition={definition} initialName="Page pricing" initialFacebookPageId="12345" />);
+
+    expect((await screen.findByLabelText("Facebook Page") as HTMLSelectElement).value).toBe("12345");
+    expect(screen.getByText(/add 3 to 5 different wordings/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another version" }));
+    fireEvent.change(screen.getByLabelText("Reply 2"), { target: { value: "Happy to help." } });
+    expect(screen.queryByText(/add 3 to 5 different wordings/i)).toBeNull();
   });
 
   it("captures opening consent copy and the opt-in button label without a final URL leaking into the definition text", async () => {

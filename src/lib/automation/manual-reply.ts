@@ -1,4 +1,5 @@
 import type { AutomationRepository } from "../repository";
+import { withoutBroadcastOptOutLine } from "./broadcast-opt-out";
 
 /**
  * How long automations stay silent for someone after a teammate replies to
@@ -108,7 +109,11 @@ export async function processManualReplyEcho(
     const recentSince = new Date(echo.timestamp - RECENT_TEXT_WINDOW_MS).toISOString();
     const payloads = await repository.listRecentAutomatedDeliveryPayloads(mapping.workspaceId, echo.accountId, recentSince, 100);
     const echoText = echo.text.trim();
-    if (payloads.some((payload) => payloadTexts(payload).includes(echoText))) return "automated";
+    // Broadcasts go out with an opt-out line added at send time, which the
+    // stored text does not carry, so the echo also counts with it taken off.
+    const echoWithoutOptOut = withoutBroadcastOptOutLine(echoText);
+    const matchesEcho = (text: string) => text === echoText || (echoWithoutOptOut !== "" && text === echoWithoutOptOut);
+    if (payloads.some((payload) => payloadTexts(payload).some(matchesEcho))) return "automated";
   }
 
   // Meta can echo an automated send before its message id is recorded. While

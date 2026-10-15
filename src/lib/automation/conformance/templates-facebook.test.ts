@@ -54,6 +54,7 @@ import {
   optinPayload,
   PAGE_ID,
   person,
+  postbackPayload,
   postFacebookWebhook,
   queuedJobs,
   referralPayload,
@@ -64,7 +65,7 @@ import {
   WORKSPACE_ID,
 } from "./harness";
 import type { AutomationRepository } from "../../repository";
-import type { FlowDefinitionV1 } from "../types";
+import type { FlowDefinitionV1, FlowDefinitionV2 } from "../types";
 import { basicAutomationTemplates, type PremadeTemplate } from "../templates";
 import { checkDefinitionForTarget } from "../activation-readiness";
 
@@ -76,8 +77,13 @@ beforeEach(async () => {
   await seedFacebookPage(repository);
 });
 
+type ClassicTemplate = PremadeTemplate & { setup: { name: string; definition: FlowDefinitionV1 } };
+type TwoStepTemplate = PremadeTemplate & { setup: { name: string; definition: FlowDefinitionV2 } };
+const isClassic = (template: PremadeTemplate): template is ClassicTemplate => template.setup.definition.version === 1;
+const isTwoStep = (template: PremadeTemplate): template is TwoStepTemplate => template.setup.definition.version === 2;
+
 /** The webhook a real person would cause for this trigger. */
-function triggeringPayload(template: PremadeTemplate, from: string) {
+function triggeringPayload(template: ClassicTemplate, from: string) {
   const trigger = template.setup.definition.trigger;
   const word = "keywords" in trigger && trigger.match === "keyword" ? trigger.keywords[0] : "love this";
   if (template.provider === "FACEBOOK") return facebookCommentPayload({ from, text: word });
@@ -101,7 +107,12 @@ function templateTexts(definition: FlowDefinitionV1): string[] {
 }
 
 describe("template catalogue", () => {
-  it.each(basicAutomationTemplates.map((template) => [template.id, template] as const))(
+  it("covers every template, classic or two-step", () => {
+    expect(basicAutomationTemplates.filter(isClassic).length + basicAutomationTemplates.filter(isTwoStep).length)
+      .toBe(basicAutomationTemplates.length);
+  });
+
+  it.each(basicAutomationTemplates.filter(isClassic).map((template) => [template.id, template] as const))(
     "%s: passes builder validation and actually runs end to end",
     async (_id, template) => {
       const definition = template.setup.definition;
@@ -144,6 +155,59 @@ describe("template catalogue", () => {
       if (definition.followUps?.length) {
         expect(queuedJobs("flow-followup")).toHaveLength(definition.followUps.length);
       }
+    },
+  );
+});
+
+describe("two-step link templates", () => {
+  const MEDIA = {
+    id: "media_template",
+    mediaType: "VIDEO" as const,
+    mediaProductType: "REELS" as const,
+    permalink: "https://www.instagram.com/reel/template/",
+    timestamp: "2026-10-01T09:00:00.000Z",
+  };
+
+  it("includes the comment link recipe", () => {
+    expect(basicAutomationTemplates.filter(isTwoStep).map((template) => template.id)).toContain("comment-link-dm");
+  });
+
+  it.each(basicAutomationTemplates.filter(isTwoStep).map((template) => [template.id, template] as const))(
+    "%s: sends a button first and the link only after the tap",
+    async (_id, template) => {
+      // The builder's first step picks the post; everything else is the prefill as shipped.
+      const definition: FlowDefinitionV2 = {
+        ...template.setup.definition,
+        trigger: { ...template.setup.definition.trigger, mediaIds: [MEDIA.id], mediaSnapshots: [MEDIA] },
+      };
+      const readiness = checkDefinitionForTarget({ provider: "INSTAGRAM", instagramAccountId: IG_ACCOUNT, definition });
+      expect(readiness).toMatchObject({ ok: true });
+      await addAutomation(repository, template.setup.name, readiness.ok ? readiness.definition : definition);
+
+      const sender = person();
+      const word = definition.trigger.match === "keyword" ? definition.trigger.keywords[0]! : "love this";
+      await deliverInstagram(commentPayload({ from: sender, text: word, mediaId: MEDIA.id }));
+
+      // Step one: a private reply with a button and no link, nothing public.
+      expect(fakeMeta.calls.some((call) => call.kind === "public_reply")).toBe(false);
+      const opening = fakeMeta.calls.find((call) => call.kind === "private_reply");
+      expect(opening?.text).toBe(definition.openingMessage.text);
+      expect(opening?.buttons).toEqual([
+        expect.objectContaining({ type: "postback", title: definition.openingMessage.optInButtonLabel }),
+      ]);
+      expect(JSON.stringify(opening)).not.toContain(definition.delivery.url);
+      expect(fakeMeta.calls.some((call) => call.kind === "direct_message")).toBe(false);
+
+      // Step two: the tap brings the link, behind its own button.
+      const tap = opening?.buttons?.find((button) => button.type === "postback")?.payload;
+      expect(typeof tap).toBe("string");
+      await deliverInstagram(postbackPayload({ from: sender, payload: String(tap) }));
+      expect(fakeMeta.calls.some((call) => call.kind === "follow_check")).toBe(false);
+      const delivery = fakeMeta.calls.filter((call) => call.kind === "direct_message").at(-1);
+      expect(delivery).toMatchObject({ recipient: { id: sender }, text: definition.delivery.text });
+      expect(delivery?.buttons).toEqual([
+        expect.objectContaining({ type: "web_url", title: definition.delivery.buttonLabel }),
+      ]);
     },
   );
 });

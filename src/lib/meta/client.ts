@@ -1,5 +1,5 @@
 import type { MetaConnection, MetaMedia, MetaMediaPage, MetaMessage, MetaPrivateReply, MetaSendResult } from "./types";
-import { describeMetaError } from "./errors";
+import { describeMetaError, parseMetaUsageHeaders, type MetaUsage } from "./errors";
 import { logger } from "../logger";
 
 type MetaClientOptions = {
@@ -16,6 +16,12 @@ export class MetaApiError extends Error {
   /** Graph error code when Meta returned one (e.g. 190 = invalid access token, 4/17/32/613 = throttled). */
   readonly code?: number;
   readonly subcode?: number;
+  /**
+   * Meta's usage headers on the rejected response (X-App-Usage and
+   * X-Business-Use-Case-Usage), when it sent them. The send path reads them
+   * after a throttle to decide how long the account should wait.
+   */
+  readonly usage?: MetaUsage | null;
 
   /**
    * For Graph errors `message` is the stable English reason from
@@ -29,6 +35,7 @@ export class MetaApiError extends Error {
     retryable = status === 0 || status === 408 || status === 429 || status >= 500,
     code?: number,
     subcode?: number,
+    usage?: MetaUsage | null,
   ) {
     super(message);
     this.name = "MetaApiError";
@@ -37,6 +44,7 @@ export class MetaApiError extends Error {
     this.retryable = retryable;
     this.code = code;
     this.subcode = subcode;
+    this.usage = usage ?? null;
   }
 }
 
@@ -363,7 +371,15 @@ export class MetaClient {
       data = await response.json() as Record<string, unknown>;
     } catch {
       if (!response.ok) {
-        throw new MetaApiError(`Meta request failed (${response.status})`, response.status, true);
+        throw new MetaApiError(
+          `Meta request failed (${response.status})`,
+          response.status,
+          true,
+          undefined,
+          undefined,
+          undefined,
+          responseUsage(response),
+        );
       }
       throw new MetaApiError("Meta response could not be parsed", 0, true);
     }
@@ -388,6 +404,7 @@ export class MetaClient {
         isTransientMetaError(error, response.status),
         code,
         subcode,
+        responseUsage(response),
       );
     }
     return data;
@@ -443,6 +460,15 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 const TRANSIENT_META_CODES = new Set([1, 2, 4, 17, 32, 341, 613]);
+
+/** Meta's usage headers from a response already in hand; never throws, null when absent. */
+function responseUsage(response: Response): MetaUsage | null {
+  try {
+    return response.headers ? parseMetaUsageHeaders(response.headers) : null;
+  } catch {
+    return null;
+  }
+}
 
 function isTransientMetaError(error: Record<string, unknown>, status: number): boolean {
   return status === 429 || status >= 500 || error.is_transient === true ||

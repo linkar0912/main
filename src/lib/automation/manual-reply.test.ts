@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRepository } from "../memory-repository";
 import { sealSecret } from "../security/secrets";
-import { executeOutboundDelivery } from "./outbound-delivery";
+import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
+import { processBroadcastSend } from "./broadcast-runner";
+import { withBroadcastOptOutLine } from "./broadcast-opt-out";
 import {
   contactAutomationsPaused,
   MANUAL_REPLY_PAUSE_MS,
@@ -44,6 +46,25 @@ async function recordAutomatedSend(repository: Awaited<ReturnType<typeof harness
     repository,
     entitlementService: { getMonthlyDeliveryLimit: async () => null },
   }, async () => ({ message_id: messageId }));
+}
+
+/**
+ * A broadcast ledger row for PERSON that holds the text as composed. The row
+ * is created first, so the caller decides how the send settles.
+ */
+async function recordBroadcastRow(repository: Awaited<ReturnType<typeof harness>>, text: string) {
+  const broadcast = await repository.createBroadcast("workspace_a", { name: "News", text, segment: "all_contacts", total: 1 });
+  const deliveryKey = deliveryKeys.broadcastRecipient(broadcast.id, ACCOUNT, PERSON);
+  await repository.ensureOutboundDelivery({
+    deliveryKey,
+    workspaceId: "workspace_a",
+    broadcastId: broadcast.id,
+    instagramAccountId: ACCOUNT,
+    recipientId: PERSON,
+    kind: "BROADCAST_RECIPIENT",
+    payload: { type: "text", text },
+  });
+  return { broadcast, deliveryKey };
 }
 
 describe("manual reply echoes", () => {
@@ -94,6 +115,53 @@ describe("manual reply echoes", () => {
 
     expect(await processManualReplyEcho({ ...echo("m_echo_id"), text: "hello" }, repository)).toBe("automated");
     expect(await processManualReplyEcho({ ...echo("m_other"), text: "Something a person typed" }, repository)).toBe("paused");
+  });
+
+  it("recognises a broadcast echo carrying the opt-out line when the ledger has no message id", async () => {
+    const repository = await harness();
+    // A send that timed out after Meta accepted it: the row is UNKNOWN with no
+    // message id, so neither the id lookup nor the in-flight check covers it.
+    const { deliveryKey } = await recordBroadcastRow(repository, "Big news!");
+    await repository.claimOutboundDelivery(deliveryKey, "worker_1", new Date(NOW + 30_000).toISOString());
+    await repository.markOutboundDeliveryUnknown(deliveryKey, "worker_1", "Request timed out");
+    expect(await repository.getOutboundDelivery(deliveryKey)).toMatchObject({ state: "UNKNOWN" });
+    expect(await repository.hasInFlightAutomatedDelivery("workspace_a", ACCOUNT, new Date(NOW - 120_000).toISOString())).toBe(false);
+
+    const sentText = withBroadcastOptOutLine("Big news!");
+    expect(sentText).not.toBe("Big news!");
+    expect(await processManualReplyEcho({ ...echo("m_broadcast"), text: sentText }, repository)).toBe("automated");
+    expect((await repository.getContact("workspace_a", ACCOUNT, PERSON))?.automationsPausedUntil).toBeUndefined();
+  });
+
+  it("recognises the exact text a broadcast sent when Meta returned no message id", async () => {
+    const repository = await harness();
+    await repository.recordWebhookEvent("workspace_a", {
+      providerEventId: "inbound_1",
+      eventType: "message.received",
+      receivedAt: new Date(NOW - 60_000).toISOString(),
+      payload: { accountId: ACCOUNT, recipientId: PERSON, text: "hi" },
+    });
+    const { broadcast, deliveryKey } = await recordBroadcastRow(repository, "Big news!");
+    const sendDirectMessage = vi.fn().mockResolvedValue({});
+
+    await processBroadcastSend(
+      { deliveryKey, broadcastId: broadcast.id, workspaceId: "workspace_a", igAccountId: ACCOUNT, igScopedUserId: PERSON },
+      repository,
+      { client: { sendDirectMessage }, tokenEncryptionKey: "c".repeat(64) },
+    );
+
+    expect(sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect((await repository.getOutboundDelivery(deliveryKey))?.providerMessageId).toBeUndefined();
+    const sent = sendDirectMessage.mock.calls[0][2] as { text: string };
+    expect(await processManualReplyEcho({ ...echo("m_echo_only"), text: sent.text }, repository)).toBe("automated");
+    expect((await repository.getContact("workspace_a", ACCOUNT, PERSON))?.automationsPausedUntil).toBeUndefined();
+  });
+
+  it("still pauses for a teammate's own words sent after a broadcast", async () => {
+    const repository = await harness();
+    await recordBroadcastRow(repository, "Big news!");
+
+    expect(await processManualReplyEcho({ ...echo("m_typed"), text: "Big news! Call me when you can" }, repository)).toBe("paused");
   });
 
   it("treats a reply sent from the Linkar inbox as a human reply", async () => {

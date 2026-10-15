@@ -16,8 +16,7 @@ import {
 import { findMatchedKeyword, matchesTrigger, resolveReplyForMedia } from "../automation/match";
 import { validateDefinitionForTarget } from "../automation/channels/registry";
 import type { DeliveryTimingObserver } from "../automation/delivery-timing";
-import { checkSendRateLimit } from "../automation/send-rate-limiter";
-import { SendDeferredError } from "../automation/send-deferral";
+import { admitPublicReply } from "../automation/send-rate-limiter";
 
 /**
  * Result shape parallel to the Instagram runner's RunnerResult so the
@@ -203,6 +202,16 @@ async function deliverPublicReply(
   return { status: "SENT", providerMessageId: sendResult.id };
 }
 
+/**
+ * True when an earlier attempt already handed this reply to Meta (a crashed
+ * worker, or another worker still holding the claim). Its outcome must be
+ * reused or waited for, never recorded as skipped: the reply may be live.
+ */
+async function replyAlreadyDispatched(repository: AutomationRepository, deliveryKey: string): Promise<boolean> {
+  const ledger = await repository.getOutboundDelivery(deliveryKey);
+  return ledger?.state === "SENT" || ledger?.state === "UNKNOWN" || ledger?.state === "CLAIMED";
+}
+
 /** Graph code 190: the Page token is invalid. Stop using the Page and ask owners to reconnect. */
 async function expireFacebookPage(
   repository: AutomationRepository,
@@ -331,17 +340,6 @@ export async function processNormalizedFacebookEvent(
       continue;
     }
 
-    // Per-Page send ceiling, checked before any claim or slot reservation so
-    // there is nothing to unwind. Meta throttles Pages dynamically off
-    // engagement, so a public reply storm on a viral post is a real
-    // restriction risk. Deferred (not skipped, not failed) so the worker parks
-    // the event until the window rolls over and the reply still lands, without
-    // spending the job's few retry attempts.
-    const rateLimit = await checkSendRateLimit(mapping.page.pageId, "comment_reply");
-    if (!rateLimit.allowed) {
-      throw new SendDeferredError("Send rate limit reached for this Facebook Page", rateLimit.retryAfterMs);
-    }
-
     const replyOnce = definition.trigger.type === "comment"
       && definition.trigger.replyOncePerUser
       && event.senderId
@@ -424,12 +422,27 @@ export async function processNormalizedFacebookEvent(
         result.skipped += 1;
         continue;
       }
+      // Per-Page public-reply budget. Meta throttles Pages dynamically off
+      // engagement, so a public reply storm on a viral post is a real
+      // restriction risk. Past half the hourly budget a shrinking share of
+      // comments get a reply; once it is used up the rest are skipped, not
+      // deferred, because posting them later would still add to the burst.
+      const deliveryKey = facebookReplyDeliveryKey(automation.id, event.id);
+      const admission = await admitPublicReply(mapping.page.pageId, event.commentId);
+      if (!admission.allowed && !(await replyAlreadyDispatched(repository, deliveryKey))) {
+        await repository.completeExecution(mapping.workspaceId, dedupeKey, {
+          status: "SKIPPED",
+          reason: admission.reason,
+        });
+        result.skipped += 1;
+        continue;
+      }
       const vars = buildTemplateVars(event);
       if (trigger?.match === "keyword") vars.keyword = findMatchedKeyword(event.text, trigger.keywords) ?? "";
       const text = renderFacebookText(selectedReply, vars);
       const connection = pageConnection(mapping.page, options.tokenEncryptionKey);
       const delivery = await deliverPublicReply(repository, {
-        deliveryKey: facebookReplyDeliveryKey(automation.id, event.id),
+        deliveryKey,
         workspaceId: mapping.workspaceId,
         automationId: automation.id,
         ...(event.senderId ? { recipientId: event.senderId } : {}),

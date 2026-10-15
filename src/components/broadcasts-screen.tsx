@@ -272,6 +272,11 @@ export function BroadcastsScreen() {
               <label className="field field-spaced">
                 <span>Message</span>
                 <textarea value={text} onChange={(e) => { setText(e.target.value); setConfirming(false); }} rows={3} maxLength={1000} placeholder="Write the message everyone will get" />
+                {/* Non-blocking: a broadcast is one text for many people, so nudge toward fewer, more useful ones. */}
+                <small className="muted" role="note">
+                  Sending the same text to many people can look repetitive. Keep broadcasts relevant to the
+                  people getting them, and send them only now and then.
+                </small>
               </label>
               <label className="field field-spaced">
                 <span>Start at (optional)</span>

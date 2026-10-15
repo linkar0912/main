@@ -71,6 +71,23 @@ export function createFacebookWebhookJobId(event: FacebookNormalizedEvent): stri
   return createHash("sha256").update(`${event.pageId}\0${event.id}`).digest("base64url");
 }
 
+/**
+ * Retry policy for realtime event jobs. A retryable failure here is mostly
+ * Meta asking Linkar to slow down (or a send held by the account's cool-down),
+ * so retries wait minutes, not seconds: about 30-60 s, 1-2, 2-4, 4-8, then
+ * 8-16 min, jittered so a burst of failed jobs does not come back in step.
+ * Together they span at least 15.5 minutes, longer than the 15-minute
+ * throttle pause (THROTTLE_PAUSE_MS in automation/account-pause.ts), so a
+ * campaign DM held by that pause still goes out after it instead of running
+ * out of attempts. Throttled classic replies, broadcasts and follow-ups wait
+ * 1, 5 and 15 minutes through a send deferral instead, which keeps these
+ * attempts for real failures.
+ */
+export const REALTIME_EVENT_RETRY = {
+  attempts: 6,
+  backoff: { type: "exponential" as const, delay: 60_000, jitter: 0.5 },
+} as const;
+
 export function createInstagramEventJobOptions(event: NormalizedEvent, ingestedAt = Date.now(), receivedAt?: number) {
   return {
     data: {
@@ -81,8 +98,8 @@ export function createInstagramEventJobOptions(event: NormalizedEvent, ingestedA
     options: {
       jobId: createWebhookJobId(event),
       priority: QUEUE_PRIORITY.REALTIME,
-      attempts: 3,
-      backoff: { type: "exponential" as const, delay: 1_000, jitter: 0.5 },
+      attempts: REALTIME_EVENT_RETRY.attempts,
+      backoff: { ...REALTIME_EVENT_RETRY.backoff },
       removeOnComplete: 1_000,
       removeOnFail: 5_000,
     },
@@ -99,8 +116,8 @@ export function createFacebookEventJobOptions(event: FacebookNormalizedEvent, in
     options: {
       jobId: createFacebookWebhookJobId(event),
       priority: QUEUE_PRIORITY.REALTIME,
-      attempts: 3,
-      backoff: { type: "exponential" as const, delay: 1_000, jitter: 0.5 },
+      attempts: REALTIME_EVENT_RETRY.attempts,
+      backoff: { ...REALTIME_EVENT_RETRY.backoff },
       removeOnComplete: 1_000,
       removeOnFail: 5_000,
     },

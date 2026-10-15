@@ -6,7 +6,23 @@ import { processDueSequences, type SequenceRunnerClient } from "./sequence-runne
 
 const TOKEN_KEY = "b".repeat(64);
 
-async function sequenceHarness() {
+let inboundEvents = 0;
+/** Records an inbound DM from the person, the event that opens Meta's 24-hour window. */
+async function recordInboundDm(
+  repository: ReturnType<typeof createMemoryRepository>,
+  recipientId: string,
+  receivedAt: string,
+) {
+  inboundEvents += 1;
+  await repository.recordWebhookEvent("workspace_a", {
+    providerEventId: `inbound_${inboundEvents}`,
+    eventType: "message.received",
+    receivedAt,
+    payload: { accountId: "ig_1", recipientId, text: "hi" },
+  });
+}
+
+async function sequenceHarness(lastInboundAt: string | null = new Date().toISOString()) {
   const repository = createMemoryRepository();
   await repository.upsertConnection({
     workspaceId: "workspace_a",
@@ -16,6 +32,7 @@ async function sequenceHarness() {
     status: "CONNECTED",
   });
   await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+  if (lastInboundAt) await recordInboundDm(repository, "lead_1", lastInboundAt);
   const contact = await repository.getContact("workspace_a", "ig_1", "lead_1");
   if (!contact) throw new Error("contact missing");
   const sequence = await repository.createSequence("workspace_a", {
@@ -154,6 +171,7 @@ describe("sequence delivery claims", () => {
       status: "CONNECTED",
     });
     await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+    await recordInboundDm(repository, "lead_1", new Date().toISOString());
     const contact = await repository.getContact("workspace_a", "ig_1", "lead_1");
     if (!contact) throw new Error("contact missing");
     const sequence = await repository.createSequence("workspace_a", {
@@ -183,5 +201,40 @@ describe("sequence delivery claims", () => {
     const expected = Date.parse(pastDue) + 24 * 3_600_000;
     expect(Math.abs(Date.parse(nextSendAt!) - expected)).toBeLessThan(5_000);
     expect(Date.parse(nextSendAt!)).toBeLessThan(Date.now() + 24 * 3_600_000);
+  });
+});
+
+describe("sequence window re-check", () => {
+  it("cancels when the last inbound DM is over 24 hours old, even with a fresh lastSeenAt", async () => {
+    // touchContact (lastSeenAt) is now; the person's last DM was 25 hours ago.
+    const { repository, client, options } = await sequenceHarness(
+      new Date(Date.now() - 25 * 3_600_000).toISOString(),
+    );
+
+    const result = await processDueSequences(repository, options);
+
+    expect(result).toMatchObject({ sent: 0, cancelled: 1 });
+    expect(client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(await repository.listDueSequenceSends(new Date(Date.now() + 86_400_000).toISOString(), 10)).toHaveLength(0);
+  });
+
+  it("cancels when no inbound DM is on record", async () => {
+    const { repository, client, options } = await sequenceHarness(null);
+
+    const result = await processDueSequences(repository, options);
+
+    expect(result).toMatchObject({ sent: 0, cancelled: 1 });
+    expect(client.sendDirectMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends when the last inbound DM is inside the window", async () => {
+    const { repository, client, options } = await sequenceHarness(
+      new Date(Date.now() - 23 * 3_600_000).toISOString(),
+    );
+
+    const result = await processDueSequences(repository, options);
+
+    expect(result).toMatchObject({ sent: 1, cancelled: 0 });
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
   });
 });

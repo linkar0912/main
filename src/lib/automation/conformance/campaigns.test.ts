@@ -42,20 +42,23 @@ vi.mock("@/src/lib/auth/session", async () => ({
 }));
 // ---------------------------------------------------------------------------
 
-import { fakeMeta, type MetaCall } from "./fakes";
+import { envOverrides, fakeMeta, type MetaCall } from "./fakes";
 import {
   addAutomation,
   commentPayload,
   deliverInstagram,
+  drain,
   IG_ACCOUNT,
   IG_USERNAME,
   person,
   postbackPayload,
+  postInstagramWebhook,
   resetWorld,
   seedWorkspace,
   setMonthlyDeliveryLimit,
   WORKSPACE_ID,
 } from "./harness";
+import { recordAccountThrottle, resetAccountPauseStateForTests } from "../account-pause";
 import type { AutomationRecord, AutomationRepository } from "../../repository";
 import type { FlowDefinitionV2 } from "../types";
 
@@ -271,5 +274,79 @@ describe("comment-to-link campaign (v2)", () => {
     expect(participant).toMatchObject({ state: "FAILED", openingStatus: "FAILED" });
     expect(participant.openingError).toMatch(/^[\x20-\x7E]+$/);
     expect(participant.openingError).toMatch(/couldn't find/i);
+  });
+});
+
+describe("comment-to-link campaign when Meta limits the account", () => {
+  const HOUR = 60 * 60_000;
+  const BLOCKED = "(#2022) The business has been blocked from sending messages via the IG Messaging API";
+
+  beforeEach(() => {
+    // Pauses live in this process's memory here (the fake Redis has no key commands).
+    resetAccountPauseStateForTests();
+  });
+
+  async function withClock<T>(at: number, run: () => Promise<T>): Promise<T> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(at);
+      return await run();
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  const privateReplies = () => fakeMeta.calls.filter((call) => call.kind === "private_reply");
+
+  it("keeps answering comments through the slow restart after a block, instead of failing them", async () => {
+    // 25% of a 4-an-hour DM ceiling: one automatic send an hour while recovering.
+    envOverrides.directMessageRateLimitPerHour = 4;
+    const automation = await addAutomation(repository, "Launch", campaign({ publicReplies: [] }));
+    fakeMeta.fail((call) => call.kind === "private_reply", { status: 400, error: { message: BLOCKED, code: 10 } });
+    const start = Date.now();
+    await withClock(start, () => deliverInstagram(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
+    expect(privateReplies()).toHaveLength(1);
+
+    // During the pause new comments stop at Linkar instead of reaching Meta.
+    await withClock(start + HOUR, () => deliverInstagram(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
+    expect(privateReplies()).toHaveLength(1);
+
+    // While recovering, more comments than the hour's share all get their DM,
+    // hour after hour, and none fails once its job retries would have run out.
+    for (const hour of [0, 1, 23]) {
+      const at = start + 24 * HOUR + 60_000 + hour * HOUR;
+      for (let index = 0; index < 3; index += 1) {
+        const report = await withClock(at, () => deliverInstagram(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
+        expect(report.failed).toHaveLength(0);
+      }
+    }
+    expect(privateReplies()).toHaveLength(10);
+    const participants = await repository.listParticipants(WORKSPACE_ID, automation.id, 20);
+    expect(participants.filter((participant) => participant.openingStatus === "SENT")).toHaveLength(9);
+    expect(participants.filter((participant) => participant.state === "FAILED")).toHaveLength(2);
+  });
+
+  it("holds a comment's DM through a short throttle pause and sends it once, after the pause", async () => {
+    const automation = await addAutomation(repository, "Launch", campaign({ publicReplies: [] }));
+    const start = Date.now();
+    // Three throttles close together pause the whole account for 15 minutes.
+    for (let index = 0; index < 3; index += 1) {
+      await recordAccountThrottle({ channel: "instagram", accountId: IG_ACCOUNT }, { now: start });
+    }
+    await withClock(start, () => postInstagramWebhook(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
+
+    // Run the job, then each retry after the shortest wait BullMQ's jittered
+    // backoff could pick (half of 1, 2, 4, 8 and 16 minutes).
+    let at = start;
+    const runs: string[] = [];
+    for (const wait of [0, 30_000, 60_000, 120_000, 240_000, 480_000]) {
+      at += wait;
+      const report = await withClock(at, () => drain({ maxRuns: 1 }));
+      runs.push(report.completed.length ? "completed" : report.failed.length ? "failed" : "retrying");
+      if (at < start + 15 * 60_000) expect(privateReplies()).toHaveLength(0);
+    }
+    expect(runs).toEqual(["retrying", "retrying", "retrying", "retrying", "retrying", "completed"]);
+    expect(privateReplies()).toHaveLength(1);
+    expect(await participantFor(automation)).toMatchObject({ state: "OPENING_SENT", openingStatus: "SENT" });
   });
 });

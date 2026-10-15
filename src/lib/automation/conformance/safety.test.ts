@@ -65,12 +65,15 @@ import type { AutomationRepository } from "../../repository";
 import type { FlowDefinitionV1 } from "../types";
 import { deriveAttentionItems } from "../../home-attention";
 import { INTERRUPTED_BEFORE_SENDING, INTERRUPTED_WHILE_SENDING } from "../execution-reconciliation";
+import { resetAccountPauseStateForTests } from "../account-pause";
 
 let repository: AutomationRepository;
 
 beforeEach(async () => {
   repository = await resetWorld();
   await seedWorkspace(repository);
+  // Account pauses and cool-downs live in process memory when Redis is faked.
+  resetAccountPauseStateForTests();
 });
 
 const keywordReply: FlowDefinitionV1 = {
@@ -157,16 +160,64 @@ describe("send limits", () => {
 });
 
 describe("Meta errors", () => {
-  it("retries a rate-limited send with backoff and delivers it once", async () => {
+  it("waits minutes, not seconds, after Meta throttles a send, then delivers it once", async () => {
     await addAutomation(repository, "Price", keywordReply);
     fakeMeta.fail((call) => call.kind === "direct_message", { status: 400, error: { message: "Application request limit reached", code: 4 } });
     const report = await deliverInstagram(messagePayload({ from: person(), text: "price" }));
     const [job] = queuedJobs("instagram-event");
-    expect(job.opts).toMatchObject({ attempts: 3, backoff: { type: "exponential", delay: 1_000 } });
-    expect(job.errors).toHaveLength(1);
-    expect(report.completed).toHaveLength(1);
+    expect(job.opts).toMatchObject({ attempts: 6, backoff: { type: "exponential", delay: 60_000, jitter: 0.5 } });
+    // Parked for about a minute without spending a retry attempt.
+    expect(report.deferred).toHaveLength(1);
+    expect(job).toMatchObject({ state: "delayed", attemptsMade: 0 });
+    expect(job.processAt - Date.now()).toBeGreaterThan(55_000);
+    expect((await drain()).completed).toHaveLength(0);
+    expect(dms()).toHaveLength(1);
+
+    const later = await withClock(Date.now() + 2 * 60_000 + 1_000, () => drain());
+    expect(later.completed).toHaveLength(1);
     expect(dms()).toHaveLength(2);
     expect(dms().at(-1)?.text).toBe("Prices start at 499");
+  });
+
+  it("stops sending for the account when Meta blocks it, and Home says until when", async () => {
+    const automation = await addAutomation(repository, "Price", keywordReply);
+    fakeMeta.fail((call) => call.kind === "direct_message", {
+      status: 400,
+      error: { message: "(#2022) The business has been blocked from sending messages via the IG Messaging API", code: 10 },
+    });
+    const first = person();
+    await deliverInstagram(messagePayload({ from: first, text: "price" }));
+    expect(dms()).toHaveLength(1);
+    const [refused] = await repository.listOutboundDeliveriesForRecipient(WORKSPACE_ID, IG_ACCOUNT, first, 5);
+    expect(refused).toMatchObject({ state: "FAILED", retryable: false, resultCode: "PROVIDER_REJECTED" });
+    expect(refused.lastError).toBe("Instagram has limited this account. Linkar paused automatic replies on it for 24 hours.");
+
+    // New triggers stop at the pause instead of calling Meta again.
+    const second = person();
+    const report = await deliverInstagram(messagePayload({ from: second, text: "price" }));
+    expect(report.failed).toHaveLength(0);
+    expect(dms()).toHaveLength(1);
+    const [held] = await repository.listOutboundDeliveriesForRecipient(WORKSPACE_ID, IG_ACCOUNT, second, 5);
+    expect(held).toMatchObject({ state: "FAILED", retryable: false, resultCode: "SUPPRESSED" });
+
+    const { GET: failuresGet } = await import("@/app/api/insights/failures/route");
+    const failures = (await (await failuresGet(new Request("https://app.linkar.test/api/insights/failures"))).json()).data;
+    const items = deriveAttentionItems({
+      connections: [{ kind: "instagram", name: IG_USERNAME, status: "CONNECTED" }],
+      automations: [{ id: automation.id, name: automation.name, status: "ACTIVE" }],
+      automationsKnown: true,
+      failures,
+      usage: null,
+    });
+    expect(items).toEqual([expect.objectContaining({
+      key: "account-paused",
+      chip: "Limited",
+      text: expect.stringMatching(/^Instagram has limited one of your accounts\. Linkar paused its automatic replies until .+\.$/),
+    })]);
+
+    // After the pause the account sends again (slowly).
+    await withClock(Date.now() + 25 * 60 * 60_000, () => deliverInstagram(messagePayload({ from: person(), text: "price" })));
+    expect(dms()).toHaveLength(2);
   });
 
   it("fails a permanent rejection once, with a readable English reason", async () => {

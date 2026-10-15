@@ -9,7 +9,7 @@ vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidat
 let repository = createMemoryRepository();
 vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => repository }));
 
-const { PATCH, DELETE } = await import("./route");
+const { GET, PATCH, DELETE } = await import("./route");
 
 const definition: FlowDefinition = {
   version: 1,
@@ -103,6 +103,53 @@ describe("PATCH /api/automations/[id] activation", () => {
     const response = await patch(automation.id, { status: "PAUSED" });
 
     expect(response.status).toBe(200);
+  });
+});
+
+describe("a paused automation saved with a short link before short links were refused", () => {
+  const withShortLink: FlowDefinition = {
+    version: 1,
+    trigger: { type: "message", match: "keyword", keywords: ["shop"] },
+    conditions: [],
+    actions: [{ type: "send_button", text: "Here you go", buttonLabel: "Shop now", url: "https://bit.ly/shop" }],
+  };
+  const fixed: FlowDefinition = {
+    ...withShortLink,
+    actions: [{ type: "send_button", text: "Here you go", buttonLabel: "Shop now", url: "https://shop.example.in/kurta" }],
+  };
+
+  beforeEach(async () => {
+    repository = createMemoryRepository();
+    await repository.ensureWorkspace("workspace_1", "owner@linkar.in");
+    mocks.getValidatedSession.mockReset().mockResolvedValue({ userId: "user_1", email: "owner@linkar.in", workspaceId: "workspace_1" });
+    await seedConnection();
+  });
+
+  it("can still be opened, renamed and fixed, but not switched on until the link is replaced", async () => {
+    // Saved and switched on before the rule, then paused (a pause runs no checks).
+    const automation = await repository.createAutomation("workspace_1", {
+      name: "Shop", definition: withShortLink, instagramAccountId: "ig_1", status: "ACTIVE",
+    });
+    expect((await patch(automation.id, { status: "PAUSED" })).status).toBe(200);
+
+    const shown = await GET(new Request(`http://localhost/api/automations/${automation.id}`), context(automation.id));
+    expect(shown.status).toBe(200);
+    expect((await shown.json()).data.definition).toEqual(withShortLink);
+
+    expect((await patch(automation.id, { name: "Shop (old link)" })).status).toBe(200);
+
+    const switchOn = await patch(automation.id, { status: "ACTIVE" });
+    expect(switchOn.status).toBe(409);
+    expect((await switchOn.json()).error).toMatch(/Short links from bit\.ly are not allowed\. Paste the full link instead/);
+
+    const resaved = await patch(automation.id, { definition: withShortLink });
+    expect(resaved.status).toBe(400);
+    expect((await resaved.json()).error).toMatch(/^actions 1 url: Short links from bit\.ly are not allowed/);
+
+    expect((await patch(automation.id, { definition: fixed })).status).toBe(200);
+    const live = await patch(automation.id, { status: "ACTIVE" });
+    expect(live.status).toBe(200);
+    expect((await live.json()).data).toMatchObject({ name: "Shop (old link)", status: "ACTIVE", definition: fixed });
   });
 });
 

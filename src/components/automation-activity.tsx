@@ -113,6 +113,9 @@ const FACEBOOK_REASONS: Record<string, string> = {
   facebook_delivery_failed: "The reply couldn't be posted.",
   delivery_failed: "The reply couldn't be posted.",
   daily_send_limit: "Today's reply limit was reached.",
+  // Same words as publicReplySkipMessage in src/lib/automation/send-rate-limiter.ts.
+  public_reply_hourly_limit: "Hourly limit for public replies reached. No more are posted this hour, to keep the account safe.",
+  public_reply_tapered: "Busy hour. Fewer comments get a public reply as volume rises, to keep the account safe.",
   "outside scheduled window": "Came in outside this automation's active hours.",
   "replyOncePerUser is set and this sender already received a reply": "Already replied to this person once.",
 };

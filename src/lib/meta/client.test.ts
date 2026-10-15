@@ -113,6 +113,32 @@ describe("Meta message payloads", () => {
     ).rejects.toMatchObject({ retryable: true, status: 429 });
   });
 
+  it("keeps Meta's usage headers on a rejected request, without another call", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: "Application request limit reached", code: 4 } }), {
+        status: 400,
+        headers: {
+          "x-app-usage": JSON.stringify({ call_count: 100, total_time: 40, total_cputime: 10 }),
+          "x-business-use-case-usage": JSON.stringify({
+            ig_1: [{ type: "instagram", call_count: 96, total_cputime: 5, total_time: 8, estimated_time_to_regain_access: 12 }],
+          }),
+        },
+      }),
+    );
+    const client = new MetaClient({ apiVersion: "v25.0", fetcher });
+    await expect(client.sendDirectMessage({ igUserId: "ig_1", accessToken: "secret" }, "person_1", { type: "text", text: "Hi" }))
+      .rejects.toMatchObject({ code: 4, usage: { highestPercent: 100, regainAccessMs: 12 * 60_000 } });
+    expect(fetcher).toHaveBeenCalledOnce();
+
+    // No headers (or a body Meta could not send as JSON) leaves it empty.
+    const plain = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response("<html>busy</html>", { status: 503 }),
+    });
+    await expect(plain.sendDirectMessage({ igUserId: "ig_1", accessToken: "secret" }, "person_1", { type: "text", text: "Hi" }))
+      .rejects.toMatchObject({ status: 503, retryable: true, usage: null });
+  });
+
   it("maps network and provider transient failures to retryable errors", async () => {
     const networkClient = new MetaClient({ apiVersion: "v25.0", fetcher: async () => { throw new TypeError("fetch failed"); } });
     await expect(networkClient.sendPrivateReply({ igUserId: "ig_1", accessToken: "secret" }, "comment_1", "Hello")).rejects.toMatchObject({ retryable: true });

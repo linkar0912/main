@@ -8,6 +8,7 @@ import { executeOutboundDelivery } from "./outbound-delivery";
 import { isQuietNow, isWithinMessagingWindow, msUntilQuietEnd } from "../messaging-window";
 import { checkSendRateLimit } from "./send-rate-limiter";
 import { SendDeferredError } from "./send-deferral";
+import { lastInboundDmAt } from "./last-inbound-dm";
 
 export type FlowFollowUpRunnerOptions = {
   client?: {
@@ -105,7 +106,10 @@ export async function processFlowFollowUp(
     await skip("Recipient no longer exists", "WINDOW_CLOSED", false);
     return;
   }
-  if (!isWithinMessagingWindow(contact.lastSeenAt)) {
+  // The window runs from the person's last inbound DM; with none on record it
+  // counts as closed.
+  const lastInboundAt = await lastInboundDmAt(repository, job.workspaceId, job.instagramAccountId, job.recipientId);
+  if (!isWithinMessagingWindow(lastInboundAt)) {
     await skip("The 24-hour messaging window has closed", "WINDOW_CLOSED");
     return;
   }
@@ -126,7 +130,7 @@ export async function processFlowFollowUp(
   // out after the 24-hour window closes is settled as WINDOW_CLOSED instead.
   const defer = async (message: string, delayMs: number): Promise<void> => {
     const deferral = new SendDeferredError(message, delayMs);
-    if (!isWithinMessagingWindow(contact.lastSeenAt, Date.now() + deferral.delayMs)) {
+    if (!isWithinMessagingWindow(lastInboundAt, Date.now() + deferral.delayMs)) {
       await skip("The 24-hour messaging window closes before the nudge could go out", "WINDOW_CLOSED");
       return;
     }

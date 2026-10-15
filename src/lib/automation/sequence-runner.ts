@@ -5,6 +5,7 @@ import { logger } from "../logger";
 import { isQuietNow, isWithinMessagingWindow, msUntilQuietEnd } from "../messaging-window";
 import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
 import { checkSendRateLimit } from "./send-rate-limiter";
+import { lastInboundDmAt } from "./last-inbound-dm";
 
 export type SequenceRunnerClient = {
   sendDirectMessage: (
@@ -99,8 +100,15 @@ export async function processDueSequences(
     // definition, and even a short step lands outside it whenever the contact
     // stopped replying. There is nothing to retry once the window shuts - the
     // enrollment is cancelled rather than held, so it cannot resume into a
-    // policy-violating DM days later.
-    if (!isWithinMessagingWindow(contact.lastSeenAt)) {
+    // policy-violating DM days later. The window runs from the person's last
+    // inbound DM; with none on record it counts as closed.
+    const lastInboundAt = await lastInboundDmAt(
+      repository,
+      enrollment.workspaceId,
+      contact.instagramAccountId,
+      contact.igScopedUserId,
+    );
+    if (!isWithinMessagingWindow(lastInboundAt)) {
       await repository.cancelEnrollmentsForContact(contact.id);
       logger.info("Sequence enrollment cancelled: 24-hour messaging window closed", {
         enrollmentId: enrollment.id,

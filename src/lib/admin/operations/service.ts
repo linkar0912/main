@@ -4,12 +4,14 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { validateFlowDefinition } from "@/src/lib/automation/definition";
+import type { FlowDefinition } from "@/src/lib/automation/types";
 import { getServerEnv } from "@/src/lib/env";
 import { createId } from "@/src/lib/id";
 import { prisma } from "@/src/lib/prisma";
 import { enqueueBroadcastSends, enqueueFacebookEvents, enqueueLeadDelivery, enqueueWebhookEvents } from "@/src/lib/queue";
 import type { FacebookNormalizedEvent } from "@/src/lib/facebook/types";
 import type { NormalizedEvent } from "@/src/lib/automation/types";
+import { isValidationError, toReadableValidationError } from "@/src/lib/validation-error";
 import { AdminWorkspaceError } from "../workspace-service";
 import type { AdminOperationKind } from "./types";
 
@@ -41,6 +43,19 @@ async function nextSnapshotNumber(tx: Prisma.TransactionClient, automationId: st
   const aggregate = await tx.automationVersion.aggregate({ where: { automationId }, _max: { version: true } });
   return (aggregate._max.version ?? 0) + 1;
 }
+/**
+ * A definition that fails today's rules (one saved before a rule tightened,
+ * such as the block on public short links) is an input problem: a 422 with the
+ * plain reason, never a 500.
+ */
+function validAutomationDefinition(input: unknown): FlowDefinition {
+  try {
+    return validateFlowDefinition(input);
+  } catch (error) {
+    if (!isValidationError(error)) throw error;
+    throw new AdminWorkspaceError(422, "invalid_definition", toReadableValidationError(error, "This automation's setup is not valid."));
+  }
+}
 function changed(count: number): void { if (count !== 1) throw new AdminWorkspaceError(409, "stale_version"); }
 function stringInput(input: Record<string, unknown>, key: string, max: number): string {
   const value = typeof input[key] === "string" ? input[key].trim() : "";
@@ -62,14 +77,16 @@ export async function executeAdminOperation(kind: AdminOperationKind, id: string
     const workspace = await protectWorkspace(record.workspaceId);
     if (record.version !== command.version) throw new AdminWorkspaceError(409, "stale_version");
     if (["activate", "update", "restore_version"].includes(command.action) && workspace.status !== "ACTIVE") throw new AdminWorkspaceError(409, "workspace_inactive");
-    if (command.action === "activate") { if (!['DRAFT', 'PAUSED'].includes(record.status) || record.archivedAt) throw new AdminWorkspaceError(409, "invalid_transition"); changed((await prisma.automation.updateMany({ where: { id, version: command.version }, data: { status: "ACTIVE", activatedAt: new Date(), boundMediaId: validateFlowDefinition(record.definition).version === 2 && (record.definition as { trigger?: { source?: string } }).trigger?.source === "next_media" ? null : undefined, version: { increment: 1 } } })).count); }
+    if (command.action === "activate") { if (!['DRAFT', 'PAUSED'].includes(record.status) || record.archivedAt) throw new AdminWorkspaceError(409, "invalid_transition"); changed((await prisma.automation.updateMany({ where: { id, version: command.version }, data: { status: "ACTIVE", activatedAt: new Date(), boundMediaId: validAutomationDefinition(record.definition).version === 2 && (record.definition as { trigger?: { source?: string } }).trigger?.source === "next_media" ? null : undefined, version: { increment: 1 } } })).count); }
     else if (command.action === "pause") { if (record.status !== "ACTIVE") throw new AdminWorkspaceError(409, "invalid_transition"); changed((await prisma.automation.updateMany({ where: { id, version: command.version }, data: { status: "PAUSED", version: { increment: 1 } } })).count); }
     else if (command.action === "archive") { changed((await prisma.automation.updateMany({ where: { id, version: command.version }, data: { status: "PAUSED", archivedAt: new Date(), version: { increment: 1 } } })).count); }
     else if (command.action === "update") {
       const name = command.input.name === undefined ? record.name : stringInput(command.input, "name", 120);
-      const definition = command.input.definition === undefined ? record.definition : validateFlowDefinition(command.input.definition);
-      const validated = validateFlowDefinition(definition);
-      const rearm = command.input.definition !== undefined && record.status === "ACTIVE" && validated.version === 2 && validated.trigger.source === "next_media";
+      // Only a new definition is checked: renaming must still work on one
+      // saved before a rule tightened, as it does in the customer's editor.
+      const nextDefinition = command.input.definition === undefined ? undefined : validAutomationDefinition(command.input.definition);
+      const definition = nextDefinition ?? record.definition;
+      const rearm = nextDefinition !== undefined && record.status === "ACTIVE" && nextDefinition.version === 2 && nextDefinition.trigger.source === "next_media";
       await prisma.$transaction(async (tx) => { const current = await tx.automation.findFirst({ where: { id, version: command.version } }); if (!current) throw new AdminWorkspaceError(409, "stale_version"); await tx.automationVersion.create({ data: { id: createId("automation_version"), automationId: id, workspaceId: record.workspaceId, version: await nextSnapshotNumber(tx, id), provider: record.provider, name: record.name, definition: record.definition as Prisma.InputJsonValue, status: record.status, priority: record.priority, activatedAt: record.activatedAt, boundMediaId: record.boundMediaId, instagramAccountId: record.instagramAccountId, facebookPageId: record.facebookPageId, snapshotBy: actorUserId } }); changed((await tx.automation.updateMany({ where: { id, version: command.version }, data: { name, definition: definition as Prisma.InputJsonValue, ...(rearm ? { boundMediaId: null, activatedAt: new Date() } : {}), version: { increment: 1 } } })).count); });
     } else {
       const versionNumber = z.number().int().positive().parse(command.input.versionNumber);

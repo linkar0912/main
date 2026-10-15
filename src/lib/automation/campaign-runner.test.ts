@@ -12,11 +12,18 @@ import { createInteractionPayload, readInteractionPayload } from "./postback";
 import type { FlowDefinitionV2, NormalizedEvent } from "./types";
 import {
   processCampaignEvent,
+  processExistingCampaignParticipant,
   processPendingCampaignInteraction,
   type CampaignRunnerClient,
   type CampaignRunnerOptions,
 } from "./campaign-runner";
 import { deliveryKeys } from "./outbound-delivery";
+import {
+  checkSendRateLimit,
+  publicReplyCommentPosition,
+  publicReplySkipMessage,
+  resetSendRateLimitFallback,
+} from "./send-rate-limiter";
 
 const NOW = Date.parse("2026-08-21T10:00:00.000Z");
 const TOKEN_KEY = randomBytes(32).toString("hex");
@@ -204,6 +211,9 @@ describe("follow-gated campaign runner", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
+    // Tests run without Redis, so public replies draw on the in-process
+    // fallback budget; start every test with it empty.
+    resetSendRateLimitFallback();
   });
 
   afterEach(() => {
@@ -340,8 +350,10 @@ describe("follow-gated campaign runner", () => {
       replyToComment: vi.fn(() => pendingPublicReply),
     });
     const { repository, mapping, options } = await createHarness(client);
+    // Real timers: the comment must be fresh, or the 7-day private reply check skips it.
+    const freshComment = { ...commentEvent, timestamp: Date.now() };
 
-    const processing = processCampaignEvent(commentEvent, automation, mapping, repository, options);
+    const processing = processCampaignEvent(freshComment, automation, mapping, repository, options);
     await vi.waitFor(() => expect(client.replyToComment).toHaveBeenCalledTimes(1));
     const privateReplyStartedBeforePublicFinished = await vi.waitFor(
       () => {
@@ -368,8 +380,10 @@ describe("follow-gated campaign runner", () => {
       sendPrivateReply: vi.fn().mockRejectedValue(new MetaApiError("invalid private reply", 400)),
     });
     const { repository, mapping, options } = await createHarness(client);
+    // Real timers: the comment must be fresh, or the 7-day private reply check skips it.
+    const freshComment = { ...commentEvent, timestamp: Date.now() };
 
-    const processing = processCampaignEvent(commentEvent, automation, mapping, repository, options);
+    const processing = processCampaignEvent(freshComment, automation, mapping, repository, options);
     await vi.waitFor(async () => {
       expect((await readParticipant(repository)).state).toBe("FAILED");
     });
@@ -1459,6 +1473,7 @@ describe("campaign expansion behavior", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
+    resetSendRateLimitFallback();
   });
 
   afterEach(() => {
@@ -1527,5 +1542,174 @@ describe("campaign expansion behavior", () => {
     expect(result).toMatchObject({ handled: true, skipped: 1 });
     expect(await repository.listParticipants(scheduledAutomation.workspaceId, scheduledAutomation.id, 10)).toHaveLength(0);
     expect(client.sendPrivateReply).not.toHaveBeenCalled();
+  });
+});
+
+describe("campaign send safety", () => {
+  const DAY_MS = 24 * 60 * 60 * 1_000;
+  const originalRedisUrl = process.env.REDIS_URL;
+  const originalCommentLimit = process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    // No Redis: public replies use the in-process fallback, a quarter of the
+    // hourly budget. 40 an hour gives a fallback budget of 10.
+    delete process.env.REDIS_URL;
+    process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR = "40";
+    resetSendRateLimitFallback();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetSendRateLimitFallback();
+    if (originalRedisUrl === undefined) delete process.env.REDIS_URL;
+    else process.env.REDIS_URL = originalRedisUrl;
+    if (originalCommentLimit === undefined) delete process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR;
+    else process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR = originalCommentLimit;
+  });
+
+  async function useCommentReplies(count: number): Promise<void> {
+    for (let i = 0; i < count; i += 1) {
+      expect((await checkSendRateLimit(commentEvent.accountId, "comment_reply")).allowed).toBe(true);
+    }
+  }
+
+  it("skips the public reply once the hourly budget is used, and still sends the private reply", async () => {
+    await useCommentReplies(10);
+    const { client, repository, mapping, options } = await createHarness();
+
+    const result = await processCampaignEvent(commentEvent, automation, mapping, repository, options);
+
+    expect(result).toMatchObject({ handled: true, sent: 1 });
+    expect(client.replyToComment).not.toHaveBeenCalled();
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(await readParticipant(repository)).toMatchObject({
+      state: "OPENING_SENT",
+      openingStatus: "SENT",
+      publicReplyStatus: "SKIPPED",
+      publicReplyError: publicReplySkipMessage("public_reply_hourly_limit"),
+    });
+  });
+
+  it("does not defer or retry a skipped public reply", async () => {
+    await useCommentReplies(10);
+    const { client, repository, mapping, options } = await createHarness();
+    await processCampaignEvent(commentEvent, automation, mapping, repository, options);
+    // The budget resets, but the skipped reply stays skipped on redelivery.
+    resetSendRateLimitFallback();
+
+    await processCampaignEvent(commentEvent, automation, mapping, repository, options);
+
+    expect(client.replyToComment).not.toHaveBeenCalled();
+    expect(await readParticipant(repository)).toMatchObject({ publicReplyStatus: "SKIPPED" });
+  });
+
+  it("thins out public replies past half the budget, deterministically by comment", async () => {
+    // 9 of 10 used: only comments in the first 20% still get a public reply.
+    expect(publicReplyCommentPosition(commentEvent.commentId!)).toBeGreaterThanOrEqual(0.2);
+    await useCommentReplies(9);
+    const { client, repository, mapping, options } = await createHarness();
+
+    await processCampaignEvent(commentEvent, automation, mapping, repository, options);
+
+    expect(client.replyToComment).not.toHaveBeenCalled();
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(await readParticipant(repository)).toMatchObject({
+      publicReplyStatus: "SKIPPED",
+      publicReplyError: publicReplySkipMessage("public_reply_tapered"),
+    });
+  });
+
+  it("still replies publicly to a comment early in the taper order", async () => {
+    expect(publicReplyCommentPosition("comment_a")).toBeLessThan(0.2);
+    await useCommentReplies(9);
+    const { client, repository, mapping, options } = await createHarness();
+    const earlyComment = { ...commentEvent, id: "comment_a", commentId: "comment_a" };
+
+    await processCampaignEvent(earlyComment, automation, mapping, repository, options);
+
+    expect(client.replyToComment).toHaveBeenCalledTimes(1);
+    expect(await readParticipant(repository)).toMatchObject({ publicReplyStatus: "SENT" });
+  });
+
+  it("does not count a skipped public reply against the daily send limit", async () => {
+    await useCommentReplies(10);
+    const limitedAutomation: AutomationRecord = {
+      ...automation,
+      id: "automation_campaign_daily_one",
+      definition: { ...definition, dailySendLimit: 1 },
+    };
+    const repository = createMemoryRepository([limitedAutomation]);
+    await repository.upsertConnection({
+      workspaceId: limitedAutomation.workspaceId,
+      igUserId: commentEvent.accountId,
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", TOKEN_KEY),
+      status: "CONNECTED",
+    });
+    const mapping = await repository.findWorkspaceByInstagramAccount(commentEvent.accountId);
+    if (!mapping) throw new Error("test connection mapping was not created");
+    const client = createClient();
+    const options: CampaignRunnerOptions = { client, tokenEncryptionKey: TOKEN_KEY, interactionSecret: INTERACTION_SECRET };
+
+    await processCampaignEvent(commentEvent, limitedAutomation, mapping, repository, options);
+
+    // The one daily slot went to the private reply, not the skipped public reply.
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+    const [participant] = await repository.listParticipants(limitedAutomation.workspaceId, limitedAutomation.id, 1);
+    expect(participant).toMatchObject({ openingStatus: "SENT", publicReplyStatus: "SKIPPED" });
+  });
+
+  it("skips the opening private reply for a comment older than 7 days", async () => {
+    const { client, repository, mapping, options } = await createHarness();
+    const oldComment = { ...commentEvent, timestamp: NOW - 7 * DAY_MS - 1_000 };
+
+    const result = await processCampaignEvent(oldComment, automation, mapping, repository, options);
+
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ handled: true, sent: 0, skipped: 1, failed: 0 });
+    const participant = await readParticipant(repository);
+    expect(participant).toMatchObject({
+      state: "EXPIRED",
+      openingStatus: "SKIPPED",
+      openingError: "Instagram only allows a private reply within 7 days of the comment",
+    });
+    // Meta accepts public replies to older comments, so that one still goes out.
+    expect(client.replyToComment).toHaveBeenCalledTimes(1);
+    expect(participant.publicReplyStatus).toBe("SENT");
+    expect(await repository.getOutboundDelivery(
+      deliveryKeys.campaignAction(participant.id, "opening_reply"),
+    )).toBeNull();
+  });
+
+  it("still sends the opening reply to a comment just inside 7 days", async () => {
+    const { client, repository, mapping, options } = await createHarness();
+    const recentComment = { ...commentEvent, timestamp: NOW - 7 * DAY_MS + 60_000 };
+
+    await processCampaignEvent(recentComment, automation, mapping, repository, options);
+
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(await readParticipant(repository)).toMatchObject({ openingStatus: "SENT" });
+  });
+
+  it("uses the participant's age when the comment time is not passed in", async () => {
+    const { client, repository, mapping, options } = await createHarness();
+    vi.setSystemTime(NOW - 8 * DAY_MS);
+    const created = await repository.createParticipant({
+      workspaceId: automation.workspaceId,
+      automationId: automation.id,
+      instagramAccountId: commentEvent.accountId,
+      sourceCommentId: "comment_backlog",
+      sourceMediaId: sourceSnapshot.id,
+      sourceMediaSnapshot: sourceSnapshot,
+    });
+    vi.setSystemTime(NOW);
+
+    const result = await processExistingCampaignParticipant(created.record, mapping, repository, options, automation);
+
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ skipped: 1 });
+    expect(await readParticipant(repository)).toMatchObject({ state: "EXPIRED", openingStatus: "SKIPPED" });
   });
 });

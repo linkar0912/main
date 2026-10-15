@@ -38,11 +38,12 @@ test.describe("plain-language journey", () => {
     await startHere.getByRole("link", { name: /send a link when someone comments/i }).click();
 
     await expect(page).toHaveURL(/\/automations\/new\?type=classic&template=comment-link-dm/);
-    await expect(page.getByRole("heading", { name: "New automatic reply" })).toBeVisible({ timeout: 15_000 });
+    // The recipe is two steps (a button first, the link after the tap), so it
+    // opens the step-by-step comment builder rather than the classic one.
+    await expect(page.getByRole("heading", { name: "Which posts should it watch?" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Started from the “Send a link when someone comments” template.")).toBeVisible();
     await expect(page.getByLabel("Automation name")).toHaveValue("Send a link when someone comments");
-    await expect(page.getByText("When it runs").first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: "When should this run?" })).toBeVisible();
-    await expect(page.getByLabel("Words to look for")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Step 2: Who gets it" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Step 3: First DM" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Step 4: Send link" })).toBeVisible();
   });
 });
