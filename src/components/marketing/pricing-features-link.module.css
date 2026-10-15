@@ -1,0 +1,55 @@
+/* The way on from the plan comparison to the feature guides. A quiet text
+   link under the table, centred like the comparison heading, so it never
+   competes with the plan buttons above it. */
+.more {
+  display: flex;
+  justify-content: center;
+  margin: clamp(28px, 3vw, 40px) 0 0;
+}
+
+/* An inline block, not a flex row, so on a narrow phone the arrow follows
+   the last word if the label wraps. The block padding keeps a 44px target. */
+.more a {
+  display: inline-block;
+  padding-block: 11px;
+  color: var(--marketing-text);
+  text-align: center;
+  line-height: 1.45;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .9375rem;
+  font-weight: 700;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
+
+/* The last word and the arrow never part. An inline block next to text is a
+   line-break opportunity, so without this the arrow could wrap on to a line
+   of its own when the label wraps. */
+.tail {
+  white-space: nowrap;
+}
+
+/* An inline block, so the underline stops at the words. */
+.arrow {
+  display: inline-block;
+  margin-inline-start: 10px;
+  transition: transform 220ms cubic-bezier(.22, .61, .21, 1);
+}
+
+.more a:hover .arrow,
+.more a:focus-visible .arrow {
+  transform: translateX(3px);
+}
+
+.more a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow {
+    transition: none;
+  }
+}

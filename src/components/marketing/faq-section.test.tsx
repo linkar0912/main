@@ -17,6 +17,7 @@ describe("FaqSection", () => {
     expect(section.id).toBe("faq");
     const triggers = within(section).getAllByRole("button");
     expect(triggers.map((trigger) => trigger.textContent)).toEqual([
+      "What is Instagram automation?",
       "How do I auto-reply to Instagram comments with a DM?",
       "Is Instagram DM automation allowed?",
       "How much does Linkar cost?",
@@ -29,7 +30,7 @@ describe("FaqSection", () => {
     expect(triggers.every((trigger) => trigger.getAttribute("aria-expanded") === "false")).toBe(true);
 
     const panels = within(section).getAllByRole("region", { hidden: true }).filter((panel) => panel !== section);
-    expect(panels).toHaveLength(8);
+    expect(panels).toHaveLength(9);
     triggers.forEach((trigger, index) => {
       const panel = document.getElementById(trigger.getAttribute("aria-controls") ?? "");
       expect(trigger.id).toBe(`faq-trigger-${index + 1}`);
@@ -38,6 +39,40 @@ describe("FaqSection", () => {
       expect(panel?.getAttribute("aria-labelledby")).toBe(trigger.id);
       expect(panel?.getAttribute("aria-hidden")).toBe("true");
     });
+  });
+
+  it("opens with a quotable 40 to 60 word definition of Instagram automation", () => {
+    render(<FaqSection />);
+    const trigger = screen.getByRole("button", { name: "What is Instagram automation?" });
+    const panel = document.getElementById(trigger.getAttribute("aria-controls") ?? "");
+    const answer = panel?.textContent ?? "";
+
+    expect(trigger.id).toBe("faq-trigger-1");
+    expect(answer.startsWith("Instagram automation is ")).toBe(true);
+    const words = answer.trim().split(/\s+/).length;
+    expect(words).toBeGreaterThanOrEqual(40);
+    expect(words).toBeLessThanOrEqual(60);
+    expect(answer).toContain("Meta’s official Instagram API");
+    expect(answer).not.toContain("\u2014");
+  });
+
+  it("answers in plain British English with the search terms people use", () => {
+    render(<FaqSection />);
+    const answer = (question: string) => {
+      const trigger = screen.getByRole("button", { name: question });
+      return document.getElementById(trigger.getAttribute("aria-controls") ?? "")?.textContent ?? "";
+    };
+    const all = screen.getAllByRole("button").map((trigger) => answer(trigger.textContent ?? "")).join(" ");
+
+    // "Instagram automation tool" and "auto DM" each appear once, in context.
+    expect(all.match(/Instagram automation tool/g)).toHaveLength(1);
+    expect(answer("What is Instagram automation?")).toContain("Linkar is an Instagram automation tool");
+    expect(all.match(/auto DM/g)).toHaveLength(1);
+    expect(answer("How do I auto-reply to Instagram comments with a DM?")).toMatch(/auto DM, through a private reply\.$/);
+    // Prices are rupee prices that already include GST.
+    expect(answer("How much does Linkar cost?")).toMatch(/billed in rupees, GST included\.$/);
+    expect(answer("How does Linkar protect my account?")).toContain("the connection you authorise");
+    expect(all).not.toMatch(/\b(authoriz|recogniz|enroll)/i);
   });
 
   it("toggles the account-safety answer and keeps focus on its native trigger", () => {

@@ -1,8 +1,11 @@
-/* Closing photo (Manychat usecase-09): the page's cta slot edge to edge, a centred headline, glass plan cards. */
+/* Closing block: the page accent as a deep surface with the grid, soft Linkar UI silhouettes in the
+   free zones, a calm centre for the headline, and the plans as glass cards. No photo: everything is code. */
 
 section.section {
   --seo-focus: #fff100;
   --seo-sub-mix: 100%;
+  /* The floating cards and silhouettes keep to the 1360px frame on very wide screens; 5% of the band below that. */
+  --edge: max(5%, calc((100% - 1360px) / 2));
   display: grid;
   place-items: center;
   min-block-size: min(100svh, 880px);
@@ -10,37 +13,280 @@ section.section {
   overflow: clip;
   isolation: isolate;
   color: #ffffff;
-  background-color: #101116;
+  background-color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 80%, #101116);
   text-align: center;
 }
 section.section[data-tone="magenta"] { --cta-tone: #fa0cf7; }
 section.section[data-tone="yellow"] { --cta-tone: #fff100; }
 
-.media { position: absolute; inset: 0; z-index: -2; }
+/* ---------- Backdrop: depth, grid, Linkar UI ---------- */
 
-/* Lighter at the top so the photo reads, a calm middle for the headline, and a dark foot that runs into the footer. */
-.scrim {
+/* A size container, so the phone can size itself from the band's height. */
+.backdrop { position: absolute; inset: 0; z-index: -1; overflow: clip; pointer-events: none; container-type: size; }
+
+/* The pure accent glows behind the headline; the edges and the foot sink towards the footer's ink. */
+.backdrop::before {
+  content: "";
   position: absolute;
   inset: 0;
-  z-index: -1;
   background:
-    radial-gradient(ellipse 52% 46% at 50% 52%, rgb(16 17 22 / 44%) 0%, rgb(16 17 22 / 14%) 72%, rgb(16 17 22 / 0%) 100%),
-    linear-gradient(to bottom, rgb(16 17 22 / 26%) 0%, rgb(16 17 22 / 0%) 26%, rgb(16 17 22 / 0%) 58%, rgb(16 17 22 / 78%) 100%);
-  pointer-events: none;
+    radial-gradient(ellipse 58% 52% at 50% 46%, var(--seo-accent, #5f2ce0) 0%, color-mix(in srgb, var(--seo-accent, #5f2ce0) 0%, transparent) 100%),
+    linear-gradient(to bottom, rgb(16 17 22 / 0%) 62%, rgb(16 17 22 / 30%) 100%);
 }
 
-.content { display: grid; justify-items: center; inline-size: 100%; }
+/* Manychat's grid, faded out in the middle so the headline sits on a calm field. */
+.grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, rgb(255 255 255 / 13%) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 13%) 1px, transparent 1px);
+  background-position: calc(50% + 48px) -1px;
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 46% 42% at 50% 46%, rgb(0 0 0 / 0%) 0%, rgb(0 0 0 / 0%) 35%, #000000 100%);
+  -webkit-mask-image: radial-gradient(ellipse 46% 42% at 50% 46%, rgb(0 0 0 / 0%) 0%, rgb(0 0 0 / 0%) 35%, #000000 100%);
+}
 
-.content > .eyebrow {
+/* The phone: the business's inbox with the page's own thread. Everything in it is sized in em, from one
+   unit that follows the band's height, so on short laptop screens the whole phone scales down and its
+   status stays in view. It rises from the bottom left, anchored under the headline's second line. */
+.phone {
+  --u: clamp(13px, min(2.25cqh, calc(.5vw + 9px)), 17px);
+  position: absolute;
+  inset: calc(50% + min(3.4vw, 64px) - 42px + 2.5em) auto auto calc(var(--edge) + 1.5%);
+  display: none;
+  inline-size: min(16em, calc(22vw - 40px));
+  aspect-ratio: 9 / 19;
+  padding: .625em;
+  font-size: var(--u);
+  background: linear-gradient(165deg, rgb(255 255 255 / 16%) 0%, rgb(255 255 255 / 5%) 55%);
+  border: 2px solid rgb(255 255 255 / 36%);
+  border-radius: 3em;
+  box-shadow: inset 0 0 0 6px rgb(255 255 255 / 5%), 0 40px 90px rgb(16 17 22 / 26%);
+  /* Frosted, so the grid softens behind the glass instead of striping the thread. */
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-align: start;
+  transform: rotate(-6deg);
+  transform-origin: 50% 25%;
+}
+.island { position: absolute; inset: 1.125em auto auto 50%; inline-size: 30%; block-size: 1.25em; background: rgb(16 17 22 / 34%); border-radius: 999px; translate: -50% 0; }
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: .5em;
+  block-size: 100%;
+  padding: 2.75em .75em .75em;
+  background: rgb(255 255 255 / 5%);
+  border-radius: 2.375em;
+}
+
+/* Thread furniture. */
+.bar { display: block; flex: 0 0 auto; block-size: .5em; max-inline-size: 100%; background: rgb(255 255 255 / 30%); border-radius: 999px; }
+.bar[data-tone="strong"] { background: rgb(255 255 255 / 52%); }
+.bar[data-tone="ink"] { background: rgb(16 17 22 / 28%); }
+.lines { display: grid; flex: 1; gap: .25em; min-inline-size: 0; }
+.dot { flex: 0 0 auto; inline-size: 1.75em; block-size: 1.75em; background: rgb(255 255 255 / 28%); border-radius: 50%; }
+.name { display: block; min-inline-size: 0; overflow: hidden; color: #ffffff; font-size: .8125em; font-weight: 700; line-height: 1.25; white-space: nowrap; text-overflow: ellipsis; }
+.muted { display: block; min-inline-size: 0; overflow: hidden; color: rgb(255 255 255 / 72%); font-size: .6875em; font-weight: 600; line-height: 1.3; white-space: nowrap; text-overflow: ellipsis; }
+.words {
+  display: -webkit-box;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: .75em;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+/* One line cuts mid word, not after the first word that fits. */
+.words[data-lines="1"] { display: block; white-space: nowrap; text-overflow: ellipsis; }
+.words[data-lines="2"] { -webkit-line-clamp: 2; line-clamp: 2; }
+
+.chatHead { display: flex; align-items: center; gap: .625em; padding-block-end: .625em; color: rgb(255 255 255 / 72%); border-block-end: 1px solid rgb(255 255 255 / 16%); }
+.chatHead > svg { inline-size: 1em; block-size: 1em; }
+
+.bubble {
+  display: grid;
+  gap: .4375em;
+  align-self: flex-start;
+  inline-size: max-content;
+  min-inline-size: 30%;
+  max-inline-size: 84%;
+  padding: .5em .75em;
   color: #ffffff;
-  background: rgb(16 17 22 / 30%);
-  border-color: rgb(255 255 255 / 45%);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgb(255 255 255 / 16%);
+  border-radius: 1em 1em 1em .375em;
 }
+.bubble[data-side="you"] { align-self: flex-end; max-inline-size: 88%; color: #101116; background: var(--cta-tone); border-radius: 1em 1em .375em 1em; }
+
+/* A muted line in the thread: an event, or "Later". */
+.system { display: flex; align-items: center; justify-content: center; gap: .375em; min-inline-size: 0; color: rgb(255 255 255 / 72%); font-size: .6875em; font-weight: 600; line-height: 1.3; }
+.system > svg { inline-size: 1.1em; block-size: 1.1em; }
+.system > span { min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* The comment a private reply answers: the post and the word people sent. */
+.refCard { display: flex; align-items: center; gap: .5em; align-self: flex-start; inline-size: max-content; max-inline-size: 94%; padding: .4375em .75em .4375em .4375em; color: #ffffff; background: rgb(255 255 255 / 12%); border-radius: .875em; }
+.refThumb { flex: 0 0 auto; inline-size: 2.25em; block-size: 2.25em; background: linear-gradient(150deg, rgb(255 255 255 / 40%), rgb(255 255 255 / 12%)); border-radius: .5em; }
+.refCard .words { font-size: .8125em; font-weight: 800; letter-spacing: .01em; }
+
+.storyRef { display: flex; align-items: flex-end; gap: .5em; min-inline-size: 0; }
+.storyRef > .bubble { max-inline-size: calc(84% - 3em); }
+.storyRef > .muted { align-self: center; white-space: normal; }
+.storyThumb {
+  position: relative;
+  flex: 0 0 auto;
+  inline-size: 2.5em;
+  block-size: 4em;
+  background: linear-gradient(170deg, rgb(255 255 255 / 40%), rgb(255 255 255 / 10%));
+  border-radius: .625em;
+}
+.storyThumb i { position: absolute; inset: .375em .375em auto; block-size: 2px; background: rgb(255 255 255 / 72%); border-radius: 999px; }
+
+.linkShape {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  align-self: flex-end;
+  inline-size: max-content;
+  min-inline-size: 50%;
+  max-inline-size: 88%;
+  padding: .625em .75em;
+  color: #ffffff;
+  border: 1.5px solid rgb(255 255 255 / 40%);
+  border-radius: .75em;
+}
+.linkShape > svg { inline-size: .875em; block-size: .875em; }
+.noteShape {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  align-self: flex-end;
+  inline-size: max-content;
+  min-inline-size: 50%;
+  max-inline-size: 92%;
+  padding: .625em .75em;
+  color: rgb(255 255 255 / 88%);
+  border: 1.5px dashed rgb(255 255 255 / 44%);
+  border-radius: .75em;
+}
+.noteTag { flex: 0 0 auto; padding: .25em .5em; color: #101116; background: rgb(255 255 255 / 80%); border-radius: .3em; font-family: var(--font-mono, ui-monospace, monospace); font-size: .5625em; font-weight: 700; line-height: 1.2; letter-spacing: .08em; text-transform: uppercase; }
+
+/* Facebook Page post (the caption that asks), the comment, and the Page's public reply under it. */
+.postHead { display: flex; align-items: center; gap: .625em; padding-block-end: .625em; border-block-end: 1px solid rgb(255 255 255 / 16%); }
+.postHead .words { color: rgb(255 255 255 / 76%); font-size: .6875em; }
+.pageDot { flex: 0 0 auto; inline-size: 1.75em; block-size: 1.75em; background: rgb(255 255 255 / 44%); border-radius: 50%; }
+.pageDot[data-small="true"] { inline-size: 1.375em; block-size: 1.375em; }
+.fbRow { display: flex; align-items: flex-start; gap: .5em; min-inline-size: 0; }
+.fbRow[data-author="true"] { margin-inline-start: 1.5em; }
+.fbRow .dot { inline-size: 1.375em; block-size: 1.375em; }
+.fbBubble { display: grid; flex: 0 1 auto; gap: .1875em; min-inline-size: 0; padding: .5em .75em; color: #ffffff; background: rgb(255 255 255 / 16%); border-radius: .875em; }
+.fbBubble > .name { font-size: .6875em; }
+.fbBubble[data-tone="you"] { color: #101116; background: var(--cta-tone); }
+.fbBubble[data-tone="you"] > .name { color: #101116; }
+
+/* The page's own status, the one crisp label on the phone. It leans out past the frame. */
+.sent {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: .6em;
+  align-self: flex-end;
+  margin-inline-end: -3.5em;
+  padding: .4em 1.05em .4em .4em;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 16px 36px rgb(16 17 22 / 26%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125em;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: rotate(6deg);
+}
+.sentIcon { display: inline-grid; place-items: center; flex: 0 0 auto; inline-size: 1.85em; block-size: 1.85em; color: #101116; background: var(--cta-tone); border-radius: 50%; }
+.sentIcon > svg { inline-size: 1em; block-size: 1em; }
+
+/* Step one of the automation as a soft builder node, hugging its label. */
+.trigger {
+  position: relative;
+  display: grid;
+  gap: 9px;
+  inline-size: max-content;
+  max-inline-size: 100%;
+  padding: 12px 18px 13px 14px;
+  color: #ffffff;
+  background: rgb(255 255 255 / 10%);
+  border: 1.5px solid rgb(255 255 255 / 30%);
+  border-radius: 20px;
+  box-shadow: 0 30px 70px rgb(16 17 22 / 18%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-align: start;
+}
+.nodeHead { display: flex; align-items: center; gap: 8px; margin: 0; }
+.nodeStep {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 24px;
+  block-size: 24px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 50%;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.nodeType {
+  padding: 4px 9px;
+  color: #101116;
+  background: var(--cta-tone);
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.nodeTitle { display: flex; align-items: flex-start; gap: 8px; min-inline-size: 0; margin: 0; font-size: .9375rem; font-weight: 700; line-height: 1.25; }
+.nodeTitle > svg { margin-block-start: 1px; }
+/* The label is set in balanced lines that do not wrap, so the node hugs its longest line. */
+.nodeLabel { display: grid; min-inline-size: 0; }
+.nodeLabel > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* The word people send, as a sticker on the node's top right corner, clear of the step chip. */
+.trigger .keyword { position: absolute; inset: -30px -22px auto auto; max-inline-size: none; white-space: nowrap; }
+
+/* Laptops: the node floats mid right, centred in the gap between the headline's second line and the second
+   plan, so short screens keep it clear of both. */
+.floating {
+  position: absolute;
+  inset: calc(65.5% - 46px + min(1.7vw, 32px)) calc(var(--edge) - 1.5%) auto auto;
+  display: none;
+  /* One transform: the CSS build folds a separate translate into it. */
+  transform: translateY(-50%) rotate(2deg);
+}
+
+/* Below laptops: a compact node and the status, cascading from the trigger to the outcome above the eyebrow. */
+.flow { display: flex; align-items: flex-end; justify-content: center; max-inline-size: 100%; margin-block-end: 60px; padding-block-start: 22px; }
+.compact { max-inline-size: 288px; transform: rotate(-4deg); }
+.compact .keyword { inset: -28px -18px auto auto; }
+.flowSent { position: relative; z-index: 1; align-self: flex-end; margin: 0 0 -28px -6px; transform: rotate(5deg); }
+
+/* ---------- Content ---------- */
+
+.content { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; inline-size: 100%; }
+
+.content > .eyebrow { color: #ffffff; background: rgb(16 17 22 / 20%); border-color: rgb(255 255 255 / 45%); }
 
 .title {
-  max-inline-size: 1100px;
+  max-inline-size: 1240px;
   margin: 0;
   color: #ffffff;
   font-family: var(--font-display, ui-sans-serif, sans-serif);
@@ -48,7 +294,6 @@ section.section[data-tone="yellow"] { --cta-tone: #fff100; }
   font-weight: 800;
   line-height: .96;
   letter-spacing: -.06em;
-  text-shadow: 0 2px 40px rgb(16 17 22 / 32%);
   text-wrap: balance;
 }
 .line { display: block; }
@@ -58,7 +303,6 @@ section.section[data-tone="yellow"] { --cta-tone: #fff100; }
   color: #101116;
   background: var(--cta-tone);
   border-radius: .2em;
-  text-shadow: none;
   transform: rotate(-3deg);
   transform-origin: 30% 60%;
 }
@@ -70,23 +314,21 @@ section.section[data-tone="yellow"] { --cta-tone: #fff100; }
   font-size: clamp(1.0625rem, 1.25vw, 1.1875rem);
   font-weight: 500;
   line-height: 1.55;
-  text-shadow: 0 1px 18px rgb(16 17 22 / 40%);
   text-wrap: pretty;
 }
 
 .content > .actions { justify-content: center; }
-.outline { background: rgb(16 17 22 / 18%); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.outline { background: rgb(16 17 22 / 14%); }
 
-/* Glass cards. Plan facts are real text: they float around the headline on wide screens and sit under the actions below that. */
-/* Smoky glass, so white type holds on whatever photo lands in the slot. */
+/* Smoky glass cards. Plan facts are real text: they float around the headline on laptops and sit under the actions below that. */
 .glass {
   color: #ffffff;
-  background: rgb(20 21 28 / 38%);
-  border: 1px solid rgb(255 255 255 / 26%);
+  background: rgb(16 17 22 / 30%);
+  border: 1px solid rgb(255 255 255 / 24%);
   border-radius: 20px;
-  box-shadow: 0 22px 50px rgb(16 17 22 / 26%), inset 0 1px 0 rgb(255 255 255 / 14%);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 22px 50px rgb(16 17 22 / 22%), inset 0 1px 0 rgb(255 255 255 / 14%);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
   text-align: start;
 }
 
@@ -121,10 +363,9 @@ section.section[data-tone="yellow"] { --cta-tone: #fff100; }
 }
 
 /* Decorative: the page you are reading, as the automation you would start with. */
-/* The floating cards keep to the 1360px frame on very wide screens; 5% of the band is the floor below about 1510px. */
 .start {
   position: absolute;
-  inset: 13% max(5%, calc((100% - 1360px) / 2)) auto auto;
+  inset: 13% var(--edge) auto auto;
   z-index: 1;
   display: none;
   grid-template-columns: auto minmax(0, 1fr);
@@ -147,17 +388,45 @@ section.section[data-tone="yellow"] { --cta-tone: #fff100; }
 .startLabel { font-family: var(--font-mono, ui-monospace, monospace); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .startName { font-size: .9375rem; font-weight: 700; line-height: 1.3; }
 
+/* Small laptops and tablets in landscape: the phone stands bottom left and the plans move right beside it,
+   the pair centred; the flow above the eyebrow keeps the trigger and the phone carries the status. */
+@media (min-width: 1024px) and (max-width: 1239px) {
+  .phone {
+    --u: 15px;
+    display: block;
+    inset: auto auto calc(clamp(120px, 11vw, 168px) - 15.5em) calc(50% - 466px);
+    inline-size: 15em;
+  }
+  /* The plans stand close by: the status leans out less. */
+  .phone .sent { margin-inline-end: -2em; }
+  .flowSent { display: none; }
+  .plans { padding-inline-start: 265px; }
+}
+
+/* Laptops: plans top left and bottom right, the start chip top right, the phone bottom left, the trigger mid right. */
 @media (min-width: 1240px) {
   .start { display: grid; }
+  .phone { display: block; }
+  .floating { display: grid; }
+  .flow { display: none; }
   .plans { margin: 0; }
   .plan { position: absolute; z-index: 1; inline-size: 332px; }
-  /* Straight, like the plan cards elsewhere: slanted baselines read badly. */
-  .plan:nth-child(1) { inset: 12% auto auto max(5%, calc((100% - 1360px) / 2)); }
-  .plan:nth-child(2) { inset: auto max(5%, calc((100% - 1360px) / 2)) 10% auto; }
+  /* Straight, like the plan cards elsewhere: slanted baselines read badly. The second plan sits lower on
+     short screens, to leave the trigger node room under the headline. */
+  .plan:nth-child(1) { inset: 12% auto auto var(--edge); }
+  .plan:nth-child(2) { inset: auto var(--edge) max(40px, calc(19% - 80px)) auto; }
 }
 
 @media (max-width: 767px) {
-  section.section { min-block-size: 0; padding-block: 96px 88px; }
+  section.section { min-block-size: 0; padding-block: 72px 88px; }
   .plans { flex-direction: column; align-items: center; margin-block-start: 32px; }
   .plan { inline-size: min(100%, 340px); }
+}
+
+/* Phones: no room side by side, so the status steps down under the node's right edge, clear of its label. */
+@media (max-width: 520px) {
+  .flow { flex-direction: column; align-items: stretch; inline-size: min(100%, 340px); margin-block-end: 44px; padding-block-start: 26px; }
+  .compact { align-self: flex-start; max-inline-size: min(236px, 74%); margin-inline-start: 6px; }
+  .compact .keyword { inset: -26px -14px auto auto; }
+  .flowSent { align-self: flex-end; max-inline-size: 86%; margin: 8px 4px 0 0; transform: rotate(4deg); }
 }

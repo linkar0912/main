@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { getSeoPages, seoPagePath, seoPages } from "@/src/content/seo";
 import { ANALYTICS_PAGE_PATHS } from "../analytics-path";
 import { contentSecurityPolicy, securityHeaderRules, securityHeaders } from "./headers";
 
@@ -14,6 +15,24 @@ function directives(policy: string): Map<string, string[]> {
 function header(rules: ReturnType<typeof securityHeaderRules>, source: string, key: string): string | undefined {
   return rules.find((rule) => rule.source === source)?.headers.find((entry) => entry.key === key)?.value;
 }
+
+/**
+ * The Content-Security-Policy a request for `path` receives. Next.js applies
+ * every rule whose source matches, and the last one wins for a key. Every
+ * rule after the catch-all is a literal path (checked below), and a literal
+ * source matches with or without a trailing slash.
+ */
+function effectivePolicy(rules: ReturnType<typeof securityHeaderRules>, path: string): string {
+  const normalized = path.length > 1 ? path.replace(/\/+$/, "") : path;
+  let policy = "";
+  for (const rule of rules) {
+    if (rule.source !== "/:path*" && rule.source !== normalized) continue;
+    policy = rule.headers.find((entry) => entry.key === "Content-Security-Policy")?.value ?? policy;
+  }
+  return policy;
+}
+
+const ANALYTICS_HOSTS = /googletagmanager|google-analytics|analytics\.google|cloudflareinsights/;
 
 describe("security headers", () => {
   it("sends the full set on every response", () => {
@@ -74,6 +93,58 @@ describe("security headers", () => {
       ]));
       expect(site.get("img-src")).toEqual(expect.arrayContaining(["https://*.google-analytics.com", "https://*.googletagmanager.com"]));
     }
+  });
+
+  it("scopes the public-site policy with exact paths only", () => {
+    const rules = securityHeaderRules(true);
+    const scoped = rules.slice(1);
+    for (const rule of scoped) {
+      expect(rule.source, rule.source).toMatch(/^\/[a-z0-9/-]*$/);
+      expect(rule.source.length === 1 || !rule.source.endsWith("/"), rule.source).toBe(true);
+    }
+    expect(scoped.map((rule) => rule.source)).toEqual([...ANALYTICS_PAGE_PATHS]);
+  });
+
+  it("allows Google Analytics on every SEO catalogue hub and guide, in dev and production", () => {
+    const paths = ["/features", "/solutions", "/templates", ...seoPages.map(seoPagePath)];
+    for (const production of [true, false]) {
+      const rules = securityHeaderRules(production);
+      for (const path of paths) {
+        const csp = directives(effectivePolicy(rules, path));
+        expect(csp.get("script-src"), path).toEqual(expect.arrayContaining(["https://www.googletagmanager.com", "https://static.cloudflareinsights.com"]));
+        expect(csp.get("connect-src"), path).toEqual(expect.arrayContaining(["https://*.google-analytics.com", "https://cloudflareinsights.com"]));
+      }
+    }
+    expect(directives(effectivePolicy(securityHeaderRules(true), "/features/instagram-comment-to-dm")).get("script-src"))
+      .toContain("https://www.googletagmanager.com");
+    expect(directives(effectivePolicy(securityHeaderRules(true), "/features/instagram-comment-to-dm/")).get("script-src"))
+      .toContain("https://www.googletagmanager.com");
+  });
+
+  it("keeps the base policy on recipe downloads, unknown slugs and the app", () => {
+    const rules = securityHeaderRules(true);
+    const paths = [
+      "/templates/comment-guide-delivery/recipe",
+      ...getSeoPages("templates").map((page) => `${seoPagePath(page)}/recipe`),
+      "/features/not-a-guide",
+      "/solutions/not-a-guide",
+      "/templates/not-a-guide",
+      "/features/instagram-comment-to-dm/extra",
+      "/llms.txt",
+      "/sitemap.xml",
+      "/dashboard",
+      "/automations/auto_1",
+      "/settings",
+      "/admin",
+      "/reset-password",
+      "/data-deletion/status/abc123",
+    ];
+    for (const path of paths) {
+      const policy = effectivePolicy(rules, path);
+      expect(policy, path).toBe(contentSecurityPolicy({ production: true, publicSite: false }));
+      expect(policy, path).not.toMatch(ANALYTICS_HOSTS);
+    }
+    expect(effectivePolicy(rules, "/templates/comment-guide-delivery/recipe")).not.toContain("https://www.googletagmanager.com");
   });
 });
 

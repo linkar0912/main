@@ -19,6 +19,8 @@
 }
 .copy { min-inline-size: 0; max-inline-size: 680px; }
 .title { max-inline-size: 700px; font-size: clamp(3rem, 5.6vw, 6rem); }
+/* The hub label leads the H1 with the 26px it always had under it. Two classes outrank the shared kicker. */
+.title .kicker { margin-block-end: 26px; }
 
 .stage {
   position: relative;
@@ -68,9 +70,8 @@
   transition: translate 200ms ease, box-shadow 200ms ease;
 }
 .card:hover { translate: 0 -4px; box-shadow: 0 24px 48px rgb(10 8 24 / 28%); }
-.thumb { position: relative; inline-size: 84px; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 12px; }
-/* The card is light UI in both themes: the slot uses the light surface, and its caption hides below 220px. */
-.thumb[data-image-slot] > svg { inline-size: 22px; }
+/* The guide's automation in miniature (its compact form): light UI in both themes, like the card around it. */
+.thumb { position: relative; display: block; inline-size: 84px; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 12px; }
 .cardText { display: grid; gap: 3px; min-inline-size: 0; }
 .cardTopic {
   color: #5c5d66;
@@ -102,8 +103,8 @@
 
 @media (max-width: 599px) {
   .title { font-size: clamp(2.625rem, 11.4vw, 3.125rem); }
-  .card { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; padding: 7px 12px 7px 7px; }
-  .thumb { inline-size: 64px; border-radius: 10px; }
+  .card { grid-template-columns: 72px minmax(0, 1fr) auto; gap: 10px; padding: 7px 12px 7px 7px; }
+  .thumb { inline-size: 72px; border-radius: 10px; }
   .cardTitle { font-size: .875rem; }
 }
 

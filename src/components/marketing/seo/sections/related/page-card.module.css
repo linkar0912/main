@@ -38,27 +38,28 @@
   background-size: 48px 48px;
 }
 
-/* A print tilted on the panel; it runs off the bottom edge like Manychat's cards. */
-.photo {
+/*
+ * The guide's automation as a print tilted on the panel. It runs off the bottom
+ * edge like Manychat's cards, by a fixed amount. --thumb-bleed tells PageThumb
+ * how much of the print the panel hides (the overhang, plus what the tilt drops
+ * at one corner), so the picture keeps its last line clear of the edge.
+ */
+.print {
+  --thumb-bleed: 26px;
   position: absolute;
-  inset-block-start: 13%;
+  inset-block: 13% -18px;
   inset-inline-start: 11%;
   inline-size: 78%;
-  aspect-ratio: 5 / 4;
   overflow: hidden;
-  background: #d8d8de;
   border-radius: 14px;
   box-shadow: 0 14px 34px rgb(16 17 22 / 18%);
   transform: rotate(-2deg);
   transition: transform 320ms cubic-bezier(.2, .7, .2, 1);
 }
-.card[data-tilt="right"] .photo { transform: rotate(2deg); }
-.card:hover .photo { transform: rotate(0deg) translateY(-6px); }
+.card[data-tilt="right"] .print { transform: rotate(2deg); }
+.card:hover .print { transform: rotate(0deg) translateY(-6px); }
 /* The collection tag sits on clear colour above the print, never on it. */
-.card[data-variant="related"] .photo { inset-block-start: 60px; }
-
-/* The development caption sits at the slot's bottom edge, which runs off the panel: lift it to the top. */
-.photo [data-image-slot] > span { inset: 12px auto auto 12px; }
+.card[data-variant="related"] .print { inset-block-start: 60px; }
 
 .copy { display: flex; flex: 1; flex-direction: column; padding: 24px 26px 26px; }
 
@@ -159,7 +160,7 @@
   .list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* Two to a row: a last odd card takes the full row, photo beside the copy. */
+/* Two to a row: a last odd card takes the full row, print beside the copy. */
 @media (min-width: 681px) and (max-width: 1023px) {
   .item:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .item:last-child:nth-child(odd) .card { flex-direction: row; }
@@ -184,11 +185,11 @@
     border-radius: 20px;
   }
   .card:not([data-variant="related"]) .media { aspect-ratio: 4 / 5; border-radius: 14px; background-position: -1px -1px; background-size: 26px 26px; }
-  .card:not([data-variant="related"]) .photo,
-  .card:not([data-variant="related"]):hover .photo {
+  .card:not([data-variant="related"]) .print,
+  .card:not([data-variant="related"]):hover .print {
+    --thumb-bleed: 0px;
     inset: 7px;
     inline-size: auto;
-    aspect-ratio: auto;
     border-radius: 9px;
     box-shadow: 0 6px 16px rgb(16 17 22 / 16%);
     transform: none;
@@ -221,8 +222,8 @@
   /* Cards beyond the edge are revealed already, so a swipe never shows them rising in. */
   .list:has(> .item > .card[data-variant="related"]) > .item { scroll-snap-align: start; opacity: 1; transform: none; }
   .card[data-variant="related"] { border-radius: 22px; }
-  .card[data-variant="related"] .media { aspect-ratio: 16 / 11; }
-  .card[data-variant="related"] .photo { inset-block-start: 56px; }
+  .card[data-variant="related"] .media { aspect-ratio: 4 / 3; }
+  .card[data-variant="related"] .print { inset-block-start: 56px; }
   .card[data-variant="related"] .copy { padding: 20px 20px 22px; }
   .card[data-variant="related"] .title { margin-block-start: 12px; font-size: 1.3125rem; }
   .card[data-variant="related"] .description { margin: 10px 0 18px; font-size: .875rem; line-height: 1.55; }
@@ -230,18 +231,19 @@
 
 /*
  * Small phones, hub cards: a 104px thumb would leave the copy a column about
- * 130px wide. The thumb shrinks to a 64px square beside the title, and the
+ * 130px wide. The thumb shrinks to an 80px square beside the title (large
+ * enough for the topic icon and a ten-letter word above 8px), and the
  * description and "Learn more" run the card's full width underneath.
  */
 @media (max-width: 400px) {
   .card[data-variant="hub"] {
-    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-columns: 80px minmax(0, 1fr);
     column-gap: 14px;
     padding: 12px 16px 16px 12px;
   }
   .card[data-variant="hub"] .media { grid-row: 1; aspect-ratio: 1 / 1; border-radius: 12px; background-size: 16px 16px; }
-  .card[data-variant="hub"] .photo,
-  .card[data-variant="hub"]:hover .photo { inset: 6px; border-radius: 7px; }
+  .card[data-variant="hub"] .print,
+  .card[data-variant="hub"]:hover .print { inset: 4px; border-radius: 8px; }
   .card[data-variant="hub"] .copy { display: contents; }
   .card[data-variant="hub"] .title { grid-column: 2; grid-row: 1; align-self: center; }
   .card[data-variant="hub"] .description { grid-column: 1 / -1; margin: 12px 0 14px 2px; }
@@ -249,10 +251,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card, .photo, .more svg { transition: none; }
+  .card, .print, .more svg { transition: none; }
   .card:hover, .card:hover .more svg { transform: none; }
 }
 @media (prefers-reduced-motion: reduce) and (min-width: 681px) {
-  .card:hover .photo { transform: rotate(-2deg); }
-  .card[data-tilt="right"]:hover .photo { transform: rotate(2deg); }
+  .card:hover .print { transform: rotate(-2deg); }
+  .card[data-tilt="right"]:hover .print { transform: rotate(2deg); }
 }

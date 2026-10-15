@@ -16,7 +16,7 @@ import styles from "./automation-story.module.css";
 export const sceneSummaries = {
   comment: [
     'Comment “GUIDE please”',
-    'Linkar recognizes “GUIDE”',
+    'Linkar recognises “GUIDE”',
     'Private reply “The quick guide is ready. What would you like to improve first?”',
   ],
   qualify: [
@@ -279,7 +279,7 @@ function CommentScene() {
             <span className={styles.commentHeart}><Icon name="heart" size={14} /></span>
           </div>
 
-          <AutomationNote detail="Private reply sent" active>GUIDE recognized</AutomationNote>
+          <AutomationNote detail="Private reply sent" active>GUIDE recognised</AutomationNote>
 
           <div className={styles.inboxRow}>
             <span className={styles.ring} data-size="sm"><span className={styles.ringInner}>L</span></span>

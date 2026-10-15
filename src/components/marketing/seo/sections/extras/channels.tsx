@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { seoPagePath, type SeoPage } from "@/src/content/seo";
+import { seoPagePath, type SeoCollection, type SeoPage } from "@/src/content/seo";
 import { HashLink } from "../../hash-link";
 import { Icon } from "../../mock-ui";
 import shell from "../../seo-section.module.css";
@@ -12,8 +12,27 @@ type Channel = {
   detail: string;
   supports: readonly string[];
   href: string;
-  more: string;
+  /** The hidden end of the card's "Learn more" link, worded per collection. */
+  more: Readonly<Record<SeoCollection, string>>;
 };
+
+/**
+ * The hidden end of the Facebook card's "Learn more" link to the Facebook Page
+ * comment reply feature. Worded per collection so one anchor is not repeated on
+ * every page that shows the channel cards.
+ */
+export const facebookRepliesLinkText: Readonly<Record<SeoCollection, string>> = {
+  features: "about automatic Facebook Page comment replies",
+  solutions: "about replying to Facebook Page comments",
+  templates: "about the Facebook Page comment auto reply feature",
+};
+
+/**
+ * The hidden end of the Instagram card's link to the features hub. It leaves
+ * out "Instagram automation": sitewide anchors with that phrase point at the
+ * homepage, not at a hub.
+ */
+export const instagramFeaturesLinkText = "about Linkar’s Instagram features";
 
 /* Facts match the FAQ answer to "Which account do I need?" on every page. */
 const channels: readonly Channel[] = [
@@ -24,7 +43,7 @@ const channels: readonly Channel[] = [
     detail: "Private replies to comments and supported conversation journeys. Personal Instagram accounts are not supported.",
     supports: ["Comment replies", "DMs", "Story replies", "Story mentions"],
     href: "/features",
-    more: "about Instagram automation features",
+    more: { features: instagramFeaturesLinkText, solutions: instagramFeaturesLinkText, templates: instagramFeaturesLinkText },
   },
   {
     key: "facebook",
@@ -33,7 +52,7 @@ const channels: readonly Channel[] = [
     detail: "Replies are posted publicly under comments on your Page posts, so everyone reading the thread sees the answer.",
     supports: ["Public comment replies", "Selected Page posts", "Keywords"],
     href: "/features/facebook-comment-auto-reply",
-    more: "about Facebook Page comment replies",
+    more: facebookRepliesLinkText,
   },
 ];
 
@@ -80,7 +99,7 @@ export function ExtraChannels({ page }: { page: SeoPage }) {
                   {self ? (
                     <HashLink className={`${shell.textAction} ${styles.link}`} href="#how-it-works">See how it works<Icon name="arrow-right" size={16} /></HashLink>
                   ) : (
-                    <Link className={`${shell.textAction} ${styles.link}`} href={channel.href}>Learn more<span className={shell.srOnly}> {channel.more}</span><Icon name="arrow-right" size={16} /></Link>
+                    <Link className={`${shell.textAction} ${styles.link}`} href={channel.href}>Learn more<span className={shell.srOnly}> {channel.more[page.collection]}</span><Icon name="arrow-right" size={16} /></Link>
                   )}
                 </div>
               </li>

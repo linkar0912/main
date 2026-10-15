@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InsightsShowcase } from "./insights-showcase";
@@ -24,6 +26,50 @@ describe("InsightsShowcase", () => {
     expect(figure.hasAttribute("data-reveal")).toBe(true);
     // The chart is decorative; the caption is what a screen reader gets.
     expect(figure.querySelector("figcaption")?.textContent).toMatch(/fourteen-day chart/i);
+  });
+
+  it("labels its figures as sample data and keeps the mock out of search snippets", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    render(<InsightsShowcase />);
+    const figure = screen.getByRole("figure", { name: "Linkar insights preview" });
+
+    expect(figure.querySelector("figcaption")?.textContent?.trim().startsWith("Sample data.")).toBe(true);
+    // A visible tag beside the date range, inside the panel itself.
+    const tag = figure.querySelector("[data-sample-tag]");
+    expect(tag?.textContent).toBe("Sample");
+    expect(tag?.closest("[aria-hidden]")).toBeNull();
+    // Every row of the mock, numbers included, sits under one data-nosnippet
+    // div (Google honours it on div, span and section); the caption does not.
+    const mock = figure.querySelector("div[data-nosnippet]");
+    expect(mock).not.toBeNull();
+    for (const value of ["412", "388", "1,284", "1,012", "linkar.in/r/guide"]) {
+      expect(mock?.textContent).toContain(value);
+    }
+    expect(mock?.contains(figure.querySelector("figcaption"))).toBe(false);
+  });
+
+  it("sets the tracked link in the system monospace, so the page never loads the web mono font", () => {
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/insights-showcase.module.css"), "utf8");
+    const slug = stylesheet.match(/\.linkSlug \{[^}]+\}/)?.[0] ?? "";
+
+    expect(slug).toContain("font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;");
+    expect(stylesheet).not.toContain("--font-mono");
+  });
+
+  it("lets the browser skip the section until it nears the viewport, with a measured content-box fallback height", () => {
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/insights-showcase.module.css"), "utf8");
+    const section = stylesheet.match(/^\.section \{[^}]+\}/m)?.[0] ?? "";
+
+    expect(section).toContain("content-visibility: auto;");
+    expect(section).toMatch(/contain-intrinsic-block-size: auto \d+px;/);
+    // Block axis only, so the placeholder never claims a fixed width.
+    expect(stylesheet).not.toContain("contain-intrinsic-size:");
+    // Content-box heights (rendered height minus block padding and border),
+    // in source order: desktop, wide (1600px and up), tablet, phone. The
+    // browser adds the padding itself, so a full-section height here makes
+    // in-page links clicked from higher up the page scroll past the section.
+    const heights = [...stylesheet.matchAll(/contain-intrinsic-block-size: auto (\d+)px;/g)].map((match) => Number(match[1]));
+    expect(heights).toEqual([750, 870, 1250, 1250]);
   });
 
   it("renders a fixed fourteen-day, two-series chart so the page is deterministic", () => {

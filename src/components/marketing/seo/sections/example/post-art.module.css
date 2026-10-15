@@ -1,0 +1,377 @@
+/* A post's artwork drawn in code. It fills its frame (absolutely positioned) and sizes everything in
+   container units, so the same drawing reads at 4:5, 1:1, 9:16 and as a DM thumbnail. It depicts
+   social content, so its colours stay the same in both site themes.
+
+   Layers: a grid (.frame) whose rows are the words; a clipped canvas and the words each take its
+   rows as a subgrid. Shapes are placed in rows the words leave free, and whatever is laid over the
+   post (.overlay: the comment that arrives) takes a row of its own, so nothing covers the words. */
+.art {
+  --art-tint: var(--seo-accent-tint, color-mix(in srgb, var(--seo-accent, #5f2ce0) 22%, #ffffff));
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  container: post-art / size;
+  color: var(--art-ink);
+  background: var(--art-bg);
+  border-radius: inherit;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+
+/* Tones. a and b are tone-on-tone shapes that text can sit on; c is the one bright pop. */
+.art[data-tone="accent"] {
+  --art-bg: var(--seo-accent, #5f2ce0);
+  --art-ink: #ffffff;
+  --art-mark: #fff100;
+  --art-a: color-mix(in srgb, var(--seo-accent, #5f2ce0) 76%, #000000);
+  --art-b: color-mix(in srgb, var(--seo-accent, #5f2ce0) 82%, #ffffff);
+  --art-c: #fff100;
+  --art-c-ink: #101116;
+  --art-cta-bg: #ffffff;
+  --art-cta-ink: #101116;
+}
+.art[data-tone="tint"] {
+  --art-bg: var(--art-tint);
+  --art-ink: #101116;
+  --art-mark: var(--seo-accent, #5f2ce0);
+  --art-a: color-mix(in srgb, var(--art-tint) 78%, var(--seo-accent, #5f2ce0));
+  --art-b: #ffffff;
+  --art-c: var(--seo-accent, #5f2ce0);
+  --art-c-ink: #ffffff;
+  --art-cta-bg: #101116;
+  --art-cta-ink: #ffffff;
+}
+.art[data-tone="yellow"] {
+  --art-bg: #fff100;
+  --art-ink: #101116;
+  --art-mark: var(--seo-accent, #5f2ce0);
+  --art-a: #ffffff;
+  --art-b: var(--art-tint);
+  --art-c: var(--seo-accent, #5f2ce0);
+  --art-c-ink: #ffffff;
+  --art-cta-bg: #101116;
+  --art-cta-ink: #ffffff;
+}
+/* A centred post on the light tint: the words sit on a white badge, so the accent highlight keeps its contrast. */
+.art[data-layout="center"][data-tone="tint"] { --art-a: #ffffff; }
+/* A brand Story: the accent, lifting towards the bottom like a Story background. */
+.art[data-format="story"][data-tone="accent"] {
+  --art-a: color-mix(in srgb, var(--seo-accent, #5f2ce0) 82%, #ffffff);
+  --art-b: color-mix(in srgb, var(--seo-accent, #5f2ce0) 62%, #ffffff);
+  background: linear-gradient(175deg, var(--seo-accent, #5f2ce0) 20%, color-mix(in srgb, var(--seo-accent, #5f2ce0) 74%, #ffffff) 100%);
+}
+
+/* ---------- The grid ---------- */
+
+.frame {
+  --art-top: 8.5cqi;
+  --art-end: 7cqi;
+  --art-gap: 5cqi;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: [full-start] 8cqi [content-start] minmax(0, 1fr) [content-end] 8cqi [full-end];
+  /* corner: kicker and headline at the top, the request at the foot of the words, the comment under it. */
+  grid-template-rows:
+    [full-start] var(--art-top)
+    [kicker-start] auto [kicker-end] 4cqi
+    [headline-start] auto [headline-end] minmax(var(--art-gap), 1fr)
+    [cta-start] auto [cta-end] 4cqi
+    [overlay-start] auto [overlay-end] var(--art-end) [full-end];
+  border-radius: inherit;
+}
+/* center: the words in the middle of the space above the comment. */
+.art[data-layout="center"] .frame {
+  grid-template-rows:
+    [full-start] minmax(var(--art-top), 1fr)
+    [kicker-start] auto [kicker-end] 4cqi
+    [headline-start] auto [headline-end] 5cqi
+    [cta-start] auto [cta-end] minmax(4cqi, 1fr)
+    [overlay-start] auto [overlay-end] var(--art-end) [full-end];
+}
+/* Story: room for the progress bars and the account line on top (drawn in fixed pixels by the phone
+   mock, so the top has a pixel floor), the reply bar at the bottom, and a sticker between. */
+.art[data-format="story"] .frame {
+  --art-top: max(21cqi, 12cqb, 60px);
+  grid-template-rows:
+    [full-start] var(--art-top)
+    [kicker-start] auto [kicker-end] 4cqi
+    [headline-start] auto [headline-end] 5cqb
+    [sticker-start] auto [sticker-end] minmax(0, 1fr)
+    [overlay-start] auto [overlay-end] 18cqb [full-end];
+}
+
+.canvas,
+.copy {
+  display: grid;
+  grid-area: full;
+  grid-template-rows: subgrid;
+  grid-template-columns: subgrid;
+  min-block-size: 0;
+}
+/* Both positioned, so the words always paint over the canvas. */
+.canvas { position: relative; z-index: 0; overflow: hidden; border-radius: inherit; }
+.copy { position: relative; z-index: 1; }
+
+/* ---------- Shapes ---------- */
+
+.shapes { position: absolute; overflow: visible; }
+/* corner: under the headline, bleeding off the right edge. */
+.art[data-layout="corner"] .shapes {
+  grid-row: headline-end / full-end;
+  grid-column: content-start / full-end;
+  inset: 6cqi -16cqi auto auto;
+  inline-size: 60cqmin;
+  block-size: 60cqmin;
+}
+/* corner with a comment landing on the post (a 4:5 post): the shape fills the space right of the request,
+   between the headline and the comment, so only its foot goes under the comment. 100% is that space. */
+.art[data-layout="corner"][data-overlay] .shapes {
+  grid-row: headline-end / overlay-start;
+  inset: 4cqi 0 auto auto;
+  inline-size: auto;
+  block-size: min(56cqi, calc(100% + 6cqi));
+  aspect-ratio: 1;
+  translate: 22% 0;
+}
+/* center: one badge behind the words, centred on them. */
+.art[data-layout="center"] .shapes {
+  grid-row: kicker-start / cta-end;
+  grid-column: full;
+  inset: 50% auto auto 50%;
+  block-size: calc(100% + 18cqi);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+}
+/* Story: low on the left, below the headline, with the sticker stuck on top of it like a real Story's.
+   Clear of the reply notification that lands on its right, and of the reply bar (drawn in pixels by the
+   phone mock: 14px from the foot and about 38px tall), so the foot has a pixel floor. */
+.art[data-format="story"] .shapes {
+  --art-foot: max(13cqb, 60px);
+  grid-row: headline-end / full-end;
+  grid-column: full-start / content-end;
+  inset: auto auto var(--art-foot) -16cqi;
+  block-size: min(86cqi, calc(100% - var(--art-foot) - 2cqi));
+  aspect-ratio: 1;
+}
+
+/* The small pops: lower left, left of the comment; and top left on a centred post (a Reel's badge
+   takes the top right). */
+.corner,
+.spark { position: absolute; grid-area: full; }
+.corner { inset: auto auto 6cqi 8cqi; inline-size: 8cqmin; block-size: 8cqmin; }
+.spark { inset: 7cqi auto auto 7cqi; inline-size: 9cqmin; block-size: 9cqmin; }
+/* Without a comment, a corner post's request sits in the lower corner instead, and a centred post's
+   pops sit on opposite corners. */
+.art[data-layout="corner"]:not([data-overlay]) .corner { display: none; }
+.art[data-layout="center"]:not([data-overlay]) .corner { inset: auto 7cqi 7cqi auto; }
+/* A corner post with a comment: a quarter disc in the lower left, under the pop, answers the shape in the
+   opposite corner. Narrower than the space the comment leaves on its left on every frame. */
+.art[data-layout="corner"][data-overlay] .canvas::before {
+  position: absolute;
+  grid-area: full;
+  inset: auto auto 0 0;
+  inline-size: 40cqi;
+  block-size: 40cqi;
+  content: "";
+  background: var(--art-a);
+  border-radius: 50%;
+  translate: -50% 50%;
+}
+
+.a { fill: var(--art-a); }
+.b { fill: var(--art-b); }
+.c { fill: var(--art-c); }
+.cInk { fill: var(--art-bg); }
+.handle { fill: none; stroke: var(--art-c); stroke-width: 7; stroke-linecap: round; }
+.ring,
+.ringThin { fill: none; stroke: var(--art-c); }
+.ring { stroke-width: 1.6; }
+.ringThin { stroke-width: .8; opacity: .45; }
+
+/* ---------- Words ---------- */
+
+.kicker {
+  grid-row: kicker;
+  grid-column: content;
+  justify-self: start;
+  max-inline-size: 100%;
+  overflow: hidden;
+  padding: .5em .95em .45em;
+  border: max(1px, .35cqi) solid color-mix(in srgb, currentColor 55%, transparent);
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 3.3cqi;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The longest word always fits the width, and the whole headline fits a square frame's top two thirds. */
+.headline {
+  grid-row: headline;
+  grid-column: content;
+  justify-self: start;
+  max-inline-size: 92%;
+  font-size: min(15cqi, calc(84cqi / (var(--art-word, 8) * .58)), 12.5cqb);
+  font-weight: 800;
+  line-height: .94;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.headline em { color: var(--art-mark); font-style: normal; }
+
+.cta {
+  display: inline-flex;
+  grid-row: cta;
+  grid-column: content;
+  justify-self: start;
+  align-items: center;
+  gap: .45em;
+  max-inline-size: 100%;
+  padding: .6em 1.05em .6em .85em;
+  color: var(--art-cta-ink);
+  background: var(--art-cta-bg);
+  border-radius: 999px;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: 3.7cqi;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.cta svg { flex: 0 0 auto; inline-size: 1.15em; block-size: 1.15em; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; }
+.cta strong { font-weight: 800; letter-spacing: .02em; }
+/* The word to send stays one piece, quotes and all. */
+.cta strong { white-space: nowrap; }
+
+/* A centred post: the words on the badge, the kicker as a stuck-on label. */
+.art[data-layout="center"] :is(.kicker, .headline, .cta) { justify-self: center; text-align: center; }
+.art[data-layout="center"] .kicker { color: var(--art-c-ink); background: var(--art-c); border-color: transparent; rotate: -3deg; }
+
+/* What lands on the post (the comment), on its own row, past the right edge by the frame's overhang. */
+.overlay {
+  grid-row: overlay;
+  grid-column: content-start / full-end;
+  justify-self: end;
+  min-inline-size: 0;
+  margin-inline-end: calc(-1 * var(--art-overhang, 0px));
+  color: #101116;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  line-height: normal;
+  letter-spacing: normal;
+  text-align: start;
+}
+
+.art[data-format="story"] .kicker { font-size: max(3.3cqi, 8.5px); }
+.art[data-format="story"] .headline { max-inline-size: 96%; font-size: min(15.5cqi, calc(86cqi / (var(--art-word, 8) * .6)), 8cqb); }
+.sticker {
+  grid-row: sticker;
+  grid-column: content;
+  justify-self: center;
+  align-self: start;
+  max-inline-size: 86%;
+  padding: .7em .95em;
+  color: var(--seo-accent, #5f2ce0);
+  background: #ffffff;
+  border-radius: .7em;
+  box-shadow: 0 1.4cqi 3.6cqi rgb(16 17 22 / 20%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: max(4.5cqi, 8px);
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  text-wrap: balance;
+  rotate: -4deg;
+}
+.sticker[data-mention] { padding: .5em .8em; font-size: max(6cqi, 11px); letter-spacing: -.01em; rotate: -7deg; }
+.stickerShort { display: none; }
+
+/* A centred post with nothing landing on it (shared into a DM): the badge has the whole frame, at least
+   most of its width, and the words sit well inside it. */
+.art[data-layout="center"]:not([data-overlay]) .headline {
+  max-inline-size: 80%;
+  font-size: min(12.5cqi, calc(66cqi / (var(--art-word, 8) * .64)), 12.5cqb);
+}
+.art[data-layout="center"]:not([data-overlay]) .shapes { block-size: max(calc(100% + 30cqi), 92cqi); }
+
+/* A centred post with a comment: the longest word keeps clear of the badge's edges. */
+.art[data-layout="center"][data-overlay] .headline {
+  max-inline-size: 80%;
+  font-size: min(15cqi, calc(70cqi / (var(--art-word, 8) * .64)), 12.5cqb);
+}
+.art[data-layout="center"][data-overlay] .shapes { block-size: max(calc(100% + 18cqi), 80cqi); }
+
+/* A square corner post with a comment (a Page post, or any post on a phone): no room under the headline,
+   so the headline takes a narrow column on two even lines and the shape stands beside it in the top
+   right corner, above the request, rising out of the edges. 100% is the height above the request. */
+@container post-art (min-aspect-ratio: 9 / 10) {
+  /* Tighter edges, so a tall comment still lands inside the frame. */
+  .art[data-overlay] .frame { --art-top: 6.5cqi; --art-end: 5cqi; --art-gap: 3cqi; }
+  .art[data-layout="corner"][data-overlay] .headline {
+    max-inline-size: 54cqi;
+    font-size: min(11.5cqi, calc(52cqi / (var(--art-pair, 9) * .68)));
+  }
+  /* A centred square post with a comment: two even lines that sit inside the badge, which is at least
+     most of the frame's width. */
+  .art[data-layout="center"][data-overlay] .headline {
+    max-inline-size: 60cqi;
+    font-size: min(12cqi, calc(58cqi / (var(--art-pair, 9) * .66)));
+  }
+  .art[data-layout="center"][data-overlay] .shapes { block-size: max(calc(100% + 18cqi), 72cqi); }
+  /* Rings centre on the frame's edge, so they leave the headline a wider column. */
+  .art[data-layout="corner"][data-overlay][data-motif="rings"] .headline {
+    max-inline-size: 62cqi;
+    font-size: min(11.5cqi, calc(60cqi / (var(--art-pair, 9) * .68)));
+  }
+  .art[data-layout="corner"][data-overlay] .shapes {
+    grid-row: full-start / cta-start;
+    inset: 0 0 auto auto;
+    block-size: min(48cqi, calc(100% + 2cqi));
+    translate: 24% -8%;
+  }
+}
+
+/* A post with a comment on a short frame (a square post on a phone): the headline and the request carry it. */
+@container post-art (max-height: 320px) {
+  .art[data-overlay] .kicker,
+  .art[data-overlay] .spark { display: none; }
+}
+
+/* Narrow posts (a square post on a small phone, a shared post in a DM): a request big enough to read. */
+@container post-art (max-width: 260px) {
+  .art[data-format="post"] .cta { font-size: max(4.6cqi, 10px); }
+}
+
+/* Small frames (a shared post or a Story inside a DM): the headline and the request carry it. */
+@container post-art (max-width: 220px) {
+  .art[data-format="post"] .kicker { display: none; }
+  .art[data-format="post"] .cta { font-size: 5.2cqi; }
+  /* Smaller, so it stays clear of the request in the lower corner. */
+  .art[data-layout="corner"]:not([data-overlay]) .shapes { inline-size: 50cqmin; block-size: 50cqmin; }
+}
+
+/* A Story on a phone-sized stage: its sentence would be too small to read, so the sticker says just the
+   request ("Reply SHADE"), the way Story stickers do. */
+@container post-art (max-width: 250px) {
+  .sticker[data-short] { font-size: max(6.4cqi, 12px); }
+  .sticker[data-short] .stickerLong { display: none; }
+  .sticker[data-short] .stickerShort { display: inline; }
+}
+/* A Story thumbnail: the sticker shrinks to its request, big enough to read. */
+@container post-art (max-width: 140px) {
+  .art[data-format="story"] .frame { --art-top: 16cqi; }
+  /* No reply bar on a thumbnail. */
+  .art[data-format="story"] .shapes { --art-foot: 13cqb; }
+  .art[data-format="story"] .kicker { display: none; }
+  .sticker,
+  .sticker[data-short] { font-size: 8.5cqi; }
+  .sticker[data-mention] { font-size: 9.5cqi; }
+  .sticker[data-short] .stickerLong { display: none; }
+  .sticker[data-short] .stickerShort { display: inline; }
+  .sticker[data-thumb="hide"] { display: none; }
+}

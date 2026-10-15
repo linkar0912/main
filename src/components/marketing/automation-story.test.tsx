@@ -99,10 +99,13 @@ describe("AutomationStory", () => {
       "When someone needs a personal answer, pause automatic replies and keep the conversation ready for your team.",
     ]);
     [
-      "GUIDE please", "GUIDE recognized", "The quick guide is ready. What would you like to improve first?",
+      "GUIDE please", "GUIDE recognised", "The quick guide is ready. What would you like to improve first?",
       "More replies or better leads?", "Better leads", "Answer remembered", "Now: guide sent",
       "+ 18h: check in", "Ready to send", "Project details received", "Automatic replies paused", "Ready for your team",
     ].forEach((state) => expect(markup).toContain(state));
+    // The page is written in British English, on screen and in the screen-reader summary.
+    expect(markup).toContain("Linkar recognises “GUIDE”");
+    expect(markup).not.toMatch(/recogniz/i);
     expect(screen.getAllByRole("figure", { name: "Linkar reply preview in an iPhone conversation" })).toHaveLength(1);
     expect(screen.getAllByRole("list")).toHaveLength(1);
     expect(screen.getAllByRole("listitem")).toHaveLength(4);

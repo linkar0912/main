@@ -1,34 +1,92 @@
-/* Alternating photo rows. The photo sits in a tilted colour frame; the outcome floats on its inner corner. */
-.rows { display: grid; gap: clamp(104px, 10vw, 168px); margin: 0; padding: 0; list-style: none; }
+/* Alternating rows: a flat colour panel holding the benefit's outcome, scaled up, beside a numbered title. */
+.rows { display: grid; gap: clamp(88px, 9vw, 152px); margin: 0; padding: 0; list-style: none; }
 
 .row {
   display: grid;
   grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr);
   grid-template-areas: "media text";
   align-items: center;
-  gap: clamp(56px, 7vw, 128px);
+  gap: clamp(48px, 6.5vw, 120px);
 }
-.row[data-photo="end"] { grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr); grid-template-areas: "text media"; }
+.row[data-media="end"] { grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr); grid-template-areas: "text media"; }
 
-.media { position: relative; grid-area: media; isolation: isolate; }
-.photo { position: relative; z-index: 1; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 28px; }
+/* No overflow clip: a tall outcome makes the panel taller rather than being cut. */
+.panel {
+  container: zigzag-panel / inline-size;
+  position: relative;
+  display: grid;
+  place-items: center;
+  grid-area: media;
+  min-inline-size: 0;
+  aspect-ratio: 4 / 3;
+  /* Room above and below for the corner chip, even when the outcome fills the panel's height. */
+  padding: clamp(64px, 5vw, 76px) clamp(36px, 4vw, 60px);
+  border-radius: 28px;
+  isolation: isolate;
+}
 
-.frameBack {
+/* The outcome is drawn at one width and zoomed to the panel, so it never squeezes.
+   Narrow panels draw it narrower, not smaller: its 12px text stays at 11px or more. */
+.stage { position: relative; inline-size: 320px; }
+@container zigzag-panel (min-width: 560px) { .stage { inline-size: 330px; zoom: 1.42; } }
+@container zigzag-panel (min-width: 480px) and (max-width: 559px) { .stage { inline-size: 330px; zoom: 1.26; } }
+@container zigzag-panel (min-width: 400px) and (max-width: 479px) { .stage { zoom: 1.1; } }
+@container zigzag-panel (max-width: 329px) { .stage { inline-size: 300px; zoom: .92; } }
+@container zigzag-panel (max-width: 289px) { .stage { inline-size: 100%; max-inline-size: 320px; zoom: 1; } }
+
+/* A pale card tilted behind the outcome, so it reads as the top of a pile rather than a lone card. */
+.stage::before {
   position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: var(--seo-accent, #5f2ce0);
-  border-radius: 30px;
-  transform: translate(-16px, 16px) rotate(-3deg);
+  inset: 16px -16px -16px 16px;
+  z-index: -1;
+  content: "";
+  background: rgb(255 255 255 / 34%);
+  border-radius: 22px;
+  rotate: 3.5deg;
 }
-.row[data-photo="end"] .frameBack { transform: translate(16px, 16px) rotate(3deg); }
-.row[data-frame="yellow"] .frameBack { background: #fff100; }
-.row[data-frame="lilac"] .frameBack { background: #e4d4ff; }
+.row[data-media="end"] .stage::before { inset: 16px 16px -16px -16px; rotate: -3.5deg; }
+.panel[data-tone="accent"] .stage::before { background: rgb(255 255 255 / 18%); }
 
-/* The outcome overlaps the photo's inner bottom corner, toward the text. */
-.float { position: absolute; inset: auto -40px -44px auto; z-index: 2; }
-.row[data-photo="end"] .float { inset: auto auto -44px -40px; }
-.stage { inline-size: 300px; zoom: .92; }
+/* The chip rides on the outcome's top corner, on the side away from the text. */
+.chip { position: absolute; z-index: 2; inset: -30px auto auto -24px; display: block; max-inline-size: calc(100% + 12px); rotate: -4deg; }
+.row[data-media="end"] .chip { inset: -30px -24px auto auto; rotate: 4deg; }
+/* A status pill closes the story, so it sits on the bottom corner toward the text instead. */
+.chip[data-chip="status"] { inset: auto -22px -18px auto; rotate: 3deg; }
+.row[data-media="end"] .chip[data-chip="status"] { inset: auto auto -18px -22px; rotate: -3deg; }
+
+/* A routes card opens with its Linkar header: the chip rides a little higher to clear the header's mark. */
+@media (min-width: 600px) { .row .chip[data-on="routes"] { inset-block-start: -34px; } }
+
+.chip .keyword { display: block; transform: none; }
+.chip .status { box-shadow: 0 12px 26px rgb(16 17 22 / 22%); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-inline-size: 100%;
+  padding: 6px 13px 6px 6px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 12px 26px rgb(16 17 22 / 20%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.pillText { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.pillIcon, .appTile { display: inline-grid; place-items: center; flex: 0 0 auto; inline-size: 24px; block-size: 24px; border-radius: 50%; }
+.pillIcon { color: #101116; background: #fff100; }
+.appTile { color: #ffffff; border-radius: 7px; font-size: .875rem; font-weight: 800; }
+.appTile[data-app="instagram"] { background: linear-gradient(140deg, #6d28f5 0%, #d6249f 55%, #fd8f3a 100%); }
+.appTile[data-app="facebook"] { background: #1f4fd1; }
+/* Two bars for "Automation paused", on a lilac disc. */
+.pillIcon[data-icon="pause"] { display: inline-flex; justify-content: center; align-items: center; gap: 3px; background: #e4d4ff; }
+.pillIcon[data-icon="pause"] i { display: block; inline-size: 3px; block-size: 10px; background: currentColor; border-radius: 2px; }
+/* On the yellow panel the trigger's bolt needs its own colour to show. */
+.panel[data-tone="yellow"] .pillIcon { color: #ffffff; background: #101116; }
 
 .text { grid-area: text; min-inline-size: 0; }
 .count { display: flex; align-items: baseline; gap: 8px; margin: 0 0 28px; font-family: var(--font-mono, ui-monospace, monospace); font-size: .8125rem; font-weight: 600; letter-spacing: .08em; }
@@ -53,36 +111,46 @@
   text-wrap: pretty;
 }
 
-/* Tablets: still two columns, tighter. The outcome hangs below the photo's
-   inner corner, so rows keep a wide gap for it (the tallest clears the next
-   row by about 60px). A translate takes no layout space, so the list also
-   keeps room under the last row for its overhang and shadow. */
+/* Two columns: every row as tall as the tallest, and each panel fills its row, so a
+   tall routes card never leaves its panel taller than its siblings. 4:3 stays the least height. */
+@media (min-width: 768px) {
+  .rows { grid-auto-rows: 1fr; }
+  .row, .row[data-media="end"] { align-items: stretch; }
+  /* Stretched both ways, so the 4:3 ratio sets the panel's least height and never its width. */
+  .panel { justify-self: stretch; }
+  .text { align-self: center; }
+}
+
+/* Tablets: still two columns, tighter. */
 @media (min-width: 768px) and (max-width: 899px) {
-  .rows { gap: 144px; padding-block-end: 64px; }
-  .row, .row[data-photo="end"] { gap: 40px; }
-  .float { inset: auto 12px 0 auto; translate: 0 40%; }
-  .row[data-photo="end"] .float { inset: auto auto 0 12px; }
-  .stage { inline-size: 260px; }
-}
-
-/* Small tablets and phones: photo first, then the text; the outcome hangs off the photo's bottom edge. */
-/* Half the outcome hangs below the photo, so it covers no more than about a quarter of it. */
-@media (max-width: 767px) {
   .rows { gap: 96px; }
-  .row, .row[data-photo="end"] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "media" "text"; gap: 136px; }
-  .frameBack, .row[data-photo="end"] .frameBack { transform: translate(10px, 12px) rotate(2deg); }
-  .float, .row[data-photo="end"] .float { inset: auto 16px 0 auto; translate: 0 52%; }
+  .row, .row[data-media="end"] { gap: 36px; }
+  .panel { padding: 54px 30px 42px; border-radius: 24px; }
+  .chip { inset-inline-start: -12px; }
+  .row[data-media="end"] .chip { inset-inline-end: -12px; }
 }
 
-/* Phones: the outcome sits in the flow under the photo and overlaps its bottom
-   edge by a fixed 96px, so a tall outcome pushes the text down instead of
-   running into it. The frame stays the photo's size. */
+/* Small tablets and phones: the panel first, then the text. */
+@media (max-width: 767px) {
+  .rows { gap: 80px; }
+  .row, .row[data-media="end"] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "media" "text"; gap: 36px; }
+}
+
+/* Phones: the panel takes the height its outcome needs, and the outcome reflows
+   to the panel's width at full size instead of being zoomed down. */
 @media (max-width: 599px) {
-  .row, .row[data-photo="end"] { gap: 36px; }
-  .frameBack, .row[data-photo="end"] .frameBack { inset: 0 0 auto; aspect-ratio: 4 / 3; transform: translate(6px, 10px) rotate(2deg); border-radius: 24px; }
-  .photo { border-radius: 24px; }
-  .float, .row[data-photo="end"] .float { position: relative; inset: auto; translate: none; inline-size: fit-content; margin: -96px 8px 0 auto; }
-  /* Narrower, not smaller: the widget's 12px text stays at 11px or more. */
-  .stage { inline-size: 260px; zoom: .92; }
+  .rows { gap: 72px; }
+  .row, .row[data-media="end"] { gap: 28px; }
+  /* The chips keep at least 22px of colour between them and the panel's rounded edge. */
+  .panel { aspect-ratio: auto; min-block-size: 280px; padding: 62px 20px 46px; border-radius: 24px; }
+  .stage { inline-size: 100%; max-inline-size: 320px; zoom: 1; }
+  /* A row without a chip keeps even room above and below its outcome. */
+  .panel[data-chip="none"] { padding-block: 44px; }
+  .chip, .row[data-media="end"] .chip { inset: -40px auto auto 2px; }
+  .chip[data-chip="status"], .row[data-media="end"] .chip[data-chip="status"] { inset: auto 2px -24px auto; }
   .count { margin-block-end: 20px; }
 }
+
+/* A link card keeps its address and Open button in its last 40px: a status pill hangs below them instead. */
+.row .chip[data-chip="status"][data-on="preview"] { inset-block-end: -36px; }
+@media (max-width: 599px) { .row .chip[data-chip="status"][data-on="preview"] { inset-block-end: -30px; } }

@@ -1,15 +1,24 @@
 import type { Metadata } from "next";
-import { faqItems } from "@/src/components/marketing/marketing-content";
 import { MarketingPage } from "@/src/components/marketing/marketing-page";
 import { BILLING_PLANS, FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
 import { PRODUCT_NAME } from "@/src/lib/branding";
-import { LEGAL_ENTITY } from "@/src/lib/legal-entity";
-import { OPEN_GRAPH_DEFAULTS, publicSiteOrigin } from "@/src/lib/site-url";
+import { homeStructuredData, jsonLdHtml } from "@/src/lib/seo-pages";
+import { OPEN_GRAPH_DEFAULTS } from "@/src/lib/site-url";
 
-// Lead with what people search for; the brand goes last.
-const TITLE = `Instagram DM automation & comment auto-reply · ${PRODUCT_NAME}`;
-const DESCRIPTION = `Auto-reply to Instagram comments, DMs and Story mentions, and to Facebook Page comments. Send links and hand off to your team. Free to start, from ₹${BILLING_PLANS.creator.monthlyPaise / 100} a month.`;
+// Lead with what people search for; the brand goes last. The homepage owns
+// "Instagram automation"; keep the title near 57 characters and the
+// description between 150 and 160 so neither is cut short in results. It
+// names both channels (public-page.test.tsx checks this), and the Free plan
+// quota and the lowest paid price come from the billing catalog. No UPI here
+// until the owner confirms recurring UPI payments.
+const HEADLINE = "Instagram Automation for Comments, DMs & Stories";
+const TITLE = `${HEADLINE} · ${PRODUCT_NAME}`;
+const FREE_MONTHLY_MESSAGES = FREE_BILLING_PLAN.monthlyDeliveryLimit.toLocaleString("en-IN");
+const LOWEST_PAID_PRICE = Math.min(...Object.values(BILLING_PLANS).map((plan) => plan.monthlyPaise)) / 100;
+const DESCRIPTION = `Instagram automation for Indian creators and brands: auto-reply to comments, DMs, Stories and Facebook Pages. Free plan: ${FREE_MONTHLY_MESSAGES} messages a month, paid from ₹${LOWEST_PAID_PRICE}.`;
 
+// No openGraph images here: app/opengraph-image.tsx sits in this segment, so
+// Next attaches it to this page, and file-based images win over config.
 export function generateMetadata(): Metadata {
   return {
     title: TITLE,
@@ -20,74 +29,10 @@ export function generateMetadata(): Metadata {
   };
 }
 
-/** Organization, WebSite, SoftwareApplication and FAQPage structured data, priced from the billing catalog. */
-function structuredData() {
-  const origin = publicSiteOrigin();
-  const plans = [FREE_BILLING_PLAN, ...Object.values(BILLING_PLANS)];
-  return [
-    {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      "@id": `${origin}/#organization`,
-      name: LEGAL_ENTITY.tradeName,
-      url: origin,
-      logo: `${origin}/icon.png`,
-      email: LEGAL_ENTITY.supportEmail,
-      contactPoint: {
-        "@type": "ContactPoint",
-        contactType: "customer support",
-        email: LEGAL_ENTITY.supportEmail,
-        areaServed: "IN",
-        availableLanguage: "English",
-      },
-    },
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "@id": `${origin}/#website`,
-      name: PRODUCT_NAME,
-      url: origin,
-      inLanguage: "en-IN",
-      publisher: { "@id": `${origin}/#organization` },
-    },
-    {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      name: PRODUCT_NAME,
-      url: origin,
-      applicationCategory: "BusinessApplication",
-      operatingSystem: "Web",
-      description: DESCRIPTION,
-      publisher: { "@id": `${origin}/#organization` },
-      offers: plans.map((plan) => ({
-        "@type": "Offer",
-        name: `${plan.name} plan`,
-        price: (plan.monthlyPaise / 100).toFixed(2),
-        priceCurrency: "INR",
-        url: `${origin}/pricing`,
-      })),
-    },
-    {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      mainEntity: faqItems.map((item) => ({
-        "@type": "Question",
-        name: item.question,
-        acceptedAnswer: { "@type": "Answer", text: item.answer },
-      })),
-    },
-  ];
-}
-
 export default function HomePage() {
   return (
     <>
-      <script
-        type="application/ld+json"
-        // JSON.stringify does not escape "<", so a value containing
-        // "</script>" could close the tag early; escape it.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData()).replace(/</g, "\\u003c") }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(homeStructuredData(HEADLINE, DESCRIPTION)) }} />
       <MarketingPage />
     </>
   );

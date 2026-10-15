@@ -239,7 +239,7 @@ export function MockNotification({ app = "Instagram", time = "now", title, child
   );
 }
 
-/** A rich link preview card: a thumbnail (children: an image slot or any block), a title and a muted subtitle. */
+/** A rich link preview card: a thumbnail (children: any drawn block), a title and a muted subtitle. */
 export function MockLinkPreview({ title, subtitle, children, className }: { title: ReactNode; subtitle?: ReactNode; children?: ReactNode; className?: string }) {
   return (
     <div className={cx(styles.surface, styles.preview, className)}>

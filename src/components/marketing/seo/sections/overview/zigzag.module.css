@@ -1,5 +1,5 @@
-/* Overview zigzag: a square photo on a tilted accent block with the request floating over its edge,
-   the overview copy beside it. The side swaps by seed (data-flip). */
+/* Overview zigzag: a square drawing of where the request arrives, on a tilted accent block, with the
+   request floating over its edge and the overview copy beside it. The side swaps by seed (data-flip). */
 .section { color: var(--marketing-text); }
 
 .layout {
@@ -9,35 +9,31 @@
   gap: clamp(64px, 8vw, 128px);
 }
 
+/* --float-reach: how far the request reaches up over the square. It hangs from that height whatever its
+   length, and the square's screens (zigzag-visual) keep that much of their bottom, and a margin, clear. */
 .media {
+  --float-reach: 48px;
   position: relative;
   justify-self: start;
   inline-size: min(100%, 600px);
-  aspect-ratio: 1;
 }
 .section[data-flip] .media { order: 2; justify-self: end; }
 
-/* The accent block peeks out round the photo, tilted away from the copy. */
+.square { position: relative; aspect-ratio: 1; }
+
+/* The accent block peeks out round the square, tilted away from the copy. */
 .backdrop { position: absolute; inset: 0; border-radius: 32px; rotate: -4deg; }
 .section[data-flip] .backdrop { rotate: 4deg; }
 
-.photo {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  border-radius: 28px;
-  box-shadow: 0 30px 60px rgb(16 17 22 / 16%);
-}
-
-/* The request overlaps the photo's inner edge, reaching toward the copy. */
+/* The request hangs over the square's bottom corner nearest the copy, reaching toward it. */
 .float {
   position: absolute;
   z-index: 2;
-  inset: auto -40px 11% auto;
+  inset: calc(100% - var(--float-reach)) -40px auto auto;
   inline-size: min(330px, 66%);
   rotate: -2deg;
 }
-.section[data-flip] .float { inset: auto auto 11% -40px; rotate: 2deg; }
+.section[data-flip] .float { inset: calc(100% - var(--float-reach)) auto auto -40px; rotate: 2deg; }
 .media .float > * { box-sizing: border-box; inline-size: 100%; max-inline-size: none; box-shadow: 0 24px 48px rgb(16 17 22 / 22%); }
 
 .copy { min-inline-size: 0; }
@@ -60,13 +56,14 @@
   text-wrap: pretty;
 }
 
-/* Stacked: heading and copy first, then the photo with the request over its bottom edge. */
+/* Stacked: heading and copy first, then the square with the request just under its bottom edge. */
 @media (max-width: 899px) {
   .layout { grid-template-columns: minmax(0, 1fr); gap: 56px; }
   .copy { order: -1; }
-  .media, .section[data-flip] .media { order: 0; justify-self: center; inline-size: min(100%, 540px); margin-block-end: 36px; }
+  .media, .section[data-flip] .media { --float-reach: 24px; display: grid; order: 0; justify-self: center; inline-size: min(100%, 540px); }
   .backdrop { rotate: -3deg; }
   .section[data-flip] .backdrop { rotate: 3deg; }
-  .float { inset: auto 16px -36px auto; inline-size: min(320px, calc(100% - 32px)); rotate: -2deg; }
-  .section[data-flip] .float { inset: auto auto -36px 16px; rotate: 2deg; }
+  .float, .section[data-flip] .float { position: relative; inset: auto; inline-size: min(320px, calc(100% - 32px)); margin-block-start: calc(-1 * var(--float-reach)); }
+  .float { justify-self: end; margin-inline-end: 16px; rotate: -2deg; }
+  .section[data-flip] .float { justify-self: start; margin-inline-start: 16px; rotate: 2deg; }
 }

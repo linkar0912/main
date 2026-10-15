@@ -42,12 +42,52 @@ describe("SetupSteps", () => {
     expect(onToggle).not.toBeNull();
     expect(onToggle?.querySelector('[data-toggle-knob="true"]')).not.toBeNull();
     expect(Array.from(steps, (step) => within(step).getByRole("figure").querySelector("figcaption")?.textContent)).toEqual([
-      "Connected securely",
-      "Starting point ready",
-      "Automatic reply is on",
+      "Connected securely. Sample data.",
+      "Starting point ready. Sample data.",
+      "Automatic reply is on. Sample data.",
     ]);
     expect(within(section).queryAllByRole("button")).toHaveLength(0);
     expect(within(section).queryAllByRole("link")).toHaveLength(0);
+  });
+
+  it("labels the previews as sample data and keeps the mocks out of search snippets", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    render(<SetupSteps />);
+    const figures = within(screen.getByRole("region", { name: "Set up Instagram auto-replies in three steps." })).getAllByRole("figure");
+
+    // The caption keeps its visible status and adds the label for screen
+    // readers, since the mock above it is aria-hidden.
+    for (const figure of figures) {
+      const hidden = figure.querySelector("figcaption [class*='srOnly']");
+      expect(hidden?.textContent).toBe(". Sample data.");
+    }
+    // The visible tag sits in the status row, beside the counts it qualifies.
+    const statRow = figures[2].querySelector("[data-sample-tag]")?.parentElement;
+    expect(figures[2].querySelector("[data-sample-tag]")?.textContent).toBe("Sample");
+    expect(statRow?.textContent).toContain("1,284");
+    expect(statRow?.textContent).toContain("failed");
+    // Every mock is a data-nosnippet div; the captions stay quotable.
+    for (const figure of figures) {
+      const mock = figure.querySelector(":scope > div");
+      expect(mock?.hasAttribute("data-nosnippet")).toBe(true);
+      expect(mock?.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
+  it("lets the browser skip the section until it nears the viewport, with a measured content-box fallback height", () => {
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/setup-steps.module.css"), "utf8");
+    const section = stylesheet.match(/^\.section \{[^}]+\}/m)?.[0] ?? "";
+
+    expect(section).toContain("content-visibility: auto;");
+    expect(section).toMatch(/contain-intrinsic-block-size: auto \d+px;/);
+    // Block axis only, so the placeholder never claims a fixed width.
+    expect(stylesheet).not.toContain("contain-intrinsic-size:");
+    // Content-box heights (rendered height minus block padding and border),
+    // in source order: desktop, wide (1600px and up), tablet, phone. The
+    // browser adds the padding itself, so a full-section height here makes
+    // in-page links clicked from higher up the page scroll past the section.
+    const heights = [...stylesheet.matchAll(/contain-intrinsic-block-size: auto (\d+)px;/g)].map((match) => Number(match[1]));
+    expect(heights).toEqual([960, 1020, 1200, 1970]);
   });
 
   it("leaves the complete sequence readable immediately when reduced motion is preferred", () => {

@@ -7,13 +7,19 @@ import { TrustLockups } from "./trust-lockups";
 export function HeroSection() {
   return (
     <section id="top" className={styles.hero} aria-labelledby="hero-title" data-motion="staged">
-      <div className={styles.imageFrame} aria-hidden="true">
+      {/* Not aria-hidden: the photo carries a real description. It sits
+          above the fold, so it loads eagerly (next/image defaults to lazy).
+          It is not the largest paint (the heading text is), so it uses
+          loading="eager" rather than next/image's preload, and the Next 16
+          docs say never to combine the two. React's server renderer still
+          adds its own preload link for an eager image. */}
+      <div className={styles.imageFrame}>
         <Image
           className={styles.image}
           src="/marketing/linkar-hero-indian-relaxed.webp"
           alt="A creator relaxing at his desk while Linkar answers his Instagram comments and DMs"
           fill
-          priority
+          loading="eager"
           sizes="100vw"
         />
       </div>
@@ -23,12 +29,12 @@ export function HeroSection() {
         <div className={styles.copy}>
           <h1 id="hero-title" className={styles.title}>
             {/* The searchable name of the product, set small above the display lines. */}
-            <span className={styles.titleKicker}>Instagram comment and DM automation </span>
+            <span className={styles.titleKicker}>Instagram automation for comments and DMs </span>
             <span className={styles.titleLine}>Reply to every opportunity. </span>
             <span className={styles.titleLine}>Even when you are away.</span>
           </h1>
           <p className={styles.body}>
-            Choose what someone says or does, write the reply once, and let Linkar answer comments and messages for you.
+            Choose what someone says or does, write the reply once, and let Linkar answer Instagram comments, DMs and Story mentions for you.
           </p>
           <div className={styles.actions} data-action-visibility="persistent" data-motion-reduced="final">
             <a
@@ -36,22 +42,22 @@ export function HeroSection() {
               href="/signup"
               data-motion-stage="action"
               data-roll-primary="native"
-              data-roll-secondary="entering"
+              data-roll-secondary="hover"
               data-contrast="white-on-magenta"
             >
               <ButtonRoll label="Create your first reply" />
             </a>
           </div>
-          <p className={styles.proof}>Free to start. Paid plans from ₹{BILLING_PLANS.creator.monthlyPaise / 100} a month.</p>
+          <p className={styles.proof}>Free to start. Paid plans from ₹{BILLING_PLANS.creator.monthlyPaise / 100} a month, GST included.</p>
         </div>
 
         <figure
           className={styles.scene}
           aria-label="A Linkar conversation preview"
           data-brand-palette="linkar"
-          data-conversation-motion="looping"
+          data-conversation-motion="single-pass"
           data-message-visibility="stacking-feed"
-          data-loop-continuity="seamless"
+          data-final-frame="full-thread"
         >
           <div className={styles.messageStack} data-conversation-feed="bottom-anchored">
             <div className={styles.messageSlot} data-message-stage="1">

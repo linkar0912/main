@@ -1,51 +1,75 @@
 import type { CSSProperties } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { ProofTicker } from "./proof-ticker";
 import styles from "./proof-rail.module.css";
 
-const creatorExamples = [
+/*
+ * Illustrative use cases, not testimonials. Each card is a kind of account and
+ * one thing Linkar can do for it, so there are no personal names, no quotation
+ * marks and no blockquote, and the alt text describes the scene without naming
+ * anyone. Names and quotes may return only for real Linkar users who have given
+ * written consent to appear here.
+ */
+const useCaseExamples = [
   {
-    name: "Aanya Mehta",
-    role: "Beauty creator",
-    location: "Bengaluru",
-    image: "/marketing/linkar-creator-aanya.webp",
-    alt: "Aanya Mehta at a Bengaluru cafe",
+    id: "beauty-creator",
+    who: "Beauty creator in Bengaluru",
+    useCase: "Sends the shade guide when someone comments SHADE.",
+    workflow: "Comment to DM workflow",
+    href: "/features/instagram-comment-to-dm",
+    image: "/marketing/linkar-example-beauty-creator.webp",
+    alt: "A smiling woman in a linen shirt at a cafe table",
     tint: "#fff100",
-    quote: "One thoughtful reply turns a passing comment into a real conversation.",
   },
   {
-    name: "Arjun Nair",
-    role: "Growth marketer",
-    location: "Mumbai",
-    image: "/marketing/linkar-creator-arjun.webp",
-    alt: "Arjun Nair on a Mumbai terrace",
+    id: "growth-marketer",
+    who: "Growth marketer in Mumbai",
+    useCase: "Asks each new lead one question, then sends the follow-up that fits.",
+    workflow: "Lead qualification workflow",
+    href: "/features/instagram-lead-qualification",
+    image: "/marketing/linkar-example-growth-marketer.webp",
+    alt: "A man in a dark shirt on a rooftop terrace at dusk",
     tint: "#fa0cf7",
-    quote: "The right follow-up is already waiting when I open my inbox.",
   },
 ] as const;
 
-function CreatorCard({
-  creator,
+function UseCaseCard({
+  example,
   duplicate = false,
 }: {
-  creator: (typeof creatorExamples)[number];
+  example: (typeof useCaseExamples)[number];
   duplicate?: boolean;
 }) {
+  // The marquee repeats every card once so the strip can loop. The copy is
+  // hidden from assistive technology and must not add a second set of
+  // headings, a second article or a second focusable link, so it is a plain
+  // div with a paragraph where the original has its heading, and its footer
+  // is text drawn exactly like the original's link so the loop stays seamless.
+  const Card = duplicate ? "div" : "article";
+  const Title = duplicate ? "p" : "h3";
+  const titleId = duplicate ? undefined : `proof-${example.id}-title`;
+  const footer = (
+    <>
+      {example.workflow} <span aria-hidden="true">→</span>
+    </>
+  );
+
   return (
-    <article
+    <Card
       className={styles.example}
-      aria-label={`${creator.name}, ${creator.role.toLowerCase()}`}
+      aria-labelledby={titleId}
       data-proof-card={!duplicate || undefined}
     >
       <div
         className={styles.portraitFrame}
         data-proof-portrait
-        style={{ "--proof-tint": creator.tint } as CSSProperties}
+        style={{ "--proof-tint": example.tint } as CSSProperties}
       >
         <Image
           className={styles.portrait}
-          src={creator.image}
-          alt={creator.alt}
+          src={example.image}
+          alt={duplicate ? "" : example.alt}
           width={136}
           height={136}
           sizes="68px"
@@ -53,27 +77,31 @@ function CreatorCard({
       </div>
       <div className={styles.body}>
         <div className={styles.identity}>
-          <p className={styles.name}>{creator.name}</p>
-          <p className={styles.meta}>{creator.role} · {creator.location}</p>
+          <p className={styles.tag}>Example</p>
+          <Title className={styles.who} id={titleId}>{example.who}</Title>
         </div>
-        <blockquote>“{creator.quote}”</blockquote>
+        <p className={styles.useCase}>{example.useCase}</p>
         <p className={styles.exampleFooter}>
-          Creator workflow <span aria-hidden="true">→</span>
+          {duplicate ? (
+            <span className={styles.footerLink}>{footer}</span>
+          ) : (
+            <Link className={styles.footerLink} href={example.href}>{footer}</Link>
+          )}
         </p>
       </div>
-    </article>
+    </Card>
   );
 }
 
-function CreatorSet({ duplicate = false }: { duplicate?: boolean }) {
+function UseCaseSet({ duplicate = false }: { duplicate?: boolean }) {
   return (
     <div
       className={styles.trackSegment}
       data-proof-duplicate={duplicate || undefined}
       aria-hidden={duplicate || undefined}
     >
-      {creatorExamples.map((creator) => (
-        <CreatorCard key={creator.name} creator={creator} duplicate={duplicate} />
+      {useCaseExamples.map((example) => (
+        <UseCaseCard key={example.id} example={example} duplicate={duplicate} />
       ))}
     </div>
   );
@@ -96,8 +124,8 @@ export function ProofRail() {
 
         <ProofTicker>
           <div className={styles.track} data-proof-track>
-            <CreatorSet />
-            <CreatorSet duplicate />
+            <UseCaseSet />
+            <UseCaseSet duplicate />
           </div>
         </ProofTicker>
       </div>

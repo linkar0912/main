@@ -1,60 +1,351 @@
-/* Full-bleed statement photo with a centred headline and floating glass UI (Manychat usecase-03). */
+/* Statement band: a centred white line on Linkar's dark canvas, the page's automation drawn around it, three glass chips. */
 
 section.section {
   --seo-focus: #fff100;
+  --band: #101116;
+  --wire: rgb(255 255 255 / 22%);
+  --live: rgb(255 255 255 / 62%);
+  --soft: var(--seo-accent-soft, color-mix(in srgb, var(--seo-accent, #5f2ce0) 45%, #ffffff));
+  /* The glow's colour: the accent, lifted by its soft tone where it has one (navy and teal are too deep to glow). */
+  --glow: color-mix(in srgb, var(--seo-accent-soft, var(--seo-accent, #5f2ce0)) 32%, var(--seo-accent, #5f2ce0));
+  /*
+   * Wide geometry, in px from the band's edges so it never depends on the headline:
+   * the wire runs down the far left, the reply node sits on the foot, its port
+   * level with Linkar. `--node-end` comes from the page's look.
+   */
+  --trunk: clamp(44px, 4.5%, 72px);
+  --tile: 44px;
+  --node-w: 300px;
+  --node-h: 196px;
+  --node-bottom: 52px;
+  --port: 76px;
+  --port-y: calc(var(--node-bottom) + var(--node-h) - var(--port));
   display: grid;
   place-items: center;
-  min-block-size: min(88svh, 800px);
-  padding-block: clamp(140px, 13vw, 200px);
+  min-block-size: max(760px, min(88svh, 800px));
+  /* The top strip holds the requests and the foot the reply, so the headline only ever has the middle. */
+  padding-block: 216px 276px;
   overflow: clip;
   isolation: isolate;
   color: #ffffff;
-  background-color: #101116;
+  background-color: var(--band);
   text-align: center;
 }
+/* Dark theme: the page canvas is ink too, so the band lifts a step and takes a hairline edge. */
+:global([data-theme="dark"]) section.section { --band: #16171e; box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), inset 0 -1px 0 rgb(255 255 255 / 8%); }
 
-.media { position: absolute; inset: 0; z-index: -2; }
-
-/* Keeps a white headline readable on any photo: darker in the middle, softer at the edges. */
-.scrim {
+/* The page accent as light pooling under the headline, and a little behind the reply. */
+.glow {
   position: absolute;
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(ellipse 60% 52% at 50% 50%, rgb(16 17 22 / 46%) 0%, rgb(16 17 22 / 18%) 70%, rgb(16 17 22 / 0%) 100%),
-    linear-gradient(to bottom, rgb(16 17 22 / 30%), rgb(16 17 22 / 0%) 28%, rgb(16 17 22 / 0%) 72%, rgb(16 17 22 / 34%));
+    radial-gradient(ellipse 44% 46% at 50% 46%, color-mix(in srgb, var(--glow) 62%, transparent) 0%, color-mix(in srgb, var(--glow) 18%, transparent) 55%, transparent 78%),
+    radial-gradient(ellipse 26% 34% at 80% 82%, color-mix(in srgb, var(--glow) 34%, transparent) 0%, transparent 70%);
   pointer-events: none;
 }
 
-.content { position: relative; z-index: 1; display: grid; justify-items: center; inline-size: 100%; }
-
-.content > .label { color: #ffffff; background: rgb(16 17 22 / 28%); border-color: rgb(255 255 255 / 45%); backdrop-filter: blur(8px); }
-
-.content > .title {
-  max-inline-size: 1040px;
-  margin-inline: auto;
-  font-size: clamp(3rem, 6.4vw, 6.25rem);
-  line-height: .94;
-  letter-spacing: -.06em;
-  text-shadow: 0 2px 40px rgb(16 17 22 / 30%);
+/* Everything drawn sits on a stage: the band up to 1440px wide, so the scene holds together on very wide screens. */
+.stage {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: max(0px, calc((100% - 1440px) / 2));
+  z-index: 0;
+  pointer-events: none;
 }
 
-/* Glass UI: decorative, sitting on the photo around the headline. */
-.glass {
+/* Column-only pieces stay hidden on wide screens. */
+.fan, .drop, .row.narrow { display: none; }
+
+/* ---------- Wide: the wall of requests, hanging from the wire ---------- */
+
+.wall {
   position: absolute;
-  z-index: 0;
+  inset: 28px auto calc(var(--port-y) + var(--tile) / 2) var(--trunk);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+.slot { position: relative; display: flex; margin-inline-start: var(--reach); }
+/* The branch from the wire into the request; the first one turns down into the wire with a rounded corner. */
+.slot::before {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto calc(-1 * var(--reach));
+  inline-size: var(--reach);
+  border-block-start: 1.5px solid var(--wire);
+}
+.slot[data-first]::before { block-size: 14px; border-inline-start: 1.5px solid var(--wire); border-start-start-radius: 12px; }
+.slot[data-lit]::before { border-color: var(--live); border-block-start-width: 2px; }
+.slot[data-lit][data-first]::before { border-inline-start-width: 2px; }
+/* The wire itself, drawn a slot at a time: above and below each branch, lit from the lit request down. */
+.wireIn, .wireOut { position: absolute; inset-inline-start: calc(-1 * var(--reach)); border-inline-start: 1.5px solid var(--wire); }
+.wireIn { inset-block: 0 50%; }
+.wireOut { inset-block: 50% -14px; }
+.slot[data-first] > .wireIn { display: none; }
+.slot[data-first] > .wireOut { inset-block-start: calc(50% + 14px); }
+.slot[data-live] > .wireOut, .slot[data-live]:not([data-lit]) > .wireIn { border-inline-start: 2px solid var(--live); }
+/* The rest of the way down to Linkar. */
+.run { flex: 1 1 auto; align-self: stretch; border-inline-start: 2px solid var(--live); }
+
+/* Linkar to the reply node, along the foot of the band. */
+.liveWire {
+  position: absolute;
+  inset: auto calc(var(--node-end) + var(--node-w)) calc(var(--port-y) - 1px) var(--trunk);
+  border-block-start: 2px solid var(--live);
+}
+
+/* ---------- The incoming requests ---------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  inline-size: 260px;
+  padding: 9px 14px 9px 9px;
+  color: #ffffff;
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 16px;
+  opacity: var(--fade, .6);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+.rowAvatar { flex: 0 0 auto; }
+.rowAvatar[data-blank] { inline-size: 28px; block-size: 28px; background: rgb(255 255 255 / 16%); border-radius: 50%; }
+/* A Story reply: the avatar wears the Story ring. */
+.row[data-context="story"] .rowAvatar { box-shadow: 0 0 0 2px var(--band), 0 0 0 3.5px #f58529; }
+/* A Page comment: Facebook's rounder grey bubble. */
+.row[data-context="page"] { border-radius: 22px; background: rgb(255 255 255 / 10%); border-color: transparent; }
+.rowText { display: grid; flex: 1 1 auto; gap: 2px; min-inline-size: 0; line-height: 1.3; }
+.rowText > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rowText strong { color: rgb(255 255 255 / 88%); font-size: .75rem; font-weight: 700; }
+.rowText span { color: rgb(255 255 255 / 78%); font-size: .8125rem; font-weight: 600; }
+.skeleton { display: block; inline-size: 64px; block-size: 7px; margin-block: 3px 4px; background: rgb(255 255 255 / 22%); border-radius: 4px; }
+.rowMeta { flex: 0 0 auto; color: rgb(255 255 255 / 50%); }
+.unread { flex: 0 0 auto; inline-size: 8px; block-size: 8px; background: var(--soft); border-radius: 50%; }
+
+/* ---------- The reply node ---------- */
+
+.node {
+  position: absolute;
+  inset: auto var(--node-end) var(--node-bottom) auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  box-sizing: border-box;
+  inline-size: var(--node-w);
+  block-size: var(--node-h);
+  padding: 14px;
+  color: #ffffff;
+  background: rgb(255 255 255 / 7%);
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 18px;
+  opacity: .8;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+/* The port the live wire plugs into, level with the reply. */
+.node::before {
+  content: "";
+  position: absolute;
+  inset: var(--port) auto auto -7px;
+  inline-size: 13px;
+  block-size: 13px;
+  box-sizing: border-box;
+  background: var(--band);
+  border: 2.5px solid var(--live);
+  border-radius: 50%;
+  translate: 0 -50%;
+}
+.node p { margin: 0; }
+.nodeHead { display: flex; align-items: center; gap: 8px; min-inline-size: 0; }
+.nodeStep {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 26px;
+  block-size: 26px;
+  color: #101116;
+  background: rgb(255 255 255 / 85%);
+  border-radius: 50%;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: .875rem;
+  font-weight: 800;
+}
+.nodeType {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  color: #fff100;
+  background: rgb(255 241 0 / 14%);
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .6875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.nodeChannel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-inline-size: 0;
+  margin-inline-start: auto;
+  overflow: hidden;
+  color: rgb(255 255 255 / 60%);
+  font-size: .75rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bubble {
+  justify-self: end;
+  max-inline-size: 236px;
+  padding: 9px 13px;
+  color: #ffffff;
+  background: color-mix(in srgb, var(--seo-accent, #5f2ce0) 78%, transparent);
+  border-radius: 18px 18px 6px 18px;
+  font-size: .8125rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+/* Clamped inside the padding, so a fourth line never peeks under the bubble's edge. */
+.bubble > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
+/* A Page's public reply: Facebook's grey comment bubble under the Page's name, not a sent DM. */
+.bubble[data-public] { justify-self: start; max-inline-size: 100%; background: rgb(255 255 255 / 12%); border-radius: 18px; }
+.bubble[data-public] > strong { display: block; margin-block-end: 2px; font-size: .75rem; font-weight: 700; }
+.bubble[data-public] > span { -webkit-line-clamp: 2; line-clamp: 2; }
+.action {
+  display: flex;
+  gap: 8px;
+  padding: 9px 11px;
+  color: rgb(255 255 255 / 86%);
+  border: 1px dashed rgb(255 255 255 / 30%);
+  border-radius: 12px;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.action > svg { flex: 0 0 auto; margin-block-start: 2px; color: #fff100; }
+.action > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
+.versions { display: grid; gap: 6px; }
+.version { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-inline-size: 0; }
+.version > .bubble { min-inline-size: 0; padding-block: 7px; }
+.version > .bubble > span { -webkit-line-clamp: 1; line-clamp: 1; }
+.versionTag { color: rgb(255 255 255 / 60%); font-family: var(--font-mono, ui-monospace, monospace); font-size: .6875rem; font-weight: 600; }
+.button, .next {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  padding: 9px 12px;
+  color: rgb(255 255 255 / 90%);
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 12px;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.button > svg { flex: 0 0 auto; color: var(--soft); }
+.next { background: rgb(255 255 255 / 6%); border-color: transparent; }
+.next > svg { flex: 0 0 auto; color: rgb(255 255 255 / 60%); }
+.button > span:last-child, .next > span:last-child { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nextTag {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  color: #101116;
+  background: rgb(255 255 255 / 80%);
+  border-radius: 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* ---------- Linkar, where the wires meet ---------- */
+
+.hub {
+  position: absolute;
+  inset: auto auto calc(var(--port-y) - var(--tile) / 2) calc(var(--trunk) - var(--tile) / 2);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.tile {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: var(--tile);
+  block-size: var(--tile);
+  color: #101116;
+  background: #ffffff;
+  border-radius: 13px;
+  box-shadow: 0 0 0 6px rgb(255 255 255 / 8%), 0 16px 40px rgb(0 0 0 / 35%);
+}
+
+/* ---------- Builder chrome, top right: the automation is on, and earlier requests were answered ---------- */
+
+.panel {
+  position: absolute;
+  inset: 28px max(24px, 4%) auto auto;
+  display: grid;
+  gap: 4px;
+  box-sizing: border-box;
+  inline-size: 296px;
+  padding: 8px;
+  color: rgb(255 255 255 / 80%);
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 16px;
+  opacity: .72;
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: start;
+}
+.panelHead { display: flex; align-items: center; gap: 10px; margin: 0; padding: 0 2px 6px 0; border-block-end: 1px solid rgb(255 255 255 / 10%); }
+.panelHead > span:nth-child(2) { flex: 1 1 auto; }
+.panelMark { display: inline-grid; place-items: center; inline-size: 26px; block-size: 26px; color: #101116; background: rgb(255 255 255 / 85%); border-radius: 8px; }
+.switch { position: relative; flex: 0 0 auto; inline-size: 34px; block-size: 20px; background: #0e7a55; border-radius: 999px; }
+.switch i { position: absolute; inset: 2px 2px auto auto; inline-size: 16px; block-size: 16px; background: #ffffff; border-radius: 50%; }
+.activity { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.activity li { display: flex; align-items: center; gap: 8px; min-inline-size: 0; padding: 6px 4px 4px 2px; }
+.activityName { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; color: rgb(255 255 255 / 72%); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
+.activityStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 3px 8px 3px 6px;
+  color: #c8f0dc;
+  background: rgb(14 122 85 / 30%);
+  border-radius: 999px;
+  font-size: .6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- Glass chips: the lit moment ---------- */
+
+.glass {
   display: flex;
   align-items: center;
   gap: 12px;
-  max-inline-size: min(420px, 38vw);
+  box-sizing: border-box;
   padding: 12px 18px 12px 12px;
   color: #ffffff;
-  background: rgb(255 255 255 / 16%);
-  border: 1px solid rgb(255 255 255 / 30%);
+  background: rgb(255 255 255 / 13%);
+  border: 1px solid rgb(255 255 255 / 26%);
   border-radius: 20px;
-  box-shadow: 0 22px 50px rgb(16 17 22 / 22%);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 22px 50px rgb(0 0 0 / 30%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
   font-size: .9375rem;
   line-height: 1.4;
   text-align: start;
@@ -62,13 +353,13 @@ section.section {
 .glass p { margin: 0; }
 .glass strong { font-weight: 700; }
 
-/* Offsets follow the viewport up to the 1360px frame, then hold at the frame edge, so on wide
-   screens the chips stay around the headline instead of drifting to the far corners. */
-.event { inset: 16% auto auto max(6%, calc((100% - 1360px) / 2)); transform: rotate(-2deg); }
-.outcome { inset: auto max(7%, calc((100% - 1360px) / 2)) 15% auto; padding-inline-start: 16px; transform: rotate(1.5deg); }
-.outcome svg { flex: 0 0 auto; color: #fff100; }
+/* The lit request: who asked and what they wrote, in two lines at most. It tilts about the end of its branch. */
+.event { max-inline-size: 380px; rotate: var(--tilt, -2deg); transform-origin: left center; }
+.event > :first-child { flex: 0 0 auto; }
+.event p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.quote { color: rgb(255 255 255 / 82%); }
+
 .trigger {
-  inset: auto auto 19% max(9%, calc((100% - 1360px) / 2 + 64px));
   gap: 8px;
   padding: 9px 14px;
   border-radius: 999px;
@@ -77,24 +368,160 @@ section.section {
   font-weight: 600;
   letter-spacing: .08em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
-.trigger svg { flex: 0 0 auto; color: #fff100; }
+.trigger svg, .outcome svg { flex: 0 0 auto; color: #fff100; }
+/* What happened: hanging from one of the reply node's lower corners. */
+.outcome {
+  position: absolute;
+  inset: auto calc(var(--node-end) - 20px) calc(var(--node-bottom) - 26px) auto;
+  max-inline-size: 360px;
+  padding-inline-start: 16px;
+  rotate: 1.5deg;
+}
+.outcome[data-corner="start"] { inset-inline: calc(100% - var(--node-end) - var(--node-w) - 36px) auto; rotate: -1.5deg; }
+
+/* ---------- The headline ---------- */
+
+.content { position: relative; z-index: 1; display: grid; justify-items: center; inline-size: 100%; }
+
+.content > .label { color: #ffffff; background: rgb(16 17 22 / 40%); border-color: rgb(255 255 255 / 40%); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+
+.content > .title {
+  /* Two lines at most on wide screens, and always inside the wire on the far left. */
+  max-inline-size: min(1140px, calc(100% - 180px));
+  margin-inline: auto;
+  font-size: clamp(3rem, 6.4vw, 6.25rem);
+  line-height: .94;
+  letter-spacing: -.06em;
+  text-shadow: 0 2px 40px rgb(16 17 22 / 45%);
+}
+
+/* ---------- Phones and tablets: top to bottom on a centred column ---------- */
 
 @media (max-width: 1099px) {
-  .trigger { display: none; }
+  section.section {
+    --n-node-bottom: 84px;
+    --n-node-size: 184px;
+    /* The lit request's top, Linkar's top, and where the column's wire fades out above the label. */
+    --n-top: 28px;
+    --n-hub: 200px;
+    --n-fade: 308px;
+    min-block-size: 0;
+    padding-block: 320px 340px;
+  }
+  .glow {
+    background:
+      radial-gradient(ellipse 80% 30% at 50% 50%, color-mix(in srgb, var(--glow) 58%, transparent) 0%, color-mix(in srgb, var(--glow) 16%, transparent) 60%, transparent 85%),
+      radial-gradient(ellipse 70% 20% at 50% 88%, color-mix(in srgb, var(--glow) 30%, transparent) 0%, transparent 70%);
+  }
+  .stage { inset-inline: max(0px, calc((100% - 640px) / 2)); }
+
+  /* Only the lit request stays from the wall: at the top of the column. */
+  .wall { display: contents; }
+  .slot, .run, .liveWire, .panel, .slot::before, .slot > i { display: none; }
+  .slot[data-lit] { display: flex; justify-content: center; position: absolute; inset: var(--n-top) 20px auto; margin: 0; }
+  .event { max-inline-size: min(100%, 460px); font-size: .875rem; transform-origin: center; }
+
+  /* The two other requests either side of the column, wired into Linkar from the sides. */
+  .fan { display: block; position: absolute; inset: 0 0 auto; inline-size: 100%; block-size: 200px; overflow: visible; fill: none; }
+  .fan path { stroke: var(--wire); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .stage .row.narrow { display: flex; position: absolute; inset: var(--y) auto auto 46.5%; translate: -100% -50%; inline-size: clamp(144px, 43%, 264px); padding-inline-end: 10px; }
+  .stage .row.narrow[data-column="end"] { inset-inline-start: 53.5%; translate: 0 -50%; }
+
+  /*
+   * The wire down the column, drawn in pieces so it never runs behind a chip's
+   * words: from under the lit request into Linkar, across the gap to the
+   * trigger, and out under the trigger, fading before the label.
+   */
+  .slot[data-lit]::after, .tile::after, .hub::after {
+    content: "";
+    position: absolute;
+    inset: 100% auto auto 50%;
+    inline-size: 2px;
+    background: var(--live);
+    translate: -50% 0;
+  }
+  .slot[data-lit]::after { block-size: calc(var(--n-hub) - var(--n-top) - 100%); }
+  .tile { position: relative; }
+  .tile::after { block-size: 12px; }
+  .hub::after { block-size: calc(var(--n-fade) - var(--n-hub) - 100%); background: linear-gradient(to bottom, var(--live), transparent); }
+  /* It comes back just above the reply node, well clear of the headline. */
+  .drop {
+    display: block;
+    position: absolute;
+    inset: auto auto calc(var(--n-node-bottom) + var(--n-node-size)) 50%;
+    inline-size: 2px;
+    block-size: 40px;
+    background: linear-gradient(to bottom, transparent, var(--live) 28px);
+    translate: -50% 0;
+  }
+
+  /* Linkar on the column's wire, the trigger it caught underneath. */
+  .hub {
+    inset: var(--n-hub) auto auto 50%;
+    translate: -50% 0;
+    flex-direction: column;
+    gap: 12px;
+    inline-size: max-content;
+    max-inline-size: calc(100% - 40px);
+  }
+  .trigger { max-inline-size: 100%; letter-spacing: .05em; white-space: normal; }
+
+  .node {
+    --port: 0px;
+    inset: auto auto var(--n-node-bottom) 50%;
+    translate: -50% 0;
+    inline-size: min(300px, calc(100% - 40px));
+    block-size: var(--n-node-size);
+  }
+  .node::before { inset: -7px auto auto 50%; translate: -50% 0; }
+
+  .glass { font-size: .875rem; }
+  .outcome, .outcome[data-corner="start"] { inset: auto max(20px, calc(50% - 168px)) calc(var(--n-node-bottom) - 34px) auto; max-inline-size: calc(100% - 40px); }
+  .outcome[data-corner="start"] { inset-inline: max(20px, calc(50% - 168px)) auto; }
+  .content > .title { max-inline-size: 1040px; font-size: clamp(2.5rem, 7.4vw, 4.25rem); }
 }
 
-/* Phones: the two glass cards stack above the headline like a short thread, clear of the text
-   and of the slot icon in the top-right corner. */
 @media (max-width: 767px) {
-  section.section { min-block-size: 0; padding-block: 184px 112px; }
-  .glass { max-inline-size: calc(100% - 92px); font-size: .875rem; }
-  .event { inset: 28px auto auto 20px; }
-  .outcome { inset: 94px 20px auto auto; }
   /* 40px at 320, 45px at 360, the usual 48px from 384px: the longest word fits the 280px column. */
   .content > .title { font-size: clamp(2.5rem, 12.5vw, 3rem); }
+  /* A tighter Linkar row, so the longest trigger stays on one line at 390px. */
+  .tile { inline-size: 40px; block-size: 40px; border-radius: 12px; }
+  .trigger { padding: 8px 12px; font-size: .6875rem; letter-spacing: .04em; }
 }
 
+/*
+ * Phones: half a column is too narrow for a request to say anything, so the
+ * two requests stack on the wire instead, nearly the full width and offset to
+ * either side. They are solid, so the wire passes behind them.
+ */
+@media (max-width: 479px) {
+  section.section { --n-top: 24px; --n-hub: 216px; --n-fade: 320px; padding-block: 334px 340px; }
+  .event { padding: 10px 14px 10px 10px; gap: 10px; font-size: .8125rem; }
+  .fan { display: none; }
+  .stage .row.narrow,
+  .stage .row.narrow[data-column="end"] {
+    inset: 100px auto auto 20px;
+    translate: none;
+    inline-size: min(calc(100% - 64px), 300px);
+    background: color-mix(in srgb, var(--band) 90%, #ffffff);
+    border-color: rgb(255 255 255 / 10%);
+    opacity: 1;
+    /* Over the wire, which the lit request draws after them. */
+    z-index: 1;
+  }
+  .stage .row.narrow[data-column="end"] { inset-inline: auto 20px; }
+  .stage .row.narrow[data-high="false"] { inset-block-start: 156px; }
+  .stage .row.narrow[data-high="false"] .rowText > * { color: rgb(255 255 255 / 58%); }
+  .stage .row.narrow .rowText > * { color: rgb(255 255 255 / 72%); }
+
+  /* A long page label wraps as a centred badge, not a ragged box. */
+  .content > .label { justify-content: center; font-size: .6875rem; letter-spacing: .05em; text-align: center; text-wrap: balance; }
+}
+
+/* Without the blur the chips go solid, so a wire behind one never shows through its words. */
 @media (prefers-reduced-transparency: reduce) {
-  .glass, .content > .label { background: rgb(16 17 22 / 72%); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .glass { background: color-mix(in srgb, var(--band) 86%, #ffffff); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .content > .label { background: rgb(16 17 22 / 82%); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }

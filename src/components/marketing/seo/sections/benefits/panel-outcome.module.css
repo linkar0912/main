@@ -1,0 +1,170 @@
+/* Outcomes for the large benefit panels: the apps' light UI, fixed white and ink in both site themes. Drawn for a 300 to 330px stage. */
+.outcome {
+  --o-ink: #101116;
+  --o-muted: #6b6c75;
+  --o-line: rgb(16 17 22 / 9%);
+  --o-shadow: 0 14px 34px rgb(16 17 22 / 14%);
+  container: panel-outcome / inline-size;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  inline-size: 100%;
+  color: var(--o-ink);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+
+/* ---------- Link card: the page's cover, its address and an Open button ---------- */
+.link { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; inline-size: 100%; padding: 8px; background: #ffffff; border-radius: 20px; box-shadow: var(--o-shadow); }
+.cover {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: space-between;
+  gap: 18px;
+  min-block-size: 136px;
+  padding: 14px 14px 16px;
+  overflow: hidden;
+  color: var(--seo-on-accent, #ffffff);
+  background: var(--seo-accent, #5f2ce0);
+  border-radius: 14px;
+  isolation: isolate;
+}
+/* Two soft rings in the corner: a designed cover, not a placeholder. */
+.cover::before, .cover::after { position: absolute; z-index: -1; content: ""; border-radius: 50%; }
+.cover::before { inset: auto -44px -64px auto; inline-size: 168px; block-size: 168px; background: rgb(255 255 255 / 12%); }
+.cover::after { inset: -38px -38px auto auto; inline-size: 104px; block-size: 104px; border: 16px solid rgb(255 255 255 / 10%); }
+.brand { display: flex; align-items: center; gap: 7px; margin: 0; font-size: .75rem; font-weight: 700; line-height: 1.2; }
+.brand > :first-child { box-shadow: 0 0 0 2px rgb(255 255 255 / 85%); }
+.coverTitle {
+  max-inline-size: 13ch;
+  margin: 0;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: .98;
+  letter-spacing: -.045em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.sections { display: flex; flex-wrap: wrap; gap: 5px; margin: -6px 0 0; }
+.sections span { padding: 4px 9px; color: var(--o-ink); background: rgb(255 255 255 / 92%); border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.linkFoot { display: flex; align-items: center; gap: 8px; margin: 0; padding: 6px 2px 0 6px; color: var(--o-muted); font-size: .75rem; font-weight: 600; line-height: 1.3; }
+.path { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open { flex: 0 0 auto; padding: 6px 12px; color: #ffffff; background: var(--o-ink); border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; }
+.tag { position: absolute; inset: -12px -8px auto auto; z-index: 1; padding: 6px 11px; background: #fff100; border-radius: 999px; box-shadow: 0 10px 22px rgb(16 17 22 / 20%); font-size: .75rem; font-weight: 700; line-height: 1.2; rotate: 3deg; }
+/* On an accent panel the cover takes the accent's light tint, so the white card reads as a card and not as a frame round the panel. */
+.outcome[data-surface="accent"] .cover { color: var(--o-ink); background: var(--seo-accent-tint, color-mix(in srgb, var(--seo-accent, #5f2ce0) 16%, #ffffff)); }
+.outcome[data-surface="accent"] .cover::before { background: color-mix(in srgb, var(--seo-accent, #5f2ce0) 14%, transparent); }
+.outcome[data-surface="accent"] .cover::after { border-color: color-mix(in srgb, var(--seo-accent, #5f2ce0) 12%, transparent); }
+.outcome[data-surface="accent"] .brand > :first-child { box-shadow: 0 0 0 2px #ffffff; }
+.outcome[data-surface="accent"] .coverTitle { color: var(--seo-accent, #5f2ce0); }
+.outcome[data-surface="accent"] .sections span { background: #ffffff; box-shadow: 0 1px 3px rgb(16 17 22 / 10%); }
+
+/* A reply with no page behind it: the builder's next-step node. */
+.nextStep { inline-size: 100%; }
+
+/* ---------- Routes: one row per word, each with its own destination ---------- */
+/* --wrapped: the route line with its destination on a second line, under the word. */
+.routes { --wrapped: "w w" "a d" / auto minmax(0, 1fr); display: grid; grid-template-columns: minmax(0, 1fr); inline-size: 100%; padding: 4px 12px; color: var(--o-ink); background: #ffffff; border-radius: 18px; box-shadow: var(--o-shadow); }
+.routesHead { display: flex; align-items: center; gap: 9px; margin: 0 -12px; padding: 9px 12px 11px; border-bottom: 1px solid var(--o-line); font-size: .8125rem; font-weight: 700; line-height: 1.3; }
+.mark { display: inline-grid; place-items: center; flex: 0 0 auto; inline-size: 22px; block-size: 22px; color: #ffffff; background: var(--o-ink); border-radius: 7px; }
+.route { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 8px; padding-block: 11px; }
+.route + .route { border-top: 1px solid var(--o-line); }
+.thumb { display: grid; place-items: center; inline-size: 30px; block-size: 30px; color: var(--o-ink); background: #e4d4ff; border-radius: 10px; }
+.route[data-at="1"] .thumb { background: #cfe8ff; }
+.route[data-at="2"] .thumb { background: #ffd6fb; }
+.routeBody { display: grid; gap: 5px; min-inline-size: 0; }
+.routeBody small { overflow: hidden; color: var(--o-muted); font-size: .75rem; font-weight: 600; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+/* Word, arrow and destination on one line; the destination truncates rather than wrapping on its own. */
+.routeLine { display: grid; grid-template: "w a d" / auto auto minmax(0, 1fr); align-items: center; gap: 6px 8px; }
+.word { grid-area: w; justify-self: start; max-inline-size: 12.5em; overflow: hidden; padding: 3px 8px; color: #ffffff; background: var(--o-ink); border-radius: 6px; font-family: var(--font-mono, ui-monospace, monospace); font-size: .75rem; font-weight: 600; line-height: 1.2; letter-spacing: .04em; text-overflow: ellipsis; white-space: nowrap; }
+.routeArrow { grid-area: a; color: var(--o-muted); }
+.destination { grid-area: d; display: inline-flex; align-items: center; justify-self: start; gap: 5px; max-inline-size: 100%; min-inline-size: 0; padding: 5px 10px; background: #f4f4f6; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; }
+.destination > span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.destination > svg { color: var(--seo-accent, #5f2ce0); }
+.route[data-to="team"] .destination { background: #f1eaff; }
+.route[data-to="quiet"] .thumb { color: var(--o-muted); background: #f1f1f4; }
+.route[data-to="quiet"] .word { color: var(--o-ink); background: #e9e9ee; }
+.route[data-to="quiet"] .destination { color: var(--o-muted); background: #ffffff; box-shadow: inset 0 0 0 1px rgb(16 17 22 / 14%); }
+.quietDash { display: block; flex: 0 0 auto; inline-size: 9px; block-size: 2px; background: currentColor; border-radius: 2px; }
+/* Too narrow for the card's longest line (data-need: its width in px, rounded up to 4px, from panel-outcome.tsx):
+   every row puts its destination on a second line, so the rows still match. The card's own chrome takes 62px. */
+.routes[data-need="all"] .routeLine { grid-template: var(--wrapped); }
+@container panel-outcome (width < 210px) { .routes[data-need="148"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 214px) { .routes[data-need="152"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 218px) { .routes[data-need="156"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 222px) { .routes[data-need="160"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 226px) { .routes[data-need="164"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 230px) { .routes[data-need="168"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 234px) { .routes[data-need="172"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 238px) { .routes[data-need="176"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 242px) { .routes[data-need="180"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 246px) { .routes[data-need="184"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 250px) { .routes[data-need="188"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 254px) { .routes[data-need="192"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 258px) { .routes[data-need="196"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 262px) { .routes[data-need="200"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 266px) { .routes[data-need="204"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 270px) { .routes[data-need="208"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 274px) { .routes[data-need="212"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 278px) { .routes[data-need="216"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 282px) { .routes[data-need="220"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 286px) { .routes[data-need="224"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 290px) { .routes[data-need="228"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 294px) { .routes[data-need="232"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 298px) { .routes[data-need="236"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 302px) { .routes[data-need="240"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 306px) { .routes[data-need="244"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 310px) { .routes[data-need="248"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 314px) { .routes[data-need="252"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 318px) { .routes[data-need="256"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 322px) { .routes[data-need="260"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 326px) { .routes[data-need="264"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 330px) { .routes[data-need="268"] .routeLine { grid-template: var(--wrapped); } }
+@container panel-outcome (width < 334px) { .routes[data-need="272"] .routeLine { grid-template: var(--wrapped); } }
+
+/* ---------- Lock screen: the newest notification, two older ones peeking out below it ---------- */
+.lock {
+  display: grid;
+  justify-items: center;
+  inline-size: 100%;
+  padding: 18px 14px 20px;
+  color: #ffffff;
+  background:
+    radial-gradient(120% 80% at 20% 0%, color-mix(in srgb, var(--seo-accent, #5f2ce0) 70%, transparent), transparent 70%),
+    linear-gradient(170deg, color-mix(in srgb, var(--seo-accent, #5f2ce0) 45%, #101116) 0%, #101116 90%);
+  border-radius: 24px;
+  box-shadow: var(--o-shadow);
+}
+.lockTime { margin: 0; font-family: var(--font-display, ui-sans-serif, sans-serif); font-size: 2.75rem; font-weight: 700; line-height: 1; letter-spacing: -.03em; }
+.lockDate { margin: 4px 0 18px; color: rgb(255 255 255 / 82%); font-size: .75rem; font-weight: 600; line-height: 1.3; }
+.lockStack { display: grid; justify-items: center; inline-size: 100%; }
+.lockStack > .lockNote { position: relative; z-index: 1; inline-size: 100%; background: rgb(255 255 255 / 16%); border-color: rgb(255 255 255 / 22%); }
+.lockLayer { display: block; inline-size: 90%; block-size: 8px; background: rgb(255 255 255 / 13%); border-radius: 0 0 14px 14px; }
+.lockLayer + .lockLayer { inline-size: 80%; block-size: 7px; background: rgb(255 255 255 / 7%); }
+
+/* ---------- Banner: the same arrival with no phone around it ---------- */
+.banner { display: grid; justify-items: center; inline-size: 100%; }
+/* The top and side padding keep the app tile and the time clear of an icon tile pinned to the card's corner. */
+.bannerCard { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 11px; inline-size: 100%; padding: 18px 18px 14px; background: #ffffff; border-radius: 20px; box-shadow: var(--o-shadow); }
+.appTile { display: inline-grid; place-items: center; flex: 0 0 auto; inline-size: 34px; block-size: 34px; color: #ffffff; border-radius: 9px; font-size: 1rem; font-weight: 800; }
+.appTile[data-app="instagram"] { background: linear-gradient(140deg, #6d28f5 0%, #d6249f 55%, #fd8f3a 100%); }
+.appTile[data-app="facebook"] { background: #1f4fd1; }
+.bannerBody { display: grid; flex: 1; gap: 2px; min-inline-size: 0; font-size: .8125rem; line-height: 1.35; }
+.bannerMeta { display: flex; justify-content: space-between; gap: 10px; color: var(--o-muted); font-size: .75rem; font-weight: 600; }
+.bannerMeta b { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.bannerBody strong { font-size: .875rem; font-weight: 700; overflow-wrap: anywhere; }
+.bannerBody > span:last-child { color: #3a3b44; font-weight: 500; overflow-wrap: anywhere; }
+.bannerLayer { display: block; inline-size: 92%; block-size: 9px; background: rgb(255 255 255 / 70%); border-radius: 0 0 16px 16px; box-shadow: 0 8px 18px rgb(16 17 22 / 10%); }
+.bannerLayer + .bannerLayer { inline-size: 82%; block-size: 8px; background: rgb(255 255 255 / 45%); }
+
+/* ---------- A linked page, attached under the notification ---------- */
+.attach { position: relative; z-index: 1; display: grid; gap: 10px; inline-size: 100%; margin-block-start: 8px; padding: 10px 12px 12px; color: var(--o-ink); background: #ffffff; border-radius: 16px; box-shadow: var(--o-shadow); }
+.attachHead { display: flex; align-items: center; gap: 10px; min-inline-size: 0; margin: 0; }
+.attachTile { display: grid; place-items: center; flex: 0 0 auto; inline-size: 34px; block-size: 34px; color: var(--seo-on-accent, #ffffff); background: var(--seo-accent, #5f2ce0); border-radius: 10px; }
+.attachText { display: grid; gap: 1px; min-inline-size: 0; line-height: 1.3; }
+.attachText strong { overflow: hidden; font-size: .875rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.attachText span { overflow: hidden; color: var(--o-muted); font-size: .75rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.attachTags { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; }
+.attachTags span { padding: 4px 9px; background: #f1f1f4; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }

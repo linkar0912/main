@@ -38,8 +38,11 @@ const setupSteps: readonly SetupStep[] = [
  * Setup happens in Linkar, not on Instagram, so these three previews are
  * fragments of the app's own screens - the Settings connection card, the
  * builder's trigger step, the automations list with its live toggle. Someone who
- * has used the product should recognize each one; someone who has not should be
- * able to tell what the step will actually look like.
+ * has used the product should recognise each one; someone who has not should be
+ * able to tell what the step will actually look like. The figures in them are
+ * sample data: each caption says so, the status row's numbers carry a visible
+ * "Sample" tag, and the mocks are data-nosnippet so search results never quote
+ * them as results.
  */
 
 function ChevronIcon() {
@@ -149,6 +152,7 @@ function PublishPreview() {
       <div className={styles.statRow}>
         <span><strong>1,284</strong>replies sent</span>
         <span><strong>0</strong>failed</span>
+        <small className={styles.sampleTag} data-sample-tag>Sample</small>
         <span className={styles.statusPill} data-live="true">
           <i className={styles.liveDot} />
           On
@@ -174,8 +178,12 @@ function SetupIllustration({ step }: { step: SetupStep }) {
 
   return (
     <figure className={`${styles.illustration} ${styles[step.id]}`} aria-label={label}>
-      <div aria-hidden="true"><Preview /></div>
-      <figcaption><span aria-hidden="true" />{step.status}</figcaption>
+      <div aria-hidden="true" data-nosnippet><Preview /></div>
+      <figcaption>
+        <span className={styles.captionDot} aria-hidden="true" />
+        {step.status}
+        <span className={styles.srOnly}>. Sample data.</span>
+      </figcaption>
     </figure>
   );
 }

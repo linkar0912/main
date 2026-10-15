@@ -8,7 +8,9 @@ import styles from "./insights-showcase.module.css";
  * day chart, the lifecycle counts, and the tracked-link attribution are all real
  * surfaces. The figures are sample data, the same way the builder and automation
  * previews elsewhere on the page carry sample data; nothing here is presented as
- * a customer result.
+ * a customer result. The panel says so twice: a visible "Sample" tag beside the
+ * date range, and "Sample data" at the start of the caption. The mock itself is
+ * marked data-nosnippet so search results never quote its numbers as facts.
  */
 
 /** Fourteen days of sent/reached pairs. Fixed values - a marketing page must render identically every time. */
@@ -67,45 +69,51 @@ export function InsightsShowcase() {
 
       <div className={styles.layout}>
         <Reveal as="figure" className={styles.panel} aria-label="Linkar insights preview" data-reduced-motion-state="visible">
-          <div className={styles.panelHead}>
-            <span className={styles.panelLabel}>Last 14 days</span>
-            <span className={styles.legend}>
-              <span className={styles.legendItem} data-series="sent"><i />Replies sent</span>
-              <span className={styles.legendItem} data-series="reached"><i />People reached</span>
-            </span>
-          </div>
-
-          <div className={styles.chart} aria-hidden="true">
-            {days.map((point) => (
-              <span className={styles.column} key={point.day}>
-                <span className={styles.bars}>
-                  <span className={styles.bar} data-series="reached" style={{ blockSize: `${Math.round((point.reached / peak) * 100)}%` }} />
-                  <span className={styles.bar} data-series="sent" style={{ blockSize: `${Math.round((point.sent / peak) * 100)}%` }} />
-                </span>
-                <small>{point.day}</small>
+          <div className={styles.panelBody} data-nosnippet data-insights-mock>
+            <div className={styles.panelHead}>
+              <span className={styles.panelMeta}>
+                <span className={styles.panelLabel}>Last 14 days</span>
+                <span className={styles.sampleTag} data-sample-tag>Sample</span>
               </span>
-            ))}
-          </div>
+              <span className={styles.legend}>
+                <span className={styles.legendItem} data-series="sent"><i />Replies sent</span>
+                <span className={styles.legendItem} data-series="reached"><i />People reached</span>
+              </span>
+            </div>
 
-          <dl className={styles.funnel}>
-            {funnel.map((step) => (
-              <div className={styles.funnelStep} key={step.label}>
-                <dt>{step.label}</dt>
-                <dd>{step.value}</dd>
-              </div>
-            ))}
-          </dl>
+            <div className={styles.chart} aria-hidden="true">
+              {days.map((point) => (
+                <span className={styles.column} key={point.day}>
+                  <span className={styles.bars}>
+                    <span className={styles.bar} data-series="reached" style={{ blockSize: `${Math.round((point.reached / peak) * 100)}%` }} />
+                    <span className={styles.bar} data-series="sent" style={{ blockSize: `${Math.round((point.sent / peak) * 100)}%` }} />
+                  </span>
+                  <small>{point.day}</small>
+                </span>
+              ))}
+            </div>
 
-          <div className={styles.linkRow}>
-            <span className={styles.linkSlug}>linkar.in/r/guide</span>
-            <span className={styles.linkStat}><strong>1,284</strong> taps</span>
-            <span className={styles.linkStat}><strong>1,012</strong> unique</span>
-            <span className={styles.linkAttribution}>Lead magnet from comments</span>
+            <dl className={styles.funnel}>
+              {funnel.map((step) => (
+                <div className={styles.funnelStep} key={step.label}>
+                  <dt>{step.label}</dt>
+                  <dd>{step.value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className={styles.linkRow}>
+              <span className={styles.linkSlug}>linkar.in/r/guide</span>
+              <span className={styles.linkStat}><strong>1,284</strong> taps</span>
+              <span className={styles.linkStat}><strong>1,012</strong> unique</span>
+              <span className={styles.linkAttribution}>Lead magnet from comments</span>
+            </div>
           </div>
 
           <figcaption className={styles.srOnly}>
-            A Linkar insights panel: a fourteen-day chart of replies sent and people reached, participant
-            counts by lifecycle state, and a tracked link with its tap count attributed to an automation.
+            Sample data. A Linkar insights panel: a fourteen-day chart of replies sent and people reached,
+            participant counts by lifecycle state, and a tracked link with its tap count attributed to an
+            automation.
           </figcaption>
         </Reveal>
 

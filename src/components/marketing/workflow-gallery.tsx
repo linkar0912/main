@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { workflowItems, type WorkflowItem } from "./marketing-content";
 import styles from "./workflow-gallery.module.css";
@@ -119,6 +120,32 @@ function BuilderPreview({ workflow }: { workflow: WorkflowItem }) {
   );
 }
 
+/**
+ * The recipe each example comes from, under the preview inside the panel the
+ * tab controls. The leaving panel is an aria-hidden copy that fades out, so it
+ * draws the same line as plain text: the two panels keep the same geometry
+ * while they cross, and the copy never adds a second focusable link. The last
+ * word and the arrow share a no-wrap span so the arrow never wraps on its own.
+ */
+function TemplateLink({ workflow, copy = false }: { workflow: WorkflowItem; copy?: boolean }) {
+  const split = workflow.linkLabel.lastIndexOf(" ") + 1;
+  const label = (
+    <>
+      {workflow.linkLabel.slice(0, split)}
+      <span className={styles.linkTail}>
+        {workflow.linkLabel.slice(split)}
+        <span className={styles.arrow} aria-hidden="true">&#8594;</span>
+      </span>
+    </>
+  );
+  if (copy) return <span className={styles.templateLink}>{label}</span>;
+  return (
+    <Link className={styles.templateLink} href={workflow.href} data-workflow-template>
+      {label}
+    </Link>
+  );
+}
+
 export function WorkflowGallery() {
   const [activeId, setActiveId] = useState(workflowItems[0].id);
   const [leavingWorkflow, setLeavingWorkflow] = useState<WorkflowItem | null>(null);
@@ -213,6 +240,7 @@ export function WorkflowGallery() {
               }}
             >
               <BuilderPreview workflow={leavingWorkflow} />
+              <TemplateLink workflow={leavingWorkflow} copy />
             </div>
           ) : null}
           {workflowItems.map((workflow) => (
@@ -225,6 +253,7 @@ export function WorkflowGallery() {
               hidden={workflow.id !== activeId}
             >
               <BuilderPreview workflow={workflow} />
+              <TemplateLink workflow={workflow} />
             </div>
           ))}
         </div>
@@ -254,6 +283,7 @@ export function WorkflowGallery() {
               <div id={contentId} className={styles.accordionPanel} aria-labelledby={triggerId} hidden={!isActive}>
                 <p>{workflow.body}</p>
                 <BuilderPreview workflow={workflow} />
+                <TemplateLink workflow={workflow} />
               </div>
             </section>
           );

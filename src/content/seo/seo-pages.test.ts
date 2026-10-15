@@ -1,11 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getRelatedSeoPages, getSeoPage, getSeoPages, seoCollections, seoPages, seoPagePath, seoRecipeMarkdown, type SeoPage } from "./index";
+import { SEO_CONTENT_UPDATED, getRelatedSeoPages, getSeoPage, getSeoPages, seoCollections, seoPages, seoPagePath, seoRecipeMarkdown, type SeoPage } from "./index";
 import { seoCollectionMetadata, seoCollectionStructuredData, seoHeroImage, seoPageMetadata, seoStructuredData } from "@/src/lib/seo-pages";
 import { seoHeroAsset } from "@/src/lib/seo-hero-assets";
 import { isProtectedAppPath, marketingHref, resolveHostRedirect } from "@/src/lib/site-routing";
 import sitemap from "@/app/sitemap";
+import featuresSitemap from "@/app/features/sitemap";
+import solutionsSitemap from "@/app/solutions/sitemap";
+import templatesSitemap from "@/app/templates/sitemap";
 import { GET } from "@/app/templates/[slug]/recipe/route";
 
 function editorialText(page: SeoPage) {
@@ -49,6 +52,21 @@ describe("public SEO catalogue", () => {
     }
   });
 
+  it("says auto DM and private reply on the comment to DM guide, in a full-length description", () => {
+    const page = getSeoPage("features", "instagram-comment-to-dm")!;
+    expect(page.description.length).toBeGreaterThanOrEqual(150);
+    expect(page.description.length).toBeLessThanOrEqual(160);
+    for (const text of [page.description, page.intro]) {
+      expect(text).toMatch(/\bauto DM\b/i);
+      expect(text).toMatch(/\bprivate reply\b/);
+    }
+  });
+
+  it("dates the catalogue with one ISO day", () => {
+    expect(SEO_CONTENT_UPDATED).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(new Date(`${SEO_CONTENT_UPDATED}T00:00:00Z`).toISOString().slice(0, 10)).toBe(SEO_CONTENT_UPDATED);
+  });
+
   it("has contextual internal links and valid local hero assets for every guide", () => {
     for (const page of seoPages) {
       const related = getRelatedSeoPages(page);
@@ -87,16 +105,42 @@ describe("public SEO catalogue", () => {
     const urls = entries.map(({ url }) => url);
     expect(new Set(urls).size).toBe(urls.length);
     for (const page of seoPages) {
-      expect(entries.find(({ url }) => url === `https://linkar.in${seoPagePath(page)}`)).toMatchObject({ lastModified: "2026-10-13" });
+      expect(entries.find(({ url }) => url === `https://linkar.in${seoPagePath(page)}`)).toMatchObject({
+        lastModified: SEO_CONTENT_UPDATED,
+        images: [`https://linkar.in${seoHeroAsset(page).src}`],
+      });
     }
-    for (const collection of Object.keys(seoCollections)) expect(urls).toContain(`https://linkar.in/${collection}`);
-    expect(urls.some((url) => url.endsWith("/recipe"))).toBe(false);
+    for (const collection of Object.keys(seoCollections) as Array<keyof typeof seoCollections>) {
+      expect(entries.find(({ url }) => url === `https://linkar.in/${collection}`)).toMatchObject({ images: [`https://linkar.in${seoHeroAsset({ collection }).src}`] });
+    }
+    expect(urls.some((url) => url.includes("/recipe"))).toBe(false);
     for (const collection of ["features", "solutions", "templates"] as const) {
       expect(seoCollectionMetadata(collection).alternates?.canonical).toBe(`/${collection}`);
       const data = seoCollectionStructuredData(collection);
       expect(data[0]).toMatchObject({ "@type": "CollectionPage" });
       expect(data[0].mainEntity?.itemListElement).toHaveLength(getSeoPages(collection).length);
       expect(data[1]).toMatchObject({ "@type": "BreadcrumbList" });
+    }
+  });
+
+  it("splits the catalogue into one sitemap per collection, each page once with its hero image", () => {
+    vi.stubEnv("PUBLIC_SITE_URL", "https://linkar.in");
+    const nested = { features: featuresSitemap, solutions: solutionsSitemap, templates: templatesSitemap };
+    expect(Object.keys(nested)).toEqual(Object.keys(seoCollections));
+    for (const [collection, build] of Object.entries(nested) as Array<[keyof typeof nested, () => ReturnType<typeof sitemap>]>) {
+      const entries = build();
+      const urls = entries.map(({ url }) => url);
+      const expected = [`/${collection}`, ...getSeoPages(collection).map(seoPagePath)].map((path) => `https://linkar.in${path}`);
+      expect(urls).toHaveLength(expected.length);
+      for (const url of expected) expect(urls.filter((candidate) => candidate === url), url).toHaveLength(1);
+      expect(urls.some((url) => url.includes("/recipe"))).toBe(false);
+      for (const entry of entries) {
+        const path = entry.url.slice("https://linkar.in".length);
+        const slug = path.split("/")[2];
+        const asset = seoHeroAsset(slug ? { collection, slug } : { collection });
+        expect(entry, path).toMatchObject({ lastModified: SEO_CONTENT_UPDATED, images: [`https://linkar.in${asset.src}`] });
+        expect(existsSync(`public${asset.src}`), asset.src).toBe(true);
+      }
     }
   });
 
@@ -128,6 +172,7 @@ describe("public SEO catalogue", () => {
 
 describe("downloadable workflow recipes", () => {
   it("returns each exact recipe with safe download headers and no search indexing", async () => {
+    vi.stubEnv("PUBLIC_SITE_URL", "https://linkar.in");
     for (const page of getSeoPages("templates")) {
       const response = await GET(new Request("http://localhost"), { params: Promise.resolve({ slug: page.slug }) });
       expect(response.status).toBe(200);
@@ -138,7 +183,16 @@ describe("downloadable workflow recipes", () => {
       expect(text).toContain(page.example.reply);
       expect(text).toContain(page.steps[0][1]);
       expect(text).toContain(page.topic === "facebook" ? "public comment replies" : "Instagram");
+      // The last line credits the page a shared copy came from.
+      expect(text.trimEnd().split("\n").at(-1)).toBe(`Source: Linkar template library, https://linkar.in/templates/${page.slug}`);
     }
+  });
+
+  it("builds the recipe source line from the site origin", () => {
+    const page = getSeoPages("templates")[0];
+    vi.stubEnv("PUBLIC_SITE_URL", "https://preview.linkar.in/ignored/path");
+    expect(seoRecipeMarkdown(page)).toMatch(new RegExp(`\\nSource: Linkar template library, https://preview\\.linkar\\.in/templates/${page.slug}\\n$`));
+    expect(seoRecipeMarkdown(page, "http://localhost:3000")).toContain(`Source: Linkar template library, http://localhost:3000/templates/${page.slug}\n`);
   });
 
   it("rejects unknown or cross-collection download names", async () => {

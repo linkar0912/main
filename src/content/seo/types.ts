@@ -21,7 +21,8 @@ export type SeoPage = {
 
 export type SeoPageInput = Omit<SeoPage, "collection">;
 
-export const SEO_CONTENT_UPDATED = "2026-10-13";
+/** The date the catalogue copy last changed: the sitemap lastmod and every page's dateModified. */
+export const SEO_CONTENT_UPDATED = "2026-10-15";
 export const SEO_HERO_IMAGE = "/marketing/linkar-hero-indian-relaxed.webp";
 
 export function seoPagePath(page: Pick<SeoPage, "collection" | "slug">): string {

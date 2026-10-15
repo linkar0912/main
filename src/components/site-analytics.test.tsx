@@ -178,6 +178,37 @@ describe("SiteAnalytics", () => {
     expect(container.querySelector("[data-page-views]")?.getAttribute("data-page-views")).toBe("false");
   });
 
+  it("loads on an SEO catalogue guide and keeps page views on across the catalogue", () => {
+    window.history.replaceState(null, "", "/features/instagram-comment-to-dm");
+    navigation.pathname = "/features/instagram-comment-to-dm";
+    const { container, rerender } = render(<SiteAnalytics measurementId={ID} />);
+    expect(loaderScripts(container)).toHaveLength(1);
+    expect(container.querySelector("[data-page-views]")?.getAttribute("data-page-views")).toBe("true");
+
+    // Client-side navigation to a hub and to a guide in another collection.
+    for (const path of ["/features", "/templates/comment-guide-delivery", "/solutions"]) {
+      navigation.pathname = path;
+      rerender(<SiteAnalytics measurementId={ID} />);
+      expect(container.querySelector("[data-page-views]")?.getAttribute("data-page-views"), path).toBe("true");
+      expect(window[`ga-disable-${ID}`], path).toBe(false);
+    }
+  });
+
+  it("loads on an SEO catalogue hub", () => {
+    window.history.replaceState(null, "", "/templates");
+    navigation.pathname = "/templates";
+    const { container } = render(<SiteAnalytics measurementId={ID} />);
+    expect(loaderScripts(container)).toHaveLength(1);
+  });
+
+  it("stays off a document that started on an unknown catalogue slug", () => {
+    window.history.replaceState(null, "", "/features/not-a-guide");
+    navigation.pathname = "/features/not-a-guide";
+    const { container } = render(<SiteAnalytics measurementId={ID} />);
+    expect(container.innerHTML).toBe("");
+    expect(window.dataLayer).toBeUndefined();
+  });
+
   it("stays off pages with a secret in the address", () => {
     window.history.replaceState(null, "", "/reset-password");
     navigation.pathname = "/reset-password";

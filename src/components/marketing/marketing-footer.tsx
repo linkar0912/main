@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { getSeoPages, seoCollections, seoPagePath, type SeoCollection, type SeoPage } from "@/src/content/seo";
 import { LEGAL_ENTITY, legalCopyrightHolder } from "@/src/lib/legal-entity";
 import { isMarketingPath, marketingHref } from "@/src/lib/site-routing";
 import { LinkarMark } from "../linkar-mark";
+import { FooterDirectory, type FooterDirectoryGroup } from "./footer-directory";
 import styles from "./marketing-footer.module.css";
 import { TrustLockups } from "./trust-lockups";
 
@@ -9,22 +11,21 @@ const columns = [
   {
     title: "Product",
     links: [
-      ["Product", "/features"],
+      ["All features", "/features"],
       ["Pricing", "/pricing"],
       ["Channels", "/#channels"],
       ["How it works", "/#how-it-works"],
-      ["Workflows", "/templates"],
       ["Get started", "/signup"],
     ],
   },
   {
     title: "Resources",
     links: [
-      ["Help and support", "/support"],
+      ["Workflow recipes", "/templates"],
       ["Solutions", "/solutions"],
+      ["Help and support", "/support"],
+      ["Questions", "/#faq"],
       ["Contact", "/contact"],
-      ["Sign in", "/login"],
-      ["Dashboard", "/dashboard"],
     ],
   },
   {
@@ -32,7 +33,7 @@ const columns = [
     links: [
       ["Linkar home", "/#top"],
       ["Setup", "/#setup"],
-      ["Questions", "/#faq"],
+      ["Sign in", "/login"],
     ],
   },
   {
@@ -49,6 +50,44 @@ const columns = [
     ],
   },
 ] as const;
+
+const directoryOrder = ["features", "solutions", "templates"] as const satisfies readonly SeoCollection[];
+
+/**
+ * Footer names that the rules below cannot shorten well. The flow builder's
+ * label would keep "Instagram automation" on every page's footer, an anchor
+ * that belongs to the homepage.
+ */
+const footerShortLabels: Readonly<Record<string, string>> = {
+  "/features/no-code-instagram-flow-builder": "No code flow builder",
+};
+
+/**
+ * A short footer name for a guide. The directory groups already say which
+ * collection a link belongs to, so the repeated "Instagram automation for" and
+ * "template" wording is dropped. Facebook guides keep their channel name.
+ */
+function footerLabel(page: SeoPage): string {
+  const fixed = footerShortLabels[seoPagePath(page)];
+  if (fixed) return fixed;
+  const short = page.label
+    .replace(/^Instagram automation for /, "")
+    .replace(/ template$/, "")
+    .replace(/^Instagram /, "");
+  return short.charAt(0).toUpperCase() + short.slice(1);
+}
+
+function directoryGroups(siteOrigin?: string): FooterDirectoryGroup[] {
+  return directoryOrder.map((collection) => ({
+    title: seoCollections[collection].label,
+    path: `/${collection}`,
+    href: marketingHref(`/${collection}`, siteOrigin),
+    links: getSeoPages(collection).map((page) => {
+      const path = seoPagePath(page);
+      return { label: footerLabel(page), path, href: marketingHref(path, siteOrigin) };
+    }),
+  }));
+}
 
 /** The legal owner of the site: the proprietor once named, else the trade name. */
 function copyrightLine(): string {
@@ -111,6 +150,8 @@ export function MarketingFooter({ compact = false, siteOrigin }: MarketingFooter
             ))}
           </nav>
         </div>
+
+        <FooterDirectory groups={directoryGroups(siteOrigin)} markCurrent={!siteOrigin} />
 
         <div className={styles.legalLine}>
           <p>© {year} {copyrightLine()}</p>

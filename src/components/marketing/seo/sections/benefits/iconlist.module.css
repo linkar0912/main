@@ -1,19 +1,116 @@
-/* A 4:5 photo slot beside an icon list. The first outcome floats on the photo's inner edge. */
+/*
+ * An accent panel (at least 4:5) beside an icon list. The panel's column runs
+ * from the trigger chip through the later benefits' outcomes to the first
+ * benefit's outcome, which floats out over the panel's inner edge (toward the
+ * list). A cascade swings its cards from side to side on dotted connectors; a
+ * rail stacks them beside one dotted line whose stops are the icon tiles.
+ * Everything is in the flow, so a tall outcome makes the panel taller instead
+ * of covering a card. Rules are written for the panel on the start side; the
+ * end side mirrors them from 900px up.
+ */
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas: "media content";
   align-items: center;
-  gap: clamp(56px, 7vw, 128px);
+  gap: clamp(56px, 6vw, 112px);
 }
-.layout[data-photo="end"] { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); grid-template-areas: "content media"; }
+.layout[data-media="end"] { grid-template-areas: "content media"; }
 
-.media { position: relative; grid-area: media; justify-self: center; inline-size: 100%; max-inline-size: 560px; }
-.photo { position: relative; aspect-ratio: 4 / 5; overflow: hidden; border-radius: 28px; }
+.media { container: iconlist-media / inline-size; grid-area: media; justify-self: center; inline-size: 100%; max-inline-size: 600px; }
 
-.float { position: absolute; inset: auto -48px 40px auto; z-index: 1; }
-.layout[data-photo="end"] .float { inset: auto auto 40px -48px; }
-.stage { inline-size: 300px; zoom: .92; }
+/* No overflow clip: the floating outcome reaches past the panel's edge. */
+.panel {
+  --outer: flex-start;
+  --inner: flex-end;
+  --pad: 36px;
+  --line: 2px dotted rgb(255 255 255 / 72%);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 4 / 5;
+  padding: 40px var(--pad);
+  border-radius: 28px;
+  isolation: isolate;
+}
+@container iconlist-media (min-width: 540px) { .panel { --pad: 40px; padding-block: 44px; } }
+/* Two benefits draw two larger pictures: a little less height keeps the connectors short and the list beside it level. */
+@media (min-width: 900px) { .layout[data-count="2"] .panel { aspect-ratio: 7 / 8; } }
+
+.trigger {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: var(--outer);
+  align-items: center;
+  gap: 8px;
+  max-inline-size: 100%;
+  padding: 6px 14px 6px 6px;
+  color: #101116;
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 12px 26px rgb(16 17 22 / 22%);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  rotate: -2deg;
+}
+.trigger[data-place="inner"] { align-self: var(--inner); rotate: 2deg; }
+.triggerIcon { display: inline-grid; place-items: center; flex: 0 0 auto; inline-size: 26px; block-size: 26px; color: #101116; background: #fff100; border-radius: 50%; }
+.triggerText { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* Connectors: dotted paths from one step's side to the next one's, sharing the spare height.
+   Their least height keeps each card's icon tile clear of the step above it. */
+.connector { position: relative; display: block; flex: 1 1 0; align-self: stretch; min-block-size: 30px; margin-block: 6px; }
+.connector svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; overflow: visible; }
+.connector path { fill: none; stroke: rgb(255 255 255 / 72%); stroke-width: 2; stroke-dasharray: 1 7; stroke-linecap: round; }
+
+/* Cascade: the second benefit on the inner side, the third back on the outer side (two benefits: one card, outer). */
+.card { position: relative; flex: 0 0 auto; align-self: var(--inner); }
+.card[data-place="outer"] { align-self: var(--outer); }
+
+/* Outcomes are drawn for a 300 to 320px stage and zoomed to the panel. Narrower, not smaller:
+   their 12px text stays at 11px or more, and reaches 13px on wide panels. */
+.cardStage, .stage { inline-size: 300px; zoom: .92; }
+@container iconlist-media (min-width: 470px) { .cardStage, .stage { zoom: 1; } }
+@container iconlist-media (min-width: 540px) { .cardStage, .stage { inline-size: 304px; zoom: 1.08; } }
+/* Two benefits: two pictures share the panel, so each is drawn larger. */
+@container iconlist-media (min-width: 470px) { .layout[data-count="2"] :is(.cardStage, .stage) { inline-size: 320px; zoom: 1.04; } }
+@container iconlist-media (min-width: 540px) { .layout[data-count="2"] :is(.cardStage, .stage) { zoom: 1.22; } }
+
+/* The list item's icon tile on each picture's top corner, toward the panel's outer edge.
+   It overlaps the card by 12px at most, inside the card's own padding. */
+.badge {
+  position: absolute;
+  inset: -22px auto auto -24px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  inline-size: 36px;
+  block-size: 36px;
+  color: #101116;
+  border-radius: 12px;
+  box-shadow: 0 0 0 3px #ffffff, 0 10px 22px rgb(16 17 22 / 22%);
+}
+
+/* The first outcome closes the column at the panel's foot and reaches 48px past its inner edge. */
+.float { position: relative; z-index: 1; flex: 0 0 auto; align-self: var(--inner); margin-inline-end: calc(-1 * (var(--pad) + 48px)); }
+
+/* ---------- Rail: one dotted line down the outer side; the icon tiles are its stops ---------- */
+.panel[data-shape="rail"] .trigger { rotate: none; margin-inline-start: -1px; }
+.panel[data-shape="rail"] .connector { min-block-size: 24px; }
+.panel[data-shape="rail"] .connector svg { display: none; }
+.panel[data-shape="rail"] .connector::before { position: absolute; inset-block: 0; inset-inline-start: 17px; content: ""; border-inline-start: var(--line); }
+.panel[data-shape="rail"] :is(.card, .float) { display: grid; grid-template-columns: 36px 16px auto minmax(0, 1fr); align-items: start; align-self: stretch; }
+.panel[data-shape="rail"] .badge { position: relative; inset: auto; grid-column: 1; grid-row: 1; }
+.panel[data-shape="rail"] .cardStage { grid-column: 3; grid-row: 1; }
+/* The line runs on past each card to the next connector. */
+.panel[data-shape="rail"] .card::after { position: absolute; inset-block: 42px -6px; inset-inline-start: 17px; content: ""; border-inline-start: var(--line); }
+/* The closing outcome sits out at the inner edge; a dotted branch runs to it from its stop on the rail. */
+.panel[data-shape="rail"] .float { grid-template-columns: 36px minmax(16px, 1fr) auto; }
+.panel[data-shape="rail"] .float::before { grid-column: 2; grid-row: 1; align-self: start; margin-block-start: 17px; margin-inline-end: 8px; content: ""; border-block-start: var(--line); }
+.panel[data-shape="rail"] .stage { grid-column: 3; grid-row: 1; }
 
 .content { grid-area: content; min-inline-size: 0; }
 .title { max-inline-size: 640px; }
@@ -33,21 +130,50 @@
 }
 .itemBody { max-inline-size: 54ch; margin-block-start: 8px; }
 
+/* Two columns with the panel on the end side: everything mirrors, so the float still reaches toward the list. */
+@media (min-width: 900px) {
+  .layout[data-media="end"] .panel { --outer: flex-end; --inner: flex-start; }
+  .layout[data-media="end"] .connector svg { scale: -1 1; }
+  .layout[data-media="end"] .trigger { rotate: 2deg; }
+  .layout[data-media="end"] .trigger[data-place="inner"] { rotate: -2deg; }
+  .layout[data-media="end"] .badge { inset: -22px -24px auto auto; }
+  .layout[data-media="end"] .panel[data-shape="cascade"] .float { margin-inline: calc(-1 * (var(--pad) + 48px)) 0; }
+  .layout[data-media="end"] .panel[data-shape="rail"] .trigger { flex-direction: row-reverse; margin-inline: 0 -1px; padding: 6px 6px 6px 14px; rotate: none; }
+  .layout[data-media="end"] .panel[data-shape="rail"] .connector::before { inset-inline: auto 17px; }
+  /* Cards and the float lay out right to left, so their tile, line and branch mirror with them. */
+  .layout[data-media="end"] .panel[data-shape="rail"] :is(.card, .float) { direction: rtl; }
+  .layout[data-media="end"] .panel[data-shape="rail"] :is(.card, .float) > * { direction: ltr; }
+  .layout[data-media="end"] .panel[data-shape="rail"] .badge { inset: auto; }
+}
+
+/* One column: the list, then the panel. The floating outcome reaches past
+   the panel's right edge and hangs over its foot; the media box keeps room for it. */
 @media (max-width: 899px) {
-  .layout, .layout[data-photo="end"] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "content" "media"; gap: 72px; }
-  .media { max-inline-size: 520px; }
-  .photo { aspect-ratio: 4 / 4.4; }
-  .float, .layout[data-photo="end"] .float { inset: auto 12px -40px auto; }
+  .layout, .layout[data-media="end"] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "content" "media"; gap: 64px; }
+  .media { max-inline-size: 520px; padding-block-end: 48px; }
+  .panel { --pad: 28px; aspect-ratio: auto; padding: 36px var(--pad) 28px; }
+  .float { margin: 8px -40px -72px 0; }
 }
 
 @media (max-width: 599px) {
   .list { margin-block-start: 32px; }
   .item { grid-template-columns: 44px minmax(0, 1fr); gap: 16px; padding-block: 20px; }
   .icon { inline-size: 44px; block-size: 44px; border-radius: 14px; }
-  .photo { border-radius: 24px; }
-  /* In the flow under the photo, overlapping its bottom edge by a fixed 112px:
-     a tall outcome pushes the section down instead of covering the photo. */
-  .float, .layout[data-photo="end"] .float { position: relative; inset: auto; inline-size: fit-content; margin: -112px 8px 0 auto; }
+  .panel { --pad: 16px; padding: 32px 16px 20px; border-radius: 24px; }
+  /* Phones draw each card at the panel's width instead of zooming it, so both shapes run one
+     column, its connectors straight down the middle and each icon tile back on its card's corner. */
+  .card, .card[data-place="outer"], .panel[data-shape] .card { display: block; align-self: center; inline-size: 100%; max-inline-size: 320px; }
+  .connector, .panel[data-shape="rail"] .connector { min-block-size: 34px; }
+  .connector svg { display: none; }
+  .connector::before, .panel[data-shape="rail"] .connector::before { position: absolute; inset: 0 auto 0 50%; inline-size: 0; content: ""; border-inline-start: var(--line); }
+  .panel[data-shape="rail"] .card::after, .panel[data-shape="rail"] .float::before { content: none; }
+  .cardStage, .layout[data-count="2"] .cardStage { inline-size: 100%; zoom: 1; }
+  .badge, .panel[data-shape="rail"] .badge { position: absolute; inset: -25px auto auto -8px; }
+  .float, .panel[data-shape="rail"] .float { display: block; align-self: var(--inner); margin: 4px -8px -64px 0; }
   /* Narrower, not smaller: the widget's 12px text stays at 11px or more. */
-  .stage { inline-size: 260px; zoom: .92; }
+  .stage, .layout[data-count="2"] .stage { inline-size: 260px; zoom: .92; }
+}
+/* Phones from 360px have room for the floating outcome at its usual width, so a route line stays on one line. */
+@media (min-width: 360px) and (max-width: 599px) {
+  .stage, .layout[data-count="2"] .stage { inline-size: 300px; }
 }

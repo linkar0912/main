@@ -11,6 +11,8 @@ const channels = [
     eyebrow: "Private conversations",
     body: "Start private replies, direct messages, and follow-gated campaigns from real audience signals.",
     icon: <InstagramGlyph size={38} brand />,
+    href: "/features",
+    linkLabel: "Explore Instagram automation features",
   },
   {
     id: "facebook",
@@ -18,6 +20,8 @@ const channels = [
     eyebrow: "Public conversations",
     body: "Send public replies to top-level Page comments while ignoring Page-authored and nested replies.",
     icon: <FacebookGlyph size={38} brand />,
+    href: "/features/facebook-comment-auto-reply",
+    linkLabel: "Explore Facebook Page comment replies",
   },
 ] as const;
 
@@ -46,7 +50,9 @@ export function ChannelShowcase() {
               <p className={styles.eyebrow}>{channel.eyebrow}</p>
               <h3>{channel.name}</h3>
               <p className={styles.body}>{channel.body}</p>
-              <Link href="/#surfaces">Explore workflows <span aria-hidden="true">&#8594;</span></Link>
+              {/* Each card links to the guides for its own channel, named in the
+                  link text so the anchor says where it goes. */}
+              <Link href={channel.href}>{channel.linkLabel} <span aria-hidden="true">&#8594;</span></Link>
             </article>
           ))}
         </div>

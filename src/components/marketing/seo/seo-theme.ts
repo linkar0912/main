@@ -94,7 +94,7 @@ export const topicVisuals: Record<SeoTopic, TopicVisual> = {
       "One comment, followed all the way.",
       "What the person who commented sees.",
     ],
-    scope: ["A specific post or Reel", "Any post or Reel"], handles: ["aanya.makes", "rohit.codes", "meera.bakes"],
+    scope: ["A specific post or Reel", "Any post or Reel"], handles: ["your.follower", "new.commenter", "reel.viewer"],
   },
   messages: {
     accent: "#c200bf", channel: "Instagram", trigger: "Incoming DM", sent: "Reply sent",
@@ -230,7 +230,7 @@ export const topicVisuals: Record<SeoTopic, TopicVisual> = {
       "One request, followed all the way.",
       "What the person who asked sees.",
     ],
-    scope: ["A specific post or Reel", "Any post or Reel"], handles: ["zoya.reads", "arjun.lifts", "pooja.paints"],
+    scope: ["A specific post or Reel", "Any post or Reel"], handles: ["new.follower", "loyal.fan", "keen.reader"],
   },
   team: {
     accent: seoPalette.navy, channel: "Instagram", trigger: "Message that needs a person", sent: "Handed to your team",

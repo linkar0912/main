@@ -1,22 +1,22 @@
 import Link from "next/link";
 import { seoTopics, type SeoPage } from "@/src/content/seo";
-import { seoImageSlot } from "@/src/content/seo/image-slots";
 import { ButtonRoll } from "../../../button-roll";
 import { Reveal } from "../../../reveal";
-import { SeoImageSlot } from "../../image-slot";
-import { exampleHandle } from "../../seo-example";
 import { pageCoin } from "../../seo-layout";
 import { topicLine } from "../../seo-theme";
 import shell from "../../seo-section.module.css";
-import slot from "../slot.module.css";
 import { overviewCta, splitLead } from "./copy";
 import { OverviewTitle, RequestCard } from "./parts";
+import { ZigzagVisual, zigzagSender } from "./zigzag-visual";
 import styles from "./zigzag.module.css";
 
 /**
- * The page's `overview` photo (a slot, never the hero photo) on a tilted accent
- * block, with the page's request floating over the edge nearest the copy. The
- * seed decides which side the photo sits on.
+ * Where the page's request arrives (its post, Page post, Story or inbox, drawn
+ * in code) as a square on a tilted accent block, with the request itself
+ * floating over the edge nearest the copy. The request hangs from a fixed
+ * height over the square (--float-reach), so the square's screens know how
+ * much of their bottom to keep clear. The seed decides which side the square
+ * sits on.
  */
 export function OverviewZigzag({ page }: { page: SeoPage }) {
   const flip = pageCoin(page, "overview");
@@ -25,12 +25,12 @@ export function OverviewZigzag({ page }: { page: SeoPage }) {
     <section className={`${shell.section} ${shell.canvas} ${styles.section}`} id="overview" aria-labelledby="overview-title" data-flip={flip ? "true" : undefined}>
       <div className={`${shell.frame} ${styles.layout}`}>
         <Reveal className={styles.media}>
-          <span className={`${styles.backdrop} ${shell.accent} ${shell.grid}`} aria-hidden="true" />
-          <div className={styles.photo}>
-            <SeoImageSlot className={slot.fill} slot={seoImageSlot({ collection: page.collection, slug: page.slug }, "overview")} sizes="(min-width: 900px) 42vw, 100vw" />
+          <div className={styles.square}>
+            <span className={`${styles.backdrop} ${shell.accent} ${shell.grid}`} aria-hidden="true" />
+            <ZigzagVisual page={page} flip={flip} />
           </div>
           <div className={styles.float} aria-hidden="true">
-            <RequestCard page={page} handle={exampleHandle(page, 1)} />
+            <RequestCard page={page} handle={zigzagSender(page)} />
           </div>
         </Reveal>
         <div className={styles.copy}>

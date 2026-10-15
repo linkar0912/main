@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BILLING_PLANS, FREE_BILLING_PLAN } from "@/src/lib/billing/catalog";
 import { PricingPage } from "./pricing-page";
+
+const pricingCss = () => readFileSync(path.join(process.cwd(), "src/components/marketing/pricing-page.module.css"), "utf8");
+const KICKER = "Instagram automation pricing in India";
 
 describe("PricingPage", () => {
   beforeEach(() => {
@@ -28,7 +32,7 @@ describe("PricingPage", () => {
   it("puts all four monthly plans first without the promotional hero", () => {
     render(<PricingPage />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "Plans that grow with you." })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: `${KICKER} Plans that grow with you.` })).toBeTruthy();
     expect(screen.getByText("Every price includes applicable GST.")).toBeTruthy();
     expect(screen.queryByLabelText("Free plan starts at zero rupees")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Your first 1,000 deliveries are on us." })).toBeNull();
@@ -49,9 +53,54 @@ describe("PricingPage", () => {
     }
   });
 
+  it("names the search phrase in the H1 as a kicker above the display line", () => {
+    render(<PricingPage />);
+    const heading = screen.getByRole("heading", { level: 1 });
+
+    expect(heading.id).toBe("pricing-title");
+    expect(heading.textContent).toBe(`${KICKER} Plans that grow with you.`);
+    // The kicker is the first thing inside the H1, set as its own block.
+    const kicker = heading.firstElementChild;
+    expect(kicker?.tagName).toBe("SPAN");
+    expect(kicker?.textContent?.trim()).toBe(KICKER);
+    const css = pricingCss();
+    expect(css.match(/\n\.titleKicker \{([\s\S]*?)\n\}/)?.[1]).toContain("display: block;");
+  });
+
+  it("keeps a way into signup inside a phone's first screen", () => {
+    render(<PricingPage />);
+    const heading = screen.getByRole("heading", { level: 1 });
+    const intro = heading.parentElement as HTMLElement;
+    const start = within(intro).getByRole("link", { name: "Start free, no card needed" });
+
+    expect(start.getAttribute("href")).toBe("/signup");
+    // Under the lead, above the billing toggle.
+    const lead = intro.querySelector(":scope > p") as HTMLElement;
+    const toggle = within(intro).getByRole("group", { name: "Billing period" });
+    expect(lead.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(start.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Phones only: hidden by default, shown under 768px with a 44px target.
+    const css = pricingCss();
+    expect(css.match(/\n\.introStart \{([\s\S]*?)\n\}/)?.[1]).toContain("display: none;");
+    const phone = css.slice(css.indexOf("@media (max-width: 767px)"));
+    expect(phone.match(/\n {2}\.introStart \{([\s\S]*?)\n {2}\}/)?.[1]).toMatch(/display: inline-flex;[\s\S]*min-block-size: 44px;/);
+  });
+
+  it("says what a delivery is where the page first states the Free limit", () => {
+    render(<PricingPage />);
+    const free = screen.getByRole("article", { name: "Free plan" });
+    const limit = within(free).getByText(`${FREE_BILLING_PLAN.monthlyDeliveryLimit.toLocaleString("en-IN")} deliveries`);
+
+    expect(limit.parentElement?.textContent?.replace(/\s+/g, " ")).toBe("1,000 deliveries(messages Linkar sends) each month");
+    // No earlier statement of the Free limit on the page.
+    const before = document.body.textContent?.split("1,000 deliveries")[0] ?? "";
+    expect(before).not.toMatch(/1,000|thousand/i);
+  });
+
   it("compares every plan using the same operating limits", () => {
     render(<PricingPage />);
-    const comparison = screen.getByRole("region", { name: "Compare plans and pricing info" });
+    const comparison = screen.getByRole("region", { name: "Every plan, side by side" });
 
     expect(within(comparison).getByRole("columnheader", { name: "Choose your plan" })).toBeTruthy();
     for (const plan of ["Free", "Creator", "Growth", "Agency"]) {
@@ -65,9 +114,38 @@ describe("PricingPage", () => {
     }
   });
 
+  it("leads from the comparison table to every feature guide", () => {
+    render(<PricingPage />);
+    const comparison = screen.getByRole("region", { name: "Every plan, side by side" });
+    const features = within(comparison).getByRole("link", { name: "See every Instagram automation feature" });
+
+    expect(features.getAttribute("href")).toBe("/features");
+    expect(features.closest("table")).toBeNull();
+    const table = within(comparison).getByRole("table");
+    expect(table.compareDocumentPosition(features) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // The last word and the decorative arrow share a no-wrap span, so the
+    // arrow can never wrap on to a line of its own on a narrow phone.
+    const tail = features.querySelector("[data-link-tail]");
+    expect(tail?.textContent).toBe("feature→");
+    expect(tail?.querySelector('[aria-hidden="true"]')?.textContent).toBe("→");
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/pricing-features-link.module.css"), "utf8");
+    expect(stylesheet.match(/\n\.tail \{([\s\S]*?)\n\}/)?.[1]).toContain("white-space: nowrap;");
+  });
+
+  it("words its headings in Linkar's own voice", () => {
+    render(<PricingPage />);
+    const headings = screen.getAllByRole("heading").map((heading) => heading.textContent);
+
+    expect(headings).toEqual(expect.arrayContaining(["Find your plan", "Where do your conversations start?", "Every plan, side by side"]));
+    for (const retired of ["Pick your plan in 30 seconds", "Where do people find you?", "Compare plans and pricing info"]) {
+      expect(document.body.textContent).not.toContain(retired);
+    }
+  });
+
   it("lets phones compare one plan at a time instead of scrolling the table sideways", () => {
     render(<PricingPage />);
-    const comparison = screen.getByRole("region", { name: "Compare plans and pricing info" });
+    const comparison = screen.getByRole("region", { name: "Every plan, side by side" });
     const planSwitch = within(comparison).getByRole("group", { name: "Plan to compare" });
     const radios = within(planSwitch).getAllByRole("radio") as HTMLInputElement[];
 
@@ -107,7 +185,7 @@ describe("PricingPage", () => {
     // Every plan link now carries the annual choice through to signup.
     const growth = screen.getByRole("article", { name: "Growth plan" });
     expect(within(growth).getByRole("link", { name: /choose/i }).getAttribute("href")).toBe("/signup?plan=growth&interval=annual");
-    const comparison = screen.getByRole("region", { name: "Compare plans and pricing info" });
+    const comparison = screen.getByRole("region", { name: "Every plan, side by side" });
     const agency = within(comparison).getByRole("columnheader", { name: /^Agency/ });
     expect(within(agency).getByRole("link").getAttribute("href")).toBe("/signup?plan=agency&interval=annual");
     // The comparison shows the exact price, not a "From" price.
@@ -154,9 +232,9 @@ describe("PricingPage plan finder", () => {
 
   it("walks the four questions and recommends the plan the answers need", () => {
     render(<PricingPage />);
-    const finder = screen.getByRole("region", { name: "Pick your plan in 30 seconds" });
+    const finder = screen.getByRole("region", { name: "Find your plan" });
 
-    expect(within(finder).getByRole("heading", { name: "Where do people find you?" })).toBeTruthy();
+    expect(within(finder).getByRole("heading", { name: "Where do your conversations start?" })).toBeTruthy();
     expect(within(finder).getByRole("button", { name: /Next step/ }).hasAttribute("disabled")).toBe(true);
 
     fireEvent.click(within(finder).getByRole("button", { name: /Instagram comments/ }));
@@ -175,12 +253,12 @@ describe("PricingPage plan finder", () => {
     expect(within(finder).getByRole("link", { name: /Start with Growth/ }).getAttribute("href")).toBe("/signup?plan=growth&interval=monthly");
 
     fireEvent.click(within(finder).getByRole("button", { name: "Start over" }));
-    expect(within(finder).getByRole("heading", { name: "Where do people find you?" })).toBeTruthy();
+    expect(within(finder).getByRole("heading", { name: "Where do your conversations start?" })).toBeTruthy();
   });
 
   it("offers only channels Linkar supports and shows Facebook as a public comment reply", () => {
     render(<PricingPage />);
-    const finder = screen.getByRole("region", { name: "Pick your plan in 30 seconds" });
+    const finder = screen.getByRole("region", { name: "Find your plan" });
 
     expect(within(finder).queryByRole("button", { name: /Messenger/ })).toBeNull();
     expect(finder.textContent).not.toMatch(/Messenger/);
@@ -197,7 +275,7 @@ describe("PricingPage plan finder", () => {
     // appears once the visitor scrolls past them.
     const jump = container.querySelector<HTMLAnchorElement>('a[href="#plan-finder"]');
     if (!jump) throw new Error("missing finder shortcut");
-    expect(jump.textContent).toContain("Pick your plan in 30 seconds");
+    expect(jump.textContent).toContain("Find your plan");
     expect(jump.getAttribute("aria-hidden")).toBe("true");
     expect(jump.hasAttribute("data-visible")).toBe(false);
     expect(jump.getAttribute("tabindex")).toBe("-1");
@@ -245,6 +323,31 @@ describe("PricingPage billing sections", () => {
     expect(within(section).getByText("Included")).toBeTruthy();
   });
 
+  it("answers whether Instagram automation is free first, from the billing catalog", () => {
+    const { container } = render(<PricingPage />);
+    const faq = screen.getByRole("region", { name: "Before you pay for anything" });
+    const questions = within(faq).getAllByRole("button").map((button) => button.textContent);
+
+    expect(questions[0]).toBe("Is Instagram automation free?");
+    const trigger = within(faq).getByRole("button", { name: "Is Instagram automation free?" });
+    fireEvent.click(trigger);
+    const answer = document.getElementById(trigger.getAttribute("aria-controls") ?? "")?.textContent ?? "";
+
+    const cheapest = Math.min(...Object.values(BILLING_PLANS).map((plan) => plan.monthlyPaise)) / 100;
+    expect(answer).toContain(`${FREE_BILLING_PLAN.monthlyDeliveryLimit.toLocaleString("en-IN")} deliveries (messages Linkar sends) a month`);
+    expect(answer).toContain(`${FREE_BILLING_PLAN.automationLimit} automations`);
+    expect(answer).toContain(`${FREE_BILLING_PLAN.instagramConnectionLimit} Instagram account `);
+    expect(answer).toContain(`${FREE_BILLING_PLAN.facebookConnectionLimit} Facebook Page.`);
+    expect(answer).toContain("₹0");
+    expect(answer).toContain("no card");
+    expect(answer).toContain(`₹${cheapest} a month, including applicable GST`);
+    expect(answer).not.toMatch(/\bUPI\b/);
+    // A plain accordion: no FAQPage markup for it.
+    for (const script of container.querySelectorAll('script[type="application/ld+json"]')) {
+      expect(script.textContent).not.toContain("FAQPage");
+    }
+  });
+
   it("opens one billing question at a time", () => {
     render(<PricingPage />);
     const cancel = screen.getByRole("button", { name: "What happens if I cancel?" });
@@ -279,5 +382,65 @@ describe("PricingPage billing sections", () => {
 
     expect(within(cta).getByRole("link", { name: "Start free" }).getAttribute("href")).toBe("/signup");
     expect(within(cta).getByRole("link", { name: /See how it works/ }).getAttribute("href")).toBe("/#how-it-works");
+  });
+});
+
+describe("PricingPage first paint", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("settles the intro with transform only, so it is readable from the first frame", () => {
+    const css = pricingCss();
+    const introRule = css.match(/\.intro h1,\n\.intro > p,\n\.intro \.introStart,\n\.intro \.periodRow \{([\s\S]*?)\n\}/)?.[1];
+    expect(introRule).toMatch(/animation: introSettle /);
+    const settle = css.match(/@keyframes introSettle \{([\s\S]*?)\n\}/)?.[1];
+    expect(settle).toContain("translateY(26px)");
+    expect(settle).not.toContain("opacity");
+
+    // The finder stats below the fold keep their fade.
+    expect(css).toMatch(/\.finderCard\[data-visible="true"\] \.previewStats div \{\s*animation: pricingRise /);
+
+    const reduced = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce) {\n  .intro h1"));
+    for (const selector of [".intro h1", ".intro > p", ".intro .introStart", ".intro .periodRow", ".price strong[data-swap]", ".choosePrice[data-swap]", ".invoiceTotal strong[data-swap]"]) {
+      expect(reduced.slice(0, reduced.indexOf("animation: none;"))).toContain(selector);
+    }
+  });
+
+  it("swaps prices without blur, and only after the visitor changes the billing period", () => {
+    const css = pricingCss();
+    const swap = css.match(/@keyframes priceSwap \{([\s\S]*?)\n\}/)?.[1];
+    expect(swap).toBeTruthy();
+    expect(swap).not.toContain("filter");
+    // Every rule that runs the swap is gated on data-swap.
+    const rules = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const selectors = [...rules.matchAll(/([^{}]+)\{[^{}]*animation:\s*priceSwap[^{}]*\}/g)].map((match) => match[1].trim());
+    expect(selectors.length).toBeGreaterThan(0);
+    for (const group of selectors) {
+      for (const selector of group.split(",")) expect(selector).toContain("[data-swap]");
+    }
+
+    const { container } = render(<PricingPage />);
+    expect(container.querySelectorAll("[data-swap]")).toHaveLength(0);
+
+    fireEvent.click(screen.getAllByRole("radio", { name: "Annual" })[0]);
+    for (const plan of ["Free plan", "Creator plan", "Growth plan", "Agency plan"]) {
+      const price = within(screen.getByRole("article", { name: plan })).getByText(/^₹/);
+      expect(price.hasAttribute("data-swap")).toBe(true);
+    }
+    const comparison = screen.getByRole("region", { name: "Every plan, side by side" });
+    expect(within(comparison).getByText("₹9,990/yr").hasAttribute("data-swap")).toBe(true);
+    const invoice = screen.getByRole("region", { name: "No surprises on the invoice" });
+    expect(invoice.querySelector("p strong[data-swap]")?.textContent).toBe("₹4,990");
   });
 });

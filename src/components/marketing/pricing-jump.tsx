@@ -77,7 +77,7 @@ export function PricingJump({ targetId }: { targetId: string }) {
       aria-hidden={visible ? undefined : true}
       tabIndex={visible ? undefined : -1}
     >
-      Pick your plan in 30 seconds
+      Find your plan
       <span aria-hidden="true">{finder === "above" ? "↑" : "↓"}</span>
     </a>
   );

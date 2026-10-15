@@ -3,6 +3,28 @@
   overflow: hidden;
   color: var(--marketing-on-inverse, #f4f4f5);
   background: var(--marketing-inverse, #101116);
+  /* About 230 elements with the guide directory, usually below the fold:
+     the browser skips rendering them until the footer nears the viewport.
+     The placeholder holds the measured height meanwhile, so the scrollbar
+     does not jump, and `auto` keeps the real height once it has rendered.
+     Only the block axis is set, so the width never comes from it.
+     contain-intrinsic-block-size is the content box: the padding is added
+     on top, so these values are the rendered height minus the vertical
+     padding (which also differs on the compact footer). Measured content
+     box: 1,099 to 1,158px from 1024px up (1,129px at 1440). Re-measure if
+     the directory or the columns change. */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 1130px;
+}
+
+/* Content box measured at 1,867px from 768 to 1023px wide. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .footer { contain-intrinsic-block-size: auto 1870px; }
+}
+
+/* Content box 2,551 to 2,707px below 768px (2,642px at 375 and 390). */
+@media (max-width: 767px) {
+  .footer { contain-intrinsic-block-size: auto 2640px; }
 }
 
 .frame { inline-size: min(100%, 1440px); margin-inline: auto; }
@@ -51,6 +73,37 @@
 .legalLine p { margin: 0; }
 .legalLine p:first-child { flex: 0 0 auto; }
 
+/* Every guide and recipe, by collection: a sitemap in the footer. The page
+   being read and its collection are marked in the footer's yellow. Links are
+   32px tall: well over the 24px minimum, and 64 of them at 44px would make the
+   phone footer several screens long. */
+.directory { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px; margin-block-start: 72px; padding-block-start: 32px; border-block-start: 1px solid rgb(255 255 255 / 18%); }
+.directoryGroup { min-inline-size: 0; }
+.directoryTitle { margin: 0 0 14px; font-family: var(--font-sans, ui-sans-serif, sans-serif); font-size: .875rem; font-weight: 700; line-height: 1.2; }
+.directoryTitle a { display: inline-flex; min-block-size: 44px; align-items: center; gap: 10px; color: rgb(255 255 255 / 92%); transition: color 220ms ease; }
+.directoryCount { display: inline-grid; min-inline-size: 26px; block-size: 22px; place-items: center; padding-inline: 6px; color: rgb(255 255 255 / 72%); border: 1px solid rgb(255 255 255 / 24%); border-radius: 999px; font-family: var(--font-sans, ui-sans-serif, sans-serif); font-size: .75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.directoryGroup ul { columns: 2; column-gap: 24px; padding: 0; margin: 0; list-style: none; }
+.directoryGroup li { break-inside: avoid; }
+.directoryGroup li a { display: inline-flex; min-block-size: 32px; padding-block: 4px; align-items: center; color: rgb(255 255 255 / 72%); font-family: var(--font-sans, ui-sans-serif, sans-serif); font-size: .8125rem; font-weight: 600; line-height: 1.3; transition: color 220ms ease; }
+.directoryTitle a:hover,
+.directoryGroup li a:hover { color: #fff100; }
+.directoryGroup[data-current] .directoryTitle a,
+.directoryGroup a[aria-current="page"] { color: #fff100; }
+.directoryGroup li a[aria-current="page"]::before { content: ""; flex: 0 0 auto; inline-size: 6px; block-size: 6px; margin-inline-end: 8px; background: #fff100; border-radius: 50%; }
+.directoryGroup a:focus-visible { outline: 2px solid #fff100; outline-offset: 3px; }
+.directory + .legalLine { margin-block-start: 72px; }
+
+@media (max-width: 1023px) {
+  .directory { grid-template-columns: minmax(0, 1fr); gap: 40px; margin-block-start: 64px; }
+  .directoryGroup ul { columns: 3; }
+}
+
+@media (max-width: 767px) {
+  .directory { margin-block-start: 56px; padding-block-start: 24px; }
+  .directoryGroup ul { columns: 2; column-gap: 16px; }
+  .directory + .legalLine { margin-block-start: 56px; }
+}
+
 @media (min-width: 768px) and (max-width: 1023px) {
   .footer { padding: 88px 32px 32px; }
   .topGrid { display: block; }
@@ -71,6 +124,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .directoryTitle a,
+  .directoryGroup li a,
   .column a {
     transition: none;
     transform: none;

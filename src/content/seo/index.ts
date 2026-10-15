@@ -1,7 +1,8 @@
+import { publicSiteOrigin } from "@/src/lib/site-url";
 import { featurePages } from "./features";
 import { solutionPages } from "./solutions";
 import { templatePages } from "./templates";
-import type { ContentBlock, SeoCollection, SeoPage, SeoTopic } from "./types";
+import { seoPagePath, type ContentBlock, type SeoCollection, type SeoPage, type SeoTopic } from "./types";
 export { SEO_CONTENT_UPDATED, SEO_HERO_IMAGE, seoPagePath } from "./types";
 export type { SeoCollection, SeoPage, SeoTopic } from "./types";
 
@@ -47,7 +48,7 @@ export const seoCollections: Record<SeoCollection, {
     ],
   },
   solutions: {
-    label: "Solutions", title: "Instagram Automation for Creators & Businesses · Linkar",
+    label: "Solutions", title: "Instagram Workflows for Creators & Businesses · Linkar",
     headline: "More time for the work you came here to do.",
     description: "Find practical Instagram automation workflows for creators, shops, coaches, and service businesses. Explore audience-specific examples and setup guides in Linkar.",
     intro: "An automation should fit the way your business actually works. A creator delivering a preset needs a different journey from a restaurant sharing a menu or a coach preparing an enquiry. These solution guides focus on the requests each audience receives, the information worth collecting, and the point where a person should take over. Use them to plan a useful first workflow, then adapt the copy and destinations to your own offer.",
@@ -60,7 +61,7 @@ export const seoCollections: Record<SeoCollection, {
   templates: {
     label: "Workflow recipes", title: "Instagram & Facebook Automation Templates · Linkar",
     headline: "A good first reply starts with a clear plan.",
-    description: "Browse 24 Instagram and Facebook Page workflow recipes for Linkar. Get sample messages, setup steps, and downloadable plans to adapt to your own campaigns.",
+    description: `Browse ${templatePages.length} Instagram and Facebook Page workflow recipes for Linkar. Get sample messages, setup steps, and downloadable plans to adapt to your own campaigns.`,
     intro: "These recipes are practical starting points for a conversation you can build in Linkar. Each includes a sample message, a channel-specific setup plan, testing advice, and a downloadable text version. Replace the sample with your own offer, links, and response expectations. A recipe is a plan you adapt and test; it does not supply a freebie, create an external booking system, or publish an automation on your behalf.",
     guidance: [
       ["Choose the interaction before the copy", "Use a comment recipe for a request under a post, an incoming DM recipe for a message, and a Story recipe for the relevant Story event. Facebook Page recipes create public comment replies. The channel decides which next steps are supported, so do not assume every recipe can run unchanged everywhere."],
@@ -96,7 +97,7 @@ export const topicGuides: Record<SeoTopic, { title: string; paragraphs: readonly
     title: "Collect the details that help your next reply",
     paragraphs: [
       "Explain the purpose before asking for an email or an additional answer. Linkar can validate an address’s format and save configured conversational fields with a contact. Format validation does not prove mailbox ownership. A short intake should give your team relevant context, while retry and exit messages keep the process understandable.",
-      "A saved address is not blanket permission for recurring marketing. Keep requested resource delivery and newsletter enrollment distinct, and test any external handoff you configure. Collect only the information needed for the enquiry. Review the completed record and fulfillment step yourself before calling the campaign a working lead journey.",
+      "A saved address is not blanket permission for recurring marketing. Keep requested resource delivery and newsletter enrolment distinct, and test any external handoff you configure. Collect only the information needed for the enquiry. Review the completed record and fulfilment step yourself before calling the campaign a working lead journey.",
     ],
   },
   followers: {
@@ -117,7 +118,7 @@ export const topicGuides: Record<SeoTopic, { title: string; paragraphs: readonly
     title: "Read each stage on its own terms",
     paragraphs: [
       "A matching interaction, a delivered message, and a tracked visit are different observations. Review individual automations over comparable time periods and investigate delivery issues before treating missing activity as low interest. Changes in post reach, offer timing, and destinations can affect results independently of the reply’s wording.",
-      "Use the external destination’s records for purchases, confirmed bookings, and enrollments. For reply experiments, change one variable and allow enough activity to make the comparison useful. A small sample or one extra click does not prove a universal winner. Keep campaign notes so your team can explain what changed and what the evidence actually shows.",
+      "Use the external destination’s records for purchases, confirmed bookings, and enrolments. For reply experiments, change one variable and allow enough activity to make the comparison useful. A small sample or one extra click does not prove a universal winner. Keep campaign notes so your team can explain what changed and what the evidence actually shows.",
     ],
   },
   facebook: {
@@ -129,7 +130,8 @@ export const topicGuides: Record<SeoTopic, { title: string; paragraphs: readonly
   },
 };
 
-export function seoRecipeMarkdown(page: SeoPage): string {
+/** The downloaded plan, ending with its source so a shared copy still credits the page it came from. */
+export function seoRecipeMarkdown(page: SeoPage, origin: string = publicSiteOrigin()): string {
   return [
     `# ${page.label}`, page.intro,
     `## Channel\n\n${page.topic === "facebook" ? "Facebook Page: public comment replies" : "Instagram: supported incoming interactions"}`,
@@ -140,5 +142,6 @@ export function seoRecipeMarkdown(page: SeoPage): string {
     `## ${page.tip[0]}\n\n${page.tip[1]}`,
     `## ${topicGuides[page.topic].title}\n\n${topicGuides[page.topic].paragraphs.join("\n\n")}`,
     "Replace all sample wording and destinations. This is a workflow plan, not an importable or already-published automation.",
+    `Source: Linkar template library, ${origin}${seoPagePath(page)}`,
   ].join("\n\n") + "\n";
 }

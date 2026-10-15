@@ -38,7 +38,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
-      lang="en"
+      lang="en-IN"
       className={`${display.variable} ${sans.variable} ${mono.variable}`}
       data-scroll-behavior="smooth"
       suppressHydrationWarning

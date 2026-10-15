@@ -1,0 +1,13 @@
+/* A link inside running copy. The global reset strips link colour and
+   underline, so this restores a visible underline in the page accent, the
+   same look as the links in the FAQ answers. */
+.link {
+  color: var(--marketing-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--seo-accent, #5f2ce0);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.link:hover { text-decoration-thickness: 3px; }
+:global([data-theme="dark"]) .link { text-decoration-color: rgb(255 241 0 / 80%); }

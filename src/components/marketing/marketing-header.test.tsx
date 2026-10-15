@@ -111,6 +111,16 @@ describe("MarketingHeader", () => {
     expect(within(panel).getByText("Public comment replies")).toBeTruthy();
     expect(within(panel).getByRole("link", { name: /Keyword replies/ }).getAttribute("href")).toBe("/features/instagram-keyword-replies");
     expect(within(panel).getByRole("link", { name: /Solutions by audience/ }).getAttribute("href")).toBe("/solutions");
+    expect(within(panel).getByRole("link", { name: /All features/ }).getAttribute("href")).toBe("/features");
+    for (const [name, href] of [
+      ["Creators", "/solutions/content-creators"],
+      ["Online coaches", "/solutions/online-coaches"],
+      ["Ecommerce brands", "/solutions/ecommerce-brands"],
+      ["Small businesses", "/solutions/small-businesses"],
+      ["Restaurants and cafes", "/solutions/restaurants-cafes"],
+    ]) {
+      expect(within(panel).getByRole("link", { name: new RegExp(`^${name}`) }).getAttribute("href")).toBe(href);
+    }
     // Every entry leads somewhere different.
     const hrefs = within(panel).getAllByRole("link").map((link) => link.getAttribute("href"));
     expect(new Set(hrefs).size).toBe(hrefs.length);
@@ -128,7 +138,11 @@ describe("MarketingHeader", () => {
     const panel = screen.getByRole("navigation", { name: "Resources" });
     expect(panel.getAttribute("id")).toBe("marketing-resources");
     expect(within(panel).getByRole("link", { name: "How it works" }).getAttribute("href")).toBe("/#how-it-works");
-    expect(within(panel).getByRole("link", { name: "Automation workflows" }).getAttribute("href")).toBe("/templates");
+    expect(within(panel).getByRole("link", { name: "All workflow recipes" }).getAttribute("href")).toBe("/templates");
+    expect(within(panel).getByRole("link", { name: "Comment to guide" }).getAttribute("href")).toBe("/templates/comment-guide-delivery");
+    expect(within(panel).getByRole("link", { name: "Price list reply" }).getAttribute("href")).toBe("/templates/dm-price-list");
+    expect(within(panel).getByRole("link", { name: "Booking link reply" }).getAttribute("href")).toBe("/templates/booking-link");
+    expect(within(panel).getByRole("link", { name: "Follow-gated freebie" }).getAttribute("href")).toBe("/templates/follow-gated-freebie");
     expect(within(panel).getByRole("link", { name: "All solutions" }).getAttribute("href")).toBe("/solutions");
     expect(within(panel).getByRole("link", { name: "Frequently asked questions" }).getAttribute("href")).toBe("/#faq");
     expect(within(panel).getByRole("link", { name: "Help center" }).getAttribute("href")).toBe("/support");

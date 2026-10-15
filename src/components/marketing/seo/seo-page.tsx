@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { getSeoPages, seoCollections, seoTopics, type SeoCollection, type SeoPage, type SeoTopic } from "@/src/content/seo";
 import { seoCollectionStructuredData, seoStructuredData } from "@/src/lib/seo-pages";
@@ -18,6 +19,7 @@ import { relatedVariants, SeoHubGroups } from "./sections/related";
 import { StepTimeline, stepsVariants } from "./sections/steps";
 import { detailLayout, pageNavItems, type DetailLayout, type ExtraVariant, type SectionKey } from "./seo-layout";
 import { HashLink } from "./hash-link";
+import inline from "./inline-link.module.css";
 import { SeoHubFilter, SeoPageNav } from "./seo-page-nav";
 import styles from "./seo-page.module.css";
 import shell from "./seo-section.module.css";
@@ -81,6 +83,17 @@ function HubFilterBar({ collection, topics }: { collection: SeoCollection; topic
     />
   );
 }
+
+/**
+ * One factual sentence per hub that closes its intro with a link to the
+ * homepage, which owns "Instagram automation". The anchor is the head term
+ * itself, so the catalogue supports the homepage instead of competing with it.
+ */
+const homeLinkSentences: Record<SeoCollection, ReactNode> = {
+  features: <>Together, these features make up Linkar’s <Link className={inline.link} href="/">Instagram automation</Link>, plus public comment replies for Facebook Pages.</>,
+  solutions: <>Each guide applies Linkar’s <Link className={inline.link} href="/">Instagram automation</Link> to the requests one kind of business receives.</>,
+  templates: <>You can build every recipe with Linkar’s <Link className={inline.link} href="/">Instagram automation</Link> or its Facebook Page comment replies.</>,
+};
 
 /** "The first two sentences" lead in a larger size; the rest of the hub intro follows. */
 function splitIntro(text: string): readonly [lead: string, rest: string] {
@@ -163,7 +176,7 @@ export function SeoCollectionPage({ collection }: { collection: SeoCollection })
             </div>
             <div className={styles.browseIntro}>
               <p className={styles.browseLead}>{introLead}</p>
-              {introRest ? <p>{introRest}</p> : null}
+              <p>{introRest ? `${introRest} ` : null}{homeLinkSentences[collection]}</p>
             </div>
           </div>
         </section>

@@ -4,6 +4,19 @@
   background: var(--marketing-canvas);
   border-block-start: 1px solid var(--marketing-border);
   scroll-margin-top: 88px;
+  /* Below the fold on every screen, so the browser can skip its layout and
+     paint until it nears the viewport. The fallback is the height of the
+     content box only: the browser adds the block padding (11vw, clamped)
+     on top, so a full-section height here makes the placeholder too tall
+     and in-page links clicked from higher up scroll past their section.
+     Measured with the section rendered, minus its padding and border, at
+     1280 to 1536px wide (1680 to 1920px, 820px and 390px for the wide,
+     tablet and phone values below). "auto" then remembers the rendered
+     height once it has been seen, so the scrollbar and /#insights land
+     where they should. Block axis only: the width comes from the page.
+     Keep these in step when the section's content changes. */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 750px;
 }
 
 .header {
@@ -59,6 +72,14 @@
   box-shadow: 0 1px 0 var(--marketing-border), 0 22px 50px rgb(0 0 0 / 9%);
 }
 
+/* The mock's own rows, wrapped once so data-nosnippet can cover all of them.
+   It keeps the panel's rhythm: the caption is absolutely positioned, so the
+   panel's grid gap never applied to it. */
+.panelBody {
+  display: grid;
+  gap: 22px;
+}
+
 .panelHead {
   display: flex;
   flex-wrap: wrap;
@@ -67,11 +88,31 @@
   gap: 14px;
 }
 
+.panelMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .panelLabel {
   color: var(--marketing-muted);
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .6rem;
   font-weight: 700;
+}
+
+/* Says the figures are illustrative, in the same chip language as the
+   "Example" tag on the use-case cards at the top of the page. */
+.sampleTag {
+  padding: 3px 7px;
+  color: var(--marketing-text);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: .015em;
+  background: color-mix(in srgb, var(--marketing-text) 8%, transparent);
+  border-radius: 5px;
 }
 
 .legend {
@@ -182,7 +223,9 @@
 
 .linkSlug {
   padding: 5px 10px;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  /* The system's own monospace: this one label used to pull the whole web
+     mono font on to the homepage. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: .64rem;
   font-weight: 700;
   background: #fff100;
@@ -254,14 +297,19 @@
   clip-path: inset(50%);
 }
 
+/* From 1600px the padding stops growing and the content settles taller. */
+@media (min-width: 1600px) {
+  .section { contain-intrinsic-block-size: auto 870px; }
+}
+
 @media (min-width: 768px) and (max-width: 1023px) {
-  .section { padding: 112px 32px; }
+  .section { padding: 112px 32px; contain-intrinsic-block-size: auto 1250px; }
   .layout { grid-template-columns: 1fr; gap: 44px; margin-block-start: 56px; }
   .funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 767px) {
-  .section { padding: 88px 20px; }
+  .section { padding: 88px 20px; contain-intrinsic-block-size: auto 1250px; }
   .layout { grid-template-columns: 1fr; gap: 36px; margin-block-start: 48px; }
   .panel { padding: 18px; border-radius: 20px; }
   .bars { block-size: 104px; }

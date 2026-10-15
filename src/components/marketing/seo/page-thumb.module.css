@@ -1,0 +1,399 @@
+/*
+ * A guide's automation in miniature, on a pale tint of its topic colour. It
+ * depicts the product, so its colours stay fixed in both site themes. The box
+ * fills its positioned parent. `.view` is the part a viewer can see (a print
+ * that runs off its panel sets --thumb-bleed to the hidden strip) and is a size
+ * container: each form below shows only where it fits.
+ */
+.thumb {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: #101116;
+  background: var(--thumb-tint, #efe9ff);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  text-align: start;
+}
+.view { position: absolute; inset: 0 0 var(--thumb-bleed, 0px); container: thumb-view / size; }
+
+.oneLine { display: block; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.twoLines { display: -webkit-box; min-inline-size: 0; overflow: hidden; overflow-wrap: break-word; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.word { font-weight: 800; letter-spacing: .01em; }
+
+/* ---------- Which form shows ---------- */
+
+.full, .row, .compact { position: absolute; inset: 0; display: none; }
+.thumb[data-size="card"] .full { display: block; }
+.thumb[data-size="row"] .row { display: grid; }
+.thumb[data-size="mini"] .compact { display: grid; }
+
+/* A card print too small for the snapshot (the smallest swipe cards): the row form. */
+@container thumb-view (width < 210px) or (height < 124px) {
+  .thumb[data-size="card"] .full { display: none; }
+  .thumb[data-size="card"] .row { display: grid; }
+}
+
+/* Thumbnails under about 100px: the compact form. */
+@container thumb-view (width < 104px) or (height < 72px) {
+  .thumb[data-size] :is(.full, .row) { display: none; }
+  .thumb[data-size] .compact { display: grid; }
+}
+
+/* ---------- Full snapshot ---------- */
+
+/*
+ * Drawn at the mock kit's own sizes, then zoomed to the visible print: zoom
+ * scales the layout as well as the paint, so the stage lays out in a box that
+ * much larger and every line keeps its proportions. Each step is the largest
+ * zoom whose content fits, and never below .7, so the smallest mock text
+ * (12px) stays above 8px. Shorter prints drop the lines that matter least
+ * instead of shrinking further. The content block sits in the middle of the
+ * visible print, so a tall or wide print frames it evenly.
+ */
+.stage {
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  align-items: center;
+  box-sizing: border-box;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 14px 18px 20px;
+}
+@container thumb-view (width >= 450px) and (height >= 330px) { .stage { zoom: 1.12; } }
+@container thumb-view (width < 340px) or (height < 290px) { .stage { zoom: .9; } }
+@container thumb-view (width < 306px) or (height < 224px) { .stage { zoom: .82; } }
+@container thumb-view (width < 280px) or (height < 204px) { .stage { zoom: .76; } }
+@container thumb-view (width < 258px) or (height < 186px) { .stage { zoom: .7; } }
+
+.block { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; inline-size: min(100%, 400px); }
+/* Wide prints: the block widens a little, so the picture fills the print instead of hugging its left side. */
+@container thumb-view (width >= 440px) and (aspect-ratio > 1.45) { .block { inline-size: min(100%, 460px); } }
+/* The builder's two steps sit side by side in a wide print and stand only half as tall: they take a larger zoom to fill it. */
+@container thumb-view (width >= 430px) and (aspect-ratio > 1.45) and (height >= 240px) { .stage[data-layout="builder"] { zoom: 1.08; } }
+
+/*
+ * Lines that only taller prints keep: the step for the business, then the link
+ * button, later message or follow check under the reply, then the outcome
+ * sticker; the smallest prints keep the builder's trigger step as its label.
+ */
+@container thumb-view (height < 236px) { .thumb .stage .note { display: none; } }
+@container thumb-view (height < 196px) { .thumb .stage .extra { display: none; } }
+@container thumb-view (height < 176px) {
+  .thumb .stage .status { display: none; }
+  .thumb .stage .stickered { padding-block-end: 0; }
+  .thumb .stage .stickered > :first-child { padding-block-end: 12px; }
+}
+@container thumb-view (height < 160px) { .thumb .stage .triggerExample { display: none; } }
+/* Short prints also tighten the frame, and Facebook comments drop their "now · Like · Reply" line. */
+@container thumb-view (height < 200px) { .thumb .stage .fbComment > :last-child > p { display: none; } }
+@container thumb-view (height < 176px) { .stage { padding-block: 10px; } .block { gap: 9px; } }
+
+/* The trigger as Linkar's builder names it: topic icon and label on a white pill. */
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-inline-size: 100%;
+  margin: 0;
+  padding: 5px 14px 5px 5px;
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgb(16 17 22 / 10%);
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.triggerIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 26px;
+  block-size: 26px;
+  color: #ffffff;
+  background: var(--thumb-accent, #5f2ce0);
+  border-radius: 50%;
+}
+
+/*
+ * The outcome as a sticker on the bottom-right corner of the scene's main card.
+ * The wrapper leaves a strip under the card for its lower half and the card
+ * gives its upper half room, so it never covers the card's words, the trigger
+ * chip at the top, or the reply under it.
+ */
+.stickered { position: relative; inline-size: 100%; padding-block-end: 15px; }
+.thumb .stage .stickered > :first-child { padding-block-end: 26px; }
+.thumb .stage .status {
+  position: absolute;
+  z-index: 1;
+  inset: auto -6px 0 auto;
+  gap: 6px;
+  padding: 6px 12px 6px 9px;
+  font-size: .75rem;
+  box-shadow: 0 10px 22px rgb(16 17 22 / 22%);
+  rotate: -3deg;
+}
+.thumb .stage .status > svg { inline-size: 14px; block-size: 14px; }
+.lead { inline-size: 100%; }
+
+/* Comment and event cards. */
+.thumb .stage .comment { inline-size: 100%; padding-inline-end: 40px; }
+.thumb .stage .eventCard { inline-size: 100%; padding: 16px; }
+
+/* On a post the private reply lands to the right, under the sticker. */
+.answer { display: grid; justify-items: end; gap: 7px; align-self: flex-end; inline-size: min(100%, 300px); }
+
+/* The reply bubble in the topic's colour, one line. */
+.thumb .stage .reply { max-inline-size: 100%; min-inline-size: 0; background: var(--thumb-accent, #5f2ce0); }
+.thumb .stage .action { max-inline-size: 100%; min-inline-size: 0; color: #101116; background: #ffffff; border-color: color-mix(in srgb, var(--thumb-accent, #5f2ce0) 45%, transparent); }
+.thumb .stage .action > svg { color: var(--thumb-accent, #5f2ce0); }
+.thumb .stage .action > span { min-inline-size: 0; }
+.thumb .stage .button { inline-size: auto; max-inline-size: 100%; min-block-size: 0; min-inline-size: 0; }
+.thumb .stage .button > svg { color: var(--thumb-accent, #5f2ce0); }
+.thumb .stage .toggle { inline-size: 210px; min-inline-size: 0; max-inline-size: 100%; }
+.answer > .button, .answer > .action { box-shadow: 0 8px 20px rgb(16 17 22 / 10%); }
+.later { display: grid; gap: 6px; justify-items: end; min-inline-size: 0; }
+
+/* Two test versions, each tagged. */
+.versions { display: grid; gap: 6px; justify-items: end; min-inline-size: 0; }
+.version { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-inline-size: 0; max-inline-size: 100%; }
+.versionTag {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 20px;
+  block-size: 20px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+/* A DM thread card: their message, the reply, then the link button. */
+.thumb .stage .thread { grid-template-columns: minmax(0, 1fr); gap: 8px; inline-size: 100%; padding: 12px; }
+.thumb .stage .thread > :is(.reply, .action, .versions) { justify-self: end; }
+.thumb .stage .thread > .button { inline-size: 100%; }
+.thumb .stage .thread > .toggle { inline-size: 100%; padding: 6px 2px 2px; border-radius: 0; box-shadow: none; }
+.them { display: flex; align-items: flex-end; gap: 8px; min-inline-size: 0; }
+.thumb .stage .theirBubble { min-inline-size: 0; max-inline-size: calc(100% - 36px); }
+.event { padding-block: 2px; }
+
+/* The Story: the topic colour as the photo, progress bars, the owner and a sticker. */
+.storyScene { display: flex; align-items: flex-start; gap: 12px; inline-size: 100%; }
+.storyThread { flex: 1; min-inline-size: 0; }
+.story {
+  position: relative;
+  flex: 0 0 92px;
+  block-size: 164px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 70%, rgb(255 255 255 / 28%), transparent 45%),
+    linear-gradient(165deg, color-mix(in srgb, var(--thumb-accent, #b8235a) 70%, #ffffff), var(--thumb-accent, #b8235a) 55%, color-mix(in srgb, var(--thumb-accent, #b8235a) 70%, #101116));
+  border-radius: 14px;
+  box-shadow: 0 14px 30px rgb(16 17 22 / 18%);
+}
+.storyBars { position: absolute; inset: 7px 7px auto; display: flex; gap: 3px; }
+.storyBars i { flex: 1; block-size: 2px; background: rgb(255 255 255 / 55%); border-radius: 2px; }
+.storyBars i:first-child { background: #ffffff; }
+.storyOwner {
+  position: absolute;
+  inset: 15px 7px auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #ffffff;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+/* At the smaller zooms the owner's name would drop under 8px: the bars and sticker say Story on their own. */
+@container thumb-view (width < 325px) or (height < 226px) { .storyOwner { display: none; } }
+.storySticker {
+  position: absolute;
+  inset: auto 6px 36px;
+  overflow: hidden;
+  padding: 6px 3px;
+  color: var(--thumb-accent, #b8235a);
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 6px 14px rgb(16 17 22 / 22%);
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: .75rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.02em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  rotate: -5deg;
+}
+
+/* A Facebook Page post's comments. */
+.thumb .stage .fbCard { grid-template-columns: minmax(0, 1fr); gap: 10px; inline-size: 100%; padding: 12px 14px 14px; }
+.fbPost { display: flex; align-items: center; gap: 7px; margin: 0; padding-block-end: 9px; border-bottom: 1px solid rgb(16 17 22 / 8%); line-height: 1.2; }
+.fbPost strong { font-size: .8125rem; font-weight: 700; }
+.fbPost small { color: #65676b; font-size: .75rem; font-weight: 600; }
+.fbPost small::before { content: "·"; margin-inline-end: 7px; }
+.thumb .stage .fbComment { min-inline-size: 0; }
+/* Prints shorter than the full thread drop the post header: the trigger chip and the Author tag already say Facebook Page. */
+@container thumb-view (height < 290px) { .fbPost { display: none; } }
+
+/* The next step for the business, as a Linkar note under the thread. */
+.thumb .stage .note { flex-wrap: nowrap; inline-size: fit-content; max-inline-size: min(100%, 330px); background: #ffffff; box-shadow: 0 8px 20px rgb(16 17 22 / 10%); }
+.thumb .stage .note > span:last-child { flex: 1 1 auto; }
+
+/* ---------- Full snapshot: Linkar's builder ---------- */
+
+/* Two steps joined by a wire: what starts it, then the reply. */
+.builder { display: flex; flex-direction: column; align-items: stretch; inline-size: 100%; }
+.thumb .stage .node { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; inline-size: 100%; padding: 10px 12px 12px; border-radius: 16px; }
+.nodeHead { display: flex; align-items: center; gap: 8px; min-inline-size: 0; margin: 0; font-size: .8125rem; font-weight: 700; line-height: 1.2; }
+.nodeStep {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 22px;
+  block-size: 22px;
+  color: #ffffff;
+  background: #101116;
+  border-radius: 50%;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  font-size: .75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.nodeTrigger, .nodeReply { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
+.nodeTrigger .triggerIcon { inline-size: 22px; block-size: 22px; }
+.nodeReply {
+  color: #3a3b42;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .75rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.replyMark { display: grid; place-items: center; flex: 0 0 auto; inline-size: 18px; block-size: 18px; color: #ffffff; background: var(--thumb-accent, #5f2ce0); border-radius: 5px; }
+.nodeKeyword { display: flex; align-items: center; gap: 10px; margin: 0; padding-inline-start: 30px; }
+.nodeLabel { color: #6b6c75; font-size: .75rem; font-weight: 600; }
+.thumb .stage .keyword { padding: 6px 13px; box-shadow: none; font-size: .9375rem; }
+.thumb .stage .node > .them { padding-inline-start: 30px; }
+.thumb .stage .node > .nodeEvent { justify-content: flex-start; padding-inline-start: 30px; text-align: start; }
+.thumb .stage .node > :is(.reply, .action, .versions) { justify-self: end; }
+.thumb .stage .node > .button { inline-size: 100%; }
+/* The wire: a short accent line from step 1 down to step 2, under the step badges. */
+.wire { flex: 0 0 auto; align-self: flex-start; inline-size: 2px; block-size: 14px; margin-inline-start: 22px; background: var(--thumb-accent, #5f2ce0); border-radius: 2px; }
+.nodeWrap { inline-size: 100%; }
+/* The link under the reply, in prints tall enough for both steps and it. */
+@container thumb-view (height < 262px) { .thumb .stage .nodeButton { display: none; } }
+
+/* Wide prints: the two steps side by side, the wire running across. */
+@container thumb-view (width >= 430px) and (aspect-ratio > 1.45) {
+  .builder { flex-direction: row; align-items: center; }
+  .builder > :not(.wire) { flex: 1 1 0; min-inline-size: 0; }
+  .builder > .nodeWrap { flex-grow: 1.25; }
+  .thumb .stage .node > :is(.them, .nodeKeyword, .nodeEvent) { padding-inline-start: 0; }
+  .wire { align-self: center; inline-size: 18px; block-size: 2px; margin: 0 0 15px; }
+  .stage[data-layout="builder"] .block { inline-size: min(100%, 580px); }
+  .thumb .stage .nodeButton { display: flex; }
+}
+
+/* ---------- Row form: the message and the reply ---------- */
+
+.row {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  gap: .45em;
+  box-sizing: border-box;
+  padding: .7em .7em;
+  font-size: clamp(8px, min(7cqi, 9.4cqh), 13px);
+  line-height: 1.25;
+}
+/* The topic icon in the corner; the message keeps clear of it. */
+.rowBadge {
+  position: absolute;
+  inset: .55em .55em auto auto;
+  display: grid;
+  place-items: center;
+  inline-size: 1.75em;
+  block-size: 1.75em;
+  color: #ffffff;
+  background: var(--thumb-accent, #5f2ce0);
+  border-radius: 50%;
+}
+.rowBadge > svg { inline-size: 1em; block-size: 1em; }
+.rowIn, .rowOut {
+  min-inline-size: 0;
+  padding: .38em .7em;
+  font-weight: 600;
+  box-shadow: 0 .3em .8em rgb(16 17 22 / 8%);
+}
+.rowIn { justify-self: start; max-inline-size: calc(100% - 2em); background: #ffffff; border-radius: 1em 1em 1em .35em; }
+.rowIn[data-event="true"] { color: #4a4b55; font-weight: 500; }
+.rowOut {
+  display: flex;
+  align-items: flex-start;
+  gap: .3em;
+  justify-self: end;
+  max-inline-size: 94%;
+  color: #ffffff;
+  background: var(--thumb-accent, #5f2ce0);
+  border-radius: 1em 1em .35em 1em;
+}
+.rowOut[data-kind="action"] { color: #101116; background: #ffffff; outline: 1px dashed color-mix(in srgb, var(--thumb-accent, #5f2ce0) 50%, transparent); outline-offset: -1px; }
+.rowOut > svg { inline-size: 1em; block-size: 1em; margin-block-start: .15em; color: var(--thumb-accent, #5f2ce0); }
+
+/* ---------- Compact form: the topic icon and the request ---------- */
+
+/*
+ * The icon takes about half the box; the chip under it sizes its text from the
+ * chip's measured width in ems (--tag-em), so the whole word fits the box's
+ * width at the largest size the box allows.
+ */
+.compact {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  align-content: center;
+  padding: 3px;
+  box-sizing: border-box;
+  line-height: 1.05;
+}
+.compactIcon {
+  display: grid;
+  place-items: center;
+  inline-size: min(48cqi, 50cqh, 44px);
+  block-size: min(48cqi, 50cqh, 44px);
+  color: #ffffff;
+  background: var(--thumb-accent, #5f2ce0);
+  border-radius: 28%;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--thumb-accent, #5f2ce0) 32%, transparent);
+  rotate: -6deg;
+}
+.compactIcon > svg { inline-size: 54%; block-size: 54%; }
+.compactTag {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: .3em;
+  max-inline-size: 100%;
+  margin-block-start: max(-8px, -10cqh);
+  padding: .32em .55em;
+  border-radius: 999px;
+  box-shadow: 0 .3em .8em rgb(16 17 22 / 18%);
+  font-size: clamp(6.5px, calc((100cqi - 6px) / var(--tag-em, 6)), min(13px, 17cqh));
+  font-weight: 800;
+  rotate: 3deg;
+}
+.compactTag[data-lines="2"] { border-radius: .7em; }
+.compactText { display: grid; justify-items: center; min-inline-size: 0; white-space: nowrap; }
+.compactText > span { display: block; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; }
+.compactTag[data-kind="keyword"] {
+  color: #ffffff;
+  background: #101116;
+  font-family: var(--font-display, ui-sans-serif, sans-serif);
+  letter-spacing: -.005em;
+  text-transform: uppercase;
+}
+.compactTag:not([data-kind="keyword"]) { color: #101116; background: #ffffff; }
+.compactTag[data-kind="mention"] { color: var(--thumb-accent, #5f2ce0); }
+.compactTag > svg { inline-size: 1em; block-size: 1em; color: var(--thumb-accent, #5f2ce0); }

@@ -293,7 +293,7 @@ export function stepPlan(title: string): StepPlan {
 }
 
 export const destinationNouns = /\b(destinations?|links?|page|resource|deliverable|menu|price list|policy|source|offer|overview|brochure|itinerary|listing|rules|syllabus|information|details|product|hours)\b/i;
-const processNouns = /\b(journeys?|delivery|enquiry|record|route|thread|handoff|transition|enrollment|registration|fulfillment|scope)\b/i;
+const processNouns = /\b(journeys?|delivery|enquiry|record|route|thread|handoff|transition|enrol(?:l)?ment|registration|fulfil(?:l)?ment|scope)\b/i;
 const triggerPhrases = /\b(story replies|story mentions?|mention trigger|keywords?|words?|post|posts|reel|reels|first contact|trigger|scope|interaction|dm flow|connect|handoff situations|comment campaign|product campaign|course request|follow requirement|eligible)\b/i;
 const messageNouns = /\b(write|reply|replies|response|message|answer|acknowledgement|introduction|ending|invitation|instruction|wording|prompts?)\b/i;
 const collectNouns = /\b(email|fields?|collection|intake|enquiry flow|information flow|information request|request journey)\b/i;

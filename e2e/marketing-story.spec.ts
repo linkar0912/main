@@ -15,7 +15,7 @@ async function placeStoryAt(page: Page, storyBody: Locator, progress: number) {
 test("desktop story replaces copy inside one pinned left stage", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/#how-it-works");
-  // The page streams in behind the root loading screen; start once the story is there.
+  // Start once the story is on screen and visible, so the scroll samples measure it.
   await expect(page.locator("#how-it-works [data-story-body]")).toBeVisible();
 
   const section = page.locator("#how-it-works");
@@ -70,7 +70,7 @@ test("desktop story replaces copy inside one pinned left stage", async ({ page }
 test("marketing previews stay contained and use neutral channel surfaces", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/#how-it-works");
-  // The page streams in behind the root loading screen; start once the story is there.
+  // Start once the story is on screen and visible, so the scroll samples measure it.
   await expect(page.locator("#how-it-works [data-story-body]")).toBeVisible();
   await page.addStyleTag({
     content: '[data-desktop-stage] *, [data-desktop-stage] *::before, [data-desktop-stage] *::after { animation: none !important; transition: none !important; }',

@@ -11,15 +11,29 @@ import styles from "./pricing-page.module.css";
  * The one piece of pricing state the whole page shares: monthly or annual.
  * The page itself is a server component; only the leaves below that print a
  * price, a billing note, or a plan-specific signup link read this context.
+ *
+ * `changed` turns true the first time the visitor flips the toggle. Prices
+ * carry it as `data-swap`, and the price swap animation runs only on that
+ * attribute, so first paint shows every price still and at full strength.
  */
-const IntervalContext = createContext<{ interval: BillingInterval; setInterval: (next: BillingInterval) => void }>({
+const IntervalContext = createContext<{
+  interval: BillingInterval;
+  changed: boolean;
+  setInterval: (next: BillingInterval) => void;
+}>({
   interval: "MONTHLY",
+  changed: false,
   setInterval: () => undefined,
 });
 
 export function PricingIntervalProvider({ children }: { children: ReactNode }) {
-  const [interval, setInterval] = useState<BillingInterval>("MONTHLY");
-  return <IntervalContext.Provider value={{ interval, setInterval }}>{children}</IntervalContext.Provider>;
+  const [interval, setIntervalState] = useState<BillingInterval>("MONTHLY");
+  const [changed, setChanged] = useState(false);
+  const setInterval = (next: BillingInterval) => {
+    setIntervalState(next);
+    setChanged(true);
+  };
+  return <IntervalContext.Provider value={{ interval, changed, setInterval }}>{children}</IntervalContext.Provider>;
 }
 
 export function usePricingInterval(): BillingInterval {
@@ -60,12 +74,15 @@ export function BillingPeriod({ name }: { name: string }) {
   );
 }
 
-/** The large price on a plan card. */
+/** The large price on a plan card. The key remounts the number on each
+ *  change, so the swap animation replays once `data-swap` is set. */
 export function PlanPrice({ plan }: { plan: PricedPlan }) {
-  const interval = usePricingInterval();
+  const { interval, changed } = useContext(IntervalContext);
   return (
     <p className={styles.price}>
-      <strong key={interval}>{formatRupees(interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise)}</strong>
+      <strong key={interval} data-swap={changed || undefined}>
+        {formatRupees(interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise)}
+      </strong>
       <span>/{interval === "ANNUAL" ? "year" : "month"}</span>
     </p>
   );
@@ -82,10 +99,10 @@ export function PlanBillingNote({ isFree }: { isFree: boolean }) {
 
 /** The compact price in the comparison table header. */
 export function ComparisonPrice({ plan }: { plan: PricedPlan }) {
-  const interval = usePricingInterval();
+  const { interval, changed } = useContext(IntervalContext);
   const price = interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise;
   return (
-    <span className={styles.choosePrice} key={interval}>
+    <span className={styles.choosePrice} key={interval} data-swap={changed || undefined}>
       {plan.key === "free" ? formatRupees(0) : `${formatRupees(price)}/${interval === "ANNUAL" ? "yr" : "mo"}`}
     </span>
   );
@@ -119,4 +136,15 @@ export function IntervalText({ monthly, annual }: { monthly: string; annual: str
 export function IntervalAmount({ plan }: { plan: PricedPlan }) {
   const interval = usePricingInterval();
   return <>{formatRupees(interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise)}</>;
+}
+
+/** A bold amount that replays the price swap after the visitor changes the
+ *  billing period, and sits still on first paint (the invoice total). */
+export function SwapAmount({ plan }: { plan: PricedPlan }) {
+  const { interval, changed } = useContext(IntervalContext);
+  return (
+    <strong key={interval} data-swap={changed || undefined}>
+      {formatRupees(interval === "ANNUAL" ? plan.annualPaise : plan.monthlyPaise)}
+    </strong>
+  );
 }

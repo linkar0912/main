@@ -58,7 +58,12 @@ export async function proxy(request: NextRequest) {
     const baseUrl = hostRedirect.target === "admin" ? env.adminUrl : hostRedirect.target === "app" ? env.appUrl : env.publicSiteUrl;
     const destination = new URL(hostRedirect.pathname, baseUrl);
     destination.search = request.nextUrl.search;
-    return NextResponse.redirect(destination);
+    // A marketing page asked for on the app or admin host has one permanent
+    // home on the marketing host, so say so with a 308 and let search engines
+    // consolidate on it. Every other hop stays temporary (307): /login,
+    // /signup and the other app routes moving to app., the owner console
+    // moving to admin., and the bare app and admin roots (/dashboard, /admin).
+    return NextResponse.redirect(destination, hostRedirect.target === "marketing" ? 308 : 307);
   }
 
   // Public marketing, legal, and authentication routes should not be sent

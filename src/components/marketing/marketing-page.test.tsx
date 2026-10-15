@@ -71,6 +71,44 @@ describe("MarketingPage", () => {
       "/#faq",
     ]));
 
+    // The body links into the feature guides, not only the header and footer.
+    const main = within(screen.getByRole("main"));
+    for (const [name, href] of [
+      ["Instagram comment to DM automation", "/features/instagram-comment-to-dm"],
+      ["Instagram DM automation", "/features/instagram-dm-automation"],
+      ["Instagram Story mention replies", "/features/instagram-story-mention-replies"],
+      ["Instagram follow-gated campaigns", "/features/instagram-follow-gate"],
+      ["See all Instagram automation features", "/features"],
+    ]) {
+      expect(main.getByRole("link", { name }).getAttribute("href")).toBe(href);
+    }
+    // The cards that name a destination link to it: the use cases to their
+    // feature guides, the ready-made workflows to their recipes, and each
+    // channel to its own guides.
+    for (const [name, href] of [
+      ["Comment to DM workflow", "/features/instagram-comment-to-dm"],
+      ["Lead qualification workflow", "/features/instagram-lead-qualification"],
+      ["Instagram comment to guide template", "/templates/comment-guide-delivery"],
+      ["Explore Instagram automation features", "/features"],
+      ["Explore Facebook Page comment replies", "/features/facebook-comment-auto-reply"],
+    ]) {
+      // The open workflow's recipe link is in both the desktop tab panel and
+      // the phone accordion; CSS shows one of them, jsdom shows both.
+      const links = main.getAllByRole("link", { name });
+      expect(links.length).toBeLessThanOrEqual(2);
+      expect(links.every((link) => link.getAttribute("href") === href)).toBe(true);
+    }
+    const mainLinks = Array.from(screen.getByRole("main").querySelectorAll("a[href]"), (link) => link.getAttribute("href"));
+    for (const slug of ["comment-guide-delivery", "lead-qualification", "offer-follow-up", "support-handoff"]) {
+      expect(mainLinks).toContain(`/templates/${slug}`);
+    }
+    // No card sends people back to a section of the page they are already on.
+    expect(mainLinks).not.toContain("/#surfaces");
+    // Nothing hidden from assistive technology can take keyboard focus.
+    expect(container.querySelectorAll('[aria-hidden="true"] a[href], [aria-hidden="true"] button')).toHaveLength(0);
+    // /dashboard redirects to the app host and is disallowed in robots.txt.
+    expect(destinations.some((href) => href?.startsWith("/dashboard"))).toBe(false);
+
     const navigation = screen.getByRole("navigation", { name: "Primary" });
     expect(within(navigation).getByRole("link", { name: "Product" }).getAttribute("href"))
       .toBe("/features");
@@ -88,7 +126,7 @@ describe("MarketingPage", () => {
       expect(href?.startsWith("/#")).toBe(true);
       expect(container.querySelector(href?.slice(1) ?? "missing-anchor")).toBeTruthy();
     }
-    expect(resources.getByRole("link", { name: "Automation workflows" }).getAttribute("href")).toBe("/templates");
+    expect(resources.getByRole("link", { name: "All workflow recipes" }).getAttribute("href")).toBe("/templates");
     expect(resources.getByRole("link", { name: "All solutions" }).getAttribute("href")).toBe("/solutions");
   });
 
@@ -109,6 +147,26 @@ describe("MarketingPage", () => {
     expect(within(channels).getByText(/private replies, direct messages, and follow-gated/i)).toBeTruthy();
     expect(within(channels).getByRole("heading", { name: "Facebook Pages" })).toBeTruthy();
     expect(within(channels).getByText(/public replies to top-level Page comments/i)).toBeTruthy();
+  });
+
+  it("shows illustrative use cases instead of named testimonials", () => {
+    const { container } = render(<MarketingPage />);
+    const proof = screen.getByRole("region", { name: "Creator conversation examples" });
+
+    expect(container.textContent).not.toMatch(/Aanya|Arjun/);
+    expect(proof.querySelectorAll("blockquote")).toHaveLength(0);
+    expect(within(proof).getAllByRole("heading", { level: 3 })).toHaveLength(2);
+  });
+
+  it("labels sample figures and uses placeholder handles in the product previews", () => {
+    const { container } = render(<MarketingPage />);
+
+    expect(Array.from(container.querySelectorAll("[data-sample-tag]"), (tag) => tag.textContent)).toEqual(["Sample", "Sample"]);
+    expect(container.querySelector("#insights figcaption")?.textContent).toMatch(/^\s*Sample data\./);
+    for (const id of ["insights", "setup", "outcomes"]) {
+      expect(container.querySelector(`#${id} [data-nosnippet]`), id).not.toBeNull();
+    }
+    expect(container.textContent).not.toMatch(/meera|arjun|nikhil|aanya/i);
   });
 
   it("does not render em dashes in public copy", () => {

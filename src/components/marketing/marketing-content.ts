@@ -13,6 +13,10 @@ export type SurfaceCard = {
   title: string;
   body: string;
   preview: readonly [string, string, string];
+  /** The feature guide that explains this card in depth. */
+  href: `/features/${string}`;
+  /** Anchor text for that guide: names the feature, never "Learn more". */
+  linkLabel: string;
 };
 
 export type WorkflowItem = {
@@ -22,6 +26,10 @@ export type WorkflowItem = {
   body: string;
   event: string;
   reply: string;
+  /** The ready-made recipe this example is built from. */
+  href: `/templates/${string}`;
+  /** Anchor text for that recipe: names the template, never "Learn more". */
+  linkLabel: string;
 };
 
 export type FaqItem = {
@@ -67,24 +75,32 @@ export const surfaceCards: SurfaceCard[] = [
     title: "Reply when someone comments",
     body: "Choose a word such as GUIDE or PRICE and privately send the answer they asked for.",
     preview: ["Someone comments", "Chosen word matches", "Private reply"],
+    href: "/features/instagram-comment-to-dm",
+    linkLabel: "Instagram comment to DM automation",
   },
   {
     id: "dm-triggers",
     title: "Answer common messages",
-    body: "Recognize questions about prices, hours, or delivery and answer them straight away.",
+    body: "Recognise questions about prices, hours, or delivery and answer them straight away.",
     preview: ["Someone messages", "Question matches", "Helpful answer"],
+    href: "/features/instagram-dm-automation",
+    linkLabel: "Instagram DM automation",
   },
   {
     id: "story-mentions",
     title: "Thank people for Story mentions",
     body: "Send a warm thank-you when someone mentions your account in an Instagram Story.",
     preview: ["Story mention", "Thank-you message", "Next question"],
+    href: "/features/instagram-story-mention-replies",
+    linkLabel: "Instagram Story mention replies",
   },
   {
     id: "follow-gated-campaigns",
     title: "Send links to followers",
     body: "Ask permission, check that the person follows you, and then send the promised link.",
     preview: ["Link requested", "Follower checked", "Link sent"],
+    href: "/features/instagram-follow-gate",
+    linkLabel: "Instagram follow-gated campaigns",
   },
 ];
 
@@ -96,6 +112,8 @@ export const workflowItems: WorkflowItem[] = [
     body: "Share the promised resource, then ask what the person would like help with.",
     event: "Someone comments GUIDE",
     reply: "Send the guide → Ask what they need",
+    href: "/templates/comment-guide-delivery",
+    linkLabel: "Instagram comment to guide template",
   },
   {
     id: "lead-qualifier",
@@ -104,6 +122,8 @@ export const workflowItems: WorkflowItem[] = [
     body: "Ask one useful question and choose the next reply from their answer.",
     event: "Someone sends a message",
     reply: "Ask a question → Save the answer → Send the right reply",
+    href: "/templates/lead-qualification",
+    linkLabel: "Instagram lead qualification template",
   },
   {
     id: "timed-nurture",
@@ -112,6 +132,8 @@ export const workflowItems: WorkflowItem[] = [
     body: "Send a friendly check-in while the conversation is still open.",
     event: "Someone replies",
     reply: "Wait 18 hours → Send a reminder",
+    href: "/templates/offer-follow-up",
+    linkLabel: "Instagram offer follow-up template",
   },
   {
     id: "human-handoff",
@@ -120,6 +142,8 @@ export const workflowItems: WorkflowItem[] = [
     body: "Pause automatic replies and give your team the conversation so far.",
     event: "Someone asks for personal help",
     reply: "Pause automatic replies → Move to the team inbox",
+    href: "/templates/support-handoff",
+    linkLabel: "Instagram support handoff template",
   },
 ];
 
@@ -127,15 +151,23 @@ const rupees = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN")}`;
 const { creator, growth, agency } = BILLING_PLANS;
 
 /**
- * The homepage FAQ, also published as FAQPage structured data. The first
- * questions answer what people search for; keep every answer literally true.
+ * The homepage FAQ, also published as FAQPage structured data and in llms.txt.
+ * The first questions answer what people search for; keep every answer
+ * literally true. The opening definition stays between 40 and 60 words so it
+ * can be quoted on its own.
  */
 export const faqItems: FaqItem[] = [
+  {
+    id: "what-is-instagram-automation",
+    question: "What is Instagram automation?",
+    answer:
+      "Instagram automation is a set of rules that replies to comments, DMs and Story mentions for you, using the words, links and next steps you choose. Linkar is an Instagram automation tool that runs these rules through Meta’s official Instagram API, so replies go out from your own professional account while your team handles anything personal.",
+  },
   {
     id: "comment-to-dm",
     question: "How do I auto-reply to Instagram comments with a DM?",
     answer:
-      "Create an automation on a post or reel, choose the words that should start it, and write the message. When someone comments, Linkar sends them that DM as a private reply.",
+      "Create an automation on a post or reel, choose the words that should start it, and write the message. When someone comments, Linkar sends them that message as an auto DM, through a private reply.",
   },
   {
     id: "allowed",
@@ -147,7 +179,7 @@ export const faqItems: FaqItem[] = [
     id: "price",
     question: "How much does Linkar cost?",
     answer:
-      `You can start free with ${FREE_BILLING_PLAN.automationLimit} automations and ${FREE_BILLING_PLAN.monthlyDeliveryLimit.toLocaleString("en-IN")} messages a month. Paid plans are ${rupees(creator.monthlyPaise)}, ${rupees(growth.monthlyPaise)} and ${rupees(agency.monthlyPaise)} a month, or ${rupees(creator.annualPaise)}, ${rupees(growth.annualPaise)} and ${rupees(agency.annualPaise)} a year, billed in rupees.`,
+      `You can start free with ${FREE_BILLING_PLAN.automationLimit} automations and ${FREE_BILLING_PLAN.monthlyDeliveryLimit.toLocaleString("en-IN")} messages a month. Paid plans are ${rupees(creator.monthlyPaise)}, ${rupees(growth.monthlyPaise)} and ${rupees(agency.monthlyPaise)} a month, or ${rupees(creator.annualPaise)}, ${rupees(growth.annualPaise)} and ${rupees(agency.annualPaise)} a year, billed in rupees, GST included.`,
   },
   {
     id: "accounts",
@@ -165,7 +197,7 @@ export const faqItems: FaqItem[] = [
     id: "account-safety",
     question: "How does Linkar protect my account?",
     answer:
-      "Linkar uses the connection you authorize, encrypts stored access tokens, verifies incoming requests, and keeps each workspace’s data scoped to that workspace.",
+      "Linkar uses the connection you authorise, encrypts stored access tokens, verifies incoming requests, and keeps each workspace’s data scoped to that workspace.",
   },
   {
     id: "no-code",

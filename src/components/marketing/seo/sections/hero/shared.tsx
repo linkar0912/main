@@ -30,17 +30,20 @@ const cheapestPaidPaise = Math.min(...Object.values(BILLING_PLANS).map((plan) =>
 export const heroProofLine = `Free to start. Paid plans from ${formatRupees(cheapestPaidPaise)} a month.`;
 
 /**
- * Home / Collection / Page. On detail heroes the current page renders as the
- * label pill, so the page label shows once instead of twice.
+ * Home / Collection. A hub shows its collection as the current crumb. A detail
+ * hero passes `parentsOnly`: the trail stops at the collection link, because
+ * the page label leads the H1 as its kicker and should show once. The
+ * BreadcrumbList JSON-LD still lists the page itself.
  */
-export function HeroBreadcrumb({ crumbs, currentAsPill = false, className }: { crumbs: readonly SeoCrumb[]; currentAsPill?: boolean; className?: string }) {
+export function HeroBreadcrumb({ crumbs, parentsOnly = false, className }: { crumbs: readonly SeoCrumb[]; parentsOnly?: boolean; className?: string }) {
+  const shown = parentsOnly ? crumbs.filter((crumb) => !crumb.current) : crumbs;
   return (
-    <nav className={cx(styles.breadcrumb, className)} aria-label="Breadcrumb">
+    <nav className={cx(styles.breadcrumb, parentsOnly && styles.parents, className)} aria-label="Breadcrumb">
       <ol>
-        {crumbs.map((crumb) => (
+        {shown.map((crumb) => (
           <li key={crumb.href}>
             {crumb.current
-              ? <span className={currentAsPill ? styles.crumbPill : undefined} aria-current="page">{crumb.label}</span>
+              ? <span aria-current="page">{crumb.label}</span>
               : <Link href={crumb.href}>{crumb.label}</Link>}
           </li>
         ))}
@@ -63,8 +66,11 @@ function longestWordLength(text: string): number {
 /**
  * One block per sentence, so a two-sentence headline never leaves a word of the second sentence on the first line.
  * data-longword: a word of 14 or more letters is wider than a phone column at the usual size, so phones step it down.
+ * kicker: the page or hub label, first inside the H1 as the label pill, so the heading names what the page is about.
+ * The space after it keeps the label and the headline apart in the heading's text; it never renders.
+ * data-long and data-longword measure the headline only: the kicker has its own size.
  */
-export function HeroTitle({ text, className }: { text: string; className?: string }) {
+export function HeroTitle({ text, kicker, className, kickerClassName }: { text: string; kicker?: string; className?: string; kickerClassName?: string }) {
   const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
   return (
     <h1
@@ -73,6 +79,7 @@ export function HeroTitle({ text, className }: { text: string; className?: strin
       data-long={text.length > 42 ? "true" : undefined}
       data-longword={longestWordLength(text) >= 14 ? "true" : undefined}
     >
+      {kicker ? <><span className={cx(styles.kicker, kickerClassName)} data-kicker="">{kicker}</span>{" "}</> : null}
       {sentences.length > 1
         ? sentences.map((sentence, index) => <span key={sentence} className={styles.sentence}>{keepHyphens(index < sentences.length - 1 ? `${sentence} ` : sentence)}</span>)
         : keepHyphens(text)}

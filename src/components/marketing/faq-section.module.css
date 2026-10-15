@@ -3,6 +3,20 @@
   color: var(--marketing-on-inverse);
   background: var(--marketing-inverse);
   scroll-margin-top: 88px;
+  /* Last section before the footer: rendering is skipped until it nears the
+     viewport. The placeholder holds the measured closed-accordion height and
+     `auto` keeps the real one after the first render. It sets the content
+     box, so the values below leave out the padding, which is added on top.
+     Measured content box: 1,160 to 1,173px from 1024 to 1410px wide, then
+     1,232 to 1,272px once a question wraps from about 1420px (1,234px at
+     1440). Re-measure if the FAQ copy changes. /#faq still lands on the
+     section's top edge, which does not depend on this height. */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 1170px;
+}
+
+@media (min-width: 1440px) {
+  .section { contain-intrinsic-block-size: auto 1250px; }
 }
 
 .frame {
@@ -89,7 +103,8 @@
 .panel[data-open="true"] p { opacity: 1; }
 
 @media (min-width: 768px) and (max-width: 1023px) {
-  .section { padding: 112px 32px; }
+  /* Content box measured at 1,106 to 1,135px. */
+  .section { padding: 112px 32px; contain-intrinsic-block-size: auto 1110px; }
   .frame { display: block; }
   .frame > h2 { max-inline-size: 800px; margin-bottom: 56px; }
   .question,
@@ -97,7 +112,8 @@
 }
 
 @media (max-width: 767px) {
-  .section { padding: 88px 20px; }
+  /* Content box measured at 962 to 1,021px (963px at 375). */
+  .section { padding: 88px 20px; contain-intrinsic-block-size: auto 965px; }
   .frame { display: block; }
   .frame > h2 { margin-bottom: 44px; font-size: var(--marketing-section-title-size); }
   .question,

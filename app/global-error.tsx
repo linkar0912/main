@@ -23,7 +23,7 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
   }, []);
 
   return (
-    <html lang="en">
+    <html lang="en-IN">
       <body>
         <title>Something went wrong · Linkar</title>
         <style>{`

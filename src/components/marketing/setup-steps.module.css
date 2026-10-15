@@ -3,6 +3,19 @@
   color: var(--marketing-text);
   background: var(--marketing-panel);
   scroll-margin-top: 88px;
+  /* Below the fold on every screen, so the browser can skip its layout and
+     paint until it nears the viewport. The fallback is the height of the
+     content box only: the browser adds the block padding (11vw, clamped)
+     on top, so a full-section height here makes the placeholder too tall
+     and in-page links clicked from higher up scroll past their section.
+     Measured with the section rendered, minus its padding and border, at
+     1280 to 1536px wide (1680 to 1920px, 820px and 390px for the wide,
+     tablet and phone values below). "auto" then remembers the rendered
+     height once it has been seen, so the scrollbar and /#setup land
+     where they should. Block axis only: the width comes from the page.
+     Keep these in step when the section's content changes. */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 960px;
 }
 
 .header {
@@ -102,7 +115,19 @@
   font-size: .8125rem;
   font-weight: 700;
 }
-.illustration figcaption > span { inline-size: 8px; block-size: 8px; background: #fff100; border-radius: 99px; }
+.captionDot { inline-size: 8px; block-size: 8px; flex: 0 0 auto; background: #fff100; border-radius: 99px; }
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  clip-path: inset(50%);
+}
 
 /* A fragment of a real Linkar screen. Built from the marketing surface tokens so
    it themes with the page instead of being a fixed-colour picture of the app. */
@@ -376,14 +401,34 @@
 
 .statRow .statusPill { margin-inline-start: auto; }
 
+/* Marks the counts beside it as sample figures, in the same chip language as
+   the "Example" tag on the use-case cards at the top of the page. */
+.sampleTag {
+  align-self: center;
+  padding: 3px 7px;
+  color: var(--marketing-text);
+  font-family: var(--font-sans, ui-sans-serif, sans-serif);
+  font-size: .58rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: .015em;
+  background: color-mix(in srgb, var(--marketing-text) 8%, transparent);
+  border-radius: 5px;
+}
+
 .revealCard[data-visible="true"] .connector { animation: connector-draw 420ms cubic-bezier(.43,.195,.02,1) both; }
 .revealCard[data-visible="true"] .switchKnob { animation: switch-on 400ms cubic-bezier(.43,.195,.02,1) both; }
 
 @keyframes connector-draw { from { stroke-dashoffset: 36; } to { stroke-dashoffset: 0; } }
 @keyframes switch-on { from { transform: translateX(0); } to { transform: translateX(20px); } }
 
+/* From 1600px the padding stops growing and the content settles taller. */
+@media (min-width: 1600px) {
+  .section { contain-intrinsic-block-size: auto 1020px; }
+}
+
 @media (min-width: 768px) and (max-width: 1023px) {
-  .section { padding: 112px 32px; }
+  .section { padding: 112px 32px; contain-intrinsic-block-size: auto 1200px; }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
   .revealCard:last-child { grid-column: span 2; }
   .revealCard:last-child .card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .9fr); column-gap: 32px; }
@@ -394,7 +439,7 @@
 }
 
 @media (max-width: 767px) {
-  .section { padding: 88px 20px; }
+  .section { padding: 88px 20px; contain-intrinsic-block-size: auto 1970px; }
   .header h2 { font-size: var(--marketing-section-title-size); }
   .steps { grid-template-columns: 1fr; gap: 20px; margin-top: 48px; }
   .card { padding: 28px 24px; }

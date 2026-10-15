@@ -1,17 +1,15 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getSeoPages, seoCollections, seoPages, seoTopics, topicGuides, type SeoCollection, type SeoPage } from "@/src/content/seo";
+import { getRelatedSeoPages, getSeoPages, seoCollections, seoPagePath, seoPages, seoTopics, topicGuides, type SeoCollection, type SeoPage } from "@/src/content/seo";
 import { seoHeroAsset } from "@/src/lib/seo-hero-assets";
 import {
   buildDetailLayouts,
   detailLayout,
   heavySurfaces,
-  hubImageSlots,
   layoutVariants,
   MIN_PAGES_PER_VARIANT,
   pageNavItems,
-  requiredImageSlots,
   sectionIds,
   sectionSurface,
   seoPager,
@@ -21,10 +19,13 @@ import {
 } from "./seo-layout";
 import { SeoCollectionPage, SeoLandingPage } from "./seo-page";
 import { topicLine, topicVisuals, type TopicLineField } from "./seo-theme";
+import { facebookRepliesLinkText, instagramFeaturesLinkText } from "./sections/extras/channels";
+import { faqItems, genericQuestion, genericQuestions } from "./sections/faq/copy";
+import { relatedSub } from "./sections/related/copy";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/features" }));
 
-/* A plain img keeps the real src, so the test can tell hero photos from image slots. */
+/* A plain img keeps the real src, so the tests can tell the hero photo from any other picture. */
 vi.mock("next/image", async () => {
   const { createElement } = await import("react");
   return {
@@ -68,6 +69,9 @@ function coveringPages(): SeoPage[] {
   return chosen;
 }
 
+/** The questions every page may add after its own; each page shows exactly one. */
+const genericQuestionTitles = ["Which account do I need?", "Can I try Linkar for free?", "Do I need to write code?"];
+
 /** Every piece of editorial copy the page must keep visible. */
 function editorialStrings(page: SeoPage): string[] {
   const guide = topicGuides[page.topic];
@@ -77,17 +81,17 @@ function editorialStrings(page: SeoPage): string[] {
     page.example.incoming, page.example.reply, page.example.note,
     ...page.tip, ...page.faq,
     guide.title, ...guide.paragraphs,
-    "Which account do I need?", "Can I try Linkar for free?", "Do I need to write code?",
+    genericQuestion(page)[0],
   ];
 }
 
-const heroPhotoPattern = /^\/marketing\/seo\/(?:features|solutions|templates)(?:\/[^/]+)?\.webp$/;
-
-function expectNoHeroPhotoOutsideHero(container: HTMLElement) {
-  for (const img of Array.from(container.querySelectorAll("img"))) {
-    const src = img.getAttribute("src") ?? "";
-    if (src.includes("/slots/")) continue;
-    if (heroPhotoPattern.test(src)) expect(img.closest("[data-hero]"), `${src} outside the hero`).not.toBeNull();
+/** The hero photo is the only picture on a page: every other visual is Linkar UI drawn in code. */
+function expectOnlyHeroPhoto(container: HTMLElement, hero: string) {
+  const pictures = Array.from(container.querySelectorAll("img, picture, video, image"));
+  expect(pictures.map((node) => node.getAttribute("src") ?? node.getAttribute("href"))).toEqual([hero]);
+  expect(pictures[0].closest("[data-hero]"), `${hero} outside the hero`).not.toBeNull();
+  for (const node of Array.from(container.querySelectorAll("[style]"))) {
+    expect(node.getAttribute("style"), "inline background picture").not.toMatch(/url\(/);
   }
 }
 
@@ -117,6 +121,8 @@ describe("SEO detail pages", () => {
 
     expect(container.querySelectorAll("h1")).toHaveLength(1);
     expect(container.querySelector("h1")?.closest("[data-hero]")).not.toBeNull();
+    // The H1 names the page: its label leads the headline.
+    expect(container.querySelector("h1")?.textContent).toContain(page.label);
 
     // Every section the layout places carries its fixed id.
     for (const key of layout.order) {
@@ -139,14 +145,14 @@ describe("SEO detail pages", () => {
     for (const copy of editorialStrings(page)) expect(text.includes(squash(copy)), copy).toBe(true);
     expect(text.includes(squash(page.example.next)), page.example.next).toBe(true);
 
-    expect(container.innerHTML.includes("\u2014")).toBe(false);
-    expectNoHeroPhotoOutsideHero(container);
-
-    // Every image slot drawn on the page is one the image script knows about.
-    const declared = new Set(requiredImageSlots(page).map((slot) => slot.id));
-    for (const slot of Array.from(container.querySelectorAll("[data-image-slot]"))) {
-      expect(declared.has(slot.getAttribute("data-image-slot")!), slot.getAttribute("data-image-slot")!).toBe(true);
+    // The FAQ: the page's own question and one generic question, never all three.
+    const questions = Array.from(main.querySelectorAll("#questions summary"), (summary) => summary.textContent?.trim());
+    expect(questions).toEqual([page.faq[0], genericQuestion(page)[0]].map((question) => expect.stringContaining(question)));
+    for (const other of genericQuestionTitles.filter((question) => question !== genericQuestion(page)[0])) {
+      expect(text.includes(squash(other)), other).toBe(false);
     }
+
+    expect(container.innerHTML.includes("\u2014")).toBe(false);
 
     // Pager: previous and next guide in the same collection.
     const { previous, next: following } = seoPager(page);
@@ -156,6 +162,11 @@ describe("SEO detail pages", () => {
     if (page.collection === "templates") {
       expect(container.querySelector(`a[href="/templates/${page.slug}/recipe"][download]`)).not.toBeNull();
     }
+  });
+
+  it.each(pages.map((page) => [pageKey(page), page] as const))("shows no picture on %s besides the hero photo", (_key, page) => {
+    const { container } = render(<SeoLandingPage page={page} />);
+    expectOnlyHeroPhoto(container, seoHeroAsset(page).src);
   });
 
   it.each(seoPages.filter((page) => page.topic === "facebook").map((page) => [pageKey(page), page] as const))("keeps %s to public Page replies", (_key, page) => {
@@ -171,6 +182,30 @@ describe("SEO detail pages", () => {
     let text = main.textContent ?? "";
     for (const copy of editorialStrings(page)) text = text.split(copy).join(" ");
     expect(text).not.toMatch(/\bDMs?\b|private repl|direct message|Messenger/i);
+  });
+
+  it("words the channel card links per collection and keeps the head term off them", () => {
+    const facebookFeature = "/features/facebook-comment-auto-reply";
+    const facebookAnchors: string[] = [];
+    for (const collection of collections) {
+      // A page that shows the channel cards and links out to the Facebook Page reply feature.
+      const page = getSeoPages(collection).find((candidate) => detailLayout(candidate).extras.includes("channels") && seoPagePath(candidate) !== facebookFeature);
+      expect(page, collection).toBeDefined();
+      const { container, unmount } = render(<SeoLandingPage page={page!} />);
+      const cards = container.querySelector("#channels");
+      expect(cards, pageKey(page!)).not.toBeNull();
+      const facebook = cards!.querySelector(`a[href="${facebookFeature}"]`);
+      const instagram = cards!.querySelector('a[href="/features"]');
+      expect(facebook?.textContent, pageKey(page!)).toBe(`Learn more ${facebookRepliesLinkText[collection]}`);
+      expect(instagram?.textContent, pageKey(page!)).toBe(`Learn more ${instagramFeaturesLinkText}`);
+      // "Instagram automation" anchors sitewide point at the homepage, never at a hub.
+      expect(instagram?.textContent).not.toMatch(/instagram automation/i);
+      expect(facebook?.textContent).not.toMatch(/[0-9\u2014]/);
+      facebookAnchors.push(facebook!.textContent!);
+      unmount();
+    }
+    expect(new Set(facebookAnchors).size).toBe(collections.length);
+    expect(facebookAnchors).not.toContain("Learn more about Facebook Page comment replies");
   });
 });
 
@@ -217,17 +252,6 @@ describe("SEO layout engine", () => {
         if (index >= 2) expect(surfaces.slice(index - 2, index + 1).every((surface) => heavySurfaces.has(surface)), `${pageKey(page)} three dark or saturated sections`).toBe(false);
       });
     }
-  });
-
-  it("asks only for image slots, never the hero photo", () => {
-    for (const page of seoPages) {
-      const hero = seoHeroAsset(page).src;
-      for (const slot of requiredImageSlots(page)) {
-        expect(slot.src.startsWith("/marketing/seo/slots/")).toBe(true);
-        expect(slot.src).not.toBe(hero);
-      }
-    }
-    for (const collection of collections) expect(hubImageSlots(collection)).toHaveLength(getSeoPages(collection).length);
   });
 });
 
@@ -285,7 +309,16 @@ describe("SEO collection hubs", () => {
     const main = container.querySelector("main")!;
 
     expect(container.querySelectorAll("h1")).toHaveLength(1);
+    // The H1 starts with the hub's label, then the headline. The homepage owns
+    // "Instagram automation", so the solutions hub names workflows instead.
+    expect(container.querySelector("h1")?.textContent).toMatch(/^Instagram (and Facebook automation|workflows) /);
+    expect(container.querySelector("h1")?.textContent).toContain(hub.headline);
     expect(main.querySelector("#browse")).not.toBeNull();
+
+    // The intro closes with one link to the homepage, anchored on the head term.
+    const homeLinks = Array.from(main.querySelectorAll('#browse a[href="/"]'));
+    expect(homeLinks.map((link) => link.textContent)).toEqual(["Instagram automation"]);
+    expect(homeLinks[0].closest("p")?.textContent).toMatch(/Linkar’s Instagram automation\b[^.]*\.$/);
     const topics = [...new Set(pages.map((page) => page.topic))];
     for (const topic of topics) expect(main.querySelector(`#${topic}`), topic).not.toBeNull();
 
@@ -309,10 +342,66 @@ describe("SEO collection hubs", () => {
     }
 
     expect(container.innerHTML.includes("\u2014")).toBe(false);
-    expectNoHeroPhotoOutsideHero(container);
-    const declared = new Set(hubImageSlots(collection).map((slot) => slot.id));
-    for (const slot of Array.from(container.querySelectorAll("[data-image-slot]"))) {
-      expect(declared.has(slot.getAttribute("data-image-slot")!), slot.getAttribute("data-image-slot")!).toBe(true);
+  });
+
+  it.each(collections.map((collection) => [collection] as const))("shows no picture on the %s hub besides the hero photo", (collection) => {
+    const { container } = render(<SeoCollectionPage collection={collection} />);
+    expectOnlyHeroPhoto(container, seoHeroAsset({ collection }).src);
+  });
+});
+
+describe("SEO shared copy", () => {
+  it("gives every page its own question plus one generic question, the same on every build", () => {
+    for (const page of seoPages) {
+      const items = faqItems(page);
+      expect(items).toHaveLength(2);
+      expect(items[0]).toBe(page.faq);
+      expect(genericQuestionTitles).toContain(items[1][0]);
+      expect(faqItems({ ...page })[1][0]).toBe(items[1][0]);
     }
+  });
+
+  it("shows each generic question on about a third of the pages, in every collection", () => {
+    const counts = new Map<string, number>();
+    for (const page of seoPages) counts.set(genericQuestion(page)[0], (counts.get(genericQuestion(page)[0]) ?? 0) + 1);
+    expect([...counts.keys()].sort()).toEqual([...genericQuestionTitles].sort());
+    for (const [question, count] of counts) {
+      expect(count, question).toBeGreaterThanOrEqual(Math.floor(seoPages.length / 3));
+      expect(count, question).toBeLessThanOrEqual(Math.ceil(seoPages.length / 3));
+    }
+    for (const collection of collections) {
+      expect(new Set(getSeoPages(collection).map((page) => genericQuestion(page)[0])).size, collection).toBe(genericQuestionTitles.length);
+    }
+  });
+
+  it("calls a Facebook Page guide a recipe only on templates", () => {
+    for (const page of seoPages.filter((candidate) => candidate.topic === "facebook")) {
+      const [question, answer] = genericQuestions(page)[0];
+      expect(question).toBe("Which account do I need?");
+      expect(typeof answer).toBe("string");
+      if (page.collection === "templates") expect(answer).toMatch(/\brecipe\b/);
+      else expect(answer).not.toMatch(/recipe/i);
+    }
+  });
+
+  it("writes the related intro for each collection, never the old shared line", () => {
+    for (const page of seoPages) {
+      const related = getRelatedSeoPages(page);
+      if (related.length === 0) continue;
+      const sub = relatedSub(page, related);
+      expect(sub).not.toContain("picked to go with");
+      expect(sub.toLowerCase()).toContain(page.label.toLowerCase());
+      expect(sub).not.toMatch(/[0-9\u2014]/);
+      // The same label and links read differently in each collection.
+      expect(new Set(collections.map((collection) => relatedSub({ ...page, collection }, related))).size).toBe(collections.length);
+    }
+    const recipe = getSeoPages("templates")[0];
+    expect(relatedSub(recipe, getRelatedSeoPages(recipe))).toContain(`adapt the ${recipe.label}`);
+    const solution = getSeoPages("solutions")[0];
+    expect(relatedSub(solution, getRelatedSeoPages(solution).slice(0, 1))).toMatch(/^One (guide|recipe) that helps you put /);
+  });
+
+  it("counts the recipes on the templates hub from the collection", () => {
+    expect(seoCollections.templates.description).toContain(`Browse ${getSeoPages("templates").length} `);
   });
 });

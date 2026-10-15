@@ -1,6 +1,4 @@
-import { getRelatedSeoPages, getSeoPages, seoCollections, seoPagePath, type SeoCollection, type SeoPage } from "@/src/content/seo";
-import { seoImageSlot, type ImageSlot, type ImageSlotKey } from "@/src/content/seo/image-slots";
-import { exampleDrawsPost } from "./seo-example";
+import { getSeoPages, seoCollections, seoPagePath, type SeoCollection, type SeoPage } from "@/src/content/seo";
 
 /*
  * Which section variants a detail page uses, and in what order. Every page gets
@@ -44,6 +42,11 @@ export const layoutVariants = {
 
 export type LayoutRole = keyof typeof layoutVariants;
 
+/**
+ * The "photo" variants and surface keep their names, but only the hero carries
+ * a photograph. The photo extra (the statement band) and the photo CTA are
+ * full-width bands of Linkar UI drawn in code.
+ */
 export type SectionSurface = "canvas" | "band" | "color" | "accent" | "photo" | "ink";
 
 type SurfaceRole = Exclude<LayoutRole, "hero">;
@@ -132,7 +135,7 @@ export function mulberry32(seed: number): () => number {
 
 type PageRef = Pick<SeoPage, "collection" | "slug">;
 
-/** A stable coin flip for small per-page choices inside a variant (which side an image sits on). */
+/** A stable coin flip for small per-page choices inside a variant (which side a visual sits on). */
 export function pageCoin(page: PageRef, purpose: string): boolean {
   return mulberry32(fnv1a(`${page.collection}/${page.slug}:${purpose}`))() < .5;
 }
@@ -186,8 +189,8 @@ export const MAX_HEAVY_RUN = 2;
 
 /**
  * Heavy pacing: a page never runs three dark or saturated surfaces in a row
- * (a photo, then the accent notes, then the ink FAQ reads as one long dark
- * block), so a light section always breaks the run.
+ * (a full-width photo band, then the accent notes, then the ink FAQ reads as
+ * one long dark block), so a light section always breaks the run.
  */
 function pacingAllowed(surfaces: readonly SectionSurface[], next: SectionSurface, rules: PhotoRules): boolean {
   if (!heavySurfaces.has(next)) return true;
@@ -198,8 +201,8 @@ function pacingAllowed(surfaces: readonly SectionSurface[], next: SectionSurface
 
 /**
  * Photo pacing: besides the hero, a page carries at most one full-width photo
- * section (the photo extra or the photo CTA, never both), and a full-bleed hero
- * is never followed straight away by another photo.
+ * band (the photo extra or the photo CTA, never both; both are drawn in code),
+ * and a full-bleed hero photo is never followed straight away by such a band.
  */
 type PhotoRules = { hero: HeroVariant; extrasMayUsePhoto: boolean };
 
@@ -275,7 +278,7 @@ function layoutFor(dealtPicks: Record<RankedRole, number>, draw: Draws): DetailL
   }
   const role = (name: SectionRole): Slot => ({ kind: "role", role: name, start: dealt[name] });
   const slots: Slot[] = [role("overview"), role("steps"), ...middle, role("notes"), role("faq"), role("related"), { kind: "pager" }, role("cta")];
-  // When the CTA is dealt the photo, a coin decides which photo section keeps it,
+  // When the CTA is dealt the photo band, a coin decides which section keeps it,
   // so the photo extra and the photo CTA both keep a fair share.
   const hero = layoutVariants.hero[dealt.hero];
   const extrasMayUsePhoto = !(dealt.cta === variantIndex("cta", "photo") && draw.photoFlip);
@@ -361,35 +364,6 @@ export function detailLayout(page: SeoPage): DetailLayout {
     collectionLayouts.set(page.collection, layouts);
   }
   return layouts.get(page.slug) ?? buildDetailLayouts([page]).get(page.slug)!;
-}
-
-/* Image slots: the photos ChatGPT will generate. The hero photo is never one of them. */
-
-const benefitSlotKeys = ["benefit-1", "benefit-2", "benefit-3"] as const satisfies readonly ImageSlotKey[];
-
-export function ownImageSlotKeys(page: SeoPage, layout: DetailLayout = detailLayout(page)): readonly ImageSlotKey[] {
-  const keys: ImageSlotKey[] = [];
-  if (layout.overview === "zigzag") keys.push("overview");
-  if (layout.benefits === "zigzag") keys.push(...benefitSlotKeys.slice(0, Math.min(page.benefits.length, benefitSlotKeys.length)));
-  if (layout.benefits === "iconlist") keys.push("benefits");
-  if (layout.example === "phone" && exampleDrawsPost(page)) keys.push("example-post");
-  if (layout.extras.includes("photo")) keys.push("statement");
-  if (layout.cta === "photo") keys.push("cta");
-  return keys;
-}
-
-/** The page's own slots, then the card slot of each related page it links to. */
-export function requiredImageSlots(page: SeoPage): readonly ImageSlot[] {
-  const target = { collection: page.collection, slug: page.slug };
-  return [
-    ...ownImageSlotKeys(page).map((key) => seoImageSlot(target, key)),
-    ...getRelatedSeoPages(page).map((related) => seoImageSlot({ collection: related.collection, slug: related.slug }, "card")),
-  ];
-}
-
-/** A hub shows every page of its collection as a card (the hero's fanned stack reuses the first three). */
-export function hubImageSlots(collection: SeoCollection): readonly ImageSlot[] {
-  return getSeoPages(collection).map((page) => seoImageSlot({ collection, slug: page.slug }, "card"));
 }
 
 /* Navigation data for heroes and the pager. */

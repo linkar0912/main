@@ -116,8 +116,10 @@ export function securityHeaderRules(production: boolean): HeaderRule[] {
   const publicSitePolicy = [{ key: "Content-Security-Policy", value: contentSecurityPolicy({ production, publicSite: true }) }];
   return [
     { source: "/:path*", headers: securityHeaders(production) },
-    // The public website pages (and only those) may load Google Analytics
-    // and the Cloudflare Web Analytics beacon.
+    // The public website pages, the SEO catalogue hubs and guides included,
+    // may load Google Analytics and the Cloudflare Web Analytics beacon.
+    // Nothing else may: each source is an exact path, so an unknown slug or a
+    // template's /recipe download keeps the base policy above.
     ...ANALYTICS_PAGE_PATHS.map((source) => ({ source, headers: publicSitePolicy })),
   ];
 }

@@ -22,11 +22,11 @@ const navigationItems = [
 // instead of one link to the homepage footer.
 const mobileNavigationItems = [
   navigationItems[0],
+  { label: "Solutions", href: "/solutions" },
+  { label: "Workflow recipes", href: "/templates" },
   navigationItems[1],
   { label: "Instagram", href: "/features/instagram-dm-automation" },
   { label: "Facebook Pages", href: "/features/facebook-comment-auto-reply" },
-  { label: "Workflows", href: "/templates" },
-  { label: "All solutions", href: "/solutions" },
   navigationItems[2],
   { label: "Questions", href: "/#faq" },
   { label: "Help center", href: "/support" },
@@ -37,15 +37,33 @@ const useCaseItems = [
   { label: "Keyword replies", detail: "Instagram answers matched to the words people send", href: "/features/instagram-keyword-replies" },
   { label: "Follow-gated campaigns", detail: "Instagram delivery after an official follow check", href: "/features/instagram-follow-gate" },
   { label: "Human handoff", detail: "Pause the flow when a person should take over", href: "/features/instagram-human-handoff" },
-  { label: "Solutions by audience", detail: "Workflows for creators, coaches, brands and local businesses", href: "/solutions" },
+  { label: "All features", detail: "Every Instagram and Facebook Page capability", href: "/features" },
+] as const;
+
+const audienceItems = [
+  { label: "Creators", href: "/solutions/content-creators" },
+  { label: "Online coaches", href: "/solutions/online-coaches" },
+  { label: "Ecommerce brands", href: "/solutions/ecommerce-brands" },
+  { label: "Small businesses", href: "/solutions/small-businesses" },
+  { label: "Restaurants and cafes", href: "/solutions/restaurants-cafes" },
+  { label: "Solutions by audience", href: "/solutions" },
 ] as const;
 
 const resourceGroups = [
   {
+    label: "Workflow recipes",
+    items: [
+      { label: "Comment to guide", href: "/templates/comment-guide-delivery" },
+      { label: "Price list reply", href: "/templates/dm-price-list" },
+      { label: "Booking link reply", href: "/templates/booking-link" },
+      { label: "Follow-gated freebie", href: "/templates/follow-gated-freebie" },
+      { label: "All workflow recipes", href: "/templates" },
+    ],
+  },
+  {
     label: "Learn",
     items: [
       { label: "How it works", href: "/#how-it-works" },
-      { label: "Automation workflows", href: "/templates" },
       { label: "All solutions", href: "/solutions" },
       { label: "Frequently asked questions", href: "/#faq" },
       { label: "Help center", href: "/support" },
@@ -352,6 +370,19 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                         <li key={item.label} style={{ "--solution-index": index } as CSSProperties}>
                           <Link href={marketingHref(item.href, siteOrigin)} onClick={() => setActivePanel(null)}>
                             <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                            <span className={styles.linkArrow} aria-hidden="true">&#8594;</span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                  <section className={styles.solutionsColumn} aria-labelledby="solutions-audience-title">
+                    <p id="solutions-audience-title" className={styles.solutionsEyebrow}>By audience</p>
+                    <ul className={`${styles.useCaseList} ${styles.resourceList}`}>
+                      {audienceItems.map((item, index) => (
+                        <li key={item.label} style={{ "--solution-index": index } as CSSProperties}>
+                          <Link href={marketingHref(item.href, siteOrigin)} onClick={() => setActivePanel(null)}>
+                            <strong>{item.label}</strong>
                             <span className={styles.linkArrow} aria-hidden="true">&#8594;</span>
                           </Link>
                         </li>

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { getSeoPages, seoPagePath } from "@/src/content/seo";
 import { SurfaceRunway } from "./surface-runway";
 
 afterEach(() => {
@@ -25,14 +26,71 @@ describe("SurfaceRunway", () => {
     ]);
     expect(cards.map((card) => card.querySelector("p")?.textContent)).toEqual([
       "Choose a word such as GUIDE or PRICE and privately send the answer they asked for.",
-      "Recognize questions about prices, hours, or delivery and answer them straight away.",
+      "Recognise questions about prices, hours, or delivery and answer them straight away.",
       "Send a warm thank-you when someone mentions your account in an Instagram Story.",
       "Ask permission, check that the person follows you, and then send the promised link.",
     ]);
     expect(within(section).getAllByRole("figure")).toHaveLength(4);
     expect(Array.from(section.querySelectorAll("figure")).every((preview) => preview.hasAttribute("data-reveal"))).toBe(true);
     expect(within(section).getAllByText("Someone comments → Chosen word matches → Private reply")).toHaveLength(1);
-    expect(section.querySelectorAll("a, button, [draggable='true']")).toHaveLength(0);
+    // Links, but nothing else interactive: no buttons and nothing draggable.
+    expect(section.querySelectorAll("button, [draggable='true']")).toHaveLength(0);
+  });
+
+  it("links each card to its feature guide with the feature's name as the link text", () => {
+    render(<SurfaceRunway />);
+    const section = screen.getByRole("region", { name: "Auto-reply to comments, DMs and Story mentions." });
+    const cards = within(section).getAllByRole("article");
+
+    expect(cards.map((card) => {
+      const links = within(card).getAllByRole("link");
+      expect(links).toHaveLength(1);
+      return [links[0]?.textContent?.replace("→", "").trim(), links[0]?.getAttribute("href")];
+    })).toEqual([
+      ["Instagram comment to DM automation", "/features/instagram-comment-to-dm"],
+      ["Instagram DM automation", "/features/instagram-dm-automation"],
+      ["Instagram Story mention replies", "/features/instagram-story-mention-replies"],
+      ["Instagram follow-gated campaigns", "/features/instagram-follow-gate"],
+    ]);
+    // The arrow is decoration, so the accessible name is the feature alone.
+    expect(within(cards[0]!).getByRole("link", { name: "Instagram comment to DM automation" })).toBeTruthy();
+  });
+
+  it("keeps each card link's last word and arrow together so the arrow never wraps alone", () => {
+    render(<SurfaceRunway />);
+    const section = screen.getByRole("region", { name: "Auto-reply to comments, DMs and Story mentions." });
+
+    expect(within(section).getAllByRole("article").map((card) => {
+      const tail = within(card).getByRole("link").querySelector("[data-link-tail]");
+      expect(tail?.querySelector('[aria-hidden="true"]')?.textContent).toBe("→");
+      return tail?.textContent;
+    })).toEqual(["automation→", "automation→", "replies→", "campaigns→"]);
+
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/surface-runway.module.css"), "utf8");
+    expect(stylesheet.match(/\n\.linkTail \{([\s\S]*?)\n\}/)?.[1]).toContain("white-space: nowrap;");
+  });
+
+  it("points every card at a feature guide that exists, never at a missing page", () => {
+    render(<SurfaceRunway />);
+    const guides = new Set(getSeoPages("features").map(seoPagePath));
+    const section = screen.getByRole("region", { name: "Auto-reply to comments, DMs and Story mentions." });
+
+    for (const card of within(section).getAllByRole("article")) {
+      expect(guides.has(within(card).getByRole("link").getAttribute("href") ?? "")).toBe(true);
+    }
+  });
+
+  it("closes with one link to every Instagram automation feature, after the cards", () => {
+    render(<SurfaceRunway />);
+    const section = screen.getByRole("region", { name: "Auto-reply to comments, DMs and Story mentions." });
+    const all = within(section).getByRole("link", { name: "See all Instagram automation features" });
+
+    expect(all.getAttribute("href")).toBe("/features");
+    expect(all.closest("article")).toBeNull();
+    const track = section.querySelector("ul");
+    expect(track && track.compareDocumentPosition(all) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(section).getAllByRole("link")).toHaveLength(5);
+    expect(within(section).queryByRole("link", { name: /learn more|read more|click here/i })).toBeNull();
   });
 
   it("numbers the cards in order so the first one is identifiable", () => {

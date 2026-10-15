@@ -1,12 +1,10 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { getRelatedSeoPages, seoPagePath, seoTopics, type SeoPage } from "@/src/content/seo";
-import { seoImageSlot } from "@/src/content/seo/image-slots";
 import { Reveal } from "../../../reveal";
-import { SeoImageSlot } from "../../image-slot";
 import { Icon } from "../../mock-ui";
+import { PageThumb } from "../../page-thumb";
 import shell from "../../seo-section.module.css";
-import slot from "../slot.module.css";
 import { seoPalette, seoToneAt, topicVisuals } from "../../seo-theme";
 import { browseAllLabel, collectionNames, relatedEyebrow, relatedSub, relatedTitle } from "./copy";
 import styles from "./rows.module.css";
@@ -21,7 +19,7 @@ const rowTones: Record<ReturnType<typeof seoToneAt>, string> = {
 };
 
 /**
- * Related guides as three full-width rows on the band: index, card thumbnail,
+ * Related guides as three full-width rows on the band: index, a miniature of the guide's automation,
  * topic and collection, label, the one-line description, and an arrow that fills
  * as the row lights up in its tone. Each row is one link (the heading's link
  * stretches over it).
@@ -50,10 +48,10 @@ export function RelatedRows({ page }: { page: SeoPage }) {
               <Reveal as="li" className={styles.item} delay={index * 70} key={seoPagePath(item)}>
                 <article className={styles.row} style={{ "--row-tone": rowTones[seoToneAt(index)] } as CSSProperties}>
                   <span className={styles.index} aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-                  {/* The light surface, as in the related cards and the hub, so a guide's card image looks the same everywhere. */}
-                  <span className={styles.thumb} style={{ "--seo-accent": accent } as CSSProperties} aria-hidden="true">
-                    <SeoImageSlot className={slot.fill} slot={seoImageSlot({ collection: item.collection, slug: item.slug }, "card")} sizes="(min-width: 768px) 144px, 88px" surface="light" />
-                  </span>
+                  {/* The same miniature as the guide's card on the hub and in the related cards, at row size. */}
+                  <div className={styles.thumb} aria-hidden="true">
+                    <PageThumb page={item} size="row" />
+                  </div>
                   <div className={styles.main}>
                     <p className={styles.meta}>
                       <span className={styles.dot} style={{ background: accent }} aria-hidden="true" />

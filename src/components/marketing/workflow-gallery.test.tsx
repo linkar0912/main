@@ -48,6 +48,57 @@ describe("WorkflowGallery", () => {
     expect(panel.querySelector("svg path")).toBeTruthy();
   });
 
+  it("links each workflow to the ready-made recipe it is built from", () => {
+    render(<WorkflowGallery />);
+    const expected = [
+      ["Instagram comment to guide template", "/templates/comment-guide-delivery"],
+      ["Instagram lead qualification template", "/templates/lead-qualification"],
+      ["Instagram offer follow-up template", "/templates/offer-follow-up"],
+      ["Instagram support handoff template", "/templates/support-handoff"],
+    ];
+
+    // Desktop: one link inside each tab panel, under its preview.
+    const panels = screen.getAllByRole("tabpanel", { hidden: true });
+    expect(panels.map((panel) => {
+      const links = Array.from(panel.querySelectorAll("a"));
+      expect(links).toHaveLength(1);
+      return [links[0].textContent?.replace("→", "").trim(), links[0].getAttribute("href")];
+    })).toEqual(expected);
+    // Only the open panel's link is exposed, and its name is the template alone.
+    expect(within(screen.getByRole("tabpanel")).getByRole("link", { name: "Instagram comment to guide template" })
+      .getAttribute("href")).toBe("/templates/comment-guide-delivery");
+
+    // Mobile: the same link closes each accordion panel.
+    const accordion = screen.getByLabelText("Workflow examples on mobile");
+    const mobilePanels = Array.from(accordion.querySelectorAll('[id^="workflow-mobile-panel-"]'));
+    expect(mobilePanels.map((panel) => {
+      const link = panel.querySelector("a");
+      return [link?.textContent?.replace("→", "").trim(), link?.getAttribute("href")];
+    })).toEqual(expected);
+  });
+
+  it("keeps the leaving copy free of links while two panels cross", () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    render(<WorkflowGallery />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Follow up later" }));
+    const leaving = document.querySelector("[data-transition-state='leaving']");
+    expect(leaving?.getAttribute("aria-hidden")).toBe("true");
+    // It still draws the template line, so both panels keep the same height.
+    expect(leaving?.textContent).toContain("Instagram comment to guide template");
+    expect(leaving?.querySelectorAll("a, button, [tabindex]")).toHaveLength(0);
+    expect(within(screen.getByRole("tabpanel")).getByRole("link", { name: "Instagram offer follow-up template" })).toBeTruthy();
+  });
+
   it("changes the selected preview on a real click", () => {
     render(<WorkflowGallery />);
 
@@ -164,14 +215,34 @@ describe("WorkflowGallery", () => {
     expect(stylesheet).toContain("padding: clamp(120px, 11vw, 176px) clamp(32px, 4.45vw, 72px);");
     expect(stylesheet).toContain("grid-column: 1 / span 4;");
     expect(stylesheet).toContain("grid-column: 5 / -1;");
-    expect(stylesheet).toContain("min-block-size: 576px;");
+    // 576 cleared the tallest flow; the template link adds a 52px row.
+    expect(stylesheet).toMatch(/\.stage \{[^}]*min-block-size: 628px;/);
+    expect(stylesheet).toMatch(/\.panel \{[^}]*grid-template-rows: minmax\(0, 1fr\) auto;/);
+    // A display value on the panel would otherwise override [hidden].
+    expect(stylesheet).toContain(".panel[hidden] { display: none; }");
     expect(stylesheet).toContain("@media (min-width: 768px) and (max-width: 1023px)");
     expect(stylesheet).toContain("grid-template-columns: 280px minmax(0, 1fr);");
-    expect(stylesheet).toContain("min-block-size: 470px;");
+    expect(stylesheet).toContain("min-block-size: 576px;");
     expect(stylesheet).toContain("@media (max-width: 767px)");
     expect(stylesheet).toContain("padding: 88px 20px;");
     expect(stylesheet).toContain("min-block-size: 76px;");
     expect(stylesheet).toContain("min-block-size: 360px;");
     expect(stylesheet).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+
+  it("lets the browser skip the section until it nears the viewport, with a measured content-box fallback height", () => {
+    const stylesheet = readFileSync(path.join(process.cwd(), "src/components/marketing/workflow-gallery.module.css"), "utf8");
+    const section = stylesheet.match(/^\.section \{[^}]+\}/m)?.[0] ?? "";
+
+    expect(section).toContain("content-visibility: auto;");
+    expect(section).toMatch(/contain-intrinsic-block-size: auto \d+px;/);
+    // Block axis only, so the placeholder never claims a fixed width.
+    expect(stylesheet).not.toContain("contain-intrinsic-size:");
+    // Content-box heights (rendered height minus block padding and border),
+    // in source order: desktop, wide (1600px and up), tablet, phone. The
+    // browser adds the padding itself, so a full-section height here makes
+    // in-page links clicked from higher up the page scroll past the section.
+    const heights = [...stylesheet.matchAll(/contain-intrinsic-block-size: auto (\d+)px;/g)].map((match) => Number(match[1]));
+    expect(heights).toEqual([900, 940, 840, 1165]);
   });
 });

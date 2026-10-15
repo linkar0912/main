@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
 import type { SeoPage } from "@/src/content/seo";
-import { seoImageSlot, type ImageSlot } from "@/src/content/seo/image-slots";
 import { Reveal } from "../../../reveal";
-import { SeoImageSlot } from "../../image-slot";
 import { Icon, MockAvatar, MockBubble, MockComment, MockNextContent, MockPageAvatar, MockPublicComment, MockSystemLine } from "../../mock-ui";
 import { eventLine, exampleHandle, incomingFor, nextFor, nextIsPublic, postCaption, replyFor, type IncomingView, type NextView, type ReplyView } from "../../seo-example";
 import shell from "../../seo-section.module.css";
-import slot from "../slot.module.css";
 import { exampleHeader, exampleTitle } from "./copy";
 import styles from "./phone.module.css";
+import { isReel, PostArt } from "./post-art";
 import { BrandAvatar, brandHandle, ExampleCaption, exampleContext, Glyph, pageName, ReplyContent, replyName, replyVersions, WorkspaceNote, type ExampleContext } from "./shared";
 
 type Example = {
@@ -19,20 +17,18 @@ type Example = {
   incoming: IncomingView;
   reply: ReplyView;
   next: NextView;
-  /** The page's example-post slot: the post or Story the conversation starts from. */
-  photo: ImageSlot;
 };
 
 function Dots() {
   return <span className={styles.dots}><i /><i /><i /></span>;
 }
 
-function Photo({ photo, className }: { photo: ImageSlot; className: string }) {
-  return (
-    <div className={className}>
-      <SeoImageSlot slot={photo} className={slot.fill} sizes="(min-width: 900px) 340px, 80vw" surface="light" />
-    </div>
-  );
+/**
+ * The post's artwork in a frame that sets its shape: 4:5 or 1:1 in the feed, 4:5 when shared into a DM.
+ * What lands on the post (the comment) is drawn inside it, on its own row, so it never covers the post's words.
+ */
+function Artwork({ page, className, children }: { page: SeoPage; className: string; children?: ReactNode }) {
+  return <div className={className}><PostArt page={page} format="post">{children}</PostArt></div>;
 }
 
 /** The request floating over the post: a comment, or a status line when it is an event. */
@@ -45,8 +41,8 @@ function IncomingFloat({ handle, incoming, className }: { handle: string; incomi
 
 /* Left panel: where the conversation starts. Decorative; the phone carries the readable copy. */
 
-function InstagramPost({ page, handle, incoming, photo }: Example) {
-  const reel = /\breel\b/i.test(`${page.label} ${page.example.reply}`);
+function InstagramPost({ page, handle, incoming }: Example) {
+  const reel = isReel(page);
   return (
     <div className={styles.postStage}>
       <div className={styles.card}>
@@ -56,9 +52,10 @@ function InstagramPost({ page, handle, incoming, photo }: Example) {
           <Dots />
         </div>
         <div className={styles.media}>
-          <Photo photo={photo} className={styles.mediaFrame} />
-          {reel ? <span className={styles.reelBadge}><Icon name="bolt" size={14} />Reel</span> : null}
-          <IncomingFloat className={styles.float} handle={handle} incoming={incoming} />
+          <Artwork page={page} className={styles.mediaFrame}>
+            <IncomingFloat className={styles.float} handle={handle} incoming={incoming} />
+          </Artwork>
+          {reel ? <span className={styles.reelBadge}><Icon name="bolt" size={14} /><span className={styles.reelText}>Reel</span></span> : null}
         </div>
         <div className={styles.postActions}>
           <Icon name="heart" size={22} /><Icon name="comment" size={22} /><Icon name="send" size={22} />
@@ -69,7 +66,7 @@ function InstagramPost({ page, handle, incoming, photo }: Example) {
   );
 }
 
-function FacebookPost({ page, handle, incoming, photo }: Example) {
+function FacebookPost({ page, handle, incoming }: Example) {
   return (
     <div className={styles.postStage}>
       <div className={styles.card}>
@@ -80,10 +77,11 @@ function FacebookPost({ page, handle, incoming, photo }: Example) {
         </div>
         <p className={styles.fbCaption}>{postCaption(page)}</p>
         <div className={`${styles.media} ${styles.fbMedia}`}>
-          <Photo photo={photo} className={styles.mediaFrame} />
-          {incoming.kind === "event"
-            ? <IncomingFloat className={styles.float} handle={handle} incoming={incoming} />
-            : <div className={`${styles.float} ${styles.fbFloat}`}><MockPublicComment name={handle} text={incoming.text} /></div>}
+          <Artwork page={page} className={styles.mediaFrame}>
+            {incoming.kind === "event"
+              ? <IncomingFloat className={styles.float} handle={handle} incoming={incoming} />
+              : <div className={`${styles.float} ${styles.fbFloat}`}><MockPublicComment name={handle} text={incoming.text} /></div>}
+          </Artwork>
         </div>
         <div className={styles.fbActions}><span><Glyph name="thumb" size={16} />Like</span><span><Icon name="comment" size={16} />Comment</span><span><Icon name="send" size={16} />Share</span></div>
       </div>
@@ -91,21 +89,19 @@ function FacebookPost({ page, handle, incoming, photo }: Example) {
   );
 }
 
-function StoryContext({ page, handle, incoming, photo }: Example) {
+function StoryContext({ page, handle, incoming }: Example) {
   const theirs = incoming.kind === "event";
   const owner = theirs ? handle : brandHandle;
   return (
     <div className={styles.storyStage}>
       <div className={styles.story}>
-        <Photo photo={photo} className={styles.storyPhoto} />
+        {/* The Story's own sticker (its caption, or the @mention) is part of the artwork. */}
+        <PostArt page={page} format="story" />
         <span className={styles.storyBars}><i /><i /><i /></span>
         <p className={styles.storyHead}>
           {theirs ? <MockAvatar name={owner} size={26} /> : <BrandAvatar size={26} />}
           <strong>{owner}</strong><span>2h</span>
         </p>
-        {theirs
-          ? <span className={styles.mention}>@{brandHandle}</span>
-          : <span className={styles.storySticker}>{postCaption(page)}</span>}
         <span className={styles.storyReply}>Send message<Icon name="heart" size={18} /></span>
       </div>
       <div className={styles.storyCard}>
@@ -185,27 +181,27 @@ function Phone({ title, subtitle, avatar, actions, composer, children }: {
   );
 }
 
-/** The Story a reply or mention points at, as Instagram previews it in the thread. */
-function StoryPreview({ mention }: { mention: boolean }) {
+/** The Story a reply or mention points at, as Instagram previews it in the thread: the same artwork, small. */
+function StoryPreview({ page }: { page: SeoPage }) {
   return (
-    <span className={styles.storyPreview} aria-hidden="true">
+    <div className={styles.storyPreview} aria-hidden="true">
+      <PostArt page={page} format="story" />
       <span className={styles.storyPreviewBars}><i /><i /></span>
-      {mention ? <span className={styles.storyPreviewSticker}>@{brandHandle}</span> : <span className={styles.storyPreviewOwner} />}
-    </span>
-  );
-}
-
-/** Your post, shared into the DM by the person asking about it: only with a request word from its caption, never with a plain question. */
-function SharedPost({ photo }: { photo: ImageSlot }) {
-  return (
-    <div className={styles.shared} aria-hidden="true">
-      <p className={styles.sharedHead}><BrandAvatar size={20} /><strong>{brandHandle}</strong></p>
-      <Photo photo={photo} className={styles.sharedPhoto} />
     </div>
   );
 }
 
-function DmThread({ handle, context, incoming, reply, next, page, photo }: Example) {
+/** Your post, shared into the DM by the person asking about it: only with a request word from its caption, never with a plain question. */
+function SharedPost({ page }: { page: SeoPage }) {
+  return (
+    <div className={styles.shared} aria-hidden="true">
+      <p className={styles.sharedHead}><BrandAvatar size={20} /><strong>{brandHandle}</strong></p>
+      <Artwork page={page} className={styles.sharedPhoto} />
+    </div>
+  );
+}
+
+function DmThread({ handle, context, incoming, reply, next, page }: Example) {
   const story = context === "story";
   const mention = story && incoming.kind === "event";
   const label = context === "post" ? "Commented on your post" : mention ? "Mentioned you in their story" : story ? "Replied to your story" : null;
@@ -225,8 +221,8 @@ function DmThread({ handle, context, incoming, reply, next, page, photo }: Examp
           <MockAvatar name={handle} size={24} />
           <div className={styles.inBody}>
             {label ? <p className={styles.inLabel}>{label}</p> : null}
-            {story ? <StoryPreview mention={mention} /> : null}
-            {context === "inbox" && incoming.keyword ? <SharedPost photo={photo} /> : null}
+            {story ? <StoryPreview page={page} /> : null}
+            {context === "inbox" && incoming.keyword ? <SharedPost page={page} /> : null}
             {mention ? <span className={shell.srOnly}>{eventLine(handle, incoming)}</span> : (
               <MockBubble side="them" className={context === "post" ? styles.commentBubble : undefined}>
                 <span className={shell.srOnly}>{handle}: </span>{incoming.text}
@@ -283,7 +279,6 @@ export function ExamplePhone({ page }: { page: SeoPage }) {
     incoming,
     reply: replyFor(page),
     next: nextFor(page),
-    photo: seoImageSlot({ collection: page.collection, slug: page.slug }, "example-post"),
   };
   const facebook = context === "page";
   const contextLabel = context === "story" && incoming.kind === "event" ? "On their Story" : contextLabels[context];
@@ -307,7 +302,7 @@ export function ExamplePhone({ page }: { page: SeoPage }) {
                   : <InboxContext {...example} />}
               </div>
             </Reveal>
-            <span className={styles.connector} aria-hidden="true"><Icon name="bolt" size={15} />Linkar replies<Icon name="arrow-right" size={15} /></span>
+            <span className={styles.connector} aria-hidden="true"><Icon name="bolt" size={15} /><span className={styles.connectorText}>Linkar replies</span><Icon name="arrow-right" size={15} /></span>
             <Reveal className={`${styles.panel} ${styles.replyPanel} ${shell.lilac} ${shell.grid} ${shell.panel}`} delay={120}>
               <p className={styles.label} aria-hidden="true"><span>2</span>{replyName(page)}</p>
               {facebook ? (

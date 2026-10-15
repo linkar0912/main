@@ -30,6 +30,31 @@ describe("BeforeAfterSection", () => {
     expect(markup).toContain("aria-hidden=\"true\"");
   });
 
+  it("uses placeholder handles and keeps the decorative mocks out of search snippets", () => {
+    const markup = renderToStaticMarkup(<BeforeAfterSection />);
+    render(<BeforeAfterSection />);
+    const section = screen.getByRole("region", { name: title });
+
+    const handles = Array.from(section.querySelectorAll("strong"), (handle) => handle.textContent);
+    expect(handles).toEqual(["@your.follower", "@new.customer", "@repeat.buyer", "@your.follower"]);
+    // No first names or surnames that could read as a real account.
+    expect(section.textContent).not.toMatch(/meera|arjun|nikhil|aanya|priya/i);
+    expect(section.querySelector("figcaption span")?.textContent).toBe("Y");
+
+    // Google honours data-nosnippet on span, div and section only, so it sits
+    // on the spans inside the waiting rows and the answered thread.
+    const quiet = Array.from(section.querySelectorAll("[data-nosnippet]"));
+    expect(quiet.every((element) => element.tagName === "SPAN")).toBe(true);
+    for (const text of ["@new.customer", "Do you ship to Pune?", "3d", "Answered in 4 seconds", "Want the size chart too?"]) {
+      expect(quiet.some((element) => element.textContent?.includes(text)), text).toBe(true);
+    }
+    // The section's real copy stays quotable.
+    for (const text of ["Repeat the same answer", "Guide delivered", "Automation handles the repeatable path."]) {
+      expect(quiet.some((element) => element.textContent?.includes(text)), text).toBe(false);
+    }
+    expect(markup).toContain("data-nosnippet");
+  });
+
   it("has no interactive controls and declares final static reduced-motion state", () => {
     render(<BeforeAfterSection />);
     const section = screen.getByRole("region", { name: title });

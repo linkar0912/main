@@ -33,8 +33,8 @@ const finderSteps: FinderStep[] = [
   {
     id: "channels",
     label: "Channels",
-    question: "Where do people find you?",
-    hint: "Pick the places where conversations actually start.",
+    question: "Where do your conversations start?",
+    hint: "Pick every channel you want Linkar to answer.",
     multiple: true,
     options: [
       { id: "ig-comments", label: "Instagram comments", tier: 0, channel: "instagram" },
@@ -84,12 +84,13 @@ const finderSteps: FinderStep[] = [
 /** Sample threads for the finder preview: the conversation a visitor would
  *  actually see on the channel they picked, in Linkar's own bubble language.
  *  Facebook Page replies are public comment replies, so that sample answers
- *  in the comment thread rather than moving to an inbox. */
+ *  in the comment thread rather than moving to an inbox. The people are
+ *  placeholders that read as roles, never as someone's real account. */
 const channelThreads: Record<string, { handle: string; channel: "instagram" | "facebook"; note: string; incoming: string; reply: string }> = {
-  "ig-comments": { handle: "@arjun.builds", channel: "instagram", note: "Commented on your reel", incoming: "price?", reply: "Just sent the details to your DMs." },
-  "ig-dms": { handle: "@meera.k", channel: "instagram", note: "Direct message", incoming: "Do you ship to Pune?", reply: "We do, in two to three days. Want the link?" },
-  "ig-stories": { handle: "@nikhil.rr", channel: "instagram", note: "Replied to your story", incoming: "need this", reply: "It is live now. Here is the link." },
-  "fb-comments": { handle: "Priya Nair", channel: "facebook", note: "Commented on your Page post", incoming: "Is this still available?", reply: "Yes, it is! Every size is in stock this week." },
+  "ig-comments": { handle: "@your.follower", channel: "instagram", note: "Commented on your reel", incoming: "price?", reply: "Just sent the details to your DMs." },
+  "ig-dms": { handle: "@new.customer", channel: "instagram", note: "Direct message", incoming: "Do you ship to Pune?", reply: "We do, in two to three days. Want the link?" },
+  "ig-stories": { handle: "@story.viewer", channel: "instagram", note: "Replied to your story", incoming: "need this", reply: "It is live now. Here is the link." },
+  "fb-comments": { handle: "Page visitor", channel: "facebook", note: "Commented on your Page post", incoming: "Is this still available?", reply: "Yes, it is! Every size is in stock this week." },
 };
 
 const defaultThread = { handle: "@yourhandle", channel: "instagram" as const, note: "Pick a channel to see it", incoming: "price?", reply: "Linkar answers here, in your voice." };
@@ -142,7 +143,7 @@ export function PlanFinder() {
     <section className={styles.finder} id="plan-finder" aria-labelledby="plan-finder-title">
       <Reveal className={styles.finderCard}>
         <div className={styles.finderAsk}>
-          <h2 className={styles.finderKicker} id="plan-finder-title">Pick your plan in 30 seconds</h2>
+          <h2 className={styles.finderKicker} id="plan-finder-title">Find your plan</h2>
 
           {finished ? (
             <div className={styles.finderResult}>

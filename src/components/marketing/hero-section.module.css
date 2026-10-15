@@ -101,7 +101,7 @@
   display: block;
   margin-block-end: 18px;
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
-  font-size: 1rem;
+  font-size: 1.125rem;
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: 0;
@@ -118,7 +118,7 @@
   line-height: 1.45;
   color: rgb(255 255 255 / 92%);
   text-shadow: 0 2px 15px rgb(34 18 10 / 38%);
-  animation: fade-up 700ms cubic-bezier(.22, .61, .21, 1) 160ms both;
+  animation: text-rise 700ms cubic-bezier(.22, .61, .21, 1) 160ms both;
 }
 
 .actions {
@@ -163,15 +163,9 @@
   box-shadow: 0 0 0 5px #ffffff;
 }
 
-.hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-secondary="entering"] :global([aria-hidden="true"]:nth-child(2)) {
-  animation: button-secondary-label-in 420ms cubic-bezier(.43, .195, .02, 1) 700ms;
-}
-
-.hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-secondary="entering"]:hover :global([aria-hidden="true"]:nth-child(2)),
-.hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-secondary="entering"]:focus-visible :global([aria-hidden="true"]:nth-child(2)) {
-  animation: none;
-  transform: translateY(0);
-}
+/* The CTA's second label only rolls in on hover and keyboard focus (the
+   ButtonRoll rules in primitives.module.css). There is no roll-in on first
+   load: a delayed one repainted the label about a second after the page. */
 
 .proof {
   margin: 24px 0 0;
@@ -183,7 +177,7 @@
 }
 
 .scene {
-  --conversation-duration: 13s;
+  --message-ease: cubic-bezier(.43, .195, .02, 1);
   grid-column: 9 / span 4;
   align-self: end;
   inline-size: min(100%, 390px);
@@ -198,13 +192,18 @@
 }
 
 /* The feed is bottom-anchored: each slot grows from 0fr at the bottom, so the
-   messages already on screen get pushed up the way a real thread scrolls. */
+   messages already on screen get pushed up the way a real thread scrolls.
+   Growing a grid row is layout work, so the feed has a fixed block size per
+   breakpoint (tall enough for the full three-message thread, in rem so it
+   grows with the text) and size plus layout containment: the work stays
+   inside the feed and never reaches the hero. No paint containment, so the
+   bubble shadows are not clipped. */
 .messageStack {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  min-block-size: 244px;
-  animation: conversation-cycle var(--conversation-duration) linear infinite both;
+  block-size: 15.25rem;
+  contain: size layout;
 }
 
 .messageSlot {
@@ -212,7 +211,6 @@
   grid-template-rows: 0fr;
   opacity: 0;
   transform: translateY(12px) scale(.97);
-  will-change: grid-template-rows, opacity, transform;
 }
 
 .messageSlotInner {
@@ -301,7 +299,9 @@
   block-size: 7px;
   background: #ffffff;
   border-radius: 50%;
-  animation: typing-bounce 1.1s ease-in-out infinite;
+  /* Four bounces (about 4.4s) outlast the typing bubble, which closes at
+     3.55s, so nothing keeps animating inside the closed slot. */
+  animation: typing-bounce 1.1s ease-in-out 4;
 }
 
 .typingDot:nth-child(2) {
@@ -312,20 +312,24 @@
   animation-delay: 280ms;
 }
 
+/* One pass, about 6s: the question lands, Linkar types, the reply lands, the
+   follow-up arrives. Each animation runs once and fills both ways, so the
+   thread then rests on its last frame with all three messages showing and no
+   further layout work. */
 .scene [data-message-stage="1"] {
-  animation: message-slot-one var(--conversation-duration) cubic-bezier(.43, .195, .02, 1) infinite both;
+  animation: message-in 500ms var(--message-ease) 400ms 1 both;
 }
 
 .scene [data-message-typing] {
-  animation: message-slot-typing var(--conversation-duration) cubic-bezier(.43, .195, .02, 1) infinite both;
+  animation: message-typing 2050ms var(--message-ease) 1500ms 1 both;
 }
 
 .scene [data-message-stage="2"] {
-  animation: message-slot-two var(--conversation-duration) cubic-bezier(.43, .195, .02, 1) infinite both;
+  animation: message-in 500ms var(--message-ease) 3550ms 1 both;
 }
 
 .scene [data-message-stage="3"] {
-  animation: message-slot-three var(--conversation-duration) cubic-bezier(.43, .195, .02, 1) infinite both;
+  animation: message-in 500ms var(--message-ease) 5600ms 1 both;
 }
 
 .status {
@@ -357,11 +361,20 @@
   to { transform: scale(1); }
 }
 
+/* The H1 lines, the kicker and the lede settle with transform only. They are
+   at full opacity from the first frame, so the heading is readable as soon as
+   the page paints instead of fading in from nothing. */
 @keyframes title-rise {
-  from { opacity: 0; transform: translateY(56px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { transform: translateY(28px); }
+  to { transform: translateY(0); }
 }
 
+@keyframes text-rise {
+  from { transform: translateY(14px); }
+  to { transform: translateY(0); }
+}
+
+/* Secondary details (the price line and the trust row) still fade in. */
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
@@ -377,89 +390,34 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* One 13s thread: question in, Linkar types, reply lands, follow-up arrives,
-   the thread holds, then fades out and restarts while it is invisible. */
-@keyframes conversation-cycle {
-  0%, 87% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  94.5%, 99.9% {
+/* A message slot opening at the bottom of the feed. */
+@keyframes message-in {
+  from {
+    grid-template-rows: 0fr;
     opacity: 0;
-    transform: translateY(-18px);
+    transform: translateY(12px) scale(.97);
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* The typing bubble opens, holds while Linkar "types", then closes as the
+   reply takes its place. */
+@keyframes message-typing {
+  0% {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(12px) scale(.97);
+  }
+  24.4%, 87.8% {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
   100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes message-slot-one {
-  0%, 3.1% {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(12px) scale(.97);
-  }
-  6.9%, 94.9% {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  95%, 100% {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(12px) scale(.97);
-  }
-}
-
-@keyframes message-slot-typing {
-  0%, 11.5% {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(12px) scale(.97);
-  }
-  15.4%, 25.4% {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  27.3%, 100% {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(12px) scale(.97);
-  }
-}
-
-@keyframes message-slot-two {
-  0%, 27.3% {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(12px) scale(.97);
-  }
-  31.2%, 94.9% {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  95%, 100% {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(12px) scale(.97);
-  }
-}
-
-@keyframes message-slot-three {
-  0%, 43.1% {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(12px) scale(.97);
-  }
-  46.9%, 94.9% {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  95%, 100% {
     grid-template-rows: 0fr;
     opacity: 0;
     transform: translateY(12px) scale(.97);
@@ -474,11 +432,6 @@
 @keyframes status-pulse {
   0%, 100% { transform: scale(.78); opacity: .58; }
   50% { transform: scale(1); opacity: 1; }
-}
-
-@keyframes button-secondary-label-in {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
@@ -513,7 +466,7 @@
   }
 
   .messageStack {
-    min-block-size: 228px;
+    block-size: 14.25rem;
   }
 }
 
@@ -574,7 +527,7 @@
     margin: 32px 0 0;
   }
 
-  .messageStack { min-block-size: 248px; }
+  .messageStack { block-size: 15.5rem; }
   .messageBubble { max-inline-size: min(100%, 320px); }
   .messageRowIncoming { max-inline-size: 330px; }
   .messageRowOutgoing { max-inline-size: min(100%, 320px); }
@@ -582,13 +535,13 @@
 
 @media (prefers-reduced-motion: reduce) {
   .image,
+  .trustStrip,
   .titleKicker,
   .titleLine,
   .body,
   .actions,
   .proof,
   .scene,
-  .messageStack,
   .messageBubble,
   .messageRow,
   .statusDot,
@@ -621,7 +574,7 @@
     transform: translateY(0);
   }
 
-  .hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-secondary="entering"] :global([aria-hidden="true"]:nth-child(2)) {
+  .hero[data-motion="staged"] .primaryAction[data-motion-stage="action"][data-roll-secondary="hover"] :global([aria-hidden="true"]:nth-child(2)) {
     animation: none;
     transform: translateY(0);
     visibility: hidden;

@@ -1,2 +1,0 @@
-/* Makes an image slot fill a positioned frame that already has its own size and radius. */
-.fill { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; aspect-ratio: auto; }

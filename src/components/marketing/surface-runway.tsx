@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { surfaceCards } from "./marketing-content";
 import { Reveal } from "./reveal";
 import styles from "./surface-runway.module.css";
@@ -128,6 +129,24 @@ function CampaignSurface() {
   );
 }
 
+/**
+ * A card link's label and its arrow. The last word and the arrow share one
+ * no-wrap span, so when a long feature name wraps on a phone the arrow moves
+ * down with that word instead of landing on a line of its own.
+ */
+function ArrowLabel({ label }: { label: string }) {
+  const split = label.lastIndexOf(" ") + 1;
+  return (
+    <>
+      {label.slice(0, split)}
+      <span className={styles.linkTail} data-link-tail>
+        {label.slice(split)}
+        <span className={styles.arrow} aria-hidden="true">&#8594;</span>
+      </span>
+    </>
+  );
+}
+
 const surfaces: Record<string, () => React.JSX.Element> = {
   "comment-triggers": CommentSurface,
   "dm-triggers": MessageSurface,
@@ -158,6 +177,11 @@ function Preview({ id, steps }: { id: string; steps: readonly [string, string, s
  * most scroll positions two cards were sliced in half by the viewport edge - you
  * could never see card one whole. Four cards fit in two rows without hijacking
  * the scrollbar, so they are simply laid out.
+ *
+ * Each card links to the feature guide that covers it, with the feature's name
+ * as the link text, and the section closes with one link to every feature.
+ * These are the homepage body's contextual links into the guides, so the link
+ * text names the destination rather than saying "Learn more".
  */
 export function SurfaceRunway() {
   return (
@@ -174,12 +198,21 @@ export function SurfaceRunway() {
                 <span className={styles.cardNumber}>{String(index + 1).padStart(2, "0")}</span>
                 <h3 id={`${card.id}-title`}>{card.title}</h3>
                 <p className={styles.cardBody}>{card.body}</p>
+                <Link className={styles.cardLink} href={card.href}>
+                  <ArrowLabel label={card.linkLabel} />
+                </Link>
                 <Preview id={card.id} steps={card.preview} />
               </article>
             </li>
           ))}
         </ul>
       </div>
+      <p className={styles.allFeatures}>
+        <Link href="/features">
+          See all Instagram automation features
+          <span aria-hidden="true">&#8594;</span>
+        </Link>
+      </p>
     </section>
   );
 }

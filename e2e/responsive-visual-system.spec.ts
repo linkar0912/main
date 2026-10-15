@@ -132,9 +132,9 @@ for (const viewport of viewports) {
 }
 
 /**
- * The marketing home streams in behind the root loading screen, so `goto`
- * can return before its sections exist. Measure only once the page, from the
- * hero to the footer, is on screen.
+ * Measure the marketing home only once the page, from the hero to the
+ * footer, is on screen, so a slow first load cannot make a check pass on a
+ * half-rendered page.
  */
 async function openMarketingHome(page: Page) {
   await page.goto("/");
@@ -462,7 +462,7 @@ test.describe("public marketing route", () => {
     test(`pricing comparison switches plans without sideways scroll at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/pricing");
-      const comparison = page.getByRole("region", { name: "Compare plans and pricing info" });
+      const comparison = page.getByRole("region", { name: "Every plan, side by side" });
       const planSwitch = comparison.getByRole("group", { name: "Plan to compare" });
       const table = comparison.getByRole("table");
       await planSwitch.scrollIntoViewIfNeeded();
@@ -488,7 +488,7 @@ test.describe("public marketing route", () => {
   test("pricing comparison stays one table on desktop", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/pricing");
-    const comparison = page.getByRole("region", { name: "Compare plans and pricing info" });
+    const comparison = page.getByRole("region", { name: "Every plan, side by side" });
     await expect(comparison.getByRole("group", { name: "Plan to compare" })).toHaveCount(0);
     for (const plan of ["Free", "Creator", "Growth", "Agency"]) {
       await expect(comparison.getByRole("columnheader", { name: new RegExp(`^${plan}`) })).toHaveCount(1);

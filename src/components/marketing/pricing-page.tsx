@@ -9,7 +9,7 @@ import { InstagramGlyph } from "../instagram-glyph";
 import { ButtonRoll } from "./button-roll";
 import { MarketingFooter } from "./marketing-footer";
 import { MarketingHeader } from "./marketing-header";
-import { formatLimit } from "./pricing-format";
+import { formatLimit, formatRupees } from "./pricing-format";
 import { PricingFaq } from "./pricing-faq";
 import { PlanFinder } from "./pricing-finder";
 import {
@@ -21,9 +21,11 @@ import {
   PlanPrice,
   PlanSignupLink,
   PricingIntervalProvider,
+  SwapAmount,
 } from "./pricing-interval";
 import { PricingJump } from "./pricing-jump";
 import { Reveal } from "./reveal";
+import featuresLinkStyles from "./pricing-features-link.module.css";
 import marketingStyles from "./marketing-page.module.css";
 import styles from "./pricing-page.module.css";
 
@@ -100,7 +102,36 @@ const paymentMarks = [
   { name: "Mastercard", src: "/brand/payments/mastercard.svg", width: 34, height: 26 },
 ];
 
+/** "1 Instagram account", "5 automations". */
+function countOf(value: number, singular: string, plural: string) {
+  return `${value.toLocaleString("en-IN")} ${value === 1 ? singular : plural}`;
+}
+
+const cheapestPaidPlan = Object.values(BILLING_PLANS).reduce((cheapest, plan) =>
+  plan.monthlyPaise < cheapest.monthlyPaise ? plan : cheapest,
+);
+
+/**
+ * The cost question people search for, answered first and only from the
+ * billing catalog and the no-card fact below. Plain text on purpose: there is
+ * no FAQPage markup for it.
+ */
+const freePlanAnswer = [
+  `Yes. Linkar's ${FREE_BILLING_PLAN.name} plan costs ${formatRupees(FREE_BILLING_PLAN.monthlyPaise)} and includes`,
+  `${countOf(FREE_BILLING_PLAN.monthlyDeliveryLimit, "delivery", "deliveries")} (messages Linkar sends) a month,`,
+  `${countOf(FREE_BILLING_PLAN.automationLimit, "automation", "automations")},`,
+  `${countOf(FREE_BILLING_PLAN.instagramConnectionLimit, "Instagram account", "Instagram accounts")} and`,
+  `${countOf(FREE_BILLING_PLAN.facebookConnectionLimit, "Facebook Page", "Facebook Pages")}.`,
+  "It needs no card and no billing details.",
+  `Paid plans start at ${formatRupees(cheapestPaidPlan.monthlyPaise)} a month, including applicable GST, when you need more.`,
+].join(" ");
+
 const pricingFaq = [
+  {
+    id: "free",
+    question: "Is Instagram automation free?",
+    answer: freePlanAnswer,
+  },
   {
     id: "counts",
     question: "What counts as one delivery?",
@@ -206,7 +237,7 @@ function PaymentsStrip() {
 
           <p className={styles.invoiceTotal}>
             <span>Total due today</span>
-            <strong><IntervalAmount plan={priced(growth)} /></strong>
+            <SwapAmount plan={priced(growth)} />
           </p>
 
           <div className={styles.invoicePaid}>
@@ -275,11 +306,23 @@ export function PricingPage() {
           <section className={styles.pricing} aria-labelledby="pricing-title">
             <div className={styles.frame}>
               <header className={styles.intro}>
-                <h1 id="pricing-title">Plans that grow with you.</h1>
+                <h1 id="pricing-title">
+                  {/* The page's search phrase, set small above the display
+                      line, the same pattern as the homepage hero kicker. */}
+                  <span className={styles.titleKicker}>Instagram automation pricing in India </span>
+                  Plans that grow with you.
+                </h1>
                 <p>
                   <span>Start free, then add capacity when the conversations arrive.</span>{" "}
                   <span>Every price includes applicable GST.</span>
                 </p>
+                {/* Phones only (see the CSS): the first plan button sits
+                    below a phone's first screen, so the intro carries a
+                    compact way into signup. */}
+                <Link className={styles.introStart} href="/signup" prefetch={false}>
+                  <span>Start free, no card needed</span>
+                  <span aria-hidden="true">&#8594;</span>
+                </Link>
                 <BillingPeriod name="public-billing-period" />
               </header>
 
@@ -299,7 +342,16 @@ export function PricingPage() {
                       <PlanBillingNote isFree={isFree} />
                       <p className={styles.deliveryLead}>
                         <strong>{plan.monthlyDeliveryLimit.toLocaleString("en-IN")} deliveries</strong>
-                        <span>each month</span>
+                        {/* The Free card is where the page first states
+                            the Free limit, so it says what a delivery is:
+                            the homepage's "messages" and this page's
+                            "deliveries" read as the same limit. Every card
+                            carries the same words, so when the line wraps on
+                            a narrow card the plan buttons stay level. */}
+                        <span>
+                          <span className={styles.deliveryPhrase}>(messages Linkar sends)</span>{" "}
+                          <span className={styles.deliveryPhrase}>each month</span>
+                        </span>
                       </p>
                       <PlanSignupLink plan={plan.key} className={styles.planAction} featured={isGrowth}>
                         <ButtonRoll label={isFree ? "Start free" : `Choose ${plan.name}`} />
@@ -328,7 +380,7 @@ export function PricingPage() {
 
               <section className={styles.comparison} aria-labelledby="comparison-title">
                 <Reveal as="header" className={styles.comparisonHeader}>
-                  <h2 id="comparison-title">Compare plans and pricing info</h2>
+                  <h2 id="comparison-title">Every plan, side by side</h2>
                   <BillingPeriod name="comparison-billing-period" />
                 </Reveal>
                 {/* Phones compare one plan at a time instead of scrolling a
@@ -377,6 +429,19 @@ export function PricingPage() {
                     </tbody>
                   </table>
                 </Reveal>
+                {/* The table compares limits. This link leads on to the
+                    feature guides that explain what each feature does. */}
+                <p className={featuresLinkStyles.more}>
+                  <Link href="/features">
+                    See every Instagram automation{" "}
+                    {/* The last word and the arrow share a no-wrap span so
+                        the arrow never wraps on to a line by itself. */}
+                    <span className={featuresLinkStyles.tail} data-link-tail>
+                      feature
+                      <span className={featuresLinkStyles.arrow} aria-hidden="true">&#8594;</span>
+                    </span>
+                  </Link>
+                </p>
               </section>
 
               <DeliveryExplainer />

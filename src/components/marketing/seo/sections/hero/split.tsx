@@ -15,8 +15,8 @@ export function HeroSplit({ page }: { page: SeoPage }) {
     <section className={`${styles.hero} ${shell.accent} ${shell.grid}`} data-hero="photo" data-hero-variant="split" data-hero-page={`${page.collection}/${page.slug}`} aria-labelledby="seo-title">
       <div className={styles.inner}>
         <div className={styles.copy}>
-          <HeroBreadcrumb crumbs={seoBreadcrumbs(page)} currentAsPill />
-          <HeroTitle text={page.headline} className={styles.title} />
+          <HeroBreadcrumb crumbs={seoBreadcrumbs(page)} parentsOnly />
+          <HeroTitle text={page.headline} kicker={page.label} className={styles.title} />
           <p className={base.description}>{page.description}</p>
           <HeroActions secondaryHref="#how-it-works" secondaryLabel="See how it works" />
           <TrustLockups className={base.trust} channel={page.topic === "facebook" ? "facebook" : "instagram"} />

@@ -10,7 +10,22 @@ export type SeoPageNavItem = { id: string; label: string };
 
 /** Where the spy line sits: a third of the way down, never above the sticky bars. */
 function spyLine() {
-  return Math.round(Math.min(Math.max(window.innerHeight * .32, 200), window.innerHeight - 1));
+  return spyLineFor(window.innerHeight);
+}
+
+/**
+ * The spy line for a viewport height, and the observer margins that make a 1px
+ * band at it. A hidden or collapsed view reports a height of 0; the margins
+ * must still be valid lengths, or IntersectionObserver throws and the page
+ * falls over.
+ */
+export function spyLineFor(height: number) {
+  return Math.max(0, Math.round(Math.min(Math.max(height * .32, 200), height - 1)));
+}
+
+export function spyBandMargin(height: number) {
+  const line = spyLineFor(height);
+  return `-${line}px 0px -${Math.max(0, Math.round(height) - line - 1)}px 0px`;
 }
 
 /**
@@ -39,8 +54,7 @@ function useScrollSpy(ids: readonly string[]): string | null {
     // A 1px band at the spy line: a section enters or leaves it exactly when its edge crosses the line.
     const observe = () => {
       observer?.disconnect();
-      const line = spyLine();
-      observer = new IntersectionObserver(update, { rootMargin: `-${line}px 0px -${Math.max(0, window.innerHeight - line - 1)}px 0px` });
+      observer = new IntersectionObserver(update, { rootMargin: spyBandMargin(window.innerHeight) });
       targets.forEach((target) => observer?.observe(target));
       update();
     };
